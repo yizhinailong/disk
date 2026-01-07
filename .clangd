@@ -1,0 +1,35 @@
+If:
+  PathMatch: .*
+
+Diagnostics:
+  ClangTidy:
+    Add:
+      [
+        bugprone-*,
+        cert-*,
+        cppcoreguidelines-*,
+        google-*,
+        performance-*,
+        misc-*,
+        modernize-*,
+        readability-*,
+        portability-*,
+      ]
+    Remove:
+      [
+        misc-unused-parameters,
+        readability-identifier-length,
+        readability-function-cognitive-complexity,
+        performance-avoid-endl,
+        modernize-use-trailing-return-type,
+        misc-non-private-member-variables-in-classes,
+        misc-use-anonymous-namespace,
+        readability-magic-numbers,
+        readability-static-accessed-through-instance,
+        bugprone-easily-swappable-parameters,
+        readability-convert-member-functions-to-static,
+        cppcoreguidelines-avoid-magic-numbers,
+        bugprone-exception-escape,
+        cppcoreguidelines-macro-usage,
+        cppcoreguidelines-avoid-c-arrays,
+      ]
