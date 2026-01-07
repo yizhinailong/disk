@@ -67,7 +67,8 @@
         "rhs": "Windows"
       },
       "cacheVariables": {
-        "CMAKE_CXX_COMPILER": "clang-cl"
+        "CMAKE_CXX_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
       },
       "environment": {
         "VCPKG_DEFAULT_TRIPLET": "x64-windows"
