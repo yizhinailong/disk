@@ -39,6 +39,9 @@ target_sources(${PROJECT_NAME}
     ${MODEL_SRC}
 )
 
-setup_precompile_headers(${PROJECT_NAME})
+target_precompile_headers(${PROJECT_NAME}
+    PRIVATE
+    "${CMAKE_SOURCE_DIR}/src/utils/pch.hpp"
+)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE Drogon::Drogon)
