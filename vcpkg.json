@@ -21,9 +21,7 @@
       "features": [
         "mysql",
         "orm",
-        "postgres",
         "redis",
-        "sqlite3",
         "yaml"
       ]
     }
