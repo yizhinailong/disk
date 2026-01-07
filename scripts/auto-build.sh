@@ -7,14 +7,13 @@ run_command="./build/$preset_name/src/disk"
 
 full_command="$build_message && $build_command && $run_command"
 
+cmake --preset $preset_name
 watchexec \
+  --watch src/ \
+  --watch config.json \
   --exts cpp,h,cxx,hpp,c,cmake \
   --debounce 500ms \
   --restart \
   --clear \
   --project-origin . \
-  --ignore build/** \
-  --ignore .git/** \
-  --ignore "*.swp" \
-  --signal SIGTERM \
   -- bash -c "$full_command"
