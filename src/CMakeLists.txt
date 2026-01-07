@@ -39,11 +39,6 @@ target_sources(${PROJECT_NAME}
     ${MODEL_SRC}
 )
 
-target_precompile_headers(${PROJECT_NAME}
-    PRIVATE
-    <drogon/drogon.h>
-    <drogon/HttpAppFramework.h>
-    <drogon/HttpController.h>
-)
+setup_precompile_headers(${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE Drogon::Drogon)

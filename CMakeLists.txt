@@ -7,5 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Drogon CONFIG REQUIRED)
 
+include(${CMAKE_SOURCE_DIR}/cmake/setup_pch.cmake)
+
 add_subdirectory(src)
 add_subdirectory(test)
