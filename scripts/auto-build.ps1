@@ -5,7 +5,9 @@ $runCommand = "./build/$presetName/src/disk.exe"
 
 $fullCommand = $buildMessage + $buildCommand + $runCommand
 
+cmake --build --preset $presetName
 watchexec `
+  --watch config.json `
   --exts cpp,h,cxx,hpp,c,cmake `
   --debounce 500ms `
   --restart `
