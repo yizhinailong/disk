@@ -23,6 +23,11 @@
       "hidden": true,
       "inherits": "base",
       "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
       "cacheVariables": {
         "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
@@ -56,6 +61,11 @@
       "hidden": true,
       "inherits": "base",
       "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
       "cacheVariables": {
         "CMAKE_CXX_COMPILER": "clang-cl"
       },
@@ -90,24 +100,28 @@
       "jobs": 16
     },
     {
-      "name": "linux-debug-clang",
+      "name": "condition-windows",
+      "hidden": true,
       "inherits": "base-build",
-      "configurePreset": "linux-debug-clang",
-      "displayName": "Build Linux Debug Clang",
-      "description": "Build the project in Debug mode on Linux with Clang",
-      "configuration": "Debug"
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
     },
     {
-      "name": "linux-release-clang",
+      "name": "condition-linux",
+      "hidden": true,
       "inherits": "base-build",
-      "configurePreset": "linux-release-clang",
-      "displayName": "Build Linux Release Clang",
-      "description": "Build the project in Release mode on Linux with Clang",
-      "configuration": "Release"
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
     },
     {
       "name": "windows-debug-clang-cl",
-      "inherits": "base-build",
+      "inherits": "condition-windows",
       "configurePreset": "windows-debug-clang-cl",
       "displayName": "Build Windows Debug Clang-Cl",
       "description": "Build the project in Debug mode on Windows with Clang-Cl",
@@ -115,10 +129,26 @@
     },
     {
       "name": "windows-release-clang-cl",
-      "inherits": "base-build",
+      "inherits": "condition-windows",
       "configurePreset": "windows-release-clang-cl",
       "displayName": "Build Windows Release Clang-Cl",
       "description": "Build the project in Release mode on Windows with Clang-Cl",
+      "configuration": "Release"
+    },
+    {
+      "name": "linux-debug-clang",
+      "inherits": "condition-linux",
+      "configurePreset": "linux-debug-clang",
+      "displayName": "Build Linux Debug Clang",
+      "description": "Build the project in Debug mode on Linux with Clang",
+      "configuration": "Debug"
+    },
+    {
+      "name": "linux-release-clang",
+      "inherits": "condition-linux",
+      "configurePreset": "linux-release-clang",
+      "displayName": "Build Linux Release Clang",
+      "description": "Build the project in Release mode on Linux with Clang",
       "configuration": "Release"
     }
   ]
