@@ -1,0 +1,125 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "displayName": "Base Configuration",
+      "description": "Base configuration with vcpkg toolchain",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}",
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      },
+      "warnings": {
+        "dev": false
+      }
+    },
+    {
+      "name": "linux-base-clang",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
+      },
+      "environment": {
+        "VCPKG_DEFAULT_TRIPLET": "x64-linux",
+        "CMAKE_BUILD_PARALLEL_LEVEL": "16"
+      }
+    },
+    {
+      "name": "linux-debug-clang",
+      "inherits": "linux-base-clang",
+      "displayName": "Linux Debug Clang",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-release-clang",
+      "inherits": "linux-base-clang",
+      "displayName": "Linux Release Clang",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG"
+      }
+    },
+    {
+      "name": "windows-base-clang-cl",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang-cl"
+      },
+      "environment": {
+        "VCPKG_DEFAULT_TRIPLET": "x64-windows"
+      }
+    },
+    {
+      "name": "windows-debug-clang-cl",
+      "inherits": "windows-base-clang-cl",
+      "displayName": "Windows Debug Clang-Cl",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "windows-release-clang-cl",
+      "inherits": "windows-base-clang-cl",
+      "displayName": "Windows Release Clang-Cl",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS_RELEASE": "/O3 /DNDEBUG"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "base-build",
+      "hidden": true,
+      "jobs": 16
+    },
+    {
+      "name": "linux-debug-clang",
+      "inherits": "base-build",
+      "configurePreset": "linux-debug-clang",
+      "displayName": "Build Linux Debug Clang",
+      "description": "Build the project in Debug mode on Linux with Clang",
+      "configuration": "Debug"
+    },
+    {
+      "name": "linux-release-clang",
+      "inherits": "base-build",
+      "configurePreset": "linux-release-clang",
+      "displayName": "Build Linux Release Clang",
+      "description": "Build the project in Release mode on Linux with Clang",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-debug-clang-cl",
+      "inherits": "base-build",
+      "configurePreset": "windows-debug-clang-cl",
+      "displayName": "Build Windows Debug Clang-Cl",
+      "description": "Build the project in Debug mode on Windows with Clang-Cl",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-release-clang-cl",
+      "inherits": "base-build",
+      "configurePreset": "windows-release-clang-cl",
+      "displayName": "Build Windows Release Clang-Cl",
+      "description": "Build the project in Release mode on Windows with Clang-Cl",
+      "configuration": "Release"
+    }
+  ]
+}
