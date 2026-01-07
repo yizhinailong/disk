@@ -1,4 +1,6 @@
 [Bb]uild
+.vs
+.idea
 
 # Prerequisites
 *.d
