@@ -12,8 +12,7 @@
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}",
         "CMAKE_CXX_STANDARD": "23",
         "CMAKE_CXX_STANDARD_REQUIRED": "ON",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "VCPKG_MANIFEST_MODE": "OFF"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       },
       "warnings": {
         "dev": false
