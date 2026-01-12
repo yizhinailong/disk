@@ -9,6 +9,8 @@
  *
  */
 
+#pragma once
+
 // Drogon 框架头文件
 #include <drogon/HttpAppFramework.h>
 #include <drogon/HttpClient.h>
@@ -35,10 +37,9 @@
 #include <unordered_map>
 #include <vector>
 
-// 其他常用头文件
-#include <cassert>
-#include <cstdint>
-#include <cstring>
-
 // 项目通用类型别名
 using HttpResponseCallback = std::function<void(const drogon::HttpResponsePtr&)>;
+using HttpRequest = drogon::HttpRequest;
+using HttpRequestPtr = drogon::HttpRequestPtr;
+using HttpResponse = drogon::HttpResponse;
+using HttpResponsePtr = drogon::HttpResponsePtr;
