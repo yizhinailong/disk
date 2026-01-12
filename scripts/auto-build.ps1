@@ -8,6 +8,7 @@ $fullCommand = $buildMessage + $buildCommand + $runCommand
 cmake --build --preset $presetName
 watchexec `
   --watch config.json `
+  --watch src `
   --exts cpp,h,cxx,hpp,c,cmake `
   --debounce 500ms `
   --restart `
