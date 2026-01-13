@@ -22,8 +22,7 @@
         "mysql",
         "orm",
         "redis",
-        "yaml",
-        "postgres"
+        "yaml"
       ],
       "version>=": "1.9.11"
     },
