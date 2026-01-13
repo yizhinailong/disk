@@ -3,7 +3,7 @@
 #include "requests/AuthRequest.hpp"
 #include "utils/Response.hpp"
 
-namespace disk::Auth {
+namespace disk::auth {
     auto AuthController::Register(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
         // 解析并验证请求参数
@@ -24,4 +24,4 @@ namespace disk::Auth {
 
         co_return Response::Success(data);
     }
-} // namespace disk::Auth
+} // namespace disk::auth

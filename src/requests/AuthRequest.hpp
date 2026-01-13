@@ -12,7 +12,7 @@
 
 #include "utils/ErrorCode.hpp"
 
-namespace disk::Auth {
+namespace disk::auth {
 
     /**
      * @brief 用户注册请求
@@ -102,4 +102,4 @@ namespace disk::Auth {
         }
     };
 
-} // namespace disk::Auth
+} // namespace disk::auth
