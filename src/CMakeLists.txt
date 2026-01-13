@@ -5,12 +5,14 @@ target_sources(${PROJECT_NAME}
     # Controllers
     controllers/AuthController.cpp
     controllers/AuthController.hpp
-
     # Models
-
+    models/Users.cpp
+    models/Users.hpp
     # Filters
 
     # Plugins
+
+    # Services
 
     # Utils
     utils/ErrorCode.hpp
