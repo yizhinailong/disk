@@ -17,4 +17,4 @@ watchexec `
   --ignore "build/**" `
   --ignore ".git/**" `
   --ignore "*.swp" `
-  --pwsh -NoProfile -Command $fullCommand
+  -- pwsh -NoProfile -Command $fullCommand
