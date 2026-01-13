@@ -12,7 +12,6 @@
 #pragma once
 
 #include <expected>
-#include <string_view>
 #include <unordered_map>
 #include <utility>
 
@@ -195,7 +194,7 @@ namespace disk ::error {
      */
     struct ErrorInfo {
         drogon::HttpStatusCode http_status;
-        std::string_view message;
+        std::string message;
     };
 
     /**
@@ -256,8 +255,8 @@ namespace disk ::error {
      * @param code 错误码
      * @return 错误消息
      */
-    inline auto GetErrorMessage(Code code) -> std::string_view {
-        static const std::unordered_map<Code, std::string_view> message_map = {
+    inline auto GetErrorMessage(Code code) -> std::string {
+        static const std::unordered_map<Code, std::string> message_map = {
             // 成功
             {              Code::Success,                "success" },
 

@@ -29,7 +29,7 @@
         "log_size_limit": 10485760,
         "max_files": 10,
         "use_spdlog": true,
-        "log_format": "[$request_date] [$thread] ($remote_addr - $local_addr) \"$request\" $status $body_bytes_sent $processing_time"
+        "log_format": "[$request_date] [$thread] ($remote_addr) \"$request\" $status $body_bytes_sent $processing_time"
       }
     }
   ]

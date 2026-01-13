@@ -7,6 +7,6 @@ namespace disk {
         ADD_METHOD_TO(AuthController::Register, "/api/auth/register", drogon::Post);
         METHOD_LIST_END
 
-        auto Register(const HttpRequestPtr& request, HttpResponseCallback&& callback) -> void;
+        auto Register(HttpRequestPtr request) -> drogon::Task<HttpResponsePtr>;
     };
 } // namespace disk

@@ -8,12 +8,16 @@ target_sources(${PROJECT_NAME}
     # Models
     models/Users.cpp
     models/Users.hpp
+    # Requests
+    requests/AuthRequest.hpp
     # Filters
 
     # Plugins
 
     # Services
 
+    # Requests
+    requests/AuthRequest.hpp
     # Utils
     utils/ErrorCode.hpp
     utils/Pch.hpp
