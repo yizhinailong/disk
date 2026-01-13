@@ -1,6 +1,6 @@
 #pragma once
 
-namespace disk {
+namespace disk::Auth {
     class AuthController : public drogon::HttpController<AuthController> {
     public:
         METHOD_LIST_BEGIN
@@ -9,4 +9,4 @@ namespace disk {
 
         auto Register(HttpRequestPtr request) -> drogon::Task<HttpResponsePtr>;
     };
-} // namespace disk
+} // namespace disk::Auth

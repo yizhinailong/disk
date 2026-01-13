@@ -3,10 +3,10 @@
 #include "requests/AuthRequest.hpp"
 #include "utils/Response.hpp"
 
-namespace disk {
+namespace disk::Auth {
     auto AuthController::Register(HttpRequestPtr request) -> drogon::Task<HttpResponsePtr> {
         // 解析并验证请求参数
-        auto result = Auth::Register::FromRequest(request);
+        auto result = RegisterRequest::FromRequest(request);
         if (!result) {
             co_return Response::Error(result.error());
         }
@@ -23,4 +23,4 @@ namespace disk {
 
         co_return Response::Success(data);
     }
-} // namespace disk
+} // namespace disk::Auth

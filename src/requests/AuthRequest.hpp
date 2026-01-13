@@ -22,14 +22,14 @@ namespace disk::Auth {
      * - email: 有效邮箱格式
      * - password: 8-64字符，需含大小写字母和数字
      */
-    struct Register {
+    struct RegisterRequest {
         std::string username;
         std::string email;
         std::string password;
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const HttpRequestPtr& req) -> Result<Register> {
+        static auto FromRequest(const HttpRequestPtr& req) -> Result<RegisterRequest> {
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
                 return std::unexpected(ErrorCode::ValidationFailed);
@@ -38,11 +38,13 @@ namespace disk::Auth {
             const auto& json = *json_ptr;
 
             // 检查必填字段
-            if (!json.isMember("username") || !json.isMember("email") || !json.isMember("password")) {
+            if (!json_ptr->isMember("username") ||
+                !json_ptr->isMember("email") ||
+                !json_ptr->isMember("password")) {
                 return std::unexpected(ErrorCode::ValidationFailed);
             }
 
-            Register request;
+            RegisterRequest request;
             request.username = json["username"].asString();
             request.email = json["email"].asString();
             request.password = json["password"].asString();
