@@ -16,7 +16,7 @@ namespace disk::auth {
                   << ", email = " << result->email
                   << ", password = " << result->password;
 
-        // TODO: 调用 Service 层注册用户
+        // TODO(liufeng): 调用 Service 层注册用户
 
         // 构造返回数据
         Json::Value data;
