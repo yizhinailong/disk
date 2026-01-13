@@ -12,10 +12,6 @@ namespace disk::auth {
             co_return Response::Error(result.error());
         }
 
-        LOG_DEBUG << "name = " << result->username
-                  << ", email = " << result->email
-                  << ", password = " << result->password;
-
         // TODO(liufeng): 调用 Service 层注册用户
 
         // 构造返回数据
