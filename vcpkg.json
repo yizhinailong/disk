@@ -26,6 +26,9 @@
       ],
       "version>=": "1.9.11"
     },
-    "jwt-cpp"
+    {
+      "name": "jwt-cpp",
+      "version>=": "0.7.1"
+    }
   ]
 }

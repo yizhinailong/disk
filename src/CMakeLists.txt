@@ -21,6 +21,7 @@ target_sources(${PROJECT_NAME}
     # Utils
     utils/ErrorCode.hpp
     utils/Pch.hpp
+    utils/Response.hpp
 )
 
 target_include_directories(${PROJECT_NAME}
