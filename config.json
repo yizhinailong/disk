@@ -8,6 +8,18 @@
   "app": {
     "upload_path": "build/uploaded"
   },
+  "db_clients": [
+    {
+      "name": "default",
+      "rdbms": "mysql",
+      "host": "127.0.0.1",
+      "port": 3306,
+      "dbname": "disk",
+      "user": "root",
+      "passwd": "mysql",
+      "num_connection_number": 1
+    }
+  ],
   "plugins": [
     {
       "name": "drogon::plugin::AccessLogger",

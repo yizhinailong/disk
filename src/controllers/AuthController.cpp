@@ -1,7 +1,7 @@
 #include "AuthController.hpp"
 
 namespace disk {
-    auto AuthController::Hello(const HttpRequestPtr& request, HttpResponseCallback&& callback) -> void {
+    auto AuthController::Register(const HttpRequestPtr& request, HttpResponseCallback&& callback) -> void {
         auto resp = drogon::HttpResponse::newHttpResponse();
         resp->setBody("Hello World!");
         resp->addHeader("Content-Type", "text/plain");
