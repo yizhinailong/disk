@@ -1,5 +1,5 @@
 /**
- * @file pch.hpp
+ * @file Pch.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 预编译头文件，包含常用的头文件和类型别名
  * @version 0.1
@@ -42,7 +42,7 @@
 
 // 错误处理
 namespace Error = disk::error;
-using ErrorCode = Error::ErrorCode;
+using ErrorCode = Error::Code;
 template <typename T>
 using Result = Error::Result<T>;
 using VoidResult = Error::VoidResult;

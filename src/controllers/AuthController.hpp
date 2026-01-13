@@ -1,6 +1,6 @@
 #pragma once
 
-#include "utils/pch.hpp"
+#include "utils/Pch.hpp"
 
 namespace disk {
     class AuthController : public drogon::HttpController<AuthController> {

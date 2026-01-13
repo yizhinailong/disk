@@ -20,7 +20,7 @@ target_include_directories(${PROJECT_NAME}
 
 target_precompile_headers(${PROJECT_NAME}
     PRIVATE
-    "${CMAKE_SOURCE_DIR}/src/utils/pch.hpp"
+    "${CMAKE_SOURCE_DIR}/src/utils/Pch.hpp"
 )
 
 target_link_libraries(${PROJECT_NAME}
