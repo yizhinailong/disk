@@ -87,7 +87,7 @@ namespace disk {
         // ==================== 错误响应 ====================
         /// 错误响应（从 Err 结构体）
         [[nodiscard]]
-        static auto Fail(const ::ErrorInfo& err) -> drogon::HttpResponsePtr {
+        static auto Error(const ::ErrorInfo& err) -> drogon::HttpResponsePtr {
             Json::Value json;
             json["code"] = err.CodeInt();
             json["message"] = err.message;
@@ -100,14 +100,14 @@ namespace disk {
 
         /// 错误响应（使用错误码默认消息）
         [[nodiscard]]
-        static auto Fail(ErrorCode code) -> drogon::HttpResponsePtr {
-            return Fail(ErrorInfo(code));
+        static auto Error(ErrorCode code) -> drogon::HttpResponsePtr {
+            return Error(ErrorInfo(code));
         }
 
         /// 错误响应（错误码 + 自定义消息）
         [[nodiscard]]
         static auto Fail(ErrorCode code, const std::string& message) -> drogon::HttpResponsePtr {
-            return Fail(ErrorInfo(code, message));
+            return Error(ErrorInfo(code, message));
         }
 
         // ==================== Result 类型支持 ====================
@@ -119,7 +119,7 @@ namespace disk {
             if (result.has_value()) {
                 return Success(std::forward<Func>(to_json)(result.value()));
             }
-            return Fail(result.error());
+            return Error(result.error());
         }
 
         /// 从 VoidResult 构造响应
@@ -128,7 +128,7 @@ namespace disk {
             if (result.has_value()) {
                 return Success();
             }
-            return Fail(result.error());
+            return Error(result.error());
         }
     };
 } // namespace disk
