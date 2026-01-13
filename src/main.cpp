@@ -1,4 +1,6 @@
-#include "utils/pch.hpp"
+#include <print>
+
+#include <drogon/drogon.h>
 
 int main() {
     std::println("Drogon version: {}", drogon::getVersion());
