@@ -11,14 +11,6 @@
 
 #pragma once
 
-// Drogon 框架头文件
-#include <drogon/HttpAppFramework.h>
-#include <drogon/HttpClient.h>
-#include <drogon/HttpController.h>
-#include <drogon/HttpRequest.h>
-#include <drogon/HttpResponse.h>
-#include <drogon/drogon.h>
-
 // C++ 标准库常用头文件
 #include <algorithm>
 #include <chrono>
@@ -37,15 +29,16 @@
 #include <unordered_map>
 #include <vector>
 
-// 项目常用头文件
-#include "utils/ErrorCode.hpp"
+// Drogon 框架头文件
+#include <drogon/HttpAppFramework.h>
+#include <drogon/HttpClient.h>
+#include <drogon/HttpController.h>
+#include <drogon/HttpRequest.h>
+#include <drogon/HttpResponse.h>
+#include <drogon/drogon.h>
 
-// 错误处理
-namespace Error = disk::error;
-using ErrorCode = Error::Code;
-template <typename T>
-using Result = Error::Result<T>;
-using VoidResult = Error::VoidResult;
+// JWT 头文件
+#include <jwt-cpp/jwt.h>
 
 // 项目通用类型别名
 using HttpResponseCallback = std::function<void(const drogon::HttpResponsePtr&)>;

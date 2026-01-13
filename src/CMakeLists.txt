@@ -3,14 +3,18 @@ add_executable(${PROJECT_NAME} main.cpp)
 target_sources(${PROJECT_NAME}
     PRIVATE
     # Controllers
-    controllers/AuthController.hpp
     controllers/AuthController.cpp
+    controllers/AuthController.hpp
 
     # Models
 
     # Filters
 
     # Plugins
+
+    # Utils
+    utils/ErrorCode.hpp
+    utils/Pch.hpp
 )
 
 target_include_directories(${PROJECT_NAME}

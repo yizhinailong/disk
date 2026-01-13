@@ -353,5 +353,10 @@ namespace disk ::error {
         auto status = GetHttpStatus(code);
         return status >= drogon::k500InternalServerError;
     }
-
 } // namespace disk::error
+
+namespace Error = disk::error;
+using ErrorCode = Error::Code;
+template <typename T>
+using Result = Error::Result<T>;
+using VoidResult = Error::VoidResult;
