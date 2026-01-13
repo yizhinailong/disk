@@ -64,56 +64,41 @@ namespace disk::Auth {
             request.email = json["email"].asString();
             request.password = json["password"].asString();
 
-            // 验证字段
-            if (auto result = request.Validate(); !result) {
-                return std::unexpected(result.error());
+            if (!request.ValidateUsername()) {
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "用户名格式错误"));
+            }
+            if (!request.ValidateEmail()) {
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "邮箱格式错误"));
+            }
+            if (!request.ValidatePassword()) {
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "密码格式错误"));
             }
 
             return request;
         }
 
     private:
-        /// 验证字段合法性
+        /// 验证用户名
         [[nodiscard]]
-        auto Validate() const -> VoidResult {
-            // 用户名验证: 4-32字符，字母数字下划线
-            if (username.length() < 4 || username.length() > 32) {
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFormat, "用户名长度必须在 4-32 字符之间"));
-            }
+        auto ValidateUsername() const -> bool {
+            // 验证用户名
             static const std::regex usernameRegex("^[a-zA-Z0-9_]+$");
-            if (!std::regex_match(username, usernameRegex)) {
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFormat, "用户名只能包含字母、数字和下划线"));
-            }
+            return std::regex_match(username, usernameRegex);
+        }
 
-            // 邮箱验证
+        /// 验证邮箱
+        [[nodiscard]]
+        auto ValidateEmail() const -> bool {
             static const std::regex emailRegex(R"(^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$)");
-            if (!std::regex_match(email, emailRegex)) {
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFormat, "邮箱格式不正确"));
-            }
+            return std::regex_match(email, emailRegex);
+        }
 
-            // 密码验证: 8-64字符，需含大小写字母和数字
-            if (password.length() < 8 || password.length() > 64) {
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFormat, "密码长度必须在 8-64 字符之间"));
-            }
-            bool hasUpper = false;
-            bool hasLower = false;
-            bool hasDigit = false;
-            for (char c : password) {
-                if (std::isupper(c) != 0) {
-                    hasUpper = true;
-                }
-                if (std::islower(c) != 0) {
-                    hasLower = true;
-                }
-                if (std::isdigit(c) != 0) {
-                    hasDigit = true;
-                }
-            }
-            if (!hasUpper || !hasLower || !hasDigit) {
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFormat, "密码必须包含大写字母、小写字母和数字"));
-            }
-
-            return {};
+        /// 验证密码
+        [[nodiscard]]
+        auto ValidatePassword() const -> bool {
+            // 验证密码
+            static const std::regex passwordRegex("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,64}$");
+            return std::regex_match(password, passwordRegex);
         }
     };
 

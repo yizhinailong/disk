@@ -9,7 +9,7 @@ namespace disk::Auth {
         // 解析并验证请求参数
         auto result = RegisterRequest::FromRequest(request);
         if (!result) {
-            co_return Response::Fail(result.error());
+            co_return Response::Error(result.error());
         }
 
         LOG_DEBUG << "name = " << result->username
