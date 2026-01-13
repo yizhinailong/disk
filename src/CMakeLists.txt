@@ -23,4 +23,8 @@ target_precompile_headers(${PROJECT_NAME}
     "${CMAKE_SOURCE_DIR}/src/utils/pch.hpp"
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE Drogon::Drogon)
+target_link_libraries(${PROJECT_NAME}
+    PRIVATE
+    Drogon::Drogon
+    jwt-cpp::jwt-cpp
+)
