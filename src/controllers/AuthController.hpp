@@ -1,3 +1,14 @@
+/**
+ * @file AuthController.hpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 认证控制器
+ * @version 0.1
+ * @date 2026-01-14
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
 #pragma once
 
 namespace disk::Auth {
@@ -7,6 +18,6 @@ namespace disk::Auth {
         ADD_METHOD_TO(AuthController::Register, "/api/auth/register", drogon::Post);
         METHOD_LIST_END
 
-        auto Register(HttpRequestPtr request) -> drogon::Task<HttpResponsePtr>;
+        auto Register(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
     };
 } // namespace disk::Auth

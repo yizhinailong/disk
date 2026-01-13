@@ -1,7 +1,7 @@
 /**
  * @file Pch.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief 预编译头文件，包含常用的头文件和类型别名
+ * @brief 预编译头文件
  * @version 0.1
  * @date 2026-01-08
  *
@@ -39,10 +39,3 @@
 
 // JWT 头文件
 #include <jwt-cpp/jwt.h>
-
-// 项目通用类型别名
-using HttpResponseCallback = std::function<void(const drogon::HttpResponsePtr&)>;
-using HttpRequest = drogon::HttpRequest;
-using HttpRequestPtr = drogon::HttpRequestPtr;
-using HttpResponse = drogon::HttpResponse;
-using HttpResponsePtr = drogon::HttpResponsePtr;

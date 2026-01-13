@@ -4,11 +4,12 @@
 #include "utils/Response.hpp"
 
 namespace disk::Auth {
-    auto AuthController::Register(HttpRequestPtr request) -> drogon::Task<HttpResponsePtr> {
+    auto AuthController::Register(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
         // 解析并验证请求参数
         auto result = RegisterRequest::FromRequest(request);
         if (!result) {
-            co_return Response::Error(result.error());
+            co_return Response::Fail(result.error());
         }
 
         LOG_DEBUG << "name = " << result->username

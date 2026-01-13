@@ -29,19 +29,34 @@ namespace disk::Auth {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const HttpRequestPtr& req) -> Result<RegisterRequest> {
+        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<RegisterRequest> {
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
-                return std::unexpected(ErrorCode::ValidationFailed);
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
             }
 
             const auto& json = *json_ptr;
 
             // 检查必填字段
-            if (!json_ptr->isMember("username") ||
-                !json_ptr->isMember("email") ||
-                !json_ptr->isMember("password")) {
-                return std::unexpected(ErrorCode::ValidationFailed);
+            if (!json.isMember("username")) {
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: username"));
+            }
+            if (!json.isMember("email")) {
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: email"));
+            }
+            if (!json.isMember("password")) {
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: password"));
+            }
+
+            // 检查字段类型
+            if (!json["username"].isString()) {
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'username' 类型错误: 期望字符串"));
+            }
+            if (!json["email"].isString()) {
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'email' 类型错误: 期望字符串"));
+            }
+            if (!json["password"].isString()) {
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'password' 类型错误: 期望字符串"));
             }
 
             RegisterRequest request;
@@ -63,22 +78,22 @@ namespace disk::Auth {
         auto Validate() const -> VoidResult {
             // 用户名验证: 4-32字符，字母数字下划线
             if (username.length() < 4 || username.length() > 32) {
-                return std::unexpected(ErrorCode::InvalidFormat);
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidFormat, "用户名长度必须在 4-32 字符之间"));
             }
             static const std::regex usernameRegex("^[a-zA-Z0-9_]+$");
             if (!std::regex_match(username, usernameRegex)) {
-                return std::unexpected(ErrorCode::InvalidFormat);
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidFormat, "用户名只能包含字母、数字和下划线"));
             }
 
             // 邮箱验证
             static const std::regex emailRegex(R"(^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$)");
             if (!std::regex_match(email, emailRegex)) {
-                return std::unexpected(ErrorCode::InvalidFormat);
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidFormat, "邮箱格式不正确"));
             }
 
             // 密码验证: 8-64字符，需含大小写字母和数字
             if (password.length() < 8 || password.length() > 64) {
-                return std::unexpected(ErrorCode::InvalidFormat);
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidFormat, "密码长度必须在 8-64 字符之间"));
             }
             bool hasUpper = false;
             bool hasLower = false;
@@ -95,7 +110,7 @@ namespace disk::Auth {
                 }
             }
             if (!hasUpper || !hasLower || !hasDigit) {
-                return std::unexpected(ErrorCode::InvalidFormat);
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidFormat, "密码必须包含大写字母、小写字母和数字"));
             }
 
             return {};

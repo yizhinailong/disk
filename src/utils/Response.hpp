@@ -58,26 +58,26 @@ namespace disk {
         // ==================== 成功响应 ====================
         /// 成功响应（无数据）
         [[nodiscard]]
-        static auto Success() -> HttpResponsePtr {
+        static auto Success() -> drogon::HttpResponsePtr {
             return Success(Json::Value{ Json::nullValue });
         }
 
         /// 成功响应（带数据）
         [[nodiscard]]
-        static auto Success(const Json::Value& data) -> HttpResponsePtr {
+        static auto Success(const Json::Value& data) -> drogon::HttpResponsePtr {
             Json::Value json;
             json["code"] = Error::ToInt(ErrorCode::Success);
             json["message"] = Error::GetErrorMessage(ErrorCode::Success);
             json["data"] = data;
 
-            auto response = HttpResponse::newHttpJsonResponse(json);
+            auto response = drogon::HttpResponse::newHttpJsonResponse(json);
             response->setStatusCode(Error::GetHttpStatus(ErrorCode::Success));
             return response;
         }
 
         /// 分页响应
         [[nodiscard]]
-        static auto Paginated(const Json::Value& items, const Pagination& pagination) -> HttpResponsePtr {
+        static auto Paginated(const Json::Value& items, const Pagination& pagination) -> drogon::HttpResponsePtr {
             Json::Value data;
             data["items"] = items;
             data["pagination"] = pagination.ToJson();
@@ -85,23 +85,29 @@ namespace disk {
         }
 
         // ==================== 错误响应 ====================
-        /// 错误响应（使用错误码默认消息）
+        /// 错误响应（从 Err 结构体）
         [[nodiscard]]
-        static auto Error(ErrorCode code) -> HttpResponsePtr {
-            return Error(code, Error::GetErrorMessage(code));
-        }
-
-        /// 错误响应（自定义消息）
-        [[nodiscard]]
-        static auto Error(ErrorCode code, const std::string& message) -> HttpResponsePtr {
+        static auto Fail(const ::ErrorInfo& err) -> drogon::HttpResponsePtr {
             Json::Value json;
-            json["code"] = Error::ToInt(code);
-            json["message"] = message;
+            json["code"] = err.CodeInt();
+            json["message"] = err.message;
             json["data"] = Json::Value{ Json::nullValue };
 
-            auto response = HttpResponse::newHttpJsonResponse(json);
-            response->setStatusCode(Error::GetHttpStatus(code));
+            auto response = drogon::HttpResponse::newHttpJsonResponse(json);
+            response->setStatusCode(err.HttpStatus());
             return response;
+        }
+
+        /// 错误响应（使用错误码默认消息）
+        [[nodiscard]]
+        static auto Fail(ErrorCode code) -> drogon::HttpResponsePtr {
+            return Fail(ErrorInfo(code));
+        }
+
+        /// 错误响应（错误码 + 自定义消息）
+        [[nodiscard]]
+        static auto Fail(ErrorCode code, const std::string& message) -> drogon::HttpResponsePtr {
+            return Fail(ErrorInfo(code, message));
         }
 
         // ==================== Result 类型支持 ====================
@@ -109,20 +115,20 @@ namespace disk {
         /// 从 Result<T> 构造响应
         template <typename T, typename Func>
         [[nodiscard]]
-        static auto FromResult(const Result<T>& result, Func&& to_json) -> HttpResponsePtr {
+        static auto FromResult(const Result<T>& result, Func&& to_json) -> drogon::HttpResponsePtr {
             if (result.has_value()) {
                 return Success(std::forward<Func>(to_json)(result.value()));
             }
-            return Error(result.error());
+            return Fail(result.error());
         }
 
         /// 从 VoidResult 构造响应
         [[nodiscard]]
-        static auto fromResult(const VoidResult& result) -> HttpResponsePtr {
+        static auto FromResult(const VoidResult& result) -> drogon::HttpResponsePtr {
             if (result.has_value()) {
                 return Success();
             }
-            return Error(result.error());
+            return Fail(result.error());
         }
     };
 } // namespace disk

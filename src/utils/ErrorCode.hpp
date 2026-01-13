@@ -17,7 +17,7 @@
 
 #include <drogon/HttpTypes.h>
 
-namespace disk ::error {
+namespace disk::error {
 
     /**
      * @brief 系统错误码枚举
@@ -96,107 +96,7 @@ namespace disk ::error {
         ShareAccessDenied = 60004,
     };
 
-    // ==================== Result 类型定义 ====================
-
-    /**
-     * @brief 通用结果类型，用于函数返回值
-     * @tparam T 成功时的返回值类型
-     *
-     * 使用示例：
-     * @code
-     * auto GetUser(int id) -> Result<User> {
-     *     if (id <= 0) {
-     *         return std::unexpected(ErrorCode::InvalidParameter);
-     *     }
-     *     return user;
-     * }
-     * @endcode
-     */
-    template <typename T>
-    using Result = std::expected<T, Code>;
-
-    /**
-     * @brief 无返回值的结果类型
-     *
-     * 使用示例：
-     * @code
-     * auto DeleteUser(int id) -> VoidResult {
-     *     if (id <= 0) {
-     *         return std::unexpected(ErrorCode::InvalidParameter);
-     *     }
-     *     // ... 删除操作
-     *     return {};
-     * }
-     * @endcode
-     */
-    using VoidResult = Result<void>;
-
-    /**
-     * @brief 创建错误结果的便捷函数
-     * @tparam T 期望的返回值类型
-     * @param code 错误码
-     * @return 包含错误的 Result
-     *
-     * 使用示例：
-     * @code
-     * return MakeError<User>(ErrorCode::ResourceNotFound);
-     * @endcode
-     */
-    template <typename T>
-    [[nodiscard]]
-    constexpr auto MakeError(Code code) -> Result<T> {
-        return std::unexpected(code);
-    }
-
-    /**
-     * @brief 创建成功结果的便捷函数
-     * @tparam T 返回值类型
-     * @param value 成功的值
-     * @return 包含值的 Result
-     *
-     * 使用示例：
-     * @code
-     * return MakeSuccess(user);
-     * @endcode
-     */
-    template <typename T>
-    [[nodiscard]]
-    constexpr auto MakeSuccess(T&& value) -> Result<std::decay_t<T>> {
-        return std::forward<T>(value);
-    }
-
-    /**
-     * @brief 创建无返回值的成功结果
-     * @return 成功的 VoidResult
-     */
-    [[nodiscard]]
-    constexpr auto MakeSuccess() -> VoidResult {
-        return {};
-    }
-
-    /**
-     * @brief 将一种错误类型的 Result 转换为另一种类型（保留错误码）
-     * @tparam T 目标类型
-     * @tparam U 源类型
-     * @param result 源 Result
-     * @return 转换后的 Result（仅当源为错误时有效）
-     */
-    template <typename T, typename U>
-    [[nodiscard]]
-    constexpr auto PropagateError(const Result<U>& result) -> Result<T> {
-        return std::unexpected(result.error());
-    }
-
     // ==================== 错误码信息 ====================
-
-    /**
-     * @brief 错误码信息结构体
-     */
-    struct ErrorInfo {
-        drogon::HttpStatusCode http_status;
-        std::string message;
-    };
-
     /**
      * @brief 获取错误码对应的 HTTP 状态码
      * @param code 错误码
@@ -304,18 +204,6 @@ namespace disk ::error {
     }
 
     /**
-     * @brief 获取错误码的完整信息
-     * @param code 错误码
-     * @return 错误信息结构体
-     */
-    inline auto GetErrorInfo(Code code) -> ErrorInfo {
-        return {
-            .http_status = GetHttpStatus(code),
-            .message = GetErrorMessage(code)
-        };
-    }
-
-    /**
      * @brief 获取错误码的整数值
      * @param code 错误码
      * @return 整数值
@@ -352,10 +240,152 @@ namespace disk ::error {
         auto status = GetHttpStatus(code);
         return status >= drogon::k500InternalServerError;
     }
+
+    // ==================== ErrorInfo 结构体定义 ====================
+
+    /**
+     * @brief 错误信息结构体，包含错误码和详细消息
+     *
+     * 使用示例：
+     * @code
+     * // 仅使用错误码（使用默认消息）
+     * return std::unexpected(ErrorInfo(Code::InvalidParameter));
+     *
+     * // 使用错误码和自定义详细消息
+     * return std::unexpected(ErrorInfo(Code::ValidationFailed, "参数 'age' 必须是正整数"));
+     * @endcode
+     */
+    struct ErrorInfo {
+        Code code;
+        std::string message;
+
+        /// 仅使用错误码构造，使用默认消息
+        explicit ErrorInfo(Code c)
+            : code(c),
+              message(GetErrorMessage(c)) {}
+
+        /// 使用错误码和自定义消息构造
+        ErrorInfo(Code c, std::string msg)
+            : code(c),
+              message(std::move(msg)) {}
+
+        /// 获取 HTTP 状态码
+        [[nodiscard]]
+        auto HttpStatus() const noexcept -> drogon::HttpStatusCode {
+            return GetHttpStatus(code);
+        }
+
+        /// 获取错误码整数值
+        [[nodiscard]]
+        auto CodeInt() const noexcept -> std::uint16_t {
+            return ToInt(code);
+        }
+    };
+
+    // ==================== Result 类型定义 ====================
+
+    /**
+     * @brief 通用结果类型，用于函数返回值
+     * @tparam T 成功时的返回值类型
+     *
+     * 使用示例：
+     * @code
+     * auto GetUser(int id) -> Result<User> {
+     *     if (id <= 0) {
+     *         return std::unexpected(Err(Code::InvalidParameter, "用户 ID 必须为正整数"));
+     *     }
+     *     return user;
+     * }
+     * @endcode
+     */
+    template <typename T>
+    using Result = std::expected<T, ErrorInfo>;
+
+    /**
+     * @brief 无返回值的结果类型
+     *
+     * 使用示例：
+     * @code
+     * auto DeleteUser(int id) -> VoidResult {
+     *     if (id <= 0) {
+     *         return std::unexpected(Err(Code::InvalidParameter));
+     *     }
+     *     // ... 删除操作
+     *     return {};
+     * }
+     * @endcode
+     */
+    using VoidResult = Result<void>;
+
+    /**
+     * @brief 创建错误结果的便捷函数（使用默认消息）
+     * @tparam T 期望的返回值类型
+     * @param code 错误码
+     * @return 包含错误的 Result
+     */
+    template <typename T>
+    [[nodiscard]]
+    auto MakeError(Code code) -> Result<T> {
+        return std::unexpected(ErrorInfo(code));
+    }
+
+    /**
+     * @brief 创建错误结果的便捷函数（使用自定义消息）
+     * @tparam T 期望的返回值类型
+     * @param code 错误码
+     * @param message 自定义错误消息
+     * @return 包含错误的 Result
+     *
+     * 使用示例：
+     * @code
+     * return MakeError<User>(Code::ValidationFailed, "bool 类型解析失败: 期望 true/false");
+     * @endcode
+     */
+    template <typename T>
+    [[nodiscard]]
+    auto MakeError(Code code, std::string message) -> Result<T> {
+        return std::unexpected(ErrorInfo(code, std::move(message)));
+    }
+
+    /**
+     * @brief 创建成功结果的便捷函数
+     * @tparam T 返回值类型
+     * @param value 成功的值
+     * @return 包含值的 Result
+     */
+    template <typename T>
+    [[nodiscard]]
+    constexpr auto MakeSuccess(T&& value) -> Result<std::decay_t<T>> {
+        return std::forward<T>(value);
+    }
+
+    /**
+     * @brief 创建无返回值的成功结果
+     * @return 成功的 VoidResult
+     */
+    [[nodiscard]]
+    constexpr auto MakeSuccess() -> VoidResult {
+        return {};
+    }
+
+    /**
+     * @brief 将一种错误类型的 Result 转换为另一种类型（保留错误信息）
+     * @tparam T 目标类型
+     * @tparam U 源类型
+     * @param result 源 Result
+     * @return 转换后的 Result（仅当源为错误时有效）
+     */
+    template <typename T, typename U>
+    [[nodiscard]]
+    auto PropagateError(const Result<U>& result) -> Result<T> {
+        return std::unexpected(result.error());
+    }
+
 } // namespace disk::error
 
 namespace Error = disk::error;
 using ErrorCode = Error::Code;
+using ErrorInfo = Error::ErrorInfo;
 template <typename T>
 using Result = Error::Result<T>;
 using VoidResult = Error::VoidResult;
