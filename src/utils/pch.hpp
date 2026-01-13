@@ -37,6 +37,16 @@
 #include <unordered_map>
 #include <vector>
 
+// 项目常用头文件
+#include "utils/error_code.hpp"
+
+// 错误处理
+namespace Error = disk::error;
+using ErrorCode = Error::ErrorCode;
+template <typename T>
+using Result = Error::Result<T>;
+using VoidResult = Error::VoidResult;
+
 // 项目通用类型别名
 using HttpResponseCallback = std::function<void(const drogon::HttpResponsePtr&)>;
 using HttpRequest = drogon::HttpRequest;

@@ -2,7 +2,7 @@
 
 #include "utils/pch.hpp"
 
-namespace api {
+namespace disk {
     class AuthController : public drogon::HttpController<AuthController> {
     public:
         METHOD_LIST_BEGIN
@@ -11,4 +11,4 @@ namespace api {
 
         auto Hello(const HttpRequestPtr& request, HttpResponseCallback&& callback) -> void;
     };
-} // namespace api
+} // namespace disk
