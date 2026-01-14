@@ -1,6 +1,14 @@
 If:
   PathMatch: .*
 
+CompileFlags:
+  Add:
+    - -Wpessimizing-move
+    - -Wredundant-move
+    - -Wunused-result
+    - -Wmissing-noreturn
+    - -Wuninitialized
+
 Diagnostics:
   ClangTidy:
     Add:
