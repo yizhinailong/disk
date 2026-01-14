@@ -54,7 +54,7 @@ namespace disk::auth {
         // 5. 插入数据库
         try {
             CoroMapper<Users> mapper(m_db_client);
-            co_await mapper.insert(user);
+            user = co_await mapper.insert(user);
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "注册用户失败: " << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "注册失败，请稍后重试"));
