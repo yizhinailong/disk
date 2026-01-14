@@ -29,6 +29,10 @@
     {
       "name": "jwt-cpp",
       "version>=": "0.7.1"
+    },
+    {
+      "name": "libxcrypt",
+      "version>=": "4.5.2"
     }
   ]
 }

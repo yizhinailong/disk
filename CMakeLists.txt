@@ -8,5 +8,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Drogon CONFIG REQUIRED)
 find_package(jwt-cpp CONFIG REQUIRED)
 
+# 使用 pkg-config 查找 libxcrypt
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBCRYPT REQUIRED IMPORTED_TARGET libcrypt)
+
 add_subdirectory(src)
 add_subdirectory(test)

@@ -15,7 +15,8 @@ target_sources(${PROJECT_NAME}
     # Plugins
 
     # Services
-
+    services/AuthService.cpp
+    services/AuthService.hpp
     # Requests
     requests/AuthRequest.hpp
     # Utils
@@ -38,4 +39,5 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE
     Drogon::Drogon
     jwt-cpp::jwt-cpp
+    PkgConfig::LIBCRYPT
 )

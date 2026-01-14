@@ -36,6 +36,11 @@
 #include <drogon/HttpRequest.h>
 #include <drogon/HttpResponse.h>
 #include <drogon/drogon.h>
+#include <drogon/orm/CoroMapper.h>
+#include <drogon/utils/Utilities.h>
 
 // JWT 头文件
 #include <jwt-cpp/jwt.h>
+
+// libxcrypt
+#include <crypt.h>
