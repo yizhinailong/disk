@@ -30,8 +30,11 @@ namespace disk::auth {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<RegisterRequest> {
+            LOG_DEBUG << "开始解析注册请求参数";
+
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
+                LOG_WARN << "请求体不是有效的 JSON";
                 return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
             }
 
@@ -39,23 +42,29 @@ namespace disk::auth {
 
             // 检查必填字段
             if (!json.isMember("username")) {
+                LOG_WARN << "缺少必需参数: username";
                 return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: username"));
             }
             if (!json.isMember("email")) {
+                LOG_WARN << "缺少必需参数: email";
                 return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: email"));
             }
             if (!json.isMember("password")) {
+                LOG_WARN << "缺少必需参数: password";
                 return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: password"));
             }
 
             // 检查字段类型
             if (!json["username"].isString()) {
+                LOG_WARN << "参数 'username' 类型错误: 期望字符串";
                 return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'username' 类型错误: 期望字符串"));
             }
             if (!json["email"].isString()) {
+                LOG_WARN << "参数 'email' 类型错误: 期望字符串";
                 return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'email' 类型错误: 期望字符串"));
             }
             if (!json["password"].isString()) {
+                LOG_WARN << "参数 'password' 类型错误: 期望字符串";
                 return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'password' 类型错误: 期望字符串"));
             }
 
@@ -64,15 +73,21 @@ namespace disk::auth {
             request.email = json["email"].asString();
             request.password = json["password"].asString();
 
+            LOG_DEBUG << "解析到注册请求: " << request.username << " <" << request.email << ">";
+
             if (!request.ValidateUsername()) {
+                LOG_WARN << "用户名格式错误: " << request.username;
                 return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "用户名格式错误"));
             }
             if (!request.ValidateEmail()) {
+                LOG_WARN << "邮箱格式错误: " << request.email;
                 return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "邮箱格式错误"));
             }
             if (!request.ValidatePassword()) {
+                LOG_WARN << "密码格式错误: " << request.username;
                 return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "密码格式错误"));
             }
+            LOG_DEBUG << "请求参数验证通过";
 
             return request;
         }
@@ -81,7 +96,6 @@ namespace disk::auth {
         /// 验证用户名
         [[nodiscard]]
         auto ValidateUsername() const -> bool {
-            // 验证用户名
             static const std::regex usernameRegex("^[a-zA-Z0-9_]+$");
             return std::regex_match(username, usernameRegex);
         }
@@ -96,7 +110,6 @@ namespace disk::auth {
         /// 验证密码
         [[nodiscard]]
         auto ValidatePassword() const -> bool {
-            // 验证密码
             static const std::regex passwordRegex("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,64}$");
             return std::regex_match(password, passwordRegex);
         }

@@ -437,7 +437,7 @@ namespace drogon_model::disk {
                 sql.resize(sql.length() - 1);
             }
             sql.append(1, ')');
-            LOG_TRACE << sql;
+            LOG_DEBUG << sql;
             return sql;
         }
     };

@@ -22,6 +22,8 @@ namespace disk::utils::passwd {
      */
     [[nodiscard]]
     inline auto Hash(const std::string& password) -> Result<std::string> {
+        LOG_DEBUG << "开始密码哈希计算";
+
         // 使用 libsodium 的 Argon2id 算法
         // crypto_pwhash_STRBYTES 是输出缓冲区的大小（128 字节）
         std::array<char, crypto_pwhash_STRBYTES> hashed_password{};
@@ -33,9 +35,11 @@ namespace disk::utils::passwd {
                 crypto_pwhash_OPSLIMIT_INTERACTIVE, // 适合交互式应用的计算强度
                 crypto_pwhash_MEMLIMIT_INTERACTIVE  // 适合交互式应用的内存限制
                 ) != 0) {
+            LOG_ERROR << "密码哈希失败: 内存不足";
             return std::unexpected(ErrorInfo{ ErrorCode::InternalError, "内存不足，密码哈希失败" });
         }
 
+        LOG_DEBUG << "密码哈希计算完成";
         return std::string(hashed_password.data());
     }
 
@@ -47,9 +51,10 @@ namespace disk::utils::passwd {
      */
     [[nodiscard]]
     inline auto Verify(const std::string& password, const std::string& hash) -> bool {
-        // 使用 libsodium 验证密码
-        // crypto_pwhash_str_verify 会自动识别存储的哈希格式（Argon2id）
-        return crypto_pwhash_str_verify(hash.c_str(), password.c_str(), password.length()) == 0;
+        LOG_DEBUG << "开始密码验证";
+        auto result = crypto_pwhash_str_verify(hash.c_str(), password.c_str(), password.length()) == 0;
+        LOG_DEBUG << "密码验证完成: " << (result ? "成功" : "失败");
+        return result;
     }
 
 } // namespace disk::utils::passwd
