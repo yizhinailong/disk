@@ -42,5 +42,5 @@
 // JWT 头文件
 #include <jwt-cpp/jwt.h>
 
-// libxcrypt
-#include <crypt.h>
+// libsodium 加密库
+#include <sodium.h>

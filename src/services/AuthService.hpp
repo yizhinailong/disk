@@ -63,7 +63,7 @@ namespace disk::auth {
          *
          * 业务规则：
          * - 验证用户名和邮箱的唯一性
-         * - 密码使用 Drogon 自带的 bcrypt 加密存储
+         * - 密码使用 libsodium 的 Argon2id 算法加密存储
          * - 分配默认存储配额（10GB）
          *
          * @param request 注册请求
@@ -86,7 +86,7 @@ namespace disk::auth {
         auto IsEmailExists(std::string email) const -> drogon::Task<bool>;
 
         /**
-         * @brief 加密密码（使用 bcrypt，cost factor = 12）
+         * @brief 加密密码（使用 libsodium Argon2id 算法）
          */
         [[nodiscard]]
         static auto HashPassword(const std::string& password) -> std::string;

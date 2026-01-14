@@ -32,7 +32,7 @@ namespace disk::auth {
             co_return std::unexpected(ErrorInfo(ErrorCode::EmailExists));
         }
 
-        // 3. 加密密码（使用 Drogon 自带的 bcrypt）
+        // 3. 加密密码（使用 libsodium Argon2id）
         auto password_hash = HashPassword(request.password);
 
         // 4. 创建用户记录
@@ -82,27 +82,27 @@ namespace disk::auth {
     }
 
     auto AuthService::HashPassword(const std::string& password) -> std::string {
-        // 使用 bcrypt 算法（cost factor = 12）
-        // $2b$ 表示使用 bcrypt，12 表示 cost factor
-        const char* salt = crypt_gensalt("$2b$", 12, nullptr, 0);
-        if (salt == nullptr) {
-            throw std::runtime_error("生成 salt 失败");
+        // 使用 libsodium 的 Argon2id 算法
+        // crypto_pwhash_STRBYTES 是输出缓冲区的大小（128 字节）
+        char hashed_password[crypto_pwhash_STRBYTES];
+
+        if (crypto_pwhash_str(
+                hashed_password,
+                password.c_str(),
+                password.length(),
+                crypto_pwhash_OPSLIMIT_INTERACTIVE, // 适合交互式应用的计算强度
+                crypto_pwhash_MEMLIMIT_INTERACTIVE  // 适合交互式应用的内存限制
+                ) != 0) {
+            throw std::runtime_error("内存不足，密码哈希失败");
         }
 
-        const char* hash = crypt(password.c_str(), salt);
-        if (hash == nullptr) {
-            throw std::runtime_error("密码哈希失败");
-        }
-
-        return std::string(hash);
+        return std::string(hashed_password);
     }
 
     auto AuthService::VerifyPassword(const std::string& password, const std::string& hash) -> bool {
-        const char* result = crypt(password.c_str(), hash.c_str());
-        if (result == nullptr) {
-            return false;
-        }
-        return std::string(result) == hash;
+        // 使用 libsodium 验证密码
+        // crypto_pwhash_str_verify 会自动识别存储的哈希格式（Argon2id）
+        return crypto_pwhash_str_verify(hash.c_str(), password.c_str(), password.length()) == 0;
     }
 
     auto AuthService::UserToResponse(const Users& user) -> RegisterResponse {

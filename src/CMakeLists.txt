@@ -39,5 +39,5 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE
     Drogon::Drogon
     jwt-cpp::jwt-cpp
-    PkgConfig::LIBCRYPT
+    unofficial-sodium::sodium
 )
