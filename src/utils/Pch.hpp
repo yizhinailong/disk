@@ -13,6 +13,7 @@
 
 // C++ 标准库常用头文件
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <exception>
 #include <fstream>

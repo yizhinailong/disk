@@ -21,6 +21,7 @@ target_sources(${PROJECT_NAME}
     requests/AuthRequest.hpp
     # Utils
     utils/ErrorCode.hpp
+    utils/PasswdHash.hpp
     utils/Pch.hpp
     utils/Response.hpp
 )

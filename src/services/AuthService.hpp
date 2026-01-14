@@ -86,21 +86,6 @@ namespace disk::auth {
         auto IsEmailExists(std::string email) const -> drogon::Task<bool>;
 
         /**
-         * @brief 加密密码（使用 libsodium Argon2id 算法）
-         */
-        [[nodiscard]]
-        static auto HashPassword(const std::string& password) -> std::string;
-
-        /**
-         * @brief 验证密码
-         * @param password 明文密码
-         * @param hash 存储的哈希值
-         * @return 密码是否匹配
-         */
-        [[nodiscard]]
-        static auto VerifyPassword(const std::string& password, const std::string& hash) -> bool;
-
-        /**
          * @brief 用户模型转响应结构
          */
         [[nodiscard]]
