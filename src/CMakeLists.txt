@@ -2,39 +2,40 @@ add_executable(${PROJECT_NAME} main.cpp)
 
 target_sources(${PROJECT_NAME}
     PRIVATE
-    # Controllers
+    # Controller
     controllers/AuthController.cpp
+    # Model
+    models/FileContents.cpp
+    models/Files.cpp
+    models/Folders.cpp
+    models/OperationLogs.cpp
+    models/ShareFiles.cpp
+    models/Shares.cpp
+    models/Trash.cpp
+    models/UploadTasks.cpp
+    models/Users.cpp
+    # Service
+    services/AuthService.cpp
+    PUBLIC
+    FILE_SET HEADERS
+    TYPE HEADERS
+    FILES
+    # Controllers
     controllers/AuthController.hpp
     # Models
-    models/FileContents.cpp
     models/FileContents.hpp
-    models/Files.cpp
     models/Files.hpp
-    models/Folders.cpp
     models/Folders.hpp
-    models/OperationLogs.cpp
     models/OperationLogs.hpp
-    models/ShareFiles.cpp
     models/ShareFiles.hpp
-    models/Shares.cpp
     models/Shares.hpp
-    models/Trash.cpp
     models/Trash.hpp
-    models/UploadTasks.cpp
     models/UploadTasks.hpp
-    models/Users.cpp
     models/Users.hpp
     # Requests
     requests/AuthRequest.hpp
-    # Filters
-
-    # Plugins
-
     # Services
-    services/AuthService.cpp
     services/AuthService.hpp
-    # Requests
-    requests/AuthRequest.hpp
     # Utils
     utils/ErrorCode.hpp
     utils/PasswdHash.hpp
