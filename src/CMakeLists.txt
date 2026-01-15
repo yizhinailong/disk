@@ -18,6 +18,8 @@ target_sources(${PROJECT_NAME}
     models/ShareFiles.hpp
     models/Shares.cpp
     models/Shares.hpp
+    models/Trash.cpp
+    models/Trash.hpp
     models/Users.cpp
     models/Users.hpp
     # Requests
