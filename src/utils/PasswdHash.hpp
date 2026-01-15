@@ -36,7 +36,7 @@ namespace disk::utils::passwd {
                 crypto_pwhash_MEMLIMIT_INTERACTIVE  // 适合交互式应用的内存限制
                 ) != 0) {
             LOG_ERROR << "密码哈希失败: 内存不足";
-            return std::unexpected(ErrorInfo{ ErrorCode::InternalError, "内存不足，密码哈希失败" });
+            return std::unexpected(ErrorInfo(ErrorCode::InternalError, "内存不足，密码哈希失败"));
         }
 
         LOG_DEBUG << "密码哈希计算完成";

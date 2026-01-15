@@ -61,18 +61,15 @@ namespace disk::auth {
         try {
             CoroMapper<Users> mapper(m_db_client);
             user = co_await mapper.insert(user);
-            LOG_INFO << "用户数据插入成功: " << request.username
-                     << " (ID: " << user.getValueOfId() << ")";
+            LOG_INFO << "用户数据插入成功: " << request.username << " (ID: " << user.getValueOfId() << ")";
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "用户注册数据库插入失败: " << request.username
-                      << " - " << e.base().what();
+            LOG_ERROR << "用户注册数据库插入失败: " << request.username << " - " << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "注册失败，请稍后重试"));
         }
 
         // 6. 返回用户信息
         auto response = UserToResponse(user);
-        LOG_INFO << "用户注册流程完成: " << response.username
-                 << " (ID: " << response.id << ")";
+        LOG_INFO << "用户注册流程完成: " << response.username << " (ID: " << response.id << ")";
         co_return response;
     }
 
@@ -101,7 +98,6 @@ namespace disk::auth {
     }
 
     auto AuthService::UserToResponse(const Users& user) -> RegisterResponse {
-
         RegisterResponse response;
         response.id = user.getValueOfId();
         response.username = user.getValueOfUsername();
