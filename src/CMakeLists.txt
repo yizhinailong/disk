@@ -6,6 +6,8 @@ target_sources(${PROJECT_NAME}
     controllers/AuthController.cpp
     controllers/AuthController.hpp
     # Models
+    models/FileContents.cpp
+    models/FileContents.hpp
     models/Users.cpp
     models/Users.hpp
     # Requests
