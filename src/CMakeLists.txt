@@ -14,6 +14,8 @@ target_sources(${PROJECT_NAME}
     models/Folders.hpp
     models/OperationLogs.cpp
     models/OperationLogs.hpp
+    models/ShareFiles.cpp
+    models/ShareFiles.hpp
     models/Users.cpp
     models/Users.hpp
     # Requests
