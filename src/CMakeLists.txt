@@ -10,6 +10,8 @@ target_sources(${PROJECT_NAME}
     models/FileContents.hpp
     models/Files.cpp
     models/Files.hpp
+    models/Folders.cpp
+    models/Folders.hpp
     models/Users.cpp
     models/Users.hpp
     # Requests
