@@ -96,22 +96,22 @@ namespace disk::auth {
         /// 验证用户名
         [[nodiscard]]
         auto ValidateUsername() const -> bool {
-            static const std::regex usernameRegex("^[a-zA-Z0-9_]+$");
-            return std::regex_match(username, usernameRegex);
+            static const std::regex username_regex("^[a-zA-Z0-9_]+$");
+            return std::regex_match(username, username_regex);
         }
 
         /// 验证邮箱
         [[nodiscard]]
         auto ValidateEmail() const -> bool {
-            static const std::regex emailRegex(R"(^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$)");
-            return std::regex_match(email, emailRegex);
+            static const std::regex email_regex(R"(^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$)");
+            return std::regex_match(email, email_regex);
         }
 
         /// 验证密码
         [[nodiscard]]
         auto ValidatePassword() const -> bool {
-            static const std::regex passwordRegex("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,64}$");
-            return std::regex_match(password, passwordRegex);
+            static const std::regex password_regex("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,64}$");
+            return std::regex_match(password, password_regex);
         }
     };
 
