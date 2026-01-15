@@ -23,9 +23,11 @@
 #include <memory>
 #include <mutex>
 #include <print>
+#include <ranges>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <vector>
