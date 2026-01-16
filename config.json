@@ -33,10 +33,5 @@
         "log_format": "[$request_date] [$thread] ($remote_addr) \"$request\" $status $body_bytes_sent $processing_time"
       }
     }
-  ],
-  "custom": {
-    "jwt": {
-      "secret": "dev-secret-key-change-in-production-min-32-chars"
-    }
-  }
+  ]
 }
