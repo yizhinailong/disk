@@ -163,23 +163,20 @@ namespace disk::auth {
     }
 
     auto AuthService::GetJwtSecret() -> std::string {
-        // 1. 尝试从自定义配置读取
-        try {
-            const auto& custom_config = drogon::app().getCustomConfig();
-            if (custom_config.isMember("jwt") && custom_config["jwt"].isMember("secret")) {
-                const auto secret = custom_config["jwt"]["secret"].asString();
-                if (!secret.empty()) {
-                    LOG_INFO << "从配置读取 JWT 密钥";
-                    return secret;
-                }
-            }
-        } catch (const std::exception& e) {
-            LOG_WARN << "读取 JWT 配置失败: " << e.what();
+        constexpr std::string_view DEFAULT_SECRET = "dev-secret-key-change-in-production-min-32-chars";
+        constexpr size_t MIN_SECRET_LENGTH = 32;
+        const auto* env_secret = std::getenv("JWT_SECRET");
+
+        if (env_secret != nullptr && std::strlen(env_secret) >= MIN_SECRET_LENGTH) {
+            LOG_INFO << "从环境变量读取 JWT 密钥";
+            return env_secret;
+        }
+        if (env_secret != nullptr) {
+            LOG_ERROR << "JWT_SECRET 长度不足，至少需要 " << MIN_SECRET_LENGTH << " 字符";
         }
 
-        // 2. 使用默认密钥（开发环境）
-        LOG_WARN << "JWT_SECRET 未配置，使用默认密钥（仅开发环境）";
-        return "dev-secret-key-change-in-production-min-32-chars";
+        LOG_WARN << "JWT_SECRET 未正确配置，使用默认密钥（仅开发环境）";
+        return std::string(DEFAULT_SECRET);
     }
 
     auto AuthService::FindUser(std::string account) const
