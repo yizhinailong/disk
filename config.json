@@ -17,7 +17,19 @@
       "dbname": "disk",
       "user": "root",
       "passwd": "mysql",
-      "num_connection_number": 1
+      "num_connection_number": 10
+    }
+  ],
+  "redis_clients": [
+    {
+      "name": "default",
+      "host": "47.97.231.191",
+      "port": 6379,
+      "passwd": "redis",
+      "db": 0,
+      "is_fast": false,
+      "number_of_connections": 10,
+      "timeout": -1.0
     }
   ],
   "plugins": [
