@@ -110,7 +110,8 @@ namespace disk::auth {
         // 4. 生成令牌
         auto [access_token, refresh_token] = m_token_service.GenerateTokens(
             user.getValueOfId(),
-            user.getValueOfUsername());
+            user.getValueOfUsername()
+        );
 
         // 5. 更新登录信息
         co_await UpdateLoginInfo(user.getValueOfId(), ip_address);
@@ -252,7 +253,8 @@ namespace disk::auth {
 
             // 查询当前失败次数
             auto user = co_await mapper.findOne(
-                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
+                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
+            );
 
             auto attempts = user.getValueOfLoginAttempts() + 1;
 

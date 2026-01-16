@@ -96,6 +96,9 @@ namespace disk::auth {
         /// 验证用户名
         [[nodiscard]]
         auto ValidateUsername() const -> bool {
+            if (username.length() < 4 || username.length() > 32) {
+                return false;
+            }
             static const std::regex username_regex("^[a-zA-Z0-9_]+$");
             return std::regex_match(username, username_regex);
         }
@@ -110,6 +113,9 @@ namespace disk::auth {
         /// 验证密码
         [[nodiscard]]
         auto ValidatePassword() const -> bool {
+            if (password.length() < 8 || password.length() > 64) {
+                return false;
+            }
             static const std::regex password_regex("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,64}$");
             return std::regex_match(password, password_regex);
         }

@@ -24,6 +24,7 @@
 #include <mutex>
 #include <print>
 #include <ranges>
+#include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <string>

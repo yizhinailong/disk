@@ -22,6 +22,11 @@ namespace disk::utils::passwd {
      */
     [[nodiscard]]
     inline auto Hash(const std::string& password) -> Result<std::string> {
+        if (password.empty()) {
+            LOG_ERROR << "密码哈希失败: 密码为空";
+            return std::unexpected(ErrorInfo(ErrorCode::InternalError, "密码不能为空"));
+        }
+
         LOG_DEBUG << "开始密码哈希计算";
 
         // 使用 libsodium 的 Argon2id 算法
@@ -34,7 +39,7 @@ namespace disk::utils::passwd {
                 password.length(),
                 crypto_pwhash_OPSLIMIT_INTERACTIVE, // 适合交互式应用的计算强度
                 crypto_pwhash_MEMLIMIT_INTERACTIVE  // 适合交互式应用的内存限制
-                ) != 0) {
+            ) != 0) {
             LOG_ERROR << "密码哈希失败: 内存不足";
             return std::unexpected(ErrorInfo(ErrorCode::InternalError, "内存不足，密码哈希失败"));
         }
