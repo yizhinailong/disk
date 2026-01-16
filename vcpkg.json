@@ -33,6 +33,10 @@
     {
       "name": "libsodium",
       "version>=": "1.0.21"
+    },
+    {
+      "name": "gtest",
+      "version>=": "1.17.0"
     }
   ]
 }
