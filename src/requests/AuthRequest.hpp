@@ -115,4 +115,56 @@ namespace disk::auth {
         }
     };
 
+    /**
+     * @brief 用户登录请求
+     *
+     * 验证规则：
+     * - account: 用户名或邮箱（必填，字符串）
+     * - password: 密码（必填，字符串）
+     */
+    struct LoginRequest {
+        std::string account;
+        std::string password;
+
+        [[nodiscard]]
+        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<LoginRequest> {
+            LOG_DEBUG << "开始解析登录请求参数";
+
+            auto json_ptr = req->getJsonObject();
+            if (!json_ptr) {
+                LOG_WARN << "请求体不是有效的 JSON";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+            }
+
+            const auto& json = *json_ptr;
+
+            // 检查必填字段
+            if (!json.isMember("account")) {
+                LOG_WARN << "缺少必需参数: account";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: account"));
+            }
+            if (!json.isMember("password")) {
+                LOG_WARN << "缺少必需参数: password";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: password"));
+            }
+
+            // 检查字段类型
+            if (!json["account"].isString()) {
+                LOG_WARN << "参数 'account' 类型错误: 期望字符串";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'account' 类型错误: 期望字符串"));
+            }
+            if (!json["password"].isString()) {
+                LOG_WARN << "参数 'password' 类型错误: 期望字符串";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'password' 类型错误: 期望字符串"));
+            }
+
+            LoginRequest request;
+            request.account = json["account"].asString();
+            request.password = json["password"].asString();
+
+            LOG_DEBUG << "解析到登录请求: " << request.account;
+
+            return request;
+        }
+    };
 } // namespace disk::auth

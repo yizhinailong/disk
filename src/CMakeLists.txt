@@ -16,6 +16,7 @@ target_sources(${PROJECT_NAME}
     models/Users.cpp
     # Service
     services/AuthService.cpp
+    services/TokenService.cpp
     PUBLIC
     FILE_SET HEADERS
     TYPE HEADERS
@@ -36,6 +37,7 @@ target_sources(${PROJECT_NAME}
     requests/AuthRequest.hpp
     # Services
     services/AuthService.hpp
+    services/TokenService.hpp
     # Utils
     utils/ErrorCode.hpp
     utils/PasswdHash.hpp

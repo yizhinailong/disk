@@ -20,7 +20,8 @@ namespace disk::auth {
     using drogon_model::disk::Users;
 
     AuthService::AuthService(drogon::orm::DbClientPtr db_client)
-        : m_db_client(std::move(db_client)) {}
+        : m_db_client(std::move(db_client)),
+          m_token_service(GetJwtSecret()) {}
 
     auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {
         LOG_DEBUG << "开始注册用户: " << request.username << " <" << request.email << ">";
@@ -73,6 +74,59 @@ namespace disk::auth {
         co_return response;
     }
 
+    auto AuthService::Login(LoginRequest request, std::string ip_address)
+        -> drogon::Task<Result<LoginResponse>> {
+
+        LOG_DEBUG << "用户登录尝试: " << request.account;
+
+        // 1. 查找用户（用户名或邮箱）
+        auto user_opt = co_await FindUser(request.account);
+        if (!user_opt) {
+            LOG_WARN << "用户不存在: " << request.account;
+            co_return std::unexpected(ErrorInfo(ErrorCode::InvalidCredentials));
+        }
+
+        const auto& user = user_opt.value();
+
+        // 2. 检查账户状态
+        const auto status = user.getValueOfStatus();
+        if (status == 0) {
+            LOG_WARN << "账户已禁用: " << request.account;
+            co_return std::unexpected(ErrorInfo(ErrorCode::AccountDisabled));
+        }
+
+        if (CheckAccountLocked(user)) {
+            LOG_WARN << "账户已锁定: " << request.account;
+            co_return std::unexpected(ErrorInfo(ErrorCode::AccountLocked));
+        }
+
+        // 3. 验证密码
+        if (!PasswdHash::Verify(request.password, user.getValueOfPasswordHash())) {
+            LOG_WARN << "密码错误: " << request.account;
+            co_await IncrementLoginAttempts(user.getValueOfId());
+            co_return std::unexpected(ErrorInfo(ErrorCode::InvalidCredentials));
+        }
+
+        // 4. 生成令牌
+        auto [access_token, refresh_token] = m_token_service.GenerateTokens(
+            user.getValueOfId(),
+            user.getValueOfUsername());
+
+        // 5. 更新登录信息
+        co_await UpdateLoginInfo(user.getValueOfId(), ip_address);
+
+        // 6. 构造响应
+        LoginResponse response;
+        response.access_token = access_token;
+        response.refresh_token = refresh_token;
+        response.token_type = "Bearer";
+        response.expires_in = TokenService::GetAccessTokenExpireSeconds();
+        response.user = UserToResponse(user);
+
+        LOG_INFO << "用户登录成功: " << request.account << " (ID: " << user.getValueOfId() << ")";
+        co_return response;
+    }
+
     auto AuthService::IsUsernameExists(std::string username) const -> drogon::Task<bool> {
         try {
             CoroMapper<Users> mapper(m_db_client);
@@ -106,5 +160,121 @@ namespace disk::auth {
         response.storage_quota = user.getValueOfStorageQuota();
         response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
         return response;
+    }
+
+    auto AuthService::GetJwtSecret() -> std::string {
+        // 1. 尝试从自定义配置读取
+        try {
+            const auto& custom_config = drogon::app().getCustomConfig();
+            if (custom_config.isMember("jwt") && custom_config["jwt"].isMember("secret")) {
+                const auto secret = custom_config["jwt"]["secret"].asString();
+                if (!secret.empty()) {
+                    LOG_INFO << "从配置读取 JWT 密钥";
+                    return secret;
+                }
+            }
+        } catch (const std::exception& e) {
+            LOG_WARN << "读取 JWT 配置失败: " << e.what();
+        }
+
+        // 2. 使用默认密钥（开发环境）
+        LOG_WARN << "JWT_SECRET 未配置，使用默认密钥（仅开发环境）";
+        return "dev-secret-key-change-in-production-min-32-chars";
+    }
+
+    auto AuthService::FindUser(std::string account) const
+        -> drogon::Task<std::optional<drogon_model::disk::Users>> {
+
+        try {
+            using drogon::orm::CompareOperator;
+            CoroMapper<Users> mapper(m_db_client);
+
+            auto by_username = co_await mapper.findOne(Criteria(Users::Cols::_username, CompareOperator::EQ, account));
+            co_return std::make_optional(by_username);
+
+        } catch (const drogon::orm::DrogonDbException&) {
+            LOG_INFO << "使用用户名查找失败";
+        }
+
+        try {
+            using drogon::orm::CompareOperator;
+            CoroMapper<Users> mapper(m_db_client);
+
+            auto by_email = co_await mapper.findOne(Criteria(Users::Cols::_email, CompareOperator::EQ, account));
+            co_return std::make_optional(by_email);
+
+        } catch (const drogon::orm::DrogonDbException&) {
+            LOG_INFO << "使用邮箱查找失败";
+        }
+
+        co_return std::nullopt;
+    }
+
+    auto AuthService::CheckAccountLocked(const Users& user) const -> bool {
+        // 检查 status 字段（2 = 锁定）
+        if (user.getValueOfStatus() == 2) {
+            return true;
+        }
+
+        // 检查 locked_until 字段
+        if (user.getLockedUntil()) {
+            const auto& locked_until = user.getValueOfLockedUntil();
+            const auto now = trantor::Date::now();
+            if (locked_until > now) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    auto AuthService::UpdateLoginInfo(uint64_t user_id, std::string ip_address)
+        -> drogon::Task<void> {
+
+        try {
+            CoroMapper<Users> mapper(m_db_client);
+
+            Users user;
+            user.setId(user_id);
+            user.setLastLoginAt(trantor::Date::now());
+            user.setLastLoginIp(ip_address);
+            user.setLoginAttempts(0);
+
+            co_await mapper.update(user);
+            LOG_DEBUG << "更新登录信息成功: " << user_id;
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "更新登录信息失败: " << user_id << " - " << e.base().what();
+        }
+    }
+
+    auto AuthService::IncrementLoginAttempts(uint64_t user_id) -> drogon::Task<void> {
+
+        try {
+            using drogon::orm::CompareOperator;
+            CoroMapper<Users> mapper(m_db_client);
+
+            // 查询当前失败次数
+            auto user = co_await mapper.findOne(
+                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
+
+            auto attempts = user.getValueOfLoginAttempts() + 1;
+
+            // 检查是否需要锁定
+            if (attempts >= 5) {
+                // 锁定账户 15 分钟
+                auto locked_until = trantor::Date::now().after(15 * 60);
+                user.setLockedUntil(locked_until);
+                user.setStatus(2);
+                LOG_WARN << "账户已锁定: " << user_id << " (15分钟后解锁)";
+            } else {
+                user.setLoginAttempts(attempts);
+                LOG_WARN << "登录失败次数: " << user_id << " = " << attempts;
+            }
+
+            co_await mapper.update(user);
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "增加登录失败次数失败: " << user_id << " - " << e.base().what();
+        }
     }
 } // namespace disk::auth

@@ -20,9 +20,11 @@ namespace disk::auth {
 
         METHOD_LIST_BEGIN
         ADD_METHOD_TO(AuthController::Register, "/api/auth/register", drogon::Post);
+        ADD_METHOD_TO(AuthController::Login, "/api/auth/login", drogon::Post);
         METHOD_LIST_END
 
         auto Register(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+        auto Login(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
         std::unique_ptr<AuthService> m_auth_service;
