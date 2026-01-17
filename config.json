@@ -6,7 +6,8 @@
     }
   ],
   "app": {
-    "upload_path": "build/uploaded"
+    "upload_path": "build/uploaded",
+    "threads_num": 0
   },
   "db_clients": [
     {
