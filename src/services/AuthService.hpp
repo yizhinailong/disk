@@ -112,12 +112,6 @@ namespace disk::auth {
         [[nodiscard]]
         auto Login(LoginRequest request, std::string ip_address) -> drogon::Task<Result<LoginResponse>>;
 
-        /**
-         * @brief 从配置读取 JWT 密钥
-         */
-        [[nodiscard]]
-        static auto GetJwtSecret() -> std::string;
-
     private:
         /**
          * @brief 检查用户名是否已存在

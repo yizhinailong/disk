@@ -11,17 +11,19 @@
 
 #include "AuthService.hpp"
 
+#include "utils/ConfigMgr.hpp"
 #include "utils/PasswdHash.hpp"
 
 namespace disk::auth {
 
+    using disk::utils::ConfigMgr;
     using drogon::orm::CoroMapper;
     using drogon::orm::Criteria;
     using drogon_model::disk::Users;
 
     AuthService::AuthService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)),
-          m_token_service(GetJwtSecret()) {}
+          m_token_service(ConfigMgr::GetInstance()->GetJwtSecret()) {}
 
     auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {
         LOG_DEBUG << "开始注册用户: " << request.username << " <" << request.email << ">";
@@ -161,23 +163,6 @@ namespace disk::auth {
         response.storage_quota = user.getValueOfStorageQuota();
         response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
         return response;
-    }
-
-    auto AuthService::GetJwtSecret() -> std::string {
-        constexpr std::string_view DEFAULT_SECRET = "dev-secret-key-change-in-production-min-32-chars";
-        constexpr size_t MIN_SECRET_LENGTH = 32;
-        const auto* env_secret = std::getenv("JWT_SECRET");
-
-        if (env_secret != nullptr && std::strlen(env_secret) >= MIN_SECRET_LENGTH) {
-            LOG_INFO << "从环境变量读取 JWT 密钥";
-            return env_secret;
-        }
-        if (env_secret != nullptr) {
-            LOG_ERROR << "JWT_SECRET 长度不足，至少需要 " << MIN_SECRET_LENGTH << " 字符";
-        }
-
-        LOG_WARN << "JWT_SECRET 未正确配置，使用默认密钥（仅开发环境）";
-        return std::string(DEFAULT_SECRET);
     }
 
     auto AuthService::FindUser(std::string account) const

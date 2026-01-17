@@ -10,13 +10,14 @@
  */
 #include "JwtAuthFilter.hpp"
 
-#include "services/AuthService.hpp"
+#include "services/TokenService.hpp"
+#include "utils/ConfigMgr.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::filters {
 
     JwtAuthFilter::JwtAuthFilter() {
-        const auto jwt_secret = disk::auth::AuthService::GetJwtSecret();
+        const auto jwt_secret = disk::utils::ConfigMgr::GetInstance()->GetJwtSecret();
         m_token_service = std::make_unique<disk::auth::TokenService>(jwt_secret);
         LOG_DEBUG << "JwtAuthFilter 初始化完成";
     }

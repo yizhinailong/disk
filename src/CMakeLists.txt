@@ -61,6 +61,11 @@ set(Utils_HEADERS
     utils/PasswdHash.hpp
     utils/Pch.hpp
     utils/Response.hpp
+    utils/Singleton.hpp
+    utils/ConfigMgr.hpp
+)
+set(Utils_SOURCES
+    utils/ConfigMgr.cpp
 )
 
 target_sources(${PROJECT_NAME}
@@ -69,6 +74,7 @@ target_sources(${PROJECT_NAME}
     ${Filters_SOURCES}
     ${Models_SOURCES}
     ${Services_SOURCES}
+    ${Utils_SOURCES}
     PUBLIC
     FILE_SET HEADERS
     TYPE HEADERS
