@@ -40,4 +40,5 @@ Diagnostics:
         bugprone-exception-escape,
         cppcoreguidelines-macro-usage,
         cppcoreguidelines-avoid-c-arrays,
+        cppcoreguidelines-avoid-reference-coroutine-parameters,
       ]

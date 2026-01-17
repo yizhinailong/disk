@@ -90,6 +90,10 @@
 | 40103 | `AccountDisabled` | 401 | 账户已禁用 |
 | 40104 | `InvalidToken` | 401 | 令牌无效或已过期 |
 | 40105 | `InvalidRefreshToken` | 401 | 刷新令牌无效 |
+| 40106 | `TokenMissing` | 401 | 未提供令牌 |
+| 40107 | `TokenMalformed` | 401 | 令牌格式错误 |
+| 40108 | `TokenExpired` | 401 | 令牌已过期 |
+| 40109 | `TokenWrongType` | 401 | 令牌类型错误 |
 
 #### 文件错误码
 

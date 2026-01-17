@@ -112,6 +112,12 @@ namespace disk::auth {
         [[nodiscard]]
         auto Login(LoginRequest request, std::string ip_address) -> drogon::Task<Result<LoginResponse>>;
 
+        /**
+         * @brief 从配置读取 JWT 密钥
+         */
+        [[nodiscard]]
+        static auto GetJwtSecret() -> std::string;
+
     private:
         /**
          * @brief 检查用户名是否已存在
@@ -152,12 +158,6 @@ namespace disk::auth {
          * @brief 增加登录失败次数
          */
         auto IncrementLoginAttempts(uint64_t user_id) -> drogon::Task<void>;
-
-        /**
-         * @brief 从配置读取 JWT 密钥
-         */
-        [[nodiscard]]
-        static auto GetJwtSecret() -> std::string;
 
         drogon::orm::DbClientPtr m_db_client;                          ///< 数据库客户端
         TokenService m_token_service;                                  ///< JWT令牌服务

@@ -8,6 +8,14 @@ set(Controllers_SOURCES
     controllers/AuthController.cpp
 )
 
+# Filter
+set(Filters_HEADERS
+    filters/JwtAuthFilter.hpp
+)
+set(Filters_SOURCES
+    filters/JwtAuthFilter.cpp
+)
+
 # Model
 set(Models_HEADERS
     models/FileContents.hpp
@@ -58,6 +66,7 @@ set(Utils_HEADERS
 target_sources(${PROJECT_NAME}
     PRIVATE
     ${Controllers_SOURCES}
+    ${Filters_SOURCES}
     ${Models_SOURCES}
     ${Services_SOURCES}
     PUBLIC
@@ -65,6 +74,7 @@ target_sources(${PROJECT_NAME}
     TYPE HEADERS
     FILES
     ${Controllers_HEADERS}
+    ${Filters_HEADERS}
     ${Models_HEADERS}
     ${Requests_HEADERS}
     ${Services_HEADERS}

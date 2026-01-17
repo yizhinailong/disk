@@ -64,6 +64,14 @@ namespace disk::error {
         InvalidToken = 40104,
         /// 刷新令牌无效
         InvalidRefreshToken = 40105,
+        /// 未提供令牌
+        TokenMissing = 40106,
+        /// 令牌格式错误
+        TokenMalformed = 40107,
+        /// 令牌已过期
+        TokenExpired = 40108,
+        /// 令牌类型错误（需要 access token）
+        TokenWrongType = 40109,
 
         // ==================== 文件错误码 (50xxx) ====================
         /// 文件名无效
@@ -123,6 +131,10 @@ namespace disk::error {
             {        Code::AccountLocked,        drogon::k401Unauthorized },
             {      Code::AccountDisabled,        drogon::k401Unauthorized },
             {         Code::InvalidToken,        drogon::k401Unauthorized },
+            {         Code::TokenMissing,        drogon::k401Unauthorized },
+            {       Code::TokenMalformed,        drogon::k401Unauthorized },
+            {         Code::TokenExpired,        drogon::k401Unauthorized },
+            {       Code::TokenWrongType,        drogon::k401Unauthorized },
             {  Code::InvalidRefreshToken,        drogon::k401Unauthorized },
 
             // 文件错误
@@ -176,6 +188,10 @@ namespace disk::error {
             {        Code::AccountLocked, "账户已锁定，请稍后重试" },
             {      Code::AccountDisabled,           "账户已被禁用" },
             {         Code::InvalidToken,       "令牌无效或已过期" },
+            {         Code::TokenMissing,             "未提供令牌" },
+            {       Code::TokenMalformed,           "令牌格式错误" },
+            {         Code::TokenExpired,             "令牌已过期" },
+            {       Code::TokenWrongType,           "令牌类型错误" },
             {  Code::InvalidRefreshToken,           "刷新令牌无效" },
 
             // 文件错误
@@ -316,57 +332,6 @@ namespace disk::error {
      * @endcode
      */
     using VoidResult = Result<void>;
-
-    /**
-     * @brief 创建错误结果的便捷函数（使用默认消息）
-     * @tparam T 期望的返回值类型
-     * @param code 错误码
-     * @return 包含错误的 Result
-     */
-    template <typename T>
-    [[nodiscard]]
-    auto MakeError(Code code) -> Result<T> {
-        return std::unexpected(ErrorInfo(code));
-    }
-
-    /**
-     * @brief 创建错误结果的便捷函数（使用自定义消息）
-     * @tparam T 期望的返回值类型
-     * @param code 错误码
-     * @param message 自定义错误消息
-     * @return 包含错误的 Result
-     *
-     * 使用示例：
-     * @code
-     * return MakeError<User>(Code::ValidationFailed, "bool 类型解析失败: 期望 true/false");
-     * @endcode
-     */
-    template <typename T>
-    [[nodiscard]]
-    auto MakeError(Code code, std::string message) -> Result<T> {
-        return std::unexpected(ErrorInfo(code, std::move(message)));
-    }
-
-    /**
-     * @brief 创建成功结果的便捷函数
-     * @tparam T 返回值类型
-     * @param value 成功的值
-     * @return 包含值的 Result
-     */
-    template <typename T>
-    [[nodiscard]]
-    constexpr auto MakeSuccess(T&& value) -> Result<std::decay_t<T>> {
-        return std::forward<T>(value);
-    }
-
-    /**
-     * @brief 创建无返回值的成功结果
-     * @return 成功的 VoidResult
-     */
-    [[nodiscard]]
-    constexpr auto MakeSuccess() -> VoidResult {
-        return {};
-    }
 
     /**
      * @brief 将一种错误类型的 Result 转换为另一种类型（保留错误信息）

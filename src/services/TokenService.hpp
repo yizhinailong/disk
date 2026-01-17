@@ -14,6 +14,8 @@
 #include <string>
 #include <utility>
 
+#include "utils/ErrorCode.hpp"
+
 namespace disk::auth {
 
     /**
@@ -55,6 +57,14 @@ namespace disk::auth {
         static constexpr auto GetRefreshTokenExpireSeconds() noexcept -> int {
             return 604800;
         }
+
+        /**
+         * @brief 验证访问令牌
+         * @param token 访问令牌字符串
+         * @return Result<pair<user_id, username>> 验证成功返回用户信息，失败返回错误
+         */
+        [[nodiscard]]
+        auto VerifyAccessToken(const std::string& token) const -> Result<std::pair<uint64_t, std::string>>;
 
     private:
         std::string m_jwt_secret;
