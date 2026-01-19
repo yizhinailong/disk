@@ -2,6 +2,7 @@ If:
   PathMatch: .*
 
 CompileFlags:
+  CompilationDatabase: build
   Add:
     - -Wpessimizing-move
     - -Wredundant-move
