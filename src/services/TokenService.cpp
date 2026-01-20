@@ -18,13 +18,11 @@
 #include "services/RedisService.hpp"
 #include "services/RedisService.hpp" // 新增
 #include "utils/ErrorCode.hpp"
-#include "utils/TokenHash.hpp"
-#include "utils/TokenHash.hpp" // 新增
+#include "utils/HashUtil.hpp"
 
 namespace disk::auth {
 
-    using disk::utils::token::Hash;
-    using disk::utils::token::ToHex;
+    using disk::utils::HashUtil;
 
     TokenService::TokenService(std::string jwt_secret, drogon::nosql::RedisClientPtr redis_client)
         : m_jwt_secret(std::move(jwt_secret)),
@@ -149,7 +147,12 @@ namespace disk::auth {
         -> drogon::Task<bool> {
 
         const auto key = "refresh_token:" + std::to_string(user_id);
-        const auto hash = ToHex(Hash(refresh_token));
+
+        auto hash_result = HashUtil::HashToken(refresh_token);
+        if (!hash_result) {
+            co_return false;
+        }
+        const auto hash = HashUtil::TokenHashToHex(hash_result.value());
 
         try {
             co_await m_redis_client->execCommandCoro(
@@ -172,11 +175,19 @@ namespace disk::auth {
         -> drogon::Task<Result<void>> {
 
         const auto key = "refresh_token:" + std::to_string(user_id);
-        const auto old_hash = ToHex(Hash(old_token));
-        const auto new_hash = ToHex(Hash(new_token));
+
+        auto old_hash_result = HashUtil::HashToken(old_token);
+        if (!old_hash_result) {
+            co_return std::unexpected(old_hash_result.error());
+        }
+        auto new_hash_result = HashUtil::HashToken(new_token);
+        if (!new_hash_result) {
+            co_return std::unexpected(new_hash_result.error());
+        }
+        const auto old_hash = HashUtil::TokenHashToHex(old_hash_result.value());
+        const auto new_hash = HashUtil::TokenHashToHex(new_hash_result.value());
 
         try {
-            // 步骤 1: GET 当前值
             auto result = co_await m_redis_client->execCommandCoro("GET %s", key.c_str());
 
             if (result.isNil()) {
@@ -184,7 +195,6 @@ namespace disk::auth {
                 co_return std::unexpected(ErrorInfo(ErrorCode::InvalidRefreshToken));
             }
 
-            // 步骤 2: 验证旧 token
             const auto current_hash = result.asString();
             if (current_hash != old_hash) {
                 LOG_WARN << "Refresh token 已被使用: user_id=" << user_id;

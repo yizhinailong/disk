@@ -60,12 +60,11 @@ set(Services_SOURCES
 # Utils
 set(Utils_HEADERS
     utils/ErrorCode.hpp
-    utils/PasswdHash.hpp
+    utils/HashUtil.hpp
     utils/Pch.hpp
     utils/Response.hpp
     utils/Singleton.hpp
     utils/ConfigMgr.hpp
-    utils/TokenHash.hpp
 )
 set(Utils_SOURCES
     utils/ConfigMgr.cpp

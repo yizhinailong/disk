@@ -13,11 +13,12 @@
 
 #include "dtos/AuthDto.hpp"
 #include "utils/ConfigMgr.hpp"
-#include "utils/PasswdHash.hpp"
+#include "utils/HashUtil.hpp"
 
 namespace disk::auth {
 
     using disk::utils::ConfigMgr;
+    using disk::utils::HashUtil;
     using drogon::orm::CompareOperator;
     using drogon::orm::CoroMapper;
     using drogon::orm::Criteria;
@@ -44,7 +45,7 @@ namespace disk::auth {
 
         // 3. 加密密码（使用 libsodium Argon2id）
         LOG_DEBUG << "开始密码哈希计算: " << request.username;
-        auto hash_result = PasswdHash::Hash(request.password);
+        auto hash_result = HashUtil::HashPassword(request.password);
         if (!hash_result) {
             LOG_ERROR << "密码哈希失败: " << request.username;
             co_return std::unexpected(hash_result.error());
@@ -105,7 +106,7 @@ namespace disk::auth {
         }
 
         // 3. 验证密码
-        if (!PasswdHash::Verify(request.password, user.getValueOfPasswordHash())) {
+        if (!HashUtil::VerifyPassword(request.password, user.getValueOfPasswordHash())) {
             LOG_WARN << "密码错误: " << request.account;
             co_await IncrementLoginAttempts(user.getValueOfId());
             co_return std::unexpected(ErrorInfo(ErrorCode::InvalidCredentials));

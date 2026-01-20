@@ -11,12 +11,13 @@
 
 #include "RedisService.hpp"
 
-#include "utils/TokenHash.hpp"
+#include "utils/ErrorCode.hpp"
+#include "utils/HashUtil.hpp"
 
 namespace disk::services {
 
-    using ::ErrorCode;
     using disk::error::ErrorInfo;
+    using disk::utils::HashUtil;
 
     RedisService::RedisService(drogon::nosql::RedisClientPtr redis_client)
         : m_redis_client(std::move(redis_client)) {}
@@ -25,7 +26,12 @@ namespace disk::services {
         -> drogon::Task<Result<void>> {
 
         const auto key = "refresh_token:" + std::to_string(user_id);
-        const auto hash = TokenHashUtils::ToHex(TokenHashUtils::Hash(refresh_token));
+
+        auto hash_result = HashUtil::HashToken(refresh_token);
+        if (!hash_result) {
+            co_return std::unexpected(hash_result.error());
+        }
+        const auto hash = HashUtil::TokenHashToHex(hash_result.value());
 
         try {
             co_await m_redis_client->execCommandCoro(
@@ -51,11 +57,19 @@ namespace disk::services {
     ) -> drogon::Task<Result<void>> {
 
         const auto key = "refresh_token:" + std::to_string(user_id);
-        const auto old_hash = TokenHashUtils::ToHex(TokenHashUtils::Hash(old_token));
-        const auto new_hash = TokenHashUtils::ToHex(TokenHashUtils::Hash(new_token));
+
+        auto old_hash_result = HashUtil::HashToken(old_token);
+        if (!old_hash_result) {
+            co_return std::unexpected(old_hash_result.error());
+        }
+        auto new_hash_result = HashUtil::HashToken(new_token);
+        if (!new_hash_result) {
+            co_return std::unexpected(new_hash_result.error());
+        }
+        const auto old_hash = HashUtil::TokenHashToHex(old_hash_result.value());
+        const auto new_hash = HashUtil::TokenHashToHex(new_hash_result.value());
 
         try {
-            // 步骤 1: GET 当前值
             auto result = co_await m_redis_client->execCommandCoro("GET %s", key.c_str());
 
             if (result.isNil()) {
@@ -63,14 +77,12 @@ namespace disk::services {
                 co_return std::unexpected(ErrorInfo(ErrorCode::InvalidRefreshToken));
             }
 
-            // 步骤 2: 验证旧 token
             const auto current_hash = result.asString();
             if (current_hash != old_hash) {
                 LOG_WARN << "Refresh token 已被使用或已刷新: user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::RefreshTokenAlreadyUsed));
             }
 
-            // 步骤 3: SET 新值
             co_await m_redis_client->execCommandCoro(
                 "SET %s %s EX %d",
                 key.c_str(),
