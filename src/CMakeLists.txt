@@ -1,20 +1,5 @@
 # Create static library for core code (shared by disk and disk-test)
-add_library(disk-lib STATIC
-    controllers/AuthController.cpp
-    filters/JwtAuthFilter.cpp
-    models/FileContents.cpp
-    models/Files.cpp
-    models/Folders.cpp
-    models/OperationLogs.cpp
-    models/ShareFiles.cpp
-    models/Shares.cpp
-    models/Trash.cpp
-    models/UploadTasks.cpp
-    models/Users.cpp
-    services/AuthService.cpp
-    services/TokenService.cpp
-    utils/ConfigMgr.cpp
-)
+add_library(disk-lib STATIC)
 
 # Create main executable
 add_executable(${PROJECT_NAME} main.cpp)
