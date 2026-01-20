@@ -358,8 +358,7 @@ Folders::Folders(const Json::Value& pJson) noexcept(false) {
     }
 }
 
-void Folders::updateByMasqueradedJson(const Json::Value& pJson,
-                                      const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
+void Folders::updateByMasqueradedJson(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
     if (pMasqueradingVector.size() != 9) {
         LOG_ERROR << "Bad masquerading vector";
         return;
@@ -919,7 +918,8 @@ Json::Value Folders::toJson() const {
 }
 
 Json::Value Folders::toMasqueradedJson(
-    const std::vector<std::string>& pMasqueradingVector) const {
+    const std::vector<std::string>& pMasqueradingVector
+) const {
     Json::Value ret;
     if (pMasqueradingVector.size() == 9) {
         if (!pMasqueradingVector[0].empty()) {
@@ -1091,9 +1091,7 @@ bool Folders::validateJsonForCreation(const Json::Value& pJson, std::string& err
     return true;
 }
 
-bool Folders::validateMasqueradedJsonForCreation(const Json::Value& pJson,
-                                                 const std::vector<std::string>& pMasqueradingVector,
-                                                 std::string& err) {
+bool Folders::validateMasqueradedJsonForCreation(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
     if (pMasqueradingVector.size() != 9) {
         err = "Bad masquerading vector";
         return false;
@@ -1227,9 +1225,7 @@ bool Folders::validateJsonForUpdate(const Json::Value& pJson, std::string& err) 
     return true;
 }
 
-bool Folders::validateMasqueradedJsonForUpdate(const Json::Value& pJson,
-                                               const std::vector<std::string>& pMasqueradingVector,
-                                               std::string& err) {
+bool Folders::validateMasqueradedJsonForUpdate(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
     if (pMasqueradingVector.size() != 9) {
         err = "Bad masquerading vector";
         return false;
@@ -1290,11 +1286,7 @@ bool Folders::validateMasqueradedJsonForUpdate(const Json::Value& pJson,
     return true;
 }
 
-bool Folders::validJsonOfField(size_t index,
-                               const std::string& fieldName,
-                               const Json::Value& pJson,
-                               std::string& err,
-                               bool isForCreation) {
+bool Folders::validJsonOfField(size_t index, const std::string& fieldName, const Json::Value& pJson, std::string& err, bool isForCreation) {
     switch (index) {
         case 0:
             if (pJson.isNull()) {

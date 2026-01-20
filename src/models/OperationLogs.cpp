@@ -319,8 +319,7 @@ OperationLogs::OperationLogs(const Json::Value& pJson) noexcept(false) {
     }
 }
 
-void OperationLogs::updateByMasqueradedJson(const Json::Value& pJson,
-                                            const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
+void OperationLogs::updateByMasqueradedJson(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
     if (pMasqueradingVector.size() != 10) {
         LOG_ERROR << "Bad masquerading vector";
         return;
@@ -947,7 +946,8 @@ Json::Value OperationLogs::toJson() const {
 }
 
 Json::Value OperationLogs::toMasqueradedJson(
-    const std::vector<std::string>& pMasqueradingVector) const {
+    const std::vector<std::string>& pMasqueradingVector
+) const {
     Json::Value ret;
     if (pMasqueradingVector.size() == 10) {
         if (!pMasqueradingVector[0].empty()) {
@@ -1139,9 +1139,7 @@ bool OperationLogs::validateJsonForCreation(const Json::Value& pJson, std::strin
     return true;
 }
 
-bool OperationLogs::validateMasqueradedJsonForCreation(const Json::Value& pJson,
-                                                       const std::vector<std::string>& pMasqueradingVector,
-                                                       std::string& err) {
+bool OperationLogs::validateMasqueradedJsonForCreation(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
     if (pMasqueradingVector.size() != 10) {
         err = "Bad masquerading vector";
         return false;
@@ -1290,9 +1288,7 @@ bool OperationLogs::validateJsonForUpdate(const Json::Value& pJson, std::string&
     return true;
 }
 
-bool OperationLogs::validateMasqueradedJsonForUpdate(const Json::Value& pJson,
-                                                     const std::vector<std::string>& pMasqueradingVector,
-                                                     std::string& err) {
+bool OperationLogs::validateMasqueradedJsonForUpdate(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
     if (pMasqueradingVector.size() != 10) {
         err = "Bad masquerading vector";
         return false;
@@ -1358,11 +1354,7 @@ bool OperationLogs::validateMasqueradedJsonForUpdate(const Json::Value& pJson,
     return true;
 }
 
-bool OperationLogs::validJsonOfField(size_t index,
-                                     const std::string& fieldName,
-                                     const Json::Value& pJson,
-                                     std::string& err,
-                                     bool isForCreation) {
+bool OperationLogs::validJsonOfField(size_t index, const std::string& fieldName, const Json::Value& pJson, std::string& err, bool isForCreation) {
     switch (index) {
         case 0:
             if (pJson.isNull()) {

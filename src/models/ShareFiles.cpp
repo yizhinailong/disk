@@ -214,8 +214,7 @@ ShareFiles::ShareFiles(const Json::Value& pJson) noexcept(false) {
     }
 }
 
-void ShareFiles::updateByMasqueradedJson(const Json::Value& pJson,
-                                         const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
+void ShareFiles::updateByMasqueradedJson(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
     if (pMasqueradingVector.size() != 5) {
         LOG_ERROR << "Bad masquerading vector";
         return;
@@ -532,7 +531,8 @@ Json::Value ShareFiles::toJson() const {
 }
 
 Json::Value ShareFiles::toMasqueradedJson(
-    const std::vector<std::string>& pMasqueradingVector) const {
+    const std::vector<std::string>& pMasqueradingVector
+) const {
     Json::Value ret;
     if (pMasqueradingVector.size() == 5) {
         if (!pMasqueradingVector[0].empty()) {
@@ -639,9 +639,7 @@ bool ShareFiles::validateJsonForCreation(const Json::Value& pJson, std::string& 
     return true;
 }
 
-bool ShareFiles::validateMasqueradedJsonForCreation(const Json::Value& pJson,
-                                                    const std::vector<std::string>& pMasqueradingVector,
-                                                    std::string& err) {
+bool ShareFiles::validateMasqueradedJsonForCreation(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
     if (pMasqueradingVector.size() != 5) {
         err = "Bad masquerading vector";
         return false;
@@ -730,9 +728,7 @@ bool ShareFiles::validateJsonForUpdate(const Json::Value& pJson, std::string& er
     return true;
 }
 
-bool ShareFiles::validateMasqueradedJsonForUpdate(const Json::Value& pJson,
-                                                  const std::vector<std::string>& pMasqueradingVector,
-                                                  std::string& err) {
+bool ShareFiles::validateMasqueradedJsonForUpdate(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
     if (pMasqueradingVector.size() != 5) {
         err = "Bad masquerading vector";
         return false;
@@ -773,11 +769,7 @@ bool ShareFiles::validateMasqueradedJsonForUpdate(const Json::Value& pJson,
     return true;
 }
 
-bool ShareFiles::validJsonOfField(size_t index,
-                                  const std::string& fieldName,
-                                  const Json::Value& pJson,
-                                  std::string& err,
-                                  bool isForCreation) {
+bool ShareFiles::validJsonOfField(size_t index, const std::string& fieldName, const Json::Value& pJson, std::string& err, bool isForCreation) {
     switch (index) {
         case 0:
             if (pJson.isNull()) {

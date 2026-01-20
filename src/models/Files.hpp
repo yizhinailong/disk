@@ -86,21 +86,12 @@ namespace drogon_model::disk {
         Files() = default;
 
         void updateByJson(const Json::Value& pJson) noexcept(false);
-        void updateByMasqueradedJson(const Json::Value& pJson,
-                                     const std::vector<std::string>& pMasqueradingVector) noexcept(false);
+        void updateByMasqueradedJson(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector) noexcept(false);
         static bool validateJsonForCreation(const Json::Value& pJson, std::string& err);
-        static bool validateMasqueradedJsonForCreation(const Json::Value&,
-                                                       const std::vector<std::string>& pMasqueradingVector,
-                                                       std::string& err);
+        static bool validateMasqueradedJsonForCreation(const Json::Value&, const std::vector<std::string>& pMasqueradingVector, std::string& err);
         static bool validateJsonForUpdate(const Json::Value& pJson, std::string& err);
-        static bool validateMasqueradedJsonForUpdate(const Json::Value&,
-                                                     const std::vector<std::string>& pMasqueradingVector,
-                                                     std::string& err);
-        static bool validJsonOfField(size_t index,
-                                     const std::string& fieldName,
-                                     const Json::Value& pJson,
-                                     std::string& err,
-                                     bool isForCreation);
+        static bool validateMasqueradedJsonForUpdate(const Json::Value&, const std::vector<std::string>& pMasqueradingVector, std::string& err);
+        static bool validJsonOfField(size_t index, const std::string& fieldName, const Json::Value& pJson, std::string& err, bool isForCreation);
 
         /**  For column id  */
         /// Get the value of the column id, returns the default value if the column is null

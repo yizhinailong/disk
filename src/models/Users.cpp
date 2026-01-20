@@ -604,8 +604,7 @@ Users::Users(const Json::Value& pJson) noexcept(false) {
     }
 }
 
-void Users::updateByMasqueradedJson(const Json::Value& pJson,
-                                    const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
+void Users::updateByMasqueradedJson(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
     if (pMasqueradingVector.size() != 15) {
         LOG_ERROR << "Bad masquerading vector";
         return;
@@ -1582,7 +1581,8 @@ Json::Value Users::toJson() const {
 }
 
 Json::Value Users::toMasqueradedJson(
-    const std::vector<std::string>& pMasqueradingVector) const {
+    const std::vector<std::string>& pMasqueradingVector
+) const {
     Json::Value ret;
     if (pMasqueradingVector.size() == 15) {
         if (!pMasqueradingVector[0].empty()) {
@@ -1859,9 +1859,7 @@ bool Users::validateJsonForCreation(const Json::Value& pJson, std::string& err) 
     return true;
 }
 
-bool Users::validateMasqueradedJsonForCreation(const Json::Value& pJson,
-                                               const std::vector<std::string>& pMasqueradingVector,
-                                               std::string& err) {
+bool Users::validateMasqueradedJsonForCreation(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
     if (pMasqueradingVector.size() != 15) {
         err = "Bad masquerading vector";
         return false;
@@ -2070,9 +2068,7 @@ bool Users::validateJsonForUpdate(const Json::Value& pJson, std::string& err) {
     return true;
 }
 
-bool Users::validateMasqueradedJsonForUpdate(const Json::Value& pJson,
-                                             const std::vector<std::string>& pMasqueradingVector,
-                                             std::string& err) {
+bool Users::validateMasqueradedJsonForUpdate(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
     if (pMasqueradingVector.size() != 15) {
         err = "Bad masquerading vector";
         return false;
@@ -2163,11 +2159,7 @@ bool Users::validateMasqueradedJsonForUpdate(const Json::Value& pJson,
     return true;
 }
 
-bool Users::validJsonOfField(size_t index,
-                             const std::string& fieldName,
-                             const Json::Value& pJson,
-                             std::string& err,
-                             bool isForCreation) {
+bool Users::validJsonOfField(size_t index, const std::string& fieldName, const Json::Value& pJson, std::string& err, bool isForCreation) {
     switch (index) {
         case 0:
             if (pJson.isNull()) {

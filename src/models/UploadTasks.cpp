@@ -523,8 +523,7 @@ UploadTasks::UploadTasks(const Json::Value& pJson) noexcept(false) {
     }
 }
 
-void UploadTasks::updateByMasqueradedJson(const Json::Value& pJson,
-                                          const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
+void UploadTasks::updateByMasqueradedJson(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
     if (pMasqueradingVector.size() != 14) {
         LOG_ERROR << "Bad masquerading vector";
         return;
@@ -1411,7 +1410,8 @@ Json::Value UploadTasks::toJson() const {
 }
 
 Json::Value UploadTasks::toMasqueradedJson(
-    const std::vector<std::string>& pMasqueradingVector) const {
+    const std::vector<std::string>& pMasqueradingVector
+) const {
     Json::Value ret;
     if (pMasqueradingVector.size() == 14) {
         if (!pMasqueradingVector[0].empty()) {
@@ -1689,9 +1689,7 @@ bool UploadTasks::validateJsonForCreation(const Json::Value& pJson, std::string&
     return true;
 }
 
-bool UploadTasks::validateMasqueradedJsonForCreation(const Json::Value& pJson,
-                                                     const std::vector<std::string>& pMasqueradingVector,
-                                                     std::string& err) {
+bool UploadTasks::validateMasqueradedJsonForCreation(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
     if (pMasqueradingVector.size() != 14) {
         err = "Bad masquerading vector";
         return false;
@@ -1906,9 +1904,7 @@ bool UploadTasks::validateJsonForUpdate(const Json::Value& pJson, std::string& e
     return true;
 }
 
-bool UploadTasks::validateMasqueradedJsonForUpdate(const Json::Value& pJson,
-                                                   const std::vector<std::string>& pMasqueradingVector,
-                                                   std::string& err) {
+bool UploadTasks::validateMasqueradedJsonForUpdate(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
     if (pMasqueradingVector.size() != 14) {
         err = "Bad masquerading vector";
         return false;
@@ -1994,11 +1990,7 @@ bool UploadTasks::validateMasqueradedJsonForUpdate(const Json::Value& pJson,
     return true;
 }
 
-bool UploadTasks::validJsonOfField(size_t index,
-                                   const std::string& fieldName,
-                                   const Json::Value& pJson,
-                                   std::string& err,
-                                   bool isForCreation) {
+bool UploadTasks::validJsonOfField(size_t index, const std::string& fieldName, const Json::Value& pJson, std::string& err, bool isForCreation) {
     switch (index) {
         case 0:
             if (pJson.isNull()) {
