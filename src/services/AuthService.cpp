@@ -11,7 +11,7 @@
 
 #include "AuthService.hpp"
 
-#include "controllers/AuthController.hpp"
+#include "dtos/AuthDto.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/PasswdHash.hpp"
 

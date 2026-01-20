@@ -15,85 +15,12 @@
 
 #include <drogon/orm/DbClient.h>
 
+#include "dtos/AuthDto.hpp"
 #include "models/Users.hpp"
 #include "services/TokenService.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::auth {
-
-    // Forward declarations - request structs defined in AuthController.hpp
-    struct RegisterRequest;
-    struct LoginRequest;
-    struct RefreshTokenRequest;
-
-    /**
-     * @brief 用户注册响应结构
-     */
-    struct RegisterResponse {
-        uint64_t id;
-        std::string username;
-        std::string email;
-        std::string nickname;
-        uint64_t storage_quota;
-        uint64_t storage_used;
-        std::string created_at;
-
-        /// 转换为 JSON
-        [[nodiscard]]
-        auto ToJson() const -> Json::Value {
-            Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["username"] = username;
-            json["email"] = email;
-            json["nickname"] = nickname;
-            json["storage_quota"] = static_cast<Json::UInt64>(storage_quota);
-            json["storage_used"] = static_cast<Json::UInt64>(storage_used);
-            json["created_at"] = created_at;
-            return json;
-        }
-    };
-
-    /**
-     * @brief 用户登录响应结构
-     */
-    struct LoginResponse {
-        std::string access_token;
-        std::string refresh_token;
-        std::string token_type;
-        int expires_in;
-        RegisterResponse user;
-
-        /// 转换为 JSON
-        [[nodiscard]]
-        auto ToJson() const -> Json::Value {
-            Json::Value json;
-            json["access_token"] = access_token;
-            json["refresh_token"] = refresh_token;
-            json["token_type"] = token_type;
-            json["expires_in"] = expires_in;
-            json["user"] = user.ToJson();
-            return json;
-        }
-    };
-
-    /**
-     * @brief 刷新令牌响应结构
-     */
-    struct RefreshTokenResponse {
-        std::string access_token;
-        std::string refresh_token;
-        int expires_in;
-
-        /// 转换为 JSON
-        [[nodiscard]]
-        auto ToJson() const -> Json::Value {
-            Json::Value json;
-            json["access_token"] = access_token;
-            json["refresh_token"] = refresh_token;
-            json["expires_in"] = expires_in;
-            return json;
-        }
-    };
 
     /**
      * @brief 认证服务类

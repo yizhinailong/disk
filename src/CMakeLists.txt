@@ -8,6 +8,11 @@ set(Controllers_SOURCES
     controllers/AuthController.cpp
 )
 
+# Dtos
+set(Dtos_HEADERS
+    dtos/AuthDto.hpp
+)
+
 # Filter
 set(Filters_HEADERS
     filters/JwtAuthFilter.hpp
@@ -39,11 +44,6 @@ set(Models_SOURCES
     models/UploadTasks.cpp
     models/Users.cpp
 )
-
-# # Requests
-# set(Requests_HEADERS
-#     requests/AuthRequest.hpp
-# )
 
 # Service
 set(Services_HEADERS
@@ -80,9 +80,9 @@ target_sources(${PROJECT_NAME}
     TYPE HEADERS
     FILES
     ${Controllers_HEADERS}
+    ${Dtos_HEADERS}
     ${Filters_HEADERS}
     ${Models_HEADERS}
-    # ${Requests_HEADERS}
     ${Services_HEADERS}
     ${Utils_HEADERS}
 )

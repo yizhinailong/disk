@@ -16,7 +16,7 @@
 #include <gtest/gtest.h>
 #include <json/json.h>
 
-#include "controllers/AuthController.hpp"
+#include "dtos/AuthDto.hpp"
 
 using disk::auth::RefreshTokenRequest;
 using disk::auth::RegisterRequest;

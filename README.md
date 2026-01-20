@@ -227,7 +227,8 @@ disk/
 │   ├── services/            # 业务逻辑层
 │   ├── filters/            # 中间件/过滤器
 │   ├── models/             # 数据库模型（自动生成）
-│   ├── requests/           # 请求验证结构
+│   ├── dtos/               # 数据传输对象 (DTO)
+│   │   └── AuthDto.hpp
 │   └── utils/             # 工具类
 │
 ├── test/                    # 单元测试
