@@ -54,6 +54,8 @@ namespace disk::error {
         EmailExists = 40002,
         /// 参数格式不正确
         InvalidFormat = 40003,
+        /// 用户不存在
+        UserNotFound = 40100,
         /// 用户名或密码错误
         InvalidCredentials = 40101,
         /// 账户已锁定
@@ -127,6 +129,7 @@ namespace disk::error {
             {       Code::UsernameExists,          drogon::k400BadRequest },
             {          Code::EmailExists,          drogon::k400BadRequest },
             {        Code::InvalidFormat,          drogon::k400BadRequest },
+            {         Code::UserNotFound,            drogon::k404NotFound },
             {   Code::InvalidCredentials,        drogon::k401Unauthorized },
             {        Code::AccountLocked,        drogon::k401Unauthorized },
             {      Code::AccountDisabled,        drogon::k401Unauthorized },
@@ -184,6 +187,7 @@ namespace disk::error {
             {       Code::UsernameExists,         "用户名已被注册" },
             {          Code::EmailExists,           "邮箱已被注册" },
             {        Code::InvalidFormat,         "参数格式不正确" },
+            {         Code::UserNotFound,             "用户不存在" },
             {   Code::InvalidCredentials,       "用户名或密码错误" },
             {        Code::AccountLocked, "账户已锁定，请稍后重试" },
             {      Code::AccountDisabled,           "账户已被禁用" },

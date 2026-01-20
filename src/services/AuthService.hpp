@@ -133,9 +133,11 @@ namespace disk::auth {
 
         /**
          * @brief 根据账号（用户名或邮箱）查找用户
+         *
+         * @return Result<Users> 成功返回用户信息，失败返回 UserNotFound 错误
          */
         [[nodiscard]]
-        auto FindUser(std::string account) const -> drogon::Task<std::optional<drogon_model::disk::Users>>;
+        auto FindUser(std::string account) const -> drogon::Task<Result<drogon_model::disk::Users>>;
 
         /**
          * @brief 检查账户是否被锁定

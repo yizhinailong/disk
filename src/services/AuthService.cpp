@@ -82,13 +82,13 @@ namespace disk::auth {
         LOG_DEBUG << "用户登录尝试: " << request.account;
 
         // 1. 查找用户（用户名或邮箱）
-        auto user_opt = co_await FindUser(request.account);
-        if (!user_opt) {
+        auto user_result = co_await FindUser(request.account);
+        if (!user_result) {
             LOG_WARN << "用户不存在: " << request.account;
-            co_return std::unexpected(ErrorInfo(ErrorCode::InvalidCredentials));
+            co_return std::unexpected(user_result.error());
         }
 
-        const auto& user = user_opt.value();
+        const auto& user = user_result.value();
 
         // 2. 检查账户状态
         const auto status = user.getValueOfStatus();
@@ -166,7 +166,7 @@ namespace disk::auth {
     }
 
     auto AuthService::FindUser(std::string account) const
-        -> drogon::Task<std::optional<drogon_model::disk::Users>> {
+        -> drogon::Task<Result<drogon_model::disk::Users>> {
 
         try {
             using drogon::orm::CompareOperator;
@@ -175,10 +175,11 @@ namespace disk::auth {
             auto by_username = co_await mapper.findOne(
                 Criteria(Users::Cols::_username, CompareOperator::EQ, account)
             );
-            co_return std::make_optional(by_username);
+            LOG_DEBUG << "通过用户名找到用户: " << account;
+            co_return by_username;
 
-        } catch (const drogon::orm::DrogonDbException&) {
-            LOG_INFO << "使用用户名查找失败";
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_DEBUG << "使用用户名查找失败: " << account;
         }
 
         try {
@@ -188,13 +189,15 @@ namespace disk::auth {
             auto by_email = co_await mapper.findOne(
                 Criteria(Users::Cols::_email, CompareOperator::EQ, account)
             );
-            co_return std::make_optional(by_email);
+            LOG_DEBUG << "通过邮箱找到用户: " << account;
+            co_return by_email;
 
-        } catch (const drogon::orm::DrogonDbException&) {
-            LOG_INFO << "使用邮箱查找失败";
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_DEBUG << "使用邮箱查找失败: " << account;
         }
 
-        co_return std::nullopt;
+        LOG_WARN << "用户不存在: " << account;
+        co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
     }
 
     auto AuthService::CheckAccountLocked(const Users& user) const -> bool {
