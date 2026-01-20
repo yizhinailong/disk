@@ -11,7 +11,6 @@
 
 #include "AuthController.hpp"
 
-#include "requests/AuthRequest.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::auth {
