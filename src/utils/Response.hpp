@@ -35,6 +35,13 @@ namespace disk {
         }
 
         /// 便捷构造：自动计算 total_pages
+        /**
+         * @brief 创建分页信息
+         * @param page 当前页码
+         * @param page_size 每页数量
+         * @param total 总记录数
+         * @return Pagination 分页信息
+         */
         static auto Create(int page, int page_size, int total) -> Pagination {
             return {
                 .page = page,
@@ -63,6 +70,11 @@ namespace disk {
         }
 
         /// 成功响应（带数据）
+        /**
+         * @brief 成功响应（带数据）
+         * @param data 响应数据
+         * @return drogon::HttpResponsePtr HTTP响应对象
+         */
         [[nodiscard]]
         static auto Success(const Json::Value& data) -> drogon::HttpResponsePtr {
             Json::Value json;
@@ -76,6 +88,12 @@ namespace disk {
         }
 
         /// 分页响应
+        /**
+         * @brief 分页响应
+         * @param items 数据项
+         * @param pagination 分页信息
+         * @return drogon::HttpResponsePtr 分页HTTP响应对象
+         */
         [[nodiscard]]
         static auto Paginated(const Json::Value& items, const Pagination& pagination) -> drogon::HttpResponsePtr {
             Json::Value data;
@@ -99,12 +117,23 @@ namespace disk {
         }
 
         /// 错误响应（使用错误码默认消息）
+        /**
+         * @brief 错误响应
+         * @param code 错误码
+         * @return drogon::HttpResponsePtr 错误HTTP响应对象
+         */
         [[nodiscard]]
         static auto Error(ErrorCode code) -> drogon::HttpResponsePtr {
             return Error(ErrorInfo(code));
         }
 
         /// 错误响应（错误码 + 自定义消息）
+        /**
+         * @brief 失败响应
+         * @param code 错误码
+         * @param message 错误消息
+         * @return drogon::HttpResponsePtr 失败HTTP响应对象
+         */
         [[nodiscard]]
         static auto Fail(ErrorCode code, const std::string& message) -> drogon::HttpResponsePtr {
             return Error(ErrorInfo(code, message));
@@ -113,6 +142,12 @@ namespace disk {
         // ==================== Result 类型支持 ====================
 
         /// 从 Result<T> 构造响应
+        /**
+         * @brief 从Result构造HTTP响应
+         * @param result Result对象
+         * @param func 转换函数
+         * @return drogon::HttpResponsePtr 从Result构造的HTTP响应对象
+         */
         template <typename T, typename Func>
         [[nodiscard]]
         static auto FromResult(const Result<T>& result, Func&& to_json) -> drogon::HttpResponsePtr {
@@ -123,6 +158,11 @@ namespace disk {
         }
 
         /// 从 VoidResult 构造响应
+        /**
+         * @brief 从VoidResult构造HTTP响应
+         * @param result VoidResult对象
+         * @return drogon::HttpResponsePtr 从VoidResult构造的HTTP响应对象
+         */
         [[nodiscard]]
         static auto FromResult(const VoidResult& result) -> drogon::HttpResponsePtr {
             if (result.has_value()) {

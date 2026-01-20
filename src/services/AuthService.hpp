@@ -16,11 +16,14 @@
 #include <drogon/orm/DbClient.h>
 
 #include "models/Users.hpp"
-#include "requests/AuthRequest.hpp"
 #include "services/TokenService.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::auth {
+
+    // Forward declarations - request structs defined in AuthController.hpp
+    struct RegisterRequest;
+    struct LoginRequest;
 
     /**
      * @brief 用户注册响应结构
@@ -93,7 +96,7 @@ namespace disk::auth {
          * - 分配默认存储配额（10GB）
          *
          * @param request 注册请求
-         * @return Result<RegisterResponse> 成功返回用户信息，失败返回错误
+         * @return drogon::Task<Result<RegisterResponse>> 成功返回用户信息，失败返回错误
          */
         [[nodiscard]]
         auto Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>>;
@@ -109,7 +112,7 @@ namespace disk::auth {
          *
          * @param request 登录请求
          * @param ip_address 客户端IP地址
-         * @return Result<LoginResponse> 成功返回令牌和用户信息，失败返回错误
+         * @return drogon::Task<Result<LoginResponse>> 成功返回令牌和用户信息，失败返回错误
          */
         [[nodiscard]]
         auto Login(LoginRequest request, std::string ip_address) -> drogon::Task<Result<LoginResponse>>;
@@ -117,43 +120,56 @@ namespace disk::auth {
     private:
         /**
          * @brief 检查用户名是否已存在
+         * @param username 用户名
+         * @return drogon::Task<bool> 用户名是否存在
          */
         [[nodiscard]]
         auto IsUsernameExists(std::string username) const -> drogon::Task<bool>;
 
         /**
          * @brief 检查邮箱是否已存在
+         * @param email 邮箱地址
+         * @return drogon::Task<bool> 邮箱是否已存在
          */
         [[nodiscard]]
         auto IsEmailExists(std::string email) const -> drogon::Task<bool>;
 
         /**
          * @brief 用户模型转响应结构
+         * @param user 用户模型
+         * @return RegisterResponse 响应结构
          */
         [[nodiscard]]
         static auto UserToResponse(const drogon_model::disk::Users& user) -> RegisterResponse;
 
         /**
          * @brief 根据账号（用户名或邮箱）查找用户
-         *
-         * @return Result<Users> 成功返回用户信息，失败返回 UserNotFound 错误
+         * @param account 账号（用户名或邮箱）
+         * @return drogon::Task<Result<drogon_model::disk::Users>> 成功返回用户信息，失败返回 UserNotFound 错误
          */
         [[nodiscard]]
         auto FindUser(std::string account) const -> drogon::Task<Result<drogon_model::disk::Users>>;
 
         /**
          * @brief 检查账户是否被锁定
+         * @param user 用户模型
+         * @return bool 账户是否被锁定
          */
         [[nodiscard]]
         auto CheckAccountLocked(const drogon_model::disk::Users& user) const -> bool;
 
         /**
          * @brief 更新登录信息
+         * @param user_id 用户ID
+         * @param ip_address IP地址
+         * @return drogon::Task<void>
          */
         auto UpdateLoginInfo(uint64_t user_id, std::string ip_address) -> drogon::Task<void>;
 
         /**
          * @brief 增加登录失败次数
+         * @param user_id 用户ID
+         * @return drogon::Task<void>
          */
         auto IncrementLoginAttempts(uint64_t user_id) -> drogon::Task<void>;
 

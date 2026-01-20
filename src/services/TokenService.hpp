@@ -44,6 +44,7 @@ namespace disk::auth {
 
         /**
          * @brief 获取访问令牌过期时间（秒）
+         * @return int 过期时间（秒）
          */
         [[nodiscard]]
         static constexpr auto GetAccessTokenExpireSeconds() noexcept -> int {
@@ -52,6 +53,7 @@ namespace disk::auth {
 
         /**
          * @brief 获取刷新令牌过期时间（秒）
+         * @return int 过期时间（秒）
          */
         [[nodiscard]]
         static constexpr auto GetRefreshTokenExpireSeconds() noexcept -> int {

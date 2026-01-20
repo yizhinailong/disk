@@ -17,6 +17,12 @@ namespace disk::filters {
     public:
         JwtAuthFilter();
 
+        /**
+         * @brief JWT认证过滤器
+         * @param request HTTP请求
+         * @return drogon::Task<drogon::HttpResponsePtr> 认证失败返回错误响应，成功返回nullptr继续链路
+         */
+        [[nodiscard]]
         auto doFilter(const drogon::HttpRequestPtr& request)
             -> drogon::Task<drogon::HttpResponsePtr> override;
 

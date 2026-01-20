@@ -13,8 +13,7 @@
 #include <drogon/utils/Utilities.h>
 
 namespace disk::utils {
-    ConfigMgr::ConfigMgr()
-        : m_custom_config(drogon::app().getCustomConfig()) {}
+    ConfigMgr::ConfigMgr() = default;
 
     auto ConfigMgr::GetJwtSecret() const -> std::string {
         constexpr size_t MIN_SECRET_LENGTH = 32;

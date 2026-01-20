@@ -52,7 +52,7 @@ namespace disk::utils::passwd {
      * @brief 验证密码
      * @param password 明文密码
      * @param hash 存储的哈希值
-     * @return 密码是否匹配
+     * @return bool 密码是否匹配
      */
     [[nodiscard]]
     inline auto Verify(const std::string& password, const std::string& hash) -> bool {

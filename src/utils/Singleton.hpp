@@ -15,6 +15,26 @@
 
 namespace disk::utils {
 
+    /**
+     * @brief 单例基类模板
+     *
+     * 使用方式：
+     * @code
+     * class MyClass : public Singleton<MyClass> {
+     *     friend class Singleton<MyClass>;
+     * private:
+     *     MyClass() = default;
+     * };
+     * @endcode
+     *
+     * 线程安全保证：
+     * - 使用 std::call_once 确保单例只初始化一次
+     * - GetInstance() 方法是线程安全的
+     *
+     * 注意事项：
+     * - 确保构造函数是 private 且默认或显式实现
+     * - 通过 friend class Singleton<T> 授予基类访问权限
+     */
     template <typename T>
     class Singleton {
     public:
