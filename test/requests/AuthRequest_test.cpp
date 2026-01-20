@@ -9,14 +9,14 @@
  *
  */
 
-#include "requests/AuthRequest.hpp"
-
 #include <string>
 
 #include <drogon/HttpRequest.h>
 #include <drogon/utils/Utilities.h>
 #include <gtest/gtest.h>
 #include <json/json.h>
+
+#include "controllers/AuthController.hpp"
 
 using disk::auth::RegisterRequest;
 

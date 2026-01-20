@@ -19,6 +19,7 @@ target_precompile_headers(disk-test
 
 target_link_libraries(disk-test
     PRIVATE
+    disk-lib
     Drogon::Drogon
     jwt-cpp::jwt-cpp
     unofficial-sodium::sodium
