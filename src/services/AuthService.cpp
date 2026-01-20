@@ -23,7 +23,7 @@ namespace disk::auth {
     using drogon::orm::Criteria;
     using drogon_model::disk::Users;
 
-    AuthService::AuthService(drogon::nosql::RedisClientPtr redis_client)
+    AuthService::AuthService(const drogon::nosql::RedisClientPtr& redis_client)
         : m_db_client(drogon::app().getDbClient()),
           m_token_service(std::make_unique<TokenService>(ConfigMgr::GetInstance()->GetJwtSecret(), redis_client)) {}
 

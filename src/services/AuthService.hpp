@@ -31,7 +31,7 @@ namespace disk::auth {
          * @brief 构造函数
          * @param redis_client Redis客户端
          */
-        explicit AuthService(drogon::nosql::RedisClientPtr redis_client);
+        explicit AuthService(const drogon::nosql::RedisClientPtr& redis_client);
         ~AuthService() = default;
         AuthService(const AuthService&) = delete;
         auto operator=(const AuthService&) -> AuthService& = delete;

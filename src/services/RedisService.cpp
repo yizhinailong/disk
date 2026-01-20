@@ -17,8 +17,6 @@ namespace disk::services {
 
     using ::ErrorCode;
     using disk::error::ErrorInfo;
-    using disk::utils::token::Hash;
-    using disk::utils::token::ToHex;
 
     RedisService::RedisService(drogon::nosql::RedisClientPtr redis_client)
         : m_redis_client(std::move(redis_client)) {}
