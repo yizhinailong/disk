@@ -25,7 +25,7 @@ namespace disk::auth {
 
     AuthService::AuthService()
         : m_db_client(drogon::app().getDbClient()),
-          m_token_service(std::make_shared<TokenService>(ConfigMgr::GetInstance()->GetJwtSecret())) {}
+          m_token_service(std::make_unique<TokenService>(ConfigMgr::GetInstance().GetJwtSecret())) {}
 
     auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {
         LOG_DEBUG << "开始注册用户: " << request.username << " <" << request.email << ">";

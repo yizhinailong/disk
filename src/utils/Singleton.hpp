@@ -38,13 +38,9 @@ namespace disk::utils {
     template <typename T>
     class Singleton {
     public:
-        static std::shared_ptr<T> GetInstance() {
-            static std::once_flag s_flag;
-            std::call_once(s_flag, [&]() {
-                m_instance = std::shared_ptr<T>(new T);
-            });
-
-            return m_instance;
+        static T& GetInstance() {
+            static T instance;
+            return instance;
         }
 
         ~Singleton() = default;
@@ -55,11 +51,6 @@ namespace disk::utils {
         Singleton& operator=(const Singleton<T>&) = delete;
         Singleton(Singleton<T>&&) = delete;
         Singleton& operator=(Singleton<T>&&) = delete;
-
-        static std::shared_ptr<T> m_instance;
     };
-
-    template <typename T>
-    std::shared_ptr<T> Singleton<T>::m_instance = nullptr;
 
 } // namespace disk::utils
