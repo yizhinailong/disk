@@ -64,7 +64,7 @@
 
 ### 1.4 错误码定义
 
-错误码枚举定义位于 `src/utils/error_code.hpp`，命名空间为 `disk::error::ErrorCode`。
+错误码枚举定义位于 `src/utils/ErrorCode.hpp`，命名空间为 `disk::error::Code`。
 
 #### 通用错误码
 
@@ -121,13 +121,12 @@
 #### 代码使用示例
 
 ```cpp
-#include "utils/error_code.hpp"
+#include "utils/ErroCode.hpp"
 
-using namespace disk::error;
-
+[[nodiscard]]
 auto GetUser(int id) -> Result<User> {
     if (id <= 0) {
-        return std::unexpected(ErrorCode::InvalidParameter);
+        return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter));
     }
     // ...
     return user;
