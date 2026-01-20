@@ -16,6 +16,37 @@
 
 namespace disk::auth {
 
+    // ==================== Controller ====================
+
+    class AuthController : public drogon::HttpController<AuthController> {
+    public:
+        AuthController();
+
+        METHOD_LIST_BEGIN
+        ADD_METHOD_TO(AuthController::Register, "/api/auth/register", drogon::Post);
+        ADD_METHOD_TO(AuthController::Login, "/api/auth/login", drogon::Post);
+        METHOD_LIST_END
+
+        /**
+         * @brief 用户注册
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto Register(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 用户登录
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto Login(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+    private:
+        std::unique_ptr<AuthService> m_auth_service;
+    };
+
     // ==================== Request Structs ====================
 
     /**
@@ -200,34 +231,4 @@ namespace disk::auth {
         }
     };
 
-    // ==================== Controller ====================
-
-    class AuthController : public drogon::HttpController<AuthController> {
-    public:
-        AuthController();
-
-        METHOD_LIST_BEGIN
-        ADD_METHOD_TO(AuthController::Register, "/api/auth/register", drogon::Post);
-        ADD_METHOD_TO(AuthController::Login, "/api/auth/login", drogon::Post);
-        METHOD_LIST_END
-
-        /**
-         * @brief 用户注册
-         * @param request HTTP请求对象
-         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
-         */
-        [[nodiscard]]
-        auto Register(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
-
-        /**
-         * @brief 用户登录
-         * @param request HTTP请求对象
-         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
-         */
-        [[nodiscard]]
-        auto Login(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
-
-    private:
-        std::unique_ptr<AuthService> m_auth_service;
-    };
 } // namespace disk::auth
