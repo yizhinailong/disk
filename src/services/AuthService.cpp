@@ -23,9 +23,9 @@ namespace disk::auth {
     using drogon::orm::Criteria;
     using drogon_model::disk::Users;
 
-    AuthService::AuthService()
+    AuthService::AuthService(drogon::nosql::RedisClientPtr redis_client)
         : m_db_client(drogon::app().getDbClient()),
-          m_token_service(std::make_unique<TokenService>(ConfigMgr::GetInstance()->GetJwtSecret())) {}
+          m_token_service(std::make_unique<TokenService>(ConfigMgr::GetInstance()->GetJwtSecret(), redis_client)) {}
 
     auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {
         LOG_DEBUG << "开始注册用户: " << request.username << " <" << request.email << ">";
@@ -117,7 +117,16 @@ namespace disk::auth {
             user.getValueOfUsername()
         );
 
-        // 5. 更新登录信息
+        // 5. 存储 refresh_token 到 Redis
+        auto store_result = co_await m_token_service->StoreRefreshToken(
+            user.getValueOfId(),
+            refresh_token
+        );
+        if (!store_result) {
+            LOG_WARN << "存储 refresh_token 到 Redis 失败: " << user.getValueOfId();
+        }
+
+        // 6. 更新登录信息
         co_await UpdateLoginInfo(user.getValueOfId(), ip_address);
 
         // 6. 构造响应
@@ -173,8 +182,16 @@ namespace disk::auth {
                 user.getValueOfUsername()
             );
 
-            // 5. TODO: 将旧 refresh token (jti) 加入黑名单
-            // 暂时不实现，等待 Redis 集成
+            // 5. 刷新 Redis 中的 token（原子操作）
+            auto refresh_result = co_await m_token_service->RefreshRefreshToken(
+                user.getValueOfId(),
+                request.refresh_token,
+                new_refresh_token
+            );
+            if (!refresh_result) {
+                LOG_WARN << "Refresh token 刷新失败: " << user.getValueOfId();
+                co_return std::unexpected(refresh_result.error());
+            }
 
             // 6. 构造响应
             RefreshTokenResponse response;

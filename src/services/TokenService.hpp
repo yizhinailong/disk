@@ -14,6 +14,8 @@
 #include <string>
 #include <utility>
 
+#include <drogon/nosql/RedisClient.h>
+
 #include "utils/ErrorCode.hpp"
 
 namespace disk::auth {
@@ -30,8 +32,9 @@ namespace disk::auth {
         /**
          * @brief 构造函数
          * @param jwt_secret JWT签名密钥
+         * @param redis_client Redis客户端
          */
-        explicit TokenService(std::string jwt_secret);
+        explicit TokenService(std::string jwt_secret, drogon::nosql::RedisClientPtr redis_client);
 
         /**
          * @brief 生成令牌对
@@ -76,8 +79,32 @@ namespace disk::auth {
         [[nodiscard]]
         auto VerifyRefreshToken(const std::string& token) const -> Result<std::pair<uint64_t, std::string>>;
 
+        /**
+         * @brief 存储 refresh_token 到 Redis
+         *
+         * @param user_id 用户 ID
+         * @param refresh_token 刷新令牌
+         * @return drogon::Task<bool> 成功返回 true，失败返回 false
+         */
+        [[nodiscard]]
+        auto StoreRefreshToken(uint64_t user_id, const std::string& refresh_token) const
+            -> drogon::Task<bool>;
+
+        /**
+         * @brief 刷新 refresh_token
+         *
+         * @param user_id 用户 ID
+         * @param old_token 旧的刷新令牌
+         * @param new_token 新的刷新令牌
+         * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
+         */
+        [[nodiscard]]
+        auto RefreshRefreshToken(uint64_t user_id, const std::string& old_token, const std::string& new_token) const
+            -> drogon::Task<Result<void>>;
+
     private:
         std::string m_jwt_secret;
+        drogon::nosql::RedisClientPtr m_redis_client;
     };
 
 } // namespace disk::auth

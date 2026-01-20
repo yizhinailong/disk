@@ -48,10 +48,12 @@ set(Models_SOURCES
 # Service
 set(Services_HEADERS
     services/AuthService.hpp
+    services/RedisService.hpp
     services/TokenService.hpp
 )
 set(Services_SOURCES
     services/AuthService.cpp
+    services/RedisService.cpp
     services/TokenService.cpp
 )
 
@@ -63,6 +65,7 @@ set(Utils_HEADERS
     utils/Response.hpp
     utils/Singleton.hpp
     utils/ConfigMgr.hpp
+    utils/TokenHash.hpp
 )
 set(Utils_SOURCES
     utils/ConfigMgr.cpp

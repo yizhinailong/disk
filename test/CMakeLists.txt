@@ -20,6 +20,7 @@ set(Models_SOURCES
 set(Services_SOURCES
     ../src/services/AuthService.cpp
     ../src/services/TokenService.cpp
+    ../src/services/RedisService.cpp
 )
 
 set(Utils_SOURCES ../src/utils/ConfigMgr.cpp)
@@ -29,6 +30,7 @@ add_executable(disk-test
     main.cpp
     utils/PasswdHash_test.cpp
     requests/AuthRequest_test.cpp
+    services/TokenHash_test.cpp
 
     # 直接编译所有项目源文件
     ${Controllers_SOURCES}

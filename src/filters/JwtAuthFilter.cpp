@@ -18,9 +18,8 @@ namespace disk::filters {
 
     using disk::utils::ConfigMgr;
 
-    JwtAuthFilter::JwtAuthFilter() {
-        const auto jwt_secret = ConfigMgr::GetInstance()->GetJwtSecret();
-        m_token_service = std::make_unique<disk::auth::TokenService>(jwt_secret);
+    JwtAuthFilter::JwtAuthFilter()
+        : m_token_service(std::make_unique<disk::auth::TokenService>(ConfigMgr::GetInstance()->GetJwtSecret(), drogon::app().getRedisClient())) {
         LOG_DEBUG << "JwtAuthFilter 初始化完成";
     }
 

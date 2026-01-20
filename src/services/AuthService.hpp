@@ -27,7 +27,11 @@ namespace disk::auth {
      */
     class AuthService {
     public:
-        explicit AuthService();
+        /**
+         * @brief 构造函数
+         * @param redis_client Redis客户端
+         */
+        explicit AuthService(drogon::nosql::RedisClientPtr redis_client);
         ~AuthService() = default;
         AuthService(const AuthService&) = delete;
         auto operator=(const AuthService&) -> AuthService& = delete;
@@ -71,7 +75,7 @@ namespace disk::auth {
          * - 验证刷新令牌的有效性
          * - 检查用户账户状态（禁用、锁定）
          * - 生成新的令牌对（access_token + refresh_token）
-         * - TODO: 将旧 refresh token 加入黑名单（Redis）
+         * - 旧 refresh token 会在 Redis 中被新 token 覆盖
          *
          * @param request 刷新令牌请求
          * @return drogon::Task<Result<RefreshTokenResponse>> 成功返回新令牌对，失败返回错误

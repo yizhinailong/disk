@@ -74,6 +74,8 @@ namespace disk::error {
         TokenExpired = 40108,
         /// 令牌类型错误（需要 access token）
         TokenWrongType = 40109,
+        /// 刷新令牌已被使用
+        RefreshTokenAlreadyUsed = 40110,
 
         // ==================== 文件错误码 (50xxx) ====================
         /// 文件名无效
@@ -115,47 +117,48 @@ namespace disk::error {
     inline auto GetHttpStatus(Code code) -> drogon::HttpStatusCode {
         static const std::unordered_map<Code, drogon::HttpStatusCode> status_map = {
             // 成功
-            {              Code::Success,                  drogon::k200OK },
+            {                 Code::Success,                  drogon::k200OK },
 
             // 通用错误
-            {     Code::InvalidParameter,          drogon::k400BadRequest },
-            {     Code::ValidationFailed,          drogon::k400BadRequest },
-            {     Code::ResourceNotFound,            drogon::k404NotFound },
-            {     Code::ResourceConflict,            drogon::k409Conflict },
-            {      Code::TooManyRequests,     drogon::k429TooManyRequests },
-            {        Code::InternalError, drogon::k500InternalServerError },
+            {        Code::InvalidParameter,          drogon::k400BadRequest },
+            {        Code::ValidationFailed,          drogon::k400BadRequest },
+            {        Code::ResourceNotFound,            drogon::k404NotFound },
+            {        Code::ResourceConflict,            drogon::k409Conflict },
+            {         Code::TooManyRequests,     drogon::k429TooManyRequests },
+            {           Code::InternalError, drogon::k500InternalServerError },
 
             // 认证错误
-            {       Code::UsernameExists,          drogon::k400BadRequest },
-            {          Code::EmailExists,          drogon::k400BadRequest },
-            {        Code::InvalidFormat,          drogon::k400BadRequest },
-            {         Code::UserNotFound,            drogon::k404NotFound },
-            {   Code::InvalidCredentials,        drogon::k401Unauthorized },
-            {        Code::AccountLocked,        drogon::k401Unauthorized },
-            {      Code::AccountDisabled,        drogon::k401Unauthorized },
-            {         Code::InvalidToken,        drogon::k401Unauthorized },
-            {         Code::TokenMissing,        drogon::k401Unauthorized },
-            {       Code::TokenMalformed,        drogon::k401Unauthorized },
-            {         Code::TokenExpired,        drogon::k401Unauthorized },
-            {       Code::TokenWrongType,        drogon::k401Unauthorized },
-            {  Code::InvalidRefreshToken,        drogon::k401Unauthorized },
+            {          Code::UsernameExists,          drogon::k400BadRequest },
+            {             Code::EmailExists,          drogon::k400BadRequest },
+            {           Code::InvalidFormat,          drogon::k400BadRequest },
+            {            Code::UserNotFound,            drogon::k404NotFound },
+            {      Code::InvalidCredentials,        drogon::k401Unauthorized },
+            {           Code::AccountLocked,        drogon::k401Unauthorized },
+            {         Code::AccountDisabled,        drogon::k401Unauthorized },
+            {            Code::InvalidToken,        drogon::k401Unauthorized },
+            {            Code::TokenMissing,        drogon::k401Unauthorized },
+            {          Code::TokenMalformed,        drogon::k401Unauthorized },
+            {            Code::TokenExpired,        drogon::k401Unauthorized },
+            {          Code::TokenWrongType,        drogon::k401Unauthorized },
+            {     Code::InvalidRefreshToken,        drogon::k401Unauthorized },
+            { Code::RefreshTokenAlreadyUsed,        drogon::k401Unauthorized },
 
             // 文件错误
-            {      Code::InvalidFilename,          drogon::k400BadRequest },
-            {   Code::FileTypeNotAllowed,          drogon::k400BadRequest },
-            {     Code::FileSizeExceeded,          drogon::k400BadRequest },
-            { Code::StorageQuotaExceeded,          drogon::k400BadRequest },
-            {         Code::FileNotFound,            drogon::k404NotFound },
-            {       Code::FolderNotFound,            drogon::k404NotFound },
-            {    Code::FileAlreadyExists,            drogon::k409Conflict },
-            {   Code::UploadTaskNotFound,          drogon::k400BadRequest },
-            {    Code::ChunkVerifyFailed,          drogon::k400BadRequest },
+            {         Code::InvalidFilename,          drogon::k400BadRequest },
+            {      Code::FileTypeNotAllowed,          drogon::k400BadRequest },
+            {        Code::FileSizeExceeded,          drogon::k400BadRequest },
+            {    Code::StorageQuotaExceeded,          drogon::k400BadRequest },
+            {            Code::FileNotFound,            drogon::k404NotFound },
+            {          Code::FolderNotFound,            drogon::k404NotFound },
+            {       Code::FileAlreadyExists,            drogon::k409Conflict },
+            {      Code::UploadTaskNotFound,          drogon::k400BadRequest },
+            {       Code::ChunkVerifyFailed,          drogon::k400BadRequest },
 
             // 分享错误
-            {        Code::ShareNotFound,            drogon::k404NotFound },
-            {         Code::ShareExpired,          drogon::k400BadRequest },
-            {   Code::SharePasswordError,          drogon::k400BadRequest },
-            {    Code::ShareAccessDenied,           drogon::k403Forbidden },
+            {           Code::ShareNotFound,            drogon::k404NotFound },
+            {            Code::ShareExpired,          drogon::k400BadRequest },
+            {      Code::SharePasswordError,          drogon::k400BadRequest },
+            {       Code::ShareAccessDenied,           drogon::k403Forbidden },
         };
 
         auto it = status_map.find(code);
@@ -173,47 +176,48 @@ namespace disk::error {
     inline auto GetErrorMessage(Code code) -> std::string {
         static const std::unordered_map<Code, std::string> message_map = {
             // 成功
-            {              Code::Success,                "success" },
+            {                 Code::Success,                "success" },
 
             // 通用错误
-            {     Code::InvalidParameter,           "请求参数错误" },
-            {     Code::ValidationFailed,           "参数校验失败" },
-            {     Code::ResourceNotFound,             "资源不存在" },
-            {     Code::ResourceConflict,               "资源冲突" },
-            {      Code::TooManyRequests,           "请求过于频繁" },
-            {        Code::InternalError,         "服务器内部错误" },
+            {        Code::InvalidParameter,           "请求参数错误" },
+            {        Code::ValidationFailed,           "参数校验失败" },
+            {        Code::ResourceNotFound,             "资源不存在" },
+            {        Code::ResourceConflict,               "资源冲突" },
+            {         Code::TooManyRequests,           "请求过于频繁" },
+            {           Code::InternalError,         "服务器内部错误" },
 
             // 认证错误
-            {       Code::UsernameExists,         "用户名已被注册" },
-            {          Code::EmailExists,           "邮箱已被注册" },
-            {        Code::InvalidFormat,         "参数格式不正确" },
-            {         Code::UserNotFound,             "用户不存在" },
-            {   Code::InvalidCredentials,       "用户名或密码错误" },
-            {        Code::AccountLocked, "账户已锁定，请稍后重试" },
-            {      Code::AccountDisabled,           "账户已被禁用" },
-            {         Code::InvalidToken,       "令牌无效或已过期" },
-            {         Code::TokenMissing,             "未提供令牌" },
-            {       Code::TokenMalformed,           "令牌格式错误" },
-            {         Code::TokenExpired,             "令牌已过期" },
-            {       Code::TokenWrongType,           "令牌类型错误" },
-            {  Code::InvalidRefreshToken,           "刷新令牌无效" },
+            {          Code::UsernameExists,         "用户名已被注册" },
+            {             Code::EmailExists,           "邮箱已被注册" },
+            {           Code::InvalidFormat,         "参数格式不正确" },
+            {            Code::UserNotFound,             "用户不存在" },
+            {      Code::InvalidCredentials,       "用户名或密码错误" },
+            {           Code::AccountLocked, "账户已锁定，请稍后重试" },
+            {         Code::AccountDisabled,           "账户已被禁用" },
+            {            Code::InvalidToken,       "令牌无效或已过期" },
+            {            Code::TokenMissing,             "未提供令牌" },
+            {          Code::TokenMalformed,           "令牌格式错误" },
+            {            Code::TokenExpired,             "令牌已过期" },
+            {          Code::TokenWrongType,           "令牌类型错误" },
+            {     Code::InvalidRefreshToken,           "刷新令牌无效" },
+            { Code::RefreshTokenAlreadyUsed,       "刷新令牌已被使用" },
 
             // 文件错误
-            {      Code::InvalidFilename,             "文件名无效" },
-            {   Code::FileTypeNotAllowed,         "文件类型不允许" },
-            {     Code::FileSizeExceeded,       "文件大小超出限制" },
-            { Code::StorageQuotaExceeded,           "存储空间不足" },
-            {         Code::FileNotFound,             "文件不存在" },
-            {       Code::FolderNotFound,           "文件夹不存在" },
-            {    Code::FileAlreadyExists,         "同名文件已存在" },
-            {   Code::UploadTaskNotFound, "上传任务不存在或已过期" },
-            {    Code::ChunkVerifyFailed,           "分片校验失败" },
+            {         Code::InvalidFilename,             "文件名无效" },
+            {      Code::FileTypeNotAllowed,         "文件类型不允许" },
+            {        Code::FileSizeExceeded,       "文件大小超出限制" },
+            {    Code::StorageQuotaExceeded,           "存储空间不足" },
+            {            Code::FileNotFound,             "文件不存在" },
+            {          Code::FolderNotFound,           "文件夹不存在" },
+            {       Code::FileAlreadyExists,         "同名文件已存在" },
+            {      Code::UploadTaskNotFound, "上传任务不存在或已过期" },
+            {       Code::ChunkVerifyFailed,           "分片校验失败" },
 
             // 分享错误
-            {        Code::ShareNotFound,             "分享不存在" },
-            {         Code::ShareExpired,             "分享已过期" },
-            {   Code::SharePasswordError,           "分享密码错误" },
-            {    Code::ShareAccessDenied,             "无权限访问" },
+            {           Code::ShareNotFound,             "分享不存在" },
+            {            Code::ShareExpired,             "分享已过期" },
+            {      Code::SharePasswordError,           "分享密码错误" },
+            {       Code::ShareAccessDenied,             "无权限访问" },
         };
 
         auto it = message_map.find(code);

@@ -15,6 +15,8 @@
 
 ### 🔐 安全认证
 - **JWT 令牌认证** - 无状态令牌机制，Access Token (2h) + Refresh Token (7d)
+- **单次使用 Refresh Token** - 每个 refresh_token 只能使用一次，刷新后旧的立即失效
+- **Redis 存储** - Refresh token 存储在 Redis 中，支持高性能验证
 - **Argon2id 密码哈希** - 抗暴力破解的密码存储
 - **账户锁定机制** - 5次失败锁定15分钟，防止暴力攻击
 - **传输加密** - 全站 HTTPS (TLS 1.3)
