@@ -161,6 +161,7 @@ namespace disk::auth {
         response.email = user.getValueOfEmail();
         response.nickname = user.getNickname() ? *user.getNickname() : user.getValueOfUsername();
         response.storage_quota = user.getValueOfStorageQuota();
+        response.storage_used = user.getValueOfStorageUsed();
         response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
         return response;
     }

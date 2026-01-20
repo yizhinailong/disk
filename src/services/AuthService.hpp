@@ -31,6 +31,7 @@ namespace disk::auth {
         std::string email;
         std::string nickname;
         uint64_t storage_quota;
+        uint64_t storage_used;
         std::string created_at;
 
         /// 转换为 JSON
@@ -42,6 +43,7 @@ namespace disk::auth {
             json["email"] = email;
             json["nickname"] = nickname;
             json["storage_quota"] = static_cast<Json::UInt64>(storage_quota);
+            json["storage_used"] = static_cast<Json::UInt64>(storage_used);
             json["created_at"] = created_at;
             return json;
         }

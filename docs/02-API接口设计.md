@@ -173,6 +173,7 @@ auto GetUser(int id) -> Result<User> {
       "email": "john@example.com",
       "nickname": "john_doe",
       "storage_quota": 10737418240,
+      "storage_used": 0,
       "created_at": "2026-01-13T10:00:00Z"
     }
   }
