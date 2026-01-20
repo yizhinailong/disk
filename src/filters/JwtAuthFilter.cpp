@@ -19,7 +19,7 @@ namespace disk::filters {
     using disk::utils::ConfigMgr;
 
     JwtAuthFilter::JwtAuthFilter() {
-        const auto jwt_secret = ConfigMgr::GetInstance().GetJwtSecret();
+        const auto jwt_secret = ConfigMgr::GetInstance()->GetJwtSecret();
         m_token_service = std::make_unique<disk::auth::TokenService>(jwt_secret);
         LOG_DEBUG << "JwtAuthFilter 初始化完成";
     }
