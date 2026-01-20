@@ -18,6 +18,7 @@
 namespace disk::auth {
 
     using disk::utils::ConfigMgr;
+    using drogon::orm::CompareOperator;
     using drogon::orm::CoroMapper;
     using drogon::orm::Criteria;
     using drogon_model::disk::Users;
@@ -131,6 +132,67 @@ namespace disk::auth {
         co_return response;
     }
 
+    auto AuthService::RefreshTokens(RefreshTokenRequest request) -> drogon::Task<Result<RefreshTokenResponse>> {
+        LOG_DEBUG << "开始刷新令牌";
+
+        // 1. 验证刷新令牌
+        auto verify_result = m_token_service.VerifyRefreshToken(request.refresh_token);
+        if (!verify_result) {
+            LOG_WARN << "刷新令牌验证失败";
+            co_return std::unexpected(verify_result.error());
+        }
+
+        const auto [user_id, jti] = verify_result.value();
+        LOG_DEBUG << "刷新令牌验证成功: user_id=" << user_id << ", jti=" << jti;
+
+        // 2. 查询用户信息
+        try {
+            CoroMapper<Users> mapper(m_db_client);
+
+            auto user = co_await mapper.findOne(
+                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
+            );
+            LOG_DEBUG << "找到用户: " << user.getValueOfUsername();
+
+            // 3. 检查账户状态
+            const auto status = user.getValueOfStatus();
+            if (status == 0) {
+                LOG_WARN << "账户已禁用: " << user.getValueOfUsername();
+                co_return std::unexpected(ErrorInfo(ErrorCode::AccountDisabled));
+            }
+
+            if (CheckAccountLocked(user)) {
+                LOG_WARN << "账户已锁定: " << user.getValueOfUsername();
+                co_return std::unexpected(ErrorInfo(ErrorCode::AccountLocked));
+            }
+
+            // 4. 生成新的令牌对
+            auto [access_token, new_refresh_token] = m_token_service.GenerateTokens(
+                user.getValueOfId(),
+                user.getValueOfUsername()
+            );
+
+            // 5. TODO: 将旧 refresh token (jti) 加入黑名单
+            // 暂时不实现，等待 Redis 集成
+
+            // 6. 构造响应
+            RefreshTokenResponse response;
+            response.access_token = access_token;
+            response.refresh_token = new_refresh_token;
+            response.expires_in = TokenService::GetAccessTokenExpireSeconds();
+
+            LOG_INFO << "令牌刷新成功: user_id=" << user_id;
+            co_return response;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "查询用户失败: " << user_id << " - " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
+        } catch (const std::exception& e) {
+            LOG_ERROR << "刷新令牌处理失败: " << e.what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "刷新令牌失败，请稍后重试"));
+        }
+    }
+
     auto AuthService::IsUsernameExists(std::string username) const -> drogon::Task<bool> {
         try {
             CoroMapper<Users> mapper(m_db_client);
@@ -171,7 +233,6 @@ namespace disk::auth {
         -> drogon::Task<Result<drogon_model::disk::Users>> {
 
         try {
-            using drogon::orm::CompareOperator;
             CoroMapper<Users> mapper(m_db_client);
 
             auto by_username = co_await mapper.findOne(
@@ -185,7 +246,6 @@ namespace disk::auth {
         }
 
         try {
-            using drogon::orm::CompareOperator;
             CoroMapper<Users> mapper(m_db_client);
 
             auto by_email = co_await mapper.findOne(
@@ -242,7 +302,6 @@ namespace disk::auth {
     auto AuthService::IncrementLoginAttempts(uint64_t user_id) -> drogon::Task<void> {
 
         try {
-            using drogon::orm::CompareOperator;
             CoroMapper<Users> mapper(m_db_client);
 
             // 查询当前失败次数

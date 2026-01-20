@@ -1,7 +1,3 @@
-# Create static library for core code (shared by disk and disk-test)
-add_library(disk-lib STATIC)
-
-# Create main executable
 add_executable(${PROJECT_NAME} main.cpp)
 
 # Controller
@@ -44,6 +40,11 @@ set(Models_SOURCES
     models/Users.cpp
 )
 
+# # Requests
+# set(Requests_HEADERS
+#     requests/AuthRequest.hpp
+# )
+
 # Service
 set(Services_HEADERS
     services/AuthService.hpp
@@ -67,8 +68,7 @@ set(Utils_SOURCES
     utils/ConfigMgr.cpp
 )
 
-# Configure static library
-target_sources(disk-lib
+target_sources(${PROJECT_NAME}
     PRIVATE
     ${Controllers_SOURCES}
     ${Filters_SOURCES}
@@ -82,28 +82,11 @@ target_sources(disk-lib
     ${Controllers_HEADERS}
     ${Filters_HEADERS}
     ${Models_HEADERS}
+    # ${Requests_HEADERS}
     ${Services_HEADERS}
     ${Utils_HEADERS}
 )
 
-target_include_directories(disk-lib
-    PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-)
-
-target_precompile_headers(disk-lib
-    PRIVATE
-    "${CMAKE_SOURCE_DIR}/src/utils/Pch.hpp"
-)
-
-target_link_libraries(disk-lib
-    PRIVATE
-    Drogon::Drogon
-    jwt-cpp::jwt-cpp
-    unofficial-sodium::sodium
-)
-
-# Configure main executable
 target_include_directories(${PROJECT_NAME}
     PRIVATE
     ${CMAKE_SOURCE_DIR}/src
@@ -116,7 +99,6 @@ target_precompile_headers(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
-    disk-lib
     Drogon::Drogon
     jwt-cpp::jwt-cpp
     unofficial-sodium::sodium

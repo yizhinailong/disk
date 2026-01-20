@@ -68,6 +68,14 @@ namespace disk::auth {
         [[nodiscard]]
         auto VerifyAccessToken(const std::string& token) const -> Result<std::pair<uint64_t, std::string>>;
 
+        /**
+         * @brief 验证刷新令牌
+         * @param token 刷新令牌字符串
+         * @return Result<pair<user_id, jti>> 验证成功返回用户ID和JTI，失败返回错误
+         */
+        [[nodiscard]]
+        auto VerifyRefreshToken(const std::string& token) const -> Result<std::pair<uint64_t, std::string>>;
+
     private:
         std::string m_jwt_secret;
     };

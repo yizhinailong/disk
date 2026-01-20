@@ -24,6 +24,7 @@ namespace disk::auth {
     // Forward declarations - request structs defined in AuthController.hpp
     struct RegisterRequest;
     struct LoginRequest;
+    struct RefreshTokenRequest;
 
     /**
      * @brief 用户注册响应结构
@@ -76,6 +77,25 @@ namespace disk::auth {
     };
 
     /**
+     * @brief 刷新令牌响应结构
+     */
+    struct RefreshTokenResponse {
+        std::string access_token;
+        std::string refresh_token;
+        int expires_in;
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["access_token"] = access_token;
+            json["refresh_token"] = refresh_token;
+            json["expires_in"] = expires_in;
+            return json;
+        }
+    };
+
+    /**
      * @brief 认证服务类
      */
     class AuthService {
@@ -116,6 +136,21 @@ namespace disk::auth {
          */
         [[nodiscard]]
         auto Login(LoginRequest request, std::string ip_address) -> drogon::Task<Result<LoginResponse>>;
+
+        /**
+         * @brief 刷新令牌
+         *
+         * 业务规则：
+         * - 验证刷新令牌的有效性
+         * - 检查用户账户状态（禁用、锁定）
+         * - 生成新的令牌对（access_token + refresh_token）
+         * - TODO: 将旧 refresh token 加入黑名单（Redis）
+         *
+         * @param request 刷新令牌请求
+         * @return drogon::Task<Result<RefreshTokenResponse>> 成功返回新令牌对，失败返回错误
+         */
+        [[nodiscard]]
+        auto RefreshTokens(RefreshTokenRequest request) -> drogon::Task<Result<RefreshTokenResponse>>;
 
     private:
         /**

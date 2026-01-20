@@ -25,6 +25,7 @@ namespace disk::auth {
         METHOD_LIST_BEGIN
         ADD_METHOD_TO(AuthController::Register, "/api/auth/register", drogon::Post);
         ADD_METHOD_TO(AuthController::Login, "/api/auth/login", drogon::Post);
+        ADD_METHOD_TO(AuthController::RefreshTokens, "/api/auth/refresh", drogon::Post);
         METHOD_LIST_END
 
         /**
@@ -42,6 +43,14 @@ namespace disk::auth {
          */
         [[nodiscard]]
         auto Login(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 刷新令牌
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto RefreshTokens(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
         std::unique_ptr<AuthService> m_auth_service;
@@ -226,6 +235,53 @@ namespace disk::auth {
             request.password = json["password"].asString();
 
             LOG_DEBUG << "解析到登录请求: " << request.account;
+
+            return request;
+        }
+    };
+
+    /**
+     * @brief 刷新令牌请求
+     *
+     * 验证规则：
+     * - refresh_token: 必填，有效的 JWT 字符串
+     */
+    struct RefreshTokenRequest {
+        std::string refresh_token;
+
+        /**
+         * @brief 从HTTP请求解析并验证
+         * @param req HTTP请求对象
+         * @return Result<RefreshTokenRequest> 解析成功返回请求结构，失败返回错误
+         */
+        [[nodiscard]]
+        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<RefreshTokenRequest> {
+            LOG_DEBUG << "开始解析刷新令牌请求参数";
+
+            auto json_ptr = req->getJsonObject();
+            if (!json_ptr) {
+                LOG_WARN << "请求体不是有效的 JSON";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+            }
+
+            const auto& json = *json_ptr;
+
+            // 检查必填字段
+            if (!json.isMember("refresh_token")) {
+                LOG_WARN << "缺少必需参数: refresh_token";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: refresh_token"));
+            }
+
+            // 检查字段类型
+            if (!json["refresh_token"].isString()) {
+                LOG_WARN << "参数 'refresh_token' 类型错误: 期望字符串";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'refresh_token' 类型错误: 期望字符串"));
+            }
+
+            RefreshTokenRequest request;
+            request.refresh_token = json["refresh_token"].asString();
+
+            LOG_DEBUG << "解析到刷新令牌请求";
 
             return request;
         }

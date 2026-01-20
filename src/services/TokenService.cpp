@@ -98,4 +98,43 @@ namespace disk::auth {
         }
     }
 
+    auto TokenService::VerifyRefreshToken(const std::string& token) const
+        -> Result<std::pair<uint64_t, std::string>> {
+
+        using traits = jwt::traits::open_source_parsers_jsoncpp;
+
+        try {
+            auto decoded = jwt::decode<traits>(token);
+
+            auto verifier = jwt::verify<traits>()
+                                .allow_algorithm(jwt::algorithm::hs256{ m_jwt_secret })
+                                .with_issuer("disk");
+
+            verifier.verify(decoded);
+
+            const auto type = decoded.get_payload_claim("type").as_string();
+            if (type != "refresh") {
+                return std::unexpected(ErrorInfo(ErrorCode::TokenWrongType));
+            }
+
+            const auto jti = decoded.get_payload_claim("jti").as_string();
+
+            const auto user_id_str = decoded.get_subject();
+            const auto user_id = std::stoull(user_id_str);
+
+            LOG_DEBUG << "刷新令牌验证成功: user_id=" << user_id << ", jti=" << jti;
+            return std::make_pair(user_id, jti);
+
+        } catch (const jwt::error::token_verification_exception& e) {
+            LOG_WARN << "刷新令牌验证失败: " << e.what();
+            if (std::string(e.what()).find("expired") != std::string::npos) {
+                return std::unexpected(ErrorInfo(ErrorCode::TokenExpired));
+            }
+            return std::unexpected(ErrorInfo(ErrorCode::InvalidRefreshToken));
+        } catch (const std::exception& e) {
+            LOG_WARN << "刷新令牌解析失败: " << e.what();
+            return std::unexpected(ErrorInfo(ErrorCode::TokenMalformed));
+        }
+    }
+
 } // namespace disk::auth

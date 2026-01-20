@@ -18,6 +18,7 @@
 
 #include "controllers/AuthController.hpp"
 
+using disk::auth::RefreshTokenRequest;
 using disk::auth::RegisterRequest;
 
 static auto CreateRegisterRequest(
@@ -259,6 +260,62 @@ TEST(RegisterRequest, InvalidJSON) {
     req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
 
     auto result = RegisterRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Invalid JSON should fail";
+}
+
+static auto CreateRefreshTokenRequest(const std::string& refresh_token)
+    -> drogon::HttpRequestPtr {
+
+    Json::Value json;
+    json["refresh_token"] = refresh_token;
+
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    std::string body = Json::writeString(builder, json);
+
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody(body);
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    return req;
+}
+
+TEST(RefreshTokenRequest, ValidToken) {
+    std::string token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwidHlwZSI6InJlZnJlc2gifQ.signature";
+    auto req = CreateRefreshTokenRequest(token);
+    auto result = RefreshTokenRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid refresh token should pass validation";
+    EXPECT_EQ(result->refresh_token, token);
+}
+
+TEST(RefreshTokenRequest, MissingRefreshToken) {
+    Json::Value json;
+    // Missing refresh_token field
+
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    std::string body = Json::writeString(builder, json);
+
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody(body);
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    auto result = RefreshTokenRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing refresh_token should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(RefreshTokenRequest, InvalidJSON) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody("{invalid json}");
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    auto result = RefreshTokenRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "Invalid JSON should fail";
 }

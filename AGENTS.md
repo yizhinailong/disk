@@ -2,6 +2,24 @@
 
 **Project**: C++23 cloud storage system (Drogon framework) | **Status**: v0.1, auth module only | **Scale**: 38 files, ~20,500 lines | **Docs**: Chinese, Code: English
 
+## 🚨 架构约束（CRITICAL - 不可违反）
+
+**禁止使用静态库或动态库形式！**
+
+- ❌ **禁止创建** `add_library(STATIC/DYNAMIC)` 静态或动态库
+- ✅ **必须使用** `add_executable()` 直接编译所有源文件到可执行文件（.exe）
+- ❌ **禁止使用** `target_link_libraries(... disk-lib)` 链接自定义静态库
+- ✅ **必须使用** `target_link_libraries(... Drogon::Drogon jwt-cpp::jwt-cpp)` 链接第三方库
+
+**架构模式：**
+```
+源文件 (.cpp/.hpp) ──── 直接编译 ────> 可执行文件 (.exe)
+```
+
+**所有 CMakeLists.txt 必须遵循此规则，任何方案的实现都不得违反！**
+
+---
+
 ## Build/Test Commands
 
 ### Configure and Build

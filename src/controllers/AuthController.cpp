@@ -78,4 +78,34 @@ namespace disk::auth {
         LOG_INFO << "登录成功: " << parse_result->account;
         co_return Response::Success(data);
     }
+
+    auto AuthController::RefreshTokens(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到刷新令牌请求: " << request->getPeerAddr().toIpPort();
+
+        // 1. 解析请求
+        auto parse_result = RefreshTokenRequest::FromRequest(request);
+        if (!parse_result) {
+            LOG_WARN << "刷新令牌请求参数验证失败: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+
+        // 2. 调用 Service 刷新令牌
+        auto refresh_result = co_await m_auth_service->RefreshTokens(*parse_result);
+
+        if (!refresh_result) {
+            LOG_ERROR << "刷新令牌失败: " << refresh_result.error().message;
+            co_return Response::Error(refresh_result.error());
+        }
+
+        // 3. 构造响应
+        Json::Value data;
+        data["access_token"] = refresh_result->access_token;
+        data["refresh_token"] = refresh_result->refresh_token;
+        data["expires_in"] = refresh_result->expires_in;
+
+        LOG_INFO << "刷新令牌成功";
+        co_return Response::Success(data);
+    }
 } // namespace disk::auth
