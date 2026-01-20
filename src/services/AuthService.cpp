@@ -172,7 +172,9 @@ namespace disk::auth {
             using drogon::orm::CompareOperator;
             CoroMapper<Users> mapper(m_db_client);
 
-            auto by_username = co_await mapper.findOne(Criteria(Users::Cols::_username, CompareOperator::EQ, account));
+            auto by_username = co_await mapper.findOne(
+                Criteria(Users::Cols::_username, CompareOperator::EQ, account)
+            );
             co_return std::make_optional(by_username);
 
         } catch (const drogon::orm::DrogonDbException&) {
@@ -183,7 +185,9 @@ namespace disk::auth {
             using drogon::orm::CompareOperator;
             CoroMapper<Users> mapper(m_db_client);
 
-            auto by_email = co_await mapper.findOne(Criteria(Users::Cols::_email, CompareOperator::EQ, account));
+            auto by_email = co_await mapper.findOne(
+                Criteria(Users::Cols::_email, CompareOperator::EQ, account)
+            );
             co_return std::make_optional(by_email);
 
         } catch (const drogon::orm::DrogonDbException&) {

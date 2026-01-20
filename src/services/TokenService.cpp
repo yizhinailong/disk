@@ -20,9 +20,7 @@
 namespace disk::auth {
 
     TokenService::TokenService(std::string jwt_secret)
-        : m_jwt_secret(std::move(jwt_secret)) {
-        LOG_DEBUG << "TokenService 初始化完成";
-    }
+        : m_jwt_secret(std::move(jwt_secret)) {}
 
     auto TokenService::GenerateTokens(uint64_t user_id, const std::string& username) const
         -> std::pair<std::string, std::string> {
