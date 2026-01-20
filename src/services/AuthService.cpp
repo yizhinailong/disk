@@ -23,8 +23,8 @@ namespace disk::auth {
     using drogon::orm::Criteria;
     using drogon_model::disk::Users;
 
-    AuthService::AuthService(drogon::orm::DbClientPtr db_client)
-        : m_db_client(std::move(db_client)),
+    AuthService::AuthService()
+        : m_db_client(drogon::app().getDbClient()),
           m_token_service(std::make_shared<TokenService>(ConfigMgr::GetInstance()->GetJwtSecret())) {}
 
     auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {

@@ -12,9 +12,7 @@
 
 #pragma once
 
-#include "dtos/AuthDto.hpp"
 #include "services/AuthService.hpp"
-#include "utils/ErrorCode.hpp"
 
 namespace disk::auth {
 

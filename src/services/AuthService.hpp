@@ -27,7 +27,7 @@ namespace disk::auth {
      */
     class AuthService {
     public:
-        explicit AuthService(drogon::orm::DbClientPtr db_client);
+        explicit AuthService();
         ~AuthService() = default;
         AuthService(const AuthService&) = delete;
         auto operator=(const AuthService&) -> AuthService& = delete;

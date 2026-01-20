@@ -15,7 +15,7 @@
 
 namespace disk::auth {
     AuthController::AuthController()
-        : m_auth_service(std::make_unique<AuthService>(drogon::app().getDbClient())) {}
+        : m_auth_service(std::make_unique<AuthService>()) {}
 
     auto AuthController::Register(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
