@@ -25,7 +25,7 @@ namespace disk::auth {
 
     AuthService::AuthService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)),
-          m_token_service(ConfigMgr::GetInstance()->GetJwtSecret()) {}
+          m_token_service(std::make_shared<TokenService>(ConfigMgr::GetInstance()->GetJwtSecret())) {}
 
     auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {
         LOG_DEBUG << "开始注册用户: " << request.username << " <" << request.email << ">";
@@ -112,7 +112,7 @@ namespace disk::auth {
         }
 
         // 4. 生成令牌
-        auto [access_token, refresh_token] = m_token_service.GenerateTokens(
+        auto [access_token, refresh_token] = m_token_service->GenerateTokens(
             user.getValueOfId(),
             user.getValueOfUsername()
         );
@@ -132,11 +132,12 @@ namespace disk::auth {
         co_return response;
     }
 
-    auto AuthService::RefreshTokens(RefreshTokenRequest request) -> drogon::Task<Result<RefreshTokenResponse>> {
+    auto AuthService::RefreshTokens(RefreshTokenRequest request)
+        -> drogon::Task<Result<RefreshTokenResponse>> {
         LOG_DEBUG << "开始刷新令牌";
 
         // 1. 验证刷新令牌
-        auto verify_result = m_token_service.VerifyRefreshToken(request.refresh_token);
+        auto verify_result = m_token_service->VerifyRefreshToken(request.refresh_token);
         if (!verify_result) {
             LOG_WARN << "刷新令牌验证失败";
             co_return std::unexpected(verify_result.error());
@@ -167,7 +168,7 @@ namespace disk::auth {
             }
 
             // 4. 生成新的令牌对
-            auto [access_token, new_refresh_token] = m_token_service.GenerateTokens(
+            auto [access_token, new_refresh_token] = m_token_service->GenerateTokens(
                 user.getValueOfId(),
                 user.getValueOfUsername()
             );
