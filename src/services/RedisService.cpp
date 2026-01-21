@@ -20,7 +20,9 @@ namespace disk::services {
     using disk::utils::HashUtil;
 
     RedisService::RedisService(drogon::nosql::RedisClientPtr redis_client)
-        : m_redis_client(std::move(redis_client)) {}
+        : m_redis_client(std::move(redis_client)) {
+        LOG_DEBUG << "RedisService 初始化成功";
+    }
 
     auto RedisService::StoreRefreshToken(uint64_t user_id, const std::string& refresh_token)
         -> drogon::Task<Result<void>> {

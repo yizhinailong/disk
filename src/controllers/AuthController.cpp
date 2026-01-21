@@ -15,7 +15,9 @@
 
 namespace disk::auth {
     AuthController::AuthController()
-        : m_auth_service(std::make_unique<AuthService>(drogon::app().getRedisClient())) {}
+        : m_auth_service(std::make_unique<AuthService>(drogon::app().getRedisClient())) {
+        LOG_DEBUG << "AuthController 初始化完成";
+    }
 
     auto AuthController::Register(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {

@@ -27,7 +27,11 @@ namespace disk::auth {
 
     AuthService::AuthService(const drogon::nosql::RedisClientPtr& redis_client)
         : m_db_client(drogon::app().getDbClient()),
-          m_token_service(std::make_unique<TokenService>(ConfigMgr::GetInstance()->GetJwtSecret(), redis_client)) {}
+          m_token_service(
+              std::make_unique<TokenService>(ConfigMgr::GetInstance()->GetJwtSecret(), redis_client)
+          ) {
+        LOG_DEBUG << "AuthService 初始化完成";
+    }
 
     auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {
         LOG_DEBUG << "开始注册用户: " << request.username << " <" << request.email << ">";

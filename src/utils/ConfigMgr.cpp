@@ -10,6 +10,8 @@
  */
 #include "ConfigMgr.hpp"
 
+#include <mutex>
+
 #include <drogon/utils/Utilities.h>
 
 namespace disk::utils {
@@ -27,7 +29,11 @@ namespace disk::utils {
             LOG_ERROR << "JWT_SECRET 长度不足，至少需要 " << MIN_SECRET_LENGTH << " 字符";
         }
 
-        LOG_WARN << "JWT_SECRET 未正确配置，使用默认密钥（仅开发环境）";
+        static std::once_flag warning_flag;
+        std::call_once(warning_flag, [] {
+            LOG_WARN << "JWT_SECRET 未正确配置，使用默认密钥（仅开发环境）";
+        });
+
         return m_jwt_secret;
     }
 

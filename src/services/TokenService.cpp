@@ -15,8 +15,6 @@
 #include <jwt-cpp/jwt.h>
 #include <jwt-cpp/traits/open-source-parsers-jsoncpp/traits.h>
 
-#include "services/RedisService.hpp"
-#include "services/RedisService.hpp" // 新增
 #include "utils/ErrorCode.hpp"
 #include "utils/HashUtil.hpp"
 
@@ -26,7 +24,9 @@ namespace disk::auth {
 
     TokenService::TokenService(std::string jwt_secret, drogon::nosql::RedisClientPtr redis_client)
         : m_jwt_secret(std::move(jwt_secret)),
-          m_redis_client(std::move(redis_client)) {}
+          m_redis_client(std::move(redis_client)) {
+        LOG_DEBUG << "TokenService 初始化完成";
+    }
 
     auto TokenService::GenerateTokens(uint64_t user_id, const std::string& username) const
         -> std::pair<std::string, std::string> {
@@ -177,8 +177,11 @@ namespace disk::auth {
         }
     }
 
-    auto TokenService::RefreshRefreshToken(uint64_t user_id, const std::string& old_token, const std::string& new_token) const
-        -> drogon::Task<Result<void>> {
+    auto TokenService::RefreshRefreshToken(
+        uint64_t user_id,
+        const std::string& old_token,
+        const std::string& new_token
+    ) const -> drogon::Task<Result<void>> {
 
         const auto key = "refresh_token:" + std::to_string(user_id);
 
