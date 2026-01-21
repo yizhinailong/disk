@@ -12,6 +12,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -48,11 +49,8 @@ namespace disk::utils {
         [[nodiscard]]
         static auto HashPassword(const std::string& password) -> Result<std::string> {
             if (password.empty()) {
-                LOG_ERROR << "密码哈希失败: 密码为空";
                 return std::unexpected(ErrorInfo(ErrorCode::InternalError, "密码不能为空"));
             }
-
-            LOG_DEBUG << "开始密码哈希计算";
 
             // 使用 libsodium 的 Argon2id 算法
             // crypto_pwhash_STRBYTES 是输出缓冲区的大小（128 字节）
@@ -65,11 +63,9 @@ namespace disk::utils {
                     crypto_pwhash_OPSLIMIT_INTERACTIVE, // 适合交互式应用的计算强度
                     crypto_pwhash_MEMLIMIT_INTERACTIVE  // 适合交互式应用的内存限制
                 ) != 0) {
-                LOG_ERROR << "密码哈希失败: 内存不足";
                 return std::unexpected(ErrorInfo(ErrorCode::InternalError, "内存不足，密码哈希失败"));
             }
 
-            LOG_DEBUG << "密码哈希计算完成";
             return std::string(hashed_password.data());
         }
 
@@ -82,10 +78,7 @@ namespace disk::utils {
          */
         [[nodiscard]]
         static auto VerifyPassword(const std::string& password, const std::string& hash) -> bool {
-            LOG_DEBUG << "开始密码验证";
-            auto result = crypto_pwhash_str_verify(hash.c_str(), password.c_str(), password.length()) == 0;
-            LOG_DEBUG << "密码验证完成: " << (result ? "成功" : "失败");
-            return result;
+            return crypto_pwhash_str_verify(hash.c_str(), password.c_str(), password.length()) == 0;
         }
 
         // ==================== Token 哈希（SHA256）====================
@@ -109,7 +102,6 @@ namespace disk::utils {
         [[nodiscard]]
         static auto HashToken(const std::string& token) -> Result<TokenHash> {
             if (token.empty()) {
-                LOG_ERROR << "Token 哈希失败: Token 为空";
                 return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Token 不能为空"));
             }
 
@@ -123,7 +115,6 @@ namespace disk::utils {
                     data,
                     token.length()
                 ) != 0) {
-                LOG_ERROR << "Token 哈希计算失败";
                 return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Token 哈希计算失败"));
             }
 

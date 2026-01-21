@@ -9,15 +9,15 @@
  *
  */
 
-#include <gtest/gtest.h>
-
 #include "utils/HashUtil.hpp"
+
+#include <gtest/gtest.h>
 
 using disk::utils::HashUtil;
 using TokenHash = HashUtil::TokenHash;
 
 TEST(TokenHash, HashProducesFixedLength) {
-    const auto token = "test_token_12345";
+    const auto* const token = "test_token_12345";
     auto hash_result = HashUtil::HashToken(token);
     ASSERT_TRUE(hash_result.has_value()) << "Token hashing should succeed";
     const auto hash = hash_result.value();
@@ -26,7 +26,7 @@ TEST(TokenHash, HashProducesFixedLength) {
 }
 
 TEST(TokenHash, HashSameInputSameOutput) {
-    const auto token = "test_token_12345";
+    const auto* const token = "test_token_12345";
     auto hash_result1 = HashUtil::HashToken(token);
     auto hash_result2 = HashUtil::HashToken(token);
     ASSERT_TRUE(hash_result1.has_value()) << "Token hashing should succeed";
@@ -38,8 +38,8 @@ TEST(TokenHash, HashSameInputSameOutput) {
 }
 
 TEST(TokenHash, HashDifferentInputDifferentOutput) {
-    const auto token1 = "test_token_12345";
-    const auto token2 = "test_token_67890";
+    const auto* const token1 = "test_token_12345";
+    const auto* const token2 = "test_token_67890";
     auto hash_result1 = HashUtil::HashToken(token1);
     auto hash_result2 = HashUtil::HashToken(token2);
     ASSERT_TRUE(hash_result1.has_value()) << "Token hashing should succeed";
@@ -51,7 +51,7 @@ TEST(TokenHash, HashDifferentInputDifferentOutput) {
 }
 
 TEST(TokenHash, ToHexProduces64Chars) {
-    const auto token = "test_token_12345";
+    const auto* const token = "test_token_12345";
     auto hash_result = HashUtil::HashToken(token);
     ASSERT_TRUE(hash_result.has_value()) << "Token hashing should succeed";
     const auto hash = hash_result.value();
@@ -61,7 +61,7 @@ TEST(TokenHash, ToHexProduces64Chars) {
 }
 
 TEST(TokenHash, ToHexValidHexFormat) {
-    const auto token = "test_token_12345";
+    const auto* const token = "test_token_12345";
     auto hash_result = HashUtil::HashToken(token);
     ASSERT_TRUE(hash_result.has_value()) << "Token hashing should succeed";
     const auto hash = hash_result.value();
@@ -74,7 +74,7 @@ TEST(TokenHash, ToHexValidHexFormat) {
 }
 
 TEST(TokenHash, ToHexConsistent) {
-    const auto token = "test_token_12345";
+    const auto* const token = "test_token_12345";
     auto hash_result = HashUtil::HashToken(token);
     ASSERT_TRUE(hash_result.has_value()) << "Token hashing should succeed";
     const auto hash = hash_result.value();
@@ -85,7 +85,7 @@ TEST(TokenHash, ToHexConsistent) {
 }
 
 TEST(TokenHash, EmptyToken) {
-    const auto token = "";
+    const auto* const token = "";
     auto hash_result = HashUtil::HashToken(token);
 
     EXPECT_FALSE(hash_result.has_value()) << "Empty token should fail";

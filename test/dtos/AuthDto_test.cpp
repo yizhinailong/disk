@@ -1,13 +1,15 @@
 /**
- * @file AuthRequest_test.cpp
+ * @file AuthDto_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief 认证请求验证测试
+ * @brief Auth DTO unit tests
  * @version 0.1
- * @date 2026-01-17
+ * @date 2026-01-21
  *
  * @copyright Copyright (c) 2026
  *
  */
+
+#include "dtos/AuthDto.hpp"
 
 #include <string>
 
@@ -16,17 +18,20 @@
 #include <gtest/gtest.h>
 #include <json/json.h>
 
-#include "dtos/AuthDto.hpp"
+#include "utils/ErrorCode.hpp"
 
+using disk::auth::LoginRequest;
+using disk::auth::LoginResponse;
 using disk::auth::RefreshTokenRequest;
+using disk::auth::RefreshTokenResponse;
 using disk::auth::RegisterRequest;
+using disk::auth::RegisterResponse;
 
 static auto CreateRegisterRequest(
     const std::string& username,
     const std::string& email,
     const std::string& password
 ) -> drogon::HttpRequestPtr {
-
     Json::Value json;
     json["username"] = username;
     json["email"] = email;
@@ -155,7 +160,6 @@ TEST(RegisterRequest, PasswordValid8Chars) {
 
 TEST(RegisterRequest, PasswordValid64Chars) {
     std::string password = "Test" + std::string(60, '1');
-    ASSERT_EQ(password.length(), 64) << "Constructed max length password";
     auto req = CreateRegisterRequest("testuser", "test@example.com", password);
     auto result = RegisterRequest::FromRequest(req);
 
@@ -264,9 +268,138 @@ TEST(RegisterRequest, InvalidJSON) {
     EXPECT_FALSE(result.has_value()) << "Invalid JSON should fail";
 }
 
-static auto CreateRefreshTokenRequest(const std::string& refresh_token)
-    -> drogon::HttpRequestPtr {
+static auto CreateLoginRequest(
+    const std::string& account,
+    const std::string& password
+) -> drogon::HttpRequestPtr {
+    Json::Value json;
+    json["account"] = account;
+    json["password"] = password;
 
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    std::string body = Json::writeString(builder, json);
+
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody(body);
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    return req;
+}
+
+TEST(LoginRequest, ValidUsernamePassword) {
+    auto req = CreateLoginRequest("test_user", "SecurePass123");
+    auto result = LoginRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid username and password should pass";
+    EXPECT_EQ(result->account, "test_user");
+    EXPECT_EQ(result->password, "SecurePass123");
+}
+
+TEST(LoginRequest, ValidEmailPassword) {
+    auto req = CreateLoginRequest("test@example.com", "SecurePass123");
+    auto result = LoginRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid email and password should pass";
+    EXPECT_EQ(result->account, "test@example.com");
+    EXPECT_EQ(result->password, "SecurePass123");
+}
+
+TEST(LoginRequest, MissingAccount) {
+    Json::Value json;
+    json["password"] = "SecurePass123";
+
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    std::string body = Json::writeString(builder, json);
+
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody(body);
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    auto result = LoginRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing account should fail";
+}
+
+TEST(LoginRequest, MissingPassword) {
+    Json::Value json;
+    json["account"] = "test_user";
+
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    std::string body = Json::writeString(builder, json);
+
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody(body);
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    auto result = LoginRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing password should fail";
+}
+
+TEST(LoginRequest, EmptyAccount) {
+    auto req = CreateLoginRequest("", "SecurePass123");
+    auto result = LoginRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Empty account should fail";
+}
+
+TEST(LoginRequest, EmptyPassword) {
+    auto req = CreateLoginRequest("test_user", "");
+    auto result = LoginRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Empty password should fail";
+}
+
+TEST(LoginRequest, InvalidJSON) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody("{invalid json}");
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    auto result = LoginRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Invalid JSON should fail";
+}
+
+TEST(LoginRequest, AccountWrongType) {
+    Json::Value json;
+    json["account"] = 123;
+    json["password"] = "SecurePass123";
+
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    std::string body = Json::writeString(builder, json);
+
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody(body);
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    auto result = LoginRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Account with wrong type should fail";
+}
+
+TEST(LoginRequest, PasswordWrongType) {
+    Json::Value json;
+    json["account"] = "test_user";
+    json["password"] = 123;
+
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    std::string body = Json::writeString(builder, json);
+
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody(body);
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    auto result = LoginRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Password with wrong type should fail";
+}
+
+static auto CreateRefreshTokenRequest(const std::string& refresh_token) -> drogon::HttpRequestPtr {
     Json::Value json;
     json["refresh_token"] = refresh_token;
 
@@ -292,7 +425,6 @@ TEST(RefreshTokenRequest, ValidToken) {
 
 TEST(RefreshTokenRequest, MissingRefreshToken) {
     Json::Value json;
-    // Missing refresh_token field
 
     Json::StreamWriterBuilder builder;
     builder["indentation"] = "";
@@ -318,4 +450,57 @@ TEST(RefreshTokenRequest, InvalidJSON) {
     auto result = RefreshTokenRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "Invalid JSON should fail";
+}
+
+TEST(RegisterResponse, ToJsonCorrectFields) {
+    RegisterResponse response;
+    response.id = 12345;
+    response.username = "test_user";
+    response.email = "test@example.com";
+    response.nickname = "test_user";
+    response.storage_quota = 10737418240;
+    response.storage_used = 0;
+
+    auto json = response.ToJson();
+
+    EXPECT_EQ(json["id"].asUInt64(), 12345);
+    EXPECT_EQ(json["username"].asString(), "test_user");
+    EXPECT_EQ(json["email"].asString(), "test@example.com");
+    EXPECT_EQ(json["nickname"].asString(), "test_user");
+    EXPECT_EQ(json["storage_quota"].asUInt64(), 10737418240);
+    EXPECT_EQ(json["storage_used"].asUInt64(), 0);
+}
+
+TEST(LoginResponse, ToJsonCorrectFields) {
+    LoginResponse response;
+    response.access_token = "test_access_token_123";
+    response.refresh_token = "test_refresh_token_456";
+    response.expires_in = 7200;
+    response.token_type = "Bearer";
+    response.user.id = 12345;
+    response.user.username = "test_user";
+    response.user.email = "test@example.com";
+
+    auto json = response.ToJson();
+
+    EXPECT_EQ(json["access_token"].asString(), "test_access_token_123");
+    EXPECT_EQ(json["refresh_token"].asString(), "test_refresh_token_456");
+    EXPECT_EQ(json["expires_in"].asInt(), 7200);
+    EXPECT_EQ(json["token_type"].asString(), "Bearer");
+    EXPECT_EQ(json["user"]["id"].asUInt64(), 12345);
+    EXPECT_EQ(json["user"]["username"].asString(), "test_user");
+    EXPECT_EQ(json["user"]["email"].asString(), "test@example.com");
+}
+
+TEST(RefreshTokenResponse, ToJsonCorrectFields) {
+    RefreshTokenResponse response;
+    response.access_token = "new_access_token_789";
+    response.refresh_token = "new_refresh_token_012";
+    response.expires_in = 7200;
+
+    auto json = response.ToJson();
+
+    EXPECT_EQ(json["access_token"].asString(), "new_access_token_789");
+    EXPECT_EQ(json["refresh_token"].asString(), "new_refresh_token_012");
+    EXPECT_EQ(json["expires_in"].asInt(), 7200);
 }

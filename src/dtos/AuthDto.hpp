@@ -190,6 +190,15 @@ namespace disk::auth {
             request.account = json["account"].asString();
             request.password = json["password"].asString();
 
+            if (request.account.empty()) {
+                LOG_WARN << "账号不能为空";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "账号不能为空"));
+            }
+            if (request.password.empty()) {
+                LOG_WARN << "密码不能为空";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "密码不能为空"));
+            }
+
             LOG_DEBUG << "解析到登录请求: " << request.account;
 
             return request;
