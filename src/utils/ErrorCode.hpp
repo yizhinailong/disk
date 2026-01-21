@@ -76,6 +76,8 @@ namespace disk::error {
         TokenWrongType = 40109,
         /// 刷新令牌已被使用
         RefreshTokenAlreadyUsed = 40110,
+        /// 令牌已被注销
+        TokenRevoked = 40111,
 
         // ==================== 文件错误码 (50xxx) ====================
         /// 文件名无效
@@ -142,6 +144,7 @@ namespace disk::error {
             {          Code::TokenWrongType,        drogon::k401Unauthorized },
             {     Code::InvalidRefreshToken,        drogon::k401Unauthorized },
             { Code::RefreshTokenAlreadyUsed,        drogon::k401Unauthorized },
+            {            Code::TokenRevoked,        drogon::k401Unauthorized },
 
             // 文件错误
             {         Code::InvalidFilename,          drogon::k400BadRequest },
@@ -201,6 +204,7 @@ namespace disk::error {
             {          Code::TokenWrongType,           "令牌类型错误" },
             {     Code::InvalidRefreshToken,           "刷新令牌无效" },
             { Code::RefreshTokenAlreadyUsed,       "刷新令牌已被使用" },
+            {            Code::TokenRevoked,           "令牌已被注销" },
 
             // 文件错误
             {         Code::InvalidFilename,             "文件名无效" },

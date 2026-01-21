@@ -36,7 +36,11 @@ namespace disk::auth {
         // 定义 traits 别名
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
-        // 生成 Access Token
+        // 生成 JTI (Access Token 和 Refresh Token 各有独立的 JTI)
+        const auto access_jti = drogon::utils::getUuid();
+        const auto refresh_jti = drogon::utils::getUuid();
+
+        // 生成 Access Token (带唯一 JTI)
         jwt::builder<jwt::default_clock, traits> access_builder{ jwt::default_clock{} };
         auto access_token = access_builder
                                 .set_issuer("disk")
@@ -44,24 +48,26 @@ namespace disk::auth {
                                 .set_subject(std::to_string(user_id))
                                 .set_payload_claim("username", username)
                                 .set_payload_claim("type", "access")
+                                .set_payload_claim("jti", access_jti)
                                 .set_issued_at(now)
                                 .set_expires_at(now + std::chrono::seconds(GetAccessTokenExpireSeconds()))
                                 .sign(jwt::algorithm::hs256{ m_jwt_secret });
 
         // 生成 Refresh Token (带唯一 JTI)
-        const auto jti = drogon::utils::getUuid();
         jwt::builder<jwt::default_clock, traits> refresh_builder{ jwt::default_clock{} };
         auto refresh_token = refresh_builder
                                  .set_issuer("disk")
                                  .set_type("JWT")
                                  .set_subject(std::to_string(user_id))
                                  .set_payload_claim("type", "refresh")
-                                 .set_payload_claim("jti", jti)
+                                 .set_payload_claim("jti", refresh_jti)
                                  .set_issued_at(now)
                                  .set_expires_at(now + std::chrono::seconds(GetRefreshTokenExpireSeconds()))
                                  .sign(jwt::algorithm::hs256{ m_jwt_secret });
 
-        LOG_DEBUG << "生成令牌对: user_id=" << user_id << ", jti=" << jti;
+        LOG_DEBUG << "生成令牌对: user_id=" << user_id
+                  << ", access_jti=" << access_jti
+                  << ", refresh_jti=" << refresh_jti;
         return { access_token, refresh_token };
     }
 
@@ -215,6 +221,120 @@ namespace disk::auth {
         } catch (const drogon::nosql::RedisException& ex) {
             LOG_ERROR << "Redis 操作失败: " << ex.what();
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Redis 操作失败"));
+        }
+    }
+
+    auto TokenService::InvalidateAccessToken(const std::string& token) const -> drogon::Task<bool> {
+        // 步骤 1: 提取 JTI
+        auto jti_result = ExtractJti(token);
+        if (!jti_result) {
+            LOG_WARN << "提取 JTI 失败: " << jti_result.error().message;
+            co_return false;
+        }
+        const auto& jti = jti_result.value();
+
+        // 步骤 2: 计算剩余 TTL
+        auto ttl_result = CalculateRemainingTtl(token);
+        if (!ttl_result) {
+            LOG_WARN << "计算 TTL 失败: " << ttl_result.error().message;
+            co_return false;
+        }
+        const auto ttl = ttl_result.value();
+
+        try {
+            // 步骤 3: 存储到黑名单
+            const auto key = "access_token_blacklist:" + jti;
+            co_await m_redis_client->execCommandCoro(
+                "SETEX %s %d %s",
+                key.c_str(),
+                ttl,
+                "1"
+            );
+
+            LOG_INFO << "访问令牌已失效: jti=" << jti << ", ttl=" << ttl << "s";
+            co_return true;
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis 操作失败: " << ex.what();
+            co_return false;
+        }
+    }
+
+    auto TokenService::RevokeRefreshToken(uint64_t user_id) const -> drogon::Task<bool> {
+        const auto key = "refresh_token:" + std::to_string(user_id);
+
+        try {
+            auto result = co_await m_redis_client->execCommandCoro("DEL %s", key.c_str());
+            const auto deleted = result.asInteger();
+
+            if (deleted > 0) {
+                LOG_INFO << "刷新令牌已撤销: user_id=" << user_id;
+            }
+
+            co_return true;
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis 操作失败: " << ex.what();
+            co_return false;
+        }
+    }
+
+    auto TokenService::IsAccessTokenRevoked(const std::string& jti) const -> drogon::Task<bool> {
+        const auto key = "access_token_blacklist:" + jti;
+
+        try {
+            auto result = co_await m_redis_client->execCommandCoro("EXISTS %s", key.c_str());
+            const auto exists = result.asInteger();
+
+            co_return exists == 1;
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis 操作失败: " << ex.what();
+            co_return false; // 容错：Redis 失败时允许通过
+        }
+    }
+
+    auto TokenService::ExtractJti(const std::string& token) const -> Result<std::string> {
+        using traits = jwt::traits::open_source_parsers_jsoncpp;
+
+        try {
+            auto decoded = jwt::decode<traits>(token);
+
+            // 检查 JTI claim 是否存在（access 和 refresh token 现在都有 JTI）
+            if (decoded.has_payload_claim("jti")) {
+                const auto jti = decoded.get_payload_claim("jti");
+                return jti.as_string();
+            }
+
+            LOG_WARN << "令牌缺少 JTI claim";
+            return std::unexpected(ErrorInfo(ErrorCode::TokenMalformed));
+        } catch (const jwt::error::token_verification_exception& e) {
+            LOG_WARN << "提取 JTI 失败: " << e.what();
+            return std::unexpected(ErrorInfo(ErrorCode::TokenMalformed));
+        } catch (const std::exception& e) {
+            LOG_WARN << "提取 JTI 失败: " << e.what();
+            return std::unexpected(ErrorInfo(ErrorCode::TokenMalformed));
+        }
+    }
+
+    auto TokenService::CalculateRemainingTtl(const std::string& token) const -> Result<int> {
+        using traits = jwt::traits::open_source_parsers_jsoncpp;
+
+        try {
+            auto decoded = jwt::decode<traits>(token);
+            auto exp = decoded.get_expires_at();
+            auto now = std::chrono::system_clock::now();
+
+            auto remaining = std::chrono::duration_cast<std::chrono::seconds>(
+                                 exp - now
+            )
+                                 .count();
+
+            if (remaining <= 0) {
+                return std::unexpected(ErrorInfo(ErrorCode::TokenExpired));
+            }
+
+            return static_cast<int>(remaining);
+        } catch (const std::exception& e) {
+            LOG_WARN << "计算 TTL 失败: " << e.what();
+            return std::unexpected(ErrorInfo(ErrorCode::TokenMalformed));
         }
     }
 

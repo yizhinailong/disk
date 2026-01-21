@@ -108,4 +108,46 @@ namespace disk::auth {
         LOG_INFO << "刷新令牌成功";
         co_return Response::Success(data);
     }
+
+    auto AuthController::Logout(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到登出请求: " << request->getPeerAddr().toIpPort();
+
+        // 步骤 1: 提取 access_token 从 Authorization header
+        const auto& auth_header = request->getHeader("Authorization");
+        if (auth_header.empty()) {
+            LOG_WARN << "登出请求缺少 Authorization header";
+            co_return Response::Error(ErrorInfo(ErrorCode::TokenMissing));
+        }
+
+        if (!auth_header.starts_with("Bearer ")) {
+            LOG_WARN << "登出请求 Authorization header 格式错误";
+            co_return Response::Error(ErrorInfo(ErrorCode::TokenMalformed));
+        }
+
+        const auto access_token = auth_header.substr(7);
+
+        // 步骤 2: 提取 user_id 从请求属性（由 JwtAuthFilter 设置）
+        if (!request->attributes()->find("user_id")) {
+            LOG_WARN << "登出请求缺少 user_id attribute";
+            co_return Response::Error(ErrorInfo(ErrorCode::InvalidToken));
+        }
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+
+        // 步骤 3: 提取 IP 地址
+
+        // 步骤 3: 提取 IP 地址
+        const auto ip_address = request->getPeerAddr().toIpPort();
+
+        // 步骤 4: 调用 Service 层登出
+        auto logout_result = co_await m_auth_service->Logout(user_id, access_token, ip_address);
+        if (!logout_result) {
+            LOG_ERROR << "登出失败: " << logout_result.error().message;
+            co_return Response::Error(logout_result.error());
+        }
+
+        // 步骤 5: 返回成功响应
+        LOG_INFO << "登出成功: user_id=" << user_id;
+        co_return Response::Success({});
+    }
 } // namespace disk::auth

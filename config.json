@@ -35,6 +35,18 @@
   ],
   "plugins": [
     {
+      "name": "drogon::plugin::GlobalFilters",
+      "config": {
+        "filters": [
+          "disk::filters::JwtAuthFilter"
+        ],
+        "exempt": [
+          "^/api/auth/register",
+          "^/api/auth/login"
+        ]
+      }
+    },
+    {
       "name": "drogon::plugin::AccessLogger",
       "config": {
         "log_path": "",

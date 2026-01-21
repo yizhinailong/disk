@@ -26,6 +26,7 @@ namespace disk::auth {
         ADD_METHOD_TO(AuthController::Register, "/api/auth/register", drogon::Post);
         ADD_METHOD_TO(AuthController::Login, "/api/auth/login", drogon::Post);
         ADD_METHOD_TO(AuthController::RefreshTokens, "/api/auth/refresh", drogon::Post);
+        ADD_METHOD_TO(AuthController::Logout, "/api/auth/logout", drogon::Post);
         METHOD_LIST_END
 
         /**
@@ -51,6 +52,14 @@ namespace disk::auth {
          */
         [[nodiscard]]
         auto RefreshTokens(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 用户登出
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto Logout(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
         std::unique_ptr<AuthService> m_auth_service;

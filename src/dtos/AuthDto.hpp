@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <regex>
 #include <string>
 
 #include <drogon/HttpRequest.h>

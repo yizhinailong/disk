@@ -102,7 +102,47 @@ namespace disk::auth {
         auto RefreshRefreshToken(uint64_t user_id, const std::string& old_token, const std::string& new_token) const
             -> drogon::Task<Result<void>>;
 
+        /**
+         * @brief 使访问令牌失效（加入黑名单）
+         * @param token 访问令牌
+         * @return drogon::Task<bool> 成功返回 true，失败返回 false
+         */
+        [[nodiscard]]
+        auto InvalidateAccessToken(const std::string& token) const -> drogon::Task<bool>;
+
+        /**
+         * @brief 撤销刷新令牌
+         * @param user_id 用户 ID
+         * @return drogon::Task<bool> 成功返回 true，失败返回 false
+         */
+        [[nodiscard]]
+        auto RevokeRefreshToken(uint64_t user_id) const -> drogon::Task<bool>;
+
+        /**
+         * @brief 检查访问令牌是否被撤销
+         * @param jti 令牌 JTI
+         * @return drogon::Task<bool> true 表示被撤销
+         */
+        [[nodiscard]]
+        auto IsAccessTokenRevoked(const std::string& jti) const -> drogon::Task<bool>;
+
     private:
+        /**
+         * @brief 从 JWT 中提取 JTI
+         * @param token JWT 令牌
+         * @return Result<std::string> 成功返回 JTI，失败返回错误
+         */
+        [[nodiscard]]
+        auto ExtractJti(const std::string& token) const -> Result<std::string>;
+
+        /**
+         * @brief 计算令牌剩余 TTL（秒）
+         * @param token JWT 令牌
+         * @return Result<int> 成功返回剩余秒数，失败返回错误
+         */
+        [[nodiscard]]
+        auto CalculateRemainingTtl(const std::string& token) const -> Result<int>;
+
         std::string m_jwt_secret;
         drogon::nosql::RedisClientPtr m_redis_client;
     };

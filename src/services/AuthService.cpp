@@ -12,6 +12,7 @@
 #include "AuthService.hpp"
 
 #include "dtos/AuthDto.hpp"
+#include "models/OperationLogs.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/HashUtil.hpp"
 
@@ -210,6 +211,48 @@ namespace disk::auth {
             LOG_ERROR << "刷新令牌处理失败: " << e.what();
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "刷新令牌失败，请稍后重试"));
         }
+    }
+
+    auto AuthService::Logout(uint64_t user_id, const std::string& access_token, std::string ip_address)
+        -> drogon::Task<Result<void>> {
+
+        LOG_INFO << "用户登出: user_id=" << user_id << ", ip=" << ip_address;
+
+        // 步骤 1: 使访问令牌失效
+        auto invalidate_result = co_await m_token_service->InvalidateAccessToken(access_token);
+        if (!invalidate_result) {
+            LOG_WARN << "访问令牌失效失败: user_id=" << user_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "登出失败，请稍后重试"));
+        }
+
+        // 步骤 2: 撤销刷新令牌
+        auto revoke_result = co_await m_token_service->RevokeRefreshToken(user_id);
+        if (!revoke_result) {
+            LOG_WARN << "刷新令牌撤销失败: user_id=" << user_id;
+            // 不中断流程，继续返回成功
+        }
+
+        // 步骤 3: 记录登出日志到 operation_logs
+        try {
+            drogon::orm::CoroMapper<drogon_model::disk::OperationLogs> mapper(m_db_client);
+
+            drogon_model::disk::OperationLogs log;
+            log.setUserId(user_id);
+            log.setAction("logout");
+            log.setTargetId(0); // 登出操作无 target
+            log.setDetails("User logged out");
+            log.setIpAddress(std::string(ip_address));
+            log.setCreatedAt(trantor::Date::now());
+
+            co_await mapper.insert(log);
+            LOG_DEBUG << "登出日志已记录: user_id=" << user_id;
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "记录登出日志失败: " << e.base().what();
+            // 不中断流程
+        }
+
+        LOG_INFO << "用户登出成功: user_id=" << user_id;
+        co_return {};
     }
 
     auto AuthService::IsUsernameExists(std::string username) const -> drogon::Task<bool> {

@@ -83,6 +83,23 @@ namespace disk::auth {
         [[nodiscard]]
         auto RefreshTokens(RefreshTokenRequest request) -> drogon::Task<Result<RefreshTokenResponse>>;
 
+        /**
+         * @brief 用户登出
+         *
+         * 业务规则：
+         * - 使访问令牌失效（加入黑名单）
+         * - 撤销刷新令牌
+         * - 记录登出日志到 operation_logs 表
+         *
+         * @param user_id 用户 ID
+         * @param access_token 访问令牌
+         * @param ip_address IP 地址
+         * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
+         */
+        [[nodiscard]]
+        auto Logout(uint64_t user_id, const std::string& access_token, std::string ip_address)
+            -> drogon::Task<Result<void>>;
+
     private:
         /**
          * @brief 检查用户名是否已存在

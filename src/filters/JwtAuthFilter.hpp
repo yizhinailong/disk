@@ -27,6 +27,15 @@ namespace disk::filters {
             -> drogon::Task<drogon::HttpResponsePtr> override;
 
     private:
+        /**
+         * @brief 检查令牌是否被撤销
+         * @param jti 令牌 JTI
+         * @return drogon::Task<bool> true 表示被撤销
+         */
+        [[nodiscard]]
+        auto IsTokenRevoked(const std::string& jti) const -> drogon::Task<bool>;
+
         std::unique_ptr<disk::auth::TokenService> m_token_service;
+        drogon::nosql::RedisClientPtr m_redis_client;
     };
 } // namespace disk::filters
