@@ -62,7 +62,7 @@ namespace disk::auth {
 
         // 2. 调用 Service 登录
         const auto ip_address = request->getPeerAddr().toIpPort();
-        auto login_result = co_await m_auth_service->Login(parse_result.value(), ip_address);
+        auto login_result = co_await m_auth_service->Login(*parse_result, ip_address);
 
         if (!login_result) {
             LOG_ERROR << "登录失败: " << login_result.error().message;

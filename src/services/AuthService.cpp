@@ -96,7 +96,7 @@ namespace disk::auth {
             co_return std::unexpected(user_result.error());
         }
 
-        const auto& user = user_result.value();
+        const auto& user = *user_result;
 
         // 2. 检查账户状态
         const auto status = user.getValueOfStatus();
