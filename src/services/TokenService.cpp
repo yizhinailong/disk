@@ -15,16 +15,14 @@
 #include <jwt-cpp/jwt.h>
 #include <jwt-cpp/traits/open-source-parsers-jsoncpp/traits.h>
 
+#include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
-#include "utils/HashUtil.hpp"
 
 namespace disk::auth {
 
-    using disk::utils::HashUtil;
-
-    TokenService::TokenService(std::string jwt_secret, drogon::nosql::RedisClientPtr redis_client)
+    TokenService::TokenService(std::string jwt_secret, disk::services::RedisService& redis_service)
         : m_jwt_secret(std::move(jwt_secret)),
-          m_redis_client(std::move(redis_client)) {
+          m_redis_service(redis_service) {
         LOG_DEBUG << "TokenService 初始化完成";
     }
 
@@ -149,149 +147,29 @@ namespace disk::auth {
         }
     }
 
-    auto TokenService::StoreRefreshToken(uint64_t user_id, const std::string& refresh_token) const
-        -> drogon::Task<bool> {
-
-        const auto key = "refresh_token:" + std::to_string(user_id);
-
-        auto hash_result = HashUtil::HashToken(refresh_token);
-        if (!hash_result) {
-            co_return false;
-        }
-        const auto hash = HashUtil::TokenHashToHex(hash_result.value());
-
-        try {
-            co_await m_redis_client->execCommandCoro(
-                "SET %s %s EX %d",
-                key.c_str(),
-                hash.c_str(),
-                GetRefreshTokenExpireSeconds()
-            );
-
-            LOG_DEBUG << "Refresh token 存储成功: user_id=" << user_id;
-            co_return true;
-
-        } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis 操作失败: " << ex.what();
-            co_return false;
-        }
+    auto TokenService::StoreRefreshToken(uint64_t user_id, const std::string& refresh_token)
+        -> drogon::Task<Result<void>> {
+        co_return co_await m_redis_service.StoreRefreshToken(user_id, refresh_token);
     }
 
     auto TokenService::RefreshRefreshToken(
         uint64_t user_id,
         const std::string& old_token,
         const std::string& new_token
-    ) const -> drogon::Task<Result<void>> {
-
-        const auto key = "refresh_token:" + std::to_string(user_id);
-
-        auto old_hash_result = HashUtil::HashToken(old_token);
-        if (!old_hash_result) {
-            co_return std::unexpected(old_hash_result.error());
-        }
-        auto new_hash_result = HashUtil::HashToken(new_token);
-        if (!new_hash_result) {
-            co_return std::unexpected(new_hash_result.error());
-        }
-        const auto old_hash = HashUtil::TokenHashToHex(old_hash_result.value());
-        const auto new_hash = HashUtil::TokenHashToHex(new_hash_result.value());
-
-        try {
-            auto result = co_await m_redis_client->execCommandCoro("GET %s", key.c_str());
-
-            if (result.isNil()) {
-                LOG_WARN << "Refresh token 不存在: user_id=" << user_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::InvalidRefreshToken));
-            }
-
-            const auto current_hash = result.asString();
-            if (current_hash != old_hash) {
-                LOG_WARN << "Refresh token 已被使用: user_id=" << user_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::RefreshTokenAlreadyUsed));
-            }
-
-            // 步骤 3: SET 新值
-            co_await m_redis_client->execCommandCoro(
-                "SET %s %s EX %d",
-                key.c_str(),
-                new_hash.c_str(),
-                GetRefreshTokenExpireSeconds()
-            );
-
-            LOG_DEBUG << "Refresh token 更新成功: user_id=" << user_id;
-            co_return {};
-
-        } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis 操作失败: " << ex.what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Redis 操作失败"));
-        }
+    ) -> drogon::Task<Result<void>> {
+        co_return co_await m_redis_service.RefreshRefreshToken(user_id, old_token, new_token);
     }
 
-    auto TokenService::InvalidateAccessToken(const std::string& token) const -> drogon::Task<bool> {
-        // 步骤 1: 提取 JTI
-        auto jti_result = ExtractJti(token);
-        if (!jti_result) {
-            LOG_WARN << "提取 JTI 失败: " << jti_result.error().message;
-            co_return false;
-        }
-        const auto& jti = jti_result.value();
-
-        // 步骤 2: 计算剩余 TTL
-        auto ttl_result = CalculateRemainingTtl(token);
-        if (!ttl_result) {
-            LOG_WARN << "计算 TTL 失败: " << ttl_result.error().message;
-            co_return false;
-        }
-        const auto ttl = ttl_result.value();
-
-        try {
-            // 步骤 3: 存储到黑名单
-            const auto key = "access_token_blacklist:" + jti;
-            co_await m_redis_client->execCommandCoro(
-                "SETEX %s %d %s",
-                key.c_str(),
-                ttl,
-                "1"
-            );
-
-            LOG_INFO << "访问令牌已失效: jti=" << jti << ", ttl=" << ttl << "s";
-            co_return true;
-        } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis 操作失败: " << ex.what();
-            co_return false;
-        }
+    auto TokenService::InvalidateAccessToken(const std::string& token) -> drogon::Task<Result<void>> {
+        co_return co_await m_redis_service.InvalidateAccessToken(token);
     }
 
-    auto TokenService::RevokeRefreshToken(uint64_t user_id) const -> drogon::Task<bool> {
-        const auto key = "refresh_token:" + std::to_string(user_id);
-
-        try {
-            auto result = co_await m_redis_client->execCommandCoro("DEL %s", key.c_str());
-            const auto deleted = result.asInteger();
-
-            if (deleted > 0) {
-                LOG_INFO << "刷新令牌已撤销: user_id=" << user_id;
-            }
-
-            co_return true;
-        } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis 操作失败: " << ex.what();
-            co_return false;
-        }
+    auto TokenService::RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>> {
+        co_return co_await m_redis_service.RevokeRefreshToken(user_id);
     }
 
-    auto TokenService::IsAccessTokenRevoked(const std::string& jti) const -> drogon::Task<bool> {
-        const auto key = "access_token_blacklist:" + jti;
-
-        try {
-            auto result = co_await m_redis_client->execCommandCoro("EXISTS %s", key.c_str());
-            const auto exists = result.asInteger();
-
-            co_return exists == 1;
-        } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis 操作失败: " << ex.what();
-            co_return false; // 容错：Redis 失败时允许通过
-        }
+    auto TokenService::IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool> {
+        co_return co_await m_redis_service.IsAccessTokenRevoked(jti);
     }
 
     auto TokenService::ExtractJti(const std::string& token) const -> Result<std::string> {
@@ -325,10 +203,7 @@ namespace disk::auth {
             auto exp = decoded.get_expires_at();
             auto now = std::chrono::system_clock::now();
 
-            auto remaining = std::chrono::duration_cast<std::chrono::seconds>(
-                                 exp - now
-            )
-                                 .count();
+            auto remaining = std::chrono::duration_cast<std::chrono::seconds>(exp - now).count();
 
             if (remaining <= 0) {
                 return std::unexpected(ErrorInfo(ErrorCode::TokenExpired));

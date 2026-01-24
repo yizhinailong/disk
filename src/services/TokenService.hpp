@@ -14,8 +14,7 @@
 #include <string>
 #include <utility>
 
-#include <drogon/nosql/RedisClient.h>
-
+#include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::auth {
@@ -32,9 +31,9 @@ namespace disk::auth {
         /**
          * @brief 构造函数
          * @param jwt_secret JWT签名密钥
-         * @param redis_client Redis客户端
+         * @param redis_service Redis服务
          */
-        explicit TokenService(std::string jwt_secret, drogon::nosql::RedisClientPtr redis_client);
+        explicit TokenService(std::string jwt_secret, disk::services::RedisService& redis_service);
 
         /**
          * @brief 生成令牌对
@@ -84,11 +83,11 @@ namespace disk::auth {
          *
          * @param user_id 用户 ID
          * @param refresh_token 刷新令牌
-         * @return drogon::Task<bool> 成功返回 true，失败返回 false
+         * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
          */
         [[nodiscard]]
-        auto StoreRefreshToken(uint64_t user_id, const std::string& refresh_token) const
-            -> drogon::Task<bool>;
+        auto StoreRefreshToken(uint64_t user_id, const std::string& refresh_token)
+            -> drogon::Task<Result<void>>;
 
         /**
          * @brief 刷新 refresh_token
@@ -99,24 +98,24 @@ namespace disk::auth {
          * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
          */
         [[nodiscard]]
-        auto RefreshRefreshToken(uint64_t user_id, const std::string& old_token, const std::string& new_token) const
+        auto RefreshRefreshToken(uint64_t user_id, const std::string& old_token, const std::string& new_token)
             -> drogon::Task<Result<void>>;
 
         /**
          * @brief 使访问令牌失效（加入黑名单）
          * @param token 访问令牌
-         * @return drogon::Task<bool> 成功返回 true，失败返回 false
+         * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
          */
         [[nodiscard]]
-        auto InvalidateAccessToken(const std::string& token) const -> drogon::Task<bool>;
+        auto InvalidateAccessToken(const std::string& token) -> drogon::Task<Result<void>>;
 
         /**
          * @brief 撤销刷新令牌
          * @param user_id 用户 ID
-         * @return drogon::Task<bool> 成功返回 true，失败返回 false
+         * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
          */
         [[nodiscard]]
-        auto RevokeRefreshToken(uint64_t user_id) const -> drogon::Task<bool>;
+        auto RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>>;
 
         /**
          * @brief 检查访问令牌是否被撤销
@@ -124,7 +123,7 @@ namespace disk::auth {
          * @return drogon::Task<bool> true 表示被撤销
          */
         [[nodiscard]]
-        auto IsAccessTokenRevoked(const std::string& jti) const -> drogon::Task<bool>;
+        auto IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool>;
 
     private:
         /**
@@ -144,7 +143,7 @@ namespace disk::auth {
         auto CalculateRemainingTtl(const std::string& token) const -> Result<int>;
 
         std::string m_jwt_secret;
-        drogon::nosql::RedisClientPtr m_redis_client;
+        disk::services::RedisService& m_redis_service;
     };
 
 } // namespace disk::auth

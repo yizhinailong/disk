@@ -14,6 +14,7 @@
 #include <jwt-cpp/jwt.h>
 #include <jwt-cpp/traits/open-source-parsers-jsoncpp/traits.h>
 
+#include "services/RedisService.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/Response.hpp"
 
@@ -22,28 +23,14 @@ namespace disk::filters {
     using disk::utils::ConfigMgr;
 
     JwtAuthFilter::JwtAuthFilter()
-        : m_token_service(
+        : m_redis_service(std::make_shared<disk::services::RedisService>(drogon::app().getRedisClient())),
+          m_token_service(
               std::make_unique<disk::auth::TokenService>(
                   ConfigMgr::GetInstance()->GetJwtSecret(),
-                  drogon::app().getRedisClient()
+                  *m_redis_service
               )
-          ),
-          m_redis_client(drogon::app().getRedisClient()) {
+          ) {
         LOG_DEBUG << "JwtAuthFilter 初始化完成";
-    }
-
-    auto JwtAuthFilter::IsTokenRevoked(const std::string& jti) const -> drogon::Task<bool> {
-        const auto key = "access_token_blacklist:" + jti;
-
-        try {
-            auto result = co_await m_redis_client->execCommandCoro("EXISTS %s", key.c_str());
-            const auto exists = result.asInteger();
-
-            co_return exists == 1;
-        } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis 操作失败: " << ex.what();
-            co_return false; // 容错：Redis 失败时允许通过
-        }
     }
 
     auto JwtAuthFilter::doFilter(const drogon::HttpRequestPtr& request)
@@ -75,7 +62,7 @@ namespace disk::filters {
         if (decoded.has_payload_claim("jti")) {
             const auto jti = decoded.get_payload_claim("jti").as_string();
 
-            if (co_await IsTokenRevoked(jti)) {
+            if (co_await m_redis_service->IsAccessTokenRevoked(jti)) {
                 LOG_WARN << "令牌已被撤销: user_id=" << user_id << ", jti=" << jti;
                 co_return disk::Response::Error(disk::error::Code::TokenRevoked);
             }

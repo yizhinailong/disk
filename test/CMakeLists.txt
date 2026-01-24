@@ -4,6 +4,7 @@ set(TEST_SOURCES
     main.cpp
     utils/PasswdHash_test.cpp
     services/HashUtil_test.cpp
+    services/RedisService_test.cpp
     dtos/AuthDto_test.cpp
 )
 

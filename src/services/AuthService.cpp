@@ -27,8 +27,9 @@ namespace disk::auth {
 
     AuthService::AuthService(const drogon::nosql::RedisClientPtr& redis_client)
         : m_db_client(drogon::app().getDbClient()),
+          m_redis_service(std::make_shared<disk::services::RedisService>(redis_client)),
           m_token_service(
-              std::make_unique<TokenService>(ConfigMgr::GetInstance()->GetJwtSecret(), redis_client)
+              std::make_unique<TokenService>(ConfigMgr::GetInstance()->GetJwtSecret(), *m_redis_service)
           ) {
         LOG_DEBUG << "AuthService 初始化完成";
     }
@@ -128,7 +129,7 @@ namespace disk::auth {
             user.getValueOfId(),
             refresh_token
         );
-        if (!store_result) {
+        if (!store_result.has_value()) {
             LOG_WARN << "存储 refresh_token 到 Redis 失败: " << user.getValueOfId();
         }
 
@@ -224,7 +225,7 @@ namespace disk::auth {
 
         // 步骤 1: 使访问令牌失效
         auto invalidate_result = co_await m_token_service->InvalidateAccessToken(access_token);
-        if (!invalidate_result) {
+        if (!invalidate_result.has_value()) {
             LOG_WARN << "访问令牌失效失败: user_id=" << user_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "登出失败，请稍后重试"));
         }

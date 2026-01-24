@@ -101,4 +101,60 @@ namespace disk::services {
         }
     }
 
+    auto RedisService::InvalidateAccessToken(const std::string& token) -> drogon::Task<Result<void>> {
+        auto jti_result = HashUtil::HashToken(token);
+        if (!jti_result) {
+            co_return std::unexpected(jti_result.error());
+        }
+        const auto jti = HashUtil::TokenHashToHex(jti_result.value());
+
+        try {
+            const auto key = "access_token_blacklist:" + jti;
+            co_await m_redis_client->execCommandCoro(
+                "SETEX %s %d %s",
+                key.c_str(),
+                ACCESS_TOKEN_TTL,
+                "1"
+            );
+
+            LOG_INFO << "访问令牌已失效: jti=" << jti << ", ttl=" << ACCESS_TOKEN_TTL << "s";
+            co_return {};
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis 操作失败: " << ex.what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Redis 操作失败"));
+        }
+    }
+
+    auto RedisService::RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>> {
+        const auto key = "refresh_token:" + std::to_string(user_id);
+
+        try {
+            auto result = co_await m_redis_client->execCommandCoro("DEL %s", key.c_str());
+            const auto deleted = result.asInteger();
+
+            if (deleted > 0) {
+                LOG_INFO << "刷新令牌已撤销: user_id=" << user_id;
+            }
+
+            co_return {};
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis 操作失败: " << ex.what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Redis 操作失败"));
+        }
+    }
+
+    auto RedisService::IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool> {
+        const auto key = "access_token_blacklist:" + jti;
+
+        try {
+            auto result = co_await m_redis_client->execCommandCoro("EXISTS %s", key.c_str());
+            const auto exists = result.asInteger();
+
+            co_return exists == 1;
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis 操作失败: " << ex.what();
+            co_return false;
+        }
+    }
+
 } // namespace disk::services

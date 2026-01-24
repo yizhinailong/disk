@@ -59,8 +59,36 @@ namespace disk::services {
             const std::string& new_token
         ) -> drogon::Task<Result<void>>;
 
+        /**
+         * @brief 使访问令牌失效（加入黑名单）
+         *
+         * @param token 访问令牌
+         * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
+         */
+        [[nodiscard]]
+        auto InvalidateAccessToken(const std::string& token) -> drogon::Task<Result<void>>;
+
+        /**
+         * @brief 撤销刷新令牌
+         *
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
+         */
+        [[nodiscard]]
+        auto RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>>;
+
+        /**
+         * @brief 检查访问令牌是否被撤销
+         *
+         * @param jti 令牌 JTI
+         * @return drogon::Task<bool> true 表示被撤销
+         */
+        [[nodiscard]]
+        auto IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool>;
+
     private:
         drogon::nosql::RedisClientPtr m_redis_client;
+        static constexpr int ACCESS_TOKEN_TTL = 7200;    // 2小时
         static constexpr int REFRESH_TOKEN_TTL = 604800; // 7天
     };
 
