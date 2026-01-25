@@ -17,12 +17,28 @@
 
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/HashUtil.hpp"
 
 namespace disk::auth {
 
-    TokenService::TokenService(std::string jwt_secret, disk::services::RedisService& redis_service)
+    using disk::error::ErrorInfo;
+
+    static constexpr int REFRESH_TOKEN_TTL = 604800; // 7天（与TokenService保持一致）
+    static constexpr int ACCESS_TOKEN_TTL = 7200;    // 2小时（与RedisService保持一致）
+
+    // TokenService构造函数（内部创建RedisService）
+    TokenService::TokenService(std::string jwt_secret, drogon::nosql::RedisClientPtr redis_client)
         : m_jwt_secret(std::move(jwt_secret)),
-          m_redis_service(redis_service) {
+          m_redis_client(std::move(redis_client)),
+          m_redis_service(std::make_shared<disk::services::RedisService>(m_redis_client)) {
+        LOG_DEBUG << "TokenService 初始化完成";
+    }
+
+    // TokenService构造函数（外部提供RedisService）
+    TokenService::TokenService(std::string jwt_secret, std::shared_ptr<disk::services::RedisService> redis_service)
+        : m_jwt_secret(std::move(jwt_secret)),
+          m_redis_client(nullptr),
+          m_redis_service(std::move(redis_service)) {
         LOG_DEBUG << "TokenService 初始化完成";
     }
 
@@ -147,32 +163,75 @@ namespace disk::auth {
         }
     }
 
-    auto TokenService::StoreRefreshToken(uint64_t user_id, const std::string& refresh_token)
+    auto disk::auth::TokenService::StoreRefreshToken(uint64_t user_id, const std::string& refresh_token)
         -> drogon::Task<Result<void>> {
-        co_return co_await m_redis_service.StoreRefreshToken(user_id, refresh_token);
+        const auto key = BuildRefreshTokenKey(user_id);
+
+        auto hash_result = disk::utils::HashUtil::HashToken(refresh_token);
+        if (!hash_result) {
+            co_return std::unexpected(hash_result.error());
+        }
+        const auto hash = disk::utils::HashUtil::TokenHashToHex(hash_result.value());
+
+        co_return co_await m_redis_service->Set(key, hash, REFRESH_TOKEN_TTL);
     }
 
-    auto TokenService::RefreshRefreshToken(
+    auto disk::auth::TokenService::RefreshRefreshToken(
         uint64_t user_id,
         const std::string& old_token,
         const std::string& new_token
     ) -> drogon::Task<Result<void>> {
-        co_return co_await m_redis_service.RefreshRefreshToken(user_id, old_token, new_token);
+        const auto key = BuildRefreshTokenKey(user_id);
+
+        auto old_hash_result = disk::utils::HashUtil::HashToken(old_token);
+        if (!old_hash_result) {
+            co_return std::unexpected(old_hash_result.error());
+        }
+        auto new_hash_result = disk::utils::HashUtil::HashToken(new_token);
+        if (!new_hash_result) {
+            co_return std::unexpected(new_hash_result.error());
+        }
+        const auto old_hash = disk::utils::HashUtil::TokenHashToHex(old_hash_result.value());
+        const auto new_hash = disk::utils::HashUtil::TokenHashToHex(new_hash_result.value());
+
+        auto get_result = co_await m_redis_service->Get(key);
+        if (!get_result) {
+            LOG_WARN << "Refresh token 不存在: user_id=" << user_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::InvalidRefreshToken));
+        }
+
+        const auto& current_hash = get_result.value();
+        if (current_hash != old_hash) {
+            LOG_WARN << "Refresh token 已被使用或已刷新: user_id=" << user_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::RefreshTokenAlreadyUsed));
+        }
+
+        co_return co_await m_redis_service->Set(key, new_hash, REFRESH_TOKEN_TTL);
     }
 
-    auto TokenService::InvalidateAccessToken(const std::string& token) -> drogon::Task<Result<void>> {
-        co_return co_await m_redis_service.InvalidateAccessToken(token);
+    auto disk::auth::TokenService::InvalidateAccessToken(const std::string& token) -> drogon::Task<Result<void>> {
+        auto jti_result = ExtractJti(token);
+        if (!jti_result) {
+            co_return std::unexpected(jti_result.error());
+        }
+
+        const auto jti = jti_result.value();
+        const auto key = BuildAccessTokenBlacklistKey(jti);
+
+        co_return co_await m_redis_service->Set(key, "1", ACCESS_TOKEN_TTL);
     }
 
-    auto TokenService::RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>> {
-        co_return co_await m_redis_service.RevokeRefreshToken(user_id);
+    auto disk::auth::TokenService::RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>> {
+        const auto key = BuildRefreshTokenKey(user_id);
+        co_return co_await m_redis_service->Delete(key);
     }
 
-    auto TokenService::IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool> {
-        co_return co_await m_redis_service.IsAccessTokenRevoked(jti);
+    auto disk::auth::TokenService::IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool> {
+        const auto key = BuildAccessTokenBlacklistKey(jti);
+        co_return co_await m_redis_service->Exists(key);
     }
 
-    auto TokenService::ExtractJti(const std::string& token) const -> Result<std::string> {
+    auto disk::auth::TokenService::ExtractJti(const std::string& token) const -> Result<std::string> {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
         try {
@@ -195,7 +254,7 @@ namespace disk::auth {
         }
     }
 
-    auto TokenService::CalculateRemainingTtl(const std::string& token) const -> Result<int> {
+    auto disk::auth::TokenService::CalculateRemainingTtl(const std::string& token) const -> Result<int> {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
         try {
@@ -214,6 +273,14 @@ namespace disk::auth {
             LOG_WARN << "计算 TTL 失败: " << e.what();
             return std::unexpected(ErrorInfo(ErrorCode::TokenMalformed));
         }
+    }
+
+    auto disk::auth::TokenService::BuildRefreshTokenKey(uint64_t user_id) const -> std::string {
+        return "refresh_token:" + std::to_string(user_id);
+    }
+
+    auto disk::auth::TokenService::BuildAccessTokenBlacklistKey(const std::string& jti) const -> std::string {
+        return "access_token_blacklist:" + jti;
     }
 
 } // namespace disk::auth

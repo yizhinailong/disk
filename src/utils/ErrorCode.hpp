@@ -28,8 +28,9 @@ namespace disk::error {
      * - 40xxx: 认证相关错误
      * - 50xxx: 文件相关错误
      * - 60xxx: 分享相关错误
+     * - 70xxx: Redis相关错误
      */
-    enum class Code : std::uint16_t {
+    enum class Code : std::uint32_t {
         // ==================== 成功 ====================
         Success = 0,
 
@@ -108,6 +109,14 @@ namespace disk::error {
         SharePasswordError = 60003,
         /// 无权限访问
         ShareAccessDenied = 60004,
+
+        // ==================== Redis错误码 (70xxx) ====================
+        /// Redis连接失败
+        RedisConnectionFailed = 70001,
+        /// Redis操作失败
+        RedisOperationFailed = 70002,
+        /// Redis key不存在
+        RedisKeyNotFound = 70003,
     };
 
     // ==================== 错误码信息 ====================
@@ -162,6 +171,11 @@ namespace disk::error {
             {            Code::ShareExpired,          drogon::k400BadRequest },
             {      Code::SharePasswordError,          drogon::k400BadRequest },
             {       Code::ShareAccessDenied,           drogon::k403Forbidden },
+
+            // Redis错误
+            {   Code::RedisConnectionFailed, drogon::k500InternalServerError },
+            {    Code::RedisOperationFailed, drogon::k500InternalServerError },
+            {        Code::RedisKeyNotFound,            drogon::k404NotFound },
         };
 
         auto it = status_map.find(code);
@@ -222,6 +236,11 @@ namespace disk::error {
             {            Code::ShareExpired,             "分享已过期" },
             {      Code::SharePasswordError,           "分享密码错误" },
             {       Code::ShareAccessDenied,             "无权限访问" },
+
+            // Redis错误
+            {   Code::RedisConnectionFailed,          "Redis连接失败" },
+            {    Code::RedisOperationFailed,          "Redis操作失败" },
+            {        Code::RedisKeyNotFound,        "Redis key不存在" },
         };
 
         auto it = message_map.find(code);
@@ -236,8 +255,8 @@ namespace disk::error {
      * @param code 错误码
      * @return 整数值
      */
-    inline auto ToInt(Code code) -> std::uint16_t {
-        return static_cast<std::uint16_t>(code);
+    inline auto ToInt(Code code) -> std::uint32_t {
+        return static_cast<std::uint32_t>(code);
     }
 
     /**
@@ -305,7 +324,7 @@ namespace disk::error {
 
         /// 获取错误码整数值
         [[nodiscard]]
-        auto CodeInt() const noexcept -> std::uint16_t {
+        auto CodeInt() const noexcept -> std::uint32_t {
             return ToInt(code);
         }
     };

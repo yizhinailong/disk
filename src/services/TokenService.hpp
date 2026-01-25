@@ -14,6 +14,8 @@
 #include <string>
 #include <utility>
 
+#include <drogon/nosql/RedisClient.h>
+
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
 
@@ -29,11 +31,18 @@ namespace disk::auth {
     class TokenService {
     public:
         /**
-         * @brief 构造函数
+         * @brief 构造函数（内部创建RedisService）
          * @param jwt_secret JWT签名密钥
-         * @param redis_service Redis服务
+         * @param redis_client Redis客户端
          */
-        explicit TokenService(std::string jwt_secret, disk::services::RedisService& redis_service);
+        explicit TokenService(std::string jwt_secret, drogon::nosql::RedisClientPtr redis_client);
+
+        /**
+         * @brief 构造函数（外部提供RedisService）
+         * @param jwt_secret JWT签名密钥
+         * @param redis_service 已创建的RedisService
+         */
+        explicit TokenService(std::string jwt_secret, std::shared_ptr<disk::services::RedisService> redis_service);
 
         /**
          * @brief 生成令牌对
@@ -127,6 +136,22 @@ namespace disk::auth {
 
     private:
         /**
+         * @brief 构建 refresh_token 的 Redis 键
+         * @param user_id 用户 ID
+         * @return std::string Redis 键
+         */
+        [[nodiscard]]
+        auto BuildRefreshTokenKey(uint64_t user_id) const -> std::string;
+
+        /**
+         * @brief 构建 access_token 黑名单的 Redis 键
+         * @param jti 令牌 JTI
+         * @return std::string Redis 键
+         */
+        [[nodiscard]]
+        auto BuildAccessTokenBlacklistKey(const std::string& jti) const -> std::string;
+
+        /**
          * @brief 从 JWT 中提取 JTI
          * @param token JWT 令牌
          * @return Result<std::string> 成功返回 JTI，失败返回错误
@@ -143,7 +168,8 @@ namespace disk::auth {
         auto CalculateRemainingTtl(const std::string& token) const -> Result<int>;
 
         std::string m_jwt_secret;
-        disk::services::RedisService& m_redis_service;
+        drogon::nosql::RedisClientPtr m_redis_client;
+        std::shared_ptr<disk::services::RedisService> m_redis_service;
     };
 
 } // namespace disk::auth

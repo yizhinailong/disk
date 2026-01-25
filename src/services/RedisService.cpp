@@ -12,148 +12,212 @@
 #include "RedisService.hpp"
 
 #include "utils/ErrorCode.hpp"
-#include "utils/HashUtil.hpp"
 
 namespace disk::services {
 
     using disk::error::ErrorInfo;
-    using disk::utils::HashUtil;
 
     RedisService::RedisService(drogon::nosql::RedisClientPtr redis_client)
         : m_redis_client(std::move(redis_client)) {
         LOG_DEBUG << "RedisService 初始化成功";
     }
 
-    auto RedisService::StoreRefreshToken(uint64_t user_id, const std::string& refresh_token)
+    // ==================== 通用方法实现 ====================
+
+    auto disk::services::RedisService::Set(const std::string& key, const std::string& value, int ttl)
         -> drogon::Task<Result<void>> {
-
-        const auto key = "refresh_token:" + std::to_string(user_id);
-
-        auto hash_result = HashUtil::HashToken(refresh_token);
-        if (!hash_result) {
-            co_return std::unexpected(hash_result.error());
-        }
-        const auto hash = HashUtil::TokenHashToHex(hash_result.value());
-
         try {
-            co_await m_redis_client->execCommandCoro(
-                "SET %s %s EX %d",
-                key.c_str(),
-                hash.c_str(),
-                REFRESH_TOKEN_TTL
-            );
+            if (ttl > 0) {
+                co_await m_redis_client->execCommandCoro(
+                    "SETEX %s %d %s",
+                    key.c_str(),
+                    ttl,
+                    value.c_str()
+                );
+            } else {
+                co_await m_redis_client->execCommandCoro(
+                    "SET %s %s",
+                    key.c_str(),
+                    value.c_str()
+                );
+            }
 
-            LOG_DEBUG << "Refresh token 存储成功: user_id=" << user_id;
+            LOG_DEBUG << "Redis SET: key=" << key << ", ttl=" << ttl;
+
             co_return {};
 
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis 操作失败: " << ex.what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Redis 操作失败"));
+            LOG_ERROR << "Redis操作失败: SET, key=" << key << ", error=" << ex.what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::RedisOperationFailed, "Redis操作失败: " + std::string(ex.what())));
         }
     }
 
-    auto RedisService::RefreshRefreshToken(
-        uint64_t user_id,
-        const std::string& old_token,
-        const std::string& new_token
-    ) -> drogon::Task<Result<void>> {
-
-        const auto key = "refresh_token:" + std::to_string(user_id);
-
-        auto old_hash_result = HashUtil::HashToken(old_token);
-        if (!old_hash_result) {
-            co_return std::unexpected(old_hash_result.error());
-        }
-        auto new_hash_result = HashUtil::HashToken(new_token);
-        if (!new_hash_result) {
-            co_return std::unexpected(new_hash_result.error());
-        }
-        const auto old_hash = HashUtil::TokenHashToHex(old_hash_result.value());
-        const auto new_hash = HashUtil::TokenHashToHex(new_hash_result.value());
-
+    auto disk::services::RedisService::Get(const std::string& key) -> drogon::Task<Result<std::string>> {
         try {
             auto result = co_await m_redis_client->execCommandCoro("GET %s", key.c_str());
 
             if (result.isNil()) {
-                LOG_WARN << "Refresh token 不存在: user_id=" << user_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::InvalidRefreshToken));
+                LOG_DEBUG << "Redis GET: key=" << key;
+
+                co_return std::unexpected(ErrorInfo(ErrorCode::RedisKeyNotFound, "Redis键不存在: " + key));
             }
 
-            const auto current_hash = result.asString();
-            if (current_hash != old_hash) {
-                LOG_WARN << "Refresh token 已被使用或已刷新: user_id=" << user_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::RefreshTokenAlreadyUsed));
-            }
+            const auto value = result.asString();
 
-            co_await m_redis_client->execCommandCoro(
-                "SET %s %s EX %d",
-                key.c_str(),
-                new_hash.c_str(),
-                REFRESH_TOKEN_TTL
-            );
+            LOG_DEBUG << "Redis GET: key=" << key;
 
-            LOG_DEBUG << "Refresh token 更新成功: user_id=" << user_id;
-            co_return {};
+            co_return value;
 
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis 操作失败: " << ex.what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Redis 操作失败"));
+            LOG_ERROR << "Redis操作失败: GET, key=" << key << ", error=" << ex.what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::RedisOperationFailed, "Redis操作失败: " + std::string(ex.what())));
         }
     }
 
-    auto RedisService::InvalidateAccessToken(const std::string& token) -> drogon::Task<Result<void>> {
-        auto jti_result = HashUtil::HashToken(token);
-        if (!jti_result) {
-            co_return std::unexpected(jti_result.error());
-        }
-        const auto jti = HashUtil::TokenHashToHex(jti_result.value());
-
+    auto disk::services::RedisService::Delete(const std::string& key) -> drogon::Task<Result<void>> {
         try {
-            const auto key = "access_token_blacklist:" + jti;
-            co_await m_redis_client->execCommandCoro(
-                "SETEX %s %d %s",
-                key.c_str(),
-                ACCESS_TOKEN_TTL,
-                "1"
-            );
+            co_await m_redis_client->execCommandCoro("DEL %s", key.c_str());
 
-            LOG_INFO << "访问令牌已失效: jti=" << jti << ", ttl=" << ACCESS_TOKEN_TTL << "s";
+            LOG_DEBUG << "Redis DEL: key=" << key;
+
             co_return {};
+
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis 操作失败: " << ex.what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Redis 操作失败"));
+            LOG_ERROR << "Redis操作失败: DEL, key=" << key << ", error=" << ex.what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::RedisOperationFailed, "Redis操作失败: " + std::string(ex.what())));
         }
     }
 
-    auto RedisService::RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>> {
-        const auto key = "refresh_token:" + std::to_string(user_id);
-
-        try {
-            auto result = co_await m_redis_client->execCommandCoro("DEL %s", key.c_str());
-            const auto deleted = result.asInteger();
-
-            if (deleted > 0) {
-                LOG_INFO << "刷新令牌已撤销: user_id=" << user_id;
-            }
-
-            co_return {};
-        } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis 操作失败: " << ex.what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Redis 操作失败"));
-        }
-    }
-
-    auto RedisService::IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool> {
-        const auto key = "access_token_blacklist:" + jti;
-
+    auto disk::services::RedisService::Exists(const std::string& key) -> drogon::Task<bool> {
         try {
             auto result = co_await m_redis_client->execCommandCoro("EXISTS %s", key.c_str());
             const auto exists = result.asInteger();
 
+            LOG_DEBUG << "Redis EXISTS: key=" << key << ", exists=" << (exists == 1);
+
             co_return exists == 1;
+
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis 操作失败: " << ex.what();
+            LOG_ERROR << "Redis操作失败: EXISTS, key=" << key << ", error=" << ex.what();
             co_return false;
+        }
+    }
+
+    auto disk::services::RedisService::Expire(const std::string& key, int ttl)
+        -> drogon::Task<Result<void>> {
+        try {
+            auto result = co_await m_redis_client->execCommandCoro("EXPIRE %s %d", key.c_str(), ttl);
+
+            if (result.asInteger() == 0) {
+                LOG_DEBUG << "Redis EXPIRE: key=" << key << ", ttl=" << ttl;
+
+                co_return std::unexpected(ErrorInfo(ErrorCode::RedisKeyNotFound, "Redis键不存在: " + key));
+            }
+
+            LOG_DEBUG << "Redis EXPIRE: key=" << key << ", ttl=" << ttl;
+
+            co_return {};
+
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis操作失败: EXPIRE, key=" << key << ", error=" << ex.what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::RedisOperationFailed,
+                "Redis操作失败: " + std::string(ex.what())
+            ));
+        }
+    }
+
+    auto disk::services::RedisService::MSet(const std::vector<KeyValue>& pairs, int ttl)
+        -> drogon::Task<Result<void>> {
+        if (pairs.empty()) {
+            co_return {};
+        }
+
+        try {
+            if (ttl == 0) {
+                for (const auto& pair : pairs) {
+                    co_await m_redis_client->execCommandCoro(
+                        "SET %s %s",
+                        pair.key.c_str(),
+                        pair.value.c_str()
+                    );
+                }
+            } else {
+                co_await m_redis_client->execCommandCoro("MULTI");
+                for (const auto& pair : pairs) {
+                    co_await m_redis_client->execCommandCoro(
+                        "SET %s %s EX %d",
+                        pair.key.c_str(),
+                        pair.value.c_str(),
+                        ttl
+                    );
+                }
+                co_await m_redis_client->execCommandCoro("EXEC");
+            }
+
+            LOG_DEBUG << "Redis MSET: count=" << pairs.size() << ", ttl=" << ttl;
+
+            co_return {};
+
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis操作失败: MSET, count=" << pairs.size()
+                      << ", error=" << ex.what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::RedisOperationFailed,
+                "Redis操作失败: " + std::string(ex.what())
+            ));
+        }
+    }
+
+    auto disk::services::RedisService::MGet(const std::vector<std::string>& keys)
+        -> drogon::Task<Result<std::vector<std::string>>> {
+        if (keys.empty()) {
+            co_return std::vector<std::string>{};
+        }
+
+        try {
+            auto result = co_await m_redis_client->execCommandCoro("MGET %s", keys[0].c_str());
+
+            std::vector<std::string> values;
+            values.reserve(keys.size());
+            for (size_t i = 0; i < keys.size(); ++i) {
+                values.push_back(result.asArray()[i].isNil() ? "" : result.asArray()[i].asString());
+            }
+
+            LOG_DEBUG << "Redis MGET: count=" << keys.size();
+
+            co_return values;
+
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis操作失败: MGET, count=" << keys.size()
+                      << ", error=" << ex.what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::RedisOperationFailed,
+                "Redis操作失败: " + std::string(ex.what())
+            ));
+        }
+    }
+
+    auto disk::services::RedisService::MDelete(const std::vector<std::string>& keys) -> drogon::Task<Result<int>> {
+        if (keys.empty()) {
+            co_return 0;
+        }
+
+        try {
+            auto result = co_await m_redis_client->execCommandCoro("DEL %s", keys[0].c_str());
+            const auto deleted = result.asInteger();
+
+            LOG_DEBUG << "Redis MDELETE: count=" << keys.size() << ", deleted=" << deleted;
+
+            co_return deleted;
+
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis操作失败: MDELETE, count=" << keys.size()
+                      << ", error=" << ex.what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::RedisOperationFailed,
+                "Redis操作失败: " + std::string(ex.what())
+            ));
         }
     }
 

@@ -10,7 +10,6 @@
  */
 #pragma once
 
-#include "services/RedisService.hpp"
 #include "services/TokenService.hpp"
 
 namespace disk::filters {
@@ -28,7 +27,6 @@ namespace disk::filters {
             -> drogon::Task<drogon::HttpResponsePtr> override;
 
     private:
-        std::shared_ptr<disk::services::RedisService> m_redis_service;
         std::unique_ptr<disk::auth::TokenService> m_token_service;
     };
 } // namespace disk::filters

@@ -14,7 +14,6 @@
 #include <jwt-cpp/jwt.h>
 #include <jwt-cpp/traits/open-source-parsers-jsoncpp/traits.h>
 
-#include "services/RedisService.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/Response.hpp"
 
@@ -23,11 +22,10 @@ namespace disk::filters {
     using disk::utils::ConfigMgr;
 
     JwtAuthFilter::JwtAuthFilter()
-        : m_redis_service(std::make_shared<disk::services::RedisService>(drogon::app().getRedisClient())),
-          m_token_service(
+        : m_token_service(
               std::make_unique<disk::auth::TokenService>(
                   ConfigMgr::GetInstance()->GetJwtSecret(),
-                  *m_redis_service
+                  drogon::app().getRedisClient()
               )
           ) {
         LOG_DEBUG << "JwtAuthFilter 初始化完成";
@@ -62,7 +60,7 @@ namespace disk::filters {
         if (decoded.has_payload_claim("jti")) {
             const auto jti = decoded.get_payload_claim("jti").as_string();
 
-            if (co_await m_redis_service->IsAccessTokenRevoked(jti)) {
+            if (co_await m_token_service->IsAccessTokenRevoked(jti)) {
                 LOG_WARN << "令牌已被撤销: user_id=" << user_id << ", jti=" << jti;
                 co_return disk::Response::Error(disk::error::Code::TokenRevoked);
             }

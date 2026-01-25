@@ -29,7 +29,7 @@ namespace disk::auth {
         : m_db_client(drogon::app().getDbClient()),
           m_redis_service(std::make_shared<disk::services::RedisService>(redis_client)),
           m_token_service(
-              std::make_unique<TokenService>(ConfigMgr::GetInstance()->GetJwtSecret(), *m_redis_service)
+              std::make_unique<TokenService>(ConfigMgr::GetInstance()->GetJwtSecret(), m_redis_service)
           ) {
         LOG_DEBUG << "AuthService 初始化完成";
     }
