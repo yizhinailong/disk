@@ -59,12 +59,12 @@ set(Services_SOURCES
 
 # Utils
 set(Utils_HEADERS
+    utils/ConfigMgr.hpp
     utils/ErrorCode.hpp
     utils/HashUtil.hpp
     utils/Pch.hpp
     utils/Response.hpp
     utils/Singleton.hpp
-    utils/ConfigMgr.hpp
 )
 set(Utils_SOURCES
     utils/ConfigMgr.cpp
