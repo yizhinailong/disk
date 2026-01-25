@@ -48,7 +48,10 @@ namespace disk::services {
 
         } catch (const drogon::nosql::RedisException& ex) {
             LOG_ERROR << "Redis操作失败: SET, key=" << key << ", error=" << ex.what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::RedisOperationFailed, "Redis操作失败: " + std::string(ex.what())));
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::RedisOperationFailed,
+                "Redis操作失败: " + std::string(ex.what())
+            ));
         }
     }
 
@@ -59,7 +62,10 @@ namespace disk::services {
             if (result.isNil()) {
                 LOG_DEBUG << "Redis GET: key=" << key;
 
-                co_return std::unexpected(ErrorInfo(ErrorCode::RedisKeyNotFound, "Redis键不存在: " + key));
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::RedisKeyNotFound,
+                    "Redis键不存在: " + key
+                ));
             }
 
             const auto value = result.asString();
@@ -70,7 +76,10 @@ namespace disk::services {
 
         } catch (const drogon::nosql::RedisException& ex) {
             LOG_ERROR << "Redis操作失败: GET, key=" << key << ", error=" << ex.what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::RedisOperationFailed, "Redis操作失败: " + std::string(ex.what())));
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::RedisOperationFailed,
+                "Redis操作失败: " + std::string(ex.what())
+            ));
         }
     }
 
@@ -84,7 +93,10 @@ namespace disk::services {
 
         } catch (const drogon::nosql::RedisException& ex) {
             LOG_ERROR << "Redis操作失败: DEL, key=" << key << ", error=" << ex.what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::RedisOperationFailed, "Redis操作失败: " + std::string(ex.what())));
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::RedisOperationFailed,
+                "Redis操作失败: " + std::string(ex.what())
+            ));
         }
     }
 
