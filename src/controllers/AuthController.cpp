@@ -137,8 +137,6 @@ namespace disk::auth {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         // 步骤 3: 提取 IP 地址
-
-        // 步骤 3: 提取 IP 地址
         const auto ip_address = request->getPeerAddr().toIpPort();
 
         // 步骤 4: 调用 Service 层登出
