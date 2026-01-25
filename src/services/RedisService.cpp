@@ -24,7 +24,7 @@ namespace disk::services {
 
     // ==================== 通用方法实现 ====================
 
-    auto disk::services::RedisService::Set(const std::string& key, const std::string& value, int ttl)
+    auto RedisService::Set(const std::string& key, const std::string& value, int ttl)
         -> drogon::Task<Result<void>> {
         try {
             if (ttl > 0) {
@@ -55,7 +55,7 @@ namespace disk::services {
         }
     }
 
-    auto disk::services::RedisService::Get(const std::string& key) -> drogon::Task<Result<std::string>> {
+    auto RedisService::Get(const std::string& key) -> drogon::Task<Result<std::string>> {
         try {
             auto result = co_await m_redis_client->execCommandCoro("GET %s", key.c_str());
 
@@ -83,7 +83,7 @@ namespace disk::services {
         }
     }
 
-    auto disk::services::RedisService::Delete(const std::string& key) -> drogon::Task<Result<void>> {
+    auto RedisService::Delete(const std::string& key) -> drogon::Task<Result<void>> {
         try {
             co_await m_redis_client->execCommandCoro("DEL %s", key.c_str());
 
@@ -100,7 +100,7 @@ namespace disk::services {
         }
     }
 
-    auto disk::services::RedisService::Exists(const std::string& key) -> drogon::Task<bool> {
+    auto RedisService::Exists(const std::string& key) -> drogon::Task<bool> {
         try {
             auto result = co_await m_redis_client->execCommandCoro("EXISTS %s", key.c_str());
             const auto exists = result.asInteger();
@@ -115,7 +115,7 @@ namespace disk::services {
         }
     }
 
-    auto disk::services::RedisService::Expire(const std::string& key, int ttl)
+    auto RedisService::Expire(const std::string& key, int ttl)
         -> drogon::Task<Result<void>> {
         try {
             auto result = co_await m_redis_client->execCommandCoro("EXPIRE %s %d", key.c_str(), ttl);
@@ -139,7 +139,7 @@ namespace disk::services {
         }
     }
 
-    auto disk::services::RedisService::MSet(const std::vector<KeyValue>& pairs, int ttl)
+    auto RedisService::MSet(const std::vector<KeyValue>& pairs, int ttl)
         -> drogon::Task<Result<void>> {
         if (pairs.empty()) {
             co_return {};
@@ -181,7 +181,7 @@ namespace disk::services {
         }
     }
 
-    auto disk::services::RedisService::MGet(const std::vector<std::string>& keys)
+    auto RedisService::MGet(const std::vector<std::string>& keys)
         -> drogon::Task<Result<std::vector<std::string>>> {
         if (keys.empty()) {
             co_return std::vector<std::string>{};
@@ -210,7 +210,7 @@ namespace disk::services {
         }
     }
 
-    auto disk::services::RedisService::MDelete(const std::vector<std::string>& keys) -> drogon::Task<Result<int>> {
+    auto RedisService::MDelete(const std::vector<std::string>& keys) -> drogon::Task<Result<int>> {
         if (keys.empty()) {
             co_return 0;
         }
@@ -226,6 +226,50 @@ namespace disk::services {
         } catch (const drogon::nosql::RedisException& ex) {
             LOG_ERROR << "Redis操作失败: MDELETE, count=" << keys.size()
                       << ", error=" << ex.what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::RedisOperationFailed,
+                "Redis操作失败: " + std::string(ex.what())
+            ));
+        }
+    }
+
+    auto RedisService::Incr(const std::string& key) -> drogon::Task<Result<std::int64_t>> {
+        try {
+            auto result = co_await m_redis_client->execCommandCoro(
+                "INCR %s",
+                key.c_str()
+            );
+            const auto new_value = result.asInteger();
+
+            LOG_DEBUG << "Redis INCR: key=" << key << ", new_value=" << new_value;
+
+            co_return new_value;
+
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis操作失败: INCR, key=" << key << ", error=" << ex.what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::RedisOperationFailed,
+                "Redis操作失败: " + std::string(ex.what())
+            ));
+        }
+    }
+
+    auto RedisService::IncrBy(const std::string& key, std::int64_t increment)
+        -> drogon::Task<Result<std::int64_t>> {
+        try {
+            auto result = co_await m_redis_client->execCommandCoro(
+                "INCRBY %s %lld",
+                key.c_str(),
+                increment
+            );
+            const auto new_value = result.asInteger();
+
+            LOG_DEBUG << "Redis INCRBY: key=" << key << ", increment=" << increment << ", new_value=" << new_value;
+
+            co_return new_value;
+
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis操作失败: INCRBY, key=" << key << ", error=" << ex.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::RedisOperationFailed,
                 "Redis操作失败: " + std::string(ex.what())

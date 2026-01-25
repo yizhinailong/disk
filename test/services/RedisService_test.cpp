@@ -88,6 +88,62 @@ namespace {
         SUCCEED() << "测试已跳过：需要 Redis 环境";
     }
 
+    TEST(RedisServiceTest, DISABLED_RedisRequired_IncrNewKey_ReturnsOne) {
+        // 【需要 Redis 环境】Incr 新键返回 1
+        // 此测试需要实际 Redis 连接才能运行
+        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
+        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // 测试步骤：
+        // 1. 创建 RedisService 实例
+        // 2. 对不存在的键调用 Incr 方法
+        // 3. 验证返回值为 1
+        // 4. 验证返回类型为 Result<long long>
+
+        SUCCEED() << "测试已跳过：需要 Redis 环境";
+    }
+
+    TEST(RedisServiceTest, DISABLED_RedisRequired_IncrExistingKey_IncrementsValue) {
+        // 【需要 Redis 环境】Incr 现有键递增值
+        // 此测试需要实际 Redis 连接才能运行
+        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
+        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // 测试步骤：
+        // 1. 创建 RedisService 实例
+        // 2. 先使用 Set 设置键的初始值
+        // 3. 调用 Incr 方法递增键值
+        // 4. 验证返回值为初始值 + 1
+
+        SUCCEED() << "测试已跳过：需要 Redis 环境";
+    }
+
+    TEST(RedisServiceTest, DISABLED_RedisRequired_IncrBy_AddsSpecifiedAmount) {
+        // 【需要 Redis 环境】IncrBy 增加指定数量
+        // 此测试需要实际 Redis 连接才能运行
+        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
+        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // 测试步骤：
+        // 1. 创建 RedisService 实例
+        // 2. 先使用 Set 设置键的初始值
+        // 3. 调用 IncrBy(key, 10) 方法增加指定数量
+        // 4. 验证返回值为初始值 + 10
+
+        SUCCEED() << "测试已跳过：需要 Redis 环境";
+    }
+
+    TEST(RedisServiceTest, DISABLED_RedisRequired_IncrByNegative_DecrementsValue) {
+        // 【需要 Redis 环境】IncrBy 负数减少值
+        // 此测试需要实际 Redis 连接才能运行
+        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
+        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // 测试步骤：
+        // 1. 创建 RedisService 实例
+        // 2. 先使用 Set 设置键的初始值为 10
+        // 3. 调用 IncrBy(key, -3) 方法减少指定数量
+        // 4. 验证返回值为 7
+
+        SUCCEED() << "测试已跳过：需要 Redis 环境";
+    }
+
     TEST(RedisServiceTest, MethodSignatures) {
         // 测试用例结构：
         // 验证所有 RedisService 通用方法的签名

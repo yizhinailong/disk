@@ -90,6 +90,39 @@ namespace disk::auth {
 
         LOG_DEBUG << "用户登录尝试: " << request.account;
 
+        // 0. 检查 IP 登录频率限制
+        std::string ip_only = ip_address;
+        const auto colon_pos = ip_only.find(':');
+        if (colon_pos != std::string::npos) {
+            ip_only = ip_only.substr(0, colon_pos);
+        }
+        const std::string rate_key = "rate:login:" + ip_only;
+
+        auto incr_result = co_await m_redis_service->Incr(rate_key);
+        if (incr_result.has_value()) {
+            const auto count = incr_result.value();
+
+            // 首次计数时设置 TTL 为 300 秒（5 分钟）
+            if (count == 1) {
+                auto expire_result = co_await m_redis_service->Expire(rate_key, 300);
+                if (!expire_result.has_value()) {
+                    LOG_WARN << "设置频率限制 TTL 失败: " << expire_result.error().message;
+                }
+            }
+
+            // 检查是否超过阈值（5 次）
+            if (count > 5) {
+                LOG_WARN << "登录频率限制触发: ip=" << ip_only << ", attempts=" << count;
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::TooManyRequests,
+                    "登录尝试过于频繁，请 5 分钟后重试"
+                ));
+            }
+        } else {
+            // Fail-open: Redis 失败时只记录警告，不阻止登录
+            LOG_WARN << "Redis 频率限制检查失败: " << incr_result.error().message;
+        }
+
         // 1. 查找用户（用户名或邮箱）
         auto user_result = co_await FindUser(request.account);
         if (!user_result) {
@@ -361,6 +394,21 @@ namespace disk::auth {
 
             co_await mapper.update(user);
             LOG_DEBUG << "更新登录信息成功: " << user_id;
+
+            // 清除 IP 频率限制计数器
+            std::string ip_only = ip_address;
+            const auto colon_pos = ip_only.find(':');
+            if (colon_pos != std::string::npos) {
+                ip_only = ip_only.substr(0, colon_pos);
+            }
+            const std::string rate_key = "rate:login:" + ip_only;
+
+            auto delete_result = co_await m_redis_service->Delete(rate_key);
+            if (delete_result.has_value()) {
+                LOG_DEBUG << "清除登录频率限制计数器: ip=" << ip_only;
+            } else {
+                LOG_WARN << "清除登录频率限制计数器失败: " << delete_result.error().message;
+            }
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "更新登录信息失败: " << user_id << " - " << e.base().what();
         }

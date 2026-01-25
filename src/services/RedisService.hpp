@@ -25,7 +25,7 @@ namespace disk::services {
     /**
      * @brief TTL类型枚举
      */
-    enum class TtlType : int {
+    enum class TtlType : std::uint8_t {
         Permanent = 0, ///< 永不过期
         Auto           ///< 自动过期（使用参数值）
     };
@@ -125,6 +125,23 @@ namespace disk::services {
          */
         [[nodiscard]]
         auto MDelete(const std::vector<std::string>& keys) -> drogon::Task<Result<int>>;
+
+        /**
+         * @brief 原子性递增 Redis 键值（递增 1）
+         * @param key Redis 键
+         * @return Result<std::int64_t> 成功返回递增后的新值，失败返回错误
+         */
+        [[nodiscard]]
+        auto Incr(const std::string& key) -> drogon::Task<Result<std::int64_t>>;
+
+        /**
+         * @brief 原子性递增 Redis 键值（递增指定值）
+         * @param key Redis 键
+         * @param increment 递增量
+         * @return Result<std::int64_t> 成功返回递增后的新值，失败返回错误
+         */
+        [[nodiscard]]
+        auto IncrBy(const std::string& key, std::int64_t increment) -> drogon::Task<Result<std::int64_t>>;
 
     private:
         drogon::nosql::RedisClientPtr m_redis_client;
