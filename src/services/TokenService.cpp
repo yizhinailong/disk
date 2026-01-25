@@ -163,7 +163,7 @@ namespace disk::auth {
         }
     }
 
-    auto disk::auth::TokenService::StoreRefreshToken(uint64_t user_id, const std::string& refresh_token)
+    auto TokenService::StoreRefreshToken(uint64_t user_id, const std::string& refresh_token)
         -> drogon::Task<Result<void>> {
         const auto key = BuildRefreshTokenKey(user_id);
 
@@ -176,7 +176,7 @@ namespace disk::auth {
         co_return co_await m_redis_service->Set(key, hash, REFRESH_TOKEN_TTL);
     }
 
-    auto disk::auth::TokenService::RefreshRefreshToken(
+    auto TokenService::RefreshRefreshToken(
         uint64_t user_id,
         const std::string& old_token,
         const std::string& new_token
@@ -209,7 +209,7 @@ namespace disk::auth {
         co_return co_await m_redis_service->Set(key, new_hash, REFRESH_TOKEN_TTL);
     }
 
-    auto disk::auth::TokenService::InvalidateAccessToken(const std::string& token) -> drogon::Task<Result<void>> {
+    auto TokenService::InvalidateAccessToken(const std::string& token) -> drogon::Task<Result<void>> {
         auto jti_result = ExtractJti(token);
         if (!jti_result) {
             co_return std::unexpected(jti_result.error());
@@ -221,17 +221,17 @@ namespace disk::auth {
         co_return co_await m_redis_service->Set(key, "1", ACCESS_TOKEN_TTL);
     }
 
-    auto disk::auth::TokenService::RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>> {
+    auto TokenService::RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>> {
         const auto key = BuildRefreshTokenKey(user_id);
         co_return co_await m_redis_service->Delete(key);
     }
 
-    auto disk::auth::TokenService::IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool> {
+    auto TokenService::IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool> {
         const auto key = BuildAccessTokenBlacklistKey(jti);
         co_return co_await m_redis_service->Exists(key);
     }
 
-    auto disk::auth::TokenService::ExtractJti(const std::string& token) const -> Result<std::string> {
+    auto TokenService::ExtractJti(const std::string& token) const -> Result<std::string> {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
         try {
@@ -254,7 +254,7 @@ namespace disk::auth {
         }
     }
 
-    auto disk::auth::TokenService::CalculateRemainingTtl(const std::string& token) const -> Result<int> {
+    auto TokenService::CalculateRemainingTtl(const std::string& token) const -> Result<int> {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
         try {
@@ -275,11 +275,11 @@ namespace disk::auth {
         }
     }
 
-    auto disk::auth::TokenService::BuildRefreshTokenKey(uint64_t user_id) const -> std::string {
+    auto TokenService::BuildRefreshTokenKey(uint64_t user_id) const -> std::string {
         return "refresh_token:" + std::to_string(user_id);
     }
 
-    auto disk::auth::TokenService::BuildAccessTokenBlacklistKey(const std::string& jti) const -> std::string {
+    auto TokenService::BuildAccessTokenBlacklistKey(const std::string& jti) const -> std::string {
         return "access_token_blacklist:" + jti;
     }
 
