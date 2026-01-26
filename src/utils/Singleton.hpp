@@ -41,7 +41,7 @@ namespace disk::utils {
         static std::shared_ptr<T> GetInstance() {
             static std::once_flag s_flag;
             std::call_once(s_flag, [&]() {
-                m_instance = std::shared_ptr<T>(new T);
+                m_instance = std::make_shared<T>();
             });
 
             return m_instance;
