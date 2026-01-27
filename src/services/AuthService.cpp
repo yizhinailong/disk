@@ -330,7 +330,7 @@ namespace disk::auth {
     }
 
     auto AuthService::FindUser(std::string account) const
-        -> drogon::Task<Result<drogon_model::disk::Users>> {
+        -> drogon::Task<Result<Users>> {
 
         try {
             CoroMapper<Users> mapper(m_db_client);
