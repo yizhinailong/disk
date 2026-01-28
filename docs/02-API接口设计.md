@@ -289,6 +289,12 @@ Authorization: Bearer <access_token>
 
 获取当前登录用户的详细信息。
 
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
 #### 响应示例
 
 ```json
@@ -296,17 +302,19 @@ Authorization: Bearer <access_token>
   "code": 0,
   "message": "success",
   "data": {
-    "id": 1,
-    "username": "john_doe",
-    "email": "john@example.com",
-    "nickname": "John",
-    "avatar": "https://example.com/avatar/1.jpg",
-    "storage_used": 1073741824,
-    "storage_quota": 10737418240,
-    "file_count": 150,
-    "folder_count": 20,
-    "created_at": "2026-01-01T00:00:00Z",
-    "updated_at": "2026-01-10T12:00:00Z"
+    "user": {
+        "id": 1,
+        "username": "john_doe",
+        "email": "john@example.com",
+        "nickname": "John",
+        "avatar": "https://example.com/avatar/1.jpg",
+        "storage_used": 1073741824,
+        "storage_quota": 10737418240,
+        "file_count": 150,
+        "folder_count": 20,
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-10T12:00:00Z"
+    }
   }
 }
 ```
