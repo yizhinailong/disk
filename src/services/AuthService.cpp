@@ -15,6 +15,7 @@
 #include "models/OperationLogs.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/HashUtil.hpp"
+#include "utils/RedisKeyPrefix.hpp"
 
 namespace disk::auth {
 
@@ -91,12 +92,7 @@ namespace disk::auth {
         LOG_DEBUG << "用户登录尝试: " << request.account;
 
         // 0. 检查 IP 登录频率限制
-        std::string ip_only = ip_address;
-        const auto colon_pos = ip_only.find(':');
-        if (colon_pos != std::string::npos) {
-            ip_only = ip_only.substr(0, colon_pos);
-        }
-        const std::string rate_key = "rate:login:" + ip_only;
+        const std::string rate_key = disk::redis::RedisKeyPrefix::BuildLoginRateLimitKey(ip_address);
 
         auto incr_result = co_await m_redis_service->Incr(rate_key);
         if (incr_result.has_value()) {
@@ -112,6 +108,7 @@ namespace disk::auth {
 
             // 检查是否超过阈值（5 次）
             if (count > 5) {
+                const std::string ip_only = disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address);
                 LOG_WARN << "登录频率限制触发: ip=" << ip_only << ", attempts=" << count;
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::TooManyRequests,
@@ -396,15 +393,11 @@ namespace disk::auth {
             LOG_DEBUG << "更新登录信息成功: " << user_id;
 
             // 清除 IP 频率限制计数器
-            std::string ip_only = ip_address;
-            const auto colon_pos = ip_only.find(':');
-            if (colon_pos != std::string::npos) {
-                ip_only = ip_only.substr(0, colon_pos);
-            }
-            const std::string rate_key = "rate:login:" + ip_only;
+            const std::string rate_key = disk::redis::RedisKeyPrefix::BuildLoginRateLimitKey(ip_address);
 
             auto delete_result = co_await m_redis_service->Delete(rate_key);
             if (delete_result.has_value()) {
+                const std::string ip_only = disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address);
                 LOG_DEBUG << "清除登录频率限制计数器: ip=" << ip_only;
             } else {
                 LOG_WARN << "清除登录频率限制计数器失败: " << delete_result.error().message;

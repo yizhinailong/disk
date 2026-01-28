@@ -63,6 +63,7 @@ set(Utils_HEADERS
     utils/ErrorCode.hpp
     utils/HashUtil.hpp
     utils/Pch.hpp
+    utils/RedisKeyPrefix.hpp
     utils/Response.hpp
     utils/Singleton.hpp
 )

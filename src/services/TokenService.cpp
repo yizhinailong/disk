@@ -18,6 +18,7 @@
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
 #include "utils/HashUtil.hpp"
+#include "utils/RedisKeyPrefix.hpp"
 
 namespace disk::auth {
 
@@ -165,7 +166,7 @@ namespace disk::auth {
 
     auto TokenService::StoreRefreshToken(uint64_t user_id, const std::string& refresh_token)
         -> drogon::Task<Result<void>> {
-        const auto key = BuildRefreshTokenKey(user_id);
+        const auto key = disk::redis::RedisKeyPrefix::BuildRefreshTokenKey(user_id);
 
         auto hash_result = disk::utils::HashUtil::HashToken(refresh_token);
         if (!hash_result) {
@@ -181,7 +182,7 @@ namespace disk::auth {
         const std::string& old_token,
         const std::string& new_token
     ) -> drogon::Task<Result<void>> {
-        const auto key = BuildRefreshTokenKey(user_id);
+        const auto key = disk::redis::RedisKeyPrefix::BuildRefreshTokenKey(user_id);
 
         auto old_hash_result = disk::utils::HashUtil::HashToken(old_token);
         if (!old_hash_result) {
@@ -216,18 +217,18 @@ namespace disk::auth {
         }
 
         const auto jti = jti_result.value();
-        const auto key = BuildAccessTokenBlacklistKey(jti);
+        const auto key = disk::redis::RedisKeyPrefix::BuildAccessTokenBlacklistKey(jti);
 
         co_return co_await m_redis_service->Set(key, "1", ACCESS_TOKEN_TTL);
     }
 
     auto TokenService::RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>> {
-        const auto key = BuildRefreshTokenKey(user_id);
+        const auto key = disk::redis::RedisKeyPrefix::BuildRefreshTokenKey(user_id);
         co_return co_await m_redis_service->Delete(key);
     }
 
     auto TokenService::IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool> {
-        const auto key = BuildAccessTokenBlacklistKey(jti);
+        const auto key = disk::redis::RedisKeyPrefix::BuildAccessTokenBlacklistKey(jti);
         co_return co_await m_redis_service->Exists(key);
     }
 
@@ -273,14 +274,6 @@ namespace disk::auth {
             LOG_WARN << "计算 TTL 失败: " << e.what();
             return std::unexpected(ErrorInfo(ErrorCode::TokenMalformed));
         }
-    }
-
-    auto TokenService::BuildRefreshTokenKey(uint64_t user_id) const -> std::string {
-        return "refresh_token:" + std::to_string(user_id);
-    }
-
-    auto TokenService::BuildAccessTokenBlacklistKey(const std::string& jti) const -> std::string {
-        return "access_token_blacklist:" + jti;
     }
 
 } // namespace disk::auth

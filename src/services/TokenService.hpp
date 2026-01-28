@@ -136,22 +136,6 @@ namespace disk::auth {
 
     private:
         /**
-         * @brief 构建 refresh_token 的 Redis 键
-         * @param user_id 用户 ID
-         * @return std::string Redis 键
-         */
-        [[nodiscard]]
-        auto BuildRefreshTokenKey(uint64_t user_id) const -> std::string;
-
-        /**
-         * @brief 构建 access_token 黑名单的 Redis 键
-         * @param jti 令牌 JTI
-         * @return std::string Redis 键
-         */
-        [[nodiscard]]
-        auto BuildAccessTokenBlacklistKey(const std::string& jti) const -> std::string;
-
-        /**
          * @brief 从 JWT 中提取 JTI
          * @param token JWT 令牌
          * @return Result<std::string> 成功返回 JTI，失败返回错误
