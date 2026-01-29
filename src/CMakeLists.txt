@@ -3,14 +3,17 @@ add_executable(${PROJECT_NAME} main.cpp)
 # Controller
 set(Controllers_HEADERS
     controllers/AuthController.hpp
+    controllers/UserController.hpp
 )
 set(Controllers_SOURCES
     controllers/AuthController.cpp
+    controllers/UserController.cpp
 )
 
 # Dtos
 set(Dtos_HEADERS
     dtos/AuthDto.hpp
+    dtos/UserDto.hpp
 )
 
 # Filter
@@ -50,11 +53,13 @@ set(Services_HEADERS
     services/AuthService.hpp
     services/RedisService.hpp
     services/TokenService.hpp
+    services/UserService.hpp
 )
 set(Services_SOURCES
     services/AuthService.cpp
     services/RedisService.cpp
     services/TokenService.cpp
+    services/UserService.cpp
 )
 
 # Utils
