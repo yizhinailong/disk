@@ -18,7 +18,6 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
 
 #include <drogon/orm/DbClient.h>
 
