@@ -152,5 +152,23 @@
       "description": "Build the project in Release mode on Linux with Clang",
       "configuration": "Release"
     }
+  ],
+  "testPresets": [
+    {
+      "name": "condition-linux",
+      "hidden": true,
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-debug-clang",
+      "inherits": "condition-linux",
+      "configurePreset": "linux-debug-clang",
+      "displayName": "Test Linux Debug Clang",
+      "description": "Run tests for Linux Debug build with Clang"
+    }
   ]
 }
