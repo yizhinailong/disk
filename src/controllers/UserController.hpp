@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "dtos/UserDto.hpp"
 #include "services/UserService.hpp"
 
 namespace disk::user {
@@ -35,6 +36,7 @@ namespace disk::user {
 
         METHOD_LIST_BEGIN
         ADD_METHOD_TO(UserController::GetProfile, "/api/user/profile", drogon::Get);
+        ADD_METHOD_TO(UserController::UpdatePassword, "/api/user/password", drogon::Put);
         METHOD_LIST_END
 
         /**
@@ -53,6 +55,22 @@ namespace disk::user {
          */
         [[nodiscard]]
         auto GetProfile(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 修改密码
+         *
+         * 业务规则：
+         * - 从请求 attributes 中提取 user_id（由 JwtAuthFilter 设置）
+         * - 解析请求 JSON 提取 old_password 和 new_password
+         * - 调用 UserService::ChangePassword(user_id, request) 修改密码
+         * - 处理服务层错误（返回 Response::Error）
+         * - 成功时返回 HTTP 200 状态码和 Response::Success({})（data 为 null）
+         *
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto UpdatePassword(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
         std::unique_ptr<disk::user::UserService> m_user_service;

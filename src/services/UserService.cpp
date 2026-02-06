@@ -14,8 +14,11 @@
 #include <drogon/orm/CoroMapper.h>
 #include <drogon/orm/Criteria.h>
 
+#include "utils/HashUtil.hpp"
+
 namespace disk::user {
 
+    using disk::utils::HashUtil;
     using drogon::orm::CompareOperator;
     using drogon::orm::CoroMapper;
     using drogon::orm::Criteria;
@@ -101,6 +104,65 @@ namespace disk::user {
         } catch (const std::exception& e) {
             LOG_ERROR << "获取用户信息未知错误: user_id=" << user_id << " - " << e.what();
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "获取用户信息失败，请稍后重试"));
+        }
+    }
+
+    auto UserService::ChangePassword(uint64_t user_id, ChangePasswordRequest request)
+        -> drogon::Task<VoidResult> {
+
+        LOG_INFO << "修改密码请求: user_id=" << user_id;
+
+        try {
+            CoroMapper<Users> mapper(m_db_client);
+
+            // Step 1: 查找用户
+            auto user = co_await mapper.findOne(
+                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
+            );
+            LOG_DEBUG << "查询到用户: " << user.getValueOfUsername() << " (ID: " << user_id << ")";
+
+            // Step 2: 验证旧密码
+            if (!HashUtil::VerifyPassword(request.old_password, user.getValueOfPasswordHash())) {
+                LOG_WARN << "旧密码错误: user_id=" << user_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::InvalidCredentials));
+            }
+            LOG_DEBUG << "旧密码验证成功: user_id=" << user_id;
+
+            // Step 3: 拒绝与当前密码相同的密码
+            if (request.old_password == request.new_password) {
+                LOG_WARN << "新密码不能与旧密码相同: user_id=" << user_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "新密码不能与旧密码相同"));
+            }
+
+            // Step 4: 加密新密码
+            LOG_DEBUG << "开始密码哈希计算: user_id=" << user_id;
+            auto hash_result = HashUtil::HashPassword(request.new_password);
+            if (!hash_result) {
+                LOG_ERROR << "密码哈希失败: user_id=" << user_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "密码加密失败，请稍后重试"));
+            }
+            LOG_DEBUG << "密码哈希完成: user_id=" << user_id;
+
+            // Step 5: 更新数据库
+            user.setPasswordHash(hash_result.value());
+            co_await mapper.update(user);
+
+            LOG_INFO << "密码修改成功: user_id=" << user_id;
+            co_return {};
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            const auto error_msg = std::string(e.base().what());
+            if (error_msg.find("condition") != std::string::npos ||
+                error_msg.find("empty") != std::string::npos) {
+                LOG_WARN << "用户不存在: user_id=" << user_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
+            }
+
+            LOG_ERROR << "密码修改数据库错误: user_id=" << user_id << " - " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "密码修改失败，请稍后重试"));
+        } catch (const std::exception& e) {
+            LOG_ERROR << "密码修改未知错误: user_id=" << user_id << " - " << e.what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "密码修改失败，请稍后重试"));
         }
     }
 

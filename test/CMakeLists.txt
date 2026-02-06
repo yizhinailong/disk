@@ -8,6 +8,7 @@ set(TEST_SOURCES
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp
     dtos/AuthDto_test.cpp
+    dtos/UserDto_test.cpp
 )
 
 add_executable(disk-test ${TEST_SOURCES})

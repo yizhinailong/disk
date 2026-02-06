@@ -75,6 +75,30 @@ namespace disk::user {
         [[nodiscard]]
         auto GetProfile(uint64_t user_id) -> drogon::Task<Result<UserProfileResponse>>;
 
+        /**
+         * @brief 修改用户密码
+         *
+         * 业务规则：
+         * - 根据 user_id 查询 Users 表获取用户
+         * - 验证旧密码是否正确（与存储的哈希对比）
+         * - 新密码不能与旧密码相同
+         * - 使用 Argon2id 算法加密新密码
+         * - 更新 Users 表的 password_hash 字段
+         *
+         * 错误处理：
+         * - 用户不存在：UserNotFound (40100)
+         * - 旧密码错误：InvalidCredentials (40101)
+         * - 新密码与旧密码相同：ValidationFailed (10002)
+         * - 数据库/哈希异常：InternalError (10006)
+         *
+         * @param user_id 用户 ID
+         * @param request 修改密码请求（包含 old_password 和 new_password）
+         * @return drogon::Task<VoidResult> 成功返回空，失败返回错误
+         */
+        [[nodiscard]]
+        auto ChangePassword(uint64_t user_id, ChangePasswordRequest request)
+            -> drogon::Task<VoidResult>;
+
     private:
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
     };
