@@ -108,7 +108,7 @@ namespace disk::user {
     }
 
     auto UserService::ChangePassword(uint64_t user_id, ChangePasswordRequest request)
-        -> drogon::Task<VoidResult> {
+        -> drogon::Task<Result<void>> {
 
         LOG_INFO << "修改密码请求: user_id=" << user_id;
 

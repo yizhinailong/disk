@@ -93,11 +93,11 @@ namespace disk::user {
          *
          * @param user_id 用户 ID
          * @param request 修改密码请求（包含 old_password 和 new_password）
-         * @return drogon::Task<VoidResult> 成功返回空，失败返回错误
+         * @return drogon::Task<Result<void>> 成功返回空，失败返回错误
          */
         [[nodiscard]]
         auto ChangePassword(uint64_t user_id, ChangePasswordRequest request)
-            -> drogon::Task<VoidResult>;
+            -> drogon::Task<Result<void>>;
 
     private:
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端

@@ -4,6 +4,7 @@ set(TEST_SOURCES
     main.cpp
     utils/PasswdHash_test.cpp
     utils/RedisKeyPrefix_test.cpp
+    utils/Response_test.cpp
     services/HashUtil_test.cpp
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp

@@ -353,7 +353,7 @@ namespace disk::error {
      *
      * 使用示例：
      * @code
-     * auto DeleteUser(int id) -> VoidResult {
+     * auto DeleteUser(int id) -> Result<void> {
      *     if (id <= 0) {
      *         return std::unexpected(Err(Code::InvalidParameter));
      *     }
@@ -362,7 +362,6 @@ namespace disk::error {
      * }
      * @endcode
      */
-    using VoidResult = Result<void>;
 
     /**
      * @brief 将一种错误类型的 Result 转换为另一种类型（保留错误信息）
@@ -384,4 +383,3 @@ using ErrorCode = Error::Code;
 using ErrorInfo = Error::ErrorInfo;
 template <typename T>
 using Result = Error::Result<T>;
-using VoidResult = Error::VoidResult;

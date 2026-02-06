@@ -134,7 +134,6 @@ Used for **all fallible operations**:
 // Type definitions (src/utils/ErrorCode.hpp)
 template <typename T>
 using Result = std::expected<T, ErrorInfo>;
-using VoidResult = Result<void>;
 
 // Service methods return Result<T>
 auto Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>>;

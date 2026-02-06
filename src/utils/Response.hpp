@@ -157,14 +157,14 @@ namespace disk {
             return Error(result.error());
         }
 
-        /// 从 VoidResult 构造响应
+        /// 从 Result<void> 构造响应
         /**
-         * @brief 从VoidResult构造HTTP响应
-         * @param result VoidResult对象
-         * @return drogon::HttpResponsePtr 从VoidResult构造的HTTP响应对象
+         * @brief 从Result<void>构造HTTP响应
+         * @param result Result<void>对象
+         * @return drogon::HttpResponsePtr 从Result<void>构造的HTTP响应对象
          */
         [[nodiscard]]
-        static auto FromResult(const VoidResult& result) -> drogon::HttpResponsePtr {
+        static auto FromResult(const Result<void>& result) -> drogon::HttpResponsePtr {
             if (result.has_value()) {
                 return Success();
             }
