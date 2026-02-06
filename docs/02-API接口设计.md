@@ -283,9 +283,39 @@ Authorization: Bearer <access_token>
 
 ## 3. 用户接口
 
+### 实现状态说明
+
+本章节中各接口的实现状态说明如下：
+
+- **已实现**: 后端已注册 method+path 路由，可正常调用
+- **未实现**: 文档中已定义接口契约，但后端尚未注册 method+path 路由
+
+### 用户接口错误响应（统一）
+
+用户接口统一使用全局错误响应格式，不在每个接口中重复展开错误 JSON：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
+
+常见错误码参考：
+
+- `40106` TokenMissing（未提供令牌）
+- `40107` TokenMalformed（令牌格式错误）
+- `40108` TokenExpired（令牌已过期）
+- `10002` ValidationFailed（参数校验失败）
+- `40101` InvalidCredentials（凭证错误，例如旧密码错误）
+
 ### 3.1 获取当前用户信息
 
 **GET** `/api/user/profile`
+
+#### 实现状态
+**已实现**
 
 获取当前登录用户的详细信息。
 
@@ -325,7 +355,16 @@ Authorization: Bearer <access_token>
 
 **PUT** `/api/user/profile`
 
+#### 实现状态
+**未实现**
+
 更新当前用户的个人信息。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
 
 #### 请求参数
 
@@ -363,7 +402,16 @@ Authorization: Bearer <access_token>
 
 **PUT** `/api/user/password`
 
+#### 实现状态
+**未实现**
+
 修改当前用户的登录密码。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
 
 #### 请求参数
 
@@ -395,7 +443,16 @@ Authorization: Bearer <access_token>
 
 **GET** `/api/user/storage`
 
+#### 实现状态
+**未实现**
+
 获取用户存储空间使用详情。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
 
 #### 响应示例
 

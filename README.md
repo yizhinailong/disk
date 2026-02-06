@@ -264,10 +264,10 @@ disk/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/user/profile` | 获取用户信息 |
-| PUT | `/api/user/profile` | 更新用户信息 |
-| PUT | `/api/user/password` | 修改密码 |
-| GET | `/api/user/storage` | 获取存储空间统计 |
+| GET | `/api/user/profile` | 获取用户信息 (Bearer, 已实现) |
+| PUT | `/api/user/profile` | 更新用户信息 (Bearer, 未实现) |
+| PUT | `/api/user/password` | 修改密码 (Bearer, 未实现) |
+| GET | `/api/user/storage` | 获取存储空间统计 (Bearer, 未实现) |
 
 详细的 API 文档请参考 [docs/02-API接口设计.md](docs/02-API接口设计.md)
 
