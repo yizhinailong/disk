@@ -12,7 +12,6 @@
 
 #pragma once
 
-#include "dtos/UserDto.hpp"
 #include "services/UserService.hpp"
 
 namespace disk::user {

@@ -11,6 +11,7 @@
 
 #include "UserController.hpp"
 
+#include "dtos/UserDto.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::user {
