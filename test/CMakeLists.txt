@@ -1,3 +1,5 @@
+enable_testing()
+
 include(GoogleTest)
 
 set(TEST_SOURCES
