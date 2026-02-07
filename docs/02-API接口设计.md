@@ -353,18 +353,27 @@ Authorization: Bearer <access_token>
 
 ### 3.2 更新用户信息
 
-**PUT** `/api/user/profile`
+**PATCH** `/api/user/profile`
 
 #### 实现状态
 **未实现**
 
-更新当前用户的个人信息。
+更新当前用户的个人信息。采用 Merge Patch 风格的局部更新语义：
+- 仅支持更新 `nickname` 和 `avatar` 两个字段
+- 未传递的字段保持不变（不使用 `null` 清空字段）
+- 空请求体或无可更新字段返回 `400 + 10001` 错误
 
 #### 请求头
 
 ```
 Authorization: Bearer <access_token>
+If-Match: <etag>（可选）
 ```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+| If-Match | 否 | 乐观锁控制，值为用户当前 ETag |
 
 #### 请求参数
 
@@ -378,7 +387,156 @@ Authorization: Bearer <access_token>
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | nickname | string | 否 | 昵称，2-32字符 |
-| avatar | string | 否 | 头像 URL |
+| avatar | string | 否 | 头像 URL，必须符合安全约束 |
+
+**更新规则**：
+- 所有参数均为可选，至少传递一个有效字段
+- 未传递的字段保持原值不变
+- `username` 和 `email` 不可修改
+
+#### 字段语义
+
+| 场景 | 请求体示例 | 行为 |
+|------|-----------|------|
+| **缺失字段** | `{"nickname": "新昵称"}` | 仅更新 nickname，avatar 保持原值 |
+| **显式 null** | `{"nickname": null}` | 返回 `400 + 10002` 校验失败错误 |
+| **完整更新** | `{"nickname": "新昵称", "avatar": "https://..."}` | 同时更新两个字段 |
+
+**注意**：未传递字段与显式 `null` 的语义完全不同。未传递字段表示"不修改"，显式 `null` 表示"请求校验失败"。
+
+#### 并发控制
+
+本接口支持可选的乐观锁机制，通过 `If-Match` 头实现：
+
+| 场景 | Header | 行为 | HTTP 状态码 | 业务码 |
+|------|--------|------|------------|--------|
+| **未提供 If-Match** | - | 采用阶段性 last-write-wins 策略，直接更新 | 200 | 0 |
+| **If-Match 匹配** | `If-Match: "12345"` | 版本一致，执行更新 | 200 | 0 |
+| **If-Match 不匹配** | `If-Match: "99999"` | 版本冲突，拒绝更新 | 412 | 10004 |
+
+**If-Match 不匹配响应示例**：
+
+```json
+{
+  "code": 10004,
+  "message": "资源冲突",
+  "data": {
+    "current_etag": "12346",
+    "message": "用户信息已被其他请求修改，请刷新后重试"
+  }
+}
+```
+
+**建议**：高并发场景下，客户端应先调用 `GET /api/user/profile` 获取用户信息和 `ETag` 响应头，然后在 PATCH 请求中携带 `If-Match`。在当前阶段，若客户端不提供 `If-Match`，服务端采用 last-write-wins 策略。
+
+#### Avatar 安全约束
+
+`avatar` 字段必须严格遵循以下安全规则，防止 SSRF（服务器端请求伪造）攻击：
+
+| 约束项 | 规则 | 违反后果 |
+|--------|------|----------|
+| **协议** | 必须使用 `https://` 协议 | 返回 `400 + 10002` 校验失败 |
+| **内网地址** | 禁止以下地址段：<br>- `127.0.0.0/8`（loopback）<br>- `169.254.0.0/16`（link-local）<br>- `10.0.0.0/8`（private）<br>- `172.16.0.0/12`（private）<br>- `192.168.0.0/16`（private） | 返回 `400 + 10002` 校验失败 |
+| **域名白名单**（建议） | 建议配置可信任的域名白名单，如：<br>- `cdn.example.com`<br>- `assets.example.com`<br>- `avatars.gravatar.com` | 不在白名单内的域名返回 `400 + 10002` |
+| **URL 格式** | 必须为完整 URL，不接受相对路径 | 返回 `400 + 10001` 参数错误 |
+
+**有效 avatar 示例**：
+- ✅ `https://cdn.example.com/avatars/123.jpg`
+- ✅ `https://avatars.gravatar.com/user/avatar`
+- ✅ `https://assets.example.com/u/profile.png`
+
+**无效 avatar 示例**：
+- ❌ `http://cdn.example.com/avatar.jpg`（非 https）
+- ❌ `https://127.0.0.1/avatar.jpg`（loopback）
+- ❌ `https://192.168.1.10/avatar.jpg`（内网地址）
+- ❌ `https://169.254.1.1/avatar.jpg`（link-local）
+- ❌ `./avatar.jpg`（相对路径）
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 空请求体、无可更新字段、URL 格式错误 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 昵称长度错误、avatar 安全约束违反、显式 `null` 字段 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 `Authorization` |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | `Authorization` 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 412 | 10004 | `ResourceConflict` | 资源冲突 | `If-Match` 值与当前 ETag 不匹配 |
+
+**10001 InvalidParameter 响应示例**：
+
+```json
+{
+  "code": 10001,
+  "message": "请求参数错误",
+  "data": {
+    "field": "avatar",
+    "reason": "URL 格式错误"
+  }
+}
+```
+
+**10002 ValidationFailed 响应示例（avatar 安全约束违反）**：
+
+```json
+{
+  "code": 10002,
+  "message": "参数校验失败",
+  "data": {
+    "field": "avatar",
+    "reason": "头像 URL 必须使用 https 协议且禁止访问内网地址",
+    "invalid_value": "https://192.168.1.10/avatar.jpg"
+  }
+}
+```
+
+**10002 ValidationFailed 响应示例（显式 null）**：
+
+```json
+{
+  "code": 10002,
+  "message": "参数校验失败",
+  "data": {
+    "field": "nickname",
+    "reason": "不支持显式设置为 null，未传递该字段即可保持原值"
+  }
+}
+```
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
+
+**40107 TokenMalformed 响应示例**：
+
+```json
+{
+  "code": 40107,
+  "message": "令牌格式错误",
+  "data": {
+    "reason": "Authorization 头格式应为 'Bearer <token>'"
+  }
+}
+```
+
+**40108 TokenExpired 响应示例**：
+
+```json
+{
+  "code": 40108,
+  "message": "令牌已过期",
+  "data": {
+    "token_type": "access_token",
+    "expired_at": "2026-01-13T12:00:00Z"
+  }
+}
+```
 
 #### 响应示例
 
@@ -387,11 +545,19 @@ Authorization: Bearer <access_token>
   "code": 0,
   "message": "success",
   "data": {
-    "id": 1,
-    "username": "john_doe",
-    "nickname": "Johnny",
-    "avatar": "https://example.com/avatar/new.jpg",
-    "updated_at": "2026-01-13T10:30:00Z"
+    "user": {
+      "id": 1,
+      "username": "john_doe",
+      "email": "john@example.com",
+      "nickname": "Johnny",
+      "avatar": "https://example.com/avatar/new.jpg",
+      "storage_used": 1073741824,
+      "storage_quota": 10737418240,
+      "file_count": 150,
+      "folder_count": 20,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-13T10:30:00Z"
+    }
   }
 }
 ```
