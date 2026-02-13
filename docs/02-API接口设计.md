@@ -610,9 +610,18 @@ Authorization: Bearer <access_token>
 **GET** `/api/user/storage`
 
 #### 实现状态
-**未实现**
+**⏸️ 待实现**（依赖文件功能完成）
+
+> **前置条件**：需要先完成 FileController/FileService 和 FolderController/FolderService 的实现，包括文件上传、删除、文件夹管理和回收站功能。
 
 获取用户存储空间使用详情。
+
+#### 实现说明（计划中）
+
+- `storage_used` 将使用实时 SQL 计算，不读取 `users.storage_used` 字段
+- 回收站（Trash）中的文件不计入存储统计
+- `categories` 当前版本将返回空数组，后续版本支持文件类型分类
+- 详细实现计划见：`.sisyphus/plans/storage-api.md`
 
 #### 请求头
 
