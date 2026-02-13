@@ -166,4 +166,64 @@ namespace disk::user {
         }
     }
 
+    auto UserService::UpdateProfile(uint64_t user_id, UpdateProfileRequest request)
+        -> drogon::Task<Result<UserProfileResponse>> {
+
+        LOG_INFO << "更新用户资料请求: user_id=" << user_id;
+
+        try {
+            CoroMapper<Users> mapper(m_db_client);
+
+            // Step 1: 查找用户
+            auto user = co_await mapper.findOne(
+                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
+            );
+            LOG_DEBUG << "查询到用户: " << user.getValueOfUsername();
+
+            // Step 2: 更新提供的字段
+            if (request.nickname.has_value()) {
+                user.setNickname(*request.nickname);
+                LOG_DEBUG << "更新昵称: " << *request.nickname;
+            }
+            if (request.avatar.has_value()) {
+                user.setAvatar(*request.avatar);
+                LOG_DEBUG << "更新头像: " << *request.avatar;
+            }
+
+            // Step 3: 保存到数据库
+            co_await mapper.update(user);
+            LOG_INFO << "用户资料更新成功: user_id=" << user_id;
+
+            // Step 4: 构建响应
+            UserProfileResponse response;
+            response.id = user.getValueOfId();
+            response.username = user.getValueOfUsername();
+            response.email = user.getValueOfEmail();
+            response.nickname = user.getNickname() ? *user.getNickname() : "";
+            response.avatar = user.getAvatar() ? *user.getAvatar() : "";
+            response.storage_quota = user.getValueOfStorageQuota();
+            response.storage_used = user.getValueOfStorageUsed();
+            response.file_count = 0; // 下次 GetProfile 时会准确
+            response.folder_count = 0;
+            response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
+            response.updated_at = user.getValueOfUpdatedAt().toDbStringLocal();
+
+            co_return response;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            const auto error_msg = std::string(e.base().what());
+            if (error_msg.find("condition") != std::string::npos ||
+                error_msg.find("empty") != std::string::npos) {
+                LOG_WARN << "用户不存在: user_id=" << user_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
+            }
+
+            LOG_ERROR << "更新用户资料数据库错误: user_id=" << user_id << " - " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "更新用户资料失败，请稍后重试"));
+        } catch (const std::exception& e) {
+            LOG_ERROR << "更新用户资料未知错误: user_id=" << user_id << " - " << e.what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "更新用户资料失败，请稍后重试"));
+        }
+    }
+
 } // namespace disk::user

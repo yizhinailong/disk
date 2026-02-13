@@ -75,4 +75,36 @@ namespace disk::user {
         co_return Response::Success();
     }
 
+    auto UserController::UpdateProfile(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到用户资料更新请求: " << request->getPeerAddr().toIpPort();
+
+        // Step 1: Extract user_id from request attributes (set by JwtAuthFilter)
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+
+        // Step 2: Parse and validate request DTO
+        auto parse_result = UpdateProfileRequest::FromRequest(request);
+        if (!parse_result) {
+            LOG_WARN << "用户资料更新请求参数验证失败: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+
+        // Step 3: Call service
+        auto update_result = co_await m_user_service->UpdateProfile(user_id, *parse_result);
+
+        // Step 4: Handle service errors
+        if (!update_result) {
+            LOG_ERROR << "用户资料更新失败: " << update_result.error().message;
+            co_return Response::Error(update_result.error());
+        }
+
+        // Step 5: Return updated profile
+        Json::Value data;
+        data["user"] = update_result->ToJson();
+
+        LOG_INFO << "用户资料更新成功: user_id=" << user_id;
+        co_return Response::Success(data);
+    }
+
 } // namespace disk::user
