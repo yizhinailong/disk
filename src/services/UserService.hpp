@@ -99,6 +99,24 @@ namespace disk::user {
         auto ChangePassword(uint64_t user_id, ChangePasswordRequest request)
             -> drogon::Task<Result<void>>;
 
+        /**
+         * @brief 更新用户资料
+         *
+         * 业务规则：
+         * - 根据 user_id 查询 Users 表获取用户
+         * - 仅更新请求中提供的字段（nickname 或 avatar）
+         * - nickname: 1-64 字符
+         * - avatar: 1-512 字符
+         * - 用户不存在时返回 UserNotFound 错误
+         *
+         * @param user_id 用户 ID
+         * @param request 更新资料请求（包含可选的 nickname 和 avatar）
+         * @return drogon::Task<Result<UserProfileResponse>> 成功返回更新后的用户信息，失败返回错误
+         */
+        [[nodiscard]]
+        auto UpdateProfile(uint64_t user_id, UpdateProfileRequest request)
+            -> drogon::Task<Result<UserProfileResponse>>;
+
     private:
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
     };

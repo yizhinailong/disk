@@ -11,6 +11,7 @@
 
 #include "dtos/UserDto.hpp"
 
+#include <optional>
 #include <string>
 
 #include <drogon/HttpRequest.h>
@@ -21,6 +22,7 @@
 #include "utils/ErrorCode.hpp"
 
 using disk::user::ChangePasswordRequest;
+using disk::user::UpdateProfileRequest;
 
 static auto CreateChangePasswordRequest(
     const std::string& old_password,
@@ -202,4 +204,132 @@ TEST(ChangePasswordRequest, NewPasswordValidComplex) {
 
     ASSERT_TRUE(result.has_value()) << "Complex new password should pass";
     EXPECT_EQ(result->new_password, "SecurePass456");
+}
+
+// ==================== UpdateProfileRequest Tests ====================
+
+static auto CreateUpdateProfileRequest(
+    const std::optional<std::string>& nickname,
+    const std::optional<std::string>& avatar
+) -> drogon::HttpRequestPtr {
+    Json::Value json;
+    if (nickname.has_value()) {
+        json["nickname"] = *nickname;
+    }
+    if (avatar.has_value()) {
+        json["avatar"] = *avatar;
+    }
+
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    std::string body = Json::writeString(builder, json);
+
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody(body);
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    return req;
+}
+
+TEST(UpdateProfileRequest, ValidNicknameOnly) {
+    auto req = CreateUpdateProfileRequest("新昵称", std::nullopt);
+    auto result = UpdateProfileRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid nickname only should pass";
+    EXPECT_TRUE(result->nickname.has_value());
+    EXPECT_EQ(result->nickname.value(), "新昵称");
+    EXPECT_FALSE(result->avatar.has_value());
+}
+
+TEST(UpdateProfileRequest, ValidAvatarOnly) {
+    auto req = CreateUpdateProfileRequest(std::nullopt, "https://example.com/avatar.png");
+    auto result = UpdateProfileRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid avatar only should pass";
+    EXPECT_FALSE(result->nickname.has_value());
+    EXPECT_TRUE(result->avatar.has_value());
+    EXPECT_EQ(result->avatar.value(), "https://example.com/avatar.png");
+}
+
+TEST(UpdateProfileRequest, ValidBothFields) {
+    auto req = CreateUpdateProfileRequest("新昵称", "https://example.com/avatar.png");
+    auto result = UpdateProfileRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid both fields should pass";
+    EXPECT_TRUE(result->nickname.has_value());
+    EXPECT_EQ(result->nickname.value(), "新昵称");
+    EXPECT_TRUE(result->avatar.has_value());
+    EXPECT_EQ(result->avatar.value(), "https://example.com/avatar.png");
+}
+
+TEST(UpdateProfileRequest, EmptyObject) {
+    auto req = CreateUpdateProfileRequest(std::nullopt, std::nullopt);
+    auto result = UpdateProfileRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Empty object should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(UpdateProfileRequest, NullNickname) {
+    Json::Value json;
+    json["nickname"] = Json::nullValue;
+
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    std::string body = Json::writeString(builder, json);
+
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody(body);
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    auto result = UpdateProfileRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Null nickname should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(UpdateProfileRequest, NicknameTooLong) {
+    std::string long_nickname(65, 'A');
+    auto req = CreateUpdateProfileRequest(long_nickname, std::nullopt);
+    auto result = UpdateProfileRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Nickname with 65 characters should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(UpdateProfileRequest, AvatarTooLong) {
+    std::string long_avatar(513, 'A');
+    auto req = CreateUpdateProfileRequest(std::nullopt, long_avatar);
+    auto result = UpdateProfileRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Avatar with 513 characters should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(UpdateProfileRequest, EmptyStringIgnored) {
+    auto req = CreateUpdateProfileRequest("", "https://example.com/avatar.png");
+    auto result = UpdateProfileRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Empty nickname should be ignored";
+    EXPECT_FALSE(result->nickname.has_value()) << "Empty nickname should not be set";
+    EXPECT_TRUE(result->avatar.has_value());
+}
+
+TEST(UpdateProfileRequest, WhitespaceTrimmed) {
+    auto req = CreateUpdateProfileRequest("  新昵称  ", "  https://example.com/avatar.png  ");
+    auto result = UpdateProfileRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Whitespace should be trimmed";
+    EXPECT_TRUE(result->nickname.has_value());
+    EXPECT_EQ(result->nickname.value(), "新昵称");
+    EXPECT_TRUE(result->avatar.has_value());
+    EXPECT_EQ(result->avatar.value(), "https://example.com/avatar.png");
 }
