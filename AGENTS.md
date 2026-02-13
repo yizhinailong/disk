@@ -1,61 +1,62 @@
 # Disk Project - Agent Guidelines
 
-**Project**: C++23 cloud storage system (Drogon framework) | **Status**: v0.1, auth module only | **Scale**: 38 files, ~20,500 lines | **Docs**: Chinese, Code: English
+**Project**: C++23 cloud storage (Drogon) | **Status**: v0.1, auth module | **Scale**: 76 files, ~24k lines | **Docs**: Chinese, Code: English
 
-## 🚨 架构约束（CRITICAL - 不可违反）
+## 🚨 CRITICAL Architecture Constraint
 
-**禁止使用静态库或动态库形式！**
-
-- ❌ **禁止创建** `add_library(STATIC/DYNAMIC)` 静态或动态库
-- ✅ **必须使用** `add_executable()` 直接编译所有源文件到可执行文件（.exe）
-- ❌ **禁止使用** `target_link_libraries(... disk-lib)` 链接自定义静态库
-- ✅ **必须使用** `target_link_libraries(... Drogon::Drogon jwt-cpp::jwt-cpp unofficial-sodium::sodium)` 链接第三方库
-
-**架构模式：**
 ```
-源文件 (.cpp/.hpp) ──── 直接编译 ────> 可执行文件 (.exe)
+❌ NEVER: add_library(STATIC/DYNAMIC)
+✅ ALWAYS: add_executable() → compile all sources directly to disk.exe
 ```
 
-**所有 CMakeLists.txt 必须遵循此规则，任何方案的实现都不得违反！**
+All CMakeLists.txt must follow direct compilation pattern.
 
 ---
 
 ## Build/Test Commands
 
-### Configure and Build
 ```bash
-cmake --preset linux-debug-clang      # Debug
-cmake --preset linux-release-clang     # Release
-cmake --build --preset linux-debug-clang
-cmake --build --preset linux-debug-clang --target disk-test
-```
-
-### Run Tests
-```bash
-# Run all tests
-ctest --preset linux-debug-clang
-
-# Run specific test suite
-ctest --preset linux-debug-clang -R PasswdHash -V
-ctest --preset linux-debug-clang -R AuthRequest -V
-
-# Run single test (CamelCase only, NO underscores)
+cmake --preset linux-debug-clang          # Configure
+cmake --build --preset linux-debug-clang  # Build
+ctest --preset linux-debug-clang          # All tests
+ctest --preset linux-debug-clang -R PasswdHash -V  # Specific suite
 ./build/linux-debug-clang/test/disk-test --gtest_filter="PasswdHash.HashValidPassword"
-./build/linux-debug-clang/test/disk-test --gtest_filter="RegisterRequest.ValidParameters"
-
-# List all tests
-./build/linux-debug-clang/test/disk-test --gtest_list_tests
+find src test -name '*.cpp' -o -name '*.hpp' | xargs clang-format -i  # Format
 ```
 
-### Format and Lint
-```bash
-find src test -name '*.cpp' -o -name '*.hpp' | xargs clang-format -i
-clang-format -i src/controllers/AuthController.cpp
+---
+
+## Project Structure
+
+```
+src/
+├── controllers/   # HTTP handlers (AuthController, UserController)
+├── services/     # Business logic (AuthService, TokenService, UserService)
+├── filters/      # Middleware (JwtAuthFilter)
+├── models/       # ORM (auto-generated) ⚠️ DO NOT EDIT
+├── dtos/         # Request/Response DTOs (AuthDto, UserDto)
+└── utils/        # Utilities (ErrorCode, Response, PasswdHash, ConfigMgr)
+test/             # GTest (mirrors src/ structure)
+docs/             # Chinese documentation
+sql/              # Database schema
 ```
 
-## Code Style Guidelines
+---
 
-### Type Annotations (CRITICAL - 100% Consistency)
+## WHERE TO LOOK
+
+| Task | Location |
+|------|----------|
+| Add API endpoint | `src/controllers/` + `src/services/` + `src/dtos/` |
+| Auth/JWT logic | `src/services/AuthService.cpp`, `src/services/TokenService.cpp` |
+| Error codes | `src/utils/ErrorCode.hpp` |
+| Response format | `src/utils/Response.hpp` |
+| DB schema | `sql/init.sql` → regenerate models |
+| Request validation | `src/dtos/*Dto.hpp` (FromRequest pattern) |
+
+---
+
+## Code Conventions (CRITICAL)
 
 **Pattern**: All functions use trailing return types with `auto func() -> ReturnType`
 
