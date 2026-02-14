@@ -25,6 +25,7 @@ namespace disk::folder {
         METHOD_LIST_BEGIN
         ADD_METHOD_TO(FolderController::CreateFolder, "/api/folder/create", drogon::Post);
         ADD_METHOD_TO(FolderController::GetTree, "/api/folder/tree", drogon::Get);
+        ADD_METHOD_TO(FolderController::GetBreadcrumb, "/api/folder/{folder_id}/breadcrumb", drogon::Get);
         METHOD_LIST_END
 
         /**
@@ -42,6 +43,14 @@ namespace disk::folder {
          */
         [[nodiscard]]
         auto GetTree(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 获取面包屑路径
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto GetBreadcrumb(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
         std::unique_ptr<FolderService> m_folder_service;

@@ -86,4 +86,37 @@ namespace disk::folder {
         co_return Response::Success(result->ToJson());
     }
 
+    auto FolderController::GetBreadcrumb(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到获取面包屑请求: " << request->getPeerAddr().toIpPort();
+
+        // 1. 从路径参数解析 folder_id
+        auto folder_id_str = request->getParameter("folder_id");
+        uint64_t folder_id = 0;
+        try {
+            folder_id = std::stoull(folder_id_str);
+        } catch (...) {
+            LOG_WARN << "folder_id 格式无效: " << folder_id_str;
+            co_return Response::Error(ErrorInfo(ErrorCode::InvalidParameter, "folder_id 格式无效"));
+        }
+
+        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+
+        // 3. 调用 Service 层获取面包屑
+        auto result = co_await m_folder_service->GetBreadcrumb(folder_id, user_id);
+        if (!result) {
+            LOG_ERROR << "获取面包屑失败: " << result.error().message
+                      << " (user_id=" << user_id << ", folder_id=" << folder_id << ")";
+            co_return Response::Error(result.error());
+        }
+
+        // 4. 返回成功响应
+        LOG_INFO << "获取面包屑成功: user_id=" << user_id
+                 << ", folder_id=" << folder_id
+                 << ", path_count=" << result->path.size();
+        co_return Response::Success(result->ToJson());
+    }
+
 } // namespace disk::folder
