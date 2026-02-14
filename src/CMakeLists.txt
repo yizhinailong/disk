@@ -3,16 +3,19 @@ add_executable(${PROJECT_NAME} main.cpp)
 # Controller
 set(Controllers_HEADERS
     controllers/AuthController.hpp
+    controllers/FolderController.hpp
     controllers/UserController.hpp
 )
 set(Controllers_SOURCES
     controllers/AuthController.cpp
+    controllers/FolderController.cpp
     controllers/UserController.cpp
 )
 
 # Dtos
 set(Dtos_HEADERS
     dtos/AuthDto.hpp
+    dtos/FolderDto.hpp
     dtos/UserDto.hpp
 )
 
@@ -51,12 +54,14 @@ set(Models_SOURCES
 # Service
 set(Services_HEADERS
     services/AuthService.hpp
+    services/FolderService.hpp
     services/RedisService.hpp
     services/TokenService.hpp
     services/UserService.hpp
 )
 set(Services_SOURCES
     services/AuthService.cpp
+    services/FolderService.cpp
     services/RedisService.cpp
     services/TokenService.cpp
     services/UserService.cpp

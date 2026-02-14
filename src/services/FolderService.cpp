@@ -1,0 +1,168 @@
+/**
+ * @file FolderService.cpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 文件夹服务实现
+ * @version 0.1
+ * @date 2026-02-14
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
+#include "FolderService.hpp"
+
+namespace disk::folder {
+
+    using drogon::orm::CompareOperator;
+    using drogon::orm::CoroMapper;
+    using drogon::orm::Criteria;
+    using drogon_model::disk::Folders;
+
+    FolderService::FolderService(drogon::orm::DbClientPtr db_client)
+        : m_db_client(std::move(db_client)) {
+        LOG_DEBUG << "FolderService 初始化完成";
+    }
+
+    auto FolderService::CreateFolder(CreateFolderRequest request, uint64_t user_id)
+        -> drogon::Task<Result<CreateFolderResponse>> {
+
+        LOG_DEBUG << "开始创建文件夹: name=\"" << request.name << "\", parent_id=" << request.parent_id
+                  << ", user_id=" << user_id;
+
+        // 1. 验证父文件夹（如果 parent_id > 0）
+        std::string parent_path = "/";
+        uint32_t parent_depth = 0;
+
+        if (request.parent_id > 0) {
+            auto parent_result = co_await FindAndValidateParent(request.parent_id, user_id);
+            if (!parent_result) {
+                LOG_WARN << "父文件夹验证失败: parent_id=" << request.parent_id;
+                co_return std::unexpected(parent_result.error());
+            }
+
+            const auto& parent = *parent_result;
+            parent_path = parent.getValueOfPath();
+            parent_depth = parent.getValueOfDepth();
+            LOG_DEBUG << "父文件夹验证通过: path=" << parent_path << ", depth=" << parent_depth;
+        }
+
+        // 2. 检查同名文件夹是否已存在
+        if (co_await IsFolderNameExists(request.name, request.parent_id, user_id)) {
+            LOG_WARN << "同名文件夹已存在: name=\"" << request.name << "\", parent_id=" << request.parent_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::FolderAlreadyExists));
+        }
+
+        // 3. 计算路径和深度
+        std::string folder_path = parent_path + request.name + "/";
+        uint32_t folder_depth = parent_depth + 1;
+
+        LOG_DEBUG << "计算文件夹路径: path=\"" << folder_path << "\", depth=" << folder_depth;
+
+        // 4. 创建文件夹记录
+        Folders folder;
+        folder.setUserId(user_id);
+        folder.setParentId(request.parent_id);
+        folder.setName(request.name);
+        folder.setPath(folder_path);
+        folder.setDepth(folder_depth);
+        folder.setItemCount(0);
+        folder.setCreatedAt(trantor::Date::now());
+        folder.setUpdatedAt(trantor::Date::now());
+
+        // 5. 插入数据库
+        try {
+            CoroMapper<Folders> mapper(m_db_client);
+            folder = co_await mapper.insert(folder);
+            LOG_INFO << "文件夹创建成功: name=\"" << request.name << "\" (ID: " << folder.getValueOfId()
+                     << ", user_id: " << user_id << ")";
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "文件夹创建失败: name=\"" << request.name << "\" - " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "创建文件夹失败，请稍后重试"));
+        }
+
+        // 6. 更新父文件夹的 item_count（如果 parent_id > 0）
+        if (request.parent_id > 0) {
+            co_await IncrementParentItemCount(request.parent_id);
+        }
+
+        // 7. 构造响应
+        CreateFolderResponse response;
+        response.id = folder.getValueOfId();
+        response.name = folder.getValueOfName();
+        response.parent_id = folder.getValueOfParentId();
+        response.path = folder.getValueOfPath();
+        response.created_at = folder.getValueOfCreatedAt().toDbStringLocal();
+
+        co_return response;
+    }
+
+    auto FolderService::FindAndValidateParent(uint64_t parent_id, uint64_t user_id) const
+        -> drogon::Task<Result<Folders>> {
+
+        try {
+            CoroMapper<Folders> mapper(m_db_client);
+
+            auto parent = co_await mapper.findOne(
+                Criteria(Folders::Cols::_id, CompareOperator::EQ, parent_id)
+            );
+
+            // 验证文件夹属于当前用户
+            if (parent.getValueOfUserId() != user_id) {
+                LOG_WARN << "父文件夹不属于当前用户: parent_id=" << parent_id
+                         << ", owner_id=" << parent.getValueOfUserId() << ", user_id=" << user_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound, "父文件夹不存在"));
+            }
+
+            co_return parent;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "父文件夹不存在: parent_id=" << parent_id << " - " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+        }
+    }
+
+    auto FolderService::IsFolderNameExists(const std::string& name, uint64_t parent_id, uint64_t user_id) const
+        -> drogon::Task<bool> {
+
+        try {
+            CoroMapper<Folders> mapper(m_db_client);
+
+            auto count = co_await mapper.count(
+                Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id) &&
+                Criteria(Folders::Cols::_parent_id, CompareOperator::EQ, parent_id) &&
+                Criteria(Folders::Cols::_name, CompareOperator::EQ, name)
+            );
+
+            LOG_DEBUG << "检查文件夹名称存在性: name=\"" << name << "\", parent_id=" << parent_id
+                      << " - " << (count > 0 ? "存在" : "不存在");
+
+            co_return count > 0;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "检查文件夹名称失败: name=\"" << name << "\" - " << e.base().what();
+            co_return false;
+        }
+    }
+
+    auto FolderService::IncrementParentItemCount(uint64_t parent_id) -> drogon::Task<void> {
+        try {
+            CoroMapper<Folders> mapper(m_db_client);
+
+            auto parent = co_await mapper.findOne(
+                Criteria(Folders::Cols::_id, CompareOperator::EQ, parent_id)
+            );
+
+            parent.setItemCount(parent.getValueOfItemCount() + 1);
+            parent.setUpdatedAt(trantor::Date::now());
+
+            co_await mapper.update(parent);
+            LOG_DEBUG << "更新父文件夹 item_count: parent_id=" << parent_id
+                      << ", new_count=" << parent.getValueOfItemCount();
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "更新父文件夹 item_count 失败: parent_id=" << parent_id
+                     << " - " << e.base().what();
+        }
+    }
+
+} // namespace disk::folder
