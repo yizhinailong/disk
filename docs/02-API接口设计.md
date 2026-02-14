@@ -1159,7 +1159,7 @@ Authorization: Bearer <access_token>
 
 ### 5.1 创建文件夹
 
-**POST** `/api/folder`
+**POST** `/api/folder/create`
 
 创建新文件夹。
 
