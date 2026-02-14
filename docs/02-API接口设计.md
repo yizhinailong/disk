@@ -108,6 +108,7 @@
 | 50007 | `FileAlreadyExists` | 409 | 同名文件已存在 |
 | 50008 | `UploadTaskNotFound` | 400 | 上传任务不存在或已过期 |
 | 50009 | `ChunkVerifyFailed` | 400 | 分片校验失败 |
+| 50010 | `FolderAlreadyExists` | 409 | 同名文件夹已存在 |
 
 #### 分享错误码
 
@@ -1161,7 +1162,20 @@ Authorization: Bearer <access_token>
 
 **POST** `/api/folder/create`
 
-创建新文件夹。
+#### 实现状态
+**未实现**
+
+在指定目录下创建新文件夹。支持层级目录结构，无嵌套深度限制。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 请求参数
 
@@ -1174,8 +1188,150 @@ Authorization: Bearer <access_token>
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| name | string | 是 | 文件夹名称 |
-| parent_id | integer | 否 | 父文件夹 ID，默认 0 |
+| name | string | 是 | 文件夹名称，1-255字符 |
+| parent_id | integer | 否 | 父文件夹 ID，默认 0（根目录） |
+
+#### 文件夹名称约束
+
+| 约束项 | 规则 | 违反后果 |
+|--------|------|----------|
+| **长度** | 1-255 字符 | 返回 `400 + 10002` 校验失败 |
+| **禁止字符** | 禁止以下字符：<br>- `/ \ : * ? " < > |`（文件系统保留字符）<br>- ASCII 控制字符（0x00-0x1F） | 返回 `400 + 50001` 文件名无效 |
+| **保留名称** | 禁止 `.` 和 `..`（相对路径标识） | 返回 `400 + 50001` 文件名无效 |
+| **隐藏文件夹** | 禁止以 `.` 开头（Unix 隐藏文件约定） | 返回 `400 + 50001` 文件名无效 |
+| **字符集** | 仅允许 ASCII 字符（禁止 emoji 和特殊 Unicode） | 返回 `400 + 50001` 文件名无效 |
+| **首尾空格** | 自动去除首尾空格后验证 | - |
+
+**有效文件夹名称示例**：
+- ✅ `Documents`
+- ✅ `工作文件2024`
+- ✅ `Project_Alpha`
+- ✅ `用户数据.backup`
+
+**无效文件夹名称示例**：
+- ❌ `My/Folder`（包含 `/`）
+- ❌ `Folder:Name`（包含 `:`）
+- ❌ `.`（保留名称）
+- ❌ `..`（保留名称）
+- ❌ `.hidden`（以 `.` 开头）
+- ❌ `📁文件夹`（包含 emoji）
+
+**同名规则**：
+- 文件和文件夹可以同名（允许 `Document.pdf` 和 `Document/` 共存）
+- 同一目录下不允许存在同名文件夹（返回 `409 + 50010`）
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+| |------------|--------|----------|----------|----------|
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 文件夹名称长度无效（空或超过255字符） |
+| 400 | 50001 | `InvalidFilename` | 文件名无效 | 包含禁止字符、保留名称、隐藏文件夹、非ASCII字符 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 `Authorization` |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | `Authorization` 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50006 | `FolderNotFound` | 文件夹不存在 | 指定的 `parent_id` 不存在或不属于当前用户 |
+| 409 | 50010 | `FolderAlreadyExists` | 同名文件夹已存在 | 同一目录下已存在同名文件夹 |
+
+**10002 ValidationFailed 响应示例**：
+
+```json
+{
+  "code": 10002,
+  "message": "参数校验失败",
+  "data": {
+    "field": "name",
+    "reason": "文件夹名称长度必须在 1-255 字符之间",
+    "invalid_value": ""
+  }
+}
+```
+
+**50001 InvalidFilename 响应示例**：
+
+```json
+{
+  "code": 50001,
+  "message": "文件名无效",
+  "data": {
+    "field": "name",
+    "reason": "文件夹名称包含禁止字符：/ \\ : * ? \" < > | 或控制字符",
+    "invalid_value": "My/Folder"
+  }
+}
+```
+
+**50006 FolderNotFound 响应示例**：
+
+```json
+{
+  "code": 50006,
+  "message": "文件夹不存在",
+  "data": {
+    "folder_id": 99999,
+    "reason": "指定的父文件夹不存在或不属于当前用户"
+  }
+}
+```
+
+**50010 FolderAlreadyExists 响应示例**：
+
+```json
+{
+  "code": 50010,
+  "message": "同名文件夹已存在",
+  "data": {
+    "name": "新建文件夹",
+    "parent_id": 0,
+    "existing_folder_id": 10,
+    "reason": "同一目录下已存在同名文件夹"
+  }
+}
+```
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
+
+**40107 TokenMalformed 响应示例**：
+
+```json
+{
+  "code": 40107,
+  "message": "令牌格式错误",
+  "data": {
+    "reason": "Authorization 头格式应为 'Bearer <token>'"
+  }
+}
+```
+
+**40108 TokenExpired 响应示例**：
+
+```json
+{
+  "code": 40108,
+  "message": "令牌已过期",
+  "data": {
+    "token_type": "access_token",
+    "expired_at": "2026-01-13T12:00:00Z"
+  }
+}
+```
+
+#### 成功响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | integer | 新建文件夹的唯一标识符 |
+| name | string | 文件夹名称（已去除首尾空格） |
+| parent_id | integer | 父文件夹 ID，0 表示根目录 |
+| path | string | 文件夹完整路径，从根目录开始 |
+| created_at | string | 创建时间，ISO 8601 格式 |
 
 #### 响应示例
 
