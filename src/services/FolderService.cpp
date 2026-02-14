@@ -317,7 +317,7 @@ namespace disk::folder {
             }
 
             // 检测循环引用
-            if (visited.count(current.getValueOfId())) {
+            if (visited.contains(current.getValueOfId())) {
                 LOG_ERROR << "检测到循环引用: folder_id=" << current.getValueOfId();
                 co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "文件夹结构异常"));
             }
