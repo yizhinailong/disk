@@ -99,6 +99,8 @@ namespace disk::error {
         UploadTaskNotFound = 50008,
         /// 分片校验失败
         ChunkVerifyFailed = 50009,
+        /// 同名文件夹已存在
+        FolderAlreadyExists = 50010,
 
         // ==================== 分享错误码 (60xxx) ====================
         /// 分享不存在
@@ -165,6 +167,7 @@ namespace disk::error {
             {       Code::FileAlreadyExists,            drogon::k409Conflict },
             {      Code::UploadTaskNotFound,          drogon::k400BadRequest },
             {       Code::ChunkVerifyFailed,          drogon::k400BadRequest },
+            {     Code::FolderAlreadyExists,            drogon::k409Conflict },
 
             // 分享错误
             {           Code::ShareNotFound,            drogon::k404NotFound },
@@ -230,6 +233,7 @@ namespace disk::error {
             {       Code::FileAlreadyExists,         "同名文件已存在" },
             {      Code::UploadTaskNotFound, "上传任务不存在或已过期" },
             {       Code::ChunkVerifyFailed,           "分片校验失败" },
+            {     Code::FolderAlreadyExists,       "同名文件夹已存在" },
 
             // 分享错误
             {           Code::ShareNotFound,             "分享不存在" },
