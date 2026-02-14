@@ -12,7 +12,10 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include <drogon/orm/DbClient.h>
 
@@ -59,6 +62,23 @@ namespace disk::folder {
         auto CreateFolder(CreateFolderRequest request, uint64_t user_id)
             -> drogon::Task<Result<CreateFolderResponse>>;
 
+        /**
+         * @brief 获取文件夹树
+         *
+         * 业务规则：
+         * - 如果 parent_id > 0，验证父文件夹存在且属于用户
+         * - 调用存储过程 sp_get_folder_tree 获取文件夹树
+         * - depth=-1 表示无限深度（实际限制为100层）
+         *
+         * @param user_id 用户 ID
+         * @param parent_id 起始文件夹 ID（0 表示根目录）
+         * @param depth 深度限制（-1 表示无限）
+         * @return drogon::Task<Result<FolderTreeNode>> 成功返回文件夹树，失败返回错误
+         */
+        [[nodiscard]]
+        auto GetFolderTree(uint64_t user_id, uint64_t parent_id, int depth)
+            -> drogon::Task<Result<FolderTreeNode>>;
+
     private:
         /**
          * @brief 查找父文件夹并验证归属
@@ -90,6 +110,28 @@ namespace disk::folder {
          * @return drogon::Task<void>
          */
         auto IncrementParentItemCount(uint64_t parent_id) -> drogon::Task<void>;
+
+        /**
+         * @brief 验证父文件夹归属
+         *
+         * @param parent_id 父文件夹 ID
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<void>> 成功返回空，失败返回错误
+         */
+        [[nodiscard]]
+        auto ValidateParentOwnership(uint64_t parent_id, uint64_t user_id) const
+            -> drogon::Task<Result<void>>;
+
+        /**
+         * @brief 从扁平列表构建树结构
+         *
+         * @param nodes 文件夹节点数据列表
+         * @param root_id 根节点 ID
+         * @return FolderTreeNode 构建好的树结构
+         */
+        [[nodiscard]]
+        auto BuildTreeFromFlatList(std::vector<FolderNodeData>& nodes, uint64_t root_id) const
+            -> FolderTreeNode;
 
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
     };

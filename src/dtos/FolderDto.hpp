@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <string>
+#include <vector>
 
 #include <drogon/HttpRequest.h>
 #include <json/json.h>
@@ -209,6 +210,116 @@ namespace disk::folder {
             json["parent_id"] = static_cast<Json::UInt64>(parent_id);
             json["path"] = path;
             json["created_at"] = created_at;
+            return json;
+        }
+    };
+
+    // ==================== Folder Tree DTOs ====================
+
+    /**
+     * @brief 获取文件夹树请求 DTO
+     *
+     * @details
+     * 验证规则：
+     * - parent_id: 默认 0（根目录），必须 >= 0
+     * - depth: 默认 -1（无限深度），必须 >= -1
+     *
+     * 从 URL 查询参数解析：parent_id, depth
+     */
+    struct FolderTreeRequest {
+        uint64_t parent_id{ 0 };
+        int depth{ -1 };
+
+        /// 从 HTTP 请求查询参数解析并验证，返回 Result
+        [[nodiscard]]
+        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<FolderTreeRequest> {
+            LOG_DEBUG << "开始解析文件夹树请求参数";
+
+            FolderTreeRequest request;
+
+            // 解析可选参数 parent_id
+            auto parent_id_str = req->getParameter("parent_id");
+            if (!parent_id_str.empty()) {
+                try {
+                    size_t pos = 0;
+                    auto value = std::stoull(parent_id_str, &pos);
+                    if (pos != parent_id_str.length()) {
+                        LOG_WARN << "参数 'parent_id' 格式无效: " << parent_id_str;
+                        return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'parent_id' 格式无效"));
+                    }
+                    request.parent_id = value;
+                } catch (const std::exception& e) {
+                    LOG_WARN << "参数 'parent_id' 格式无效: " << parent_id_str;
+                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'parent_id' 格式无效"));
+                }
+            }
+
+            // 解析可选参数 depth
+            auto depth_str = req->getParameter("depth");
+            if (!depth_str.empty()) {
+                try {
+                    size_t pos = 0;
+                    auto value = std::stoi(depth_str, &pos);
+                    if (pos != depth_str.length()) {
+                        LOG_WARN << "参数 'depth' 格式无效: " << depth_str;
+                        return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'depth' 格式无效"));
+                    }
+                    request.depth = value;
+                } catch (const std::exception& e) {
+                    LOG_WARN << "参数 'depth' 格式无效: " << depth_str;
+                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'depth' 格式无效"));
+                }
+            }
+
+            // 验证 depth >= -1
+            if (request.depth < -1) {
+                LOG_WARN << "参数 'depth' 不能小于 -1: " << request.depth;
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'depth' 不能小于 -1"));
+            }
+
+            LOG_DEBUG << "解析到文件夹树请求: parent_id=" << request.parent_id << ", depth=" << request.depth;
+
+            return request;
+        }
+    };
+
+    /**
+     * @brief 文件夹节点数据（内部结构）
+     *
+     * @details
+     * 用于存储从数据库查询的文件夹行数据。
+     */
+    struct FolderNodeData {
+        uint64_t id;
+        std::string name;
+        uint64_t parent_id;
+    };
+
+    /**
+     * @brief 文件夹树节点响应 DTO
+     *
+     * @details
+     * 用于构建递归的文件夹树结构。
+     * 包含文件夹基本信息和子节点列表。
+     */
+    struct FolderTreeNode {
+        uint64_t id;
+        std::string name;
+        std::vector<FolderTreeNode> children;
+
+        /// 转换为 JSON（递归序列化）
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["id"] = static_cast<Json::UInt64>(id);
+            json["name"] = name;
+
+            Json::Value children_array(Json::arrayValue);
+            for (const auto& child : children) {
+                children_array.append(child.ToJson());
+            }
+            json["children"] = children_array;
+
             return json;
         }
     };

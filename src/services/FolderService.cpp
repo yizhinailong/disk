@@ -165,4 +165,124 @@ namespace disk::folder {
         }
     }
 
+    auto FolderService::GetFolderTree(uint64_t user_id, uint64_t parent_id, int depth)
+        -> drogon::Task<Result<FolderTreeNode>> {
+
+        LOG_DEBUG << "开始获取文件夹树: user_id=" << user_id
+                  << ", parent_id=" << parent_id << ", depth=" << depth;
+
+        // 1. 验证父文件夹归属（如果 parent_id > 0）
+        if (parent_id > 0) {
+            auto validate_result = co_await ValidateParentOwnership(parent_id, user_id);
+            if (!validate_result) {
+                LOG_WARN << "父文件夹验证失败: parent_id=" << parent_id;
+                co_return std::unexpected(validate_result.error());
+            }
+        }
+
+        // 2. 计算最大深度（-1 映射为 100）
+        int max_depth = (depth == -1) ? 100 : depth;
+
+        // 3. 调用存储过程获取文件夹树
+        std::vector<FolderNodeData> nodes;
+
+        try {
+            auto result = co_await m_db_client->execSqlCoro(
+                "CALL sp_get_folder_tree(?, ?, ?)",
+                user_id,
+                parent_id,
+                max_depth
+            );
+
+            if (result.size() == 0) {
+                LOG_DEBUG << "文件夹树为空，返回根节点";
+                FolderTreeNode root;
+                root.id = parent_id;
+                root.name = (parent_id == 0) ? "根目录" : "";
+                co_return root;
+            }
+
+            for (const auto& row : result) {
+                FolderNodeData node;
+                node.id = row["id"].as<uint64_t>();
+                node.name = row["name"].as<std::string>();
+                node.parent_id = row["parent_id"].as<uint64_t>();
+                nodes.push_back(node);
+            }
+
+            LOG_DEBUG << "查询到 " << nodes.size() << " 个文件夹节点";
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "查询文件夹树失败: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "获取文件夹树失败，请稍后重试"));
+        }
+
+        // 4. 构建树结构
+        auto tree = BuildTreeFromFlatList(nodes, parent_id);
+
+        co_return tree;
+    }
+
+    auto FolderService::ValidateParentOwnership(uint64_t parent_id, uint64_t user_id) const
+        -> drogon::Task<Result<void>> {
+
+        try {
+            CoroMapper<Folders> mapper(m_db_client);
+
+            auto parent = co_await mapper.findOne(
+                Criteria(Folders::Cols::_id, CompareOperator::EQ, parent_id)
+            );
+
+            if (parent.getValueOfUserId() != user_id) {
+                LOG_WARN << "父文件夹不属于当前用户: parent_id=" << parent_id
+                         << ", owner_id=" << parent.getValueOfUserId() << ", user_id=" << user_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound, "父文件夹不存在"));
+            }
+
+            co_return {};
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "父文件夹不存在: parent_id=" << parent_id << " - " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+        }
+    }
+
+    auto FolderService::BuildTreeFromFlatList(std::vector<FolderNodeData>& nodes, uint64_t root_id) const
+        -> FolderTreeNode {
+
+        // 构建 parent_id -> children 映射
+        std::unordered_map<uint64_t, std::vector<FolderNodeData>> children_map;
+
+        for (auto& node : nodes) {
+            children_map[node.parent_id].push_back(std::move(node));
+        }
+
+        // 递归构建子树
+        std::function<void(FolderTreeNode&, uint64_t)> build_children =
+            [&children_map, &build_children](FolderTreeNode& parent, uint64_t parent_id) {
+                auto it = children_map.find(parent_id);
+                if (it == children_map.end()) {
+                    return;
+                }
+
+                for (const auto& node_data : it->second) {
+                    FolderTreeNode child;
+                    child.id = node_data.id;
+                    child.name = node_data.name;
+
+                    build_children(child, node_data.id);
+                    parent.children.push_back(std::move(child));
+                }
+            };
+
+        // 构建根节点
+        FolderTreeNode root;
+        root.id = root_id;
+        root.name = (root_id == 0) ? "根目录" : "";
+
+        build_children(root, root_id);
+
+        return root;
+    }
+
 } // namespace disk::folder

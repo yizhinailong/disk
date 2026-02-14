@@ -421,3 +421,125 @@ TEST(CreateFolderResponse, CreateFolderResponseToJsonWithParent) {
     EXPECT_EQ(json["path"].asString(), "/Parent/SubFolder");
     EXPECT_EQ(json["created_at"].asString(), "2026-02-14T12:30:00Z");
 }
+
+// ==================== FolderTreeRequest Helper ====================
+
+static auto CreateFolderTreeRequest(
+    const std::string& parent_id = "",
+    const std::string& depth = ""
+) -> drogon::HttpRequestPtr {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    if (!parent_id.empty()) {
+        req->setParameter("parent_id", parent_id);
+    }
+    if (!depth.empty()) {
+        req->setParameter("depth", depth);
+    }
+    return req;
+}
+
+// ==================== FolderTreeRequest Tests ====================
+
+TEST(FolderTreeRequest, DefaultParams) {
+    auto req = CreateFolderTreeRequest();
+    auto result = disk::folder::FolderTreeRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Empty params should use defaults";
+    EXPECT_EQ(result->parent_id, 0);
+    EXPECT_EQ(result->depth, -1);
+}
+
+TEST(FolderTreeRequest, ValidParentIdAndDepth) {
+    auto req = CreateFolderTreeRequest("5", "2");
+    auto result = disk::folder::FolderTreeRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid params should pass";
+    EXPECT_EQ(result->parent_id, 5);
+    EXPECT_EQ(result->depth, 2);
+}
+
+TEST(FolderTreeRequest, InvalidParentIdType) {
+    auto req = CreateFolderTreeRequest("abc");
+    auto result = disk::folder::FolderTreeRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Non-numeric parent_id should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(FolderTreeRequest, InvalidDepthType) {
+    auto req = CreateFolderTreeRequest("", "abc");
+    auto result = disk::folder::FolderTreeRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Non-numeric depth should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(FolderTreeRequest, NegativeParentId) {
+    auto req = CreateFolderTreeRequest("18446744073709551615");
+    auto result = disk::folder::FolderTreeRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Large uint64_t should parse";
+    EXPECT_EQ(result->parent_id, 18446744073709551615ULL);
+}
+
+TEST(FolderTreeRequest, DepthBelowNegativeOne) {
+    auto req = CreateFolderTreeRequest("", "-2");
+    auto result = disk::folder::FolderTreeRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Depth < -1 should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+// ==================== FolderTreeNode Tests ====================
+
+TEST(FolderTreeNode, ToJsonEmptyChildren) {
+    disk::folder::FolderTreeNode node;
+    node.id = 100;
+    node.name = "EmptyFolder";
+
+    auto json = node.ToJson();
+
+    EXPECT_EQ(json["id"].asUInt64(), 100);
+    EXPECT_EQ(json["name"].asString(), "EmptyFolder");
+    EXPECT_TRUE(json["children"].isArray());
+    EXPECT_EQ(json["children"].size(), 0);
+}
+
+TEST(FolderTreeNode, ToJsonNestedChildren) {
+    disk::folder::FolderTreeNode root;
+    root.id = 1;
+    root.name = "Root";
+
+    disk::folder::FolderTreeNode child1;
+    child1.id = 2;
+    child1.name = "Child1";
+
+    disk::folder::FolderTreeNode grandchild;
+    grandchild.id = 3;
+    grandchild.name = "Grandchild";
+
+    child1.children.push_back(grandchild);
+    root.children.push_back(child1);
+
+    auto json = root.ToJson();
+
+    EXPECT_EQ(json["id"].asUInt64(), 1);
+    EXPECT_EQ(json["name"].asString(), "Root");
+    EXPECT_TRUE(json["children"].isArray());
+    EXPECT_EQ(json["children"].size(), 1);
+
+    const auto& child_json = json["children"][0];
+    EXPECT_EQ(child_json["id"].asUInt64(), 2);
+    EXPECT_EQ(child_json["name"].asString(), "Child1");
+    EXPECT_EQ(child_json["children"].size(), 1);
+
+    const auto& grandchild_json = child_json["children"][0];
+    EXPECT_EQ(grandchild_json["id"].asUInt64(), 3);
+    EXPECT_EQ(grandchild_json["name"].asString(), "Grandchild");
+}
