@@ -20,6 +20,8 @@
 
 #include "utils/ErrorCode.hpp"
 
+using disk::folder::BreadcrumbItem;
+using disk::folder::BreadcrumbResponse;
 using disk::folder::CreateFolderRequest;
 using disk::folder::CreateFolderResponse;
 
@@ -542,4 +544,84 @@ TEST(FolderTreeNode, ToJsonNestedChildren) {
     const auto& grandchild_json = child_json["children"][0];
     EXPECT_EQ(grandchild_json["id"].asUInt64(), 3);
     EXPECT_EQ(grandchild_json["name"].asString(), "Grandchild");
+}
+
+// ==================== BreadcrumbItem Tests ====================
+
+TEST(BreadcrumbItem, ToJsonCorrectFields) {
+    BreadcrumbItem item;
+    item.id = 0;
+    item.name = "根目录";
+
+    auto json = item.ToJson();
+
+    EXPECT_EQ(json["id"].asUInt64(), 0);
+    EXPECT_EQ(json["name"].asString(), "根目录");
+}
+
+TEST(BreadcrumbItem, ToJsonWithValidFolder) {
+    BreadcrumbItem item;
+    item.id = 42;
+    item.name = "Documents";
+
+    auto json = item.ToJson();
+
+    EXPECT_EQ(json["id"].asUInt64(), 42);
+    EXPECT_EQ(json["name"].asString(), "Documents");
+}
+
+// ==================== BreadcrumbResponse Tests ====================
+
+TEST(BreadcrumbResponse, ToJsonEmptyPath) {
+    BreadcrumbResponse response;
+    response.path = {};
+
+    auto json = response.ToJson();
+
+    EXPECT_TRUE(json.isMember("path"));
+    EXPECT_TRUE(json["path"].isArray());
+    EXPECT_EQ(json["path"].size(), 0);
+}
+
+TEST(BreadcrumbResponse, ToJsonSingleItem) {
+    BreadcrumbResponse response;
+    BreadcrumbItem item;
+    item.id = 0;
+    item.name = "根目录";
+    response.path.push_back(item);
+
+    auto json = response.ToJson();
+
+    EXPECT_TRUE(json.isMember("path"));
+    EXPECT_TRUE(json["path"].isArray());
+    EXPECT_EQ(json["path"].size(), 1);
+    EXPECT_EQ(json["path"][0]["id"].asUInt64(), 0);
+    EXPECT_EQ(json["path"][0]["name"].asString(), "根目录");
+}
+
+TEST(BreadcrumbResponse, ToJsonMultipleItems) {
+    BreadcrumbResponse response;
+
+    BreadcrumbItem root;
+    root.id = 0;
+    root.name = "根目录";
+
+    BreadcrumbItem docs;
+    docs.id = 1;
+    docs.name = "文档";
+
+    response.path.push_back(root);
+    response.path.push_back(docs);
+
+    auto json = response.ToJson();
+
+    EXPECT_TRUE(json.isMember("path"));
+    EXPECT_TRUE(json["path"].isArray());
+    EXPECT_EQ(json["path"].size(), 2);
+
+    EXPECT_EQ(json["path"][0]["id"].asUInt64(), 0);
+    EXPECT_EQ(json["path"][0]["name"].asString(), "根目录");
+
+    EXPECT_EQ(json["path"][1]["id"].asUInt64(), 1);
+    EXPECT_EQ(json["path"][1]["name"].asString(), "文档");
 }

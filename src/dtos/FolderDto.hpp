@@ -324,4 +324,48 @@ namespace disk::folder {
         }
     };
 
+    // ==================== Breadcrumb DTOs ====================
+
+    /**
+     * @brief 面包屑导航项
+     *
+     * @details
+     * 表示路径中的单个文件夹节点。
+     */
+    struct BreadcrumbItem {
+        uint64_t id;
+        std::string name;
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["id"] = static_cast<Json::UInt64>(id);
+            json["name"] = name;
+            return json;
+        }
+    };
+
+    /**
+     * @brief 面包屑导航响应 DTO
+     *
+     * @details
+     * 包含从根目录到当前文件夹的完整路径。
+     */
+    struct BreadcrumbResponse {
+        std::vector<BreadcrumbItem> path;
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            Json::Value path_array(Json::arrayValue);
+            for (const auto& item : path) {
+                path_array.append(item.ToJson());
+            }
+            json["path"] = path_array;
+            return json;
+        }
+    };
+
 } // namespace disk::folder
