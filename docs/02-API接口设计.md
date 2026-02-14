@@ -630,6 +630,41 @@ Authorization: Bearer <access_token>
 Authorization: Bearer <access_token>
 ```
 
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
+
+**40108 TokenExpired 响应示例**：
+
+```json
+{
+  "code": 40108,
+  "message": "令牌已过期",
+  "data": {
+    "token_type": "access_token",
+    "expired_at": "2026-01-13T12:00:00Z"
+  }
+}
+```
+
 #### 响应示例
 
 ```json
@@ -659,7 +694,20 @@ Authorization: Bearer <access_token>
 
 **POST** `/api/file/upload/init`
 
+#### 实现状态
+**未实现**
+
 初始化文件上传任务，检测秒传和断点续传。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 请求参数
 
@@ -678,6 +726,27 @@ Authorization: Bearer <access_token>
 | file_size | integer | 是 | 文件大小（字节） |
 | file_hash | string | 是 | 文件 MD5 哈希 |
 | parent_id | integer | 否 | 父文件夹 ID，默认 0（根目录） |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 409 | 50004 | `StorageQuotaExceeded` | 存储空间不足 | 上传文件后将超过存储配额 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
 
 #### 响应示例 - 正常上传
 
@@ -735,7 +804,20 @@ Authorization: Bearer <access_token>
 
 **POST** `/api/file/upload/chunk`
 
+#### 实现状态
+**未实现**
+
 上传文件分片。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 请求格式
 
@@ -747,6 +829,28 @@ Authorization: Bearer <access_token>
 | chunk_index | integer | 是 | 分片索引（从 0 开始） |
 | chunk_hash | string | 是 | 分片 MD5 哈希 |
 | chunk | file | 是 | 分片数据 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50008 | `UploadTaskNotFound` | 上传任务不存在 | 指定的 upload_id 不存在或已失效 |
+| 422 | 50009 | `ChunkVerifyFailed` | 分片校验失败 | 分片哈希校验不通过 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
 
 #### 响应示例
 
@@ -767,13 +871,47 @@ Authorization: Bearer <access_token>
 
 **POST** `/api/file/upload/complete`
 
+#### 实现状态
+**未实现**
+
 完成文件上传，合并分片。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 请求参数
 
 ```json
 {
   "upload_id": "up_abc123def456"
+}
+```
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50008 | `UploadTaskNotFound` | 上传任务不存在 | 指定的 upload_id 不存在或已失效 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
 }
 ```
 
@@ -803,13 +941,47 @@ Authorization: Bearer <access_token>
 
 **DELETE** `/api/file/upload/{upload_id}`
 
+#### 实现状态
+**未实现**
+
 取消上传任务，清理临时分片。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 路径参数
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | upload_id | string | 上传任务 ID |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50008 | `UploadTaskNotFound` | 上传任务不存在 | 指定的 upload_id 不存在或已失效 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
 
 #### 响应示例
 
@@ -827,13 +999,47 @@ Authorization: Bearer <access_token>
 
 **GET** `/api/file/download/{file_id}/info`
 
+#### 实现状态
+**未实现**
+
 获取文件下载信息。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 路径参数
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | file_id | integer | 文件 ID |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50005 | `FileNotFound` | 文件不存在 | 指定的 file_id 不存在或不属于当前用户 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
 
 #### 响应示例
 
@@ -858,7 +1064,20 @@ Authorization: Bearer <access_token>
 
 **GET** `/api/file/download/{file_id}`
 
+#### 实现状态
+**未实现**
+
 下载文件内容，支持 Range 请求。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 路径参数
 
@@ -866,11 +1085,32 @@ Authorization: Bearer <access_token>
 |------|------|------|
 | file_id | integer | 文件 ID |
 
-#### 请求头
+#### 下载请求头（可选）
 
 | Header | 说明 |
 |--------|------|
 | Range | 可选，字节范围，如 `bytes=0-1048575` |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50005 | `FileNotFound` | 文件不存在 | 指定的 file_id 不存在或不属于当前用户 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
 
 #### 响应头
 
@@ -892,7 +1132,20 @@ Authorization: Bearer <access_token>
 
 **GET** `/api/file/list`
 
+#### 实现状态
+**未实现**
+
 获取指定目录下的文件和文件夹列表。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 查询参数
 
@@ -904,6 +1157,27 @@ Authorization: Bearer <access_token>
 | sort_by | string | 否 | 排序字段：name/size/created_at/updated_at |
 | sort_order | string | 否 | 排序方向：asc/desc，默认 asc |
 | type | string | 否 | 筛选类型：all/file/folder，默认 all |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50006 | `FolderNotFound` | 文件夹不存在 | 指定的 parent_id 不存在或不属于当前用户 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
 
 #### 响应示例
 
@@ -948,13 +1222,47 @@ Authorization: Bearer <access_token>
 
 **GET** `/api/file/{file_id}`
 
+#### 实现状态
+**未实现**
+
 获取单个文件的详细信息。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 路径参数
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | file_id | integer | 文件 ID |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50005 | `FileNotFound` | 文件不存在 | 指定的 file_id 不存在或不属于当前用户 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
 
 #### 响应示例
 
@@ -983,7 +1291,20 @@ Authorization: Bearer <access_token>
 
 **PUT** `/api/file/{file_id}/rename`
 
+#### 实现状态
+**未实现**
+
 重命名文件或文件夹。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 路径参数
 
@@ -996,6 +1317,29 @@ Authorization: Bearer <access_token>
 ```json
 {
   "new_name": "新名称.pdf"
+}
+```
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 400 | 50001 | `InvalidFilename` | 文件名无效 | 新文件名包含非法字符或不符合命名规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50005 | `FileNotFound` | 文件不存在 | 指定的 file_id 不存在或不属于当前用户 |
+| 409 | 50007 | `FileAlreadyExists` | 文件已存在 | 目标目录下已存在同名文件 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
 }
 ```
 
@@ -1019,7 +1363,20 @@ Authorization: Bearer <access_token>
 
 **PUT** `/api/file/move`
 
+#### 实现状态
+**未实现**
+
 移动文件或文件夹到指定目录。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 请求参数
 
@@ -1034,6 +1391,28 @@ Authorization: Bearer <access_token>
 |------|------|------|------|
 | file_ids | array | 是 | 文件/文件夹 ID 列表 |
 | target_folder_id | integer | 是 | 目标文件夹 ID |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50005 | `FileNotFound` | 文件不存在 | 待移动项中包含不存在或无权限访问的文件 |
+| 404 | 50006 | `FolderNotFound` | 文件夹不存在 | 目标文件夹不存在或不属于当前用户 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
 
 #### 响应示例
 
@@ -1053,7 +1432,20 @@ Authorization: Bearer <access_token>
 
 **POST** `/api/file/copy`
 
+#### 实现状态
+**未实现**
+
 复制文件或文件夹到指定目录。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 请求参数
 
@@ -1061,6 +1453,29 @@ Authorization: Bearer <access_token>
 {
   "file_ids": [1, 2, 3],
   "target_folder_id": 10
+}
+```
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50005 | `FileNotFound` | 文件不存在 | 待复制项中包含不存在或无权限访问的文件 |
+| 404 | 50006 | `FolderNotFound` | 文件夹不存在 | 目标文件夹不存在或不属于当前用户 |
+| 409 | 50004 | `StorageQuotaExceeded` | 存储空间不足 | 复制后将超过用户存储配额 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
 }
 ```
 
@@ -1087,13 +1502,47 @@ Authorization: Bearer <access_token>
 
 **DELETE** `/api/file`
 
+#### 实现状态
+**未实现**
+
 删除文件或文件夹（移入回收站）。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 请求参数
 
 ```json
 {
   "file_ids": [1, 2, 3]
+}
+```
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50005 | `FileNotFound` | 文件不存在 | 待删除项中包含不存在或无权限访问的文件 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
 }
 ```
 
@@ -1115,7 +1564,20 @@ Authorization: Bearer <access_token>
 
 **GET** `/api/file/search`
 
+#### 实现状态
+**未实现**
+
 搜索用户文件。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 查询参数
 
@@ -1126,6 +1588,26 @@ Authorization: Bearer <access_token>
 | folder_id | integer | 否 | 限定搜索范围 |
 | page | integer | 否 | 页码 |
 | page_size | integer | 否 | 每页数量 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
 
 #### 响应示例
 
@@ -1406,11 +1888,57 @@ Authorization: Bearer <access_token>
 
 获取当前文件夹的路径面包屑。
 
+#### 实现状态
+**未实现**
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+
 #### 路径参数
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | folder_id | integer | 文件夹 ID |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | folder_id 格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50006 | `FolderNotFound` | 文件夹不存在 | 指定的 folder_id 不存在或不属于当前用户 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
+
+**50006 FolderNotFound 响应示例**：
+
+```json
+{
+  "code": 50006,
+  "message": "文件夹不存在",
+  "data": {
+    "folder_id": 99999,
+    "reason": "指定的文件夹不存在或不属于当前用户"
+  }
+}
+```
 
 #### 响应示例
 
@@ -1436,7 +1964,20 @@ Authorization: Bearer <access_token>
 
 **GET** `/api/trash`
 
+#### 实现状态
+**未实现**
+
 获取回收站中的文件列表。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 查询参数
 
@@ -1444,6 +1985,25 @@ Authorization: Bearer <access_token>
 |------|------|------|------|
 | page | integer | 否 | 页码，默认 1 |
 | page_size | integer | 否 | 每页数量，默认 20 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
 
 #### 响应示例
 
@@ -1480,13 +2040,46 @@ Authorization: Bearer <access_token>
 
 **POST** `/api/trash/restore`
 
+#### 实现状态
+**未实现**
+
 从回收站恢复文件。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 请求参数
 
 ```json
 {
   "trash_ids": [1, 2, 3]
+}
+```
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 10003 | `TrashItemNotFound` | 回收站项目不存在 | trash_id 不存在或不属于用户 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
 }
 ```
 
@@ -1513,13 +2106,46 @@ Authorization: Bearer <access_token>
 
 **DELETE** `/api/trash`
 
+#### 实现状态
+**未实现**
+
 彻底删除回收站中的文件。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
 
 #### 请求参数
 
 ```json
 {
   "trash_ids": [1, 2, 3]
+}
+```
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 10003 | `TrashItemNotFound` | 回收站项目不存在 | trash_id 不存在或不属于用户 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
 }
 ```
 
@@ -1542,7 +2168,38 @@ Authorization: Bearer <access_token>
 
 **DELETE** `/api/trash/all`
 
+#### 实现状态
+**未实现**
+
 清空回收站所有内容。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
 
 #### 响应示例
 
@@ -1567,6 +2224,19 @@ Authorization: Bearer <access_token>
 
 创建文件分享链接。
 
+#### 实现状态
+**未实现**
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+
 #### 请求参数
 
 ```json
@@ -1584,6 +2254,66 @@ Authorization: Bearer <access_token>
 | expire_days | integer | 否 | 有效天数，0 表示永久，默认 7 |
 | password | string | 否 | 访问密码，4-8 字符 |
 | permission | string | 否 | 权限：view/download，默认 download |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | file_ids 为空或格式错误 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | password 长度不在 4-8 字符之间 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Token 已超过有效期 |
+| 404 | 50002 | `FileNotFound` | 文件不存在 | 指定的 file_id 不存在或不属于当前用户 |
+
+**10002 ValidationFailed 响应示例**：
+
+```json
+{
+  "code": 10002,
+  "message": "参数校验失败",
+  "data": {
+    "field": "password",
+    "reason": "访问密码长度必须在 4-8 字符之间",
+    "invalid_value": "ab"
+  }
+}
+```
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
+
+**40108 TokenExpired 响应示例**：
+
+```json
+{
+  "code": 40108,
+  "message": "令牌已过期",
+  "data": {
+    "token_type": "access_token",
+    "expired_at": "2026-01-13T12:00:00Z"
+  }
+}
+```
+
+**50002 FileNotFound 响应示例**：
+
+```json
+{
+  "code": 50002,
+  "message": "文件不存在",
+  "data": {
+    "file_id": 99999,
+    "reason": "指定的文件不存在或不属于当前用户"
+  }
+}
+```
 
 #### 响应示例
 
@@ -1610,6 +2340,19 @@ Authorization: Bearer <access_token>
 
 获取当前用户创建的所有分享。
 
+#### 实现状态
+**未实现**
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+
 #### 查询参数
 
 | 参数 | 类型 | 必填 | 说明 |
@@ -1617,6 +2360,37 @@ Authorization: Bearer <access_token>
 | status | string | 否 | 状态筛选：all/active/expired |
 | page | integer | 否 | 页码 |
 | page_size | integer | 否 | 每页数量 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | page 或 page_size 格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Token 已超过有效期 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
+
+**40108 TokenExpired 响应示例**：
+
+```json
+{
+  "code": 40108,
+  "message": "令牌已过期",
+  "data": {
+    "token_type": "access_token",
+    "expired_at": "2026-01-13T12:00:00Z"
+  }
+}
+```
 
 #### 响应示例
 
@@ -1658,6 +2432,70 @@ Authorization: Bearer <access_token>
 
 获取分享的详细信息。
 
+#### 实现状态
+**未实现**
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| share_id | string | 分享 ID |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | share_id 格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Token 已超过有效期 |
+| 404 | 60001 | `ShareNotFound` | 分享不存在 | share_id 不存在或不属于当前用户 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
+
+**40108 TokenExpired 响应示例**：
+
+```json
+{
+  "code": 40108,
+  "message": "令牌已过期",
+  "data": {
+    "token_type": "access_token",
+    "expired_at": "2026-01-13T12:00:00Z"
+  }
+}
+```
+
+**60001 ShareNotFound 响应示例**：
+
+```json
+{
+  "code": 60001,
+  "message": "分享不存在",
+  "data": {
+    "share_id": "sh_invalid",
+    "reason": "分享不存在或不属于当前用户"
+  }
+}
+```
+
 #### 响应示例
 
 ```json
@@ -1689,6 +2527,25 @@ Authorization: Bearer <access_token>
 
 更新分享的设置。
 
+#### 实现状态
+**未实现**
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| share_id | string | 分享 ID |
+
 #### 请求参数
 
 ```json
@@ -1704,6 +2561,66 @@ Authorization: Bearer <access_token>
 | expire_days | integer | 否 | 更新有效期（从当前时间计算） |
 | password | string | 否 | 新密码，空字符串表示移除密码 |
 | permission | string | 否 | 更新权限 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | share_id 格式错误 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | password 长度不在 4-8 字符之间 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Token 已超过有效期 |
+| 404 | 60001 | `ShareNotFound` | 分享不存在 | share_id 不存在或不属于当前用户 |
+
+**10002 ValidationFailed 响应示例**：
+
+```json
+{
+  "code": 10002,
+  "message": "参数校验失败",
+  "data": {
+    "field": "password",
+    "reason": "访问密码长度必须在 4-8 字符之间",
+    "invalid_value": "ab"
+  }
+}
+```
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
+
+**40108 TokenExpired 响应示例**：
+
+```json
+{
+  "code": 40108,
+  "message": "令牌已过期",
+  "data": {
+    "token_type": "access_token",
+    "expired_at": "2026-01-13T12:00:00Z"
+  }
+}
+```
+
+**60001 ShareNotFound 响应示例**：
+
+```json
+{
+  "code": 60001,
+  "message": "分享不存在",
+  "data": {
+    "share_id": "sh_invalid",
+    "reason": "分享不存在或不属于当前用户"
+  }
+}
+```
 
 #### 响应示例
 
@@ -1729,11 +2646,70 @@ Authorization: Bearer <access_token>
 
 取消分享链接。
 
+#### 实现状态
+**未实现**
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+
 #### 请求参数
 
 ```json
 {
   "share_ids": ["sh_abc123", "sh_def456"]
+}
+```
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | share_ids 为空或格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Token 已超过有效期 |
+| 404 | 60001 | `ShareNotFound` | 分享不存在 | 部分 share_id 不存在（部分成功） |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
+
+**40108 TokenExpired 响应示例**：
+
+```json
+{
+  "code": 40108,
+  "message": "令牌已过期",
+  "data": {
+    "token_type": "access_token",
+    "expired_at": "2026-01-13T12:00:00Z"
+  }
+}
+```
+
+**60001 ShareNotFound 响应示例**：
+
+```json
+{
+  "code": 60001,
+  "message": "分享不存在",
+  "data": {
+    "share_ids": ["sh_invalid1", "sh_invalid2"],
+    "reason": "部分分享不存在或不属于当前用户",
+    "cancelled_count": 1
+  }
 }
 ```
 
@@ -1757,6 +2733,11 @@ Authorization: Bearer <access_token>
 
 验证分享并获取访问令牌（供访客使用，无需登录）。
 
+#### 实现状态
+**未实现**
+
+此接口无需认证，访客可直接访问。
+
 #### 路径参数
 
 | 参数 | 类型 | 说明 |
@@ -1774,6 +2755,55 @@ Authorization: Bearer <access_token>
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | password | string | 否 | 访问密码（如果分享设置了密码） |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | share_id 格式错误 |
+| 404 | 60001 | `ShareNotFound` | 分享不存在 | share_id 不存在 |
+| 400 | 60002 | `ShareExpired` | 分享已过期 | 分享已超过有效期 |
+| 400 | 60003 | `SharePasswordError` | 分享密码错误 | 密码验证失败 |
+
+**60001 ShareNotFound 响应示例**：
+
+```json
+{
+  "code": 60001,
+  "message": "分享不存在",
+  "data": {
+    "share_id": "sh_invalid",
+    "reason": "分享不存在或已被取消"
+  }
+}
+```
+
+**60002 ShareExpired 响应示例**：
+
+```json
+{
+  "code": 60002,
+  "message": "分享已过期",
+  "data": {
+    "share_id": "sh_abc123",
+    "expired_at": "2026-01-10T10:00:00Z",
+    "reason": "分享已超过有效期"
+  }
+}
+```
+
+**60003 SharePasswordError 响应示例**：
+
+```json
+{
+  "code": 60003,
+  "message": "分享密码错误",
+  "data": {
+    "share_id": "sh_abc123",
+    "reason": "访问密码验证失败"
+  }
+}
+```
 
 #### 响应示例
 
@@ -1805,17 +2835,104 @@ Authorization: Bearer <access_token>
 
 浏览分享的文件夹内容（使用分享令牌）。
 
+#### 实现状态
+**未实现**
+
 #### 请求头
 
 ```
-X-Share-Token: st_xyz789...
+X-Share-Token: <share_token>
 ```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| X-Share-Token | 是 | 分享访问令牌（通过 /api/share/access 获取） |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| share_id | string | 分享 ID |
 
 #### 查询参数
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | folder_id | integer | 否 | 文件夹 ID（分享内的相对 ID） |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | share_id 或 folder_id 格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 X-Share-Token |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Share Token 已超过有效期 |
+| 404 | 60001 | `ShareNotFound` | 分享不存在 | share_id 不存在 |
+| 400 | 60002 | `ShareExpired` | 分享已过期 | 分享已超过有效期 |
+| 404 | 50006 | `FolderNotFound` | 文件夹不存在 | folder_id 不存在于分享中 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
+
+**40108 TokenExpired 响应示例**：
+
+```json
+{
+  "code": 40108,
+  "message": "令牌已过期",
+  "data": {
+    "token_type": "share_token",
+    "expired_at": "2026-01-13T12:00:00Z"
+  }
+}
+```
+
+**60001 ShareNotFound 响应示例**：
+
+```json
+{
+  "code": 60001,
+  "message": "分享不存在",
+  "data": {
+    "share_id": "sh_invalid",
+    "reason": "分享不存在或已被取消"
+  }
+}
+```
+
+**60002 ShareExpired 响应示例**：
+
+```json
+{
+  "code": 60002,
+  "message": "分享已过期",
+  "data": {
+    "share_id": "sh_abc123",
+    "expired_at": "2026-01-10T10:00:00Z",
+    "reason": "分享已超过有效期"
+  }
+}
+```
+
+**50006 FolderNotFound 响应示例**：
+
+```json
+{
+  "code": 50006,
+  "message": "文件夹不存在",
+  "data": {
+    "folder_id": 99999,
+    "reason": "指定的文件夹不存在于分享中"
+  }
+}
+```
 
 #### 响应示例
 
@@ -1842,11 +2959,116 @@ X-Share-Token: st_xyz789...
 
 下载分享的文件。
 
+#### 实现状态
+**未实现**
+
 #### 请求头
 
 ```
-X-Share-Token: st_xyz789...
+X-Share-Token: <share_token>
 Range: bytes=0-1048575 (可选)
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| X-Share-Token | 是 | 分享访问令牌（通过 /api/share/access 获取） |
+| Range | 否 | 断点续传范围 |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| share_id | string | 分享 ID |
+| file_id | integer | 文件 ID |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | share_id 或 file_id 格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 X-Share-Token |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Share Token 已超过有效期 |
+| 404 | 60001 | `ShareNotFound` | 分享不存在 | share_id 不存在 |
+| 400 | 60002 | `ShareExpired` | 分享已过期 | 分享已超过有效期 |
+| 403 | 60004 | `ShareAccessDenied` | 无权限访问 | 分享设置为仅查看，不允许下载 |
+| 404 | 50002 | `FileNotFound` | 文件不存在 | file_id 不存在于分享中 |
+
+**40106 TokenMissing 响应示例**：
+
+```json
+{
+  "code": 40106,
+  "message": "未提供令牌",
+  "data": null
+}
+```
+
+**40108 TokenExpired 响应示例**：
+
+```json
+{
+  "code": 40108,
+  "message": "令牌已过期",
+  "data": {
+    "token_type": "share_token",
+    "expired_at": "2026-01-13T12:00:00Z"
+  }
+}
+```
+
+**60001 ShareNotFound 响应示例**：
+
+```json
+{
+  "code": 60001,
+  "message": "分享不存在",
+  "data": {
+    "share_id": "sh_invalid",
+    "reason": "分享不存在或已被取消"
+  }
+}
+```
+
+**60002 ShareExpired 响应示例**：
+
+```json
+{
+  "code": 60002,
+  "message": "分享已过期",
+  "data": {
+    "share_id": "sh_abc123",
+    "expired_at": "2026-01-10T10:00:00Z",
+    "reason": "分享已超过有效期"
+  }
+}
+```
+
+**60004 ShareAccessDenied 响应示例**：
+
+```json
+{
+  "code": 60004,
+  "message": "无权限访问",
+  "data": {
+    "share_id": "sh_abc123",
+    "file_id": 1,
+    "permission": "view",
+    "reason": "分享设置为仅查看，不允许下载"
+  }
+}
+```
+
+**50002 FileNotFound 响应示例**：
+
+```json
+{
+  "code": 50002,
+  "message": "文件不存在",
+  "data": {
+    "file_id": 99999,
+    "reason": "指定的文件不存在于分享中"
+  }
+}
 ```
 
 #### 响应
@@ -1861,7 +3083,18 @@ Range: bytes=0-1048575 (可选)
 
 **GET** `/api/health`
 
+#### 实现状态
+**未实现**
+
 系统健康检查（无需认证）。
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 503 | 10006 | `ServiceUnavailable` | 服务不可用 | 系统维护或过载 |
+
+> 健康检查接口通常不返回错误，如有需要可返回 503。
 
 #### 响应示例
 
@@ -1884,7 +3117,40 @@ Range: bytes=0-1048575 (可选)
 
 **GET** `/api/system/info`
 
+#### 实现状态
+**未实现**
+
 获取系统信息（需要管理员权限）。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Token 已超过有效期 |
+| 403 | 10005 | `PermissionDenied` | 权限不足 | 非管理员用户访问 |
+
+**403 PermissionDenied 响应示例**：
+
+```json
+{
+  "code": 10005,
+  "message": "权限不足",
+  "data": {
+    "required_role": "admin"
+  }
+}
+```
 
 #### 响应示例
 
