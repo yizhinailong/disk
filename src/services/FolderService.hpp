@@ -12,9 +12,7 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include <drogon/orm/DbClient.h>
