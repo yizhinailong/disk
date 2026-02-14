@@ -285,4 +285,91 @@ namespace disk::folder {
         return root;
     }
 
+    auto FolderService::GetBreadcrumb(uint64_t folder_id, uint64_t user_id)
+        -> drogon::Task<Result<BreadcrumbResponse>> {
+
+        LOG_DEBUG << "开始获取面包屑导航: folder_id=" << folder_id << ", user_id=" << user_id;
+
+        // 1. 特殊情况：根目录
+        if (folder_id == 0) {
+            BreadcrumbResponse response;
+            response.path.push_back({ 0, "根目录" });
+            co_return response;
+        }
+
+        // 2. 查找文件夹并验证归属
+        auto folder_result = co_await FindAndValidateParent(folder_id, user_id);
+        if (!folder_result) {
+            LOG_WARN << "文件夹验证失败: folder_id=" << folder_id;
+            co_return std::unexpected(folder_result.error());
+        }
+
+        // 3. 沿父链遍历
+        std::vector<BreadcrumbItem> path;
+        std::unordered_set<uint64_t> visited;
+        auto current = *folder_result;
+
+        while (true) {
+            // 检查深度限制
+            if (path.size() >= 50) {
+                LOG_ERROR << "面包屑深度超出限制: folder_id=" << folder_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "文件夹层级过深"));
+            }
+
+            // 检测循环引用
+            if (visited.count(current.getValueOfId())) {
+                LOG_ERROR << "检测到循环引用: folder_id=" << current.getValueOfId();
+                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "文件夹结构异常"));
+            }
+            visited.insert(current.getValueOfId());
+
+            // 添加当前文件夹到路径
+            path.push_back({ current.getValueOfId(), current.getValueOfName() });
+
+            // 到达根目录
+            if (current.getValueOfParentId() == 0) {
+                break;
+            }
+
+            // 获取父文件夹
+            auto parent_result = co_await FindFolderById(current.getValueOfParentId());
+            if (!parent_result) {
+                LOG_WARN << "父链断裂: folder_id=" << current.getValueOfId()
+                         << ", missing_parent_id=" << current.getValueOfParentId();
+                break;
+            }
+            current = *parent_result;
+        }
+
+        // 4. 添加根目录并反转
+        path.push_back({ 0, "根目录" });
+        std::reverse(path.begin(), path.end());
+
+        // 5. 构建响应
+        BreadcrumbResponse response;
+        response.path = std::move(path);
+
+        LOG_DEBUG << "面包屑导航获取成功: folder_id=" << folder_id << ", depth=" << response.path.size();
+
+        co_return response;
+    }
+
+    auto FolderService::FindFolderById(uint64_t folder_id) const
+        -> drogon::Task<std::optional<Folders>> {
+
+        try {
+            CoroMapper<Folders> mapper(m_db_client);
+
+            auto folder = co_await mapper.findOne(
+                Criteria(Folders::Cols::_id, CompareOperator::EQ, folder_id)
+            );
+
+            co_return folder;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_DEBUG << "文件夹不存在: folder_id=" << folder_id;
+            co_return std::nullopt;
+        }
+    }
+
 } // namespace disk::folder

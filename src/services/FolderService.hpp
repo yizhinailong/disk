@@ -12,7 +12,9 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <drogon/orm/DbClient.h>
@@ -77,6 +79,25 @@ namespace disk::folder {
         auto GetFolderTree(uint64_t user_id, uint64_t parent_id, int depth)
             -> drogon::Task<Result<FolderTreeNode>>;
 
+        /**
+         * @brief 获取面包屑导航路径
+         *
+         * 业务规则：
+         * - folder_id == 0 返回仅包含根目录的面包屑
+         * - 验证文件夹存在且属于当前用户
+         * - 沿父链向上遍历直到到达根目录（parent_id == 0）
+         * - 深度限制 50 层，超出返回 InternalError
+         * - 检测循环引用，发现返回 InternalError
+         * - 父链断裂时返回部分路径并记录警告日志
+         *
+         * @param folder_id 文件夹 ID（0 表示根目录）
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<BreadcrumbResponse>> 成功返回面包屑路径，失败返回错误
+         */
+        [[nodiscard]]
+        auto GetBreadcrumb(uint64_t folder_id, uint64_t user_id)
+            -> drogon::Task<Result<BreadcrumbResponse>>;
+
     private:
         /**
          * @brief 查找父文件夹并验证归属
@@ -130,6 +151,16 @@ namespace disk::folder {
         [[nodiscard]]
         auto BuildTreeFromFlatList(std::vector<FolderNodeData>& nodes, uint64_t root_id) const
             -> FolderTreeNode;
+
+        /**
+         * @brief 根据ID查找文件夹（不验证归属）
+         *
+         * @param folder_id 文件夹 ID
+         * @return drogon::Task<std::optional<Folders>> 成功返回文件夹，失败返回空
+         */
+        [[nodiscard]]
+        auto FindFolderById(uint64_t folder_id) const
+            -> drogon::Task<std::optional<drogon_model::disk::Folders>>;
 
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
     };
