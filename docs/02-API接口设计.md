@@ -1364,6 +1364,12 @@ Authorization: Bearer <access_token>
 | parent_id | integer | 否 | 起始文件夹 ID，默认 0 |
 | depth | integer | 否 | 展开深度，默认 -1（全部） |
 
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
 #### 响应示例
 
 ```json
