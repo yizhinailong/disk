@@ -3,11 +3,13 @@ add_executable(${PROJECT_NAME} main.cpp)
 # Controller
 set(Controllers_HEADERS
     controllers/AuthController.hpp
+    controllers/FileController.hpp
     controllers/FolderController.hpp
     controllers/UserController.hpp
 )
 set(Controllers_SOURCES
     controllers/AuthController.cpp
+    controllers/FileController.cpp
     controllers/FolderController.cpp
     controllers/UserController.cpp
 )
@@ -15,6 +17,7 @@ set(Controllers_SOURCES
 # Dtos
 set(Dtos_HEADERS
     dtos/AuthDto.hpp
+    dtos/FileDto.hpp
     dtos/FolderDto.hpp
     dtos/UserDto.hpp
 )
@@ -54,6 +57,7 @@ set(Models_SOURCES
 # Service
 set(Services_HEADERS
     services/AuthService.hpp
+    services/FileService.hpp
     services/FolderService.hpp
     services/RedisService.hpp
     services/TokenService.hpp
@@ -61,6 +65,7 @@ set(Services_HEADERS
 )
 set(Services_SOURCES
     services/AuthService.cpp
+    services/FileService.cpp
     services/FolderService.cpp
     services/RedisService.cpp
     services/TokenService.cpp
@@ -71,6 +76,7 @@ set(Services_SOURCES
 set(Utils_HEADERS
     utils/ConfigMgr.hpp
     utils/ErrorCode.hpp
+    utils/FileHashUtil.hpp
     utils/HashUtil.hpp
     utils/Pch.hpp
     utils/RedisKeyPrefix.hpp

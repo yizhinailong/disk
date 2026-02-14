@@ -1,0 +1,70 @@
+/**
+ * @file FileController.hpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 文件上传控制器
+ * @note Request 和 Response DTO 定义在 dtos/FileDto.hpp
+ * @version 0.1
+ * @date 2026-02-14
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
+#pragma once
+
+#include "services/FileService.hpp"
+
+namespace disk::file {
+
+    // ==================== Controller ====================
+
+    class FileController : public drogon::HttpController<FileController> {
+    public:
+        FileController();
+
+        METHOD_LIST_BEGIN
+        ADD_METHOD_TO(FileController::InitUpload, "/api/file/upload/init", drogon::Post);
+        ADD_METHOD_TO(FileController::UploadChunk, "/api/file/upload/chunk", drogon::Post);
+        ADD_METHOD_TO(FileController::CompleteUpload, "/api/file/upload/complete", drogon::Post);
+        ADD_METHOD_TO(FileController::CancelUpload, "/api/file/upload/{upload_id}", drogon::Delete);
+        METHOD_LIST_END
+
+        /**
+         * @brief 初始化上传
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto InitUpload(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 上传分片
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto UploadChunk(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 完成上传
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto CompleteUpload(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 取消上传
+         * @param request HTTP请求对象
+         * @param upload_id 上传会话ID
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto CancelUpload(drogon::HttpRequestPtr request, std::string upload_id)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+    private:
+        std::unique_ptr<FileService> m_file_service;
+    };
+
+} // namespace disk::file
