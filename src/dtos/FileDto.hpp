@@ -8,14 +8,29 @@
  * @copyright Copyright (c) 2026
  *
  * @details
- * 本文件包含文件上传模块的所有数据传输对象（DTO）：
+ * 本文件包含文件模块的所有数据传输对象（DTO）：
+ * - FileItem: 文件项（共享响应组件）
  * - InitUploadRequest: 初始化上传请求
  * - InitUploadResponse: 初始化上传响应
  * - UploadChunkRequest: 上传分片请求
  * - UploadChunkResponse: 上传分片响应
  * - CompleteUploadRequest: 完成上传请求
  * - CompleteUploadResponse: 完成上传响应
- * - FileItem: 文件项（共享响应组件）
+ * - FileListRequest: 获取文件列表请求
+ * - FileListItem: 文件列表项
+ * - FileListResponse: 获取文件列表响应
+ * - DownloadInfoRequest: 获取下载信息请求
+ * - DownloadInfoResponse: 获取下载信息响应
+ * - DownloadRequest: 下载文件请求
+ * - RenameRequest: 重命名请求
+ * - RenameResponse: 重命名响应
+ * - MoveRequest: 移动文件请求
+ * - MoveResponse: 移动文件响应
+ * - CopyRequest: 复制文件请求
+ * - CopyResponse: 复制文件响应
+ * - FileIdMapping: 文件ID映射
+ * - DeleteRequest: 删除文件请求
+ * - DeleteResponse: 删除文件响应
  *
  * DTO 用于在不同层（Controller、Service）之间传输数据，
  * 包含请求验证和响应序列化逻辑。
@@ -29,9 +44,11 @@
 #include <vector>
 
 #include <drogon/HttpRequest.h>
+#include <drogon/HttpResponse.h>
 #include <json/json.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/Response.hpp"
 
 namespace disk::file {
 
@@ -492,6 +509,904 @@ namespace disk::file {
         auto ToJson() const -> Json::Value {
             Json::Value json;
             json["file"] = file.ToJson();
+            return json;
+        }
+    };
+
+    // ==================== File List ====================
+
+    /**
+     * @brief 获取文件列表请求 DTO
+     *
+     * @details
+     * 验证规则：
+     * - parent_id: 默认 0（根目录）
+     * - page: 默认 1，必须 > 0
+     * - page_size: 默认 20，必须 > 0 且 <= 100
+     * - sort_by: 默认 name，可选值 name/size/created_at/updated_at
+     * - sort_order: 默认 asc，可选值 asc/desc
+     * - type: 默认 all，可选值 all/file/folder
+     *
+     * 从 URL 查询参数解析。
+     */
+    struct FileListRequest {
+        uint64_t parent_id{ 0 };
+        int page{ 1 };
+        int page_size{ 20 };
+        std::string sort_by{ "name" };
+        std::string sort_order{ "asc" };
+        std::string type{ "all" };
+
+        /// 从 HTTP 请求查询参数解析并验证，返回 Result
+        [[nodiscard]]
+        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<FileListRequest> {
+            LOG_DEBUG << "开始解析文件列表请求参数";
+
+            FileListRequest request;
+
+            // 有效排序字段
+            static const std::set<std::string> valid_sort_by = { "name", "size", "created_at", "updated_at" };
+
+            // 有效排序方向
+            static const std::set<std::string> valid_sort_order = { "asc", "desc" };
+
+            // 有效类型
+            static const std::set<std::string> valid_types = { "all", "file", "folder" };
+
+            // 解析可选参数 parent_id
+            auto parent_id_str = req->getParameter("parent_id");
+            if (!parent_id_str.empty()) {
+                try {
+                    size_t pos = 0;
+                    auto value = std::stoull(parent_id_str, &pos);
+                    if (pos != parent_id_str.length()) {
+                        LOG_WARN << "参数 'parent_id' 格式无效: " << parent_id_str;
+                        return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'parent_id' 格式无效"));
+                    }
+                    request.parent_id = value;
+                } catch (const std::exception& e) {
+                    LOG_WARN << "参数 'parent_id' 格式无效: " << parent_id_str;
+                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'parent_id' 格式无效"));
+                }
+            }
+
+            // 解析可选参数 page
+            auto page_str = req->getParameter("page");
+            if (!page_str.empty()) {
+                try {
+                    size_t pos = 0;
+                    auto value = std::stoi(page_str, &pos);
+                    if (pos != page_str.length() || value <= 0) {
+                        LOG_WARN << "参数 'page' 格式无效或值无效: " << page_str;
+                        return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'page' 必须是正整数"));
+                    }
+                    request.page = value;
+                } catch (const std::exception& e) {
+                    LOG_WARN << "参数 'page' 格式无效: " << page_str;
+                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'page' 格式无效"));
+                }
+            }
+
+            // 解析可选参数 page_size
+            auto page_size_str = req->getParameter("page_size");
+            if (!page_size_str.empty()) {
+                try {
+                    size_t pos = 0;
+                    auto value = std::stoi(page_size_str, &pos);
+                    if (pos != page_size_str.length() || value <= 0 || value > 100) {
+                        LOG_WARN << "参数 'page_size' 格式无效或值无效: " << page_size_str;
+                        return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'page_size' 必须是 1-100 之间的整数"));
+                    }
+                    request.page_size = value;
+                } catch (const std::exception& e) {
+                    LOG_WARN << "参数 'page_size' 格式无效: " << page_size_str;
+                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'page_size' 格式无效"));
+                }
+            }
+
+            // 解析可选参数 sort_by
+            auto sort_by_str = req->getParameter("sort_by");
+            if (!sort_by_str.empty()) {
+                if (valid_sort_by.find(sort_by_str) == valid_sort_by.end()) {
+                    LOG_WARN << "参数 'sort_by' 值无效: " << sort_by_str;
+                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'sort_by' 值无效，必须是 name/size/created_at/updated_at"));
+                }
+                request.sort_by = sort_by_str;
+            }
+
+            // 解析可选参数 sort_order
+            auto sort_order_str = req->getParameter("sort_order");
+            if (!sort_order_str.empty()) {
+                if (valid_sort_order.find(sort_order_str) == valid_sort_order.end()) {
+                    LOG_WARN << "参数 'sort_order' 值无效: " << sort_order_str;
+                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'sort_order' 值无效，必须是 asc/desc"));
+                }
+                request.sort_order = sort_order_str;
+            }
+
+            // 解析可选参数 type
+            auto type_str = req->getParameter("type");
+            if (!type_str.empty()) {
+                if (valid_types.find(type_str) == valid_types.end()) {
+                    LOG_WARN << "参数 'type' 值无效: " << type_str;
+                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'type' 值无效，必须是 all/file/folder"));
+                }
+                request.type = type_str;
+            }
+
+            LOG_DEBUG << "解析到文件列表请求: parent_id=" << request.parent_id
+                      << ", page=" << request.page
+                      << ", page_size=" << request.page_size
+                      << ", sort_by=" << request.sort_by
+                      << ", sort_order=" << request.sort_order
+                      << ", type=" << request.type;
+
+            return request;
+        }
+    };
+
+    /**
+     * @brief 文件列表项
+     *
+     * @details
+     * 用于表示文件列表中的单个文件或文件夹项。
+     */
+    struct FileListItem {
+        uint64_t id;
+        std::string name;
+        std::string type; ///< "file" 或 "folder"
+        // For files:
+        uint64_t size{ 0 };
+        std::string mime_type;
+        std::string hash;
+        // For folders:
+        int item_count{ 0 };
+        // Common:
+        std::string created_at;
+        std::string updated_at;
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["id"] = static_cast<Json::UInt64>(id);
+            json["name"] = name;
+            json["type"] = type;
+
+            if (type == "file") {
+                json["size"] = static_cast<Json::UInt64>(size);
+                json["mime_type"] = mime_type;
+                json["hash"] = hash;
+            } else {
+                json["item_count"] = item_count;
+            }
+
+            json["created_at"] = created_at;
+            json["updated_at"] = updated_at;
+            return json;
+        }
+    };
+
+    /**
+     * @brief 获取文件列表响应 DTO
+     *
+     * @details
+     * 包含文件列表项和分页信息。
+     */
+    struct FileListResponse {
+        std::vector<FileListItem> items;
+        Pagination pagination;
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            Json::Value items_array(Json::arrayValue);
+            for (const auto& item : items) {
+                items_array.append(item.ToJson());
+            }
+            json["items"] = items_array;
+            json["pagination"] = pagination.ToJson();
+            return json;
+        }
+    };
+
+    // ==================== Download Info ====================
+
+    /**
+     * @brief 获取下载信息请求 DTO（路径参数）
+     *
+     * @details
+     * 验证规则：
+     * - file_id: 正整数
+     *
+     * 从 URL 路径参数解析。
+     */
+    struct DownloadInfoRequest {
+        uint64_t file_id{ 0 };
+
+        /// 从路径参数解析并验证，返回 Result
+        [[nodiscard]]
+        static auto FromPath(const std::string& file_id_str) -> Result<DownloadInfoRequest> {
+            LOG_DEBUG << "开始解析下载信息请求参数";
+
+            if (file_id_str.empty()) {
+                LOG_WARN << "缺少必需参数: file_id";
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "缺少必需参数: file_id"));
+            }
+
+            // 检查是否为负数（stoull 会将负数回绕）
+            if (file_id_str[0] == '-') {
+                LOG_WARN << "参数 'file_id' 必须是正整数: " << file_id_str;
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数"));
+            }
+
+            uint64_t file_id = 0;
+            try {
+                size_t pos = 0;
+                file_id = std::stoull(file_id_str, &pos);
+                if (pos != file_id_str.length() || file_id == 0) {
+                    LOG_WARN << "参数 'file_id' 必须是正整数: " << file_id_str;
+                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数"));
+                }
+            } catch (const std::exception& e) {
+                LOG_WARN << "参数 'file_id' 格式无效: " << file_id_str;
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 格式无效"));
+            }
+
+            DownloadInfoRequest request;
+            request.file_id = file_id;
+
+            LOG_DEBUG << "解析到下载信息请求: file_id=" << request.file_id;
+
+            return request;
+        }
+    };
+
+    /**
+     * @brief 获取下载信息响应 DTO
+     *
+     * @details
+     * 包含文件下载所需的元数据。
+     */
+    struct DownloadInfoResponse {
+        uint64_t file_id{ 0 };
+        std::string filename;
+        uint64_t file_size{ 0 };
+        std::string file_hash; ///< MD5 hash
+        std::string mime_type;
+        bool supports_range{ true };
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["file_id"] = static_cast<Json::UInt64>(file_id);
+            json["filename"] = filename;
+            json["file_size"] = static_cast<Json::UInt64>(file_size);
+            json["file_hash"] = file_hash;
+            json["mime_type"] = mime_type;
+            json["supports_range"] = supports_range;
+            return json;
+        }
+    };
+
+    // ==================== Download ====================
+
+    /**
+     * @brief 下载文件请求 DTO（路径参数）
+     *
+     * @details
+     * 验证规则：
+     * - file_id: 正整数
+     *
+     * 从 URL 路径参数解析。
+     * Range 请求头通过 RangeRequest 结构体解析（参考 ShareDto.hpp 模式）。
+     */
+    struct DownloadRequest {
+        uint64_t file_id{ 0 };
+
+        /// 从路径参数解析并验证，返回 Result
+        [[nodiscard]]
+        static auto FromPath(const std::string& file_id_str) -> Result<DownloadRequest> {
+            LOG_DEBUG << "开始解析下载文件请求参数";
+
+            if (file_id_str.empty()) {
+                LOG_WARN << "缺少必需参数: file_id";
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "缺少必需参数: file_id"));
+            }
+
+            // 检查是否为负数（stoull 会将负数回绕）
+            if (file_id_str[0] == '-') {
+                LOG_WARN << "参数 'file_id' 必须是正整数: " << file_id_str;
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数"));
+            }
+
+            uint64_t file_id = 0;
+            try {
+                size_t pos = 0;
+                file_id = std::stoull(file_id_str, &pos);
+                if (pos != file_id_str.length() || file_id == 0) {
+                    LOG_WARN << "参数 'file_id' 必须是正整数: " << file_id_str;
+                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数"));
+                }
+            } catch (const std::exception& e) {
+                LOG_WARN << "参数 'file_id' 格式无效: " << file_id_str;
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 格式无效"));
+            }
+
+            DownloadRequest request;
+            request.file_id = file_id;
+
+            LOG_DEBUG << "解析到下载文件请求: file_id=" << request.file_id;
+
+            return request;
+        }
+    };
+
+    /**
+     * @brief Range 请求解析结果
+     *
+     * @details
+     * 用于解析 HTTP Range 请求头，支持断点续传和分片下载。
+     */
+    struct RangeRequest {
+        bool has_range{ false };
+        uint64_t start{ 0 };
+        uint64_t end{ 0 };
+        bool satisfiable{ true };
+        uint64_t file_size{ 0 };
+
+        /// 解析 Range 请求头
+        [[nodiscard]]
+        static auto Parse(const std::string& range_header, uint64_t file_size) -> RangeRequest {
+            RangeRequest result;
+            result.file_size = file_size;
+
+            if (range_header.empty()) {
+                result.has_range = false;
+                return result;
+            }
+
+            result.has_range = true;
+
+            std::string range = range_header;
+            if (range.substr(0, 6) == "bytes=") {
+                range = range.substr(6);
+            } else {
+                result.satisfiable = false;
+                return result;
+            }
+
+            size_t dash_pos = range.find('-');
+            if (dash_pos == std::string::npos) {
+                result.satisfiable = false;
+                return result;
+            }
+
+            std::string start_str = range.substr(0, dash_pos);
+            std::string end_str = range.substr(dash_pos + 1);
+
+            try {
+                if (start_str.empty()) {
+                    if (end_str.empty()) {
+                        result.satisfiable = false;
+                        return result;
+                    }
+                    uint64_t suffix_length = std::stoull(end_str);
+                    if (suffix_length == 0 || suffix_length > file_size) {
+                        result.start = 0;
+                        result.end = file_size - 1;
+                    } else {
+                        result.start = file_size - suffix_length;
+                        result.end = file_size - 1;
+                    }
+                } else {
+                    result.start = std::stoull(start_str);
+                    if (result.start >= file_size) {
+                        result.satisfiable = false;
+                        return result;
+                    }
+                    if (end_str.empty()) {
+                        result.end = file_size - 1;
+                    } else {
+                        result.end = std::stoull(end_str);
+                        if (result.end >= file_size) {
+                            result.end = file_size - 1;
+                        }
+                    }
+                }
+
+                if (result.start > result.end) {
+                    result.satisfiable = false;
+                }
+            } catch (...) {
+                result.satisfiable = false;
+            }
+
+            return result;
+        }
+    };
+
+    // ==================== Rename ====================
+
+    /**
+     * @brief 重命名请求 DTO
+     *
+     * @details
+     * 验证规则：
+     * - file_id: 正整数（路径参数）
+     * - new_name: 1-255字符，禁止字符 / \ : * ? " < > | 及控制字符
+     * - new_name: 禁止保留名称 "." 和 ".."
+     * - new_name: 禁止以 "." 开头（隐藏文件）
+     * - new_name: 仅允许 ASCII 可打印字符 (0x20-0x7E)
+     *
+     * 从 URL 路径参数和请求体解析。
+     */
+    struct RenameRequest {
+        uint64_t file_id{ 0 };
+        std::string new_name;
+
+        /// 从路径参数和请求体解析并验证，返回 Result
+        [[nodiscard]]
+        static auto FromPathAndRequest(const std::string& file_id_str, const drogon::HttpRequestPtr& req) -> Result<RenameRequest> {
+            LOG_DEBUG << "开始解析重命名请求参数";
+
+            // 验证路径参数 file_id
+            if (file_id_str.empty()) {
+                LOG_WARN << "缺少必需参数: file_id";
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "缺少必需参数: file_id"));
+            }
+
+            // 检查是否为负数
+            if (file_id_str[0] == '-') {
+                LOG_WARN << "参数 'file_id' 必须是正整数: " << file_id_str;
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数"));
+            }
+
+            uint64_t file_id = 0;
+            try {
+                size_t pos = 0;
+                file_id = std::stoull(file_id_str, &pos);
+                if (pos != file_id_str.length() || file_id == 0) {
+                    LOG_WARN << "参数 'file_id' 必须是正整数: " << file_id_str;
+                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数"));
+                }
+            } catch (const std::exception& e) {
+                LOG_WARN << "参数 'file_id' 格式无效: " << file_id_str;
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 格式无效"));
+            }
+
+            auto json_ptr = req->getJsonObject();
+            if (!json_ptr) {
+                LOG_WARN << "请求体不是有效的 JSON";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+            }
+
+            const auto& json = *json_ptr;
+
+            // 检查必填字段 new_name
+            if (!json.isMember("new_name")) {
+                LOG_WARN << "缺少必需参数: new_name";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: new_name"));
+            }
+
+            if (!json["new_name"].isString()) {
+                LOG_WARN << "参数 'new_name' 类型错误: 期望字符串";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'new_name' 类型错误: 期望字符串"));
+            }
+
+            RenameRequest request;
+            request.file_id = file_id;
+            request.new_name = json["new_name"].asString();
+
+            LOG_DEBUG << "解析到重命名请求: file_id=" << request.file_id
+                      << ", new_name=\"" << request.new_name << "\"";
+
+            // 验证新文件名
+            if (!request.ValidateFilenameLength()) {
+                LOG_WARN << "文件名长度无效: " << request.new_name.length();
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "文件名长度必须在 1-255 字符之间"));
+            }
+
+            if (!request.ValidateFilenameForbiddenChars()) {
+                LOG_WARN << "文件名包含禁止字符: " << request.new_name;
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件名包含禁止字符：/ \\ : * ? \" < > | 或控制字符"));
+            }
+
+            if (!request.ValidateFilenameReservedNames()) {
+                LOG_WARN << "文件名为保留名称: " << request.new_name;
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件名不能为保留名称 \".\" 或 \"..\""));
+            }
+
+            if (!request.ValidateFilenameNotHidden()) {
+                LOG_WARN << "文件名以点开头（隐藏文件）: " << request.new_name;
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件名不能以 \".\" 开头"));
+            }
+
+            if (!request.ValidateFilenameCharset()) {
+                LOG_WARN << "文件名包含非 ASCII 字符: " << request.new_name;
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件名仅允许 ASCII 可打印字符"));
+            }
+
+            LOG_DEBUG << "请求参数验证通过";
+            return request;
+        }
+
+    private:
+        /// 验证文件名长度 (1-255 字符)
+        [[nodiscard]]
+        auto ValidateFilenameLength() const -> bool {
+            return new_name.length() >= 1 && new_name.length() <= 255;
+        }
+
+        /// 验证文件名禁止字符 (/ \ : * ? " < > | 及控制字符 0x00-0x1F)
+        [[nodiscard]]
+        auto ValidateFilenameForbiddenChars() const -> bool {
+            static const char forbidden_chars[] = "/\\:*?\"<>|";
+            for (char c : new_name) {
+                // 检查控制字符 (0x00-0x1F)
+                if (static_cast<unsigned char>(c) <= 0x1F) {
+                    return false;
+                }
+                // 检查文件系统保留字符
+                for (char fc : forbidden_chars) {
+                    if (c == fc) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        /// 验证文件名保留名称 (. 和 ..)
+        [[nodiscard]]
+        auto ValidateFilenameReservedNames() const -> bool {
+            return new_name != "." && new_name != "..";
+        }
+
+        /// 验证文件名不以点开头（非隐藏文件）
+        [[nodiscard]]
+        auto ValidateFilenameNotHidden() const -> bool {
+            return new_name.empty() || new_name[0] != '.';
+        }
+
+        /// 验证文件名字符集（仅 ASCII 可打印字符 0x20-0x7E）
+        [[nodiscard]]
+        auto ValidateFilenameCharset() const -> bool {
+            for (char c : new_name) {
+                // ASCII 可打印字符范围: 0x20 (空格) 到 0x7E (~)
+                if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    };
+
+    /**
+     * @brief 重命名响应 DTO
+     *
+     * @details
+     * 包含重命名后的文件信息。
+     */
+    struct RenameResponse {
+        uint64_t id{ 0 };
+        std::string name;
+        std::string updated_at;
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["id"] = static_cast<Json::UInt64>(id);
+            json["name"] = name;
+            json["updated_at"] = updated_at;
+            return json;
+        }
+    };
+
+    // ==================== Move ====================
+
+    /**
+     * @brief 移动文件请求 DTO
+     *
+     * @details
+     * 验证规则：
+     * - file_ids: 非空数组，每个元素为正整数
+     * - target_folder_id: 默认 0（根目录）
+     *
+     * 从请求体解析。
+     */
+    struct MoveRequest {
+        std::vector<uint64_t> file_ids;
+        uint64_t target_folder_id{ 0 };
+
+        /// 从 HTTP 请求解析并验证，返回 Result
+        [[nodiscard]]
+        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<MoveRequest> {
+            LOG_DEBUG << "开始解析移动文件请求参数";
+
+            auto json_ptr = req->getJsonObject();
+            if (!json_ptr) {
+                LOG_WARN << "请求体不是有效的 JSON";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+            }
+
+            const auto& json = *json_ptr;
+
+            // 检查必填字段 file_ids
+            if (!json.isMember("file_ids")) {
+                LOG_WARN << "缺少必需参数: file_ids";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: file_ids"));
+            }
+
+            if (!json["file_ids"].isArray()) {
+                LOG_WARN << "参数 'file_ids' 类型错误: 期望数组";
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 类型错误: 期望数组"));
+            }
+
+            MoveRequest request;
+
+            // 解析 file_ids
+            const auto& file_ids_array = json["file_ids"];
+            if (file_ids_array.empty()) {
+                LOG_WARN << "参数 'file_ids' 不能为空数组";
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 不能为空数组"));
+            }
+
+            for (const auto& item : file_ids_array) {
+                if (!item.isIntegral()) {
+                    LOG_WARN << "参数 'file_ids' 中的元素类型错误: 期望整数";
+                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 中的元素类型错误: 期望整数"));
+                }
+                auto file_id = item.asUInt64();
+                if (file_id == 0) {
+                    LOG_WARN << "参数 'file_ids' 中的元素必须为正整数";
+                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 中的元素必须为正整数"));
+                }
+                request.file_ids.push_back(file_id);
+            }
+
+            // 解析可选参数 target_folder_id
+            if (json.isMember("target_folder_id")) {
+                if (!json["target_folder_id"].isIntegral()) {
+                    LOG_WARN << "参数 'target_folder_id' 类型错误: 期望整数";
+                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'target_folder_id' 类型错误: 期望整数"));
+                }
+                request.target_folder_id = json["target_folder_id"].asUInt64();
+            }
+
+            LOG_DEBUG << "解析到移动文件请求: file_ids.size()=" << request.file_ids.size()
+                      << ", target_folder_id=" << request.target_folder_id;
+
+            return request;
+        }
+    };
+
+    /**
+     * @brief 移动文件响应 DTO
+     *
+     * @details
+     * 包含移动操作的结果统计。
+     */
+    struct MoveResponse {
+        int moved_count{ 0 };
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["moved_count"] = moved_count;
+            return json;
+        }
+    };
+
+    // ==================== Copy ====================
+
+    /**
+     * @brief 文件ID映射
+     *
+     * @details
+     * 用于复制操作中记录旧ID和新ID的映射关系。
+     */
+    struct FileIdMapping {
+        uint64_t old_id{ 0 };
+        uint64_t new_id{ 0 };
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["old_id"] = static_cast<Json::UInt64>(old_id);
+            json["new_id"] = static_cast<Json::UInt64>(new_id);
+            return json;
+        }
+    };
+
+    /**
+     * @brief 复制文件请求 DTO
+     *
+     * @details
+     * 验证规则：
+     * - file_ids: 非空数组，每个元素为正整数
+     * - target_folder_id: 默认 0（根目录）
+     *
+     * 从请求体解析。
+     */
+    struct CopyRequest {
+        std::vector<uint64_t> file_ids;
+        uint64_t target_folder_id{ 0 };
+
+        /// 从 HTTP 请求解析并验证，返回 Result
+        [[nodiscard]]
+        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<CopyRequest> {
+            LOG_DEBUG << "开始解析复制文件请求参数";
+
+            auto json_ptr = req->getJsonObject();
+            if (!json_ptr) {
+                LOG_WARN << "请求体不是有效的 JSON";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+            }
+
+            const auto& json = *json_ptr;
+
+            // 检查必填字段 file_ids
+            if (!json.isMember("file_ids")) {
+                LOG_WARN << "缺少必需参数: file_ids";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: file_ids"));
+            }
+
+            if (!json["file_ids"].isArray()) {
+                LOG_WARN << "参数 'file_ids' 类型错误: 期望数组";
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 类型错误: 期望数组"));
+            }
+
+            CopyRequest request;
+
+            // 解析 file_ids
+            const auto& file_ids_array = json["file_ids"];
+            if (file_ids_array.empty()) {
+                LOG_WARN << "参数 'file_ids' 不能为空数组";
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 不能为空数组"));
+            }
+
+            for (const auto& item : file_ids_array) {
+                if (!item.isIntegral()) {
+                    LOG_WARN << "参数 'file_ids' 中的元素类型错误: 期望整数";
+                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 中的元素类型错误: 期望整数"));
+                }
+                auto file_id = item.asUInt64();
+                if (file_id == 0) {
+                    LOG_WARN << "参数 'file_ids' 中的元素必须为正整数";
+                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 中的元素必须为正整数"));
+                }
+                request.file_ids.push_back(file_id);
+            }
+
+            // 解析可选参数 target_folder_id
+            if (json.isMember("target_folder_id")) {
+                if (!json["target_folder_id"].isIntegral()) {
+                    LOG_WARN << "参数 'target_folder_id' 类型错误: 期望整数";
+                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'target_folder_id' 类型错误: 期望整数"));
+                }
+                request.target_folder_id = json["target_folder_id"].asUInt64();
+            }
+
+            LOG_DEBUG << "解析到复制文件请求: file_ids.size()=" << request.file_ids.size()
+                      << ", target_folder_id=" << request.target_folder_id;
+
+            return request;
+        }
+    };
+
+    /**
+     * @brief 复制文件响应 DTO
+     *
+     * @details
+     * 包含复制操作的结果统计和ID映射。
+     */
+    struct CopyResponse {
+        int copied_count{ 0 };
+        std::vector<FileIdMapping> new_files;
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["copied_count"] = copied_count;
+
+            Json::Value files_array(Json::arrayValue);
+            for (const auto& mapping : new_files) {
+                files_array.append(mapping.ToJson());
+            }
+            json["new_files"] = files_array;
+
+            return json;
+        }
+    };
+
+    // ==================== Delete ====================
+
+    /**
+     * @brief 删除文件请求 DTO
+     *
+     * @details
+     * 验证规则：
+     * - file_ids: 非空数组，每个元素为正整数
+     *
+     * 从请求体解析。
+     * 注意：删除操作为软删除，文件移入回收站。
+     */
+    struct DeleteRequest {
+        std::vector<uint64_t> file_ids;
+
+        /// 从 HTTP 请求解析并验证，返回 Result
+        [[nodiscard]]
+        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<DeleteRequest> {
+            LOG_DEBUG << "开始解析删除文件请求参数";
+
+            auto json_ptr = req->getJsonObject();
+            if (!json_ptr) {
+                LOG_WARN << "请求体不是有效的 JSON";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+            }
+
+            const auto& json = *json_ptr;
+
+            // 检查必填字段 file_ids
+            if (!json.isMember("file_ids")) {
+                LOG_WARN << "缺少必需参数: file_ids";
+                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: file_ids"));
+            }
+
+            if (!json["file_ids"].isArray()) {
+                LOG_WARN << "参数 'file_ids' 类型错误: 期望数组";
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 类型错误: 期望数组"));
+            }
+
+            DeleteRequest request;
+
+            // 解析 file_ids
+            const auto& file_ids_array = json["file_ids"];
+            if (file_ids_array.empty()) {
+                LOG_WARN << "参数 'file_ids' 不能为空数组";
+                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 不能为空数组"));
+            }
+
+            for (const auto& item : file_ids_array) {
+                if (!item.isIntegral()) {
+                    LOG_WARN << "参数 'file_ids' 中的元素类型错误: 期望整数";
+                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 中的元素类型错误: 期望整数"));
+                }
+                auto file_id = item.asUInt64();
+                if (file_id == 0) {
+                    LOG_WARN << "参数 'file_ids' 中的元素必须为正整数";
+                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 中的元素必须为正整数"));
+                }
+                request.file_ids.push_back(file_id);
+            }
+
+            LOG_DEBUG << "解析到删除文件请求: file_ids.size()=" << request.file_ids.size();
+
+            return request;
+        }
+    };
+
+    /**
+     * @brief 删除文件响应 DTO
+     *
+     * @details
+     * 包含删除操作的结果统计。
+     */
+    struct DeleteResponse {
+        int deleted_count{ 0 };
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["deleted_count"] = deleted_count;
             return json;
         }
     };
