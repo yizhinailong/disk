@@ -773,7 +773,7 @@ Authorization: Bearer <access_token>
 **GET** `/api/file/download/{file_id}`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 下载文件内容，支持 Range 请求。
 
@@ -880,7 +880,7 @@ Authorization: Bearer <access_token>
 **GET** `/api/file/list`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 获取指定目录下的文件和文件夹列表。
 
@@ -1045,7 +1045,7 @@ Authorization: Bearer <access_token>
 **PUT** `/api/file/{file_id}/rename`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 重命名文件或文件夹。
 
@@ -1121,7 +1121,7 @@ Authorization: Bearer <access_token>
 **PUT** `/api/file/move`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 移动文件或文件夹到指定目录。
 
@@ -1194,7 +1194,7 @@ Authorization: Bearer <access_token>
 **POST** `/api/file/copy`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 复制文件或文件夹到指定目录。
 
@@ -1271,7 +1271,7 @@ Authorization: Bearer <access_token>
 **DELETE** `/api/file`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 删除文件或文件夹（移入回收站）。
 
