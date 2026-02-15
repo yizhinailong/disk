@@ -11,6 +11,8 @@
 
 #include "FileController.hpp"
 
+#include <fstream>
+
 #include "dtos/FileDto.hpp"
 #include "utils/Response.hpp"
 
@@ -192,6 +194,187 @@ namespace disk::file {
         LOG_INFO << "取消上传成功: upload_id=" << upload_id
                  << " (user_id=" << user_id << ")";
         co_return Response::Success({});
+    }
+
+    auto FileController::List(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到获取文件列表请求: " << request->getPeerAddr().toIpPort();
+
+        // 1. 解析并验证请求参数
+        auto parse_result = FileListRequest::FromRequest(request);
+        if (!parse_result) {
+            LOG_WARN << "获取文件列表请求参数验证失败: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+        LOG_DEBUG << "获取文件列表参数验证通过: parent_id=" << parse_result->parent_id
+                  << ", page=" << parse_result->page
+                  << ", page_size=" << parse_result->page_size
+                  << ", sort_by=" << parse_result->sort_by
+                  << ", sort_order=" << parse_result->sort_order
+                  << ", type=" << parse_result->type;
+
+        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+
+        // 3. 调用 Service 层获取文件列表
+        auto result = co_await m_file_service->GetFileList(*parse_result, user_id);
+        if (!result) {
+            LOG_ERROR << "获取文件列表失败: " << result.error().message
+                      << " (user_id=" << user_id << ")";
+            co_return Response::Error(result.error());
+        }
+
+        // 4. 构造响应
+        LOG_INFO << "获取文件列表成功: items=" << result->items.size()
+                 << " (user_id=" << user_id << ")";
+        co_return Response::Success(result->ToJson());
+    }
+
+    auto FileController::DownloadInfo(drogon::HttpRequestPtr request, std::string file_id)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到获取下载信息请求: " << request->getPeerAddr().toIpPort()
+                 << ", file_id=" << file_id;
+
+        // 1. 解析并验证路径参数
+        auto parse_result = disk::file::DownloadInfoRequest::FromPath(file_id);
+        if (!parse_result) {
+            LOG_WARN << "获取下载信息请求参数验证失败: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+        LOG_DEBUG << "获取下载信息参数验证通过: file_id=" << parse_result->file_id;
+
+        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+
+        // 3. 调用 Service 层获取下载信息
+        auto result = co_await m_file_service->GetDownloadInfo(parse_result->file_id, user_id);
+        if (!result) {
+            LOG_ERROR << "获取下载信息失败: " << result.error().message
+                      << " (user_id=" << user_id << ", file_id=" << file_id << ")";
+            co_return Response::Error(result.error());
+        }
+
+        // 4. 构造响应
+        LOG_INFO << "获取下载信息成功: filename=" << result->filename
+                 << ", size=" << result->file_size
+                 << " (user_id=" << user_id << ", file_id=" << file_id << ")";
+        co_return Response::Success(result->ToJson());
+    }
+
+    auto FileController::Download(drogon::HttpRequestPtr request, std::string file_id)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到下载文件请求: " << request->getPeerAddr().toIpPort()
+                 << ", file_id=" << file_id;
+
+        // 1. 解析并验证路径参数
+        auto parse_result = disk::file::DownloadRequest::FromPath(file_id);
+        if (!parse_result) {
+            LOG_WARN << "下载文件请求参数验证失败: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+        LOG_DEBUG << "下载文件参数验证通过: file_id=" << parse_result->file_id;
+
+        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+
+        // 3. 获取下载文件信息
+        auto info_result = co_await m_file_service->GetDownloadData(parse_result->file_id, user_id);
+        if (!info_result) {
+            LOG_ERROR << "获取下载数据失败: " << info_result.error().message
+                      << " (user_id=" << user_id << ", file_id=" << file_id << ")";
+            co_return Response::Error(info_result.error());
+        }
+
+        const auto& download_info = *info_result;
+        LOG_INFO << "获取下载信息成功: file_id=" << file_id
+                 << ", filename=" << download_info.filename
+                 << ", size=" << download_info.file_size
+                 << ", storage_path=" << download_info.storage_path;
+
+        // 4. 检查文件是否存在
+        if (!std::filesystem::exists(download_info.storage_path)) {
+            LOG_ERROR << "文件不存在: " << download_info.storage_path;
+            co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "文件不存在"));
+        }
+
+        // 5. 解析 Range 请求头
+        auto range_header = std::string(request->getHeader("Range"));
+        auto range_request = RangeRequest::Parse(range_header, download_info.file_size);
+
+        // 6. 处理 Range 请求
+        if (range_request.has_range && !range_request.satisfiable) {
+            LOG_WARN << "Range 请求无法满足: " << range_header
+                     << ", file_size=" << download_info.file_size;
+
+            auto resp = drogon::HttpResponse::newHttpResponse();
+            resp->setStatusCode(drogon::HttpStatusCode::k416RequestedRangeNotSatisfiable);
+            resp->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+            std::string content_range = "bytes */" + std::to_string(download_info.file_size);
+            resp->addHeader("Content-Range", content_range);
+
+            Json::Value error_data;
+            error_data["file_size"] = static_cast<Json::UInt64>(download_info.file_size);
+            error_data["requested_range"] = range_header;
+            error_data["reason"] = "请求的起始位置超出文件大小";
+
+            Json::Value body;
+            body["code"] = 10002;
+            body["message"] = "请求范围无效";
+            body["data"] = error_data;
+
+            resp->setBody(body.toStyledString());
+            co_return resp;
+        }
+
+        // 7. 读取文件内容
+        std::ifstream file(download_info.storage_path, std::ios::binary);
+        if (!file.is_open()) {
+            LOG_ERROR << "无法打开文件: " << download_info.storage_path;
+            co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "无法打开文件"));
+        }
+
+        uint64_t start = range_request.has_range ? range_request.start : 0;
+        uint64_t end = range_request.has_range ? range_request.end : download_info.file_size - 1;
+        uint64_t content_length = end - start + 1;
+
+        file.seekg(static_cast<std::streampos>(start));
+        std::string content(content_length, '\0');
+        file.read(content.data(), static_cast<std::streamsize>(content_length));
+        file.close();
+
+        // 8. 构建响应
+        auto resp = drogon::HttpResponse::newHttpResponse();
+
+        if (range_request.has_range) {
+            resp->setStatusCode(drogon::HttpStatusCode::k206PartialContent);
+            std::string content_range = "bytes " + std::to_string(start) + "-" + std::to_string(end) + "/" + std::to_string(download_info.file_size);
+            resp->addHeader("Content-Range", content_range);
+            LOG_INFO << "返回部分内容: start=" << start << ", end=" << end
+                     << ", total=" << download_info.file_size;
+        } else {
+            resp->setStatusCode(drogon::HttpStatusCode::k200OK);
+            LOG_INFO << "返回完整文件: size=" << download_info.file_size;
+        }
+
+        // 设置响应头
+        resp->setContentTypeString(download_info.mime_type);
+        resp->addHeader("Content-Length", std::to_string(content_length));
+        resp->addHeader("Accept-Ranges", "bytes");
+
+        std::string disposition = "attachment; filename=\"" + download_info.filename + "\"";
+        resp->addHeader("Content-Disposition", disposition);
+
+        if (!download_info.file_hash.empty()) {
+            resp->addHeader("ETag", "\"" + download_info.file_hash + "\"");
+        }
+
+        resp->setBody(std::move(content));
+
+        co_return resp;
     }
 
 } // namespace disk::file
