@@ -620,7 +620,7 @@ Authorization: Bearer <access_token>
 #### 实现说明（计划中）
 
 - `storage_used` 将使用实时 SQL 计算，不读取 `users.storage_used` 字段
-- 回收站（Trash）中的文件不计入存储统计
+- 回收站（Trash）中的文件计入 `storage_used`，仅在彻底删除时释放配额
 - `categories` 当前版本将返回空数组，后续版本支持文件类型分类
 - 详细实现计划见：`.sisyphus/plans/storage-api.md`
 
@@ -1965,7 +1965,7 @@ Authorization: Bearer <access_token>
 **GET** `/api/trash`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 获取回收站中的文件列表。
 
@@ -2041,7 +2041,7 @@ Authorization: Bearer <access_token>
 **POST** `/api/trash/restore`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 从回收站恢复文件。
 
@@ -2071,7 +2071,7 @@ Authorization: Bearer <access_token>
 | 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
 | 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
-| 404 | 10003 | `TrashItemNotFound` | 回收站项目不存在 | trash_id 不存在或不属于用户 |
+| 404 | 10003 | `ResourceNotFound` | 资源不存在 | trash_id 不存在或不属于用户 |
 
 **40106 TokenMissing 响应示例**：
 
@@ -2083,6 +2083,14 @@ Authorization: Bearer <access_token>
 }
 ```
 
+#### 业务规则
+
+1. **目标位置恢复**：优先恢复到原始位置；如原始父文件夹已不存在，则恢复到用户根目录
+2. **命名冲突处理**：如目标位置存在同名文件/文件夹，自动重命名为 `name (n).ext` 格式（n 从 1 开始递增）
+   - 示例：`文档.pdf` → `文档 (1).pdf` → `文档 (2).pdf`
+   - 文件夹同理：`工作` → `工作 (1)` → `工作 (2)`
+3. **V1 限制**：当前版本不支持递归恢复文件夹子树，文件夹类型项目恢复时仅恢复文件夹本身（不包含内部子项）
+
 #### 响应示例
 
 ```json
@@ -2090,11 +2098,34 @@ Authorization: Bearer <access_token>
   "code": 0,
   "message": "success",
   "data": {
-    "restored_count": 3,
-    "restored_files": [
-      {"trash_id": 1, "file_id": 123, "path": "/文档/已删除文件.pdf"},
-      {"trash_id": 2, "file_id": 124, "path": "/已删除文件2.pdf"},
-      {"trash_id": 3, "file_id": 125, "path": "/已删除文件3.pdf"}
+    "summary": {
+      "total": 3,
+      "success_count": 2,
+      "failure_count": 1
+    },
+    "results": [
+      {
+        "trash_id": 1,
+        "status": "success",
+        "file_id": 123,
+        "path": "/文档/已删除文件.pdf"
+      },
+      {
+        "trash_id": 2,
+        "status": "success",
+        "file_id": 124,
+        "path": "/已删除文件2 (1).pdf"
+      },
+      {
+        "trash_id": 3,
+        "status": "failed",
+        "error": {
+          "code": 10003,
+          "message": "资源不存在",
+          "field": "trash_id",
+          "value": 3
+        }
+      }
     ]
   }
 }
@@ -2107,7 +2138,7 @@ Authorization: Bearer <access_token>
 **DELETE** `/api/trash`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 彻底删除回收站中的文件。
 
@@ -2137,7 +2168,7 @@ Authorization: Bearer <access_token>
 | 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
 | 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
-| 404 | 10003 | `TrashItemNotFound` | 回收站项目不存在 | trash_id 不存在或不属于用户 |
+| 404 | 10003 | `ResourceNotFound` | 资源不存在 | trash_id 不存在或不属于用户 |
 
 **40106 TokenMissing 响应示例**：
 
@@ -2156,8 +2187,33 @@ Authorization: Bearer <access_token>
   "code": 0,
   "message": "success",
   "data": {
-    "deleted_count": 3,
-    "freed_space": 307200
+    "summary": {
+      "total": 3,
+      "success_count": 2,
+      "failure_count": 1
+    },
+    "results": [
+      {
+        "trash_id": 1,
+        "status": "success",
+        "freed_space": 102400
+      },
+      {
+        "trash_id": 2,
+        "status": "success",
+        "freed_space": 102400
+      },
+      {
+        "trash_id": 3,
+        "status": "failed",
+        "error": {
+          "code": 10003,
+          "message": "资源不存在",
+          "field": "trash_id",
+          "value": 3
+        }
+      }
+    ]
   }
 }
 ```
@@ -2169,7 +2225,7 @@ Authorization: Bearer <access_token>
 **DELETE** `/api/trash/all`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 清空回收站所有内容。
 

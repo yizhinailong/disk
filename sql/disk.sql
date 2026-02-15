@@ -117,7 +117,7 @@ CREATE PROCEDURE sp_file_move_to_trash(
     OUT p_result_code INT,
     OUT p_result_msg VARCHAR(255)
 )
-BEGIN
+sp: BEGIN
     DECLARE v_item_name VARCHAR(255);
     DECLARE v_item_size BIGINT UNSIGNED DEFAULT 0;
     DECLARE v_original_folder_id BIGINT UNSIGNED;
@@ -175,8 +175,8 @@ BEGIN
         -- 减少文件内容引用计数
         UPDATE file_contents SET ref_count = ref_count - 1 WHERE id = v_content_id;
         
-        -- 更新用户存储空间
-        UPDATE users SET storage_used = storage_used - v_item_size WHERE id = p_user_id;
+        -- 注意：回收站中的文件仍计入 storage_used，仅在彻底删除时释放配额
+        -- 不再减少 storage_used（符合文档约定：trash counts toward storage_used）
         
         -- 更新文件夹子项计数
         IF v_original_folder_id > 0 THEN
@@ -219,8 +219,8 @@ BEGIN
         -- 删除文件夹及其所有子项（外键级联删除）
         DELETE FROM folders WHERE id = p_item_id;
         
-        -- 更新用户存储空间
-        UPDATE users SET storage_used = storage_used - v_item_size WHERE id = p_user_id;
+        -- 注意：回收站中的文件夹仍计入 storage_used，仅在彻底删除时释放配额
+        -- 不再减少 storage_used（符合文档约定：trash counts toward storage_used）
         
         -- 更新父文件夹子项计数
         IF v_original_folder_id > 0 THEN
@@ -244,13 +244,18 @@ CREATE PROCEDURE sp_file_restore_from_trash(
     OUT p_result_code INT,
     OUT p_result_msg VARCHAR(255)
 )
-BEGIN
+sp: BEGIN
     DECLARE v_item_type ENUM('file', 'folder');
     DECLARE v_item_id BIGINT UNSIGNED;
     DECLARE v_item_data JSON;
     DECLARE v_original_folder_id BIGINT UNSIGNED;
     DECLARE v_item_size BIGINT UNSIGNED;
     DECLARE v_content_id BIGINT UNSIGNED;
+    DECLARE v_user_id BIGINT UNSIGNED;
+    DECLARE v_folder_id BIGINT UNSIGNED;
+    DECLARE v_name VARCHAR(255);
+    DECLARE v_parent_id BIGINT UNSIGNED;
+    DECLARE v_conflict_exists INT DEFAULT 0;
     
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
@@ -275,16 +280,34 @@ BEGIN
     END IF;
     
     IF v_item_type = 'file' THEN
-        -- 恢复文件
+        -- 从 item_data 提取恢复所需的字段
+        SET v_user_id = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.user_id'));
+        SET v_folder_id = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.folder_id'));
+        SET v_name = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.name'));
+        SET v_content_id = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.content_id'));
+        
+        -- 显式检查目标位置是否存在同名文件冲突
+        SELECT COUNT(*) INTO v_conflict_exists
+        FROM files
+        WHERE user_id = v_user_id AND folder_id = v_folder_id AND name = v_name;
+        
+        IF v_conflict_exists > 0 THEN
+            ROLLBACK;
+            SET p_result_code = -5;
+            SET p_result_msg = 'File with same name already exists at target location';
+            LEAVE sp;
+        END IF;
+        
+        -- 执行恢复：直接插入（不再使用 WHERE NOT EXISTS 模式）
         INSERT INTO files (
             user_id, content_id, folder_id, name, extension, size, mime_type, path,
             is_favorite, download_count, created_at, updated_at
         )
-        SELECT 
-            JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.user_id')),
-            JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.content_id')),
-            JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.folder_id')),
-            JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.name')),
+        VALUES (
+            v_user_id,
+            v_content_id,
+            v_folder_id,
+            v_name,
             JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.extension')),
             JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.size')),
             JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.mime_type')),
@@ -293,20 +316,13 @@ BEGIN
             JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.download_count')),
             JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.created_at')),
             JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.updated_at'))
-        WHERE NOT EXISTS (
-            SELECT 1 FROM files 
-            WHERE user_id = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.user_id'))
-            AND folder_id = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.folder_id'))
-            AND name = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.name'))
         );
-        
-        SET v_content_id = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.content_id'));
         
         -- 增加文件内容引用计数
         UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = v_content_id;
         
-        -- 更新用户存储空间
-        UPDATE users SET storage_used = storage_used + v_item_size WHERE id = p_user_id;
+        -- 注意：恢复时不再增加 storage_used，因为移入回收站时未减少
+        -- storage_used 在整个生命周期中保持一致
         
         -- 更新文件夹子项计数
         IF v_original_folder_id > 0 THEN
@@ -314,29 +330,40 @@ BEGIN
         END IF;
         
     ELSEIF v_item_type = 'folder' THEN
-        -- 恢复文件夹（需要递归恢复子项，这里简化处理）
-        -- 注意：实际实现中可能需要更复杂的逻辑来恢复整个文件夹树
+        -- 从 item_data 提取恢复所需的字段
+        SET v_user_id = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.user_id'));
+        SET v_parent_id = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.parent_id'));
+        SET v_name = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.name'));
+        
+        -- 显式检查目标位置是否存在同名文件夹冲突
+        SELECT COUNT(*) INTO v_conflict_exists
+        FROM folders
+        WHERE user_id = v_user_id AND parent_id = v_parent_id AND name = v_name;
+        
+        IF v_conflict_exists > 0 THEN
+            ROLLBACK;
+            SET p_result_code = -5;
+            SET p_result_msg = 'Folder with same name already exists at target location';
+            LEAVE sp;
+        END IF;
+        
+        -- 恢复文件夹
         INSERT INTO folders (
             user_id, parent_id, name, path, depth, item_count, created_at, updated_at
         )
-        SELECT 
-            JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.user_id')),
-            JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.parent_id')),
-            JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.name')),
+        VALUES (
+            v_user_id,
+            v_parent_id,
+            v_name,
             JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.path')),
             JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.depth')),
             JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.item_count')),
             JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.created_at')),
             JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.updated_at'))
-        WHERE NOT EXISTS (
-            SELECT 1 FROM folders 
-            WHERE user_id = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.user_id'))
-            AND parent_id = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.parent_id'))
-            AND name = JSON_UNQUOTE(JSON_EXTRACT(v_item_data, '$.name'))
         );
         
-        -- 更新用户存储空间
-        UPDATE users SET storage_used = storage_used + v_item_size WHERE id = p_user_id;
+        -- 注意：恢复时不再增加 storage_used，因为移入回收站时未减少
+        -- storage_used 在整个生命周期中保持一致
         
         -- 更新父文件夹子项计数
         IF v_original_folder_id > 0 THEN
@@ -363,8 +390,9 @@ CREATE PROCEDURE sp_file_delete_permanently(
     OUT p_result_code INT,
     OUT p_result_msg VARCHAR(255)
 )
-BEGIN
+sp: BEGIN
     DECLARE v_item_type ENUM('file', 'folder');
+    DECLARE v_item_size BIGINT UNSIGNED DEFAULT 0;
     DECLARE v_content_id BIGINT UNSIGNED;
     DECLARE v_ref_count INT UNSIGNED;
     
@@ -377,13 +405,13 @@ BEGIN
     
     START TRANSACTION;
     
-    -- 获取回收站记录类型
-    SELECT item_type, 
+    -- 获取回收站记录类型和大小
+    SELECT item_type, item_size,
            CASE item_type 
                WHEN 'file' THEN JSON_UNQUOTE(JSON_EXTRACT(item_data, '$.content_id'))
                ELSE NULL
            END
-    INTO v_item_type, v_content_id
+    INTO v_item_type, v_item_size, v_content_id
     FROM trash
     WHERE id = p_trash_id AND user_id = p_user_id;
     
@@ -393,6 +421,9 @@ BEGIN
         SET p_result_msg = 'Trash item not found';
         LEAVE sp;
     END IF;
+    
+    -- 释放存储配额（从 storage_used 中扣除）
+    UPDATE users SET storage_used = GREATEST(0, storage_used - v_item_size) WHERE id = p_user_id;
     
     -- 如果是文件，检查并清理文件内容
     IF v_item_type = 'file' AND v_content_id IS NOT NULL THEN

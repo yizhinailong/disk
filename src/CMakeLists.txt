@@ -5,12 +5,14 @@ set(Controllers_HEADERS
     controllers/AuthController.hpp
     controllers/FileController.hpp
     controllers/FolderController.hpp
+    controllers/TrashController.hpp
     controllers/UserController.hpp
 )
 set(Controllers_SOURCES
     controllers/AuthController.cpp
     controllers/FileController.cpp
     controllers/FolderController.cpp
+    controllers/TrashController.cpp
     controllers/UserController.cpp
 )
 
@@ -19,6 +21,7 @@ set(Dtos_HEADERS
     dtos/AuthDto.hpp
     dtos/FileDto.hpp
     dtos/FolderDto.hpp
+    dtos/TrashDto.hpp
     dtos/UserDto.hpp
 )
 
@@ -61,6 +64,7 @@ set(Services_HEADERS
     services/FolderService.hpp
     services/RedisService.hpp
     services/TokenService.hpp
+    services/TrashService.hpp
     services/UserService.hpp
 )
 set(Services_SOURCES
@@ -69,6 +73,7 @@ set(Services_SOURCES
     services/FolderService.cpp
     services/RedisService.cpp
     services/TokenService.cpp
+    services/TrashService.cpp
     services/UserService.cpp
 )
 
