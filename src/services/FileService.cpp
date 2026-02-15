@@ -761,6 +761,243 @@ namespace disk::file {
         }
     }
 
+    // ==================== Rename ====================
+
+    auto FileService::Rename(uint64_t file_id, std::string new_name, uint64_t user_id)
+        -> drogon::Task<Result<RenameResponse>> {
+
+        LOG_DEBUG << "开始重命名文件: file_id=" << file_id
+                  << ", new_name=\"" << new_name << "\""
+                  << ", user_id=" << user_id;
+
+        try {
+            CoroMapper<Files> mapper(m_db_client);
+            auto file = co_await mapper.findOne(
+                Criteria(Files::Cols::_id, CompareOperator::EQ, file_id) &&
+                Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
+            );
+
+            if (file.getValueOfName() == new_name) {
+                LOG_DEBUG << "新名称与当前名称相同，跳过更新";
+                RenameResponse response;
+                response.id = file.getValueOfId();
+                response.name = file.getValueOfName();
+                response.updated_at = file.getValueOfUpdatedAt().toDbStringLocal();
+                co_return response;
+            }
+
+            auto folder_id = file.getValueOfFolderId();
+            if (co_await IsFilenameExists(folder_id, new_name, user_id)) {
+                LOG_WARN << "目标文件夹已存在同名文件: " << new_name;
+                co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
+            }
+
+            file.setName(new_name);
+            file.setExtension(ExtractExtension(new_name));
+            file.setUpdatedAt(trantor::Date::now());
+            co_await mapper.update(file);
+
+            LOG_INFO << "文件重命名成功: file_id=" << file_id
+                     << ", new_name=\"" << new_name << "\"";
+
+            RenameResponse response;
+            response.id = file.getValueOfId();
+            response.name = new_name;
+            response.updated_at = file.getValueOfUpdatedAt().toDbStringLocal();
+            co_return response;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "文件不存在或无权限: file_id=" << file_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
+        }
+    }
+
+    // ==================== Move ====================
+
+    auto FileService::Move(MoveRequest request, uint64_t user_id)
+        -> drogon::Task<Result<MoveResponse>> {
+
+        LOG_DEBUG << "开始移动文件: file_ids.size()=" << request.file_ids.size()
+                  << ", target_folder_id=" << request.target_folder_id
+                  << ", user_id=" << user_id;
+
+        if (request.target_folder_id != 0) {
+            try {
+                CoroMapper<Folders> folder_mapper(m_db_client);
+                co_await folder_mapper.findOne(
+                    Criteria(Folders::Cols::_id, CompareOperator::EQ, request.target_folder_id) &&
+                    Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id)
+                );
+                LOG_DEBUG << "目标文件夹验证通过: folder_id=" << request.target_folder_id;
+            } catch (const drogon::orm::DrogonDbException&) {
+                LOG_WARN << "目标文件夹不存在或无权限: folder_id=" << request.target_folder_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+            }
+        }
+
+        int moved_count = 0;
+        CoroMapper<Files> file_mapper(m_db_client);
+
+        for (const auto& file_id : request.file_ids) {
+            try {
+                auto file = co_await file_mapper.findOne(
+                    Criteria(Files::Cols::_id, CompareOperator::EQ, file_id) &&
+                    Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
+                );
+
+                if (file.getValueOfFolderId() == request.target_folder_id) {
+                    LOG_DEBUG << "文件已在目标文件夹，跳过: file_id=" << file_id;
+                    ++moved_count;
+                    continue;
+                }
+
+                if (co_await IsFilenameExists(request.target_folder_id, file.getValueOfName(), user_id)) {
+                    LOG_WARN << "目标文件夹已存在同名文件，跳过: " << file.getValueOfName();
+                    continue;
+                }
+
+                file.setFolderId(request.target_folder_id);
+                file.setUpdatedAt(trantor::Date::now());
+                co_await file_mapper.update(file);
+
+                ++moved_count;
+                LOG_DEBUG << "文件移动成功: file_id=" << file_id;
+
+            } catch (const drogon::orm::DrogonDbException&) {
+                LOG_WARN << "文件不存在或移动失败，跳过: file_id=" << file_id;
+            }
+        }
+
+        LOG_INFO << "文件移动完成: moved_count=" << moved_count;
+
+        MoveResponse response;
+        response.moved_count = moved_count;
+        co_return response;
+    }
+
+    // ==================== Copy ====================
+
+    auto FileService::Copy(CopyRequest request, uint64_t user_id)
+        -> drogon::Task<Result<CopyResponse>> {
+
+        LOG_DEBUG << "开始复制文件: file_ids.size()=" << request.file_ids.size()
+                  << ", target_folder_id=" << request.target_folder_id
+                  << ", user_id=" << user_id;
+
+        if (request.target_folder_id != 0) {
+            try {
+                CoroMapper<Folders> folder_mapper(m_db_client);
+                co_await folder_mapper.findOne(
+                    Criteria(Folders::Cols::_id, CompareOperator::EQ, request.target_folder_id) &&
+                    Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id)
+                );
+                LOG_DEBUG << "目标文件夹验证通过: folder_id=" << request.target_folder_id;
+            } catch (const drogon::orm::DrogonDbException&) {
+                LOG_WARN << "目标文件夹不存在或无权限: folder_id=" << request.target_folder_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+            }
+        }
+
+        Users user;
+        try {
+            CoroMapper<Users> user_mapper(m_db_client);
+            user = co_await user_mapper.findOne(
+                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
+            );
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "查询用户信息失败: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "查询用户信息失败"));
+        }
+
+        auto storage_used = user.getValueOfStorageUsed();
+        auto storage_quota = user.getValueOfStorageQuota();
+
+        uint64_t total_copy_size = 0;
+        CoroMapper<Files> file_mapper(m_db_client);
+        std::vector<std::pair<uint64_t, Files>> files_to_copy;
+
+        for (const auto& file_id : request.file_ids) {
+            try {
+                auto file = co_await file_mapper.findOne(
+                    Criteria(Files::Cols::_id, CompareOperator::EQ, file_id) &&
+                    Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
+                );
+                total_copy_size += file.getValueOfSize();
+                files_to_copy.emplace_back(file_id, file);
+            } catch (const drogon::orm::DrogonDbException&) {
+                LOG_WARN << "文件不存在或无权限，跳过: file_id=" << file_id;
+            }
+        }
+
+        if (storage_used + total_copy_size > storage_quota) {
+            LOG_WARN << "存储空间不足: used=" << storage_used
+                     << ", quota=" << storage_quota
+                     << ", copy_size=" << total_copy_size;
+            co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
+        }
+
+        int copied_count = 0;
+        uint64_t actual_copy_size = 0;
+        std::vector<FileIdMapping> new_files;
+        CoroMapper<FileContents> content_mapper(m_db_client);
+
+        for (const auto& [old_id, file] : files_to_copy) {
+            try {
+                if (co_await IsFilenameExists(request.target_folder_id, file.getValueOfName(), user_id)) {
+                    LOG_WARN << "目标文件夹已存在同名文件，跳过: " << file.getValueOfName();
+                    continue;
+                }
+
+                auto content_id_ptr = file.getContentId();
+                if (content_id_ptr) {
+                    auto content = co_await content_mapper.findOne(
+                        Criteria(FileContents::Cols::_id, CompareOperator::EQ, *content_id_ptr)
+                    );
+                    content.setRefCount(content.getValueOfRefCount() + 1);
+                    co_await content_mapper.update(content);
+                }
+
+                Files new_file;
+                new_file.setUserId(user_id);
+                if (content_id_ptr) {
+                    new_file.setContentId(*content_id_ptr);
+                }
+                new_file.setFolderId(request.target_folder_id);
+                new_file.setName(file.getValueOfName());
+                new_file.setExtension(file.getValueOfExtension());
+                new_file.setSize(file.getValueOfSize());
+                new_file.setMimeType(file.getValueOfMimeType());
+                new_file.setPath("");
+                new_file.setIsFavorite(0);
+                new_file.setDownloadCount(0);
+
+                new_file = co_await file_mapper.insert(new_file);
+
+                ++copied_count;
+                actual_copy_size += file.getValueOfSize();
+                new_files.push_back({ .old_id = old_id, .new_id = new_file.getValueOfId() });
+
+                LOG_DEBUG << "文件复制成功: old_id=" << old_id
+                          << ", new_id=" << new_file.getValueOfId();
+
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_ERROR << "复制文件失败: file_id=" << old_id << " - " << e.base().what();
+            }
+        }
+
+        if (copied_count > 0) {
+            co_await UpdateStorageUsed(user_id, static_cast<int64_t>(actual_copy_size));
+        }
+
+        LOG_INFO << "文件复制完成: copied_count=" << copied_count
+                 << ", total_size=" << actual_copy_size;
+
+        CopyResponse response;
+        response.copied_count = copied_count;
+        response.new_files = new_files;
+        co_return response;
+    }
+
     // ==================== 私有辅助方法 ====================
 
     auto FileService::CheckStorageQuota(uint64_t user_id, uint64_t file_size) const

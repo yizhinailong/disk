@@ -175,6 +175,60 @@ namespace disk::file {
         auto GetDownloadData(uint64_t file_id, uint64_t user_id)
             -> drogon::Task<Result<DownloadInfo>>;
 
+        /**
+         * @brief 重命名文件
+         *
+         * 业务规则：
+         * - 验证文件存在且属于用户
+         * - 检查新文件名是否与同目录下其他文件冲突
+         * - 更新文件名和更新时间
+         *
+         * @param file_id 文件 ID
+         * @param new_name 新文件名
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<RenameResponse>> 成功返回重命名后的文件信息，失败返回错误
+         */
+        [[nodiscard]]
+        auto Rename(uint64_t file_id, std::string new_name, uint64_t user_id)
+            -> drogon::Task<Result<RenameResponse>>;
+
+        /**
+         * @brief 移动文件到目标文件夹
+         *
+         * 业务规则：
+         * - 验证目标文件夹存在且属于用户
+         * - 验证每个文件存在且属于用户
+         * - 检查目标文件夹是否存在同名文件
+         * - 更新文件的 folder_id
+         *
+         * @param request 移动请求
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<MoveResponse>> 成功返回移动统计，失败返回错误
+         */
+        [[nodiscard]]
+        auto Move(MoveRequest request, uint64_t user_id)
+            -> drogon::Task<Result<MoveResponse>>;
+
+        /**
+         * @brief 复制文件到目标文件夹
+         *
+         * 业务规则：
+         * - 验证目标文件夹存在且属于用户
+         * - 计算总复制大小，检查存储配额
+         * - 验证每个文件存在且属于用户
+         * - 检查目标文件夹是否存在同名文件
+         * - 创建新文件记录（复用 content_id）
+         * - 增加 file_contents.ref_count（不复制物理文件）
+         * - 更新用户存储使用量
+         *
+         * @param request 复制请求
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<CopyResponse>> 成功返回复制统计和ID映射，失败返回错误
+         */
+        [[nodiscard]]
+        auto Copy(CopyRequest request, uint64_t user_id)
+            -> drogon::Task<Result<CopyResponse>>;
+
     private:
         /**
          * @brief 检查存储配额
