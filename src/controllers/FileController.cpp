@@ -377,4 +377,133 @@ namespace disk::file {
         co_return resp;
     }
 
+    auto FileController::Rename(drogon::HttpRequestPtr request, std::string file_id)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到重命名请求: " << request->getPeerAddr().toIpPort()
+                 << ", file_id=" << file_id;
+
+        // 1. 解析并验证路径参数和请求体
+        auto parse_result = RenameRequest::FromPathAndRequest(file_id, request);
+        if (!parse_result) {
+            LOG_WARN << "重命名请求参数验证失败: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+        LOG_DEBUG << "重命名参数验证通过: file_id=" << parse_result->file_id
+                  << ", new_name=\"" << parse_result->new_name << "\"";
+
+        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+
+        // 3. 调用 Service 层重命名文件
+        auto result = co_await m_file_service->Rename(
+            parse_result->file_id,
+            std::move(parse_result->new_name),
+            user_id
+        );
+        if (!result) {
+            LOG_ERROR << "重命名失败: " << result.error().message
+                      << " (user_id=" << user_id << ", file_id=" << file_id << ")";
+            co_return Response::Error(result.error());
+        }
+
+        // 4. 构造响应
+        LOG_INFO << "重命名成功: file_id=" << file_id
+                 << ", new_name=\"" << result->name << "\""
+                 << " (user_id=" << user_id << ")";
+        co_return Response::Success(result->ToJson());
+    }
+
+    auto FileController::Move(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到移动文件请求: " << request->getPeerAddr().toIpPort();
+
+        // 1. 解析并验证请求参数
+        auto parse_result = MoveRequest::FromRequest(request);
+        if (!parse_result) {
+            LOG_WARN << "移动文件请求参数验证失败: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+        LOG_DEBUG << "移动文件参数验证通过: file_ids.size()=" << parse_result->file_ids.size()
+                  << ", target_folder_id=" << parse_result->target_folder_id;
+
+        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+
+        // 3. 调用 Service 层移动文件
+        auto result = co_await m_file_service->Move(*parse_result, user_id);
+        if (!result) {
+            LOG_ERROR << "移动文件失败: " << result.error().message
+                      << " (user_id=" << user_id << ")";
+            co_return Response::Error(result.error());
+        }
+
+        // 4. 构造响应
+        LOG_INFO << "移动文件成功: moved_count=" << result->moved_count
+                 << " (user_id=" << user_id << ")";
+        co_return Response::Success(result->ToJson());
+    }
+
+    auto FileController::Copy(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到复制文件请求: " << request->getPeerAddr().toIpPort();
+
+        // 1. 解析并验证请求参数
+        auto parse_result = CopyRequest::FromRequest(request);
+        if (!parse_result) {
+            LOG_WARN << "复制文件请求参数验证失败: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+        LOG_DEBUG << "复制文件参数验证通过: file_ids.size()=" << parse_result->file_ids.size()
+                  << ", target_folder_id=" << parse_result->target_folder_id;
+
+        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+
+        // 3. 调用 Service 层复制文件
+        auto result = co_await m_file_service->Copy(*parse_result, user_id);
+        if (!result) {
+            LOG_ERROR << "复制文件失败: " << result.error().message
+                      << " (user_id=" << user_id << ")";
+            co_return Response::Error(result.error());
+        }
+
+        // 4. 构造响应
+        LOG_INFO << "复制文件成功: copied_count=" << result->copied_count
+                 << " (user_id=" << user_id << ")";
+        co_return Response::Success(result->ToJson());
+    }
+
+    auto FileController::Delete(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到删除文件请求: " << request->getPeerAddr().toIpPort();
+
+        // 1. 解析并验证请求参数
+        auto parse_result = DeleteRequest::FromRequest(request);
+        if (!parse_result) {
+            LOG_WARN << "删除文件请求参数验证失败: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+        LOG_DEBUG << "删除文件参数验证通过: file_ids.size()=" << parse_result->file_ids.size();
+
+        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+
+        // 3. 调用 Service 层删除文件
+        auto result = co_await m_file_service->Delete(*parse_result, user_id);
+        if (!result) {
+            LOG_ERROR << "删除文件失败: " << result.error().message
+                      << " (user_id=" << user_id << ")";
+            co_return Response::Error(result.error());
+        }
+
+        // 4. 构造响应
+        LOG_INFO << "删除文件成功: deleted_count=" << result->deleted_count
+                 << " (user_id=" << user_id << ")";
+        co_return Response::Success(result->ToJson());
+    }
+
 } // namespace disk::file

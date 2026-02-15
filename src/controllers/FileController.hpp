@@ -30,6 +30,10 @@ namespace disk::file {
         ADD_METHOD_TO(FileController::List, "/api/file/list", drogon::Get);
         ADD_METHOD_TO(FileController::DownloadInfo, "/api/file/download/{file_id}/info", drogon::Get);
         ADD_METHOD_TO(FileController::Download, "/api/file/download/{file_id}", drogon::Get);
+        ADD_METHOD_TO(FileController::Rename, "/api/file/{file_id}/rename", drogon::Put);
+        ADD_METHOD_TO(FileController::Move, "/api/file/move", drogon::Put);
+        ADD_METHOD_TO(FileController::Copy, "/api/file/copy", drogon::Post);
+        ADD_METHOD_TO(FileController::Delete, "/api/file", drogon::Delete);
         METHOD_LIST_END
 
         /**
@@ -93,6 +97,40 @@ namespace disk::file {
         [[nodiscard]]
         auto Download(drogon::HttpRequestPtr request, std::string file_id)
             -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 重命名文件
+         * @param request HTTP请求对象
+         * @param file_id 文件ID（路径参数）
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto Rename(drogon::HttpRequestPtr request, std::string file_id)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 移动文件
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto Move(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 复制文件
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto Copy(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 删除文件
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto Delete(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
         std::unique_ptr<FileService> m_file_service;
