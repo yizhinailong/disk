@@ -11,6 +11,8 @@
 
 #include "FolderService.hpp"
 
+#include <algorithm>
+
 namespace disk::folder {
 
     using drogon::orm::CompareOperator;
@@ -343,7 +345,7 @@ namespace disk::folder {
 
         // 4. 添加根目录并反转
         path.push_back({ 0, "根目录" });
-        std::reverse(path.begin(), path.end());
+        std::ranges::reverse(path);
 
         // 5. 构建响应
         BreadcrumbResponse response;
