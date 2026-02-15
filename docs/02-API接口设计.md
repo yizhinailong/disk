@@ -2274,6 +2274,15 @@ Authorization: Bearer <access_token>
 
 ## 7. 分享接口
 
+### 标识符映射说明
+
+本章中所有 API 使用的 `share_id` 是外部可见的分享标识符（URL 友好格式，如 `sh_abc123`），对应数据库 `shares` 表中的 `share_code` 字段。数据库内部主键 `shares.id` 为自增整数，不直接暴露给 API 调用方。
+
+| 外部标识符 | 数据库字段 | 说明 |
+|-----------|-----------|------|
+| `share_id` | `shares.share_code` | API 路径/响应中使用的唯一分享标识（如 `sh_abc123`） |
+| （内部） | `shares.id` | 数据库自增主键，仅用于内部关联（`share_files.share_id` 外键引用） |
+
 ### 7.1 创建分享
 
 **POST** `/api/share`
@@ -2281,7 +2290,7 @@ Authorization: Bearer <access_token>
 创建文件分享链接。
 
 #### 实现状态
-**未实现**
+**已实现**
 
 #### 请求头
 
@@ -2319,7 +2328,7 @@ Authorization: Bearer <access_token>
 | 400 | 10002 | `ValidationFailed` | 参数校验失败 | password 长度不在 4-8 字符之间 |
 | 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Token 已超过有效期 |
-| 404 | 50002 | `FileNotFound` | 文件不存在 | 指定的 file_id 不存在或不属于当前用户 |
+| 404 | 50005 | `FileNotFound` | 文件不存在 | 指定的 file_id 不存在或不属于当前用户 |
 
 **10002 ValidationFailed 响应示例**：
 
@@ -2358,11 +2367,11 @@ Authorization: Bearer <access_token>
 }
 ```
 
-**50002 FileNotFound 响应示例**：
+**50005 FileNotFound 响应示例**：
 
 ```json
 {
-  "code": 50002,
+  "code": 50005,
   "message": "文件不存在",
   "data": {
     "file_id": 99999,
@@ -2397,7 +2406,7 @@ Authorization: Bearer <access_token>
 获取当前用户创建的所有分享。
 
 #### 实现状态
-**未实现**
+**已实现**
 
 #### 请求头
 
@@ -2413,9 +2422,18 @@ Authorization: Bearer <access_token>
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| status | string | 否 | 状态筛选：all/active/expired |
+| status | string | 否 | 状态筛选：all/active/expired/cancelled，默认 all |
 | page | integer | 否 | 页码 |
 | page_size | integer | 否 | 每页数量 |
+
+**状态筛选与数据库映射**：
+
+| API 参数值 | 数据库 `shares.status` 值 | 说明 |
+|-----------|--------------------------|------|
+| `all` | （不筛选） | 返回所有状态的分享 |
+| `active` | `1` | 有效分享（未过期且未取消） |
+| `expired` | `2` | 已过期分享 |
+| `cancelled` | `0` | 已取消分享 |
 
 #### 错误响应矩阵
 
@@ -2489,7 +2507,7 @@ Authorization: Bearer <access_token>
 获取分享的详细信息。
 
 #### 实现状态
-**未实现**
+**已实现**
 
 #### 请求头
 
@@ -2584,7 +2602,7 @@ Authorization: Bearer <access_token>
 更新分享的设置。
 
 #### 实现状态
-**未实现**
+**已实现**
 
 #### 请求头
 
@@ -2703,7 +2721,7 @@ Authorization: Bearer <access_token>
 取消分享链接。
 
 #### 实现状态
-**未实现**
+**已实现**
 
 #### 请求头
 
@@ -2723,14 +2741,25 @@ Authorization: Bearer <access_token>
 }
 ```
 
+#### 批量操作语义
+
+本接口采用**确定性混合结果契约**：无论请求中多少项成功或失败，HTTP 状态码始终返回 `200 OK`，通过响应体中的 `summary` 和 `results` 字段表达每项的处理结果。
+
+此设计避免了通过顶层 404 编码"部分成功"的歧义，使客户端能够：
+1. 明确知道请求已被服务端完整处理
+2. 精确识别哪些项成功、哪些项失败
+3. 获取失败项的具体错误原因
+
 #### 错误响应矩阵
 
 | HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
 |------------|--------|----------|----------|----------|
 | 400 | 10001 | `InvalidParameter` | 请求参数错误 | share_ids 为空或格式错误 |
 | 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Token 已超过有效期 |
-| 404 | 60001 | `ShareNotFound` | 分享不存在 | 部分 share_id 不存在（部分成功） |
+
+> **注意**：即使请求中所有 `share_ids` 都不存在或无权限，接口仍返回 `200 OK`，通过 `results` 数组中的 `status: "failed"` 表达。
 
 **40106 TokenMissing 响应示例**：
 
@@ -2755,28 +2784,121 @@ Authorization: Bearer <access_token>
 }
 ```
 
-**60001 ShareNotFound 响应示例**：
+#### 响应体结构
 
-```json
-{
-  "code": 60001,
-  "message": "分享不存在",
-  "data": {
-    "share_ids": ["sh_invalid1", "sh_invalid2"],
-    "reason": "部分分享不存在或不属于当前用户",
-    "cancelled_count": 1
-  }
-}
-```
+成功响应（HTTP 200）包含以下字段：
 
-#### 响应示例
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `summary.total` | integer | 请求取消的分享总数 |
+| `summary.succeeded` | integer | 成功取消的数量 |
+| `summary.failed` | integer | 取消失败的数量 |
+| `results` | array | 每项的处理结果，顺序与请求中的 `share_ids` 一致 |
+| `results[].share_id` | string | 分享标识符 |
+| `results[].status` | string | `success` 或 `failed` |
+| `results[].error` | object | 仅当 `status: "failed"` 时存在 |
+| `results[].error.code` | integer | 业务错误码 |
+| `results[].error.message` | string | 错误消息 |
+| `results[].error.reason` | string | 详细错误原因 |
+
+#### 响应示例 - 全部成功
 
 ```json
 {
   "code": 0,
   "message": "success",
   "data": {
-    "cancelled_count": 2
+    "summary": {
+      "total": 2,
+      "succeeded": 2,
+      "failed": 0
+    },
+    "results": [
+      {
+        "share_id": "sh_abc123",
+        "status": "success"
+      },
+      {
+        "share_id": "sh_def456",
+        "status": "success"
+      }
+    ]
+  }
+}
+```
+
+#### 响应示例 - 部分成功
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "summary": {
+      "total": 3,
+      "succeeded": 1,
+      "failed": 2
+    },
+    "results": [
+      {
+        "share_id": "sh_abc123",
+        "status": "success"
+      },
+      {
+        "share_id": "sh_invalid1",
+        "status": "failed",
+        "error": {
+          "code": 60001,
+          "message": "分享不存在",
+          "reason": "分享不存在或不属于当前用户"
+        }
+      },
+      {
+        "share_id": "sh_expired",
+        "status": "failed",
+        "error": {
+          "code": 60002,
+          "message": "分享已过期",
+          "reason": "分享已超过有效期，无法取消"
+        }
+      }
+    ]
+  }
+}
+```
+
+#### 响应示例 - 全部失败
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "summary": {
+      "total": 2,
+      "succeeded": 0,
+      "failed": 2
+    },
+    "results": [
+      {
+        "share_id": "sh_invalid1",
+        "status": "failed",
+        "error": {
+          "code": 60001,
+          "message": "分享不存在",
+          "reason": "分享不存在或不属于当前用户"
+        }
+      },
+      {
+        "share_id": "sh_invalid2",
+        "status": "failed",
+        "error": {
+          "code": 60001,
+          "message": "分享不存在",
+          "reason": "分享不存在或不属于当前用户"
+        }
+      }
+    ]
   }
 }
 ```
@@ -2790,7 +2912,7 @@ Authorization: Bearer <access_token>
 验证分享并获取访问令牌（供访客使用，无需登录）。
 
 #### 实现状态
-**未实现**
+**已实现**
 
 此接口无需认证，访客可直接访问。
 
@@ -2892,7 +3014,7 @@ Authorization: Bearer <access_token>
 浏览分享的文件夹内容（使用分享令牌）。
 
 #### 实现状态
-**未实现**
+**已实现**
 
 #### 请求头
 
@@ -2922,6 +3044,7 @@ X-Share-Token: <share_token>
 |------------|--------|----------|----------|----------|
 | 400 | 10001 | `InvalidParameter` | 请求参数错误 | share_id 或 folder_id 格式错误 |
 | 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 X-Share-Token |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | X-Share-Token 格式无效（非 JWT 或签名损坏） |
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Share Token 已超过有效期 |
 | 404 | 60001 | `ShareNotFound` | 分享不存在 | share_id 不存在 |
 | 400 | 60002 | `ShareExpired` | 分享已过期 | 分享已超过有效期 |
@@ -2934,6 +3057,18 @@ X-Share-Token: <share_token>
   "code": 40106,
   "message": "未提供令牌",
   "data": null
+}
+```
+
+**40107 TokenMalformed 响应示例**：
+
+```json
+{
+  "code": 40107,
+  "message": "令牌格式错误",
+  "data": {
+    "reason": "X-Share-Token 格式无效（非 JWT 或签名损坏）"
+  }
 }
 ```
 
@@ -3016,7 +3151,7 @@ X-Share-Token: <share_token>
 下载分享的文件。
 
 #### 实现状态
-**未实现**
+**已实现**
 
 #### 请求头
 
@@ -3043,11 +3178,12 @@ Range: bytes=0-1048575 (可选)
 |------------|--------|----------|----------|----------|
 | 400 | 10001 | `InvalidParameter` | 请求参数错误 | share_id 或 file_id 格式错误 |
 | 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 X-Share-Token |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | X-Share-Token 格式无效（非 JWT 或签名损坏） |
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Share Token 已超过有效期 |
 | 404 | 60001 | `ShareNotFound` | 分享不存在 | share_id 不存在 |
 | 400 | 60002 | `ShareExpired` | 分享已过期 | 分享已超过有效期 |
 | 403 | 60004 | `ShareAccessDenied` | 无权限访问 | 分享设置为仅查看，不允许下载 |
-| 404 | 50002 | `FileNotFound` | 文件不存在 | file_id 不存在于分享中 |
+| 404 | 50005 | `FileNotFound` | 文件不存在 | file_id 不存在于分享中 |
 
 **40106 TokenMissing 响应示例**：
 
@@ -3056,6 +3192,18 @@ Range: bytes=0-1048575 (可选)
   "code": 40106,
   "message": "未提供令牌",
   "data": null
+}
+```
+
+**40107 TokenMalformed 响应示例**：
+
+```json
+{
+  "code": 40107,
+  "message": "令牌格式错误",
+  "data": {
+    "reason": "X-Share-Token 格式无效（非 JWT 或签名损坏）"
+  }
 }
 ```
 
@@ -3114,11 +3262,11 @@ Range: bytes=0-1048575 (可选)
 }
 ```
 
-**50002 FileNotFound 响应示例**：
+**50005 FileNotFound 响应示例**：
 
 ```json
 {
-  "code": 50002,
+  "code": 50005,
   "message": "文件不存在",
   "data": {
     "file_id": 99999,
@@ -3127,9 +3275,110 @@ Range: bytes=0-1048575 (可选)
 }
 ```
 
-#### 响应
+#### Range 请求语义
 
-文件二进制数据流。
+本接口支持 HTTP Range 请求，遵循 [RFC 7233](https://datatracker.ietf.org/doc/html/rfc7233) 规范，用于断点续传和分片下载场景。
+
+| 场景 | 请求头 | HTTP 状态码 | 说明 |
+|------|--------|------------|------|
+| **完整下载** | 无 Range | `200 OK` | 返回完整文件内容 |
+| **范围下载** | `Range: bytes=0-1023` | `206 Partial Content` | 返回指定字节范围的内容 |
+| **范围无效** | `Range: bytes=999999-`（超出文件大小） | `416 Range Not Satisfiable` | 范围无法满足，响应体包含错误信息 |
+
+**Range 请求格式说明**：
+- 仅支持 `bytes` 单位
+- 格式：`bytes=<start>-<end>`（end 可选，表示到文件末尾）
+- 示例：`Range: bytes=0-1048575`（下载前 1MB）
+
+#### 响应状态码矩阵
+
+| HTTP 状态码 | 触发条件 | 响应体 |
+|------------|----------|--------|
+| `200 OK` | 无 Range 请求，返回完整文件 | 文件二进制数据流 |
+| `206 Partial Content` | 有效 Range 请求 | 请求范围的字节片段 |
+| `416 Range Not Satisfiable` | Range 范围无效或超出文件大小 | JSON 错误响应（见下方示例） |
+
+#### 响应头
+
+| Header | 必须返回 | 说明 |
+|--------|---------|------|
+| `Content-Type` | 是 | 文件 MIME 类型（如 `application/pdf`） |
+| `Content-Length` | 是 | 返回数据的字节长度 |
+| `Content-Disposition` | 是 | `attachment; filename="<文件名>"`，建议使用 RFC 5987 编码非 ASCII 文件名 |
+| `Accept-Ranges` | 是 | 固定值 `bytes`，表示支持范围请求 |
+| `Content-Range` | 206 必须 | 范围信息，格式：`bytes <start>-<end>/<total>` |
+| `ETag` | 建议 | 文件版本标识（如文件哈希），用于条件请求 |
+| `Last-Modified` | 建议 | 文件最后修改时间，用于条件请求 |
+
+**200 OK 响应头示例**：
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/pdf
+Content-Length: 104857600
+Content-Disposition: attachment; filename="document.pdf"
+Accept-Ranges: bytes
+ETag: "d41d8cd98f00b204e9800998ecf8427e"
+Last-Modified: Mon, 13 Jan 2026 10:00:00 GMT
+```
+
+**206 Partial Content 响应头示例**：
+
+```http
+HTTP/1.1 206 Partial Content
+Content-Type: application/pdf
+Content-Length: 1048576
+Content-Range: bytes 0-1048575/104857600
+Content-Disposition: attachment; filename="document.pdf"
+Accept-Ranges: bytes
+ETag: "d41d8cd98f00b204e9800998ecf8427e"
+```
+
+**416 Range Not Satisfiable 响应**：
+
+当请求的 Range 范围无法满足时（如起始位置超出文件大小），返回 `416` 状态码：
+
+```http
+HTTP/1.1 416 Range Not Satisfiable
+Content-Type: application/json
+Content-Range: bytes */104857600
+
+{
+  "code": 10002,
+  "message": "请求范围无效",
+  "data": {
+    "file_size": 104857600,
+    "requested_range": "bytes=999999000-",
+    "reason": "请求的起始位置超出文件大小"
+  }
+}
+```
+
+#### 条件请求（可选）
+
+服务端建议支持以下条件请求头，用于优化缓存和断点续传验证：
+
+| Header | 说明 |
+|--------|------|
+| `If-Range` | 值为 `ETag` 或 `Last-Modified`；若匹配则返回 206，否则返回 200 完整内容 |
+| `If-Match` | 值为 `ETag`；若不匹配则返回 412 Precondition Failed |
+| `If-None-Match` | 值为 `ETag`；若匹配则返回 304 Not Modified |
+
+**If-Range 请求示例**：
+
+```http
+GET /api/share/download/sh_abc123/1 HTTP/1.1
+X-Share-Token: st_xyz789...
+Range: bytes=1048576-
+If-Range: "d41d8cd98f00b204e9800998ecf8427e"
+```
+
+- 若 ETag 匹配：返回 `206 Partial Content` 及后续内容
+- 若 ETag 不匹配（文件已变更）：返回 `200 OK` 及完整文件
+
+#### 响应体
+
+成功时返回文件二进制数据流。
 
 ---
 
@@ -3282,3 +3531,153 @@ X-Timestamp: 1705132800
 X-Nonce: random-string
 X-Signature: HMAC-SHA256(timestamp + nonce + body, secret)
 ```
+
+### 9.4 分享访问安全控制
+
+分享功能涉及公开/半公开资源访问，需要额外的安全防护措施。
+
+#### 9.4.1 密码暴力破解防护
+
+对于设置了密码的分享，服务端必须实施以下防护措施：
+
+| 防护措施 | 实现要求 | 触发条件 |
+|---------|---------|---------|
+| **尝试计数** | Redis 计数器 `share:pwd:{share_id}:{ip}` | 每次密码验证失败 |
+| **尝试限制** | 最多 5 次失败 | 单个 IP + 单个分享 |
+| **临时锁定** | 15 分钟冷却期 | 达到失败上限后 |
+| **计数器过期** | 15 分钟 TTL | 最后一次尝试后 |
+
+**Redis 键设计**：
+```
+share:pwd:{share_id}:{client_ip}  -> 失败次数 (int, TTL=15min)
+share:pwd:lock:{share_id}:{client_ip}  -> 锁定标记 (exists, TTL=15min)
+```
+
+**错误响应（锁定状态）**：
+
+```json
+{
+  "code": 60003,
+  "message": "分享密码错误",
+  "data": {
+    "share_id": "sh_abc123",
+    "reason": "密码错误次数过多，请 15 分钟后重试",
+    "retry_after": 900
+  }
+}
+```
+
+#### 9.4.2 Share Token 防护
+
+Share Token（通过 `/api/share/access` 获取）需要以下安全措施：
+
+| 防护措施 | 实现要求 | 说明 |
+|---------|---------|------|
+| **短有效期** | 默认 1 小时（3600 秒） | 限制被盗用后的攻击窗口 |
+| **单次使用/绑定** | 建议绑定 Client IP 或 User-Agent | 可选增强措施 |
+| **撤销机制** | 分享取消时立即使所有 token 失效 | 通过 Redis 黑名单或 DB 状态检查 |
+| **类型标识** | JWT `type` claim = `share` | 区分于 access_token/refresh_token |
+| **作用域限定** | JWT `scope` claim 包含 `share_id` 和 `permission` | 限定 token 仅能访问指定分享 |
+
+**Share Token Payload 示例**：
+
+```json
+{
+  "sub": "sh_abc123",
+  "type": "share",
+  "scope": {
+    "share_id": "sh_abc123",
+    "permission": "download"
+  },
+  "iat": 1705132800,
+  "exp": 1705136400,
+  "jti": "unique-token-id"
+}
+```
+
+**Token 撤销检查**：
+
+服务端在验证 Share Token 时，必须检查：
+1. JWT 签名和过期时间
+2. 分享状态（`shares.status`）：`status = 0` (cancelled) 时拒绝
+3. 分享有效期（`shares.expires_at`）：已过期时拒绝
+4. （可选）Redis 黑名单 `share:revoked:{jti}`
+
+**已撤销 Token 响应**：
+
+```json
+{
+  "code": 40104,
+  "message": "令牌无效或已过期",
+  "data": {
+    "reason": "分享已被取消",
+    "share_id": "sh_abc123"
+  }
+}
+```
+
+#### 9.4.3 速率限制强化
+
+除通用分享访问限制外，对敏感操作实施更严格的限制：
+
+| 操作类型 | 限制规则 | 说明 |
+|---------|---------|------|
+| **分享访问验证** | 30 次/分钟/IP | `/api/share/access` 接口 |
+| **密码尝试** | 5 次/15分钟/IP/分享 | 同一分享的密码验证 |
+| **文件下载** | 10 次/分钟/share_token | 限制下载频率 |
+| **浏览目录** | 60 次/分钟/share_token | 限制目录遍历 |
+
+**429 Too Many Requests 响应**：
+
+```json
+{
+  "code": 10005,
+  "message": "请求过于频繁",
+  "data": {
+    "retry_after": 60,
+    "limit": "30 次/分钟"
+  }
+}
+```
+
+#### 9.4.4 审计日志
+
+以下分享相关事件必须记录到 `operation_logs` 表：
+
+| 事件类型 | `action` 值 | 记录字段 |
+|---------|------------|---------|
+| **分享创建** | `share_create` | `target_type`='share', `target_id`=shares.id, `details`={share_code, file_ids, permission, expires_at} |
+| **分享访问** | `share_access` | `target_type`='share', `target_id`=shares.id, `details`={share_code, ip, user_agent, success} |
+| **密码验证失败** | `share_pwd_fail` | `target_type`='share', `target_id`=shares.id, `details`={share_code, ip, attempt_count} |
+| **文件下载** | `share_download` | `target_type`='share', `target_id`=shares.id, `details`={share_code, file_id, ip, bytes} |
+| **分享取消** | `share_cancel` | `target_type`='share', `target_id`=shares.id, `details`={share_code, cancelled_by} |
+
+> **注意**：`target_id` 为数据库内部 `shares.id`（BIGINT），外部标识 `share_code` 存储于 `details` JSON 中用于追溯。
+
+**审计日志字段要求**（对应 `sql/init.sql` 定义）：
+
+```sql
+-- operation_logs 表关键字段
+user_id     BIGINT UNSIGNED  -- 操作者 ID（访客为 NULL，需调整 NOT NULL 约束）
+action      VARCHAR(32)      -- 操作类型
+target_type VARCHAR(32)      -- 目标类型（如 'share', 'file', 'folder'）
+target_id   BIGINT UNSIGNED  -- 目标内部 ID（shares.id，非 share_code）
+target_name VARCHAR(255)     -- 目标名称（可选，如分享的文件名）
+details     JSON             -- 操作详情（含 share_code 等外部标识）
+ip_address  VARCHAR(45)      -- 客户端 IP
+user_agent  VARCHAR(512)     -- 客户端标识
+created_at  DATETIME         -- 操作时间
+```
+
+#### 9.4.5 安全检查清单
+
+实现分享功能时，必须确保以下检查项全部通过：
+
+- [ ] 密码验证失败计数器使用 Redis 原子操作（INCR + EXPIRE）
+- [ ] Share Token 有效期不超过 1 小时
+- [ ] Share Token 包含 `type: "share"` 和 `scope` claim
+- [ ] 验证 Share Token 时检查分享状态和有效期
+- [ ] 分享取消时清理或使失效相关 Share Token
+- [ ] 敏感操作有独立的速率限制
+- [ ] 关键事件写入审计日志
+- [ ] 密码错误响应不泄露分享是否存在的信息（统一返回 60003）

@@ -11,12 +11,18 @@ set(TEST_SOURCES
     services/HashUtil_test.cpp
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp
+    services/ShareService_test.cpp
+    services/ShareTokenService_test.cpp
     services/TrashService_test.cpp
+    filters/ShareAuthFilter_test.cpp
     dtos/AuthDto_test.cpp
     dtos/FileDto_test.cpp
     dtos/FolderDto_test.cpp
+    dtos/ShareDto_test.cpp
     dtos/TrashDto_test.cpp
     dtos/UserDto_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/ShareTokenService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/RedisService.cpp
 )
 
 add_executable(disk-test ${TEST_SOURCES})

@@ -76,3 +76,59 @@ TEST(RedisKeyPrefix, BuildLoginRateLimitKey_IPv6WithPort) {
     auto result = RedisKeyPrefix::BuildLoginRateLimitKey(ip);
     EXPECT_EQ(result, "rate:login:2001:db8::1");
 }
+
+// ==================== Share Token Redis Key Tests ====================
+
+TEST(RedisKeyPrefix, BuildShareTokenKey_ValidShareCodeAndHash) {
+    std::string share_code = "AbCd1234";
+    std::string token_hash = "a1b2c3d4e5f6";
+    auto result = RedisKeyPrefix::BuildShareTokenKey(share_code, token_hash);
+    EXPECT_EQ(result, "share_token:AbCd1234:a1b2c3d4e5f6");
+}
+
+TEST(RedisKeyPrefix, BuildShareTokenKey_EmptyTokenHash) {
+    std::string share_code = "XyZ999";
+    std::string token_hash;
+    auto result = RedisKeyPrefix::BuildShareTokenKey(share_code, token_hash);
+    EXPECT_EQ(result, "share_token:XyZ999:");
+}
+
+TEST(RedisKeyPrefix, BuildShareTokenKey_EmptyShareCode) {
+    std::string share_code;
+    std::string token_hash = "hash123";
+    auto result = RedisKeyPrefix::BuildShareTokenKey(share_code, token_hash);
+    EXPECT_EQ(result, "share_token::hash123");
+}
+
+TEST(RedisKeyPrefix, BuildShareTokenBlacklistKey_ValidHash) {
+    std::string token_hash = "revoked_token_hash_abc";
+    auto result = RedisKeyPrefix::BuildShareTokenBlacklistKey(token_hash);
+    EXPECT_EQ(result, "share_token_blacklist:revoked_token_hash_abc");
+}
+
+TEST(RedisKeyPrefix, BuildShareTokenBlacklistKey_EmptyHash) {
+    std::string token_hash;
+    auto result = RedisKeyPrefix::BuildShareTokenBlacklistKey(token_hash);
+    EXPECT_EQ(result, "share_token_blacklist:");
+}
+
+TEST(RedisKeyPrefix, BuildSharePasswordRateLimitKey_ValidShareCodeAndIP) {
+    std::string share_code = "AbCd12";
+    std::string ip = "192.168.1.100";
+    auto result = RedisKeyPrefix::BuildSharePasswordRateLimitKey(share_code, ip);
+    EXPECT_EQ(result, "rate:share_password:AbCd12:192.168.1.100");
+}
+
+TEST(RedisKeyPrefix, BuildSharePasswordRateLimitKey_IPWithPort) {
+    std::string share_code = "XyZ99";
+    std::string ip = "10.0.0.1:8080";
+    auto result = RedisKeyPrefix::BuildSharePasswordRateLimitKey(share_code, ip);
+    EXPECT_EQ(result, "rate:share_password:XyZ99:10.0.0.1");
+}
+
+TEST(RedisKeyPrefix, BuildSharePasswordRateLimitKey_IPv6WithPort) {
+    std::string share_code = "Test01";
+    std::string ip = "[2001:db8::1]:9090";
+    auto result = RedisKeyPrefix::BuildSharePasswordRateLimitKey(share_code, ip);
+    EXPECT_EQ(result, "rate:share_password:Test01:2001:db8::1");
+}

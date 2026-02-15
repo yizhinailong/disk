@@ -47,7 +47,10 @@
         ],
         "exempt": [
           "^/api/auth/register",
-          "^/api/auth/login"
+          "^/api/auth/login",
+          "^/api/share/access/.*",
+          "^/api/share/browse/.*",
+          "^/api/share/download/.*"
         ]
       }
     },

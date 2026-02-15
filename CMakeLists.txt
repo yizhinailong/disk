@@ -10,5 +10,7 @@ find_package(jwt-cpp CONFIG REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 
+enable_testing()
+
 add_subdirectory(src)
 add_subdirectory(test)

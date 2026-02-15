@@ -5,6 +5,7 @@ set(Controllers_HEADERS
     controllers/AuthController.hpp
     controllers/FileController.hpp
     controllers/FolderController.hpp
+    controllers/ShareController.hpp
     controllers/TrashController.hpp
     controllers/UserController.hpp
 )
@@ -12,6 +13,7 @@ set(Controllers_SOURCES
     controllers/AuthController.cpp
     controllers/FileController.cpp
     controllers/FolderController.cpp
+    controllers/ShareController.cpp
     controllers/TrashController.cpp
     controllers/UserController.cpp
 )
@@ -21,6 +23,7 @@ set(Dtos_HEADERS
     dtos/AuthDto.hpp
     dtos/FileDto.hpp
     dtos/FolderDto.hpp
+    dtos/ShareDto.hpp
     dtos/TrashDto.hpp
     dtos/UserDto.hpp
 )
@@ -28,9 +31,11 @@ set(Dtos_HEADERS
 # Filter
 set(Filters_HEADERS
     filters/JwtAuthFilter.hpp
+    filters/ShareAuthFilter.hpp
 )
 set(Filters_SOURCES
     filters/JwtAuthFilter.cpp
+    filters/ShareAuthFilter.cpp
 )
 
 # Model
@@ -63,6 +68,8 @@ set(Services_HEADERS
     services/FileService.hpp
     services/FolderService.hpp
     services/RedisService.hpp
+    services/ShareService.hpp
+    services/ShareTokenService.hpp
     services/TokenService.hpp
     services/TrashService.hpp
     services/UserService.hpp
@@ -72,6 +79,8 @@ set(Services_SOURCES
     services/FileService.cpp
     services/FolderService.cpp
     services/RedisService.cpp
+    services/ShareService.cpp
+    services/ShareTokenService.cpp
     services/TokenService.cpp
     services/TrashService.cpp
     services/UserService.cpp

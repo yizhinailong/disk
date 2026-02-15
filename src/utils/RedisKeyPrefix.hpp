@@ -36,6 +36,9 @@ namespace disk::redis {
         static constexpr std::string_view REFRESH_TOKEN_PREFIX = "refresh_token";
         static constexpr std::string_view ACCESS_TOKEN_BLACKLIST_PREFIX = "access_token_blacklist";
         static constexpr std::string_view LOGIN_RATE_LIMIT_PREFIX = "rate:login";
+        static constexpr std::string_view SHARE_TOKEN_PREFIX = "share_token";
+        static constexpr std::string_view SHARE_TOKEN_BLACKLIST_PREFIX = "share_token_blacklist";
+        static constexpr std::string_view SHARE_PASSWORD_RATE_LIMIT_PREFIX = "rate:share_password";
 
         // ==================== Key Construction Methods ====================
 
@@ -70,6 +73,50 @@ namespace disk::redis {
         [[nodiscard]]
         static auto BuildLoginRateLimitKey(const std::string& ip_address) -> std::string {
             return std::string(LOGIN_RATE_LIMIT_PREFIX) + ":" + ExtractIPOnly(ip_address);
+        }
+
+        /**
+         * @brief Build share token key
+         *
+         * @param share_code Share code (external identifier)
+         * @param token_hash SHA256 hash of the share token
+         * @return std::string Redis key format: "share_token:{share_code}:{token_hash}"
+         */
+        [[nodiscard]]
+        static auto BuildShareTokenKey(
+            const std::string& share_code,
+            const std::string& token_hash
+        ) -> std::string {
+            return std::string(SHARE_TOKEN_PREFIX) + ":" + share_code + ":" + token_hash;
+        }
+
+        /**
+         * @brief Build share token blacklist key
+         *
+         * @param token_hash SHA256 hash of the revoked share token
+         * @return std::string Redis key format: "share_token_blacklist:{token_hash}"
+         */
+        [[nodiscard]]
+        static auto BuildShareTokenBlacklistKey(const std::string& token_hash) -> std::string {
+            return std::string(SHARE_TOKEN_BLACKLIST_PREFIX) + ":" + token_hash;
+        }
+
+        /**
+         * @brief Build share password rate limit key
+         *
+         * @param share_code Share code
+         * @param ip_address IP address (with optional port)
+         * @return std::string Redis key format: "rate:share_password:{share_code}:{normalized_ip}"
+         */
+        [[nodiscard]]
+        static auto BuildSharePasswordRateLimitKey(
+            const std::string& share_code,
+            const std::string& ip_address
+        ) -> std::string {
+            return std::string(
+                       SHARE_PASSWORD_RATE_LIMIT_PREFIX
+                   ) +
+                   ":" + share_code + ":" + ExtractIPOnly(ip_address);
         }
 
         /**
