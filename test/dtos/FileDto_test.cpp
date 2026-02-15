@@ -22,9 +22,15 @@
 
 using disk::file::CompleteUploadRequest;
 using disk::file::CompleteUploadResponse;
+using disk::file::CopyRequest;
+using disk::file::DeleteRequest;
+using disk::file::DownloadInfoRequest;
 using disk::file::FileItem;
+using disk::file::FileListRequest;
 using disk::file::InitUploadRequest;
 using disk::file::InitUploadResponse;
+using disk::file::MoveRequest;
+using disk::file::RenameRequest;
 using disk::file::UploadChunkRequest;
 using disk::file::UploadChunkResponse;
 
@@ -587,4 +593,435 @@ TEST(CompleteUploadResponse, ToJsonCorrectFields) {
     EXPECT_EQ(json["file"]["mime_type"].asString(), "application/pdf");
     EXPECT_EQ(json["file"]["parent_id"].asUInt64(), 10);
     EXPECT_EQ(json["file"]["created_at"].asString(), "2026-02-14T11:00:00Z");
+}
+
+// ==================== FileListRequest Tests ====================
+
+TEST(FileListRequest, ValidParameters) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("parent_id", "10");
+    req->setParameter("page", "2");
+    req->setParameter("page_size", "50");
+    req->setParameter("sort_by", "size");
+    req->setParameter("sort_order", "desc");
+    req->setParameter("type", "file");
+
+    auto result = FileListRequest::FromRequest(req);
+    ASSERT_TRUE(result.has_value()) << "Valid parameters should pass";
+    EXPECT_EQ(result->parent_id, 10);
+    EXPECT_EQ(result->page, 2);
+    EXPECT_EQ(result->page_size, 50);
+    EXPECT_EQ(result->sort_by, "size");
+    EXPECT_EQ(result->sort_order, "desc");
+    EXPECT_EQ(result->type, "file");
+}
+
+TEST(FileListRequest, DefaultValues) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+
+    auto result = FileListRequest::FromRequest(req);
+    ASSERT_TRUE(result.has_value()) << "Empty request should use defaults";
+    EXPECT_EQ(result->parent_id, 0);
+    EXPECT_EQ(result->page, 1);
+    EXPECT_EQ(result->page_size, 20);
+    EXPECT_EQ(result->sort_by, "name");
+    EXPECT_EQ(result->sort_order, "asc");
+    EXPECT_EQ(result->type, "all");
+}
+
+TEST(FileListRequest, InvalidPage) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("page", "-1");
+
+    auto result = FileListRequest::FromRequest(req);
+    EXPECT_FALSE(result.has_value()) << "Negative page should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(FileListRequest, InvalidPageSizeTooLarge) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("page_size", "101");
+
+    auto result = FileListRequest::FromRequest(req);
+    EXPECT_FALSE(result.has_value()) << "page_size > 100 should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(FileListRequest, InvalidPageSizeZero) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("page_size", "0");
+
+    auto result = FileListRequest::FromRequest(req);
+    EXPECT_FALSE(result.has_value()) << "page_size = 0 should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(FileListRequest, InvalidSortBy) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("sort_by", "invalid_field");
+
+    auto result = FileListRequest::FromRequest(req);
+    EXPECT_FALSE(result.has_value()) << "Invalid sort_by should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(FileListRequest, InvalidType) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("type", "document");
+
+    auto result = FileListRequest::FromRequest(req);
+    EXPECT_FALSE(result.has_value()) << "Invalid type should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+// ==================== DownloadInfoRequest Tests ====================
+
+TEST(DownloadInfoRequest, ValidFileId) {
+    auto result = DownloadInfoRequest::FromPath("123");
+    ASSERT_TRUE(result.has_value()) << "Valid file_id should pass";
+    EXPECT_EQ(result->file_id, 123);
+}
+
+TEST(DownloadInfoRequest, InvalidFileIdNonNumeric) {
+    auto result = DownloadInfoRequest::FromPath("abc");
+    EXPECT_FALSE(result.has_value()) << "Non-numeric file_id should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+TEST(DownloadInfoRequest, InvalidFileIdZero) {
+    auto result = DownloadInfoRequest::FromPath("0");
+    EXPECT_FALSE(result.has_value()) << "file_id = 0 should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+TEST(DownloadInfoRequest, InvalidFileIdNegative) {
+    auto result = DownloadInfoRequest::FromPath("-5");
+    EXPECT_FALSE(result.has_value()) << "Negative file_id should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+TEST(DownloadInfoRequest, InvalidFileIdEmpty) {
+    auto result = DownloadInfoRequest::FromPath("");
+    EXPECT_FALSE(result.has_value()) << "Empty file_id should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+// ==================== RenameRequest Tests ====================
+
+static auto CreateRenameRequest(uint64_t file_id, const std::string& new_name) -> drogon::HttpRequestPtr {
+    Json::Value json;
+    json["new_name"] = new_name;
+
+    return CreateJsonRequest(json);
+}
+
+TEST(RenameRequest, ValidRequest) {
+    auto req = CreateRenameRequest(123, "new_document.pdf");
+    auto result = RenameRequest::FromPathAndRequest("123", req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid rename request should pass";
+    EXPECT_EQ(result->file_id, 123);
+    EXPECT_EQ(result->new_name, "new_document.pdf");
+}
+
+TEST(RenameRequest, EmptyName) {
+    auto req = CreateRenameRequest(123, "");
+    auto result = RenameRequest::FromPathAndRequest("123", req);
+
+    EXPECT_FALSE(result.has_value()) << "Empty new_name should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(RenameRequest, InvalidFilenameSlash) {
+    auto req = CreateRenameRequest(123, "test/file.txt");
+    auto result = RenameRequest::FromPathAndRequest("123", req);
+
+    EXPECT_FALSE(result.has_value()) << "Filename with / should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidFilename);
+    }
+}
+
+TEST(RenameRequest, InvalidFilenameBackslash) {
+    auto req = CreateRenameRequest(123, "test\\file.txt");
+    auto result = RenameRequest::FromPathAndRequest("123", req);
+
+    EXPECT_FALSE(result.has_value()) << "Filename with \\ should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidFilename);
+    }
+}
+
+TEST(RenameRequest, InvalidFilenameColon) {
+    auto req = CreateRenameRequest(123, "test:file.txt");
+    auto result = RenameRequest::FromPathAndRequest("123", req);
+
+    EXPECT_FALSE(result.has_value()) << "Filename with : should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidFilename);
+    }
+}
+
+TEST(RenameRequest, InvalidFilenameHiddenFile) {
+    auto req = CreateRenameRequest(123, ".hidden");
+    auto result = RenameRequest::FromPathAndRequest("123", req);
+
+    EXPECT_FALSE(result.has_value()) << "Hidden filename should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidFilename);
+    }
+}
+
+TEST(RenameRequest, InvalidFilenameReservedDot) {
+    auto req = CreateRenameRequest(123, ".");
+    auto result = RenameRequest::FromPathAndRequest("123", req);
+
+    EXPECT_FALSE(result.has_value()) << "Reserved name '.' should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidFilename);
+    }
+}
+
+TEST(RenameRequest, InvalidFilenameReservedDoubleDot) {
+    auto req = CreateRenameRequest(123, "..");
+    auto result = RenameRequest::FromPathAndRequest("123", req);
+
+    EXPECT_FALSE(result.has_value()) << "Reserved name '..' should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidFilename);
+    }
+}
+
+TEST(RenameRequest, InvalidFileIdNonNumeric) {
+    auto req = CreateRenameRequest(123, "valid.txt");
+    auto result = RenameRequest::FromPathAndRequest("abc", req);
+
+    EXPECT_FALSE(result.has_value()) << "Non-numeric file_id should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+TEST(RenameRequest, MissingNewName) {
+    Json::Value json;
+    auto req = CreateJsonRequest(json);
+    auto result = RenameRequest::FromPathAndRequest("123", req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing new_name should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+// ==================== MoveRequest Tests ====================
+
+static auto CreateMoveRequest(const std::vector<uint64_t>& file_ids, uint64_t target_folder_id = 0) -> drogon::HttpRequestPtr {
+    Json::Value json;
+    Json::Value ids_array(Json::arrayValue);
+    for (auto id : file_ids) {
+        ids_array.append(static_cast<Json::UInt64>(id));
+    }
+    json["file_ids"] = ids_array;
+    json["target_folder_id"] = static_cast<Json::UInt64>(target_folder_id);
+
+    return CreateJsonRequest(json);
+}
+
+TEST(MoveRequest, ValidRequest) {
+    auto req = CreateMoveRequest({ 1, 2, 3 }, 10);
+    auto result = MoveRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid move request should pass";
+    EXPECT_EQ(result->file_ids.size(), 3);
+    EXPECT_EQ(result->file_ids[0], 1);
+    EXPECT_EQ(result->file_ids[1], 2);
+    EXPECT_EQ(result->file_ids[2], 3);
+    EXPECT_EQ(result->target_folder_id, 10);
+}
+
+TEST(MoveRequest, EmptyFileIds) {
+    auto req = CreateMoveRequest({});
+    auto result = MoveRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Empty file_ids array should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+TEST(MoveRequest, MissingFileIds) {
+    Json::Value json;
+    auto req = CreateJsonRequest(json);
+    auto result = MoveRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing file_ids should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(MoveRequest, InvalidFileIdType) {
+    Json::Value json;
+    Json::Value ids_array(Json::arrayValue);
+    ids_array.append("not_a_number");
+    json["file_ids"] = ids_array;
+
+    auto req = CreateJsonRequest(json);
+    auto result = MoveRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Non-numeric file_id should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+TEST(MoveRequest, InvalidFileIdZero) {
+    Json::Value json;
+    Json::Value ids_array(Json::arrayValue);
+    ids_array.append(0);
+    json["file_ids"] = ids_array;
+
+    auto req = CreateJsonRequest(json);
+    auto result = MoveRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "file_id = 0 should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+// ==================== CopyRequest Tests ====================
+
+static auto CreateCopyRequest(const std::vector<uint64_t>& file_ids, uint64_t target_folder_id = 0) -> drogon::HttpRequestPtr {
+    Json::Value json;
+    Json::Value ids_array(Json::arrayValue);
+    for (auto id : file_ids) {
+        ids_array.append(static_cast<Json::UInt64>(id));
+    }
+    json["file_ids"] = ids_array;
+    json["target_folder_id"] = static_cast<Json::UInt64>(target_folder_id);
+
+    return CreateJsonRequest(json);
+}
+
+TEST(CopyRequest, ValidRequest) {
+    auto req = CreateCopyRequest({ 100, 200 }, 5);
+    auto result = CopyRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid copy request should pass";
+    EXPECT_EQ(result->file_ids.size(), 2);
+    EXPECT_EQ(result->file_ids[0], 100);
+    EXPECT_EQ(result->file_ids[1], 200);
+    EXPECT_EQ(result->target_folder_id, 5);
+}
+
+TEST(CopyRequest, EmptyFileIds) {
+    auto req = CreateCopyRequest({});
+    auto result = CopyRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Empty file_ids array should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+TEST(CopyRequest, MissingFileIds) {
+    Json::Value json;
+    auto req = CreateJsonRequest(json);
+    auto result = CopyRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing file_ids should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(CopyRequest, InvalidFileIdType) {
+    Json::Value json;
+    Json::Value ids_array(Json::arrayValue);
+    ids_array.append(3.14);
+    json["file_ids"] = ids_array;
+
+    auto req = CreateJsonRequest(json);
+    auto result = CopyRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Non-integer file_id should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+// ==================== DeleteRequest Tests ====================
+
+static auto CreateDeleteRequest(const std::vector<uint64_t>& file_ids) -> drogon::HttpRequestPtr {
+    Json::Value json;
+    Json::Value ids_array(Json::arrayValue);
+    for (auto id : file_ids) {
+        ids_array.append(static_cast<Json::UInt64>(id));
+    }
+    json["file_ids"] = ids_array;
+
+    return CreateJsonRequest(json);
+}
+
+TEST(DeleteRequest, ValidRequest) {
+    auto req = CreateDeleteRequest({ 1, 2, 3 });
+    auto result = DeleteRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid delete request should pass";
+    EXPECT_EQ(result->file_ids.size(), 3);
+    EXPECT_EQ(result->file_ids[0], 1);
+    EXPECT_EQ(result->file_ids[1], 2);
+    EXPECT_EQ(result->file_ids[2], 3);
+}
+
+TEST(DeleteRequest, EmptyFileIds) {
+    auto req = CreateDeleteRequest({});
+    auto result = DeleteRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Empty file_ids array should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+TEST(DeleteRequest, MissingFileIds) {
+    Json::Value json;
+    auto req = CreateJsonRequest(json);
+    auto result = DeleteRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing file_ids should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(DeleteRequest, InvalidFileIdZero) {
+    auto req = CreateDeleteRequest({ 1, 0, 2 });
+    auto result = DeleteRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "file_id = 0 should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
 }
