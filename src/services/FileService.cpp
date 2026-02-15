@@ -18,10 +18,12 @@
 #include <sstream>
 
 #include <drogon/utils/Utilities.h>
+#include <json/writer.h>
 
 #include "models/FileContents.hpp"
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
+#include "models/Trash.hpp"
 #include "models/Users.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
@@ -36,6 +38,7 @@ namespace disk::file {
     using drogon_model::disk::FileContents;
     using drogon_model::disk::Files;
     using drogon_model::disk::Folders;
+    using drogon_model::disk::Trash;
     using drogon_model::disk::UploadTasks;
     using drogon_model::disk::Users;
 
@@ -995,6 +998,66 @@ namespace disk::file {
         CopyResponse response;
         response.copied_count = copied_count;
         response.new_files = new_files;
+        co_return response;
+    }
+
+    // ==================== Delete ====================
+
+    auto FileService::Delete(DeleteRequest request, uint64_t user_id)
+        -> drogon::Task<Result<DeleteResponse>> {
+
+        LOG_DEBUG << "开始删除文件: file_ids.size()=" << request.file_ids.size()
+                  << ", user_id=" << user_id;
+
+        int deleted_count = 0;
+        CoroMapper<Files> file_mapper(m_db_client);
+        CoroMapper<Trash> trash_mapper(m_db_client);
+
+        for (const auto& file_id : request.file_ids) {
+            try {
+                auto file = co_await file_mapper.findOne(
+                    Criteria(Files::Cols::_id, CompareOperator::EQ, file_id) &&
+                    Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
+                );
+
+                Trash trash;
+                trash.setUserId(user_id);
+                trash.setItemType("file");
+                trash.setItemId(file.getValueOfId());
+                trash.setItemName(file.getValueOfName());
+                trash.setItemSize(file.getValueOfSize());
+                trash.setOriginalFolderId(file.getValueOfFolderId());
+                trash.setOriginalPath(file.getValueOfPath());
+
+                Json::Value item_data;
+                if (file.getContentId()) {
+                    item_data["content_id"] = static_cast<Json::UInt64>(*file.getContentId());
+                }
+                item_data["mime_type"] = file.getValueOfMimeType();
+                Json::StreamWriterBuilder builder;
+                builder["indentation"] = "";
+                trash.setItemData(Json::writeString(builder, item_data));
+
+                auto now = trantor::Date::now();
+                trash.setDeletedAt(now);
+                trash.setExpiresAt(now.after(30 * 24 * 60 * 60));
+
+                co_await trash_mapper.insert(trash);
+                co_await file_mapper.deleteByPrimaryKey(file.getValueOfId());
+
+                ++deleted_count;
+                LOG_DEBUG << "文件移入回收站: file_id=" << file_id;
+
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_WARN << "文件不存在或删除失败，跳过: file_id=" << file_id
+                         << " - " << e.base().what();
+            }
+        }
+
+        LOG_INFO << "文件删除完成: deleted_count=" << deleted_count;
+
+        DeleteResponse response;
+        response.deleted_count = deleted_count;
         co_return response;
     }
 

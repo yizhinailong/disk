@@ -229,6 +229,25 @@ namespace disk::file {
         auto Copy(CopyRequest request, uint64_t user_id)
             -> drogon::Task<Result<CopyResponse>>;
 
+        /**
+         * @brief 删除文件（移入回收站）
+         *
+         * 业务规则：
+         * - 验证每个文件存在且属于用户
+         * - 创建 trash 记录保存文件元数据
+         * - item_data 包含 content_id 和 mime_type（用于恢复）
+         * - 删除原始 files 记录
+         * - 不更新 storage_used（回收站项目仍计入配额）
+         * - 不减少 file_contents.ref_count（彻底删除时才减少）
+         *
+         * @param request 删除请求
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<DeleteResponse>> 成功返回删除统计，失败返回错误
+         */
+        [[nodiscard]]
+        auto Delete(DeleteRequest request, uint64_t user_id)
+            -> drogon::Task<Result<DeleteResponse>>;
+
     private:
         /**
          * @brief 检查存储配额
