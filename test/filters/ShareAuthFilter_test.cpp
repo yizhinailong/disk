@@ -13,13 +13,13 @@
 
 #include <gtest/gtest.h>
 
-#include "services/ShareTokenService.hpp"
+#include "services/TokenService.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace {
 
     using disk::error::Code;
-    using disk::services::ShareTokenService;
+    using disk::services::TokenService;
 
     static constexpr const char* TEST_JWT_SECRET = "test_secret_key_for_share_token_32b";
 
@@ -61,13 +61,13 @@ namespace {
     }
 
     TEST(ShareAuthFilterTest, ServiceVerifyToken_MalformedPath_ReturnsMalformedCode) {
-        auto result = ShareTokenService::VerifyToken(TEST_JWT_SECRET, "malformed.token.string");
+        auto result = TokenService::VerifyShareToken(TEST_JWT_SECRET, "malformed.token.string");
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error().code, Code::TokenMalformed);
     }
 
     TEST(ShareAuthFilterTest, ServiceVerifyToken_EmptyPath_ReturnsMalformedCode) {
-        auto result = ShareTokenService::VerifyToken(TEST_JWT_SECRET, "");
+        auto result = TokenService::VerifyShareToken(TEST_JWT_SECRET, "");
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error().code, Code::TokenMalformed);
     }

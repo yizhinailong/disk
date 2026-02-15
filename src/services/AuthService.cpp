@@ -30,7 +30,7 @@ namespace disk::auth {
         : m_db_client(drogon::app().getDbClient()),
           m_redis_service(std::make_shared<disk::services::RedisService>(redis_client)),
           m_token_service(
-              std::make_unique<TokenService>(ConfigMgr::GetInstance()->GetJwtSecret(), m_redis_service)
+              std::make_unique<disk::services::TokenService>(ConfigMgr::GetInstance()->GetJwtSecret(), m_redis_service)
           ) {
         LOG_DEBUG << "AuthService 初始化完成";
     }
@@ -171,7 +171,7 @@ namespace disk::auth {
         response.access_token = access_token;
         response.refresh_token = refresh_token;
         response.token_type = "Bearer";
-        response.expires_in = TokenService::GetAccessTokenExpireSeconds();
+        response.expires_in = disk::services::TokenService::GetAccessTokenExpireSeconds();
         response.user = UserToResponse(user);
 
         LOG_INFO << "用户登录成功: " << request.account << " (ID: " << user.getValueOfId() << ")";
@@ -234,7 +234,7 @@ namespace disk::auth {
             RefreshTokenResponse response;
             response.access_token = access_token;
             response.refresh_token = new_refresh_token;
-            response.expires_in = TokenService::GetAccessTokenExpireSeconds();
+            response.expires_in = disk::services::TokenService::GetAccessTokenExpireSeconds();
 
             LOG_INFO << "令牌刷新成功: user_id=" << user_id;
             co_return response;

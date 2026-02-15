@@ -471,7 +471,7 @@ namespace disk::share {
         }
 
         // 生成分享令牌
-        auto token_result = services::ShareTokenService::GenerateToken(
+        auto token_result = services::TokenService::GenerateShareToken(
             m_jwt_secret,
             share.getValueOfShareCode(),
             share.getValueOfId()
@@ -482,7 +482,7 @@ namespace disk::share {
 
         // 存储分享令牌到 Redis
         if (m_redis_service) {
-            auto token_hash_result = services::ShareTokenService::ExtractTokenHash(*token_result);
+            auto token_hash_result = services::TokenService::ExtractShareTokenHash(*token_result);
             if (token_hash_result) {
                 auto key = redis::RedisKeyPrefix::BuildShareTokenKey(
                     share.getValueOfShareCode(),
@@ -501,7 +501,7 @@ namespace disk::share {
         // 构建响应
         AccessShareResponse response;
         response.share_token = *token_result;
-        response.expires_in = services::ShareTokenService::GetShareTokenExpireSeconds();
+        response.expires_in = services::TokenService::GetShareTokenExpireSeconds();
         response.permission = share.getValueOfPermission();
         response.files = share_files;
 

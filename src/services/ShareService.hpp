@@ -41,7 +41,7 @@
 #include "models/Files.hpp"
 #include "models/Shares.hpp"
 #include "services/RedisService.hpp"
-#include "services/ShareTokenService.hpp"
+#include "services/TokenService.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::share {

@@ -13,7 +13,7 @@
 #include <drogon/HttpFilter.h>
 #include <drogon/HttpRequest.h>
 
-#include "services/ShareTokenService.hpp"
+#include "services/TokenService.hpp"
 
 namespace disk::filters {
     class ShareAuthFilter : public drogon::HttpCoroFilter<ShareAuthFilter> {
@@ -25,6 +25,6 @@ namespace disk::filters {
             -> drogon::Task<drogon::HttpResponsePtr> override;
 
     private:
-        std::unique_ptr<disk::services::ShareTokenService> m_share_token_service;
+        std::unique_ptr<disk::services::TokenService> m_token_service;
     };
 } // namespace disk::filters

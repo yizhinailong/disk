@@ -1,7 +1,7 @@
 /**
  * @file TokenService.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief JWT令牌服务（最小化实现）
+ * @brief 统一JWT令牌服务（Access、Refresh、Share Token）
  * @version 0.1
  * @date 2026-01-16
  *
@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <utility>
 
@@ -19,14 +20,21 @@
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
 
-namespace disk::auth {
+namespace disk::services {
 
     /**
-     * @brief JWT令牌服务
+     * @brief 分享令牌声明信息
+     */
+    struct ShareTokenClaims {
+        std::string share_code;
+        uint64_t share_id;
+        std::string jti;
+    };
+
+    /**
+     * @brief 统一JWT令牌服务
      *
-     * 最小化实现：
-     * - 仅支持生成 Access Token 和 Refresh Token
-     * - 不实现验证、黑名单等功能（后续需要时添加）
+     * 提供 Access Token、Refresh Token 和 Share Token 的生成与验证。
      */
     class TokenService {
     public:
@@ -42,7 +50,9 @@ namespace disk::auth {
          * @param jwt_secret JWT签名密钥
          * @param redis_service 已创建的RedisService
          */
-        explicit TokenService(std::string jwt_secret, std::shared_ptr<disk::services::RedisService> redis_service);
+        explicit TokenService(std::string jwt_secret, std::shared_ptr<RedisService> redis_service);
+
+        // ==================== Access/Refresh Token 实例方法 ====================
 
         /**
          * @brief 生成令牌对
@@ -134,6 +144,102 @@ namespace disk::auth {
         [[nodiscard]]
         auto IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool>;
 
+        // ==================== Share Token 静态方法 ====================
+
+        /**
+         * @brief 生成分享令牌（静态方法）
+         *
+         * 契约：
+         * - issuer = "disk_share"
+         * - type = "share"
+         * - claims: share_code, share_id (subject), jti
+         * - TTL = 3600 秒
+         *
+         * @param jwt_secret JWT签名密钥
+         * @param share_code 分享码
+         * @param share_id 分享ID
+         * @return Result<std::string> 成功返回令牌，失败返回错误
+         */
+        [[nodiscard]]
+        static auto GenerateShareToken(
+            const std::string& jwt_secret,
+            const std::string& share_code,
+            uint64_t share_id
+        ) -> Result<std::string>;
+
+        /**
+         * @brief 验证分享令牌（静态方法）
+         *
+         * @param jwt_secret JWT签名密钥
+         * @param token 分享令牌
+         * @return Result<ShareTokenClaims> 成功返回声明信息，失败返回错误
+         */
+        [[nodiscard]]
+        static auto VerifyShareToken(
+            const std::string& jwt_secret,
+            const std::string& token
+        ) -> Result<ShareTokenClaims>;
+
+        /**
+         * @brief 提取分享令牌哈希（静态方法）
+         *
+         * @param token 分享令牌
+         * @return Result<std::string> 成功返回哈希字符串（64位十六进制），失败返回错误
+         */
+        [[nodiscard]]
+        static auto ExtractShareTokenHash(const std::string& token) -> Result<std::string>;
+
+        /**
+         * @brief 获取分享令牌过期时间（秒）
+         * @return int 过期时间（秒），默认3600秒（1小时）
+         */
+        [[nodiscard]]
+        static constexpr auto GetShareTokenExpireSeconds() noexcept -> int {
+            return 3600;
+        }
+
+        // ==================== Share Token Redis 异步方法 ====================
+
+        /**
+         * @brief 存储分享令牌到 Redis
+         *
+         * @param share_code 分享码
+         * @param token 分享令牌
+         * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
+         */
+        [[nodiscard]]
+        auto StoreShareToken(const std::string& share_code, const std::string& token)
+            -> drogon::Task<Result<void>>;
+
+        /**
+         * @brief 验证分享令牌（含 Redis 撤销检查）
+         *
+         * @param share_code 分享码
+         * @param token 分享令牌
+         * @return drogon::Task<Result<ShareTokenClaims>> 成功返回声明信息，失败返回错误
+         */
+        [[nodiscard]]
+        auto VerifyShareTokenWithRedis(const std::string& share_code, const std::string& token)
+            -> drogon::Task<Result<ShareTokenClaims>>;
+
+        /**
+         * @brief 撤销分享令牌
+         *
+         * @param token 分享令牌
+         * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
+         */
+        [[nodiscard]]
+        auto RevokeShareToken(const std::string& token) -> drogon::Task<Result<void>>;
+
+        /**
+         * @brief 检查分享令牌是否已被撤销
+         *
+         * @param token_hash 令牌哈希
+         * @return drogon::Task<bool> true 表示已撤销
+         */
+        [[nodiscard]]
+        auto IsShareTokenRevoked(const std::string& token_hash) -> drogon::Task<bool>;
+
     private:
         /**
          * @brief 从 JWT 中提取 JTI
@@ -153,7 +259,7 @@ namespace disk::auth {
 
         std::string m_jwt_secret;
         drogon::nosql::RedisClientPtr m_redis_client;
-        std::shared_ptr<disk::services::RedisService> m_redis_service;
+        std::shared_ptr<RedisService> m_redis_service;
     };
 
-} // namespace disk::auth
+} // namespace disk::services

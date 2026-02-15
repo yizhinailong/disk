@@ -69,7 +69,6 @@ set(Services_HEADERS
     services/FolderService.hpp
     services/RedisService.hpp
     services/ShareService.hpp
-    services/ShareTokenService.hpp
     services/TokenService.hpp
     services/TrashService.hpp
     services/UserService.hpp
@@ -80,7 +79,6 @@ set(Services_SOURCES
     services/FolderService.cpp
     services/RedisService.cpp
     services/ShareService.cpp
-    services/ShareTokenService.cpp
     services/TokenService.cpp
     services/TrashService.cpp
     services/UserService.cpp

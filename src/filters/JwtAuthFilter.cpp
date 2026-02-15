@@ -23,7 +23,7 @@ namespace disk::filters {
 
     JwtAuthFilter::JwtAuthFilter()
         : m_token_service(
-              std::make_unique<disk::auth::TokenService>(
+              std::make_unique<disk::services::TokenService>(
                   ConfigMgr::GetInstance()->GetJwtSecret(),
                   drogon::app().getRedisClient()
               )

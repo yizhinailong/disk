@@ -19,8 +19,8 @@ namespace disk::filters {
     using disk::utils::ConfigMgr;
 
     ShareAuthFilter::ShareAuthFilter()
-        : m_share_token_service(
-              std::make_unique<disk::services::ShareTokenService>(
+        : m_token_service(
+              std::make_unique<disk::services::TokenService>(
                   ConfigMgr::GetInstance()->GetJwtSecret(),
                   drogon::app().getRedisClient()
               )
@@ -37,7 +37,7 @@ namespace disk::filters {
             co_return disk::Response::Error(disk::error::Code::TokenMissing);
         }
 
-        auto verify_result = co_await m_share_token_service->VerifyShareToken("", share_token_header);
+        auto verify_result = co_await m_token_service->VerifyShareTokenWithRedis("", share_token_header);
 
         if (!verify_result) {
             const auto& error = verify_result.error();
