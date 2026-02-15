@@ -15,7 +15,6 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
-#include <sstream>
 
 #include <drogon/utils/Utilities.h>
 #include <json/writer.h>
@@ -519,7 +518,7 @@ namespace disk::file {
         std::error_code ec;
 
         if (std::filesystem::exists(temp_dir)) {
-            if (!std::filesystem::remove_all(temp_dir, ec)) {
+            if (std::filesystem::remove_all(temp_dir, ec) == 0U) {
                 LOG_WARN << "删除临时目录失败: " << temp_dir << " - " << ec.message();
             } else {
                 LOG_DEBUG << "临时目录已删除: " << temp_dir;
@@ -1157,9 +1156,7 @@ namespace disk::file {
             );
 
             auto new_used = static_cast<int64_t>(user.getValueOfStorageUsed()) + delta;
-            if (new_used < 0) {
-                new_used = 0;
-            }
+            new_used = std::max<int64_t>(new_used, 0);
 
             user.setStorageUsed(static_cast<uint64_t>(new_used));
             co_await mapper.update(user);
