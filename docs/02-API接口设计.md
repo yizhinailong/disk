@@ -732,304 +732,12 @@ Authorization: Bearer <access_token>
 | HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
 |------------|--------|----------|----------|----------|
 | 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
-| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
-| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
-| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
-| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
-| 409 | 50004 | `StorageQuotaExceeded` | 存储空间不足 | 上传文件后将超过存储配额 |
-
-**40106 TokenMissing 响应示例**：
-
-```json
-{
-  "code": 40106,
-  "message": "未提供令牌",
-  "data": null
-}
-```
-
-#### 响应示例 - 正常上传
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "upload_id": "up_abc123def456",
-    "chunk_size": 5242880,
-    "total_chunks": 20,
-    "uploaded_chunks": [],
-    "instant_upload": false
-  }
-}
-```
-
-#### 响应示例 - 秒传成功
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "instant_upload": true,
-    "file": {
-      "id": 123,
-      "name": "document.pdf",
-      "size": 104857600,
-      "created_at": "2026-01-13T10:30:00Z"
-    }
-  }
-}
-```
-
-#### 响应示例 - 断点续传
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "upload_id": "up_abc123def456",
-    "chunk_size": 5242880,
-    "total_chunks": 20,
-    "uploaded_chunks": [0, 1, 2, 3, 4],
-    "instant_upload": false
-  }
-}
-```
-
----
-
-### 4.2 上传分片
-
-**POST** `/api/file/upload/chunk`
-
-#### 实现状态
-**未实现**
-
-上传文件分片。
-
-#### 请求头
-
-```
-Authorization: Bearer <access_token>
-```
-
-| Header | 必填 | 说明 |
-|--------|------|------|
-| Authorization | 是 | Bearer 访问令牌 |
-
-#### 请求格式
-
-`Content-Type: multipart/form-data`
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| upload_id | string | 是 | 上传任务 ID |
-| chunk_index | integer | 是 | 分片索引（从 0 开始） |
-| chunk_hash | string | 是 | 分片 MD5 哈希 |
-| chunk | file | 是 | 分片数据 |
-
-#### 错误响应矩阵
-
-| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
-|------------|--------|----------|----------|----------|
-| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
-| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
-| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
-| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
-| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
-| 404 | 50008 | `UploadTaskNotFound` | 上传任务不存在 | 指定的 upload_id 不存在或已失效 |
-| 422 | 50009 | `ChunkVerifyFailed` | 分片校验失败 | 分片哈希校验不通过 |
-
-**40106 TokenMissing 响应示例**：
-
-```json
-{
-  "code": 40106,
-  "message": "未提供令牌",
-  "data": null
-}
-```
-
-#### 响应示例
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "chunk_index": 5,
-    "uploaded": true
-  }
-}
-```
-
----
-
-### 4.3 完成上传
-
-**POST** `/api/file/upload/complete`
-
-#### 实现状态
-**未实现**
-
-完成文件上传，合并分片。
-
-#### 请求头
-
-```
-Authorization: Bearer <access_token>
-```
-
-| Header | 必填 | 说明 |
-|--------|------|------|
-| Authorization | 是 | Bearer 访问令牌 |
-
-#### 请求参数
-
-```json
-{
-  "upload_id": "up_abc123def456"
-}
-```
-
-#### 错误响应矩阵
-
-| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
-|------------|--------|----------|----------|----------|
-| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
-| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
-| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
-| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
-| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
-| 404 | 50008 | `UploadTaskNotFound` | 上传任务不存在 | 指定的 upload_id 不存在或已失效 |
-
-**40106 TokenMissing 响应示例**：
-
-```json
-{
-  "code": 40106,
-  "message": "未提供令牌",
-  "data": null
-}
-```
-
-#### 响应示例
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "file": {
-      "id": 123,
-      "name": "document.pdf",
-      "size": 104857600,
-      "hash": "d41d8cd98f00b204e9800998ecf8427e",
-      "mime_type": "application/pdf",
-      "parent_id": 0,
-      "created_at": "2026-01-13T10:35:00Z"
-    }
-  }
-}
-```
-
----
-
-### 4.4 取消上传
-
-**DELETE** `/api/file/upload/{upload_id}`
-
-#### 实现状态
-**未实现**
-
-取消上传任务，清理临时分片。
-
-#### 请求头
-
-```
-Authorization: Bearer <access_token>
-```
-
-| Header | 必填 | 说明 |
-|--------|------|------|
-| Authorization | 是 | Bearer 访问令牌 |
-
-#### 路径参数
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| upload_id | string | 上传任务 ID |
-
-#### 错误响应矩阵
-
-| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
-|------------|--------|----------|----------|----------|
-| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
-| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
-| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
-| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
-| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
-| 404 | 50008 | `UploadTaskNotFound` | 上传任务不存在 | 指定的 upload_id 不存在或已失效 |
-
-**40106 TokenMissing 响应示例**：
-
-```json
-{
-  "code": 40106,
-  "message": "未提供令牌",
-  "data": null
-}
-```
-
-#### 响应示例
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": null
-}
-```
-
----
-
-### 4.5 获取下载信息
-
-**GET** `/api/file/download/{file_id}/info`
-
-#### 实现状态
-**未实现**
-
-获取文件下载信息。
-
-#### 请求头
-
-```
-Authorization: Bearer <access_token>
-```
-
-| Header | 必填 | 说明 |
-|--------|------|------|
-| Authorization | 是 | Bearer 访问令牌 |
-
-#### 路径参数
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| file_id | integer | 文件 ID |
-
-#### 错误响应矩阵
-
-| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
-|------------|--------|----------|----------|----------|
-| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
-| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则、Range 格式无效 |
 | 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
 | 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
 | 404 | 50005 | `FileNotFound` | 文件不存在 | 指定的 file_id 不存在或不属于当前用户 |
+| 416 | 10002 | `ValidationFailed` | 请求范围无效 | Range 范围超出文件大小 |
 
 **40106 TokenMissing 响应示例**：
 
@@ -1122,6 +830,45 @@ Authorization: Bearer <access_token>
 | Accept-Ranges | `bytes` |
 | Content-Range | 范围信息（Range 请求时） |
 
+#### Range 请求语义
+
+本接口支持 HTTP Range 请求，遵循 [RFC 7233](https://datatracker.ietf.org/doc/html/rfc7233) 规范，用于断点续传和分片下载场景。
+
+| 场景 | 请求头 | HTTP 状态码 | 说明 |
+|------|--------|------------|------|
+| **完整下载** | 无 Range | `200 OK` | 返回完整文件内容 |
+| **范围下载** | `Range: bytes=0-1023` | `206 Partial Content` | 返回指定字节范围的内容 |
+| **范围无效** | `Range: bytes=999999-`（超出文件大小） | `416 Range Not Satisfiable` | 范围无法满足，响应体包含错误信息 |
+
+**Range 请求格式说明**：
+- 仅支持 `bytes` 单位
+- 格式：`bytes=<start>-<end>`（end 可选，表示到文件末尾）
+- 示例：`Range: bytes=0-1048575`（下载前 1MB）
+
+#### 响应状态码矩阵
+
+| HTTP 状态码 | 触发条件 | 响应体 |
+|------------|----------|--------|
+| `200 OK` | 无 Range 请求，返回完整文件 | 文件二进制数据流 |
+| `206 Partial Content` | 有效 Range 请求 | 请求范围的字节片段 |
+| `416 Range Not Satisfiable` | Range 范围无效或超出文件大小 | JSON 错误响应（见下方示例） |
+
+#### 416 Range Not Satisfiable 错误响应
+
+当请求的 Range 范围无法满足时（如起始位置超出文件大小），返回 `416` 状态码：
+
+```json
+{
+  "code": 10002,
+  "message": "请求范围无效",
+  "data": {
+    "file_size": 104857600,
+    "requested_range": "bytes=999999000-",
+    "reason": "请求的起始位置超出文件大小"
+  }
+}
+```
+
 #### 响应
 
 文件二进制数据流。
@@ -1136,6 +883,10 @@ Authorization: Bearer <access_token>
 **未实现**
 
 获取指定目录下的文件和文件夹列表。
+
+> **混合返回说明**：`items` 数组同时包含文件和文件夹对象，通过 `type` 字段区分（`"file"` 或 `"folder"`）。两种类型的字段结构不同：
+> - **文件夹**：包含 `item_count`（子项数量），无 `size`、`mime_type`、`hash`
+> - **文件**：包含 `size`、`mime_type`、`hash`，无 `item_count`
 
 #### 请求头
 
@@ -1225,6 +976,8 @@ Authorization: Bearer <access_token>
 #### 实现状态
 **未实现**
 
+> **⚠️ 实现范围说明**：本接口不在当前 file-read-loop 优先级范围内，暂不实现。客户端可通过 `GET /api/file/list` 获取文件元信息。
+
 获取单个文件的详细信息。
 
 #### 请求头
@@ -1295,6 +1048,10 @@ Authorization: Bearer <access_token>
 **未实现**
 
 重命名文件或文件夹。
+
+> **文件/文件夹歧义说明**：`file_id` 参数可以是文件 ID 或文件夹 ID，服务端通过查询 `files` 表和 `folders` 表自动判断类型。无论哪种类型，操作语义相同——修改名称字段。
+>
+> **命名冲突规则**：如果目标名称在同目录下已存在（无论是文件还是文件夹），返回 `409 + 50007 FileAlreadyExists`。注意：文件和文件夹可以同名共存（如 `doc.pdf` 文件和 `doc.pdf` 文件夹），重命名时仅检查同类型冲突。
 
 #### 请求头
 
@@ -1368,6 +1125,10 @@ Authorization: Bearer <access_token>
 
 移动文件或文件夹到指定目录。
 
+> **批量操作行为**：`file_ids` 支持批量移动，每个项目独立处理。如果部分项目移动失败（如权限不足、源不存在），其他成功的项目仍会完成移动，响应中返回 `moved_count` 表示成功数量。
+>
+> **目标文件夹验证**：`target_folder_id` 必须属于当前用户，否则返回 `404 + 50006 FolderNotFound`。`target_folder_id = 0` 表示移动到根目录。
+
 #### 请求头
 
 ```
@@ -1436,6 +1197,13 @@ Authorization: Bearer <access_token>
 **未实现**
 
 复制文件或文件夹到指定目录。
+
+> **存储配额检查**：复制操作会增加用户的 `storage_used`，服务端必须在操作前检查配额。如果复制后超过配额，返回 `400 + 50004 StorageQuotaExceeded`，不执行任何复制。
+>
+> **内容引用计数**：文件复制采用元数据复制，实际文件内容（`file_contents` 表）通过引用计数共享。复制文件时：
+> - 在 `files` 表创建新记录
+> - `file_contents.ref_count` 递增（而非复制物理存储）
+> - 删除文件时 `ref_count` 递减，仅当 `ref_count = 0` 时删除物理文件
 
 #### 请求头
 
@@ -1507,6 +1275,17 @@ Authorization: Bearer <access_token>
 
 删除文件或文件夹（移入回收站）。
 
+> **🗑️ 软删除语义（CRITICAL）**：本接口执行的是**移入回收站**操作，而非物理删除：
+> - 文件/文件夹从原位置移除，添加到 `trash` 表
+> - **存储配额不释放**：`users.storage_used` 不会减少，文件仍占用空间
+> - **可恢复**：用户可通过回收站 API（第 6 节）恢复误删文件
+> - **自动清理**：回收站项目 30 天后自动彻底删除，届时才释放存储空间
+>
+> **相关接口**：
+> - 查看回收站：`GET /api/trash`（6.1）
+> - 恢复文件：`POST /api/trash/restore`（6.2）
+> - 彻底删除：`DELETE /api/trash`（6.3）— 释放存储空间
+
 #### 请求头
 
 ```
@@ -1566,6 +1345,8 @@ Authorization: Bearer <access_token>
 
 #### 实现状态
 **未实现**
+
+> **⚠️ 实现范围说明**：本接口不在当前 file-read-loop 优先级范围内，暂不实现。全文搜索需要额外的索引机制（如 Elasticsearch），将在后续版本中实现。
 
 搜索用户文件。
 
@@ -2319,6 +2100,21 @@ Authorization: Bearer <access_token>
 | expire_days | integer | 否 | 有效天数，0 表示永久，默认 7 |
 | password | string | 否 | 访问密码，4-8 字符 |
 | permission | string | 否 | 权限：view/download，默认 download |
+
+#### 文件夹分享行为说明
+
+`file_ids` 参数支持混合文件和文件夹 ID，两者的分享行为有所不同：
+
+**文件分享**：
+- 直接分享单个文件，访客可查看/下载该文件
+
+**文件夹分享**：
+- 分享整个文件夹及其**完整内容树**（递归包含所有子文件夹和文件）
+- 访客通过 `GET /api/share/browse` 浏览文件夹内容
+- 新增到文件夹的内容**不会**自动加入分享（快照语义）
+- 文件夹内文件被删除/移动后，分享列表自动更新
+
+> **所有权验证**：所有 `file_ids` 必须属于当前用户（`files.user_id == current_user_id` 或 `folders.user_id == current_user_id`），否则返回 `404 + 50005 FileNotFound`。
 
 #### 错误响应矩阵
 
