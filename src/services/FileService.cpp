@@ -21,6 +21,7 @@
 
 #include "models/FileContents.hpp"
 #include "models/Files.hpp"
+#include "models/Folders.hpp"
 #include "models/Users.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
@@ -34,6 +35,7 @@ namespace disk::file {
     using drogon::orm::Criteria;
     using drogon_model::disk::FileContents;
     using drogon_model::disk::Files;
+    using drogon_model::disk::Folders;
     using drogon_model::disk::UploadTasks;
     using drogon_model::disk::Users;
 
@@ -532,6 +534,230 @@ namespace disk::file {
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "删除上传任务失败: " << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "删除上传任务失败"));
+        }
+    }
+
+    // ==================== GetFileList ====================
+
+    auto FileService::GetFileList(FileListRequest request, uint64_t user_id)
+        -> drogon::Task<Result<FileListResponse>> {
+
+        LOG_DEBUG << "开始获取文件列表: parent_id=" << request.parent_id
+                  << ", page=" << request.page
+                  << ", page_size=" << request.page_size
+                  << ", sort_by=" << request.sort_by
+                  << ", sort_order=" << request.sort_order
+                  << ", type=" << request.type
+                  << ", user_id=" << user_id;
+
+        // 1. 验证 parent_id 文件夹存在且属于用户（如果 parent_id != 0）
+        if (request.parent_id != 0) {
+            try {
+                CoroMapper<Folders> folder_mapper(m_db_client);
+                auto folder = co_await folder_mapper.findOne(
+                    Criteria(Folders::Cols::_id, CompareOperator::EQ, request.parent_id) &&
+                    Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id)
+                );
+                LOG_DEBUG << "文件夹验证通过: folder_id=" << request.parent_id;
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_WARN << "文件夹不存在或无权限: folder_id=" << request.parent_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+            }
+        }
+
+        // 2. 查询文件和文件夹
+        std::vector<FileListItem> all_items;
+
+        // 查询文件
+        if (request.type == "all" || request.type == "file") {
+            try {
+                CoroMapper<Files> file_mapper(m_db_client);
+                auto file_criteria = Criteria(Files::Cols::_folder_id, CompareOperator::EQ, request.parent_id) &&
+                                     Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id);
+                auto files = co_await file_mapper.findBy(file_criteria);
+
+                // 获取文件内容的 hash 信息
+                for (const auto& file : files) {
+                    FileListItem item;
+                    item.id = file.getValueOfId();
+                    item.name = file.getValueOfName();
+                    item.type = "file";
+                    item.size = file.getValueOfSize();
+                    item.mime_type = file.getValueOfMimeType();
+                    item.created_at = file.getValueOfCreatedAt().toDbStringLocal();
+                    item.updated_at = file.getValueOfUpdatedAt().toDbStringLocal();
+
+                    // 获取 hash
+                    if (file.getContentId()) {
+                        try {
+                            CoroMapper<FileContents> content_mapper(m_db_client);
+                            auto content = co_await content_mapper.findOne(
+                                Criteria(FileContents::Cols::_id, CompareOperator::EQ, *file.getContentId())
+                            );
+                            item.hash = content.getValueOfHashMd5();
+                        } catch (const drogon::orm::DrogonDbException&) {
+                            item.hash = "";
+                        }
+                    }
+
+                    all_items.push_back(item);
+                }
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_WARN << "查询文件列表失败: " << e.base().what();
+            }
+        }
+
+        // 查询文件夹
+        if (request.type == "all" || request.type == "folder") {
+            try {
+                CoroMapper<Folders> folder_mapper(m_db_client);
+                auto folder_criteria = Criteria(Folders::Cols::_parent_id, CompareOperator::EQ, request.parent_id) &&
+                                       Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id);
+                auto folders = co_await folder_mapper.findBy(folder_criteria);
+
+                for (const auto& folder : folders) {
+                    FileListItem item;
+                    item.id = folder.getValueOfId();
+                    item.name = folder.getValueOfName();
+                    item.type = "folder";
+                    item.item_count = static_cast<int>(folder.getValueOfItemCount());
+                    item.created_at = folder.getValueOfCreatedAt().toDbStringLocal();
+                    item.updated_at = folder.getValueOfUpdatedAt().toDbStringLocal();
+                    all_items.push_back(item);
+                }
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_WARN << "查询文件夹列表失败: " << e.base().what();
+            }
+        }
+
+        // 3. 排序
+        auto sort_comparator = [&request](const FileListItem& a, const FileListItem& b) -> bool {
+            bool result = false;
+            if (request.sort_by == "name") {
+                result = a.name < b.name;
+            } else if (request.sort_by == "size") {
+                result = a.size < b.size;
+            } else if (request.sort_by == "created_at") {
+                result = a.created_at < b.created_at;
+            } else if (request.sort_by == "updated_at") {
+                result = a.updated_at < b.updated_at;
+            }
+            return request.sort_order == "desc" ? !result : result;
+        };
+        std::sort(all_items.begin(), all_items.end(), sort_comparator);
+
+        // 4. 分页
+        auto total = static_cast<int>(all_items.size());
+        auto offset = (request.page - 1) * request.page_size;
+        auto total_pages = request.page_size > 0 ? (total + request.page_size - 1) / request.page_size : 0;
+
+        std::vector<FileListItem> paginated_items;
+        for (int i = offset; i < std::min(offset + request.page_size, total); ++i) {
+            paginated_items.push_back(all_items[i]);
+        }
+
+        // 5. 构造响应
+        FileListResponse response;
+        response.items = paginated_items;
+        response.pagination = {
+            .page = request.page,
+            .page_size = request.page_size,
+            .total = total,
+            .total_pages = total_pages
+        };
+
+        LOG_DEBUG << "文件列表获取成功: total=" << total << ", page=" << request.page;
+        co_return response;
+    }
+
+    // ==================== GetDownloadInfo ====================
+
+    auto FileService::GetDownloadInfo(uint64_t file_id, uint64_t user_id)
+        -> drogon::Task<Result<DownloadInfoResponse>> {
+
+        LOG_DEBUG << "开始获取下载信息: file_id=" << file_id << ", user_id=" << user_id;
+
+        // 1. 查找文件并验证归属
+        try {
+            CoroMapper<Files> file_mapper(m_db_client);
+            auto file = co_await file_mapper.findOne(
+                Criteria(Files::Cols::_id, CompareOperator::EQ, file_id) &&
+                Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
+            );
+
+            // 2. 获取文件内容信息
+            if (!file.getContentId()) {
+                LOG_ERROR << "文件缺少 content_id: file_id=" << file_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::FileReadError, "文件内容信息缺失"));
+            }
+
+            CoroMapper<FileContents> content_mapper(m_db_client);
+            auto content = co_await content_mapper.findOne(
+                Criteria(FileContents::Cols::_id, CompareOperator::EQ, *file.getContentId())
+            );
+
+            // 3. 构造响应
+            DownloadInfoResponse response;
+            response.file_id = file.getValueOfId();
+            response.filename = file.getValueOfName();
+            response.file_size = file.getValueOfSize();
+            response.file_hash = content.getValueOfHashMd5();
+            response.mime_type = file.getValueOfMimeType().empty() ? content.getValueOfMimeType() : file.getValueOfMimeType();
+            response.supports_range = true;
+
+            LOG_DEBUG << "下载信息获取成功: filename=" << response.filename
+                      << ", size=" << response.file_size;
+            co_return response;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "文件不存在或无权限: file_id=" << file_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
+        }
+    }
+
+    // ==================== GetDownloadData ====================
+
+    auto FileService::GetDownloadData(uint64_t file_id, uint64_t user_id)
+        -> drogon::Task<Result<DownloadInfo>> {
+
+        LOG_DEBUG << "开始获取下载数据: file_id=" << file_id << ", user_id=" << user_id;
+
+        // 1. 查找文件并验证归属
+        try {
+            CoroMapper<Files> file_mapper(m_db_client);
+            auto file = co_await file_mapper.findOne(
+                Criteria(Files::Cols::_id, CompareOperator::EQ, file_id) &&
+                Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
+            );
+
+            // 2. 获取文件内容信息
+            if (!file.getContentId()) {
+                LOG_ERROR << "文件缺少 content_id: file_id=" << file_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::FileReadError, "文件内容信息缺失"));
+            }
+
+            CoroMapper<FileContents> content_mapper(m_db_client);
+            auto content = co_await content_mapper.findOne(
+                Criteria(FileContents::Cols::_id, CompareOperator::EQ, *file.getContentId())
+            );
+
+            // 3. 构造响应
+            DownloadInfo info;
+            info.file_id = file.getValueOfId();
+            info.filename = file.getValueOfName();
+            info.file_size = file.getValueOfSize();
+            info.file_hash = content.getValueOfHashMd5();
+            info.mime_type = file.getValueOfMimeType().empty() ? content.getValueOfMimeType() : file.getValueOfMimeType();
+            info.storage_path = content.getValueOfStoragePath();
+            info.supports_range = true;
+
+            LOG_DEBUG << "下载数据获取成功: filename=" << info.filename
+                      << ", storage_path=" << info.storage_path;
+            co_return info;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "文件不存在或无权限: file_id=" << file_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
         }
     }
 

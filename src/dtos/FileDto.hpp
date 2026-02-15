@@ -1411,4 +1411,23 @@ namespace disk::file {
         }
     };
 
+    // ==================== DownloadInfo (Internal Service Use) ====================
+
+    /**
+     * @brief 下载信息结构（内部服务使用）
+     *
+     * @details
+     * 用于服务层返回下载所需的所有信息，包括文件存储路径。
+     * 控制器使用此结构构造 HTTP 响应。
+     */
+    struct DownloadInfo {
+        uint64_t file_id{ 0 };
+        std::string filename;
+        uint64_t file_size{ 0 };
+        std::string file_hash;    ///< MD5 hash
+        std::string mime_type;
+        std::string storage_path; ///< 文件物理存储路径
+        bool supports_range{ true };
+    };
+
 } // namespace disk::file

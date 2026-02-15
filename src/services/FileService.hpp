@@ -126,6 +126,55 @@ namespace disk::file {
         [[nodiscard]]
         auto CancelUpload(std::string upload_id, uint64_t user_id) -> drogon::Task<Result<void>>;
 
+        /**
+         * @brief 获取文件列表
+         *
+         * 业务规则：
+         * - 验证 parent_id 文件夹存在且属于用户（如果 parent_id != 0）
+         * - 查询 files 和 folders 表，合并结果
+         * - 应用 type 过滤（all/file/folder）
+         * - 应用排序和分页
+         *
+         * @param request 文件列表请求
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<FileListResponse>> 成功返回文件列表，失败返回错误
+         */
+        [[nodiscard]]
+        auto GetFileList(FileListRequest request, uint64_t user_id)
+            -> drogon::Task<Result<FileListResponse>>;
+
+        /**
+         * @brief 获取下载信息（元数据）
+         *
+         * 业务规则：
+         * - 验证文件存在且属于用户
+         * - 关联 file_contents 获取存储信息
+         * - 返回文件元数据（不含物理路径）
+         *
+         * @param file_id 文件 ID
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<DownloadInfoResponse>> 成功返回下载信息，失败返回错误
+         */
+        [[nodiscard]]
+        auto GetDownloadInfo(uint64_t file_id, uint64_t user_id)
+            -> drogon::Task<Result<DownloadInfoResponse>>;
+
+        /**
+         * @brief 获取下载数据（含物理路径）
+         *
+         * 业务规则：
+         * - 验证文件存在且属于用户
+         * - 关联 file_contents 获取存储路径
+         * - 返回完整下载信息（含 storage_path）
+         *
+         * @param file_id 文件 ID
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<DownloadInfo>> 成功返回下载数据，失败返回错误
+         */
+        [[nodiscard]]
+        auto GetDownloadData(uint64_t file_id, uint64_t user_id)
+            -> drogon::Task<Result<DownloadInfo>>;
+
     private:
         /**
          * @brief 检查存储配额
