@@ -717,6 +717,7 @@ namespace disk::share {
     auto ShareService::GetShareFiles(uint64_t share_id) const -> drogon::Task<std::vector<ShareFile>> {
         CoroMapper<ShareFiles> sf_mapper(m_db_client);
         CoroMapper<Files> file_mapper(m_db_client);
+        CoroMapper<Folders> folder_mapper(m_db_client);
 
         std::vector<ShareFile> result;
 
@@ -739,8 +740,22 @@ namespace disk::share {
                     } catch (const DrogonDbException& e) {
                         LOG_WARN << "获取分享文件失败: file_id=" << sf.getValueOfItemId();
                     }
+                } else if (sf.getValueOfItemType() == "folder") {
+                    try {
+                        auto folder = co_await folder_mapper.findOne(
+                            Criteria(Folders::Cols::_id, sf.getValueOfItemId())
+                        );
+
+                        ShareFile sf_item;
+                        sf_item.id = folder.getValueOfId();
+                        sf_item.name = folder.getValueOfName();
+                        sf_item.type = "folder";
+                        sf_item.size = 0;
+                        result.push_back(sf_item);
+                    } catch (const DrogonDbException& e) {
+                        LOG_WARN << "获取分享文件夹失败: folder_id=" << sf.getValueOfItemId();
+                    }
                 }
-                // TODO: 支持文件夹类型
             }
         } catch (const DrogonDbException& e) {
             LOG_ERROR << "获取分享文件列表失败: " << e.base().what();
