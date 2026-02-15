@@ -4,6 +4,7 @@ include(GoogleTest)
 
 set(TEST_SOURCES
     main.cpp
+    utils/FileHashUtil_test.cpp
     utils/PasswdHash_test.cpp
     utils/RedisKeyPrefix_test.cpp
     utils/Response_test.cpp
@@ -11,6 +12,7 @@ set(TEST_SOURCES
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp
     dtos/AuthDto_test.cpp
+    dtos/FileDto_test.cpp
     dtos/FolderDto_test.cpp
     dtos/UserDto_test.cpp
 )

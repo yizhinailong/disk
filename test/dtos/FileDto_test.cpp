@@ -1,0 +1,590 @@
+/**
+ * @file FileDto_test.cpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief File DTO unit tests
+ * @version 0.1
+ * @date 2026-02-14
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
+#include "dtos/FileDto.hpp"
+
+#include <string>
+
+#include <drogon/HttpRequest.h>
+#include <drogon/utils/Utilities.h>
+#include <gtest/gtest.h>
+#include <json/json.h>
+
+#include "utils/ErrorCode.hpp"
+
+using disk::file::CompleteUploadRequest;
+using disk::file::CompleteUploadResponse;
+using disk::file::FileItem;
+using disk::file::InitUploadRequest;
+using disk::file::InitUploadResponse;
+using disk::file::UploadChunkRequest;
+using disk::file::UploadChunkResponse;
+
+// ==================== Helper Functions ====================
+
+static auto CreateJsonRequest(const Json::Value& json) -> drogon::HttpRequestPtr {
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    std::string body = Json::writeString(builder, json);
+
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody(body);
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    return req;
+}
+
+static auto CreateInitUploadRequest(
+    const std::string& filename,
+    uint64_t file_size,
+    const std::string& file_hash,
+    uint64_t parent_id = 0
+) -> drogon::HttpRequestPtr {
+    Json::Value json;
+    json["filename"] = filename;
+    json["file_size"] = static_cast<Json::UInt64>(file_size);
+    json["file_hash"] = file_hash;
+    json["parent_id"] = static_cast<Json::UInt64>(parent_id);
+
+    return CreateJsonRequest(json);
+}
+
+static auto CreateUploadChunkRequest(
+    const std::string& upload_id,
+    uint32_t chunk_index,
+    const std::string& chunk_hash
+) -> drogon::HttpRequestPtr {
+    Json::Value json;
+    json["upload_id"] = upload_id;
+    json["chunk_index"] = chunk_index;
+    json["chunk_hash"] = chunk_hash;
+
+    return CreateJsonRequest(json);
+}
+
+static auto CreateCompleteUploadRequest(const std::string& upload_id) -> drogon::HttpRequestPtr {
+    Json::Value json;
+    json["upload_id"] = upload_id;
+
+    return CreateJsonRequest(json);
+}
+
+// ==================== FileItem Tests ====================
+
+TEST(FileItem, ToJsonCorrectFields) {
+    FileItem item;
+    item.id = 123;
+    item.name = "document.pdf";
+    item.size = 1048576;
+    item.hash = "d41d8cd98f00b204e9800998ecf8427e";
+    item.mime_type = "application/pdf";
+    item.parent_id = 10;
+    item.created_at = "2026-02-14T10:30:00Z";
+
+    auto json = item.ToJson();
+
+    EXPECT_EQ(json["id"].asUInt64(), 123);
+    EXPECT_EQ(json["name"].asString(), "document.pdf");
+    EXPECT_EQ(json["size"].asUInt64(), 1048576);
+    EXPECT_EQ(json["hash"].asString(), "d41d8cd98f00b204e9800998ecf8427e");
+    EXPECT_EQ(json["mime_type"].asString(), "application/pdf");
+    EXPECT_EQ(json["parent_id"].asUInt64(), 10);
+    EXPECT_EQ(json["created_at"].asString(), "2026-02-14T10:30:00Z");
+}
+
+TEST(FileItem, ToJsonMinimalFields) {
+    FileItem item;
+    item.id = 1;
+    item.name = "test.txt";
+    item.size = 0;
+    item.hash = "";
+    item.mime_type = "text/plain";
+    item.parent_id = 0;
+    item.created_at = "";
+
+    auto json = item.ToJson();
+
+    EXPECT_EQ(json["id"].asUInt64(), 1);
+    EXPECT_EQ(json["name"].asString(), "test.txt");
+}
+
+// ==================== InitUploadRequest Tests ====================
+
+TEST(InitUploadRequest, ValidParameters) {
+    auto req = CreateInitUploadRequest(
+        "document.pdf",
+        104857600,
+        "d41d8cd98f00b204e9800998ecf8427e",
+        0
+    );
+    auto result = InitUploadRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid parameters should pass";
+    EXPECT_EQ(result->filename, "document.pdf");
+    EXPECT_EQ(result->file_size, 104857600);
+    EXPECT_EQ(result->file_hash, "d41d8cd98f00b204e9800998ecf8427e");
+    EXPECT_EQ(result->parent_id, 0);
+}
+
+TEST(InitUploadRequest, ValidWithParentId) {
+    auto req = CreateInitUploadRequest(
+        "report.docx",
+        5242880,
+        "abc123def456789012345678901234ab",
+        42
+    );
+    auto result = InitUploadRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid parameters with parent_id should pass";
+    EXPECT_EQ(result->filename, "report.docx");
+    EXPECT_EQ(result->parent_id, 42);
+}
+
+TEST(InitUploadRequest, MissingFilename) {
+    Json::Value json;
+    json["file_size"] = 1048576;
+    json["file_hash"] = "d41d8cd98f00b204e9800998ecf8427e";
+    json["parent_id"] = 0;
+
+    auto req = CreateJsonRequest(json);
+    auto result = InitUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing filename should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(InitUploadRequest, MissingFileHash) {
+    Json::Value json;
+    json["filename"] = "test.txt";
+    json["file_size"] = 1024;
+    json["parent_id"] = 0;
+
+    auto req = CreateJsonRequest(json);
+    auto result = InitUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing file_hash should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(InitUploadRequest, InvalidFileHashLength) {
+    auto req = CreateInitUploadRequest(
+        "test.txt",
+        1024,
+        "abc123", // Too short
+        0
+    );
+    auto result = InitUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Invalid hash length should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(InitUploadRequest, InvalidFileHashNonHex) {
+    auto req = CreateInitUploadRequest(
+        "test.txt",
+        1024,
+        "ghijklmnopqrstuvwxijklmnopqrstuv", // Non-hex chars
+        0
+    );
+    auto result = InitUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Non-hex hash should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(InitUploadRequest, InvalidFileHashUppercase) {
+    auto req = CreateInitUploadRequest(
+        "test.txt",
+        1024,
+        "ABCDEF1234567890ABCDEF1234567890", // Uppercase (should fail)
+        0
+    );
+    auto result = InitUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Uppercase hash should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(InitUploadRequest, FilenameTooLong) {
+    std::string filename(256, 'a'); // 256 chars
+    auto req = CreateInitUploadRequest(
+        filename,
+        1024,
+        "d41d8cd98f00b204e9800998ecf8427e",
+        0
+    );
+    auto result = InitUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Filename > 255 chars should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(InitUploadRequest, FilenameMaxLength) {
+    std::string filename(255, 'a'); // 255 chars (max valid)
+    auto req = CreateInitUploadRequest(
+        filename,
+        1024,
+        "d41d8cd98f00b204e9800998ecf8427e",
+        0
+    );
+    auto result = InitUploadRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Filename with 255 chars should pass";
+    EXPECT_EQ(result->filename.length(), 255);
+}
+
+TEST(InitUploadRequest, FilenameEmpty) {
+    auto req = CreateInitUploadRequest(
+        "",
+        1024,
+        "d41d8cd98f00b204e9800998ecf8427e",
+        0
+    );
+    auto result = InitUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Empty filename should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(InitUploadRequest, FilenameForbiddenCharSlash) {
+    auto req = CreateInitUploadRequest(
+        "test/file.txt",
+        1024,
+        "d41d8cd98f00b204e9800998ecf8427e",
+        0
+    );
+    auto result = InitUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Filename with / should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidFilename);
+    }
+}
+
+TEST(InitUploadRequest, FilenameForbiddenCharBackslash) {
+    auto req = CreateInitUploadRequest(
+        "test\\file.txt",
+        1024,
+        "d41d8cd98f00b204e9800998ecf8427e",
+        0
+    );
+    auto result = InitUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Filename with \\ should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidFilename);
+    }
+}
+
+TEST(InitUploadRequest, FilenameForbiddenCharColon) {
+    auto req = CreateInitUploadRequest(
+        "test:file.txt",
+        1024,
+        "d41d8cd98f00b204e9800998ecf8427e",
+        0
+    );
+    auto result = InitUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Filename with : should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidFilename);
+    }
+}
+
+TEST(InitUploadRequest, FileSizeZero) {
+    auto req = CreateInitUploadRequest(
+        "test.txt",
+        0, // Zero size
+        "d41d8cd98f00b204e9800998ecf8427e",
+        0
+    );
+    auto result = InitUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Zero file_size should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(InitUploadRequest, InvalidJSON) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody("{invalid json}");
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    auto result = InitUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Invalid JSON should fail";
+}
+
+TEST(InitUploadRequest, FilenameWrongType) {
+    Json::Value json;
+    json["filename"] = 123;
+    json["file_size"] = 1024;
+    json["file_hash"] = "d41d8cd98f00b204e9800998ecf8427e";
+    json["parent_id"] = 0;
+
+    auto req = CreateJsonRequest(json);
+    auto result = InitUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Filename with wrong type should fail";
+}
+
+// ==================== InitUploadResponse Tests ====================
+
+TEST(InitUploadResponse, ToJsonNormalUpload) {
+    InitUploadResponse response;
+    response.upload_id = "up_abc123def456";
+    response.chunk_size = 5242880;
+    response.total_chunks = 20;
+    response.uploaded_chunks = { 0, 1, 2 };
+    response.instant_upload = false;
+
+    auto json = response.ToJson();
+
+    EXPECT_EQ(json["upload_id"].asString(), "up_abc123def456");
+    EXPECT_EQ(json["chunk_size"].asUInt(), 5242880);
+    EXPECT_EQ(json["total_chunks"].asUInt(), 20);
+    EXPECT_TRUE(json["uploaded_chunks"].isArray());
+    EXPECT_EQ(json["uploaded_chunks"].size(), 3);
+    EXPECT_FALSE(json["instant_upload"].asBool());
+    EXPECT_FALSE(json.isMember("file"));
+}
+
+TEST(InitUploadResponse, ToJsonInstantUpload) {
+    InitUploadResponse response;
+    response.upload_id = "";
+    response.chunk_size = 0;
+    response.total_chunks = 0;
+    response.uploaded_chunks = {};
+    response.instant_upload = true;
+
+    FileItem file;
+    file.id = 123;
+    file.name = "existing.pdf";
+    file.size = 1048576;
+    file.hash = "d41d8cd98f00b204e9800998ecf8427e";
+    file.mime_type = "application/pdf";
+    file.parent_id = 0;
+    file.created_at = "2026-02-14T10:30:00Z";
+    response.file = file;
+
+    auto json = response.ToJson();
+
+    EXPECT_TRUE(json["instant_upload"].asBool());
+    EXPECT_TRUE(json.isMember("file"));
+    EXPECT_EQ(json["file"]["id"].asUInt64(), 123);
+    EXPECT_EQ(json["file"]["name"].asString(), "existing.pdf");
+}
+
+TEST(InitUploadResponse, ToJsonResumeUpload) {
+    InitUploadResponse response;
+    response.upload_id = "up_resume_123";
+    response.chunk_size = 5242880;
+    response.total_chunks = 10;
+    response.uploaded_chunks = { 0, 1, 2, 3, 4 }; // First 5 chunks uploaded
+    response.instant_upload = false;
+
+    auto json = response.ToJson();
+
+    EXPECT_EQ(json["uploaded_chunks"].size(), 5);
+    EXPECT_EQ(json["uploaded_chunks"][0].asUInt(), 0);
+    EXPECT_EQ(json["uploaded_chunks"][4].asUInt(), 4);
+}
+
+// ==================== UploadChunkRequest Tests ====================
+
+TEST(UploadChunkRequest, ValidParameters) {
+    auto req = CreateUploadChunkRequest(
+        "up_abc123def456",
+        5,
+        "e99a18c428cb38d5f260853678922e03"
+    );
+    auto result = UploadChunkRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid parameters should pass";
+    EXPECT_EQ(result->upload_id, "up_abc123def456");
+    EXPECT_EQ(result->chunk_index, 5);
+    EXPECT_EQ(result->chunk_hash, "e99a18c428cb38d5f260853678922e03");
+}
+
+TEST(UploadChunkRequest, MissingUploadId) {
+    Json::Value json;
+    json["chunk_index"] = 0;
+    json["chunk_hash"] = "d41d8cd98f00b204e9800998ecf8427e";
+
+    auto req = CreateJsonRequest(json);
+    auto result = UploadChunkRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing upload_id should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(UploadChunkRequest, MissingChunkHash) {
+    Json::Value json;
+    json["upload_id"] = "up_abc123";
+    json["chunk_index"] = 0;
+
+    auto req = CreateJsonRequest(json);
+    auto result = UploadChunkRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing chunk_hash should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(UploadChunkRequest, InvalidChunkHashLength) {
+    auto req = CreateUploadChunkRequest(
+        "up_abc123",
+        0,
+        "abc123" // Too short
+    );
+    auto result = UploadChunkRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Invalid chunk_hash length should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(UploadChunkRequest, InvalidChunkHashNonHex) {
+    auto req = CreateUploadChunkRequest(
+        "up_abc123",
+        0,
+        "ghijklmnopqrstuvwxijklmnopqrstuv" // Non-hex
+    );
+    auto result = UploadChunkRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Non-hex chunk_hash should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(UploadChunkRequest, EmptyUploadId) {
+    auto req = CreateUploadChunkRequest(
+        "", // Empty
+        0,
+        "d41d8cd98f00b204e9800998ecf8427e"
+    );
+    auto result = UploadChunkRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Empty upload_id should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+// ==================== UploadChunkResponse Tests ====================
+
+TEST(UploadChunkResponse, ToJsonSuccess) {
+    UploadChunkResponse response;
+    response.chunk_index = 5;
+    response.uploaded = true;
+
+    auto json = response.ToJson();
+
+    EXPECT_EQ(json["chunk_index"].asUInt(), 5);
+    EXPECT_TRUE(json["uploaded"].asBool());
+}
+
+TEST(UploadChunkResponse, ToJsonFailure) {
+    UploadChunkResponse response;
+    response.chunk_index = 10;
+    response.uploaded = false;
+
+    auto json = response.ToJson();
+
+    EXPECT_EQ(json["chunk_index"].asUInt(), 10);
+    EXPECT_FALSE(json["uploaded"].asBool());
+}
+
+// ==================== CompleteUploadRequest Tests ====================
+
+TEST(CompleteUploadRequest, ValidParameters) {
+    auto req = CreateCompleteUploadRequest("up_abc123def456");
+    auto result = CompleteUploadRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid parameters should pass";
+    EXPECT_EQ(result->upload_id, "up_abc123def456");
+}
+
+TEST(CompleteUploadRequest, MissingUploadId) {
+    Json::Value json;
+
+    auto req = CreateJsonRequest(json);
+    auto result = CompleteUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing upload_id should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(CompleteUploadRequest, EmptyUploadId) {
+    auto req = CreateCompleteUploadRequest("");
+    auto result = CompleteUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Empty upload_id should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(CompleteUploadRequest, InvalidJSON) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody("{invalid json}");
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    auto result = CompleteUploadRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Invalid JSON should fail";
+}
+
+// ==================== CompleteUploadResponse Tests ====================
+
+TEST(CompleteUploadResponse, ToJsonCorrectFields) {
+    CompleteUploadResponse response;
+    response.file.id = 456;
+    response.file.name = "completed.pdf";
+    response.file.size = 10485760;
+    response.file.hash = "d41d8cd98f00b204e9800998ecf8427e";
+    response.file.mime_type = "application/pdf";
+    response.file.parent_id = 10;
+    response.file.created_at = "2026-02-14T11:00:00Z";
+
+    auto json = response.ToJson();
+
+    EXPECT_TRUE(json.isMember("file"));
+    EXPECT_EQ(json["file"]["id"].asUInt64(), 456);
+    EXPECT_EQ(json["file"]["name"].asString(), "completed.pdf");
+    EXPECT_EQ(json["file"]["size"].asUInt64(), 10485760);
+    EXPECT_EQ(json["file"]["hash"].asString(), "d41d8cd98f00b204e9800998ecf8427e");
+    EXPECT_EQ(json["file"]["mime_type"].asString(), "application/pdf");
+    EXPECT_EQ(json["file"]["parent_id"].asUInt64(), 10);
+    EXPECT_EQ(json["file"]["created_at"].asString(), "2026-02-14T11:00:00Z");
+}

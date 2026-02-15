@@ -67,10 +67,55 @@ namespace disk::utils {
         [[nodiscard]]
         auto GetRefreshTokenExpireSeconds() const -> int;
 
+        // ==================== 存储配置 ====================
+
+        /**
+         * @brief 获取存储基础路径
+         * @return std::string 存储基础路径
+         */
+        [[nodiscard]]
+        auto GetStorageBasePath() const noexcept -> std::string;
+
+        /**
+         * @brief 获取临时上传路径
+         * @return std::string 临时上传路径
+         */
+        [[nodiscard]]
+        auto GetTempUploadPath() const noexcept -> std::string;
+
+        /**
+         * @brief 获取分片大小（字节）
+         * @return uint32_t 分片大小（默认 5MB）
+         */
+        [[nodiscard]]
+        auto GetChunkSize() const noexcept -> uint32_t;
+
+        /**
+         * @brief 获取最大文件大小（字节）
+         * @return uint64_t 最大文件大小（默认 10GB）
+         */
+        [[nodiscard]]
+        auto GetMaxFileSize() const noexcept -> uint64_t;
+
+        /**
+         * @brief 获取上传任务过期时间（秒）
+         * @return int 过期时间（默认 24小时）
+         */
+        [[nodiscard]]
+        auto GetUploadTaskExpirySeconds() const noexcept -> int;
+
     private:
+        // JWT 配置
         std::string m_jwt_secret{ "dev-secret-key-change-in-production-min-32-chars" };
         int m_access_token_expire_seconds{ 7200 };
         int m_refresh_token_expire_seconds{ 604800 };
+
+        // 存储配置
+        std::string m_storage_base_path{ "build/uploaded" };
+        std::string m_temp_upload_path{ "build/temp_uploads" };
+        uint32_t m_chunk_size{ 5242880 };
+        uint64_t m_max_file_size{ 10737418240 };
+        int m_upload_task_expiry_seconds{ 86400 };
     };
 
 } // namespace disk::utils

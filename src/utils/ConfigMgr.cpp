@@ -45,4 +45,26 @@ namespace disk::utils {
         return m_refresh_token_expire_seconds;
     }
 
+    // ==================== 存储配置 ====================
+
+    auto ConfigMgr::GetStorageBasePath() const noexcept -> std::string {
+        return m_storage_base_path;
+    }
+
+    auto ConfigMgr::GetTempUploadPath() const noexcept -> std::string {
+        return m_temp_upload_path;
+    }
+
+    auto ConfigMgr::GetChunkSize() const noexcept -> uint32_t {
+        return m_chunk_size;
+    }
+
+    auto ConfigMgr::GetMaxFileSize() const noexcept -> uint64_t {
+        return m_max_file_size;
+    }
+
+    auto ConfigMgr::GetUploadTaskExpirySeconds() const noexcept -> int {
+        return m_upload_task_expiry_seconds;
+    }
+
 } // namespace disk::utils
