@@ -333,3 +333,78 @@ TEST(UpdateProfileRequest, WhitespaceTrimmed) {
     EXPECT_TRUE(result->avatar.has_value());
     EXPECT_EQ(result->avatar.value(), "https://example.com/avatar.png");
 }
+
+// ==================== StorageCategory Tests ====================
+
+TEST(StorageCategory, ToJsonReturnsCorrectFormat) {
+    disk::user::StorageCategory category{
+        .type = "document",
+        .size = 1073741824,
+        .count = 150
+    };
+
+    Json::Value json = category.ToJson();
+
+    EXPECT_EQ(json["type"].asString(), "document");
+    EXPECT_EQ(json["size"].asUInt64(), 1073741824ULL);
+    EXPECT_EQ(json["count"].asUInt(), 150U);
+}
+
+// ==================== StorageResponse Tests ====================
+
+TEST(StorageResponse, ToJsonReturnsCorrectFormat) {
+    std::vector<disk::user::StorageCategory> categories;
+    categories.push_back({ .type = "document", .size = 100, .count = 5 });
+
+    disk::user::StorageResponse response{
+        .used = 1073741824,
+        .quota = 10737418240,
+        .percentage = 10.0,
+        .file_count = 150,
+        .folder_count = 20,
+        .categories = categories
+    };
+
+    Json::Value json = response.ToJson();
+
+    EXPECT_EQ(json["used"].asUInt64(), 1073741824ULL);
+    EXPECT_EQ(json["quota"].asUInt64(), 10737418240ULL);
+    EXPECT_DOUBLE_EQ(json["percentage"].asDouble(), 10.0);
+    EXPECT_EQ(json["file_count"].asUInt(), 150U);
+    EXPECT_EQ(json["folder_count"].asUInt(), 20U);
+    EXPECT_TRUE(json["categories"].isArray());
+    EXPECT_EQ(json["categories"].size(), 1U);
+}
+
+TEST(StorageResponse, ToJsonWithEmptyCategories) {
+    disk::user::StorageResponse response{
+        .used = 0,
+        .quota = 10737418240,
+        .percentage = 0.0,
+        .file_count = 0,
+        .folder_count = 0,
+        .categories = {}
+    };
+
+    Json::Value json = response.ToJson();
+
+    EXPECT_EQ(json["used"].asUInt64(), 0ULL);
+    EXPECT_DOUBLE_EQ(json["percentage"].asDouble(), 0.0);
+    EXPECT_TRUE(json["categories"].isArray());
+    EXPECT_EQ(json["categories"].size(), 0U);
+}
+
+TEST(StorageResponse, ToJsonWithPercentageOver100) {
+    disk::user::StorageResponse response{
+        .used = 15000000000,
+        .quota = 10737418240,
+        .percentage = 139.7,
+        .file_count = 500,
+        .folder_count = 50,
+        .categories = {}
+    };
+
+    Json::Value json = response.ToJson();
+
+    EXPECT_DOUBLE_EQ(json["percentage"].asDouble(), 139.7);
+}
