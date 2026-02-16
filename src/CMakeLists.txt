@@ -31,10 +31,12 @@ set(Dtos_HEADERS
 # Filter
 set(Filters_HEADERS
     filters/JwtAuthFilter.hpp
+    filters/RateLimitFilter.hpp
     filters/ShareAuthFilter.hpp
 )
 set(Filters_SOURCES
     filters/JwtAuthFilter.cpp
+    filters/RateLimitFilter.cpp
     filters/ShareAuthFilter.cpp
 )
 

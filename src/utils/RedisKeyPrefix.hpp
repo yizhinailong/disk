@@ -39,6 +39,7 @@ namespace disk::redis {
         static constexpr std::string_view SHARE_TOKEN_PREFIX = "share_token";
         static constexpr std::string_view SHARE_TOKEN_BLACKLIST_PREFIX = "share_token_blacklist";
         static constexpr std::string_view SHARE_PASSWORD_RATE_LIMIT_PREFIX = "rate:share_password";
+        static constexpr std::string_view API_RATE_LIMIT_PREFIX = "rate:api";
 
         // ==================== Key Construction Methods ====================
 
@@ -117,6 +118,19 @@ namespace disk::redis {
                        SHARE_PASSWORD_RATE_LIMIT_PREFIX
                    ) +
                    ":" + share_code + ":" + ExtractIPOnly(ip_address);
+        }
+
+        /**
+         * @brief Build API rate limit key
+         *
+         * @param user_id User ID
+         * @param window_timestamp Window timestamp (Unix timestamp in seconds, rounded to window)
+         * @return std::string Redis key format: "rate:api:{user_id}:{window_timestamp}"
+         */
+        [[nodiscard]]
+        static auto BuildApiRateLimitKey(uint64_t user_id, int64_t window_timestamp) -> std::string {
+            return std::string(API_RATE_LIMIT_PREFIX) + ":" + std::to_string(user_id) + ":" +
+                   std::to_string(window_timestamp);
         }
 
         /**

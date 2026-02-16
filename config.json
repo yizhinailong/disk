@@ -38,18 +38,19 @@
       "timeout": -1.0
     }
   ],
-  "plugins": [
+"plugins": [
     {
       "name": "drogon::plugin::GlobalFilters",
       "config": {
         "filters": [
-          "disk::filters::JwtAuthFilter"
+          "disk::filters::JwtAuthFilter",
+          "disk::filters::RateLimitFilter"
         ],
         "exempt": [
           "^/api/auth/register",
           "^/api/auth/login",
           "^/api/share/access/.*",
-          "^/api/share/browse/.*",
+          "^/api/share-browse/.*",
           "^/api/share/download/.*"
         ]
       }
