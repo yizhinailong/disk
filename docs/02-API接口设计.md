@@ -93,7 +93,10 @@
 | 40106 | `TokenMissing` | 401 | 未提供令牌 |
 | 40107 | `TokenMalformed` | 401 | 令牌格式错误 |
 | 40108 | `TokenExpired` | 401 | 令牌已过期 |
+| 40100 | `UserNotFound` | 404 | 用户不存在 |
 | 40109 | `TokenWrongType` | 401 | 令牌类型错误 |
+| 40110 | `RefreshTokenAlreadyUsed` | 401 | 刷新令牌已被使用 |
+| 40111 | `TokenRevoked` | 401 | 令牌已被注销 |
 
 #### 文件错误码
 
@@ -109,6 +112,7 @@
 | 50008 | `UploadTaskNotFound` | 400 | 上传任务不存在或已过期 |
 | 50009 | `ChunkVerifyFailed` | 400 | 分片校验失败 |
 | 50010 | `FolderAlreadyExists` | 409 | 同名文件夹已存在 |
+| 50011 | `FileReadError` | 500 | 文件读取失败 |
 
 #### 分享错误码
 
@@ -118,6 +122,14 @@
 | 60002 | `ShareExpired` | 400 | 分享已过期 |
 | 60003 | `SharePasswordError` | 400 | 分享密码错误 |
 | 60004 | `ShareAccessDenied` | 403 | 无权限访问 |
+
+#### Redis错误码
+
+| 错误码 | 枚举名称 | HTTP状态码 | 说明 |
+|--------|----------|------------|------|
+| 70001 | `RedisConnectionFailed` | 500 | Redis连接失败 |
+| 70002 | `RedisOperationFailed` | 500 | Redis操作失败 |
+| 70003 | `RedisKeyNotFound` | 404 | Redis key不存在 |
 
 #### 代码使用示例
 
