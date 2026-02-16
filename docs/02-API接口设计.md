@@ -1426,7 +1426,7 @@ Authorization: Bearer <access_token>
 **POST** `/api/folder/create`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 在指定目录下创建新文件夹。支持层级目录结构，无嵌套深度限制。
 
@@ -1618,6 +1618,9 @@ Authorization: Bearer <access_token>
 
 **GET** `/api/folder/tree`
 
+#### 实现状态
+**已实现**
+
 获取文件夹目录树结构。
 
 #### 查询参数
@@ -1670,7 +1673,7 @@ Authorization: Bearer <access_token>
 获取当前文件夹的路径面包屑。
 
 #### 实现状态
-**未实现**
+**已实现**
 
 #### 请求头
 
