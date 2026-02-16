@@ -369,7 +369,7 @@ Authorization: Bearer <access_token>
 **PATCH** `/api/user/profile`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 更新当前用户的个人信息。采用 Merge Patch 风格的局部更新语义：
 - 仅支持更新 `nickname` 和 `avatar` 两个字段
@@ -582,7 +582,7 @@ If-Match: <etag>（可选）
 **PUT** `/api/user/password`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 修改当前用户的登录密码。
 
@@ -707,7 +707,7 @@ Authorization: Bearer <access_token>
 **POST** `/api/file/upload/init`
 
 #### 实现状态
-**未实现**
+**已实现**
 
 初始化文件上传任务，检测秒传和断点续传。
 
