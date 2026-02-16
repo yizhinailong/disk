@@ -117,6 +117,24 @@ namespace disk::user {
         auto UpdateProfile(uint64_t user_id, UpdateProfileRequest request)
             -> drogon::Task<Result<UserProfileResponse>>;
 
+        /**
+         * @brief 获取用户存储空间统计
+         *
+         * 业务规则：
+         * - used = SUM(Files.size) - 逻辑文件大小（不计算去重）
+         * - quota = Users.storage_quota - 用户存储配额
+         * - file_count = COUNT(Files) - 文件数量
+         * - folder_count = COUNT(Folders) - 文件夹数量
+         * - percentage = round((used / quota) * 100, 1) - 使用百分比（1位小数）
+         * - quota = 0 时 percentage = 0.0
+         * - categories 当前版本返回空数组
+         *
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<StorageResponse>> 成功返回存储统计，失败返回错误
+         */
+        [[nodiscard]]
+        auto GetStorage(uint64_t user_id) -> drogon::Task<Result<StorageResponse>>;
+
     private:
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
     };

@@ -11,6 +11,8 @@
 
 #include "UserService.hpp"
 
+#include <cmath>
+
 #include <drogon/orm/CoroMapper.h>
 #include <drogon/orm/Criteria.h>
 
@@ -223,6 +225,63 @@ namespace disk::user {
         } catch (const std::exception& e) {
             LOG_ERROR << "更新用户资料未知错误: user_id=" << user_id << " - " << e.what();
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "更新用户资料失败，请稍后重试"));
+        }
+    }
+
+    auto UserService::GetStorage(uint64_t user_id) -> drogon::Task<Result<StorageResponse>> {
+        LOG_DEBUG << "获取用户存储统计: user_id=" << user_id;
+
+        try {
+            // 1. 获取用户配额
+            CoroMapper<Users> user_mapper(m_db_client);
+            auto user = co_await user_mapper.findByPrimaryKey(user_id);
+            uint64_t quota = user.getValueOfStorageQuota();
+
+            // 2. 计算已使用空间 (SUM of Files.size)
+            auto used_result = co_await m_db_client->execSqlCoro(
+                "SELECT COALESCE(SUM(size), 0) as total_size FROM files WHERE user_id = ?",
+                user_id
+            );
+            uint64_t used = used_result[0]["total_size"].as<uint64_t>();
+
+            // 3. 计算文件数量
+            auto file_count_result = co_await m_db_client->execSqlCoro(
+                "SELECT COUNT(*) as count FROM files WHERE user_id = ?",
+                user_id
+            );
+            uint32_t file_count = file_count_result[0]["count"].as<uint32_t>();
+
+            // 4. 计算文件夹数量
+            auto folder_count_result = co_await m_db_client->execSqlCoro(
+                "SELECT COUNT(*) as count FROM folders WHERE user_id = ?",
+                user_id
+            );
+            uint32_t folder_count = folder_count_result[0]["count"].as<uint32_t>();
+
+            // 5. 计算百分比（1位小数）
+            double percentage = 0.0;
+            if (quota > 0) {
+                percentage = std::round(static_cast<double>(used) / static_cast<double>(quota) * 1000.0) / 10.0;
+            }
+
+            // 6. 构建响应
+            StorageResponse response{
+                .used = used,
+                .quota = quota,
+                .percentage = percentage,
+                .file_count = file_count,
+                .folder_count = folder_count,
+                .categories = {}
+            };
+
+            LOG_DEBUG << "存储统计: used=" << used << ", quota=" << quota
+                      << ", percentage=" << percentage << "%"
+                      << ", files=" << file_count << ", folders=" << folder_count;
+
+            co_return response;
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "获取存储统计失败: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "获取存储统计失败"));
         }
     }
 

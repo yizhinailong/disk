@@ -20,6 +20,7 @@
 #include <optional>
 #include <regex>
 #include <string>
+#include <vector>
 
 #include <drogon/HttpRequest.h>
 #include <json/json.h>
@@ -277,6 +278,62 @@ namespace disk::user {
             json["folder_count"] = folder_count;
             json["created_at"] = created_at;
             json["updated_at"] = updated_at;
+            return json;
+        }
+    };
+
+    /**
+     * @brief 存储分类统计 DTO
+     *
+     * @details
+     * 用于按文件类型分类统计存储空间使用情况。
+     * 文件类型包括：document, image, video, audio, other
+     */
+    struct StorageCategory {
+        std::string type; ///< 文件类型：document, image, video, audio, other
+        uint64_t size;    ///< 该类型总大小（字节）
+        uint32_t count;   ///< 该类型文件数量
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["type"] = type;
+            json["size"] = static_cast<Json::UInt64>(size);
+            json["count"] = count;
+            return json;
+        }
+    };
+
+    /**
+     * @brief 存储空间统计响应 DTO
+     *
+     * @details
+     * 返回用户存储空间使用情况，包括已用空间、总配额、
+     * 使用百分比、文件/文件夹数量及分类统计。
+     */
+    struct StorageResponse {
+        uint64_t used;                           ///< 已使用空间（字节）
+        uint64_t quota;                          ///< 总配额（字节）
+        double percentage;                       ///< 使用百分比（1位小数）
+        uint32_t file_count;                     ///< 文件数量
+        uint32_t folder_count;                   ///< 文件夹数量
+        std::vector<StorageCategory> categories; ///< 分类统计（当前版本为空）
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["used"] = static_cast<Json::UInt64>(used);
+            json["quota"] = static_cast<Json::UInt64>(quota);
+            json["percentage"] = percentage;
+            json["file_count"] = file_count;
+            json["folder_count"] = folder_count;
+            Json::Value categories_array(Json::arrayValue);
+            for (const auto& cat : categories) {
+                categories_array.append(cat.ToJson());
+            }
+            json["categories"] = categories_array;
             return json;
         }
     };
