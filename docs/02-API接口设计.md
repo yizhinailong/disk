@@ -170,7 +170,7 @@ auto GetUser(int id) -> Result<User> {
 |------|------|------|------|
 | username | string | 是 | 用户名，4-32字符，字母数字下划线 |
 | email | string | 是 | 邮箱地址 |
-| password | string | 是 | 密码，8-64字符，需含大小写字母和数字 |
+| password | string | 是 | 密码，8-64字符，仅含大小写字母和数字（不支持特殊字符） |
 
 #### 响应示例
 
