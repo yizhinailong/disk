@@ -29,6 +29,8 @@ namespace disk::folder {
      *
      * 提供文件夹管理相关的业务逻辑：
      * - 创建文件夹
+     * - 获取文件夹树
+     * - 获取面包屑导航路径
      */
     class FolderService {
     public:

@@ -347,7 +347,7 @@ namespace disk::error {
      * @code
      * auto GetUser(int id) -> Result<User> {
      *     if (id <= 0) {
-     *         return std::unexpected(Err(Code::InvalidParameter, "用户 ID 必须为正整数"));
+     *         return std::unexpected(ErrorInfo(Code::InvalidParameter, "用户 ID 必须为正整数"));
      *     }
      *     return user;
      * }
@@ -363,7 +363,7 @@ namespace disk::error {
      * @code
      * auto DeleteUser(int id) -> Result<void> {
      *     if (id <= 0) {
-     *         return std::unexpected(Err(Code::InvalidParameter));
+     *         return std::unexpected(ErrorInfo(Code::InvalidParameter));
      *     }
      *     // ... 删除操作
      *     return {};

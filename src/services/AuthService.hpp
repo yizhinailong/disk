@@ -30,7 +30,7 @@ namespace disk::auth {
     public:
         /**
          * @brief 构造函数
-         * @param redis_client Redis客户端
+         * @param redis_client Redis客户端（数据库客户端从全局获取）
          */
         explicit AuthService(const drogon::nosql::RedisClientPtr& redis_client);
         ~AuthService() = default;

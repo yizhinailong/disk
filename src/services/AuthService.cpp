@@ -166,7 +166,7 @@ namespace disk::auth {
         // 6. 更新登录信息
         co_await UpdateLoginInfo(user.getValueOfId(), ip_address);
 
-        // 6. 构造响应
+        // 7. 构造响应
         LoginResponse response;
         response.access_token = access_token;
         response.refresh_token = refresh_token;
@@ -230,7 +230,7 @@ namespace disk::auth {
                 co_return std::unexpected(refresh_result.error());
             }
 
-            // 6. 构造响应
+            // 7. 构造响应
             RefreshTokenResponse response;
             response.access_token = access_token;
             response.refresh_token = new_refresh_token;
