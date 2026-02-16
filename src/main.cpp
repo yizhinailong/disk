@@ -17,15 +17,14 @@ auto main() -> int {
 
     // 注册启动后定时清理任务
     drogon::app().registerBeginningAdvice([]() {
-        auto cleanup_service = std::make_shared<disk::services::CleanupService>(
-            drogon::app().getDbClient()
-        );
+        using disk::services::CleanupService;
+        auto cleanup_service = std::make_shared<CleanupService>(drogon::app().getDbClient());
 
         // async_func wraps the coroutine lambda in std::function<void()> that keeps
         // captures alive. runEvery stores the function for program lifetime.
         drogon::app().getLoop()->runEvery(
             3600.0,
-            drogon::async_func([cleanup_service]() -> drogon::Task<void> { // NOLINT(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+            drogon::async_func([cleanup_service]() -> drogon::Task<void> {
                 LOG_INFO << "定时清理任务开始执行";
                 const auto& service = cleanup_service;
                 auto result = co_await service->CleanupExpiredTrash();
