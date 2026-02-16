@@ -37,6 +37,7 @@ namespace disk::user {
         ADD_METHOD_TO(UserController::GetProfile, "/api/user/profile", drogon::Get);
         ADD_METHOD_TO(UserController::UpdateProfile, "/api/user/profile", drogon::Patch);
         ADD_METHOD_TO(UserController::UpdatePassword, "/api/user/password", drogon::Put);
+        ADD_METHOD_TO(UserController::GetStorage, "/api/user/storage", drogon::Get);
         METHOD_LIST_END
 
         /**
@@ -87,6 +88,21 @@ namespace disk::user {
          */
         [[nodiscard]]
         auto UpdateProfile(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 获取存储空间统计
+         *
+         * 业务规则：
+         * - 从请求 attributes 中提取 user_id（由 JwtAuthFilter 设置）
+         * - 调用 UserService::GetStorage(user_id) 获取存储统计
+         * - 处理服务层错误（返回 Response::Error）
+         * - 返回 HTTP 200 状态码和 Response::Success(data)
+         *
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto GetStorage(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
         std::unique_ptr<disk::user::UserService> m_user_service;
