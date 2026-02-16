@@ -1,5 +1,7 @@
 #include <drogon/drogon.h>
 
+#include "services/CleanupService.hpp"
+
 auto main() -> int {
     LOG_INFO << "网盘系统启动中...";
 
@@ -12,6 +14,25 @@ auto main() -> int {
 
     LOG_INFO << "Drogon 框架版本：" << drogon::getVersion();
     LOG_INFO << "Web 服务监听在 http://127.0.0.1:8080";
+
+    // 注册启动后定时清理任务
+    drogon::app().registerBeginningAdvice([]() {
+        auto cleanup_service = std::make_shared<disk::services::CleanupService>(
+            drogon::app().getDbClient()
+        );
+
+        drogon::app().getLoop()->runEvery(3600.0, [cleanup_service]() {
+            LOG_INFO << "定时清理任务开始执行";
+            drogon::async_run([cleanup_service]() -> drogon::Task<void> {
+                auto result = co_await cleanup_service->CleanupExpiredTrash();
+                if (!result) {
+                    LOG_ERROR << "定时清理任务失败: " << result.error().message;
+                }
+            });
+        });
+
+        LOG_INFO << "定时清理任务已注册（每小时执行）";
+    });
 
     drogon::app().loadConfigFile("config.json").run();
 

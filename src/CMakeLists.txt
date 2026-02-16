@@ -67,6 +67,7 @@ set(Models_SOURCES
 # Service
 set(Services_HEADERS
     services/AuthService.hpp
+    services/CleanupService.hpp
     services/FileService.hpp
     services/FolderService.hpp
     services/RedisService.hpp
@@ -77,6 +78,7 @@ set(Services_HEADERS
 )
 set(Services_SOURCES
     services/AuthService.cpp
+    services/CleanupService.cpp
     services/FileService.cpp
     services/FolderService.cpp
     services/RedisService.cpp
