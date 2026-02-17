@@ -114,7 +114,9 @@ namespace disk::file {
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
                 LOG_WARN << "请求体不是有效的 JSON";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON")
+                );
             }
 
             const auto& json = *json_ptr;
@@ -122,29 +124,41 @@ namespace disk::file {
             // 检查必填字段
             if (!json.isMember("filename")) {
                 LOG_WARN << "缺少必需参数: filename";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: filename"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: filename")
+                );
             }
             if (!json.isMember("file_size")) {
                 LOG_WARN << "缺少必需参数: file_size";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: file_size"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: file_size")
+                );
             }
             if (!json.isMember("file_hash")) {
                 LOG_WARN << "缺少必需参数: file_hash";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: file_hash"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: file_hash")
+                );
             }
 
             // 检查字段类型
             if (!json["filename"].isString()) {
                 LOG_WARN << "参数 'filename' 类型错误: 期望字符串";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'filename' 类型错误: 期望字符串"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "参数 'filename' 类型错误: 期望字符串")
+                );
             }
             if (!json["file_size"].isIntegral()) {
                 LOG_WARN << "参数 'file_size' 类型错误: 期望整数";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'file_size' 类型错误: 期望整数"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "参数 'file_size' 类型错误: 期望整数")
+                );
             }
             if (!json["file_hash"].isString()) {
                 LOG_WARN << "参数 'file_hash' 类型错误: 期望字符串";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'file_hash' 类型错误: 期望字符串"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "参数 'file_hash' 类型错误: 期望字符串")
+                );
             }
 
             InitUploadRequest request;
@@ -156,52 +170,69 @@ namespace disk::file {
             if (json.isMember("parent_id")) {
                 if (!json["parent_id"].isIntegral()) {
                     LOG_WARN << "参数 'parent_id' 类型错误: 期望整数";
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'parent_id' 类型错误: 期望整数"));
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "参数 'parent_id' 类型错误: 期望整数"
+                    ));
                 }
                 request.parent_id = json["parent_id"].asUInt64();
             }
 
             LOG_DEBUG << "解析到初始化上传请求: filename=\"" << request.filename
                       << "\", file_size=" << request.file_size
-                      << ", file_hash=" << request.file_hash
-                      << ", parent_id=" << request.parent_id;
+                      << ", file_hash=" << request.file_hash << ", parent_id=" << request.parent_id;
 
             // 验证文件名
             if (!request.ValidateFilenameLength()) {
                 LOG_WARN << "文件名长度无效: " << request.filename.length();
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "文件名长度必须在 1-255 字符之间"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "文件名长度必须在 1-255 字符之间")
+                );
             }
 
             if (!request.ValidateFilenameForbiddenChars()) {
                 LOG_WARN << "文件名包含禁止字符: " << request.filename;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件名包含禁止字符：/ \\ : * ? \" < > | 或控制字符"));
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidFilename,
+                    "文件名包含禁止字符：/ \\ : * ? \" < > | 或控制字符"
+                ));
             }
 
             if (!request.ValidateFilenameReservedNames()) {
                 LOG_WARN << "文件名为保留名称: " << request.filename;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件名不能为保留名称 \".\" 或 \"..\""));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidFilename, "文件名不能为保留名称 \".\" 或 \"..\"")
+                );
             }
 
             if (!request.ValidateFilenameNotHidden()) {
                 LOG_WARN << "文件名以点开头（隐藏文件）: " << request.filename;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件名不能以 \".\" 开头"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidFilename, "文件名不能以 \".\" 开头")
+                );
             }
 
             if (!request.ValidateFilenameCharset()) {
                 LOG_WARN << "文件名包含非 ASCII 字符: " << request.filename;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件名仅允许 ASCII 可打印字符"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidFilename, "文件名仅允许 ASCII 可打印字符")
+                );
             }
 
             // 验证文件大小
             if (!request.ValidateFileSize()) {
                 LOG_WARN << "文件大小无效: " << request.file_size;
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "文件大小必须大于 0 且不超过最大限制"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "文件大小必须大于 0 且不超过最大限制")
+                );
             }
 
             // 验证文件哈希
             if (!request.ValidateFileHash()) {
                 LOG_WARN << "文件哈希格式错误: " << request.file_hash;
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "文件哈希必须是 32 位小写十六进制字符串"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "文件哈希必须是 32 位小写十六进制字符串")
+                );
             }
 
             LOG_DEBUG << "请求参数验证通过";
@@ -348,7 +379,9 @@ namespace disk::file {
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
                 LOG_WARN << "请求体不是有效的 JSON";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON")
+                );
             }
 
             const auto& json = *json_ptr;
@@ -356,21 +389,29 @@ namespace disk::file {
             // 检查必填字段
             if (!json.isMember("upload_id")) {
                 LOG_WARN << "缺少必需参数: upload_id";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: upload_id"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: upload_id")
+                );
             }
             if (!json.isMember("chunk_hash")) {
                 LOG_WARN << "缺少必需参数: chunk_hash";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: chunk_hash"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: chunk_hash")
+                );
             }
 
             // 检查字段类型
             if (!json["upload_id"].isString()) {
                 LOG_WARN << "参数 'upload_id' 类型错误: 期望字符串";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'upload_id' 类型错误: 期望字符串"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "参数 'upload_id' 类型错误: 期望字符串")
+                );
             }
             if (!json["chunk_hash"].isString()) {
                 LOG_WARN << "参数 'chunk_hash' 类型错误: 期望字符串";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'chunk_hash' 类型错误: 期望字符串"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "参数 'chunk_hash' 类型错误: 期望字符串")
+                );
             }
 
             UploadChunkRequest request;
@@ -381,7 +422,10 @@ namespace disk::file {
             if (json.isMember("chunk_index")) {
                 if (!json["chunk_index"].isIntegral()) {
                     LOG_WARN << "参数 'chunk_index' 类型错误: 期望整数";
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'chunk_index' 类型错误: 期望整数"));
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "参数 'chunk_index' 类型错误: 期望整数"
+                    ));
                 }
                 request.chunk_index = json["chunk_index"].asUInt();
             }
@@ -393,13 +437,17 @@ namespace disk::file {
             // 验证 upload_id 非空
             if (request.upload_id.empty()) {
                 LOG_WARN << "upload_id 不能为空";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "upload_id 不能为空"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "upload_id 不能为空")
+                );
             }
 
             // 验证分片哈希
             if (!request.ValidateChunkHash()) {
                 LOG_WARN << "分片哈希格式错误: " << request.chunk_hash;
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "分片哈希必须是 32 位小写十六进制字符串"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "分片哈希必须是 32 位小写十六进制字符串")
+                );
             }
 
             LOG_DEBUG << "请求参数验证通过";
@@ -456,13 +504,16 @@ namespace disk::file {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<CompleteUploadRequest> {
+        static auto FromRequest(const drogon::HttpRequestPtr& req)
+            -> Result<CompleteUploadRequest> {
             LOG_DEBUG << "开始解析完成上传请求参数";
 
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
                 LOG_WARN << "请求体不是有效的 JSON";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON")
+                );
             }
 
             const auto& json = *json_ptr;
@@ -470,13 +521,17 @@ namespace disk::file {
             // 检查必填字段
             if (!json.isMember("upload_id")) {
                 LOG_WARN << "缺少必需参数: upload_id";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: upload_id"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: upload_id")
+                );
             }
 
             // 检查字段类型
             if (!json["upload_id"].isString()) {
                 LOG_WARN << "参数 'upload_id' 类型错误: 期望字符串";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'upload_id' 类型错误: 期望字符串"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "参数 'upload_id' 类型错误: 期望字符串")
+                );
             }
 
             CompleteUploadRequest request;
@@ -487,7 +542,9 @@ namespace disk::file {
             // 验证 upload_id 非空
             if (request.upload_id.empty()) {
                 LOG_WARN << "upload_id 不能为空";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "upload_id 不能为空"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "upload_id 不能为空")
+                );
             }
 
             LOG_DEBUG << "请求参数验证通过";
@@ -545,7 +602,10 @@ namespace disk::file {
             FileListRequest request;
 
             // 有效排序字段
-            static const std::set<std::string> valid_sort_by = { "name", "size", "created_at", "updated_at" };
+            static const std::set<std::string> valid_sort_by = { "name",
+                                                                 "size",
+                                                                 "created_at",
+                                                                 "updated_at" };
 
             // 有效排序方向
             static const std::set<std::string> valid_sort_order = { "asc", "desc" };
@@ -561,12 +621,16 @@ namespace disk::file {
                     auto value = std::stoull(parent_id_str, &pos);
                     if (pos != parent_id_str.length()) {
                         LOG_WARN << "参数 'parent_id' 格式无效: " << parent_id_str;
-                        return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'parent_id' 格式无效"));
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::ValidationFailed, "参数 'parent_id' 格式无效")
+                        );
                     }
                     request.parent_id = value;
                 } catch (const std::exception& e) {
                     LOG_WARN << "参数 'parent_id' 格式无效: " << parent_id_str;
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'parent_id' 格式无效"));
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ValidationFailed, "参数 'parent_id' 格式无效")
+                    );
                 }
             }
 
@@ -578,12 +642,16 @@ namespace disk::file {
                     auto value = std::stoi(page_str, &pos);
                     if (pos != page_str.length() || value <= 0) {
                         LOG_WARN << "参数 'page' 格式无效或值无效: " << page_str;
-                        return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'page' 必须是正整数"));
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::ValidationFailed, "参数 'page' 必须是正整数")
+                        );
                     }
                     request.page = value;
                 } catch (const std::exception& e) {
                     LOG_WARN << "参数 'page' 格式无效: " << page_str;
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'page' 格式无效"));
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ValidationFailed, "参数 'page' 格式无效")
+                    );
                 }
             }
 
@@ -595,12 +663,17 @@ namespace disk::file {
                     auto value = std::stoi(page_size_str, &pos);
                     if (pos != page_size_str.length() || value <= 0 || value > 100) {
                         LOG_WARN << "参数 'page_size' 格式无效或值无效: " << page_size_str;
-                        return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'page_size' 必须是 1-100 之间的整数"));
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::ValidationFailed,
+                            "参数 'page_size' 必须是 1-100 之间的整数"
+                        ));
                     }
                     request.page_size = value;
                 } catch (const std::exception& e) {
                     LOG_WARN << "参数 'page_size' 格式无效: " << page_size_str;
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'page_size' 格式无效"));
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ValidationFailed, "参数 'page_size' 格式无效")
+                    );
                 }
             }
 
@@ -609,7 +682,10 @@ namespace disk::file {
             if (!sort_by_str.empty()) {
                 if (valid_sort_by.find(sort_by_str) == valid_sort_by.end()) {
                     LOG_WARN << "参数 'sort_by' 值无效: " << sort_by_str;
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'sort_by' 值无效，必须是 name/size/created_at/updated_at"));
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "参数 'sort_by' 值无效，必须是 name/size/created_at/updated_at"
+                    ));
                 }
                 request.sort_by = sort_by_str;
             }
@@ -619,7 +695,10 @@ namespace disk::file {
             if (!sort_order_str.empty()) {
                 if (valid_sort_order.find(sort_order_str) == valid_sort_order.end()) {
                     LOG_WARN << "参数 'sort_order' 值无效: " << sort_order_str;
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'sort_order' 值无效，必须是 asc/desc"));
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "参数 'sort_order' 值无效，必须是 asc/desc"
+                    ));
                 }
                 request.sort_order = sort_order_str;
             }
@@ -629,16 +708,17 @@ namespace disk::file {
             if (!type_str.empty()) {
                 if (valid_types.find(type_str) == valid_types.end()) {
                     LOG_WARN << "参数 'type' 值无效: " << type_str;
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'type' 值无效，必须是 all/file/folder"));
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "参数 'type' 值无效，必须是 all/file/folder"
+                    ));
                 }
                 request.type = type_str;
             }
 
             LOG_DEBUG << "解析到文件列表请求: parent_id=" << request.parent_id
-                      << ", page=" << request.page
-                      << ", page_size=" << request.page_size
-                      << ", sort_by=" << request.sort_by
-                      << ", sort_order=" << request.sort_order
+                      << ", page=" << request.page << ", page_size=" << request.page_size
+                      << ", sort_by=" << request.sort_by << ", sort_order=" << request.sort_order
                       << ", type=" << request.type;
 
             return request;
@@ -732,13 +812,17 @@ namespace disk::file {
 
             if (file_id_str.empty()) {
                 LOG_WARN << "缺少必需参数: file_id";
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "缺少必需参数: file_id"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "缺少必需参数: file_id")
+                );
             }
 
             // 检查是否为负数（stoull 会将负数回绕）
             if (file_id_str[0] == '-') {
                 LOG_WARN << "参数 'file_id' 必须是正整数: " << file_id_str;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数")
+                );
             }
 
             uint64_t file_id = 0;
@@ -747,11 +831,15 @@ namespace disk::file {
                 file_id = std::stoull(file_id_str, &pos);
                 if (pos != file_id_str.length() || file_id == 0) {
                     LOG_WARN << "参数 'file_id' 必须是正整数: " << file_id_str;
-                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数"));
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数")
+                    );
                 }
             } catch (const std::exception& e) {
                 LOG_WARN << "参数 'file_id' 格式无效: " << file_id_str;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 格式无效"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 格式无效")
+                );
             }
 
             DownloadInfoRequest request;
@@ -813,13 +901,17 @@ namespace disk::file {
 
             if (file_id_str.empty()) {
                 LOG_WARN << "缺少必需参数: file_id";
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "缺少必需参数: file_id"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "缺少必需参数: file_id")
+                );
             }
 
             // 检查是否为负数（stoull 会将负数回绕）
             if (file_id_str[0] == '-') {
                 LOG_WARN << "参数 'file_id' 必须是正整数: " << file_id_str;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数")
+                );
             }
 
             uint64_t file_id = 0;
@@ -828,11 +920,15 @@ namespace disk::file {
                 file_id = std::stoull(file_id_str, &pos);
                 if (pos != file_id_str.length() || file_id == 0) {
                     LOG_WARN << "参数 'file_id' 必须是正整数: " << file_id_str;
-                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数"));
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数")
+                    );
                 }
             } catch (const std::exception& e) {
                 LOG_WARN << "参数 'file_id' 格式无效: " << file_id_str;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 格式无效"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 格式无效")
+                );
             }
 
             DownloadRequest request;
@@ -949,19 +1045,25 @@ namespace disk::file {
 
         /// 从路径参数和请求体解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromPathAndRequest(const std::string& file_id_str, const drogon::HttpRequestPtr& req) -> Result<RenameRequest> {
+        static auto
+        FromPathAndRequest(const std::string& file_id_str, const drogon::HttpRequestPtr& req)
+            -> Result<RenameRequest> {
             LOG_DEBUG << "开始解析重命名请求参数";
 
             // 验证路径参数 file_id
             if (file_id_str.empty()) {
                 LOG_WARN << "缺少必需参数: file_id";
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "缺少必需参数: file_id"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "缺少必需参数: file_id")
+                );
             }
 
             // 检查是否为负数
             if (file_id_str[0] == '-') {
                 LOG_WARN << "参数 'file_id' 必须是正整数: " << file_id_str;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数")
+                );
             }
 
             uint64_t file_id = 0;
@@ -970,17 +1072,23 @@ namespace disk::file {
                 file_id = std::stoull(file_id_str, &pos);
                 if (pos != file_id_str.length() || file_id == 0) {
                     LOG_WARN << "参数 'file_id' 必须是正整数: " << file_id_str;
-                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数"));
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 必须是正整数")
+                    );
                 }
             } catch (const std::exception& e) {
                 LOG_WARN << "参数 'file_id' 格式无效: " << file_id_str;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 格式无效"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_id' 格式无效")
+                );
             }
 
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
                 LOG_WARN << "请求体不是有效的 JSON";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON")
+                );
             }
 
             const auto& json = *json_ptr;
@@ -988,45 +1096,60 @@ namespace disk::file {
             // 检查必填字段 new_name
             if (!json.isMember("new_name")) {
                 LOG_WARN << "缺少必需参数: new_name";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: new_name"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: new_name")
+                );
             }
 
             if (!json["new_name"].isString()) {
                 LOG_WARN << "参数 'new_name' 类型错误: 期望字符串";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'new_name' 类型错误: 期望字符串"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "参数 'new_name' 类型错误: 期望字符串")
+                );
             }
 
             RenameRequest request;
             request.file_id = file_id;
             request.new_name = json["new_name"].asString();
 
-            LOG_DEBUG << "解析到重命名请求: file_id=" << request.file_id
-                      << ", new_name=\"" << request.new_name << "\"";
+            LOG_DEBUG << "解析到重命名请求: file_id=" << request.file_id << ", new_name=\""
+                      << request.new_name << "\"";
 
             // 验证新文件名
             if (!request.ValidateFilenameLength()) {
                 LOG_WARN << "文件名长度无效: " << request.new_name.length();
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "文件名长度必须在 1-255 字符之间"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "文件名长度必须在 1-255 字符之间")
+                );
             }
 
             if (!request.ValidateFilenameForbiddenChars()) {
                 LOG_WARN << "文件名包含禁止字符: " << request.new_name;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件名包含禁止字符：/ \\ : * ? \" < > | 或控制字符"));
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidFilename,
+                    "文件名包含禁止字符：/ \\ : * ? \" < > | 或控制字符"
+                ));
             }
 
             if (!request.ValidateFilenameReservedNames()) {
                 LOG_WARN << "文件名为保留名称: " << request.new_name;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件名不能为保留名称 \".\" 或 \"..\""));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidFilename, "文件名不能为保留名称 \".\" 或 \"..\"")
+                );
             }
 
             if (!request.ValidateFilenameNotHidden()) {
                 LOG_WARN << "文件名以点开头（隐藏文件）: " << request.new_name;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件名不能以 \".\" 开头"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidFilename, "文件名不能以 \".\" 开头")
+                );
             }
 
             if (!request.ValidateFilenameCharset()) {
                 LOG_WARN << "文件名包含非 ASCII 字符: " << request.new_name;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件名仅允许 ASCII 可打印字符"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidFilename, "文件名仅允许 ASCII 可打印字符")
+                );
             }
 
             LOG_DEBUG << "请求参数验证通过";
@@ -1130,7 +1253,9 @@ namespace disk::file {
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
                 LOG_WARN << "请求体不是有效的 JSON";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON")
+                );
             }
 
             const auto& json = *json_ptr;
@@ -1138,12 +1263,16 @@ namespace disk::file {
             // 检查必填字段 file_ids
             if (!json.isMember("file_ids")) {
                 LOG_WARN << "缺少必需参数: file_ids";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: file_ids"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: file_ids")
+                );
             }
 
             if (!json["file_ids"].isArray()) {
                 LOG_WARN << "参数 'file_ids' 类型错误: 期望数组";
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 类型错误: 期望数组"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 类型错误: 期望数组")
+                );
             }
 
             MoveRequest request;
@@ -1152,18 +1281,26 @@ namespace disk::file {
             const auto& file_ids_array = json["file_ids"];
             if (file_ids_array.empty()) {
                 LOG_WARN << "参数 'file_ids' 不能为空数组";
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 不能为空数组"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 不能为空数组")
+                );
             }
 
             for (const auto& item : file_ids_array) {
                 if (!item.isIntegral()) {
                     LOG_WARN << "参数 'file_ids' 中的元素类型错误: 期望整数";
-                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 中的元素类型错误: 期望整数"));
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::InvalidParameter,
+                        "参数 'file_ids' 中的元素类型错误: 期望整数"
+                    ));
                 }
                 auto file_id = item.asUInt64();
                 if (file_id == 0) {
                     LOG_WARN << "参数 'file_ids' 中的元素必须为正整数";
-                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 中的元素必须为正整数"));
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::InvalidParameter,
+                        "参数 'file_ids' 中的元素必须为正整数"
+                    ));
                 }
                 request.file_ids.push_back(file_id);
             }
@@ -1172,7 +1309,10 @@ namespace disk::file {
             if (json.isMember("target_folder_id")) {
                 if (!json["target_folder_id"].isIntegral()) {
                     LOG_WARN << "参数 'target_folder_id' 类型错误: 期望整数";
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'target_folder_id' 类型错误: 期望整数"));
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "参数 'target_folder_id' 类型错误: 期望整数"
+                    ));
                 }
                 request.target_folder_id = json["target_folder_id"].asUInt64();
             }
@@ -1246,7 +1386,9 @@ namespace disk::file {
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
                 LOG_WARN << "请求体不是有效的 JSON";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON")
+                );
             }
 
             const auto& json = *json_ptr;
@@ -1254,12 +1396,16 @@ namespace disk::file {
             // 检查必填字段 file_ids
             if (!json.isMember("file_ids")) {
                 LOG_WARN << "缺少必需参数: file_ids";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: file_ids"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: file_ids")
+                );
             }
 
             if (!json["file_ids"].isArray()) {
                 LOG_WARN << "参数 'file_ids' 类型错误: 期望数组";
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 类型错误: 期望数组"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 类型错误: 期望数组")
+                );
             }
 
             CopyRequest request;
@@ -1268,18 +1414,26 @@ namespace disk::file {
             const auto& file_ids_array = json["file_ids"];
             if (file_ids_array.empty()) {
                 LOG_WARN << "参数 'file_ids' 不能为空数组";
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 不能为空数组"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 不能为空数组")
+                );
             }
 
             for (const auto& item : file_ids_array) {
                 if (!item.isIntegral()) {
                     LOG_WARN << "参数 'file_ids' 中的元素类型错误: 期望整数";
-                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 中的元素类型错误: 期望整数"));
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::InvalidParameter,
+                        "参数 'file_ids' 中的元素类型错误: 期望整数"
+                    ));
                 }
                 auto file_id = item.asUInt64();
                 if (file_id == 0) {
                     LOG_WARN << "参数 'file_ids' 中的元素必须为正整数";
-                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 中的元素必须为正整数"));
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::InvalidParameter,
+                        "参数 'file_ids' 中的元素必须为正整数"
+                    ));
                 }
                 request.file_ids.push_back(file_id);
             }
@@ -1288,7 +1442,10 @@ namespace disk::file {
             if (json.isMember("target_folder_id")) {
                 if (!json["target_folder_id"].isIntegral()) {
                     LOG_WARN << "参数 'target_folder_id' 类型错误: 期望整数";
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'target_folder_id' 类型错误: 期望整数"));
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "参数 'target_folder_id' 类型错误: 期望整数"
+                    ));
                 }
                 request.target_folder_id = json["target_folder_id"].asUInt64();
             }
@@ -1349,7 +1506,9 @@ namespace disk::file {
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
                 LOG_WARN << "请求体不是有效的 JSON";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON")
+                );
             }
 
             const auto& json = *json_ptr;
@@ -1357,12 +1516,16 @@ namespace disk::file {
             // 检查必填字段 file_ids
             if (!json.isMember("file_ids")) {
                 LOG_WARN << "缺少必需参数: file_ids";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: file_ids"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: file_ids")
+                );
             }
 
             if (!json["file_ids"].isArray()) {
                 LOG_WARN << "参数 'file_ids' 类型错误: 期望数组";
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 类型错误: 期望数组"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 类型错误: 期望数组")
+                );
             }
 
             DeleteRequest request;
@@ -1371,18 +1534,26 @@ namespace disk::file {
             const auto& file_ids_array = json["file_ids"];
             if (file_ids_array.empty()) {
                 LOG_WARN << "参数 'file_ids' 不能为空数组";
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 不能为空数组"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 不能为空数组")
+                );
             }
 
             for (const auto& item : file_ids_array) {
                 if (!item.isIntegral()) {
                     LOG_WARN << "参数 'file_ids' 中的元素类型错误: 期望整数";
-                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 中的元素类型错误: 期望整数"));
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::InvalidParameter,
+                        "参数 'file_ids' 中的元素类型错误: 期望整数"
+                    ));
                 }
                 auto file_id = item.asUInt64();
                 if (file_id == 0) {
                     LOG_WARN << "参数 'file_ids' 中的元素必须为正整数";
-                    return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "参数 'file_ids' 中的元素必须为正整数"));
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::InvalidParameter,
+                        "参数 'file_ids' 中的元素必须为正整数"
+                    ));
                 }
                 request.file_ids.push_back(file_id);
             }
@@ -1428,6 +1599,197 @@ namespace disk::file {
         std::string mime_type;
         std::string storage_path; ///< 文件物理存储路径
         bool supports_range{ true };
+    };
+
+    // ==================== Search ====================
+
+    /**
+     * @brief 文件搜索请求 DTO
+     *
+     * @details
+     * 验证规则：
+     * - keyword: 必填，1-100字符
+     * - type: 默认 all，可选值 all/file/folder
+     * - folder_id: 默认空（全局搜索），指定时限定搜索范围
+     * - page: 默认 1，必须 > 0
+     * - page_size: 默认 20，必须 > 0 且 <= 100
+     *
+     * 从 URL 查询参数解析。
+     */
+    struct SearchRequest {
+        std::string keyword;
+        std::string type{ "all" };
+        std::optional<uint64_t> folder_id;
+        int page{ 1 };
+        int page_size{ 20 };
+
+        /// 从 HTTP 请求查询参数解析并验证，返回 Result
+        [[nodiscard]]
+        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<SearchRequest> {
+            LOG_DEBUG << "开始解析文件搜索请求参数";
+
+            SearchRequest request;
+
+            // 有效类型
+            static const std::set<std::string> valid_types = { "all", "file", "folder" };
+
+            // 解析必填参数 keyword
+            auto keyword_str = req->getParameter("keyword");
+            if (keyword_str.empty()) {
+                LOG_WARN << "缺少必需参数: keyword";
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: keyword")
+                );
+            }
+
+            // 验证 keyword 长度
+            if (keyword_str.length() < 1 || keyword_str.length() > 100) {
+                LOG_WARN << "参数 'keyword' 长度无效: " << keyword_str.length();
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "参数 'keyword' 长度必须在 1-100 字符之间"
+                ));
+            }
+
+            // 过滤 keyword 中的特殊字符（防止 SQL 注入）
+            for (char c : keyword_str) {
+                if (c == '%' || c == '_' || c == '\\' || c == '\'' || c == '"') {
+                    LOG_WARN << "参数 'keyword' 包含禁止字符: " << c;
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ValidationFailed, "参数 'keyword' 包含禁止字符")
+                    );
+                }
+            }
+
+            request.keyword = keyword_str;
+
+            // 解析可选参数 type
+            auto type_str = req->getParameter("type");
+            if (!type_str.empty()) {
+                if (valid_types.find(type_str) == valid_types.end()) {
+                    LOG_WARN << "参数 'type' 值无效: " << type_str;
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "参数 'type' 值无效，必须是 all/file/folder"
+                    ));
+                }
+                request.type = type_str;
+            }
+
+            // 解析可选参数 folder_id
+            auto folder_id_str = req->getParameter("folder_id");
+            if (!folder_id_str.empty()) {
+                try {
+                    size_t pos = 0;
+                    auto value = std::stoull(folder_id_str, &pos);
+                    if (pos != folder_id_str.length()) {
+                        LOG_WARN << "参数 'folder_id' 格式无效: " << folder_id_str;
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::ValidationFailed, "参数 'folder_id' 格式无效")
+                        );
+                    }
+                    request.folder_id = value;
+                } catch (const std::exception& e) {
+                    LOG_WARN << "参数 'folder_id' 格式无效: " << folder_id_str;
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ValidationFailed, "参数 'folder_id' 格式无效")
+                    );
+                }
+            }
+
+            // 解析可选参数 page
+            auto page_str = req->getParameter("page");
+            if (!page_str.empty()) {
+                try {
+                    size_t pos = 0;
+                    auto value = std::stoi(page_str, &pos);
+                    if (pos != page_str.length() || value <= 0) {
+                        LOG_WARN << "参数 'page' 格式无效或值无效: " << page_str;
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::ValidationFailed, "参数 'page' 必须是正整数")
+                        );
+                    }
+                    request.page = value;
+                } catch (const std::exception& e) {
+                    LOG_WARN << "参数 'page' 格式无效: " << page_str;
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ValidationFailed, "参数 'page' 格式无效")
+                    );
+                }
+            }
+
+            // 解析可选参数 page_size
+            auto page_size_str = req->getParameter("page_size");
+            if (!page_size_str.empty()) {
+                try {
+                    size_t pos = 0;
+                    auto value = std::stoi(page_size_str, &pos);
+                    if (pos != page_size_str.length() || value <= 0 || value > 100) {
+                        LOG_WARN << "参数 'page_size' 格式无效或值无效: " << page_size_str;
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::ValidationFailed,
+                            "参数 'page_size' 必须是 1-100 之间的整数"
+                        ));
+                    }
+                    request.page_size = value;
+                } catch (const std::exception& e) {
+                    LOG_WARN << "参数 'page_size' 格式无效: " << page_size_str;
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ValidationFailed, "参数 'page_size' 格式无效")
+                    );
+                }
+            }
+
+            LOG_DEBUG << "解析到文件搜索请求: keyword=\"" << request.keyword
+                      << "\", type=" << request.type << ", folder_id="
+                      << (request.folder_id.has_value() ? std::to_string(*request.folder_id) :
+                                                          "null")
+                      << ", page=" << request.page << ", page_size=" << request.page_size;
+
+            return request;
+        }
+    };
+
+    /**
+     * @brief 搜索结果项
+     *
+     * @details
+     * 继承 FileListItem，添加路径信息用于搜索结果展示。
+     */
+    struct SearchResultItem : FileListItem {
+        std::string path; ///< 文件路径（面包屑）
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            auto json = FileListItem::ToJson();
+            json["path"] = path;
+            return json;
+        }
+    };
+
+    /**
+     * @brief 文件搜索响应 DTO
+     *
+     * @details
+     * 包含搜索结果项和分页信息。
+     */
+    struct SearchResponse {
+        std::vector<SearchResultItem> items;
+        Pagination pagination;
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            Json::Value items_array(Json::arrayValue);
+            for (const auto& item : items) {
+                items_array.append(item.ToJson());
+            }
+            json["items"] = items_array;
+            json["pagination"] = pagination.ToJson();
+            return json;
+        }
     };
 
 } // namespace disk::file

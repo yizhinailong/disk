@@ -979,7 +979,107 @@ Authorization: Bearer <access_token>
 
 ---
 
-### 4.8 获取文件详情
+### 4.8 搜索文件
+
+**GET** `/api/file/search`
+
+#### 实现状态
+**已实现**
+
+根据关键词搜索文件和文件夹。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+
+#### 查询参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| keyword | string | 是 | 搜索关键词，1-100字符 |
+| type | string | 否 | 筛选类型：all/file/folder，默认 all |
+| folder_id | integer | 否 | 限定搜索范围，不指定则全局搜索 |
+| page | integer | 否 | 页码，默认 1 |
+| page_size | integer | 否 | 每页数量，默认 20，最大 100 |
+
+#### 业务规则
+
+1. 支持文件名/文件夹名模糊搜索（LIKE %keyword%）
+2. 搜索范围限定：
+   - 不指定 `folder_id`：搜索用户所有文件
+   - 指定 `folder_id`：仅搜索指定文件夹下的内容
+3. 关键词过滤：禁止 `%`、`_`、`\`、`'`、`"` 等特殊字符（防止 SQL 注入）
+4. 结果按名称排序（升序）
+5. 返回结果包含路径面包屑信息
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | keyword 为空、长度超限、包含禁止字符 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+
+**40002 ValidationFailed 响应示例**：
+
+```json
+{
+  "code": 10002,
+  "message": "参数校验失败: 参数 'keyword' 长度必须在 1-100 字符之间",
+  "data": null
+}
+```
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "id": 5,
+        "name": "项目报告.docx",
+        "type": "file",
+        "size": 102400,
+        "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "hash": "a1b2c3d4e5f6...",
+        "path": "/工作文档/项目报告.docx",
+        "created_at": "2026-01-11T10:00:00Z",
+        "updated_at": "2026-01-11T10:00:00Z"
+      },
+      {
+        "id": 12,
+        "name": "项目资料",
+        "type": "folder",
+        "item_count": 8,
+        "path": "/项目资料",
+        "created_at": "2026-01-10T08:00:00Z",
+        "updated_at": "2026-01-12T14:30:00Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 20,
+      "total": 15,
+      "total_pages": 1
+    }
+  }
+}
+```
+
+---
+
+### 4.9 获取文件详情
 
 **GET** `/api/file/{file_id}`
 
@@ -1050,7 +1150,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### 4.9 重命名文件
+### 4.10 重命名文件
 
 **PUT** `/api/file/{file_id}/rename`
 
@@ -1126,7 +1226,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### 4.10 移动文件
+### 4.11 移动文件
 
 **PUT** `/api/file/move`
 
@@ -1199,7 +1299,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### 4.11 复制文件
+### 4.12 复制文件
 
 **POST** `/api/file/copy`
 
@@ -1276,7 +1376,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### 4.12 删除文件
+### 4.13 删除文件
 
 **DELETE** `/api/file`
 
@@ -1343,86 +1443,6 @@ Authorization: Bearer <access_token>
   "message": "success",
   "data": {
     "deleted_count": 3
-  }
-}
-```
-
----
-
-### 4.13 搜索文件
-
-**GET** `/api/file/search`
-
-#### 实现状态
-**未实现**
-
-> **⚠️ 实现范围说明**：本接口不在当前 file-read-loop 优先级范围内，暂不实现。全文搜索需要额外的索引机制（如 Elasticsearch），将在后续版本中实现。
-
-搜索用户文件。
-
-#### 请求头
-
-```
-Authorization: Bearer <access_token>
-```
-
-| Header | 必填 | 说明 |
-|--------|------|------|
-| Authorization | 是 | Bearer 访问令牌 |
-
-#### 查询参数
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| keyword | string | 是 | 搜索关键词 |
-| type | string | 否 | 文件类型：document/image/video/audio |
-| folder_id | integer | 否 | 限定搜索范围 |
-| page | integer | 否 | 页码 |
-| page_size | integer | 否 | 每页数量 |
-
-#### 错误响应矩阵
-
-| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
-|------------|--------|----------|----------|----------|
-| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
-| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
-| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
-| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
-| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
-
-**40106 TokenMissing 响应示例**：
-
-```json
-{
-  "code": 40106,
-  "message": "未提供令牌",
-  "data": null
-}
-```
-
-#### 响应示例
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": [
-      {
-        "id": 123,
-        "name": "报告2026.pdf",
-        "type": "file",
-        "size": 102400,
-        "path": "/工作/报告2026.pdf",
-        "created_at": "2026-01-10T10:00:00Z"
-      }
-    ],
-    "pagination": {
-      "page": 1,
-      "page_size": 20,
-      "total": 5,
-      "total_pages": 1
-    }
   }
 }
 ```

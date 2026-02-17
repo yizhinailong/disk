@@ -206,8 +206,7 @@ namespace disk::file {
          * @return drogon::Task<Result<MoveResponse>> 成功返回移动统计，失败返回错误
          */
         [[nodiscard]]
-        auto Move(MoveRequest request, uint64_t user_id)
-            -> drogon::Task<Result<MoveResponse>>;
+        auto Move(MoveRequest request, uint64_t user_id) -> drogon::Task<Result<MoveResponse>>;
 
         /**
          * @brief 复制文件到目标文件夹
@@ -226,8 +225,7 @@ namespace disk::file {
          * @return drogon::Task<Result<CopyResponse>> 成功返回复制统计和ID映射，失败返回错误
          */
         [[nodiscard]]
-        auto Copy(CopyRequest request, uint64_t user_id)
-            -> drogon::Task<Result<CopyResponse>>;
+        auto Copy(CopyRequest request, uint64_t user_id) -> drogon::Task<Result<CopyResponse>>;
 
         /**
          * @brief 删除文件（移入回收站）
@@ -247,6 +245,24 @@ namespace disk::file {
         [[nodiscard]]
         auto Delete(DeleteRequest request, uint64_t user_id)
             -> drogon::Task<Result<DeleteResponse>>;
+
+        /**
+         * @brief 搜索文件和文件夹
+         *
+         * 业务规则：
+         * - 支持文件名模糊搜索（LIKE %keyword%）
+         * - 支持按类型过滤（all/file/folder）
+         * - 支持限定搜索范围（folder_id）
+         * - 返回结果包含路径面包屑信息
+         * - 应用分页
+         *
+         * @param request 搜索请求
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<SearchResponse>> 成功返回搜索结果，失败返回错误
+         */
+        [[nodiscard]]
+        auto Search(SearchRequest request, uint64_t user_id)
+            -> drogon::Task<Result<SearchResponse>>;
 
     private:
         /**
@@ -275,7 +291,8 @@ namespace disk::file {
          *
          * @param user_id 用户 ID
          * @param file_hash 文件 MD5 哈希
-         * @return drogon::Task<std::optional<drogon_model::disk::UploadTasks>> 存在返回上传任务，不存在返回空
+         * @return drogon::Task<std::optional<drogon_model::disk::UploadTasks>>
+         * 存在返回上传任务，不存在返回空
          */
         [[nodiscard]]
         auto FindExistingTask(uint64_t user_id, const std::string& file_hash) const
@@ -286,7 +303,8 @@ namespace disk::file {
          *
          * @param upload_id 上传会话 ID
          * @param user_id 用户 ID
-         * @return drogon::Task<Result<drogon_model::disk::UploadTasks>> 成功返回上传任务，失败返回错误
+         * @return drogon::Task<Result<drogon_model::disk::UploadTasks>>
+         * 成功返回上传任务，失败返回错误
          */
         [[nodiscard]]
         auto FindUploadTask(const std::string& upload_id, uint64_t user_id) const
@@ -308,7 +326,8 @@ namespace disk::file {
          * @return std::set<uint32_t> 已上传分片索引集合
          */
         [[nodiscard]]
-        static auto ParseUploadedChunks(const std::string& uploaded_chunks_json) -> std::set<uint32_t>;
+        static auto ParseUploadedChunks(const std::string& uploaded_chunks_json)
+            -> std::set<uint32_t>;
 
         /**
          * @brief 序列化已上传分片列表为 JSON
@@ -366,7 +385,8 @@ namespace disk::file {
          * @return drogon::Task<bool> 存在返回 true
          */
         [[nodiscard]]
-        auto IsFilenameExists(uint64_t folder_id, const std::string& filename, uint64_t user_id) const
+        auto
+        IsFilenameExists(uint64_t folder_id, const std::string& filename, uint64_t user_id) const
             -> drogon::Task<bool>;
 
         /**

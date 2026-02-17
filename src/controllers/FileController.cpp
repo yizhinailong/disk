@@ -44,15 +44,14 @@ namespace disk::file {
         // 3. 调用 Service 层初始化上传
         auto result = co_await m_file_service->InitUpload(*parse_result, user_id);
         if (!result) {
-            LOG_ERROR << "初始化上传失败: " << result.error().message
-                      << " (user_id=" << user_id << ")";
+            LOG_ERROR << "初始化上传失败: " << result.error().message << " (user_id=" << user_id
+                      << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
         LOG_INFO << "初始化上传成功: upload_id=" << result->upload_id
-                 << ", instant_upload=" << result->instant_upload
-                 << " (user_id=" << user_id << ")";
+                 << ", instant_upload=" << result->instant_upload << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -73,15 +72,21 @@ namespace disk::file {
         // 验证必填参数
         if (upload_id.empty()) {
             LOG_WARN << "上传分片请求缺少 upload_id 参数";
-            co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "缺少 upload_id 参数"));
+            co_return Response::Error(
+                ErrorInfo(ErrorCode::ValidationFailed, "缺少 upload_id 参数")
+            );
         }
         if (chunk_index_str.empty()) {
             LOG_WARN << "上传分片请求缺少 chunk_index 参数";
-            co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "缺少 chunk_index 参数"));
+            co_return Response::Error(
+                ErrorInfo(ErrorCode::ValidationFailed, "缺少 chunk_index 参数")
+            );
         }
         if (chunk_hash.empty()) {
             LOG_WARN << "上传分片请求缺少 chunk_hash 参数";
-            co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "缺少 chunk_hash 参数"));
+            co_return Response::Error(
+                ErrorInfo(ErrorCode::ValidationFailed, "缺少 chunk_hash 参数")
+            );
         }
 
         // 解析 chunk_index
@@ -90,18 +95,25 @@ namespace disk::file {
             chunk_index = static_cast<uint32_t>(std::stoul(chunk_index_str));
         } catch (...) {
             LOG_WARN << "chunk_index 格式无效: " << chunk_index_str;
-            co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "chunk_index 格式无效"));
+            co_return Response::Error(
+                ErrorInfo(ErrorCode::ValidationFailed, "chunk_index 格式无效")
+            );
         }
 
         // 验证 chunk_hash 格式（32位小写十六进制）
         if (chunk_hash.length() != 32) {
             LOG_WARN << "chunk_hash 格式错误: " << chunk_hash;
-            co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "chunk_hash 必须是 32 位小写十六进制字符串"));
+            co_return Response::Error(
+                ErrorInfo(ErrorCode::ValidationFailed, "chunk_hash 必须是 32 位小写十六进制字符串")
+            );
         }
         for (char c : chunk_hash) {
             if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
                 LOG_WARN << "chunk_hash 格式错误: " << chunk_hash;
-                co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "chunk_hash 必须是 32 位小写十六进制字符串"));
+                co_return Response::Error(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "chunk_hash 必须是 32 位小写十六进制字符串"
+                ));
             }
         }
 
@@ -113,26 +125,21 @@ namespace disk::file {
         }
 
         LOG_DEBUG << "上传分片参数验证通过: upload_id=" << upload_id
-                  << ", chunk_index=" << chunk_index
-                  << ", chunk_size=" << chunk_data.size();
+                  << ", chunk_index=" << chunk_index << ", chunk_size=" << chunk_data.size();
 
         // 4. 调用 Service 层上传分片
-        auto result = co_await m_file_service->UploadChunk(
-            upload_id,
-            chunk_index,
-            chunk_hash,
-            std::string(chunk_data),
-            user_id
-        );
+        auto result =
+            co_await m_file_service
+                ->UploadChunk(upload_id, chunk_index, chunk_hash, std::string(chunk_data), user_id);
         if (!result) {
-            LOG_ERROR << "上传分片失败: " << result.error().message
-                      << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";
+            LOG_ERROR << "上传分片失败: " << result.error().message << " (user_id=" << user_id
+                      << ", upload_id=" << upload_id << ")";
             co_return Response::Error(result.error());
         }
 
         // 5. 构造响应
-        LOG_INFO << "上传分片成功: chunk_index=" << result->chunk_index
-                 << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";
+        LOG_INFO << "上传分片成功: chunk_index=" << result->chunk_index << " (user_id=" << user_id
+                 << ", upload_id=" << upload_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -155,14 +162,14 @@ namespace disk::file {
         // 3. 调用 Service 层完成上传
         auto result = co_await m_file_service->CompleteUpload(parse_result->upload_id, user_id);
         if (!result) {
-            LOG_ERROR << "完成上传失败: " << result.error().message
-                      << " (user_id=" << user_id << ", upload_id=" << parse_result->upload_id << ")";
+            LOG_ERROR << "完成上传失败: " << result.error().message << " (user_id=" << user_id
+                      << ", upload_id=" << parse_result->upload_id << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "完成上传成功: file_id=" << result->file.id
-                 << ", filename=\"" << result->file.name << "\""
+        LOG_INFO << "完成上传成功: file_id=" << result->file.id << ", filename=\""
+                 << result->file.name << "\""
                  << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
@@ -185,14 +192,13 @@ namespace disk::file {
         // 3. 调用 Service 层取消上传
         auto result = co_await m_file_service->CancelUpload(upload_id, user_id);
         if (!result) {
-            LOG_ERROR << "取消上传失败: " << result.error().message
-                      << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";
+            LOG_ERROR << "取消上传失败: " << result.error().message << " (user_id=" << user_id
+                      << ", upload_id=" << upload_id << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 返回成功响应
-        LOG_INFO << "取消上传成功: upload_id=" << upload_id
-                 << " (user_id=" << user_id << ")";
+        LOG_INFO << "取消上传成功: upload_id=" << upload_id << " (user_id=" << user_id << ")";
         co_return Response::Success({});
     }
 
@@ -208,11 +214,9 @@ namespace disk::file {
             co_return Response::Error(parse_result.error());
         }
         LOG_DEBUG << "获取文件列表参数验证通过: parent_id=" << parse_result->parent_id
-                  << ", page=" << parse_result->page
-                  << ", page_size=" << parse_result->page_size
+                  << ", page=" << parse_result->page << ", page_size=" << parse_result->page_size
                   << ", sort_by=" << parse_result->sort_by
-                  << ", sort_order=" << parse_result->sort_order
-                  << ", type=" << parse_result->type;
+                  << ", sort_order=" << parse_result->sort_order << ", type=" << parse_result->type;
 
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -220,14 +224,14 @@ namespace disk::file {
         // 3. 调用 Service 层获取文件列表
         auto result = co_await m_file_service->GetFileList(*parse_result, user_id);
         if (!result) {
-            LOG_ERROR << "获取文件列表失败: " << result.error().message
-                      << " (user_id=" << user_id << ")";
+            LOG_ERROR << "获取文件列表失败: " << result.error().message << " (user_id=" << user_id
+                      << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "获取文件列表成功: items=" << result->items.size()
-                 << " (user_id=" << user_id << ")";
+        LOG_INFO << "获取文件列表成功: items=" << result->items.size() << " (user_id=" << user_id
+                 << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -251,15 +255,15 @@ namespace disk::file {
         // 3. 调用 Service 层获取下载信息
         auto result = co_await m_file_service->GetDownloadInfo(parse_result->file_id, user_id);
         if (!result) {
-            LOG_ERROR << "获取下载信息失败: " << result.error().message
-                      << " (user_id=" << user_id << ", file_id=" << file_id << ")";
+            LOG_ERROR << "获取下载信息失败: " << result.error().message << " (user_id=" << user_id
+                      << ", file_id=" << file_id << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
         LOG_INFO << "获取下载信息成功: filename=" << result->filename
-                 << ", size=" << result->file_size
-                 << " (user_id=" << user_id << ", file_id=" << file_id << ")";
+                 << ", size=" << result->file_size << " (user_id=" << user_id
+                 << ", file_id=" << file_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -290,8 +294,7 @@ namespace disk::file {
 
         const auto& download_info = *info_result;
         LOG_INFO << "获取下载信息成功: file_id=" << file_id
-                 << ", filename=" << download_info.filename
-                 << ", size=" << download_info.file_size
+                 << ", filename=" << download_info.filename << ", size=" << download_info.file_size
                  << ", storage_path=" << download_info.storage_path;
 
         // 4. 检查文件是否存在
@@ -351,7 +354,9 @@ namespace disk::file {
 
         if (range_request.has_range) {
             resp->setStatusCode(drogon::HttpStatusCode::k206PartialContent);
-            std::string content_range = "bytes " + std::to_string(start) + "-" + std::to_string(end) + "/" + std::to_string(download_info.file_size);
+            std::string content_range = "bytes " + std::to_string(start) + "-" +
+                                        std::to_string(end) + "/" +
+                                        std::to_string(download_info.file_size);
             resp->addHeader("Content-Range", content_range);
             LOG_INFO << "返回部分内容: start=" << start << ", end=" << end
                      << ", total=" << download_info.file_size;
@@ -389,8 +394,8 @@ namespace disk::file {
             LOG_WARN << "重命名请求参数验证失败: " << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        LOG_DEBUG << "重命名参数验证通过: file_id=" << parse_result->file_id
-                  << ", new_name=\"" << parse_result->new_name << "\"";
+        LOG_DEBUG << "重命名参数验证通过: file_id=" << parse_result->file_id << ", new_name=\""
+                  << parse_result->new_name << "\"";
 
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -402,14 +407,13 @@ namespace disk::file {
             user_id
         );
         if (!result) {
-            LOG_ERROR << "重命名失败: " << result.error().message
-                      << " (user_id=" << user_id << ", file_id=" << file_id << ")";
+            LOG_ERROR << "重命名失败: " << result.error().message << " (user_id=" << user_id
+                      << ", file_id=" << file_id << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "重命名成功: file_id=" << file_id
-                 << ", new_name=\"" << result->name << "\""
+        LOG_INFO << "重命名成功: file_id=" << file_id << ", new_name=\"" << result->name << "\""
                  << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
@@ -434,14 +438,14 @@ namespace disk::file {
         // 3. 调用 Service 层移动文件
         auto result = co_await m_file_service->Move(*parse_result, user_id);
         if (!result) {
-            LOG_ERROR << "移动文件失败: " << result.error().message
-                      << " (user_id=" << user_id << ")";
+            LOG_ERROR << "移动文件失败: " << result.error().message << " (user_id=" << user_id
+                      << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "移动文件成功: moved_count=" << result->moved_count
-                 << " (user_id=" << user_id << ")";
+        LOG_INFO << "移动文件成功: moved_count=" << result->moved_count << " (user_id=" << user_id
+                 << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -465,14 +469,14 @@ namespace disk::file {
         // 3. 调用 Service 层复制文件
         auto result = co_await m_file_service->Copy(*parse_result, user_id);
         if (!result) {
-            LOG_ERROR << "复制文件失败: " << result.error().message
-                      << " (user_id=" << user_id << ")";
+            LOG_ERROR << "复制文件失败: " << result.error().message << " (user_id=" << user_id
+                      << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "复制文件成功: copied_count=" << result->copied_count
-                 << " (user_id=" << user_id << ")";
+        LOG_INFO << "复制文件成功: copied_count=" << result->copied_count << " (user_id=" << user_id
+                 << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -495,14 +499,44 @@ namespace disk::file {
         // 3. 调用 Service 层删除文件
         auto result = co_await m_file_service->Delete(*parse_result, user_id);
         if (!result) {
-            LOG_ERROR << "删除文件失败: " << result.error().message
-                      << " (user_id=" << user_id << ")";
+            LOG_ERROR << "删除文件失败: " << result.error().message << " (user_id=" << user_id
+                      << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
         LOG_INFO << "删除文件成功: deleted_count=" << result->deleted_count
                  << " (user_id=" << user_id << ")";
+        co_return Response::Success(result->ToJson());
+    }
+
+    auto FileController::Search(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到文件搜索请求: " << request->getPeerAddr().toIpPort();
+
+        // 1. 解析并验证请求参数
+        auto parse_result = SearchRequest::FromRequest(request);
+        if (!parse_result) {
+            LOG_WARN << "文件搜索请求参数验证失败: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+        LOG_DEBUG << "文件搜索参数验证通过: keyword=\"" << parse_result->keyword << "\"";
+
+        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+
+        // 3. 调用 Service 层搜索文件
+        auto result = co_await m_file_service->Search(*parse_result, user_id);
+        if (!result) {
+            LOG_ERROR << "文件搜索失败: " << result.error().message << " (user_id=" << user_id
+                      << ")";
+            co_return Response::Error(result.error());
+        }
+
+        // 4. 构造响应
+        LOG_INFO << "文件搜索成功: total=" << result->pagination.total
+                 << ", page=" << result->pagination.page << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 

@@ -128,6 +128,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case GoBackMsg:
 		return m.handleGoBack()
+
+	case OperationMsg:
+		return m.handleOperationResult(msg)
 	}
 
 	var cmd tea.Cmd
@@ -236,32 +239,27 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.handleGoBack()
 
 	case "u":
-		m.statusBar.SetInfo(styles.IconUploading + " 上传功能开发中...")
+		// 上传功能需要文件选择器，暂时显示提示
+		m.statusBar.SetInfo(styles.IconUploading + " 上传: 请使用命令行 disk-tui upload <文件>")
 		return m, nil
 
 	case "d":
-		m.statusBar.SetInfo(styles.IconDownloading + " 下载功能开发中...")
-		return m, nil
+		return m.handleDownload()
 
 	case "r":
-		m.statusBar.SetInfo("重命名功能开发中...")
-		return m, nil
+		return m.handleRename()
 
 	case "m":
-		m.statusBar.SetInfo("移动功能开发中...")
-		return m, nil
+		return m.handleMove()
 
 	case "c":
-		m.statusBar.SetInfo("复制功能开发中...")
-		return m, nil
+		return m.handleCopy()
 
 	case "x", "dd":
-		m.statusBar.SetInfo("删除功能开发中...")
-		return m, nil
+		return m.handleDelete()
 
 	case "n":
-		m.statusBar.SetInfo("新建文件夹功能开发中...")
-		return m, nil
+		return m.handleCreateFolder()
 
 	case "R", "f5":
 		m.loading = true
@@ -269,8 +267,7 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, m.loadFiles()
 
 	case "?":
-		m.statusBar.SetInfo(styles.IconHelp + " 帮助功能开发中...")
-		return m, nil
+		return m.handleHelp()
 
 	case " ":
 		m.fileList.ToggleSelected()
@@ -475,4 +472,98 @@ func (m *Model) GetSelectedFiles() []models.File {
 // GetCurrentFile returns the currently focused file.
 func (m *Model) GetCurrentFile() *models.File {
 	return m.fileList.SelectedFile()
+}
+
+func (m Model) handleDownload() (Model, tea.Cmd) {
+	file := m.fileList.SelectedFile()
+	if file == nil {
+		m.statusBar.SetError("请先选择一个文件")
+		return m, nil
+	}
+	if file.IsFolder() {
+		m.statusBar.SetError("暂不支持下载文件夹")
+		return m, nil
+	}
+	m.statusBar.SetInfo(styles.IconDownloading + " 正在下载: " + file.Name)
+	return m, m.DoDownload()
+}
+
+func (m Model) handleDelete() (Model, tea.Cmd) {
+	count := 1
+	if m.fileList.HasSelection() {
+		count = len(m.fileList.SelectedFiles())
+	}
+	m.statusBar.SetInfo(fmt.Sprintf("正在删除 %d 个项目...", count))
+	return m, tea.Sequence(m.DoDelete(), m.loadFiles())
+}
+
+func (m Model) handleRename() (Model, tea.Cmd) {
+	file := m.fileList.SelectedFile()
+	if file == nil {
+		m.statusBar.SetError("请先选择一个文件或文件夹")
+		return m, nil
+	}
+	m.statusBar.SetInfo(fmt.Sprintf("重命名: %s (请在命令行使用 :rename <新名称>)", file.Name))
+	return m, nil
+}
+
+func (m Model) handleMove() (Model, tea.Cmd) {
+	if !m.fileList.HasSelection() && m.fileList.SelectedFile() == nil {
+		m.statusBar.SetError("请先选择要移动的文件")
+		return m, nil
+	}
+	m.statusBar.SetInfo("移动: 请使用命令行 :move <目标文件夹ID>")
+	return m, nil
+}
+
+func (m Model) handleCopy() (Model, tea.Cmd) {
+	if !m.fileList.HasSelection() && m.fileList.SelectedFile() == nil {
+		m.statusBar.SetError("请先选择要复制的文件")
+		return m, nil
+	}
+	m.statusBar.SetInfo("复制: 请使用命令行 :copy <目标文件夹ID>")
+	return m, nil
+}
+
+func (m Model) handleCreateFolder() (Model, tea.Cmd) {
+	m.statusBar.SetInfo("新建文件夹: 请使用命令行 :mkdir <文件夹名>")
+	return m, nil
+}
+
+func (m Model) handleHelp() (Model, tea.Cmd) {
+	m.statusBar.SetInfo(styles.IconHelp + " 帮助: j/k导航, d下载, x删除, r重命名, n新建文件夹, R刷新")
+	return m, nil
+}
+
+func (m Model) handleOperationResult(msg OperationMsg) (Model, tea.Cmd) {
+	if msg.Success {
+		switch msg.Operation {
+		case "download":
+			m.statusBar.SetInfo(styles.IconDownloading + " 下载完成: " + msg.FileName)
+		case "delete":
+			m.statusBar.SetInfo("删除成功")
+			return m, m.loadFiles()
+		case "rename":
+			m.statusBar.SetInfo("重命名成功: " + msg.FileName)
+			return m, m.loadFiles()
+		case "move":
+			m.statusBar.SetInfo("移动成功")
+			return m, m.loadFiles()
+		case "copy":
+			m.statusBar.SetInfo("复制成功")
+			return m, m.loadFiles()
+		case "createFolder":
+			m.statusBar.SetInfo("文件夹创建成功: " + msg.FileName)
+			return m, m.loadFiles()
+		default:
+			m.statusBar.SetInfo(msg.Operation + " 完成")
+		}
+	} else {
+		errMsg := "操作失败"
+		if msg.Error != nil {
+			errMsg = msg.Error.Error()
+		}
+		m.statusBar.SetError(errMsg)
+	}
+	return m, nil
 }

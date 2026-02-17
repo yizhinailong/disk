@@ -54,10 +54,8 @@ namespace disk::file {
         -> drogon::Task<Result<InitUploadResponse>> {
 
         LOG_DEBUG << "开始初始化上传: filename=\"" << request.filename
-                  << "\", file_size=" << request.file_size
-                  << ", file_hash=" << request.file_hash
-                  << ", parent_id=" << request.parent_id
-                  << ", user_id=" << user_id;
+                  << "\", file_size=" << request.file_size << ", file_hash=" << request.file_hash
+                  << ", parent_id=" << request.parent_id << ", user_id=" << user_id;
 
         // 1. 检查存储配额
         auto quota_result = co_await CheckStorageQuota(user_id, request.file_size);
@@ -112,15 +110,14 @@ namespace disk::file {
                 // 构造响应
                 InitUploadResponse response;
                 response.instant_upload = true;
-                response.file = FileItem{
-                    .id = file.getValueOfId(),
-                    .name = file.getValueOfName(),
-                    .size = file.getValueOfSize(),
-                    .hash = request.file_hash,
-                    .mime_type = file.getValueOfMimeType(),
-                    .parent_id = file.getValueOfFolderId(),
-                    .created_at = file.getValueOfCreatedAt().toDbStringLocal()
-                };
+                response.file =
+                    FileItem{ .id = file.getValueOfId(),
+                              .name = file.getValueOfName(),
+                              .size = file.getValueOfSize(),
+                              .hash = request.file_hash,
+                              .mime_type = file.getValueOfMimeType(),
+                              .parent_id = file.getValueOfFolderId(),
+                              .created_at = file.getValueOfCreatedAt().toDbStringLocal() };
 
                 LOG_INFO << "秒传完成: file_id=" << file.getValueOfId();
                 co_return response;
@@ -155,9 +152,9 @@ namespace disk::file {
         // 4. 创建新的上传任务
         auto config = ConfigMgr::GetInstance();
         auto chunk_size = config->GetChunkSize();
-        auto total_chunks = static_cast<uint32_t>(std::ceil(
-            static_cast<double>(request.file_size) / static_cast<double>(chunk_size)
-        ));
+        auto total_chunks = static_cast<uint32_t>(
+            std::ceil(static_cast<double>(request.file_size) / static_cast<double>(chunk_size))
+        );
         auto expiry_seconds = config->GetUploadTaskExpirySeconds();
         auto temp_path = GetTempDirPath(drogon::utils::getUuid()).string();
 
@@ -210,10 +207,8 @@ namespace disk::file {
         uint64_t user_id
     ) -> drogon::Task<Result<UploadChunkResponse>> {
 
-        LOG_DEBUG << "开始上传分片: upload_id=" << upload_id
-                  << ", chunk_index=" << chunk_index
-                  << ", chunk_hash=" << chunk_hash
-                  << ", data_size=" << chunk_data.size();
+        LOG_DEBUG << "开始上传分片: upload_id=" << upload_id << ", chunk_index=" << chunk_index
+                  << ", chunk_hash=" << chunk_hash << ", data_size=" << chunk_data.size();
 
         // 1. 查找并验证上传任务
         auto task_result = co_await FindUploadTask(upload_id, user_id);
@@ -240,8 +235,7 @@ namespace disk::file {
         // 4. 验证分片哈希
         auto actual_hash = FileHashUtil::HashMd5(chunk_data);
         if (actual_hash != chunk_hash) {
-            LOG_WARN << "分片哈希不匹配: expected=" << chunk_hash
-                     << ", actual=" << actual_hash;
+            LOG_WARN << "分片哈希不匹配: expected=" << chunk_hash << ", actual=" << actual_hash;
             co_return std::unexpected(ErrorInfo(ErrorCode::ChunkVerifyFailed, "分片哈希不匹配"));
         }
 
@@ -281,8 +275,7 @@ namespace disk::file {
             updated_task.setUploadedChunks(SerializeUploadedChunks(uploaded_chunks));
             co_await mapper.update(updated_task);
 
-            LOG_DEBUG << "分片上传成功: upload_id=" << upload_id
-                      << ", chunk_index=" << chunk_index;
+            LOG_DEBUG << "分片上传成功: upload_id=" << upload_id << ", chunk_index=" << chunk_index;
 
             UploadChunkResponse response;
             response.chunk_index = chunk_index;
@@ -414,7 +407,9 @@ namespace disk::file {
                 auto sha256_result = FileHashUtil::HashFileSha256(final_storage_path);
                 if (!sha256_result) {
                     LOG_ERROR << "计算 SHA256 失败";
-                    co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "计算 SHA256 失败"));
+                    co_return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "计算 SHA256 失败")
+                    );
                 }
 
                 // 创建 FileContents 记录
@@ -434,7 +429,11 @@ namespace disk::file {
             }
 
             // 6. 检查同名文件
-            if (co_await IsFilenameExists(task.getValueOfFolderId(), task.getValueOfFilename(), user_id)) {
+            if (co_await IsFilenameExists(
+                    task.getValueOfFolderId(),
+                    task.getValueOfFilename(),
+                    user_id
+                )) {
                 LOG_WARN << "同名文件已存在: " << task.getValueOfFilename();
                 // 回滚：减少引用计数或删除内容
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
@@ -476,15 +475,13 @@ namespace disk::file {
 
             // 10. 返回响应
             CompleteUploadResponse response;
-            response.file = FileItem{
-                .id = file.getValueOfId(),
-                .name = file.getValueOfName(),
-                .size = file.getValueOfSize(),
-                .hash = final_hash,
-                .mime_type = file.getValueOfMimeType(),
-                .parent_id = file.getValueOfFolderId(),
-                .created_at = file.getValueOfCreatedAt().toDbStringLocal()
-            };
+            response.file = FileItem{ .id = file.getValueOfId(),
+                                      .name = file.getValueOfName(),
+                                      .size = file.getValueOfSize(),
+                                      .hash = final_hash,
+                                      .mime_type = file.getValueOfMimeType(),
+                                      .parent_id = file.getValueOfFolderId(),
+                                      .created_at = file.getValueOfCreatedAt().toDbStringLocal() };
 
             LOG_INFO << "文件上传完成: file_id=" << file.getValueOfId()
                      << ", filename=" << task.getValueOfFilename();
@@ -545,12 +542,9 @@ namespace disk::file {
         -> drogon::Task<Result<FileListResponse>> {
 
         LOG_DEBUG << "开始获取文件列表: parent_id=" << request.parent_id
-                  << ", page=" << request.page
-                  << ", page_size=" << request.page_size
-                  << ", sort_by=" << request.sort_by
-                  << ", sort_order=" << request.sort_order
-                  << ", type=" << request.type
-                  << ", user_id=" << user_id;
+                  << ", page=" << request.page << ", page_size=" << request.page_size
+                  << ", sort_by=" << request.sort_by << ", sort_order=" << request.sort_order
+                  << ", type=" << request.type << ", user_id=" << user_id;
 
         // 1. 验证 parent_id 文件夹存在且属于用户（如果 parent_id != 0）
         if (request.parent_id != 0) {
@@ -574,8 +568,9 @@ namespace disk::file {
         if (request.type == "all" || request.type == "file") {
             try {
                 CoroMapper<Files> file_mapper(m_db_client);
-                auto file_criteria = Criteria(Files::Cols::_folder_id, CompareOperator::EQ, request.parent_id) &&
-                                     Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id);
+                auto file_criteria =
+                    Criteria(Files::Cols::_folder_id, CompareOperator::EQ, request.parent_id) &&
+                    Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id);
                 auto files = co_await file_mapper.findBy(file_criteria);
 
                 // 获取文件内容的 hash 信息
@@ -593,9 +588,11 @@ namespace disk::file {
                     if (file.getContentId()) {
                         try {
                             CoroMapper<FileContents> content_mapper(m_db_client);
-                            auto content = co_await content_mapper.findOne(
-                                Criteria(FileContents::Cols::_id, CompareOperator::EQ, *file.getContentId())
-                            );
+                            auto content = co_await content_mapper.findOne(Criteria(
+                                FileContents::Cols::_id,
+                                CompareOperator::EQ,
+                                *file.getContentId()
+                            ));
                             item.hash = content.getValueOfHashMd5();
                         } catch (const drogon::orm::DrogonDbException&) {
                             item.hash = "";
@@ -613,8 +610,9 @@ namespace disk::file {
         if (request.type == "all" || request.type == "folder") {
             try {
                 CoroMapper<Folders> folder_mapper(m_db_client);
-                auto folder_criteria = Criteria(Folders::Cols::_parent_id, CompareOperator::EQ, request.parent_id) &&
-                                       Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id);
+                auto folder_criteria =
+                    Criteria(Folders::Cols::_parent_id, CompareOperator::EQ, request.parent_id) &&
+                    Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id);
                 auto folders = co_await folder_mapper.findBy(folder_criteria);
 
                 for (const auto& folder : folders) {
@@ -651,7 +649,8 @@ namespace disk::file {
         // 4. 分页
         auto total = static_cast<int>(all_items.size());
         auto offset = (request.page - 1) * request.page_size;
-        auto total_pages = request.page_size > 0 ? (total + request.page_size - 1) / request.page_size : 0;
+        auto total_pages =
+            request.page_size > 0 ? (total + request.page_size - 1) / request.page_size : 0;
 
         std::vector<FileListItem> paginated_items;
         for (int i = offset; i < std::min(offset + request.page_size, total); ++i) {
@@ -661,12 +660,10 @@ namespace disk::file {
         // 5. 构造响应
         FileListResponse response;
         response.items = paginated_items;
-        response.pagination = {
-            .page = request.page,
-            .page_size = request.page_size,
-            .total = total,
-            .total_pages = total_pages
-        };
+        response.pagination = { .page = request.page,
+                                .page_size = request.page_size,
+                                .total = total,
+                                .total_pages = total_pages };
 
         LOG_DEBUG << "文件列表获取成功: total=" << total << ", page=" << request.page;
         co_return response;
@@ -704,7 +701,8 @@ namespace disk::file {
             response.filename = file.getValueOfName();
             response.file_size = file.getValueOfSize();
             response.file_hash = content.getValueOfHashMd5();
-            response.mime_type = file.getValueOfMimeType().empty() ? content.getValueOfMimeType() : file.getValueOfMimeType();
+            response.mime_type = file.getValueOfMimeType().empty() ? content.getValueOfMimeType() :
+                                                                     file.getValueOfMimeType();
             response.supports_range = true;
 
             LOG_DEBUG << "下载信息获取成功: filename=" << response.filename
@@ -749,7 +747,8 @@ namespace disk::file {
             info.filename = file.getValueOfName();
             info.file_size = file.getValueOfSize();
             info.file_hash = content.getValueOfHashMd5();
-            info.mime_type = file.getValueOfMimeType().empty() ? content.getValueOfMimeType() : file.getValueOfMimeType();
+            info.mime_type = file.getValueOfMimeType().empty() ? content.getValueOfMimeType() :
+                                                                 file.getValueOfMimeType();
             info.storage_path = content.getValueOfStoragePath();
             info.supports_range = true;
 
@@ -768,8 +767,7 @@ namespace disk::file {
     auto FileService::Rename(uint64_t file_id, std::string new_name, uint64_t user_id)
         -> drogon::Task<Result<RenameResponse>> {
 
-        LOG_DEBUG << "开始重命名文件: file_id=" << file_id
-                  << ", new_name=\"" << new_name << "\""
+        LOG_DEBUG << "开始重命名文件: file_id=" << file_id << ", new_name=\"" << new_name << "\""
                   << ", user_id=" << user_id;
 
         try {
@@ -799,8 +797,8 @@ namespace disk::file {
             file.setUpdatedAt(trantor::Date::now());
             co_await mapper.update(file);
 
-            LOG_INFO << "文件重命名成功: file_id=" << file_id
-                     << ", new_name=\"" << new_name << "\"";
+            LOG_INFO << "文件重命名成功: file_id=" << file_id << ", new_name=\"" << new_name
+                     << "\"";
 
             RenameResponse response;
             response.id = file.getValueOfId();
@@ -820,8 +818,7 @@ namespace disk::file {
         -> drogon::Task<Result<MoveResponse>> {
 
         LOG_DEBUG << "开始移动文件: file_ids.size()=" << request.file_ids.size()
-                  << ", target_folder_id=" << request.target_folder_id
-                  << ", user_id=" << user_id;
+                  << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
         if (request.target_folder_id != 0) {
             try {
@@ -853,7 +850,11 @@ namespace disk::file {
                     continue;
                 }
 
-                if (co_await IsFilenameExists(request.target_folder_id, file.getValueOfName(), user_id)) {
+                if (co_await IsFilenameExists(
+                        request.target_folder_id,
+                        file.getValueOfName(),
+                        user_id
+                    )) {
                     LOG_WARN << "目标文件夹已存在同名文件，跳过: " << file.getValueOfName();
                     continue;
                 }
@@ -883,8 +884,7 @@ namespace disk::file {
         -> drogon::Task<Result<CopyResponse>> {
 
         LOG_DEBUG << "开始复制文件: file_ids.size()=" << request.file_ids.size()
-                  << ", target_folder_id=" << request.target_folder_id
-                  << ", user_id=" << user_id;
+                  << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
         if (request.target_folder_id != 0) {
             try {
@@ -932,8 +932,7 @@ namespace disk::file {
         }
 
         if (storage_used + total_copy_size > storage_quota) {
-            LOG_WARN << "存储空间不足: used=" << storage_used
-                     << ", quota=" << storage_quota
+            LOG_WARN << "存储空间不足: used=" << storage_used << ", quota=" << storage_quota
                      << ", copy_size=" << total_copy_size;
             co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
         }
@@ -945,7 +944,11 @@ namespace disk::file {
 
         for (const auto& [old_id, file] : files_to_copy) {
             try {
-                if (co_await IsFilenameExists(request.target_folder_id, file.getValueOfName(), user_id)) {
+                if (co_await IsFilenameExists(
+                        request.target_folder_id,
+                        file.getValueOfName(),
+                        user_id
+                    )) {
                     LOG_WARN << "目标文件夹已存在同名文件，跳过: " << file.getValueOfName();
                     continue;
                 }
@@ -1048,8 +1051,8 @@ namespace disk::file {
                 LOG_DEBUG << "文件移入回收站: file_id=" << file_id;
 
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "文件不存在或删除失败，跳过: file_id=" << file_id
-                         << " - " << e.base().what();
+                LOG_WARN << "文件不存在或删除失败，跳过: file_id=" << file_id << " - "
+                         << e.base().what();
             }
         }
 
@@ -1060,6 +1063,137 @@ namespace disk::file {
         co_return response;
     }
 
+    // ==================== Search ====================
+
+    auto FileService::Search(SearchRequest request, uint64_t user_id)
+        -> drogon::Task<Result<SearchResponse>> {
+
+        LOG_DEBUG << "开始搜索文件: keyword=\"" << request.keyword << "\", type=" << request.type
+                  << ", folder_id="
+                  << (request.folder_id.has_value() ? std::to_string(*request.folder_id) : "null")
+                  << ", page=" << request.page << ", page_size=" << request.page_size
+                  << ", user_id=" << user_id;
+
+        std::vector<SearchResultItem> all_items;
+
+        // 构建搜索模式（LIKE %keyword%）
+        std::string search_pattern = "%" + request.keyword + "%";
+
+        // 搜索文件
+        if (request.type == "all" || request.type == "file") {
+            try {
+                CoroMapper<Files> file_mapper(m_db_client);
+                auto file_criteria =
+                    Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id) &&
+                    Criteria(Files::Cols::_name, CompareOperator::Like, search_pattern);
+
+                // 如果指定了 folder_id，限定搜索范围
+                if (request.folder_id.has_value()) {
+                    file_criteria =
+                        file_criteria &&
+                        Criteria(Files::Cols::_folder_id, CompareOperator::EQ, *request.folder_id);
+                }
+
+                auto files = co_await file_mapper.findBy(file_criteria);
+
+                for (const auto& file : files) {
+                    SearchResultItem item;
+                    item.id = file.getValueOfId();
+                    item.name = file.getValueOfName();
+                    item.type = "file";
+                    item.size = file.getValueOfSize();
+                    item.mime_type = file.getValueOfMimeType();
+                    item.path = file.getValueOfPath();
+                    item.created_at = file.getValueOfCreatedAt().toDbStringLocal();
+                    item.updated_at = file.getValueOfUpdatedAt().toDbStringLocal();
+
+                    // 获取 hash
+                    if (file.getContentId()) {
+                        try {
+                            CoroMapper<FileContents> content_mapper(m_db_client);
+                            auto content = co_await content_mapper.findOne(Criteria(
+                                FileContents::Cols::_id,
+                                CompareOperator::EQ,
+                                *file.getContentId()
+                            ));
+                            item.hash = content.getValueOfHashMd5();
+                        } catch (const drogon::orm::DrogonDbException&) {
+                            item.hash = "";
+                        }
+                    }
+
+                    all_items.push_back(item);
+                }
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_WARN << "搜索文件失败: " << e.base().what();
+            }
+        }
+
+        // 搜索文件夹
+        if (request.type == "all" || request.type == "folder") {
+            try {
+                CoroMapper<Folders> folder_mapper(m_db_client);
+                auto folder_criteria =
+                    Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id) &&
+                    Criteria(Folders::Cols::_name, CompareOperator::Like, search_pattern);
+
+                // 如果指定了 folder_id，限定搜索范围
+                if (request.folder_id.has_value()) {
+                    folder_criteria = folder_criteria && Criteria(
+                                                             Folders::Cols::_parent_id,
+                                                             CompareOperator::EQ,
+                                                             *request.folder_id
+                                                         );
+                }
+
+                auto folders = co_await folder_mapper.findBy(folder_criteria);
+
+                for (const auto& folder : folders) {
+                    SearchResultItem item;
+                    item.id = folder.getValueOfId();
+                    item.name = folder.getValueOfName();
+                    item.type = "folder";
+                    item.item_count = static_cast<int>(folder.getValueOfItemCount());
+                    item.path = folder.getValueOfPath();
+                    item.created_at = folder.getValueOfCreatedAt().toDbStringLocal();
+                    item.updated_at = folder.getValueOfUpdatedAt().toDbStringLocal();
+                    all_items.push_back(item);
+                }
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_WARN << "搜索文件夹失败: " << e.base().what();
+            }
+        }
+
+        // 排序（按名称排序）
+        std::sort(
+            all_items.begin(),
+            all_items.end(),
+            [](const SearchResultItem& a, const SearchResultItem& b) { return a.name < b.name; }
+        );
+
+        // 分页
+        auto total = static_cast<int>(all_items.size());
+        auto offset = (request.page - 1) * request.page_size;
+        auto total_pages =
+            request.page_size > 0 ? (total + request.page_size - 1) / request.page_size : 0;
+
+        std::vector<SearchResultItem> paginated_items;
+        for (int i = offset; i < std::min(offset + request.page_size, total); ++i) {
+            paginated_items.push_back(all_items[i]);
+        }
+
+        // 构造响应
+        SearchResponse response;
+        response.items = paginated_items;
+        response.pagination = { .page = request.page,
+                                .page_size = request.page_size,
+                                .total = total,
+                                .total_pages = total_pages };
+
+        LOG_DEBUG << "搜索完成: total=" << total << ", page=" << request.page;
+        co_return response;
+    }
+
     // ==================== 私有辅助方法 ====================
 
     auto FileService::CheckStorageQuota(uint64_t user_id, uint64_t file_size) const
@@ -1067,22 +1201,19 @@ namespace disk::file {
 
         try {
             CoroMapper<Users> mapper(m_db_client);
-            auto user = co_await mapper.findOne(
-                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
-            );
+            auto user =
+                co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
 
             auto storage_used = user.getValueOfStorageUsed();
             auto storage_quota = user.getValueOfStorageQuota();
 
             if (storage_used + file_size > storage_quota) {
-                LOG_WARN << "存储空间不足: used=" << storage_used
-                         << ", quota=" << storage_quota
+                LOG_WARN << "存储空间不足: used=" << storage_used << ", quota=" << storage_quota
                          << ", file_size=" << file_size;
                 co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
             }
 
-            LOG_DEBUG << "存储配额检查通过: used=" << storage_used
-                      << ", quota=" << storage_quota;
+            LOG_DEBUG << "存储配额检查通过: used=" << storage_used << ", quota=" << storage_quota;
             co_return {};
 
         } catch (const drogon::orm::DrogonDbException& e) {
@@ -1151,9 +1282,8 @@ namespace disk::file {
 
         try {
             CoroMapper<Users> mapper(m_db_client);
-            auto user = co_await mapper.findOne(
-                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
-            );
+            auto user =
+                co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
 
             auto new_used = static_cast<int64_t>(user.getValueOfStorageUsed()) + delta;
             new_used = std::max<int64_t>(new_used, 0);
@@ -1161,8 +1291,7 @@ namespace disk::file {
             user.setStorageUsed(static_cast<uint64_t>(new_used));
             co_await mapper.update(user);
 
-            LOG_DEBUG << "存储使用量已更新: user_id=" << user_id
-                      << ", delta=" << delta
+            LOG_DEBUG << "存储使用量已更新: user_id=" << user_id << ", delta=" << delta
                       << ", new_used=" << new_used;
 
         } catch (const drogon::orm::DrogonDbException& e) {
@@ -1170,7 +1299,8 @@ namespace disk::file {
         }
     }
 
-    auto FileService::ParseUploadedChunks(const std::string& uploaded_chunks_json) -> std::set<uint32_t> {
+    auto FileService::ParseUploadedChunks(const std::string& uploaded_chunks_json)
+        -> std::set<uint32_t> {
         std::set<uint32_t> result;
 
         if (uploaded_chunks_json.empty() || uploaded_chunks_json == "[]") {
@@ -1214,20 +1344,26 @@ namespace disk::file {
         return std::filesystem::path(config->GetTempUploadPath()) / upload_id;
     }
 
-    auto FileService::GetAssembleFilePath(const std::string& upload_id) const -> std::filesystem::path {
+    auto FileService::GetAssembleFilePath(const std::string& upload_id) const
+        -> std::filesystem::path {
         auto config = ConfigMgr::GetInstance();
         return std::filesystem::path(config->GetTempUploadPath()) / (upload_id + ".tmp");
     }
 
-    auto FileService::GetFinalStoragePath(const std::string& file_hash) const -> std::filesystem::path {
+    auto FileService::GetFinalStoragePath(const std::string& file_hash) const
+        -> std::filesystem::path {
         auto config = ConfigMgr::GetInstance();
         // 使用 hash 的前 2 个字符作为子目录，避免单个目录文件过多
         auto hash_prefix = file_hash.substr(0, 2);
-        return std::filesystem::path(config->GetStorageBasePath()) / hash_prefix / (file_hash + ".bin");
+        return std::filesystem::path(config->GetStorageBasePath()) / hash_prefix /
+               (file_hash + ".bin");
     }
 
-    auto FileService::IsFilenameExists(uint64_t folder_id, const std::string& filename, uint64_t user_id) const
-        -> drogon::Task<bool> {
+    auto FileService::IsFilenameExists(
+        uint64_t folder_id,
+        const std::string& filename,
+        uint64_t user_id
+    ) const -> drogon::Task<bool> {
 
         try {
             CoroMapper<Files> mapper(m_db_client);

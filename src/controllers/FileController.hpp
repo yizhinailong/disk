@@ -28,12 +28,17 @@ namespace disk::file {
         ADD_METHOD_TO(FileController::CompleteUpload, "/api/file/upload/complete", drogon::Post);
         ADD_METHOD_TO(FileController::CancelUpload, "/api/file/upload/{upload_id}", drogon::Delete);
         ADD_METHOD_TO(FileController::List, "/api/file/list", drogon::Get);
-        ADD_METHOD_TO(FileController::DownloadInfo, "/api/file/download/{file_id}/info", drogon::Get);
+        ADD_METHOD_TO(
+            FileController::DownloadInfo,
+            "/api/file/download/{file_id}/info",
+            drogon::Get
+        );
         ADD_METHOD_TO(FileController::Download, "/api/file/download/{file_id}", drogon::Get);
         ADD_METHOD_TO(FileController::Rename, "/api/file/{file_id}/rename", drogon::Put);
         ADD_METHOD_TO(FileController::Move, "/api/file/move", drogon::Put);
         ADD_METHOD_TO(FileController::Copy, "/api/file/copy", drogon::Post);
         ADD_METHOD_TO(FileController::Delete, "/api/file", drogon::Delete);
+        ADD_METHOD_TO(FileController::Search, "/api/file/search", drogon::Get);
         METHOD_LIST_END
 
         /**
@@ -58,7 +63,8 @@ namespace disk::file {
          * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
          */
         [[nodiscard]]
-        auto CompleteUpload(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+        auto CompleteUpload(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
 
         /**
          * @brief 取消上传
@@ -131,6 +137,14 @@ namespace disk::file {
          */
         [[nodiscard]]
         auto Delete(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 搜索文件
+         * @param request HTTP请求对象
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto Search(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
         std::unique_ptr<FileService> m_file_service;
