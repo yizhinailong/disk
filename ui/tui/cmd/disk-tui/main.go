@@ -1,3 +1,11 @@
+// Package main TUI 客户端入口
+//
+// 提供命令行界面访问 Disk 网盘系统。
+// 支持版本显示、配置文件指定、服务器地址覆盖等功能。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package main
 
 import (
@@ -13,12 +21,16 @@ import (
 	"github.com/liufeng/disk/ui/tui/internal/config"
 )
 
+// 构建时注入的版本信息
 var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
+	version = "dev"     // 版本号
+	commit  = "none"    // Git 提交哈希
+	date    = "unknown" // 构建日期
 )
 
+// main 程序入口
+//
+// 解析命令行参数，初始化配置，启动 TUI 应用。
 func main() {
 	var (
 		showVersion = flag.Bool("version", false, "显示版本信息")
@@ -61,6 +73,12 @@ func main() {
 	}
 }
 
+// getPassword 获取加密密码
+//
+// 优先从环境变量 DISK_PASSWORD 读取，否则交互式提示用户输入。
+//
+// 返回:
+//   - string: 用户输入的加密密码
 func getPassword() string {
 	if pwd := os.Getenv("DISK_PASSWORD"); pwd != "" {
 		return pwd

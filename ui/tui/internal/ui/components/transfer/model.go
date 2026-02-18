@@ -1,4 +1,11 @@
 // Package transfer 传输进度组件
+//
+// 提供上传/下载任务进度展示功能。
+// 支持多任务显示、进度条、速度显示和任务管理。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package transfer
 
 import (
@@ -14,43 +21,45 @@ import (
 // TaskStatus 任务状态
 type TaskStatus string
 
+// 任务状态常量
 const (
-	TaskStatusPending   TaskStatus = "pending"
-	TaskStatusRunning   TaskStatus = "running"
-	TaskStatusPaused    TaskStatus = "paused"
-	TaskStatusCompleted TaskStatus = "completed"
-	TaskStatusError     TaskStatus = "error"
+	TaskStatusPending   TaskStatus = "pending"   // 等待中
+	TaskStatusRunning   TaskStatus = "running"   // 运行中
+	TaskStatusPaused    TaskStatus = "paused"    // 已暂停
+	TaskStatusCompleted TaskStatus = "completed" // 已完成
+	TaskStatusError     TaskStatus = "error"     // 出错
 )
 
 // TaskType 任务类型
 type TaskType string
 
+// 任务类型常量
 const (
-	TaskUpload   TaskType = "上传"
-	TaskDownload TaskType = "下载"
+	TaskUpload   TaskType = "上传" // 上传任务
+	TaskDownload TaskType = "下载" // 下载任务
 )
 
 // Task 传输任务
 type Task struct {
-	ID        string
-	Type      TaskType
-	Filename  string
-	Progress  float64
-	Speed     string
-	Status    TaskStatus
-	TotalSize uint64
-	BytesDone uint64
-	Error     string
+	ID        string     // 任务唯一标识
+	Type      TaskType   // 任务类型
+	Filename  string     // 文件名
+	Progress  float64    // 进度百分比
+	Speed     string     // 当前速度
+	Status    TaskStatus // 任务状态
+	TotalSize uint64     // 总大小
+	BytesDone uint64     // 已完成字节数
+	Error     string     // 错误信息
 }
 
 // Model 传输进度模型
 type Model struct {
-	tasks       []Task
-	width       int
-	maxVisible  int
-	showAll     bool
-	focused     bool
-	focusedTask int
+	tasks       []Task // 任务列表
+	width       int    // 组件宽度
+	maxVisible  int    // 最大可见任务数
+	showAll     bool   // 是否显示所有任务
+	focused     bool   // 是否获得焦点
+	focusedTask int    // 当前焦点任务索引
 }
 
 // New 创建传输进度组件

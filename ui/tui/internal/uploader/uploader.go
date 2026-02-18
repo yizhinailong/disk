@@ -1,3 +1,11 @@
+// Package uploader 文件上传管理
+//
+// 提供文件上传功能，支持 MD5 哈希计算、秒传检测和进度回调。
+// 上传流程：计算哈希 -> 检测秒传 -> 分片上传。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package uploader
 
 import (
@@ -13,54 +21,67 @@ import (
 	"github.com/liufeng/disk/ui/tui/internal/models"
 )
 
+// DefaultChunkSize 默认分片大小（5MB）
 const DefaultChunkSize = 5 * 1024 * 1024
 
+// TaskStatus 上传任务状态
 type TaskStatus string
 
+// 上传状态常量
 const (
-	StatusPending   TaskStatus = "pending"
-	StatusHashing   TaskStatus = "hashing"
-	StatusUploading TaskStatus = "uploading"
-	StatusSuccess   TaskStatus = "success"
-	StatusFailed    TaskStatus = "failed"
-	StatusCanceled  TaskStatus = "canceled"
+	StatusPending   TaskStatus = "pending"   // 等待中
+	StatusHashing   TaskStatus = "hashing"   // 计算哈希中
+	StatusUploading TaskStatus = "uploading" // 上传中
+	StatusSuccess   TaskStatus = "success"   // 上传成功
+	StatusFailed    TaskStatus = "failed"    // 上传失败
+	StatusCanceled  TaskStatus = "canceled"  // 已取消
 )
 
+// UploadTask 上传任务
 type UploadTask struct {
-	ID         string
-	FilePath   string
-	FileName   string
-	FileSize   int64
-	FileHash   string
-	ParentID   uint64
-	ChunkSize  int
-	Chunks     int
-	Progress   float64
-	Status     TaskStatus
-	Error      error
-	Speed      string
-	Uploaded   int64
-	uploadID   string
-	cancelFunc context.CancelFunc
+	ID         string             // 任务唯一标识
+	FilePath   string             // 本地文件路径
+	FileName   string             // 文件名
+	FileSize   int64              // 文件大小（字节）
+	FileHash   string             // 文件 MD5 哈希
+	ParentID   uint64             // 目标文件夹 ID
+	ChunkSize  int                // 分片大小
+	Chunks     int                // 分片数量
+	Progress   float64            // 上传进度（百分比）
+	Status     TaskStatus         // 上传状态
+	Error      error              // 错误信息
+	Speed      string             // 上传速度
+	Uploaded   int64              // 已上传字节数
+	uploadID   string             // 服务端上传 ID
+	cancelFunc context.CancelFunc // 取消函数
 }
 
+// ProgressInfo 上传进度信息
 type ProgressInfo struct {
-	TaskID   string
-	Phase    string
-	Progress float64
-	Uploaded int64
-	Total    int64
-	Speed    string
-	Status   TaskStatus
-	Error    error
-	FileName string
+	TaskID   string     // 任务 ID
+	Phase    string     // 当前阶段（hashing/uploading）
+	Progress float64    // 进度百分比
+	Uploaded int64      // 已上传字节数
+	Total    int64      // 总字节数
+	Speed    string     // 当前速度
+	Status   TaskStatus // 上传状态
+	Error    error      // 错误信息
+	FileName string     // 文件名
 }
 
+// Uploader 上传器
 type Uploader struct {
-	client    *api.Client
-	chunkSize int
+	client    *api.Client // API 客户端
+	chunkSize int         // 分片大小
 }
 
+// New 创建上传器
+//
+// 参数:
+//   - client: API 客户端
+//
+// 返回:
+//   - *Uploader: 上传器实例
 func New(client *api.Client) *Uploader {
 	return &Uploader{
 		client:    client,
@@ -68,6 +89,15 @@ func New(client *api.Client) *Uploader {
 	}
 }
 
+// CreateTask 创建上传任务
+//
+// 参数:
+//   - filePath: 本地文件路径
+//   - parentID: 目标文件夹 ID
+//
+// 返回:
+//   - *UploadTask: 上传任务
+//   - error: 错误信息
 func (u *Uploader) CreateTask(filePath string, parentID uint64) (*UploadTask, error) {
 	info, err := os.Stat(filePath)
 	if err != nil {
@@ -95,6 +125,14 @@ func (u *Uploader) CreateTask(filePath string, parentID uint64) (*UploadTask, er
 	}, nil
 }
 
+// CalculateHash 计算文件哈希
+//
+// 参数:
+//   - task: 上传任务
+//   - progressFunc: 进度回调函数
+//
+// 返回:
+//   - error: 错误信息
 func (u *Uploader) CalculateHash(task *UploadTask, progressFunc func(float64)) error {
 	task.Status = StatusHashing
 
@@ -134,6 +172,15 @@ func (u *Uploader) CalculateHash(task *UploadTask, progressFunc func(float64)) e
 	return nil
 }
 
+// Upload 执行上传
+//
+// 参数:
+//   - ctx: 上下文
+//   - task: 上传任务
+//   - progressFunc: 进度回调函数
+//
+// 返回:
+//   - error: 错误信息
 func (u *Uploader) Upload(ctx context.Context, task *UploadTask, progressFunc func(ProgressInfo)) error {
 	task.Status = StatusUploading
 
@@ -194,6 +241,10 @@ func (u *Uploader) Upload(ctx context.Context, task *UploadTask, progressFunc fu
 	return nil
 }
 
+// Cancel 取消上传任务
+//
+// 参数:
+//   - task: 上传任务
 func (u *Uploader) Cancel(task *UploadTask) {
 	if task.cancelFunc != nil {
 		task.cancelFunc()
@@ -201,6 +252,19 @@ func (u *Uploader) Cancel(task *UploadTask) {
 	}
 }
 
+// UploadWithProgress 带进度回调的上传
+//
+// 创建任务、计算哈希并执行上传，通过回调实时报告进度。
+//
+// 参数:
+//   - ctx: 上下文
+//   - filePath: 本地文件路径
+//   - parentID: 目标文件夹 ID
+//   - progressFunc: 进度回调函数
+//
+// 返回:
+//   - *UploadTask: 上传任务
+//   - error: 错误信息
 func (u *Uploader) UploadWithProgress(ctx context.Context, filePath string, parentID uint64, progressFunc func(ProgressInfo)) (*UploadTask, error) {
 	task, err := u.CreateTask(filePath, parentID)
 	if err != nil {
@@ -247,10 +311,18 @@ func (u *Uploader) UploadWithProgress(ctx context.Context, filePath string, pare
 	return task, err
 }
 
+// generateID 生成任务 ID
 func generateID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
+// FormatSpeed 格式化上传速度
+//
+// 参数:
+//   - bytesPerSec: 每秒字节数
+//
+// 返回:
+//   - string: 格式化后的速度字符串
 func FormatSpeed(bytesPerSec float64) string {
 	const KB = 1024
 	const MB = KB * 1024

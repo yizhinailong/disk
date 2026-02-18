@@ -1,4 +1,11 @@
 // Package breadcrumb 面包屑导航组件
+//
+// 提供路径导航和文件夹层级展示功能。
+// 支持路径跳转、返回上级、重置到根目录等操作。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package breadcrumb
 
 import (
@@ -11,9 +18,11 @@ import (
 )
 
 // Model 面包屑模型
+//
+// 管理当前导航路径和显示状态。
 type Model struct {
-	path  []models.BreadcrumbItem
-	width int
+	path  []models.BreadcrumbItem // 路径项列表
+	width int                     // 组件宽度
 }
 
 // New 创建面包屑

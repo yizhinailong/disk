@@ -1,3 +1,10 @@
+// Package api API 客户端模块
+//
+// 提供与后端 API 通信的能力，包括认证、文件管理、分享等功能。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package api
 
 import (
@@ -16,26 +23,35 @@ import (
 )
 
 // Client API 客户端
+//
+// 提供与后端 API 通信的能力，包括认证、文件管理、分享等功能。
 type Client struct {
-	httpClient *http.Client
-	config     *config.Config
-	tokenStore *store.TokenStore
+	httpClient *http.Client      // HTTP 客户端
+	config     *config.Config    // 配置
+	tokenStore *store.TokenStore // 令牌存储
 
 	// Token 管理
-	mu           sync.RWMutex
-	accessToken  string
-	refreshToken string
-	tokenExpiry  time.Time
+	mu           sync.RWMutex // 读写锁
+	accessToken  string       // 访问令牌
+	refreshToken string       // 刷新令牌
+	tokenExpiry  time.Time    // 令牌过期时间
 
 	// 子模块
-	Auth   *AuthAPI
-	File   *FileAPI
-	Folder *FolderAPI
-	Trash  *TrashAPI
-	Share  *ShareAPI
+	Auth   *AuthAPI   // 认证 API
+	File   *FileAPI   // 文件 API
+	Folder *FolderAPI // 文件夹 API
+	Trash  *TrashAPI  // 回收站 API
+	Share  *ShareAPI  // 分享 API
 }
 
 // NewClient 创建 API 客户端
+//
+// 参数:
+//   - cfg: 配置对象
+//   - tokenStore: 令牌存储
+//
+// 返回:
+//   - *Client: API 客户端实例
 func NewClient(cfg *config.Config, tokenStore *store.TokenStore) *Client {
 	c := &Client{
 		httpClient: &http.Client{
@@ -55,7 +71,7 @@ func NewClient(cfg *config.Config, tokenStore *store.TokenStore) *Client {
 	return c
 }
 
-// LoadToken 从存储加载 Token
+// LoadToken 从存储加载令牌
 func (c *Client) LoadToken() error {
 	data, err := c.tokenStore.Load()
 	if err != nil {
@@ -71,7 +87,7 @@ func (c *Client) LoadToken() error {
 	return nil
 }
 
-// SaveToken 保存 Token 到存储
+// SaveToken 保存令牌到存储
 func (c *Client) SaveToken() error {
 	c.mu.RLock()
 	data := &store.TokenData{
@@ -83,7 +99,12 @@ func (c *Client) SaveToken() error {
 	return c.tokenStore.Save(data)
 }
 
-// SetToken 设置 Token
+// SetToken 设置令牌
+//
+// 参数:
+//   - accessToken: 访问令牌
+//   - refreshToken: 刷新令牌
+//   - expiresIn: 过期时间（秒）
 func (c *Client) SetToken(accessToken, refreshToken string, expiresIn int) {
 	c.mu.Lock()
 	c.accessToken = accessToken
@@ -92,7 +113,7 @@ func (c *Client) SetToken(accessToken, refreshToken string, expiresIn int) {
 	c.mu.Unlock()
 }
 
-// ClearToken 清除 Token
+// ClearToken 清除令牌
 func (c *Client) ClearToken() {
 	c.mu.Lock()
 	c.accessToken = ""
@@ -102,20 +123,26 @@ func (c *Client) ClearToken() {
 }
 
 // IsLoggedIn 检查是否已登录
+//
+// 验证 access_token 是否存在且未过期。
 func (c *Client) IsLoggedIn() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.accessToken != "" && time.Now().Before(c.tokenExpiry)
 }
 
-// NeedRefresh 检查是否需要刷新 Token（5 分钟内过期）
+// NeedRefresh 检查是否需要刷新令牌
+//
+// 令牌在 5 分钟内过期时返回 true。
 func (c *Client) NeedRefresh() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.refreshToken != "" && time.Now().Add(5*time.Minute).After(c.tokenExpiry)
 }
 
-// GetAccessToken 获取当前 Access Token（用于下载等需要直接使用 token 的场景）
+// GetAccessToken 获取当前访问令牌
+//
+// 用于下载等需要直接使用令牌的场景。
 func (c *Client) GetAccessToken() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -123,6 +150,16 @@ func (c *Client) GetAccessToken() string {
 }
 
 // doRequest 执行 HTTP 请求
+//
+// 内部方法，处理请求构建、认证、响应解析和错误处理。
+// 自动刷新即将过期的令牌。
+//
+// 参数:
+//   - ctx: 上下文
+//   - method: HTTP 方法
+//   - path: API 路径
+//   - body: 请求体（可为 nil）
+//   - result: 响应结果指针（可为 nil）
 func (c *Client) doRequest(ctx context.Context, method, path string, body, result any) error {
 	// 检查并刷新 Token（仅当需要认证时）
 	if c.NeedRefresh() {
@@ -191,26 +228,31 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 }
 
 // APIError API 错误
+//
+// 封装后端 API 返回的错误信息。
 type APIError struct {
-	Code    int
-	Message string
+	Code    int    // 错误码
+	Message string // 错误消息
 }
 
+// Error 实现 error 接口
 func (e *APIError) Error() string {
 	return fmt.Sprintf("API错误(%d): %s", e.Code, e.Message)
 }
 
 // IsAuthError 检查是否为认证错误
+//
+// 错误码在 40100-40199 范围内为认证错误。
 func (e *APIError) IsAuthError() bool {
 	return e.Code >= 40100 && e.Code < 40200
 }
 
-// IsTokenExpired 检查是否为 Token 过期错误
+// IsTokenExpired 检查是否为令牌过期错误（错误码 40108）
 func (e *APIError) IsTokenExpired() bool {
 	return e.Code == 40108
 }
 
-// IsRefreshTokenUsed 检查是否为 Refresh Token 已使用错误
+// IsRefreshTokenUsed 检查是否为刷新令牌已使用错误（错误码 40110）
 func (e *APIError) IsRefreshTokenUsed() bool {
 	return e.Code == 40110
 }

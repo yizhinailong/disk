@@ -1,3 +1,8 @@
+// Package store_test Token 存储模块测试
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package store
 
 import (
@@ -6,6 +11,7 @@ import (
 	"testing"
 )
 
+// TestTokenStore_SaveAndLoad 测试令牌保存和加载
 func TestTokenStore_SaveAndLoad(t *testing.T) {
 	// 创建临时目录
 	tmpDir, err := os.MkdirTemp("", "token-test")
@@ -54,6 +60,7 @@ func TestTokenStore_SaveAndLoad(t *testing.T) {
 	}
 }
 
+// TestTokenStore_LoadNotExists 测试加载不存在的令牌文件
 func TestTokenStore_LoadNotExists(t *testing.T) {
 	store := NewTokenStore("/nonexistent/path/token.enc", "password")
 
@@ -66,6 +73,7 @@ func TestTokenStore_LoadNotExists(t *testing.T) {
 	}
 }
 
+// TestTokenStore_Delete 测试删除令牌文件
 func TestTokenStore_Delete(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "token-test")
 	if err != nil {
@@ -93,6 +101,7 @@ func TestTokenStore_Delete(t *testing.T) {
 	}
 }
 
+// TestTokenStore_Exists 测试检查令牌文件是否存在
 func TestTokenStore_Exists(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "token-test")
 	if err != nil {
@@ -119,6 +128,7 @@ func TestTokenStore_Exists(t *testing.T) {
 	}
 }
 
+// TestTokenStore_WrongPassword 测试使用错误密码解密
 func TestTokenStore_WrongPassword(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "token-test")
 	if err != nil {
@@ -143,6 +153,7 @@ func TestTokenStore_WrongPassword(t *testing.T) {
 	}
 }
 
+// TestTokenStore_CreatesDirectory 测试自动创建目录
 func TestTokenStore_CreatesDirectory(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "token-test")
 	if err != nil {

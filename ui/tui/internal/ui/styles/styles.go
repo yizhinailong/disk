@@ -1,6 +1,11 @@
-// Package styles provides styling definitions for the TUI application.
-// It defines color schemes, component styles, and utility functions
-// for consistent visual presentation across the terminal interface.
+// Package styles TUI 样式定义
+//
+// 提供颜色方案、组件样式和工具函数，
+// 确保终端界面视觉呈现的一致性。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package styles
 
 import (
@@ -296,10 +301,10 @@ var (
 
 // 进度条字符
 const (
-	ProgressFilled   = "█"
-	ProgressEmpty    = "░"
-	ProgressPaused   = "▓"
-	ProgressComplete = "█"
+	ProgressFilled   = "█" // 已填充
+	ProgressEmpty    = "░" // 未填充
+	ProgressPaused   = "▓" // 暂停
+	ProgressComplete = "█" // 完成
 )
 
 // =============================================================================
@@ -496,6 +501,13 @@ const (
 // =============================================================================
 
 // GetFileIcon 根据文件类型获取图标
+//
+// 参数:
+//   - name: 文件名
+//   - isFolder: 是否为文件夹
+//
+// 返回:
+//   - string: 对应的图标
 func GetFileIcon(name string, isFolder bool) string {
 	if isFolder {
 		return IconFolder
@@ -530,6 +542,13 @@ func GetFileIcon(name string, isFolder bool) string {
 }
 
 // GetFileIconASCII 获取 ASCII 降级图标
+//
+// 参数:
+//   - name: 文件名（未使用）
+//   - isFolder: 是否为文件夹
+//
+// 返回:
+//   - string: ASCII 图标
 func GetFileIconASCII(_ string, isFolder bool) string {
 	if isFolder {
 		return IconFolderASCII
@@ -538,6 +557,12 @@ func GetFileIconASCII(_ string, isFolder bool) string {
 }
 
 // getFileExtension 获取文件扩展名（包含点号）
+//
+// 参数:
+//   - name: 文件名
+//
+// 返回:
+//   - string: 扩展名（如 ".txt"）
 func getFileExtension(name string) string {
 	for i := len(name) - 1; i >= 0; i-- {
 		if name[i] == '.' {
@@ -551,6 +576,13 @@ func getFileExtension(name string) string {
 }
 
 // GetFileColor 根据文件类型获取颜色
+//
+// 参数:
+//   - name: 文件名
+//   - isFolder: 是否为文件夹
+//
+// 返回:
+//   - lipgloss.Color: 对应的颜色
 func GetFileColor(name string, isFolder bool) lipgloss.Color {
 	if isFolder {
 		return ColorFolder
@@ -575,6 +607,12 @@ func GetFileColor(name string, isFolder bool) lipgloss.Color {
 }
 
 // FormatSize 格式化文件大小
+//
+// 参数:
+//   - size: 文件大小（字节）
+//
+// 返回:
+//   - string: 格式化后的大小字符串（如 "1.5 MB"）
 func FormatSize(size uint64) string {
 	const (
 		KB = 1024
@@ -598,6 +636,12 @@ func FormatSize(size uint64) string {
 }
 
 // FormatSizeShort 格式化文件大小（短格式，无空格）
+//
+// 参数:
+//   - size: 文件大小（字节）
+//
+// 返回:
+//   - string: 格式化后的大小字符串（如 "1.5MB"）
 func FormatSizeShort(size uint64) string {
 	const (
 		KB = 1024
@@ -618,11 +662,25 @@ func FormatSizeShort(size uint64) string {
 }
 
 // formatFloat 格式化浮点数
+//
+// 参数:
+//   - f: 浮点数
+//   - precision: 小数位数
+//
+// 返回:
+//   - string: 格式化后的字符串
 func formatFloat(f float64, precision int) string {
 	return strconv.FormatFloat(f, 'f', precision, 64)
 }
 
 // FormatPercent 格式化百分比
+//
+// 参数:
+//   - current: 当前值
+//   - total: 总值
+//
+// 返回:
+//   - string: 百分比字符串（如 "75%"）
 func FormatPercent(current, total uint64) string {
 	if total == 0 {
 		return "0%"
@@ -635,11 +693,27 @@ func FormatPercent(current, total uint64) string {
 }
 
 // FormatStorage 格式化存储空间显示
+//
+// 参数:
+//   - used: 已使用空间
+//   - total: 总空间
+//
+// 返回:
+//   - string: 存储空间字符串（如 "1.5 GB / 10 GB (15%)"）
 func FormatStorage(used, total uint64) string {
 	return FormatSize(used) + "/" + FormatSize(total) + " (" + FormatPercent(used, total) + ")"
 }
 
 // MakeProgressBar 生成进度条字符串
+//
+// 参数:
+//   - width: 进度条宽度
+//   - percent: 进度百分比
+//   - filled: 填充字符
+//   - empty: 空白字符
+//
+// 返回:
+//   - string: 进度条字符串
 func MakeProgressBar(width int, percent float64, filled, empty string) string {
 	if width <= 0 {
 		return ""
@@ -667,46 +741,105 @@ func MakeProgressBar(width int, percent float64, filled, empty string) string {
 }
 
 // MakeProgressBarDefault 使用默认字符生成进度条
+//
+// 参数:
+//   - width: 进度条宽度
+//   - percent: 进度百分比
+//
+// 返回:
+//   - string: 进度条字符串
 func MakeProgressBarDefault(width int, percent float64) string {
 	return MakeProgressBar(width, percent, ProgressFilled, ProgressEmpty)
 }
 
 // JoinHorizontal 水平连接多个字符串
+//
+// 参数:
+//   - strs: 字符串列表
+//
+// 返回:
+//   - string: 连接后的字符串
 func JoinHorizontal(strs ...string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, strs...)
 }
 
 // JoinVertical 垂直连接多个字符串
+//
+// 参数:
+//   - strs: 字符串列表
+//
+// 返回:
+//   - string: 连接后的字符串
 func JoinVertical(strs ...string) string {
 	return lipgloss.JoinVertical(lipgloss.Left, strs...)
 }
 
 // Width 获取字符串显示宽度
+//
+// 参数:
+//   - s: 字符串
+//
+// 返回:
+//   - int: 显示宽度
 func Width(s string) int {
 	return lipgloss.Width(s)
 }
 
 // Height 获取字符串显示高度
+//
+// 参数:
+//   - s: 字符串
+//
+// 返回:
+//   - int: 显示高度（行数）
 func Height(s string) int {
 	return lipgloss.Height(s)
 }
 
 // Center 居中字符串
+//
+// 参数:
+//   - s: 字符串
+//   - width: 目标宽度
+//
+// 返回:
+//   - string: 居中后的字符串
 func Center(s string, width int) string {
 	return lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(s)
 }
 
 // PadLeft 左侧填充空格
+//
+// 参数:
+//   - s: 字符串
+//   - width: 目标宽度
+//
+// 返回:
+//   - string: 左填充后的字符串
 func PadLeft(s string, width int) string {
 	return lipgloss.NewStyle().Width(width).Align(lipgloss.Right).Render(s)
 }
 
 // PadRight 右侧填充空格
+//
+// 参数:
+//   - s: 字符串
+//   - width: 目标宽度
+//
+// 返回:
+//   - string: 右填充后的字符串
 func PadRight(s string, width int) string {
 	return lipgloss.NewStyle().Width(width).Align(lipgloss.Left).Render(s)
 }
 
 // Truncate 截断字符串（超出部分用省略号）
+//
+// 参数:
+//   - s: 字符串
+//   - maxLen: 最大长度
+//
+// 返回:
+//   - string: 截断后的字符串
 func Truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
@@ -718,6 +851,13 @@ func Truncate(s string, maxLen int) string {
 }
 
 // RepeatString 重复字符串
+//
+// 参数:
+//   - s: 字符串
+//   - count: 重复次数
+//
+// 返回:
+//   - string: 重复后的字符串
 func RepeatString(s string, count int) string {
 	result := ""
 	for i := 0; i < count; i++ {

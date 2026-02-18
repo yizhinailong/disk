@@ -1,6 +1,11 @@
-// Package login implements the login page for the TUI application.
-// It provides user authentication with username/password input,
-// server address display, and error feedback.
+// Package login 登录页面
+//
+// 提供用户认证界面，支持用户名/密码输入和登录验证。
+// 显示服务器地址、错误提示和帮助信息。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package login
 
 import (
@@ -24,6 +29,7 @@ import (
 // loginState 登录页面状态
 type loginState int
 
+// 登录状态常量
 const (
 	stateInput   loginState = iota // 输入状态
 	stateLogging                   // 登录中
@@ -37,12 +43,12 @@ const (
 
 // LoginSuccessMsg 登录成功消息
 type LoginSuccessMsg struct {
-	Username string
+	Username string // 用户名
 }
 
 // LoginErrorMsg 登录失败消息
 type LoginErrorMsg struct {
-	Error string
+	Error string // 错误信息
 }
 
 // =============================================================================
@@ -51,19 +57,19 @@ type LoginErrorMsg struct {
 
 // Model 登录页面模型
 type Model struct {
-	client *api.Client
-	config *config.Config
+	client *api.Client    // API 客户端
+	config *config.Config // 配置对象
 
 	// 输入框
-	usernameInput textinput.Model
-	passwordInput textinput.Model
-	focusIndex    int // 0: 用户名, 1: 密码, 2: 登录按钮
+	usernameInput textinput.Model // 用户名输入框
+	passwordInput textinput.Model // 密码输入框
+	focusIndex    int             // 焦点索引（0: 用户名, 1: 密码, 2: 登录按钮）
 
 	// 状态
-	state    loginState
-	errorMsg string
-	width    int
-	height   int
+	state    loginState // 当前状态
+	errorMsg string     // 错误消息
+	width    int        // 组件宽度
+	height   int        // 组件高度
 }
 
 // New 创建登录页面

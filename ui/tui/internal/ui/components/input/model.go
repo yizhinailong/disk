@@ -1,4 +1,11 @@
 // Package input 输入框组件
+//
+// 提供单行文本输入功能，支持密码模式、
+// 错误提示、焦点状态和长度限制。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package input
 
 import (
@@ -13,25 +20,26 @@ import (
 // InputState 输入框状态
 type InputState int
 
+// 输入框状态常量
 const (
-	StateNormal InputState = iota
-	StateFocused
-	StateError
-	StateDisabled
+	StateNormal   InputState = iota // 正常状态
+	StateFocused                    // 获得焦点
+	StateError                      // 错误状态
+	StateDisabled                   // 禁用状态
 )
 
 // Model 输入框模型
 type Model struct {
-	placeholder string
-	value       string
-	cursor      int
-	focused     bool
-	width       int
-	echoMode    bool   // 是否显示输入内容（密码模式）
-	errMsg      string // 错误消息
-	label       string // 标签
-	state       InputState
-	maxLength   int // 最大长度限制
+	placeholder string     // 占位符文本
+	value       string     // 输入值
+	cursor      int        // 光标位置
+	focused     bool       // 是否获得焦点
+	width       int        // 组件宽度
+	echoMode    bool       // 是否显示输入内容（密码模式）
+	errMsg      string     // 错误消息
+	label       string     // 标签
+	state       InputState // 当前状态
+	maxLength   int        // 最大长度限制（0 表示无限制）
 }
 
 // New 创建输入框

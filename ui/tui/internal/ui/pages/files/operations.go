@@ -1,3 +1,11 @@
+// Package files 文件操作
+//
+// 提供文件操作的具体实现：上传、下载、重命名、删除、移动、复制、创建文件夹。
+// 所有操作返回 tea.Cmd 以便在 Bubble Tea 框架中执行。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package files
 
 import (
@@ -12,37 +20,47 @@ import (
 	"github.com/liufeng/disk/ui/tui/internal/uploader"
 )
 
+// OperationMsg 操作结果消息
 type OperationMsg struct {
-	Operation string
-	Success   bool
-	Error     error
-	FileID    uint64
-	FileName  string
+	Operation string // 操作类型（upload/download/delete/rename/move/copy/createFolder）
+	Success   bool   // 是否成功
+	Error     error  // 错误信息
+	FileID    uint64 // 文件 ID
+	FileName  string // 文件名
 }
 
+// UploadProgressMsg 上传进度消息
 type UploadProgressMsg struct {
-	TaskID   string
-	Phase    string
-	Progress float64
-	Uploaded int64
-	Total    int64
-	Speed    string
-	Status   uploader.TaskStatus
-	Error    error
-	FileName string
+	TaskID   string              // 任务 ID
+	Phase    string              // 当前阶段
+	Progress float64             // 进度百分比
+	Uploaded int64               // 已上传字节数
+	Total    int64               // 总字节数
+	Speed    string              // 当前速度
+	Status   uploader.TaskStatus // 上传状态
+	Error    error               // 错误信息
+	FileName string              // 文件名
 }
 
+// DownloadProgressMsg 下载进度消息
 type DownloadProgressMsg struct {
-	TaskID     string
-	Progress   float64
-	Downloaded int64
-	Total      int64
-	Speed      string
-	Status     downloader.DownloadStatus
-	Error      error
-	FileName   string
+	TaskID     string                    // 任务 ID
+	Progress   float64                   // 进度百分比
+	Downloaded int64                     // 已下载字节数
+	Total      int64                     // 总字节数
+	Speed      string                    // 当前速度
+	Status     downloader.DownloadStatus // 下载状态
+	Error      error                     // 错误信息
+	FileName   string                    // 文件名
 }
 
+// DoUpload 执行上传
+//
+// 参数:
+//   - filePath: 本地文件路径
+//
+// 返回:
+//   - tea.Cmd: 上传命令
 func (m *Model) DoUpload(filePath string) tea.Cmd {
 	return func() tea.Msg {
 		u := uploader.New(m.client)
@@ -69,6 +87,10 @@ func (m *Model) DoUpload(filePath string) tea.Cmd {
 	}
 }
 
+// DoDownload 执行下载
+//
+// 返回:
+//   - tea.Cmd: 下载命令
 func (m *Model) DoDownload() tea.Cmd {
 	return func() tea.Msg {
 		file := m.fileList.SelectedFile()
@@ -115,6 +137,13 @@ func (m *Model) DoDownload() tea.Cmd {
 	}
 }
 
+// DoRename 执行重命名
+//
+// 参数:
+//   - newName: 新文件名
+//
+// 返回:
+//   - tea.Cmd: 重命名命令
 func (m *Model) DoRename(newName string) tea.Cmd {
 	return func() tea.Msg {
 		file := m.fileList.SelectedFile()
@@ -139,6 +168,10 @@ func (m *Model) DoRename(newName string) tea.Cmd {
 	}
 }
 
+// DoDelete 执行删除
+//
+// 返回:
+//   - tea.Cmd: 删除命令
 func (m *Model) DoDelete() tea.Cmd {
 	return func() tea.Msg {
 		var fileIDs []uint64
@@ -170,6 +203,13 @@ func (m *Model) DoDelete() tea.Cmd {
 	}
 }
 
+// DoMove 执行移动
+//
+// 参数:
+//   - targetFolderID: 目标文件夹 ID
+//
+// 返回:
+//   - tea.Cmd: 移动命令
 func (m *Model) DoMove(targetFolderID uint64) tea.Cmd {
 	return func() tea.Msg {
 		var fileIDs []uint64
@@ -201,6 +241,13 @@ func (m *Model) DoMove(targetFolderID uint64) tea.Cmd {
 	}
 }
 
+// DoCopy 执行复制
+//
+// 参数:
+//   - targetFolderID: 目标文件夹 ID
+//
+// 返回:
+//   - tea.Cmd: 复制命令
 func (m *Model) DoCopy(targetFolderID uint64) tea.Cmd {
 	return func() tea.Msg {
 		var fileIDs []uint64
@@ -232,6 +279,13 @@ func (m *Model) DoCopy(targetFolderID uint64) tea.Cmd {
 	}
 }
 
+// DoCreateFolder 执行创建文件夹
+//
+// 参数:
+//   - name: 文件夹名称
+//
+// 返回:
+//   - tea.Cmd: 创建命令
 func (m *Model) DoCreateFolder(name string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -246,6 +300,11 @@ func (m *Model) DoCreateFolder(name string) tea.Cmd {
 	}
 }
 
+// getDownloadDir 获取下载目录
+//
+// 返回:
+//   - string: 下载目录路径
+//   - error: 错误信息
 func getDownloadDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -262,6 +321,13 @@ func getDownloadDir() (string, error) {
 	return downloadDir, nil
 }
 
+// FormatSize 格式化文件大小
+//
+// 参数:
+//   - bytes: 字节数
+//
+// 返回:
+//   - string: 格式化后的大小字符串
 func FormatSize(bytes uint64) string {
 	const KB = 1024
 	const MB = KB * 1024

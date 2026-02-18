@@ -1,4 +1,11 @@
 // Package statusbar 状态栏组件
+//
+// 提供底部状态栏功能，显示快捷键提示和消息通知。
+// 支持不同页面（文件、回收站、分享）的专用显示。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package statusbar
 
 import (
@@ -13,16 +20,16 @@ import (
 
 // KeyHint 快捷键提示
 type KeyHint struct {
-	Key  string
-	Desc string
+	Key  string // 按键
+	Desc string // 描述
 }
 
 // Model 状态栏模型
 type Model struct {
-	keyHints []KeyHint
-	message  string
-	msgType  string // info, success, error, warning
-	width    int
+	keyHints []KeyHint // 快捷键提示列表
+	message  string    // 当前消息
+	msgType  string    // 消息类型（info, success, error, warning）
+	width    int       // 组件宽度
 }
 
 // New 创建状态栏

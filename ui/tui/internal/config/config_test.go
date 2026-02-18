@@ -1,3 +1,8 @@
+// Package config_test 配置模块测试
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package config
 
 import (
@@ -7,6 +12,7 @@ import (
 	"github.com/spf13/viper"
 )
 
+// TestInit 测试配置初始化
 func TestInit(t *testing.T) {
 	// 重置 viper
 	Reset()
@@ -30,6 +36,7 @@ func TestInit(t *testing.T) {
 	}
 }
 
+// TestGetTokenPath 测试获取 Token 路径（~ 展开）
 func TestGetTokenPath(t *testing.T) {
 	cfg := &Config{
 		Storage: StorageConfig{
@@ -46,6 +53,7 @@ func TestGetTokenPath(t *testing.T) {
 	}
 }
 
+// TestGetTokenPathEmpty 测试空 Token 路径
 func TestGetTokenPathEmpty(t *testing.T) {
 	cfg := &Config{
 		Storage: StorageConfig{
@@ -59,6 +67,7 @@ func TestGetTokenPathEmpty(t *testing.T) {
 	}
 }
 
+// TestGetTokenPathAbsolutePath 测试绝对路径 Token 路径
 func TestGetTokenPathAbsolutePath(t *testing.T) {
 	cfg := &Config{
 		Storage: StorageConfig{
@@ -72,6 +81,7 @@ func TestGetTokenPathAbsolutePath(t *testing.T) {
 	}
 }
 
+// TestSetConfigFile 测试设置配置文件路径
 func TestSetConfigFile(t *testing.T) {
 	Reset()
 
@@ -82,6 +92,7 @@ func TestSetConfigFile(t *testing.T) {
 	}
 }
 
+// TestReset 测试配置重置
 func TestReset(t *testing.T) {
 	Init()
 	Reset()
@@ -94,6 +105,7 @@ func TestReset(t *testing.T) {
 	}
 }
 
+// init 初始化测试环境
 func init() {
 	// 确保每个测试开始前 viper 是干净的状态
 	viper.Reset()

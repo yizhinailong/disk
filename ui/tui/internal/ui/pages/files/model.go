@@ -1,4 +1,11 @@
-// Package files implements the file list page for the TUI application.
+// Package files 文件列表页面
+//
+// 提供文件浏览、导航、选择和操作功能。
+// 支持键盘导航、多选、排序和文件操作（上传/下载/删除等）。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package files
 
 import (
@@ -17,52 +24,58 @@ import (
 	"github.com/liufeng/disk/ui/tui/internal/ui/styles"
 )
 
-// FilesLoadedMsg is dispatched when files are successfully loaded.
+// FilesLoadedMsg 文件加载成功消息
 type FilesLoadedMsg struct {
-	Files      []models.File
-	Pagination models.Pagination
-	Breadcrumb []models.BreadcrumbItem
-	ParentID   uint64
+	Files      []models.File           // 文件列表
+	Pagination models.Pagination       // 分页信息
+	Breadcrumb []models.BreadcrumbItem // 面包屑路径
+	ParentID   uint64                  // 父文件夹 ID
 }
 
-// FilesLoadErrorMsg is dispatched when file loading fails.
+// FilesLoadErrorMsg 文件加载失败消息
 type FilesLoadErrorMsg struct {
-	Error error
+	Error error // 错误信息
 }
 
-// OpenFolderMsg is dispatched to open a folder.
+// OpenFolderMsg 打开文件夹消息
 type OpenFolderMsg struct {
-	FolderID uint64
+	FolderID uint64 // 文件夹 ID
 }
 
-// GoBackMsg is dispatched to navigate to parent directory.
+// GoBackMsg 返回上级目录消息
 type GoBackMsg struct{}
 
-// Model represents the file list page.
+// Model 文件列表页面模型
 type Model struct {
-	client        *api.Client
-	currentFolder uint64
-	parentID      uint64
+	client        *api.Client // API 客户端
+	currentFolder uint64      // 当前文件夹 ID
+	parentID      uint64      // 父文件夹 ID
 
-	fileList    filelist.Model
-	breadcrumb  breadcrumb.Model
-	statusBar   statusbar.Model
-	transferBar transfer.Model
+	fileList    filelist.Model   // 文件列表组件
+	breadcrumb  breadcrumb.Model // 面包屑组件
+	statusBar   statusbar.Model  // 状态栏组件
+	transferBar transfer.Model   // 传输进度组件
 
-	page     int
-	pageSize int
-	total    int
+	page     int // 当前页码
+	pageSize int // 每页数量
+	total    int // 总数量
 
-	sortBy    string
-	sortOrder string
+	sortBy    string // 排序字段
+	sortOrder string // 排序方向
 
-	loading bool
-	err     string
-	width   int
-	height  int
+	loading bool   // 是否加载中
+	err     string // 错误消息
+	width   int    // 组件宽度
+	height  int    // 组件高度
 }
 
-// New creates a new file list page model.
+// New 创建文件列表页面
+//
+// 参数:
+//   - client: API 客户端
+//
+// 返回:
+//   - Model: 页面模型
 func New(client *api.Client) Model {
 	return Model{
 		client:        client,
@@ -78,7 +91,15 @@ func New(client *api.Client) Model {
 	}
 }
 
-// NewWithSize creates a new file list page with specified dimensions.
+// NewWithSize 创建指定尺寸的文件列表页面
+//
+// 参数:
+//   - client: API 客户端
+//   - width: 宽度
+//   - height: 高度
+//
+// 返回:
+//   - Model: 页面模型
 func NewWithSize(client *api.Client, width, height int) Model {
 	m := New(client)
 	m.width = width
@@ -87,12 +108,12 @@ func NewWithSize(client *api.Client, width, height int) Model {
 	return m
 }
 
-// Init initializes the model.
+// Init 初始化页面
 func (m Model) Init() tea.Cmd {
 	return m.loadFiles()
 }
 
-// Update handles messages and updates the model.
+// Update 更新页面
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -140,7 +161,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// View renders the file list page.
+// View 渲染页面
 func (m Model) View() string {
 	var sections []string
 
@@ -170,6 +191,7 @@ func (m Model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
+// loadFiles 加载文件列表
 func (m Model) loadFiles() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -419,33 +441,33 @@ func (m *Model) updateSelectionStatus() {
 	}
 }
 
-// SetClient sets the API client.
+// SetClient 设置 API 客户端
 func (m *Model) SetClient(client *api.Client) {
 	m.client = client
 }
 
-// CurrentFolder returns the current folder ID.
+// CurrentFolder 返回当前文件夹 ID
 func (m *Model) CurrentFolder() uint64 {
 	return m.currentFolder
 }
 
-// IsLoading returns whether files are being loaded.
+// IsLoading 返回是否正在加载
 func (m *Model) IsLoading() bool {
 	return m.loading
 }
 
-// Error returns the error message if any.
+// Error 返回错误消息
 func (m *Model) Error() string {
 	return m.err
 }
 
-// Refresh reloads the file list.
+// Refresh 刷新文件列表
 func (m *Model) Refresh() tea.Cmd {
 	m.loading = true
 	return m.loadFiles()
 }
 
-// NavigateTo navigates to the specified folder.
+// NavigateTo 导航到指定文件夹
 func (m *Model) NavigateTo(folderID uint64) tea.Cmd {
 	m.parentID = m.currentFolder
 	m.currentFolder = folderID
@@ -454,7 +476,7 @@ func (m *Model) NavigateTo(folderID uint64) tea.Cmd {
 	return m.loadFiles()
 }
 
-// GoToRoot navigates to the root folder.
+// GoToRoot 导航到根目录
 func (m *Model) GoToRoot() tea.Cmd {
 	m.currentFolder = 0
 	m.parentID = 0
@@ -464,12 +486,12 @@ func (m *Model) GoToRoot() tea.Cmd {
 	return m.loadFiles()
 }
 
-// GetSelectedFiles returns the selected files.
+// GetSelectedFiles 返回选中的文件
 func (m *Model) GetSelectedFiles() []models.File {
 	return m.fileList.SelectedFiles()
 }
 
-// GetCurrentFile returns the currently focused file.
+// GetCurrentFile 返回当前聚焦的文件
 func (m *Model) GetCurrentFile() *models.File {
 	return m.fileList.SelectedFile()
 }

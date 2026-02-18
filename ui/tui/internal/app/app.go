@@ -1,5 +1,11 @@
-// Package app implements the main application model for the TUI client.
-// It manages page routing, global state, and coordinates between pages.
+// Package app 应用主逻辑
+//
+// 管理 TUI 应用的生命周期、页面路由和全局状态。
+// 协调登录页面、文件页面等子模块之间的交互。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package app
 
 import (
@@ -16,47 +22,57 @@ import (
 // 页面状态 (Page State)
 // =============================================================================
 
-// pageState represents the current active page.
+// pageState 当前活跃页面状态
 type pageState int
 
+// 页面状态常量
 const (
-	pageLogin pageState = iota
-	pageFiles
-	pageTrash
-	pageShare
-	pageHelp
+	pageLogin pageState = iota // 登录页面
+	pageFiles                  // 文件列表页面
+	pageTrash                  // 回收站页面
+	pageShare                  // 分享管理页面
+	pageHelp                   // 帮助页面
 )
 
 // =============================================================================
 // 消息定义 (Message Definitions)
 // =============================================================================
 
-// QuitMsg is dispatched when the application should quit.
+// QuitMsg 退出应用消息
 type QuitMsg struct{}
 
 // =============================================================================
 // Model 定义 (Model Definition)
 // =============================================================================
 
-// Model is the main application model that manages page routing and global state.
+// Model TUI 应用主模型
+//
+// 管理 Bubble Tea 应用的生命周期和状态，协调各子页面。
 type Model struct {
-	config     *config.Config
-	client     *api.Client
-	tokenStore *store.TokenStore
+	config     *config.Config    // 配置对象
+	client     *api.Client       // API 客户端
+	tokenStore *store.TokenStore // Token 存储器
 
 	// 页面状态
-	currentPage pageState
+	currentPage pageState // 当前活跃页面
 
 	// 子页面
-	loginPage login.Model
-	filesPage files.Model
+	loginPage login.Model // 登录页面模型
+	filesPage files.Model // 文件列表页面模型
 
 	// 布局
-	width  int
-	height int
+	width  int // 窗口宽度
+	height int // 窗口高度
 }
 
-// New creates a new application model.
+// New 创建应用模型
+//
+// 参数:
+//   - cfg: 配置对象
+//   - password: Token 加密密码
+//
+// 返回:
+//   - Model: 初始化后的应用模型
 func New(cfg *config.Config, password string) Model {
 	// 创建 Token 存储
 	tokenStore := store.NewTokenStore(cfg.GetTokenPath(), password)
@@ -76,7 +92,9 @@ func New(cfg *config.Config, password string) Model {
 	}
 }
 
-// Init initializes the application.
+// Init 初始化应用
+//
+// 实现 bubbletea.Model 接口。检查登录状态并启动相应页面。
 func (m Model) Init() tea.Cmd {
 	// 检查是否已登录
 	if m.client.IsLoggedIn() {
@@ -88,7 +106,9 @@ func (m Model) Init() tea.Cmd {
 	return m.loginPage.Init()
 }
 
-// Update handles messages and updates the model.
+// Update 处理消息并更新模型
+//
+// 实现 bubbletea.Model 接口。处理全局快捷键和页面切换。
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -132,7 +152,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the current page.
+// View 渲染当前页面
+//
+// 实现 bubbletea.Model 接口。根据当前页面状态返回对应视图。
 func (m Model) View() string {
 	switch m.currentPage {
 	case pageLogin:
@@ -148,24 +170,24 @@ func (m Model) View() string {
 // 辅助方法 (Helper Methods)
 // =============================================================================
 
-// SetSize sets the application dimensions.
+// SetSize 设置应用尺寸
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 	m.loginPage.SetSize(width, height)
 }
 
-// CurrentPage returns the current page state.
+// CurrentPage 返回当前页面状态
 func (m *Model) CurrentPage() pageState {
 	return m.currentPage
 }
 
-// IsLoggedIn returns whether the user is logged in.
+// IsLoggedIn 返回用户是否已登录
 func (m *Model) IsLoggedIn() bool {
 	return m.client.IsLoggedIn()
 }
 
-// Logout logs out the user and returns to login page.
+// Logout 登出用户并返回登录页面
 func (m *Model) Logout() {
 	m.client.ClearToken()
 	_ = m.tokenStore.Delete()

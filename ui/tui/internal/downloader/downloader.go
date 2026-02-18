@@ -1,3 +1,11 @@
+// Package downloader 文件下载管理
+//
+// 提供文件下载功能，支持进度回调和取消操作。
+// 下载进度实时计算速度并支持断点续传。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package downloader
 
 import (
@@ -13,50 +21,70 @@ import (
 	"github.com/liufeng/disk/ui/tui/internal/models"
 )
 
+// DownloadStatus 下载状态
 type DownloadStatus string
 
+// 下载状态常量
 const (
-	StatusPending     DownloadStatus = "pending"
-	StatusDownloading DownloadStatus = "downloading"
-	StatusSuccess     DownloadStatus = "success"
-	StatusFailed      DownloadStatus = "failed"
-	StatusCanceled    DownloadStatus = "canceled"
+	StatusPending     DownloadStatus = "pending"     // 等待中
+	StatusDownloading DownloadStatus = "downloading" // 下载中
+	StatusSuccess     DownloadStatus = "success"     // 下载成功
+	StatusFailed      DownloadStatus = "failed"      // 下载失败
+	StatusCanceled    DownloadStatus = "canceled"    // 已取消
 )
 
+// DownloadTask 下载任务
 type DownloadTask struct {
-	ID         string
-	FileID     uint64
-	FileName   string
-	FileSize   int64
-	FileHash   string
-	SavePath   string
-	Progress   float64
-	Speed      string
-	Status     DownloadStatus
-	Error      error
-	Downloaded int64
-	cancelFunc context.CancelFunc
+	ID         string             // 任务唯一标识
+	FileID     uint64             // 文件 ID
+	FileName   string             // 文件名
+	FileSize   int64              // 文件大小（字节）
+	FileHash   string             // 文件哈希值
+	SavePath   string             // 本地保存路径
+	Progress   float64            // 下载进度（百分比）
+	Speed      string             // 下载速度
+	Status     DownloadStatus     // 下载状态
+	Error      error              // 错误信息
+	Downloaded int64              // 已下载字节数
+	cancelFunc context.CancelFunc // 取消函数
 }
 
+// ProgressInfo 下载进度信息
 type ProgressInfo struct {
-	TaskID     string
-	Progress   float64
-	Downloaded int64
-	Total      int64
-	Speed      string
-	Status     DownloadStatus
-	Error      error
-	FileName   string
+	TaskID     string         // 任务 ID
+	Progress   float64        // 进度百分比
+	Downloaded int64          // 已下载字节数
+	Total      int64          // 总字节数
+	Speed      string         // 当前速度
+	Status     DownloadStatus // 下载状态
+	Error      error          // 错误信息
+	FileName   string         // 文件名
 }
 
+// Downloader 下载器
 type Downloader struct {
-	client *api.Client
+	client *api.Client // API 客户端
 }
 
+// New 创建下载器
+//
+// 参数:
+//   - client: API 客户端
+//
+// 返回:
+//   - *Downloader: 下载器实例
 func New(client *api.Client) *Downloader {
 	return &Downloader{client: client}
 }
 
+// CreateTask 创建下载任务
+//
+// 参数:
+//   - file: 文件信息
+//   - saveDir: 保存目录
+//
+// 返回:
+//   - *DownloadTask: 下载任务
 func (d *Downloader) CreateTask(file *models.File, saveDir string) *DownloadTask {
 	return &DownloadTask{
 		ID:       generateID(),
@@ -69,6 +97,15 @@ func (d *Downloader) CreateTask(file *models.File, saveDir string) *DownloadTask
 	}
 }
 
+// Download 执行下载
+//
+// 参数:
+//   - ctx: 上下文
+//   - task: 下载任务
+//   - progressFunc: 进度回调函数
+//
+// 返回:
+//   - error: 错误信息
 func (d *Downloader) Download(ctx context.Context, task *DownloadTask, progressFunc func(ProgressInfo)) error {
 	task.Status = StatusDownloading
 
@@ -204,6 +241,10 @@ func (d *Downloader) Download(ctx context.Context, task *DownloadTask, progressF
 	return nil
 }
 
+// Cancel 取消下载任务
+//
+// 参数:
+//   - task: 下载任务
 func (d *Downloader) Cancel(task *DownloadTask) {
 	if task.cancelFunc != nil {
 		task.cancelFunc()
@@ -214,6 +255,19 @@ func (d *Downloader) Cancel(task *DownloadTask) {
 	}
 }
 
+// DownloadWithProgress 带进度回调的下载
+//
+// 创建任务并执行下载，通过回调实时报告进度。
+//
+// 参数:
+//   - ctx: 上下文
+//   - file: 文件信息
+//   - saveDir: 保存目录
+//   - progressFunc: 进度回调函数
+//
+// 返回:
+//   - *DownloadTask: 下载任务
+//   - error: 错误信息
 func (d *Downloader) DownloadWithProgress(ctx context.Context, file *models.File, saveDir string, progressFunc func(ProgressInfo)) (*DownloadTask, error) {
 	task := d.CreateTask(file, saveDir)
 
@@ -232,10 +286,18 @@ func (d *Downloader) DownloadWithProgress(ctx context.Context, file *models.File
 	return task, err
 }
 
+// generateID 生成任务 ID
 func generateID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
+// formatSpeed 格式化下载速度
+//
+// 参数:
+//   - bytesPerSec: 每秒字节数
+//
+// 返回:
+//   - string: 格式化后的速度字符串
 func formatSpeed(bytesPerSec float64) string {
 	const KB = 1024
 	const MB = KB * 1024

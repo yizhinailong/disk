@@ -1,4 +1,11 @@
 // Package filelist 文件列表组件
+//
+// 提供文件/文件夹列表的展示、导航和选择功能。
+// 支持多选、单选、键盘导航和空目录提示。
+//
+// 作者: LiuFeng (liufeng.code@outlook.com)
+// 日期: 2026-02-18
+// 版权: Copyright (c) 2026
 package filelist
 
 import (
@@ -15,17 +22,21 @@ import (
 )
 
 // Model 文件列表模型
+//
+// 管理文件列表的展示、导航和选择状态。
 type Model struct {
-	list     list.Model
-	files    []models.File
-	selected map[uint64]bool
-	width    int
-	height   int
+	list     list.Model      // bubbles 列表组件
+	files    []models.File   // 文件列表
+	selected map[uint64]bool // 选中状态（按文件 ID）
+	width    int             // 组件宽度
+	height   int             // 组件高度
 }
 
 // FileItem 列表项包装
+//
+// 实现 list.Item 接口，包装文件信息。
 type FileItem struct {
-	file models.File
+	file models.File // 文件信息
 }
 
 // FilterValue 实现 list.Item 接口
