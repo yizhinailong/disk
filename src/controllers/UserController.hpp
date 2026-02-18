@@ -34,10 +34,34 @@ namespace disk::user {
         UserController();
 
         METHOD_LIST_BEGIN
-        ADD_METHOD_TO(UserController::GetProfile, "/api/user/profile", drogon::Get);
-        ADD_METHOD_TO(UserController::UpdateProfile, "/api/user/profile", drogon::Patch);
-        ADD_METHOD_TO(UserController::UpdatePassword, "/api/user/password", drogon::Put);
-        ADD_METHOD_TO(UserController::GetStorage, "/api/user/storage", drogon::Get);
+        ADD_METHOD_TO(
+            UserController::GetProfile,
+            "/api/user/profile",
+            drogon::Get,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
+        ADD_METHOD_TO(
+            UserController::UpdateProfile,
+            "/api/user/profile",
+            drogon::Patch,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
+        ADD_METHOD_TO(
+            UserController::UpdatePassword,
+            "/api/user/password",
+            drogon::Put,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
+        ADD_METHOD_TO(
+            UserController::GetStorage,
+            "/api/user/storage",
+            drogon::Get,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
         METHOD_LIST_END
 
         /**
@@ -71,7 +95,8 @@ namespace disk::user {
          * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
          */
         [[nodiscard]]
-        auto UpdatePassword(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+        auto UpdatePassword(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
 
         /**
          * @brief 更新用户资料

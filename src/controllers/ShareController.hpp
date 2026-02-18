@@ -42,19 +42,56 @@ namespace disk::share {
         ShareController();
 
         METHOD_LIST_BEGIN
-        // ==================== 所有者端点（JWT 保护） ====================
-        ADD_METHOD_TO(ShareController::Create, "/api/share", drogon::Post);
-        ADD_METHOD_TO(ShareController::List, "/api/share", drogon::Get);
-        ADD_METHOD_TO(ShareController::Detail, "/api/share/{share_id}", drogon::Get);
-        ADD_METHOD_TO(ShareController::Update, "/api/share/{share_id}", drogon::Put);
-        ADD_METHOD_TO(ShareController::Cancel, "/api/share", drogon::Delete);
+        ADD_METHOD_TO(
+            ShareController::Create,
+            "/api/share",
+            drogon::Post,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
+        ADD_METHOD_TO(
+            ShareController::List,
+            "/api/share",
+            drogon::Get,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
+        ADD_METHOD_TO(
+            ShareController::Detail,
+            "/api/share/{share_id}",
+            drogon::Get,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
+        ADD_METHOD_TO(
+            ShareController::Update,
+            "/api/share/{share_id}",
+            drogon::Put,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
+        ADD_METHOD_TO(
+            ShareController::Cancel,
+            "/api/share",
+            drogon::Delete,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
 
-        // ==================== 公开端点（无需认证） ====================
         ADD_METHOD_TO(ShareController::Access, "/api/share/access/{share_id}", drogon::Post);
 
-        // ==================== 分享令牌保护端点 ====================
-        ADD_METHOD_TO(ShareController::Browse, "/api/share/browse/{share_id}", drogon::Get, "disk::filters::ShareAuthFilter");
-        ADD_METHOD_TO(ShareController::Download, "/api/share/download/{share_id}/{file_id}", drogon::Get, "disk::filters::ShareAuthFilter");
+        ADD_METHOD_TO(
+            ShareController::Browse,
+            "/api/share/browse/{share_id}",
+            drogon::Get,
+            "disk::filters::ShareAuthFilter"
+        );
+        ADD_METHOD_TO(
+            ShareController::Download,
+            "/api/share/download/{share_id}/{file_id}",
+            drogon::Get,
+            "disk::filters::ShareAuthFilter"
+        );
         METHOD_LIST_END
 
         /**

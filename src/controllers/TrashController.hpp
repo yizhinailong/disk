@@ -34,10 +34,34 @@ namespace disk::trash {
         TrashController();
 
         METHOD_LIST_BEGIN
-        ADD_METHOD_TO(TrashController::List, "/api/trash", drogon::Get);
-        ADD_METHOD_TO(TrashController::Restore, "/api/trash/restore", drogon::Post);
-        ADD_METHOD_TO(TrashController::Delete, "/api/trash", drogon::Delete);
-        ADD_METHOD_TO(TrashController::DeleteAll, "/api/trash/all", drogon::Delete);
+        ADD_METHOD_TO(
+            TrashController::List,
+            "/api/trash",
+            drogon::Get,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
+        ADD_METHOD_TO(
+            TrashController::Restore,
+            "/api/trash/restore",
+            drogon::Post,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
+        ADD_METHOD_TO(
+            TrashController::Delete,
+            "/api/trash",
+            drogon::Delete,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
+        ADD_METHOD_TO(
+            TrashController::DeleteAll,
+            "/api/trash/all",
+            drogon::Delete,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
         METHOD_LIST_END
 
         /**
