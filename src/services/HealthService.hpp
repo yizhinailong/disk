@@ -1,0 +1,66 @@
+/**
+ * @file HealthService.hpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 健康检查服务
+ * @version 0.1
+ * @date 2026-02-18
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
+#pragma once
+
+#include <chrono>
+#include <cstdint>
+#include <map>
+#include <string>
+
+#include <drogon/nosql/RedisClient.h>
+#include <drogon/orm/DbClient.h>
+
+namespace disk::health {
+
+    // ==================== 数据结构 ====================
+
+    struct ComponentStatus {
+        std::string status;      // "healthy" or "unhealthy"
+        std::string message;     // 错误信息（可选）
+        int64_t latency_ms{ 0 }; // 响应延迟（毫秒）
+    };
+
+    struct HealthResult {
+        std::string overall_status;                        // "healthy", "degraded", "unhealthy"
+        std::string version;                               // 系统版本
+        int64_t uptime{ 0 };                               // 运行时间（秒）
+        std::string timestamp;                             // ISO 8601 时间戳
+        std::map<std::string, ComponentStatus> components; // 各组件状态
+    };
+
+    // ==================== Service ====================
+
+    class HealthService {
+    public:
+        HealthService(
+            drogon::orm::DbClientPtr db_client,
+            drogon::nosql::RedisClientPtr redis_client
+        );
+
+        [[nodiscard]]
+        auto Check() -> drogon::Task<HealthResult>;
+
+    private:
+        [[nodiscard]]
+        auto CheckDatabase() -> drogon::Task<ComponentStatus>;
+
+        [[nodiscard]]
+        auto CheckRedis() -> drogon::Task<ComponentStatus>;
+
+        static auto GetTimestamp() -> std::string;
+
+        drogon::orm::DbClientPtr m_db_client;
+        drogon::nosql::RedisClientPtr m_redis_client;
+        std::chrono::steady_clock::time_point m_start_time;
+    };
+
+} // namespace disk::health

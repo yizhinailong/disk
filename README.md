@@ -393,9 +393,10 @@ clang-format -i src/controllers/AuthController.cpp
 - [x] 文件分享（创建、访问、取消、下载）
 - [x] 回收站功能（列表、恢复、彻底删除）
 - [x] 存储配额统计
-- [x] 数据库模型生成
-- [x] 单元测试框架
-- [x] 完整的项目文档
+ - [x] 数据库模型生成
+ - [x] 单元测试框架
+ - [x] 完整的项目文档
+- [x] 健康检查 API (`GET /api/health`)
 
 **TUI 客户端 (Go/Bubble Tea)**
 - [x] 项目骨架和配置管理
@@ -414,7 +415,6 @@ clang-format -i src/controllers/AuthController.cpp
 
 ### 📝 计划中
 
-- [ ] 健康检查 API (`GET /api/health`)
 - [ ] 系统信息 API (`GET /api/system/info`)
 - [ ] 操作日志
 - [ ] 桌面客户端 (QT/QML)

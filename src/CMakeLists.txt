@@ -5,6 +5,7 @@ set(Controllers_HEADERS
     controllers/AuthController.hpp
     controllers/FileController.hpp
     controllers/FolderController.hpp
+    controllers/HealthController.hpp
     controllers/ShareController.hpp
     controllers/TrashController.hpp
     controllers/UserController.hpp
@@ -13,6 +14,7 @@ set(Controllers_SOURCES
     controllers/AuthController.cpp
     controllers/FileController.cpp
     controllers/FolderController.cpp
+    controllers/HealthController.cpp
     controllers/ShareController.cpp
     controllers/TrashController.cpp
     controllers/UserController.cpp
@@ -72,6 +74,7 @@ set(Services_HEADERS
     services/CleanupService.hpp
     services/FileService.hpp
     services/FolderService.hpp
+    services/HealthService.hpp
     services/RedisService.hpp
     services/ShareService.hpp
     services/TokenService.hpp
@@ -83,6 +86,7 @@ set(Services_SOURCES
     services/CleanupService.cpp
     services/FileService.cpp
     services/FolderService.cpp
+    services/HealthService.cpp
     services/RedisService.cpp
     services/ShareService.cpp
     services/TokenService.cpp

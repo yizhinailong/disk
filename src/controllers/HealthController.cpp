@@ -1,0 +1,64 @@
+/**
+ * @file HealthController.cpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 健康检查控制器
+ * @version 0.1
+ * @date 2026-02-18
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
+#include "HealthController.hpp"
+
+#include "utils/Response.hpp"
+
+namespace disk::health {
+
+    HealthController::HealthController()
+        : m_health_service(
+              std::make_unique<HealthService>(
+                  drogon::app().getDbClient(),
+                  drogon::app().getRedisClient()
+              )
+          ) {
+        LOG_DEBUG << "HealthController 初始化完成";
+    }
+
+    auto HealthController::Check(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+        LOG_DEBUG << "收到健康检查请求: " << request->getPeerAddr().toIpPort();
+
+        auto health_result = co_await m_health_service->Check();
+
+        Json::Value data;
+        data["overall_status"] = health_result.overall_status;
+        data["version"] = health_result.version;
+        data["uptime"] = health_result.uptime;
+        data["timestamp"] = health_result.timestamp;
+
+        Json::Value components;
+        for (const auto& [name, status] : health_result.components) {
+            Json::Value component;
+            component["status"] = status.status;
+            if (!status.message.empty()) {
+                component["message"] = status.message;
+            }
+            component["latency_ms"] = status.latency_ms;
+            components[name] = component;
+        }
+        data["components"] = components;
+
+        if (health_result.overall_status == "healthy") {
+            co_return Response::Success(data);
+        }
+
+        // degraded 或 unhealthy 返回 503
+        auto response = drogon::HttpResponse::newHttpJsonResponse(
+            Response::Success(data)->getJsonObject()->operator[]("data")
+        );
+        response->setStatusCode(drogon::k503ServiceUnavailable);
+        co_return response;
+    }
+
+} // namespace disk::health

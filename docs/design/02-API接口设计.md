@@ -3218,29 +3218,79 @@ If-Range: "d41d8cd98f00b204e9800998ecf8427e"
 **GET** `/api/health`
 
 #### 实现状态
-**未实现**
+**✅ 已实现**
 
-系统健康检查（无需认证）。
+系统健康检查（无需认证）。检查数据库和 Redis 连接状态。
 
-#### 错误响应矩阵
+#### 响应字段
 
-| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
-|------------|--------|----------|----------|----------|
-| 503 | 10006 | `ServiceUnavailable` | 服务不可用 | 系统维护或过载 |
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| overall_status | string | 整体状态：`healthy` / `degraded` / `unhealthy` |
+| version | string | 系统版本 |
+| uptime | integer | 运行时间（秒） |
+| timestamp | string | ISO 8601 时间戳 |
+| components | object | 各组件状态 |
+| components.database | object | 数据库状态 |
+| components.redis | object | Redis 状态 |
+| components.*.status | string | 组件状态：`healthy` / `unhealthy` |
+| components.*.message | string | 错误信息（可选） |
+| components.*.latency_ms | integer | 响应延迟（毫秒） |
 
-> 健康检查接口通常不返回错误，如有需要可返回 503。
+#### HTTP 状态码
 
-#### 响应示例
+| 状态码 | 说明 |
+|--------|------|
+| 200 | 系统健康 |
+| 503 | 系统不健康或降级 |
+
+#### 成功响应示例（200）
 
 ```json
 {
   "code": 0,
   "message": "success",
   "data": {
-    "status": "healthy",
+    "overall_status": "healthy",
     "version": "1.0.0",
     "uptime": 86400,
-    "timestamp": "2026-01-13T10:00:00Z"
+    "timestamp": "2026-02-18T12:30:00Z",
+    "components": {
+      "database": {
+        "status": "healthy",
+        "latency_ms": 5
+      },
+      "redis": {
+        "status": "healthy",
+        "latency_ms": 2
+      }
+    }
+  }
+}
+```
+
+#### 不健康响应示例（503）
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "overall_status": "unhealthy",
+    "version": "1.0.0",
+    "uptime": 86400,
+    "timestamp": "2026-02-18T12:30:00Z",
+    "components": {
+      "database": {
+        "status": "unhealthy",
+        "message": "Connection refused",
+        "latency_ms": 0
+      },
+      "redis": {
+        "status": "healthy",
+        "latency_ms": 2
+      }
+    }
   }
 }
 ```
