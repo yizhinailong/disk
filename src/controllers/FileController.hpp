@@ -35,7 +35,7 @@ namespace disk::file {
             "/api/file/upload/chunk",
             drogon::Post,
             "JwtAuthFilter",
-            "RateLimitFilter"
+            "UploadRateLimitFilter"
         );
         ADD_METHOD_TO(
             FileController::CompleteUpload,
