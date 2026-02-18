@@ -33,7 +33,7 @@ type ShareAPI struct {
 //   - error: 错误信息
 func (s *ShareAPI) Create(ctx context.Context, req *models.CreateShareRequest) (*models.CreateShareResponse, error) {
 	var resp models.CreateShareResponse
-	if err := s.client.doRequest(ctx, "POST", "/api/share/create", req, &resp); err != nil {
+	if err := s.client.doRequest(ctx, "POST", "/api/share", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -58,7 +58,7 @@ func (s *ShareAPI) List(ctx context.Context, page, pageSize int) (*models.ShareL
 		params.Set("page_size", strconv.Itoa(pageSize))
 	}
 
-	path := "/api/share/list"
+	path := "/api/share"
 	if len(params) > 0 {
 		path += "?" + params.Encode()
 	}
