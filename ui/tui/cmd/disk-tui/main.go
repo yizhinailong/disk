@@ -9,11 +9,9 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -57,10 +55,8 @@ func main() {
 		config.Get().Server.URL = *serverURL
 	}
 
-	password := getPassword()
-
 	cfg := config.Get()
-	model := app.New(cfg, password)
+	model := app.New(cfg)
 
 	p := tea.NewProgram(
 		model,
@@ -71,21 +67,4 @@ func main() {
 		fmt.Fprintf(os.Stderr, "启动失败: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-// getPassword 获取加密密码
-//
-// 优先从环境变量 DISK_PASSWORD 读取，否则交互式提示用户输入。
-//
-// 返回:
-//   - string: 用户输入的加密密码
-func getPassword() string {
-	if pwd := os.Getenv("DISK_PASSWORD"); pwd != "" {
-		return pwd
-	}
-
-	fmt.Print("请输入加密密码: ")
-	reader := bufio.NewReader(os.Stdin)
-	password, _ := reader.ReadString('\n')
-	return strings.TrimSpace(password)
 }

@@ -21,7 +21,7 @@ func TestTokenStore_SaveAndLoad(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	filePath := filepath.Join(tmpDir, "token.enc")
-	store := NewTokenStore(filePath, "test-password")
+	store := NewTokenStore(filePath)
 
 	// 保存
 	data := &TokenData{
@@ -62,7 +62,7 @@ func TestTokenStore_SaveAndLoad(t *testing.T) {
 
 // TestTokenStore_LoadNotExists 测试加载不存在的令牌文件
 func TestTokenStore_LoadNotExists(t *testing.T) {
-	store := NewTokenStore("/nonexistent/path/token.enc", "password")
+	store := NewTokenStore("/nonexistent/path/token.enc")
 
 	data, err := store.Load()
 	if err != nil {
@@ -82,7 +82,7 @@ func TestTokenStore_Delete(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	filePath := filepath.Join(tmpDir, "token.enc")
-	store := NewTokenStore(filePath, "password")
+	store := NewTokenStore(filePath)
 
 	// 保存
 	data := &TokenData{AccessToken: "test"}
@@ -110,7 +110,7 @@ func TestTokenStore_Exists(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	filePath := filepath.Join(tmpDir, "token.enc")
-	store := NewTokenStore(filePath, "password")
+	store := NewTokenStore(filePath)
 
 	// 初始不存在
 	if store.Exists() {
@@ -128,31 +128,6 @@ func TestTokenStore_Exists(t *testing.T) {
 	}
 }
 
-// TestTokenStore_WrongPassword 测试使用错误密码解密
-func TestTokenStore_WrongPassword(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "token-test")
-	if err != nil {
-		t.Fatalf("创建临时目录失败: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	filePath := filepath.Join(tmpDir, "token.enc")
-
-	// 用密码 A 保存
-	storeA := NewTokenStore(filePath, "password-a")
-	data := &TokenData{AccessToken: "secret-token"}
-	if err := storeA.Save(data); err != nil {
-		t.Fatalf("Save() failed: %v", err)
-	}
-
-	// 用密码 B 尝试加载
-	storeB := NewTokenStore(filePath, "password-b")
-	_, err = storeB.Load()
-	if err == nil {
-		t.Error("Load() with wrong password should fail")
-	}
-}
-
 // TestTokenStore_CreatesDirectory 测试自动创建目录
 func TestTokenStore_CreatesDirectory(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "token-test")
@@ -163,7 +138,7 @@ func TestTokenStore_CreatesDirectory(t *testing.T) {
 
 	// 使用不存在的子目录
 	filePath := filepath.Join(tmpDir, "subdir", "deep", "token.enc")
-	store := NewTokenStore(filePath, "password")
+	store := NewTokenStore(filePath)
 
 	data := &TokenData{AccessToken: "test"}
 	if err := store.Save(data); err != nil {
@@ -173,5 +148,51 @@ func TestTokenStore_CreatesDirectory(t *testing.T) {
 	// 验证目录已创建
 	if _, err := os.Stat(filepath.Dir(filePath)); os.IsNotExist(err) {
 		t.Error("目录应该被自动创建")
+	}
+}
+
+// TestTokenStore_LoadInvalidJSON 测试加载无效 JSON 文件
+func TestTokenStore_LoadInvalidJSON(t *testing.T) {
+	// 创建临时目录
+	tmpDir, err := os.MkdirTemp("", "token-test")
+	if err != nil {
+		t.Fatalf("创建临时目录失败: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	filePath := filepath.Join(tmpDir, "token.enc")
+
+	// 写入无效 JSON 内容
+	if err := os.WriteFile(filePath, []byte("invalid json"), 0600); err != nil {
+		t.Fatalf("WriteFile() failed: %v", err)
+	}
+
+	store := NewTokenStore(filePath)
+	_, err = store.Load()
+	if err == nil {
+		t.Error("Load() with invalid JSON should fail")
+	}
+}
+
+// TestTokenStore_LoadEmptyFile 测试加载空文件
+func TestTokenStore_LoadEmptyFile(t *testing.T) {
+	// 创建临时目录
+	tmpDir, err := os.MkdirTemp("", "token-test")
+	if err != nil {
+		t.Fatalf("创建临时目录失败: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	filePath := filepath.Join(tmpDir, "token.enc")
+
+	// 写入空文件
+	if err := os.WriteFile(filePath, []byte(""), 0600); err != nil {
+		t.Fatalf("WriteFile() failed: %v", err)
+	}
+
+	store := NewTokenStore(filePath)
+	_, err = store.Load()
+	if err == nil {
+		t.Error("Load() with empty file should fail")
 	}
 }

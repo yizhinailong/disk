@@ -71,13 +71,12 @@ type Model struct {
 //
 // 参数:
 //   - cfg: 配置对象
-//   - password: Token 加密密码
 //
 // 返回:
 //   - Model: 初始化后的应用模型
-func New(cfg *config.Config, password string) Model {
+func New(cfg *config.Config) Model {
 	// 创建 Token 存储
-	tokenStore := store.NewTokenStore(cfg.GetTokenPath(), password)
+	tokenStore := store.NewTokenStore(cfg.GetTokenPath())
 
 	// 创建 API 客户端
 	client := api.NewClient(cfg, tokenStore)

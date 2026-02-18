@@ -1,7 +1,7 @@
-// Package store Token 安全存储模块
+// Package store Token 存储模块
 //
-// 提供 JWT Token 的加密存储功能，使用 AES-256-GCM 加密算法和 PBKDF2 密钥派生。
-// 支持安全持久化到本地文件系统。
+// 提供 JWT Token 的本地文件存储功能。
+// 支持持久化到本地文件系统。
 //
 // 作者: LiuFeng (liufeng.code@outlook.com)
 // 日期: 2026-02-18
@@ -9,22 +9,10 @@
 package store
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"golang.org/x/crypto/pbkdf2"
-)
-
-const (
-	saltSize   = 32     // 盐值大小（字节）
-	keySize    = 32     // 密钥大小（AES-256）
-	iterations = 100000 // PBKDF2 迭代次数
 )
 
 // TokenData 令牌数据结构
@@ -38,30 +26,27 @@ type TokenData struct {
 
 // TokenStore 令牌存储
 //
-// 提供加密的令牌持久化存储，使用 AES-256-GCM 加密。
+// 提供令牌持久化存储。
 type TokenStore struct {
 	filePath string // 令牌文件路径
-	password []byte // 加密密码
 }
 
 // NewTokenStore 创建令牌存储
 //
 // 参数:
 //   - filePath: 令牌文件存储路径
-//   - password: 加密密码
 //
 // 返回:
 //   - *TokenStore: 令牌存储实例
-func NewTokenStore(filePath string, password string) *TokenStore {
+func NewTokenStore(filePath string) *TokenStore {
 	return &TokenStore{
 		filePath: filePath,
-		password: []byte(password),
 	}
 }
 
-// Save 保存令牌（加密）
+// Save 保存令牌
 //
-// 使用 AES-256-GCM 加密令牌数据并存储到文件。文件格式为: salt + nonce + ciphertext。
+// 将令牌数据序列化为 JSON 并存储到文件。
 // 文件权限设置为 0600，仅所有者可读写。
 //
 // 参数:
@@ -76,39 +61,6 @@ func (s *TokenStore) Save(data *TokenData) error {
 		return fmt.Errorf("序列化令牌失败: %w", err)
 	}
 
-	// 生成随机盐
-	salt := make([]byte, saltSize)
-	if _, err := rand.Read(salt); err != nil {
-		return fmt.Errorf("生成盐失败: %w", err)
-	}
-
-	// 派生密钥
-	key := pbkdf2.Key(s.password, salt, iterations, keySize, sha256.New)
-
-	// 加密
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return fmt.Errorf("创建加密器失败: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return fmt.Errorf("创建 GCM 失败: %w", err)
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return fmt.Errorf("生成 nonce 失败: %w", err)
-	}
-
-	ciphertext := gcm.Seal(nil, nonce, plaintext, nil)
-
-	// 组合: salt + nonce + ciphertext
-	result := make([]byte, 0, len(salt)+len(nonce)+len(ciphertext))
-	result = append(result, salt...)
-	result = append(result, nonce...)
-	result = append(result, ciphertext...)
-
 	// 确保目录存在
 	dir := filepath.Dir(s.filePath)
 	if err := os.MkdirAll(dir, 0700); err != nil {
@@ -116,22 +68,22 @@ func (s *TokenStore) Save(data *TokenData) error {
 	}
 
 	// 写入文件（权限 600）
-	if err := os.WriteFile(s.filePath, result, 0600); err != nil {
+	if err := os.WriteFile(s.filePath, plaintext, 0600); err != nil {
 		return fmt.Errorf("写入文件失败: %w", err)
 	}
 
 	return nil
 }
 
-// Load 加载令牌（解密）
+// Load 加载令牌
 //
-// 从文件读取并解密令牌数据。如果文件不存在，返回 nil（表示未登录）。
+// 从文件读取令牌数据。如果文件不存在，返回 nil（表示未登录）。
 //
 // 返回:
 //   - *TokenData: 令牌数据（文件不存在时为 nil）
 //   - error: 错误信息
 func (s *TokenStore) Load() (*TokenData, error) {
-	ciphertext, err := os.ReadFile(s.filePath)
+	data, err := os.ReadFile(s.filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil // 文件不存在，返回 nil（未登录）
@@ -139,48 +91,13 @@ func (s *TokenStore) Load() (*TokenData, error) {
 		return nil, fmt.Errorf("读取文件失败: %w", err)
 	}
 
-	if len(ciphertext) < saltSize {
-		return nil, fmt.Errorf("文件格式无效")
-	}
-
-	// 解析
-	salt := ciphertext[:saltSize]
-	remaining := ciphertext[saltSize:]
-
-	// 派生密钥
-	key := pbkdf2.Key(s.password, salt, iterations, keySize, sha256.New)
-
-	// 解密
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("创建解密器失败: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("创建 GCM 失败: %w", err)
-	}
-
-	nonceSize := gcm.NonceSize()
-	if len(remaining) < nonceSize {
-		return nil, fmt.Errorf("文件格式无效")
-	}
-
-	nonce := remaining[:nonceSize]
-	ciphertext = remaining[nonceSize:]
-
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return nil, fmt.Errorf("解密失败: %w", err)
-	}
-
 	// 反序列化
-	var data TokenData
-	if err := json.Unmarshal(plaintext, &data); err != nil {
+	var tokenData TokenData
+	if err := json.Unmarshal(data, &tokenData); err != nil {
 		return nil, fmt.Errorf("反序列化失败: %w", err)
 	}
 
-	return &data, nil
+	return &tokenData, nil
 }
 
 // Delete 删除令牌文件
