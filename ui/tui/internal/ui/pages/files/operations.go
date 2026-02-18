@@ -16,8 +16,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/liufeng/disk/ui/tui/internal/downloader"
-	"github.com/liufeng/disk/ui/tui/internal/uploader"
+	"github.com/yizhinailong/disk/ui/tui/internal/downloader"
+	"github.com/yizhinailong/disk/ui/tui/internal/uploader"
 )
 
 // OperationMsg 操作结果消息

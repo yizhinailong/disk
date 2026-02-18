@@ -15,13 +15,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/liufeng/disk/ui/tui/internal/api"
-	"github.com/liufeng/disk/ui/tui/internal/models"
-	"github.com/liufeng/disk/ui/tui/internal/ui/components/breadcrumb"
-	"github.com/liufeng/disk/ui/tui/internal/ui/components/filelist"
-	"github.com/liufeng/disk/ui/tui/internal/ui/components/statusbar"
-	"github.com/liufeng/disk/ui/tui/internal/ui/components/transfer"
-	"github.com/liufeng/disk/ui/tui/internal/ui/styles"
+	"github.com/yizhinailong/disk/ui/tui/internal/api"
+	"github.com/yizhinailong/disk/ui/tui/internal/models"
+	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/breadcrumb"
+	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/filelist"
+	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/statusbar"
+	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/transfer"
+	"github.com/yizhinailong/disk/ui/tui/internal/ui/styles"
 )
 
 // FilesLoadedMsg 文件加载成功消息

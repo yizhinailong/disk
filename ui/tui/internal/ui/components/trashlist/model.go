@@ -18,8 +18,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/liufeng/disk/ui/tui/internal/models"
-	"github.com/liufeng/disk/ui/tui/internal/ui/styles"
+	"github.com/yizhinailong/disk/ui/tui/internal/models"
+	"github.com/yizhinailong/disk/ui/tui/internal/ui/styles"
 )
 
 // Model 回收站列表模型

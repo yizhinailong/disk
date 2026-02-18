@@ -17,8 +17,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/liufeng/disk/ui/tui/internal/api"
-	"github.com/liufeng/disk/ui/tui/internal/models"
+	"github.com/yizhinailong/disk/ui/tui/internal/api"
+	"github.com/yizhinailong/disk/ui/tui/internal/models"
 )
 
 // DownloadStatus 下载状态

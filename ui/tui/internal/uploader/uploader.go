@@ -17,8 +17,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/liufeng/disk/ui/tui/internal/api"
-	"github.com/liufeng/disk/ui/tui/internal/models"
+	"github.com/yizhinailong/disk/ui/tui/internal/api"
+	"github.com/yizhinailong/disk/ui/tui/internal/models"
 )
 
 // DefaultChunkSize 默认分片大小（5MB）

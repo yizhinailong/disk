@@ -17,8 +17,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/liufeng/disk/ui/tui/internal/app"
-	"github.com/liufeng/disk/ui/tui/internal/config"
+	"github.com/yizhinailong/disk/ui/tui/internal/app"
+	"github.com/yizhinailong/disk/ui/tui/internal/config"
 )
 
 // 构建时注入的版本信息

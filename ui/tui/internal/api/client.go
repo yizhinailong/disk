@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/liufeng/disk/ui/tui/internal/config"
-	"github.com/liufeng/disk/ui/tui/internal/models"
-	"github.com/liufeng/disk/ui/tui/internal/store"
+	"github.com/yizhinailong/disk/ui/tui/internal/config"
+	"github.com/yizhinailong/disk/ui/tui/internal/models"
+	"github.com/yizhinailong/disk/ui/tui/internal/store"
 )
 
 // Client API 客户端

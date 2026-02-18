@@ -11,12 +11,12 @@ package app
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/liufeng/disk/ui/tui/internal/api"
-	"github.com/liufeng/disk/ui/tui/internal/config"
-	"github.com/liufeng/disk/ui/tui/internal/store"
-	"github.com/liufeng/disk/ui/tui/internal/ui/pages/files"
-	"github.com/liufeng/disk/ui/tui/internal/ui/pages/login"
-	"github.com/liufeng/disk/ui/tui/internal/ui/pages/trash"
+	"github.com/yizhinailong/disk/ui/tui/internal/api"
+	"github.com/yizhinailong/disk/ui/tui/internal/config"
+	"github.com/yizhinailong/disk/ui/tui/internal/store"
+	"github.com/yizhinailong/disk/ui/tui/internal/ui/pages/files"
+	"github.com/yizhinailong/disk/ui/tui/internal/ui/pages/login"
+	"github.com/yizhinailong/disk/ui/tui/internal/ui/pages/trash"
 )
 
 // =============================================================================

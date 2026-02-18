@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/liufeng/disk/ui/tui/internal/models"
+	"github.com/yizhinailong/disk/ui/tui/internal/models"
 )
 
 // FolderAPI 文件夹 API

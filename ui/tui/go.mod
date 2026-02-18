@@ -1,4 +1,4 @@
-module github.com/liufeng/disk/ui/tui
+module github.com/yizhinailong/disk/ui/tui
 
 go 1.25.7
 

@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/liufeng/disk/ui/tui/internal/models"
+	"github.com/yizhinailong/disk/ui/tui/internal/models"
 )
 
 // TrashAPI 回收站 API

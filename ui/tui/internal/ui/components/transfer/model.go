@@ -15,7 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/liufeng/disk/ui/tui/internal/ui/styles"
+	"github.com/yizhinailong/disk/ui/tui/internal/ui/styles"
 )
 
 // TaskStatus 任务状态
