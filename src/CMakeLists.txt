@@ -33,11 +33,13 @@ set(Filters_HEADERS
     filters/JwtAuthFilter.hpp
     filters/RateLimitFilter.hpp
     filters/ShareAuthFilter.hpp
+    filters/UploadRateLimitFilter.hpp
 )
 set(Filters_SOURCES
     filters/JwtAuthFilter.cpp
     filters/RateLimitFilter.cpp
     filters/ShareAuthFilter.cpp
+    filters/UploadRateLimitFilter.cpp
 )
 
 # Model
