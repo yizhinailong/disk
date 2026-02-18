@@ -45,6 +45,9 @@ type OpenFolderMsg struct {
 // GoBackMsg 返回上级目录消息
 type GoBackMsg struct{}
 
+// SwitchToTrashMsg 切换到回收站页面消息
+type SwitchToTrashMsg struct{}
+
 // Model 文件列表页面模型
 type Model struct {
 	client        *api.Client // API 客户端
@@ -316,6 +319,9 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case "s":
 		return m.changeSort("size")
+
+	case "T":
+		return m, func() tea.Msg { return SwitchToTrashMsg{} }
 
 	case "ctrl+d", "ctrl+u":
 		return m, nil

@@ -16,6 +16,7 @@ import (
 	"github.com/liufeng/disk/ui/tui/internal/store"
 	"github.com/liufeng/disk/ui/tui/internal/ui/pages/files"
 	"github.com/liufeng/disk/ui/tui/internal/ui/pages/login"
+	"github.com/liufeng/disk/ui/tui/internal/ui/pages/trash"
 )
 
 // =============================================================================
@@ -59,6 +60,7 @@ type Model struct {
 	// 子页面
 	loginPage login.Model // 登录页面模型
 	filesPage files.Model // 文件列表页面模型
+	trashPage trash.Model // 回收站页面模型
 
 	// 布局
 	width  int // 窗口宽度
@@ -89,6 +91,7 @@ func New(cfg *config.Config, password string) Model {
 		tokenStore: tokenStore,
 		loginPage:  login.New(cfg, client),
 		filesPage:  files.New(client),
+		trashPage:  trash.New(client),
 	}
 }
 
@@ -132,6 +135,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_ = m.client.SaveToken()
 		return m, m.filesPage.Init()
 
+	case files.SwitchToTrashMsg:
+		// 切换到回收站页面
+		m.currentPage = pageTrash
+		return m, m.trashPage.Init()
+
+	case trash.SwitchToFilesMsg:
+		// 返回文件页面
+		m.currentPage = pageFiles
+		return m, nil
+
 	case QuitMsg:
 		return m, tea.Quit
 	}
@@ -147,6 +160,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		fp, cmd := m.filesPage.Update(msg)
 		m.filesPage = fp
 		return m, cmd
+
+	case pageTrash:
+		tp, cmd := m.trashPage.Update(msg)
+		m.trashPage = tp
+		return m, cmd
 	}
 
 	return m, nil
@@ -161,6 +179,8 @@ func (m Model) View() string {
 		return m.loginPage.View()
 	case pageFiles:
 		return m.filesPage.View()
+	case pageTrash:
+		return m.trashPage.View()
 	default:
 		return ""
 	}
