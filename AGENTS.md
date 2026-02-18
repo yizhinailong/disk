@@ -121,10 +121,10 @@ find src test -name '*.cpp' -o -name '*.hpp' | xargs clang-format -i
 ./build/linux-debug-clang/disk
 
 # Build TUI
-cd ui/tui && go build -o bin/disk-tui ./cmd/disk-tui
+cd ui/tui && go build -o build/disk-tui ./cmd/disk-tui
 
 # Run TUI
-./ui/tui/bin/disk-tui --server http://127.0.0.1:8080
+./ui/tui/build/disk-tui --server http://127.0.0.1:8080
 ```
 
 ## ENVIRONMENT
