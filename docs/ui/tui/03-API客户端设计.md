@@ -1417,7 +1417,7 @@ type ListSharesResponse struct {
 func (s *ShareAPI) Create(ctx context.Context, req *CreateShareRequest) (*CreateShareResponse, error) {
     var resp CreateShareResponse
 
-    err := s.client.NewRequest(ctx, http.MethodPost, "/api/share/create").
+    err := s.client.NewRequest(ctx, http.MethodPost, "/api/share").
         WithJSON(req).
         DoJSON(&resp)
 
@@ -1444,7 +1444,7 @@ func (s *ShareAPI) Access(ctx context.Context, req *AccessShareRequest) (*Access
 
 // List 获取我的分享列表
 func (s *ShareAPI) List(ctx context.Context, opts *ListSharesOptions) (*ListSharesResponse, error) {
-    req := s.client.NewRequest(ctx, http.MethodGet, "/api/share/list")
+    req := s.client.NewRequest(ctx, http.MethodGet, "/api/share")
 
     if opts != nil {
         if opts.Page > 0 {
@@ -1462,10 +1462,12 @@ func (s *ShareAPI) List(ctx context.Context, opts *ListSharesOptions) (*ListShar
     return &resp, nil
 }
 
-// Delete 删除分享
-func (s *ShareAPI) Delete(ctx context.Context, shareID uint64) error {
-    path := fmt.Sprintf("/api/share/%d", shareID)
-    return s.client.NewRequest(ctx, http.MethodDelete, path).DoJSON(nil)
+// Cancel 取消分享（批量）
+func (s *ShareAPI) Cancel(ctx context.Context, shareIDs []string) error {
+    body := map[string]any{"share_ids": shareIDs}
+    return s.client.NewRequest(ctx, http.MethodDelete, "/api/share").
+        WithJSON(body).
+        DoJSON(nil)
 }
 
 // DownloadShare 下载分享文件
