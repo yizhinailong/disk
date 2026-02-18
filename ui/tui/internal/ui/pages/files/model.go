@@ -48,6 +48,9 @@ type GoBackMsg struct{}
 // SwitchToTrashMsg 切换到回收站页面消息
 type SwitchToTrashMsg struct{}
 
+// SwitchToShareMsg 切换到分享管理页面消息
+type SwitchToShareMsg struct{}
+
 // Model 文件列表页面模型
 type Model struct {
 	client        *api.Client // API 客户端
@@ -155,6 +158,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case OperationMsg:
 		return m.handleOperationResult(msg)
+
+	case ShareCreatedMsg:
+		return m.handleShareCreated(msg)
 	}
 
 	var cmd tea.Cmd
@@ -322,6 +328,12 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case "T":
 		return m, func() tea.Msg { return SwitchToTrashMsg{} }
+
+	case "S":
+		return m, func() tea.Msg { return SwitchToShareMsg{} }
+
+	case "y":
+		return m.handleCreateShare()
 
 	case "ctrl+d", "ctrl+u":
 		return m, nil
@@ -559,7 +571,37 @@ func (m Model) handleCreateFolder() (Model, tea.Cmd) {
 }
 
 func (m Model) handleHelp() (Model, tea.Cmd) {
-	m.statusBar.SetInfo(styles.IconHelp + " 帮助: j/k导航, d下载, x删除, r重命名, n新建文件夹, R刷新")
+	m.statusBar.SetInfo(styles.IconHelp + " 帮助: j/k导航, d下载, x删除, r重命名, y分享, n新建, S分享列表, R刷新")
+	return m, nil
+}
+
+func (m Model) handleCreateShare() (Model, tea.Cmd) {
+	if !m.fileList.HasSelection() && m.fileList.SelectedFile() == nil {
+		m.statusBar.SetError("请先选择要分享的文件")
+		return m, nil
+	}
+
+	count := 1
+	if m.fileList.HasSelection() {
+		count = len(m.fileList.SelectedFiles())
+	}
+
+	m.statusBar.SetInfo(fmt.Sprintf("正在创建分享 (%d 个文件)...", count))
+	return m, m.DoCreateShare(7, "")
+}
+
+func (m Model) handleShareCreated(msg ShareCreatedMsg) (Model, tea.Cmd) {
+	if msg.Error != nil {
+		m.statusBar.SetError("创建分享失败: " + msg.Error.Error())
+		return m, nil
+	}
+
+	shareInfo := msg.ShareLink
+	if msg.Password != "" {
+		shareInfo += " (密码: " + msg.Password + ")"
+	}
+	m.statusBar.SetSuccess("分享成功: " + shareInfo + " | 过期: " + msg.ExpiresAt)
+	m.fileList.ClearSelection()
 	return m, nil
 }
 

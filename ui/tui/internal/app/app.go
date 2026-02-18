@@ -16,6 +16,7 @@ import (
 	"github.com/yizhinailong/disk/ui/tui/internal/store"
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/pages/files"
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/pages/login"
+	"github.com/yizhinailong/disk/ui/tui/internal/ui/pages/share"
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/pages/trash"
 )
 
@@ -61,6 +62,7 @@ type Model struct {
 	loginPage login.Model // 登录页面模型
 	filesPage files.Model // 文件列表页面模型
 	trashPage trash.Model // 回收站页面模型
+	sharePage share.Model // 分享管理页面模型
 
 	// 布局
 	width  int // 窗口宽度
@@ -91,6 +93,7 @@ func New(cfg *config.Config) Model {
 		loginPage:  login.New(cfg, client),
 		filesPage:  files.New(client),
 		trashPage:  trash.New(client),
+		sharePage:  share.New(client),
 	}
 }
 
@@ -139,8 +142,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentPage = pageTrash
 		return m, m.trashPage.Init()
 
+	case files.SwitchToShareMsg:
+		// 切换到分享管理页面
+		m.currentPage = pageShare
+		return m, m.sharePage.Init()
+
 	case trash.SwitchToFilesMsg:
 		// 返回文件页面
+		m.currentPage = pageFiles
+		return m, nil
+
+	case share.SwitchToFilesMsg:
+		// 从分享页面返回文件页面
 		m.currentPage = pageFiles
 		return m, nil
 
@@ -164,6 +177,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		tp, cmd := m.trashPage.Update(msg)
 		m.trashPage = tp
 		return m, cmd
+
+	case pageShare:
+		sp, cmd := m.sharePage.Update(msg)
+		m.sharePage = sp
+		return m, cmd
 	}
 
 	return m, nil
@@ -180,6 +198,8 @@ func (m Model) View() string {
 		return m.filesPage.View()
 	case pageTrash:
 		return m.trashPage.View()
+	case pageShare:
+		return m.sharePage.View()
 	default:
 		return ""
 	}

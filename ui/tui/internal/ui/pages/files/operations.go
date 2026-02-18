@@ -17,6 +17,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/yizhinailong/disk/ui/tui/internal/downloader"
+	"github.com/yizhinailong/disk/ui/tui/internal/models"
 	"github.com/yizhinailong/disk/ui/tui/internal/uploader"
 )
 
@@ -342,5 +343,65 @@ func FormatSize(bytes uint64) string {
 		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(KB))
 	default:
 		return fmt.Sprintf("%d B", bytes)
+	}
+}
+
+// ShareCreatedMsg 分享创建成功消息
+type ShareCreatedMsg struct {
+	ShareLink string // 分享链接
+	Password  string // 访问密码（如有）
+	ExpiresAt string // 过期时间描述
+	Error     error  // 错误信息
+}
+
+// DoCreateShare 执行创建分享
+//
+// 参数:
+//   - expireDays: 有效天数（0 表示永久）
+//   - password: 访问密码（空表示无密码）
+//
+// 返回:
+//   - tea.Cmd: 创建分享命令
+func (m *Model) DoCreateShare(expireDays int, password string) tea.Cmd {
+	return func() tea.Msg {
+		var fileIDs []uint64
+
+		if m.fileList.HasSelection() {
+			for _, f := range m.fileList.SelectedFiles() {
+				fileIDs = append(fileIDs, f.ID)
+			}
+		} else {
+			file := m.fileList.SelectedFile()
+			if file == nil {
+				return ShareCreatedMsg{
+					Error: fmt.Errorf("未选择文件"),
+				}
+			}
+			fileIDs = append(fileIDs, file.ID)
+		}
+
+		ctx := context.Background()
+		req := &models.CreateShareRequest{
+			FileIDs:    fileIDs,
+			ExpireDays: expireDays,
+			Password:   password,
+			Permission: "download",
+		}
+
+		result, err := m.client.Share.Create(ctx, req)
+		if err != nil {
+			return ShareCreatedMsg{Error: err}
+		}
+
+		expiresAt := "永久有效"
+		if result.ExpiresAt != nil {
+			expiresAt = result.ExpiresAt.Format("2006-01-02 15:04")
+		}
+
+		return ShareCreatedMsg{
+			ShareLink: result.ShareLink,
+			Password:  result.Password,
+			ExpiresAt: expiresAt,
+		}
 	}
 }

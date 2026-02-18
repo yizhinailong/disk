@@ -38,12 +38,14 @@ func New() Model {
 		keyHints: []KeyHint{
 			{"u", "上传"},
 			{"d", "下载"},
+			{"y", "分享"},
 			{"r", "重命名"},
 			{"m", "移动"},
 			{"c", "复制"},
 			{"x", "删除"},
 			{"n", "新建"},
 			{"T", "回收站"},
+			{"S", "分享列表"},
 			{"?", "帮助"},
 		},
 	}
@@ -225,9 +227,10 @@ func (m *Model) RenderForTrash() string {
 // RenderForShare 渲染分享管理专用状态栏
 func (m *Model) RenderForShare() string {
 	hints := []KeyHint{
-		{"x", "取消分享"},
-		{"c", "复制链接"},
-		{"e", "编辑"},
+		{"Enter", "复制链接"},
+		{"c", "取消分享"},
+		{"R", "刷新"},
+		{"Esc", "返回"},
 		{"?", "帮助"},
 	}
 
