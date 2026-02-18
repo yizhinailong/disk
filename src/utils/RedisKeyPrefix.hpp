@@ -40,6 +40,7 @@ namespace disk::redis {
         static constexpr std::string_view SHARE_TOKEN_BLACKLIST_PREFIX = "share_token_blacklist";
         static constexpr std::string_view SHARE_PASSWORD_RATE_LIMIT_PREFIX = "rate:share_password";
         static constexpr std::string_view API_RATE_LIMIT_PREFIX = "rate:api";
+        static constexpr std::string_view UPLOAD_RATE_LIMIT_PREFIX = "rate:upload";
 
         // ==================== Key Construction Methods ====================
 
@@ -84,10 +85,8 @@ namespace disk::redis {
          * @return std::string Redis key format: "share_token:{share_code}:{token_hash}"
          */
         [[nodiscard]]
-        static auto BuildShareTokenKey(
-            const std::string& share_code,
-            const std::string& token_hash
-        ) -> std::string {
+        static auto BuildShareTokenKey(const std::string& share_code, const std::string& token_hash)
+            -> std::string {
             return std::string(SHARE_TOKEN_PREFIX) + ":" + share_code + ":" + token_hash;
         }
 
@@ -110,14 +109,11 @@ namespace disk::redis {
          * @return std::string Redis key format: "rate:share_password:{share_code}:{normalized_ip}"
          */
         [[nodiscard]]
-        static auto BuildSharePasswordRateLimitKey(
-            const std::string& share_code,
-            const std::string& ip_address
-        ) -> std::string {
-            return std::string(
-                       SHARE_PASSWORD_RATE_LIMIT_PREFIX
-                   ) +
-                   ":" + share_code + ":" + ExtractIPOnly(ip_address);
+        static auto
+        BuildSharePasswordRateLimitKey(const std::string& share_code, const std::string& ip_address)
+            -> std::string {
+            return std::string(SHARE_PASSWORD_RATE_LIMIT_PREFIX) + ":" + share_code + ":" +
+                   ExtractIPOnly(ip_address);
         }
 
         /**
@@ -128,8 +124,23 @@ namespace disk::redis {
          * @return std::string Redis key format: "rate:api:{user_id}:{window_timestamp}"
          */
         [[nodiscard]]
-        static auto BuildApiRateLimitKey(uint64_t user_id, int64_t window_timestamp) -> std::string {
+        static auto BuildApiRateLimitKey(uint64_t user_id, int64_t window_timestamp)
+            -> std::string {
             return std::string(API_RATE_LIMIT_PREFIX) + ":" + std::to_string(user_id) + ":" +
+                   std::to_string(window_timestamp);
+        }
+
+        /**
+         * @brief Build upload rate limit key
+         *
+         * @param user_id User ID
+         * @param window_timestamp Window timestamp (Unix timestamp in seconds, rounded to window)
+         * @return std::string Redis key format: "rate:upload:{user_id}:{window_timestamp}"
+         */
+        [[nodiscard]]
+        static auto BuildUploadRateLimitKey(uint64_t user_id, int64_t window_timestamp)
+            -> std::string {
+            return std::string(UPLOAD_RATE_LIMIT_PREFIX) + ":" + std::to_string(user_id) + ":" +
                    std::to_string(window_timestamp);
         }
 
