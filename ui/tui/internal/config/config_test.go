@@ -85,10 +85,10 @@ func TestGetTokenPathAbsolutePath(t *testing.T) {
 func TestSetConfigFile(t *testing.T) {
 	Reset()
 
-	SetConfigFile("/custom/path/config.yaml")
+	SetConfigFile("/custom/path/config.json")
 
-	if cfgFile != "/custom/path/config.yaml" {
-		t.Errorf("cfgFile = %q, want %q", cfgFile, "/custom/path/config.yaml")
+	if cfgFile != "/custom/path/config.json" {
+		t.Errorf("cfgFile = %q, want %q", cfgFile, "/custom/path/config.json")
 	}
 }
 

@@ -1,7 +1,7 @@
 // Package config 配置管理模块
 //
 // 提供基于 Viper 的配置管理功能，支持多配置源（文件、环境变量）。
-// 配置文件格式为 YAML，支持热重载和默认值。
+// 配置文件格式为 JSON，支持热重载和默认值。
 //
 // 作者: LiuFeng (liufeng.code@outlook.com)
 // 日期: 2026-02-18
@@ -57,10 +57,10 @@ var (
 //
 // 从配置文件和环境变量加载配置。配置文件查找顺序：
 // 1. 通过 SetConfigFile 设置的路径
-// 2. ./config.yaml
-// 3. ./configs/config.yaml
-// 4. ~/.config/disk-tui/config.yaml
-// 5. /etc/disk-tui/config.yaml
+// 2. ./config.json
+// 3. ./configs/config.json
+// 4. ~/.config/disk-tui/config.json
+// 5. /etc/disk-tui/config.json
 //
 // 环境变量前缀为 DISK_，如 DISK_SERVER_URL。
 //
@@ -76,7 +76,7 @@ func Init() error {
 	} else {
 		// 查找配置文件
 		viper.SetConfigName("config")
-		viper.SetConfigType("yaml")
+		viper.SetConfigType("json")
 		viper.AddConfigPath(".")
 		viper.AddConfigPath("./configs")
 		viper.AddConfigPath("$HOME/.config/disk-tui")

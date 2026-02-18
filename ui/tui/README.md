@@ -51,7 +51,7 @@ go test ./... -v
 ./disk-tui --server https://disk.example.com
 
 # 使用自定义配置
-./disk-tui --config ~/.config/disk-tui/config.yaml
+./disk-tui --config ~/.config/disk-tui/config.json
 ```
 
 ## 配置
@@ -59,24 +59,27 @@ go test ./... -v
 ### 配置文件
 
 默认配置文件位置（按优先级）：
-1. `./config.yaml`
-2. `./configs/config.yaml`
-3. `~/.config/disk-tui/config.yaml`
-4. `/etc/disk-tui/config.yaml`
+1. `./config.json`
+2. `./configs/config.json`
+3. `~/.config/disk-tui/config.json`
+4. `/etc/disk-tui/config.json`
 
 ### 配置示例
 
-```yaml
-server:
-  url: "https://disk.example.com"
-  timeout: 30
-
-storage:
-  token_path: "~/.config/disk-tui/token.enc"
-
-log:
-  level: "info"
-  format: "console"
+```json
+{
+  "server": {
+    "url": "https://disk.example.com",
+    "timeout": 30
+  },
+  "storage": {
+    "token_path": "~/.config/disk-tui/token.enc"
+  },
+  "log": {
+    "level": "info",
+    "format": "console"
+  }
+}
 ```
 
 ### 环境变量
