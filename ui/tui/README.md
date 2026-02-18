@@ -16,7 +16,7 @@
 
 ```bash
 cd ui/tui
-go build -o bin/disk-tui ./cmd/disk-tui
+go build -o build/disk-tui ./cmd/disk-tui
 ```
 
 ### 运行测试
