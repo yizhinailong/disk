@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"sync"
 	"time"
@@ -255,4 +256,102 @@ func (e *APIError) IsTokenExpired() bool {
 // IsRefreshTokenUsed 检查是否为刷新令牌已使用错误（错误码 40110）
 func (e *APIError) IsRefreshTokenUsed() bool {
 	return e.Code == 40110
+}
+
+// doMultipartRequest 执行 multipart/form-data HTTP 请求
+//
+// 用于文件上传等需要 multipart 表单的场景。
+//
+// 参数:
+//   - ctx: 上下文
+//   - method: HTTP 方法
+//   - path: API 路径
+//   - fields: 表单字段（键值对）
+//   - files: 文件字段（字段名 -> (文件名, 数据)）
+//   - result: 响应结果指针（可为 nil）
+func (c *Client) doMultipartRequest(ctx context.Context, method, path string, fields map[string]string, files map[string]struct {
+	Filename string
+	Data     []byte
+}, result any) error {
+	// 检查并刷新 Token
+	if c.NeedRefresh() {
+		if err := c.Auth.Refresh(ctx); err != nil {
+			return fmt.Errorf("刷新令牌失败: %w", err)
+		}
+	}
+
+	// 构建 multipart body
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	// 添加普通字段
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			return fmt.Errorf("写入字段 %s 失败: %w", key, err)
+		}
+	}
+
+	// 添加文件字段
+	for fieldName, file := range files {
+		part, err := writer.CreateFormFile(fieldName, file.Filename)
+		if err != nil {
+			return fmt.Errorf("创建文件字段 %s 失败: %w", fieldName, err)
+		}
+		if _, err := part.Write(file.Data); err != nil {
+			return fmt.Errorf("写入文件数据失败: %w", err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("关闭 multipart writer 失败: %w", err)
+	}
+
+	// 创建请求
+	url := c.config.Server.URL + path
+	req, err := http.NewRequestWithContext(ctx, method, url, &body)
+	if err != nil {
+		return fmt.Errorf("创建请求失败: %w", err)
+	}
+
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	// 添加认证头
+	c.mu.RLock()
+	if c.accessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.accessToken)
+	}
+	c.mu.RUnlock()
+
+	// 发送请求
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 读取响应
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("读取响应失败: %w", err)
+	}
+
+	// 解析响应
+	var apiResp models.ApiResponse[json.RawMessage]
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		return fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	// 检查错误
+	if apiResp.Code != 0 {
+		return &APIError{Code: apiResp.Code, Message: apiResp.Message}
+	}
+
+	// 解析数据
+	if result != nil && apiResp.Data != nil {
+		if err := json.Unmarshal(apiResp.Data, result); err != nil {
+			return fmt.Errorf("解析数据失败: %w", err)
+		}
+	}
+
+	return nil
 }

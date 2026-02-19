@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -55,13 +56,6 @@ type DownloadProgressMsg struct {
 	FileName   string                    // 文件名
 }
 
-// DoUpload 执行上传
-//
-// 参数:
-//   - filePath: 本地文件路径
-//
-// 返回:
-//   - tea.Cmd: 上传命令
 func (m *Model) DoUpload(filePath string) tea.Cmd {
 	return func() tea.Msg {
 		u := uploader.New(m.client)
@@ -86,6 +80,104 @@ func (m *Model) DoUpload(filePath string) tea.Cmd {
 			FileName:  task.FileName,
 		}
 	}
+}
+
+func (m *Model) DoUploadWithProgress(filePath string) tea.Cmd {
+	progressChan := make(chan UploadProgressMsg, 100)
+
+	return tea.Batch(
+		func() tea.Msg {
+			u := uploader.New(m.client)
+			ctx := context.Background()
+
+			uploadTask, err := u.CreateTask(filePath, m.currentFolder)
+			if err != nil {
+				return OperationMsg{
+					Operation: "upload",
+					Success:   false,
+					Error:     err,
+					FileName:  filepath.Base(filePath),
+				}
+			}
+
+			progressChan <- UploadProgressMsg{
+				TaskID:   uploadTask.ID,
+				Phase:    "pending",
+				Progress: 0,
+				Total:    uploadTask.FileSize,
+				Status:   uploader.StatusPending,
+				FileName: uploadTask.FileName,
+			}
+
+			var lastBytes int64
+			var lastTime time.Time
+
+			task, err := u.UploadWithProgress(ctx, filePath, m.currentFolder, func(info uploader.ProgressInfo) {
+				now := time.Now()
+				if !lastTime.IsZero() {
+					elapsed := now.Sub(lastTime).Seconds()
+					if elapsed > 0 {
+						bytesDiff := info.Uploaded - lastBytes
+						speed := float64(bytesDiff) / elapsed
+						info.Speed = uploader.FormatSpeed(speed)
+					}
+				}
+				lastBytes = info.Uploaded
+				lastTime = now
+
+				progressChan <- UploadProgressMsg{
+					TaskID:   info.TaskID,
+					Phase:    info.Phase,
+					Progress: info.Progress,
+					Uploaded: info.Uploaded,
+					Total:    info.Total,
+					Speed:    info.Speed,
+					Status:   info.Status,
+					Error:    info.Error,
+					FileName: info.FileName,
+				}
+			})
+
+			finalStatus := uploader.StatusSuccess
+			if err != nil || task.Status == uploader.StatusFailed {
+				finalStatus = uploader.StatusFailed
+			}
+
+			progressChan <- UploadProgressMsg{
+				TaskID:   uploadTask.ID,
+				Phase:    "completed",
+				Progress: 100,
+				Total:    uploadTask.FileSize,
+				Status:   finalStatus,
+				Error:    err,
+				FileName: uploadTask.FileName,
+			}
+
+			close(progressChan)
+
+			return OperationMsg{
+				Operation: "upload",
+				Success:   task.Status == uploader.StatusSuccess,
+				Error:     task.Error,
+				FileName:  task.FileName,
+			}
+		},
+		m.pollProgress(progressChan),
+	)
+}
+
+func (m *Model) pollProgress(progressChan <-chan UploadProgressMsg) tea.Cmd {
+	return tea.Every(50*time.Millisecond, func(t time.Time) tea.Msg {
+		select {
+		case msg, ok := <-progressChan:
+			if !ok {
+				return nil
+			}
+			return msg
+		default:
+			return nil
+		}
+	})
 }
 
 // DoDownload 执行下载

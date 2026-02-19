@@ -11,6 +11,7 @@ package files
 import (
 	"context"
 	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -22,6 +23,7 @@ import (
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/statusbar"
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/transfer"
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/styles"
+	"github.com/yizhinailong/disk/ui/tui/internal/uploader"
 )
 
 // FilesLoadedMsg 文件加载成功消息
@@ -161,6 +163,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case ShareCreatedMsg:
 		return m.handleShareCreated(msg)
+
+	case UploadProgressMsg:
+		return m.handleUploadProgress(msg)
 	}
 
 	var cmd tea.Cmd
@@ -636,4 +641,54 @@ func (m Model) handleOperationResult(msg OperationMsg) (Model, tea.Cmd) {
 		m.statusBar.SetError(errMsg)
 	}
 	return m, nil
+}
+
+func (m Model) handleUploadProgress(msg UploadProgressMsg) (Model, tea.Cmd) {
+	taskStatus := transfer.TaskStatusRunning
+	switch msg.Status {
+	case uploader.StatusPending:
+		taskStatus = transfer.TaskStatusPending
+	case uploader.StatusHashing:
+		taskStatus = transfer.TaskStatusRunning
+	case uploader.StatusUploading:
+		taskStatus = transfer.TaskStatusRunning
+	case uploader.StatusSuccess:
+		taskStatus = transfer.TaskStatusCompleted
+	case uploader.StatusFailed:
+		taskStatus = transfer.TaskStatusError
+	case uploader.StatusCanceled:
+		taskStatus = transfer.TaskStatusError
+	}
+
+	existingTask := m.findTransferTask(msg.TaskID)
+	if existingTask == nil {
+		m.transferBar.AddTask(transfer.Task{
+			ID:        msg.TaskID,
+			Type:      transfer.TaskUpload,
+			Filename:  msg.FileName,
+			Progress:  msg.Progress,
+			Speed:     msg.Speed,
+			Status:    taskStatus,
+			TotalSize: uint64(msg.Total),
+			BytesDone: uint64(msg.Uploaded),
+		})
+	} else {
+		m.transferBar.UpdateTask(msg.TaskID, msg.Progress, msg.Speed)
+		m.transferBar.SetTaskStatus(msg.TaskID, taskStatus)
+	}
+
+	if msg.Error != nil {
+		m.transferBar.SetTaskError(msg.TaskID, msg.Error.Error())
+	}
+
+	return m, nil
+}
+
+func (m *Model) findTransferTask(id string) *transfer.Task {
+	for _, t := range m.transferBar.Tasks() {
+		if t.ID == id {
+			return &t
+		}
+	}
+	return nil
 }

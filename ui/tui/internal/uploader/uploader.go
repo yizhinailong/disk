@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yizhinailong/disk/ui/tui/internal/api"
@@ -58,21 +60,25 @@ type UploadTask struct {
 
 // ProgressInfo 上传进度信息
 type ProgressInfo struct {
-	TaskID   string     // 任务 ID
-	Phase    string     // 当前阶段（hashing/uploading）
-	Progress float64    // 进度百分比
-	Uploaded int64      // 已上传字节数
-	Total    int64      // 总字节数
-	Speed    string     // 当前速度
-	Status   TaskStatus // 上传状态
-	Error    error      // 错误信息
-	FileName string     // 文件名
+	TaskID      string     // 任务 ID
+	Phase       string     // 当前阶段（hashing/uploading）
+	Progress    float64    // 进度百分比
+	Uploaded    int64      // 已上传字节数
+	Total       int64      // 总字节数
+	Speed       string     // 当前速度
+	Status      TaskStatus // 上传状态
+	Error       error      // 错误信息
+	FileName    string     // 文件名
+	ChunkIndex  int        // 当前分片索引
+	TotalChunks int        // 总分片数
 }
 
 // Uploader 上传器
 type Uploader struct {
-	client    *api.Client // API 客户端
-	chunkSize int         // 分片大小
+	client       *api.Client   // API 客户端
+	chunkSize    int           // 分片大小
+	concurrency  int           // 并发上传数
+	stateManager *StateManager // 状态管理器
 }
 
 // New 创建上传器
@@ -84,9 +90,29 @@ type Uploader struct {
 //   - *Uploader: 上传器实例
 func New(client *api.Client) *Uploader {
 	return &Uploader{
-		client:    client,
-		chunkSize: DefaultChunkSize,
+		client:      client,
+		chunkSize:   DefaultChunkSize,
+		concurrency: 3,
 	}
+}
+
+// SetConcurrency 设置并发上传数
+//
+// 参数:
+//   - n: 并发数（最小为 1）
+func (u *Uploader) SetConcurrency(n int) {
+	if n < 1 {
+		n = 1
+	}
+	u.concurrency = n
+}
+
+// SetStateManager 设置状态管理器
+//
+// 参数:
+//   - mgr: 状态管理器
+func (u *Uploader) SetStateManager(mgr *StateManager) {
+	u.stateManager = mgr
 }
 
 // CreateTask 创建上传任务
@@ -209,18 +235,270 @@ func (u *Uploader) Upload(ctx context.Context, task *UploadTask, progressFunc fu
 		task.Progress = 100
 		if progressFunc != nil {
 			progressFunc(ProgressInfo{
-				TaskID:   task.ID,
-				Phase:    "uploading",
-				Progress: 100,
-				Total:    task.FileSize,
-				Status:   StatusSuccess,
-				FileName: task.FileName,
+				TaskID:      task.ID,
+				Phase:       "uploading",
+				Progress:    100,
+				Total:       task.FileSize,
+				Status:      StatusSuccess,
+				FileName:    task.FileName,
+				TotalChunks: task.Chunks,
 			})
 		}
 		return nil
 	}
 
 	task.uploadID = initResp.UploadID
+	if initResp.ChunkSize > 0 {
+		task.ChunkSize = initResp.ChunkSize
+	}
+
+	uploadedChunksMap := make(map[int]bool)
+	for _, idx := range initResp.UploadedChunks {
+		uploadedChunksMap[idx] = true
+	}
+
+	file, err := os.Open(task.FilePath)
+	if err != nil {
+		task.Status = StatusFailed
+		task.Error = err
+		return err
+	}
+	defer file.Close()
+
+	totalChunks := task.Chunks
+	var uploadedCount int
+	for range uploadedChunksMap {
+		uploadedCount++
+	}
+	task.Uploaded = int64(uploadedCount) * int64(task.ChunkSize)
+	if task.Uploaded > task.FileSize {
+		task.Uploaded = task.FileSize
+	}
+
+	if progressFunc != nil {
+		progress := float64(task.Uploaded) / float64(task.FileSize) * 100
+		progressFunc(ProgressInfo{
+			TaskID:      task.ID,
+			Phase:       "uploading",
+			Progress:    progress,
+			Uploaded:    task.Uploaded,
+			Total:       task.FileSize,
+			Status:      StatusUploading,
+			FileName:    task.FileName,
+			TotalChunks: totalChunks,
+		})
+	}
+
+	var uploadedChunks []int
+	for i := 0; i < totalChunks; i++ {
+		if uploadedChunksMap[i] {
+			uploadedChunks = append(uploadedChunks, i)
+		}
+	}
+
+	uploadChunk := func(idx int) error {
+		offset := int64(idx) * int64(task.ChunkSize)
+		chunkData := make([]byte, task.ChunkSize)
+		n, err := file.ReadAt(chunkData, offset)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		chunkData = chunkData[:n]
+
+		hash := md5.Sum(chunkData)
+		chunkHash := hex.EncodeToString(hash[:])
+
+		if err := u.client.File.UploadChunk(ctx, task.uploadID, idx, chunkHash, chunkData); err != nil {
+			return err
+		}
+
+		uploadedChunks = append(uploadedChunks, idx)
+		uploadedChunksMap[idx] = true
+		task.Uploaded += int64(n)
+		if task.Uploaded > task.FileSize {
+			task.Uploaded = task.FileSize
+		}
+
+		if u.stateManager != nil {
+			state := &UploadState{
+				UploadID:       task.uploadID,
+				FilePath:       task.FilePath,
+				FileName:       task.FileName,
+				FileSize:       task.FileSize,
+				FileHash:       task.FileHash,
+				ParentID:       task.ParentID,
+				TotalChunks:    totalChunks,
+				UploadedChunks: append([]int{}, uploadedChunks...),
+				ChunkSize:      task.ChunkSize,
+				CreatedAt:      time.Now().Unix(),
+				UpdatedAt:      time.Now().Unix(),
+			}
+			u.stateManager.Save(state)
+		}
+
+		if progressFunc != nil {
+			progress := float64(task.Uploaded) / float64(task.FileSize) * 100
+			progressFunc(ProgressInfo{
+				TaskID:      task.ID,
+				Phase:       "uploading",
+				Progress:    progress,
+				Uploaded:    task.Uploaded,
+				Total:       task.FileSize,
+				Status:      StatusUploading,
+				FileName:    task.FileName,
+				ChunkIndex:  idx,
+				TotalChunks: totalChunks,
+			})
+		}
+
+		return nil
+	}
+
+	if u.concurrency <= 1 {
+		for chunkIndex := 0; chunkIndex < totalChunks; chunkIndex++ {
+			if uploadedChunksMap[chunkIndex] {
+				continue
+			}
+			if ctx.Err() != nil {
+				break
+			}
+			if err := uploadChunk(chunkIndex); err != nil {
+				task.Status = StatusFailed
+				task.Error = err
+				return err
+			}
+		}
+	} else {
+		sem := make(chan struct{}, u.concurrency)
+		var wg sync.WaitGroup
+		var uploadErr atomic.Value
+		var mu sync.Mutex
+
+		for chunkIndex := 0; chunkIndex < totalChunks; chunkIndex++ {
+			if uploadedChunksMap[chunkIndex] {
+				continue
+			}
+			if ctx.Err() != nil {
+				break
+			}
+
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+
+				select {
+				case sem <- struct{}{}:
+				case <-ctx.Done():
+					return
+				}
+				defer func() { <-sem }()
+
+				if err := uploadErr.Load(); err != nil {
+					return
+				}
+
+				offset := int64(idx) * int64(task.ChunkSize)
+				chunkData := make([]byte, task.ChunkSize)
+				n, err := file.ReadAt(chunkData, offset)
+				if err != nil && err != io.EOF {
+					uploadErr.Store(err)
+					return
+				}
+				chunkData = chunkData[:n]
+
+				hash := md5.Sum(chunkData)
+				chunkHash := hex.EncodeToString(hash[:])
+
+				if err := u.client.File.UploadChunk(ctx, task.uploadID, idx, chunkHash, chunkData); err != nil {
+					uploadErr.Store(err)
+					return
+				}
+
+				mu.Lock()
+				uploadedChunks = append(uploadedChunks, idx)
+				uploadedChunksMap[idx] = true
+				task.Uploaded += int64(n)
+				if task.Uploaded > task.FileSize {
+					task.Uploaded = task.FileSize
+				}
+
+				if u.stateManager != nil {
+					chunks := make([]int, 0, len(uploadedChunks))
+					for i := 0; i < totalChunks; i++ {
+						if uploadedChunksMap[i] {
+							chunks = append(chunks, i)
+						}
+					}
+					state := &UploadState{
+						UploadID:       task.uploadID,
+						FilePath:       task.FilePath,
+						FileName:       task.FileName,
+						FileSize:       task.FileSize,
+						FileHash:       task.FileHash,
+						ParentID:       task.ParentID,
+						TotalChunks:    totalChunks,
+						UploadedChunks: chunks,
+						ChunkSize:      task.ChunkSize,
+						CreatedAt:      time.Now().Unix(),
+						UpdatedAt:      time.Now().Unix(),
+					}
+					u.stateManager.Save(state)
+				}
+				mu.Unlock()
+
+				if progressFunc != nil {
+					mu.Lock()
+					progress := float64(task.Uploaded) / float64(task.FileSize) * 100
+					info := ProgressInfo{
+						TaskID:      task.ID,
+						Phase:       "uploading",
+						Progress:    progress,
+						Uploaded:    task.Uploaded,
+						Total:       task.FileSize,
+						Status:      StatusUploading,
+						FileName:    task.FileName,
+						ChunkIndex:  idx,
+						TotalChunks: totalChunks,
+					}
+					mu.Unlock()
+					progressFunc(info)
+				}
+			}(chunkIndex)
+		}
+
+		wg.Wait()
+
+		if err := ctx.Err(); err != nil {
+			task.Status = StatusCanceled
+			task.Error = err
+			u.client.File.CancelUpload(context.Background(), task.uploadID)
+			return err
+		}
+
+		if err, ok := uploadErr.Load().(error); ok && err != nil {
+			task.Status = StatusFailed
+			task.Error = err
+			return err
+		}
+	}
+
+	if err := ctx.Err(); err != nil {
+		task.Status = StatusCanceled
+		task.Error = err
+		u.client.File.CancelUpload(context.Background(), task.uploadID)
+		return err
+	}
+
+	_, err = u.client.File.CompleteUpload(ctx, task.uploadID)
+	if err != nil {
+		task.Status = StatusFailed
+		task.Error = err
+		return err
+	}
+
+	if u.stateManager != nil {
+		u.stateManager.Delete(task.uploadID)
+	}
 
 	task.Status = StatusSuccess
 	task.Progress = 100
@@ -228,13 +506,14 @@ func (u *Uploader) Upload(ctx context.Context, task *UploadTask, progressFunc fu
 
 	if progressFunc != nil {
 		progressFunc(ProgressInfo{
-			TaskID:   task.ID,
-			Phase:    "uploading",
-			Progress: 100,
-			Uploaded: task.FileSize,
-			Total:    task.FileSize,
-			Status:   StatusSuccess,
-			FileName: task.FileName,
+			TaskID:      task.ID,
+			Phase:       "uploading",
+			Progress:    100,
+			Uploaded:    task.FileSize,
+			Total:       task.FileSize,
+			Status:      StatusSuccess,
+			FileName:    task.FileName,
+			TotalChunks: totalChunks,
 		})
 	}
 

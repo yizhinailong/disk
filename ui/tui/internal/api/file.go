@@ -184,3 +184,88 @@ func (f *FileAPI) InitUpload(ctx context.Context, req *models.FileUploadInit) (*
 func (f *FileAPI) DownloadURL(fileID uint64) string {
 	return f.client.config.Server.URL + "/api/file/download/" + strconv.FormatUint(fileID, 10)
 }
+
+// Get 获取文件信息
+//
+// 参数:
+//   - ctx: 上下文
+//   - fileID: 文件 ID
+//
+// 返回:
+//   - *models.File: 文件信息
+//   - error: 错误信息
+func (f *FileAPI) Get(ctx context.Context, fileID uint64) (*models.File, error) {
+	path := "/api/file/" + strconv.FormatUint(fileID, 10)
+	var resp models.File
+	if err := f.client.doRequest(ctx, "GET", path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// UploadChunk 上传文件分片
+//
+// 参数:
+//   - ctx: 上下文
+//   - uploadID: 上传任务 ID
+//   - chunkIndex: 分片索引（从 0 开始）
+//   - chunkHash: 分片哈希（SHA256）
+//   - chunkData: 分片数据
+//
+// 返回:
+//   - error: 错误信息
+func (f *FileAPI) UploadChunk(ctx context.Context, uploadID string, chunkIndex int, chunkHash string, chunkData []byte) error {
+	fields := map[string]string{
+		"upload_id":   uploadID,
+		"chunk_index": strconv.Itoa(chunkIndex),
+		"chunk_hash":  chunkHash,
+	}
+
+	files := map[string]struct {
+		Filename string
+		Data     []byte
+	}{
+		"chunk": {
+			Filename: "chunk",
+			Data:     chunkData,
+		},
+	}
+
+	return f.client.doMultipartRequest(ctx, "POST", "/api/file/upload/chunk", fields, files, nil)
+}
+
+// CompleteUpload 完成文件上传
+//
+// 参数:
+//   - ctx: 上下文
+//   - uploadID: 上传任务 ID
+//
+// 返回:
+//   - *models.File: 完成的文件信息
+//   - error: 错误信息
+func (f *FileAPI) CompleteUpload(ctx context.Context, uploadID string) (*models.File, error) {
+	req := &models.CompleteUploadRequest{
+		UploadID: uploadID,
+	}
+
+	var resp models.File
+	if err := f.client.doRequest(ctx, "POST", "/api/file/upload/complete", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// CancelUpload 取消文件上传
+//
+// 参数:
+//   - ctx: 上下文
+//   - uploadID: 上传任务 ID
+//
+// 返回:
+//   - error: 错误信息
+func (f *FileAPI) CancelUpload(ctx context.Context, uploadID string) error {
+	req := &models.CancelUploadRequest{
+		UploadID: uploadID,
+	}
+	return f.client.doRequest(ctx, "POST", "/api/file/upload/cancel", req, nil)
+}

@@ -81,3 +81,13 @@ type FileDownloadInfo struct {
 	FileSize uint64 `json:"file_size"` // 文件大小（字节）
 	FileHash string `json:"file_hash"` // 文件 SHA256 哈希
 }
+
+// CompleteUploadRequest 完成上传请求
+type CompleteUploadRequest struct {
+	UploadID string `json:"upload_id"` // 上传任务 ID
+}
+
+// CancelUploadRequest 取消上传请求
+type CancelUploadRequest struct {
+	UploadID string `json:"upload_id"` // 上传任务 ID
+}
