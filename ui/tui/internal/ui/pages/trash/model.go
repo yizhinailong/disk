@@ -18,6 +18,7 @@ import (
 	"github.com/yizhinailong/disk/ui/tui/internal/api"
 	"github.com/yizhinailong/disk/ui/tui/internal/models"
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/statusbar"
+	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/topbar"
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/trashlist"
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/styles"
 )
@@ -63,6 +64,7 @@ type Model struct {
 	client    *api.Client     // API 客户端
 	trashList trashlist.Model // 回收站列表组件
 	statusBar statusbar.Model // 状态栏组件
+	topBar    topbar.Model    // 顶部状态栏组件
 
 	page     int // 当前页码
 	pageSize int // 每页数量
@@ -97,6 +99,7 @@ func New(client *api.Client) Model {
 		pageSize:  100,
 		statusBar: statusbar.New(),
 		trashList: trashlist.New(0, 0),
+		topBar:    topbar.New(),
 	}
 }
 
@@ -177,15 +180,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 func (m Model) View() string {
 	var sections []string
 
-	// 标题栏
-	titleStyle := lipgloss.NewStyle().
-		Background(styles.ColorPrimary).
-		Foreground(styles.ColorTextSelected).
-		Bold(true).
-		Padding(0, 1)
-
-	title := titleStyle.Width(m.width).Render(" 垃圾桶")
-	sections = append(sections, title)
+	// 顶部状态栏
+	sections = append(sections, m.topBar.View())
 
 	// 内容区域
 	if m.loading {
@@ -527,16 +523,17 @@ func (m *Model) setSize(width, height int) {
 	m.width = width
 	m.height = height
 
+	topBarHeight := 1
 	statusBarHeight := 1
-	titleBarHeight := 1
 
-	listHeight := height - statusBarHeight - titleBarHeight
+	listHeight := height - topBarHeight - statusBarHeight
 	if listHeight < 5 {
 		listHeight = 5
 	}
 
 	m.trashList.SetSize(width, listHeight)
 	m.statusBar.SetWidth(width)
+	m.topBar.SetWidth(width)
 }
 
 // updateStatusBar 更新状态栏

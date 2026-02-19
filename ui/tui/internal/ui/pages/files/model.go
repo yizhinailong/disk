@@ -20,6 +20,7 @@ import (
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/breadcrumb"
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/filelist"
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/statusbar"
+	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/topbar"
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/components/transfer"
 	"github.com/yizhinailong/disk/ui/tui/internal/ui/styles"
 	"github.com/yizhinailong/disk/ui/tui/internal/uploader"
@@ -57,11 +58,15 @@ type Model struct {
 	client        *api.Client // API 客户端
 	currentFolder uint64      // 当前文件夹 ID
 	parentID      uint64      // 父文件夹 ID
+	username      string      // 当前用户名
+	usedSpace     uint64      // 已用空间
+	totalSpace    uint64      // 总空间
 
 	fileList    filelist.Model   // 文件列表组件
 	breadcrumb  breadcrumb.Model // 面包屑组件
 	statusBar   statusbar.Model  // 状态栏组件
 	transferBar transfer.Model   // 传输进度组件
+	topBar      topbar.Model     // 顶部状态栏组件
 
 	page     int // 当前页码
 	pageSize int // 每页数量
@@ -95,6 +100,7 @@ func New(client *api.Client) Model {
 		breadcrumb:    breadcrumb.New(),
 		statusBar:     statusbar.New(),
 		transferBar:   transfer.New(),
+		topBar:        topbar.New(),
 	}
 }
 
@@ -177,6 +183,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 // View 渲染页面
 func (m Model) View() string {
 	var sections []string
+
+	// 顶部状态栏
+	sections = append(sections, m.topBar.View())
 
 	sections = append(sections, m.breadcrumb.View())
 
@@ -409,6 +418,7 @@ func (m *Model) setSize(width, height int) {
 	m.width = width
 	m.height = height
 
+	topBarHeight := 1
 	statusBarHeight := 1
 	breadcrumbHeight := 1
 	transferHeight := 0
@@ -416,7 +426,7 @@ func (m *Model) setSize(width, height int) {
 		transferHeight = 2
 	}
 
-	fileListHeight := height - statusBarHeight - breadcrumbHeight - transferHeight
+	fileListHeight := height - topBarHeight - statusBarHeight - breadcrumbHeight - transferHeight
 	if fileListHeight < 5 {
 		fileListHeight = 5
 	}
@@ -425,6 +435,7 @@ func (m *Model) setSize(width, height int) {
 	m.breadcrumb.SetWidth(width)
 	m.statusBar.SetWidth(width)
 	m.transferBar.SetWidth(width)
+	m.topBar.SetWidth(width)
 }
 
 func (m *Model) updateStatusBar() {

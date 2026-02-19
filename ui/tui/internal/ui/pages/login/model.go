@@ -63,7 +63,10 @@ type Model struct {
 	// 输入框
 	usernameInput textinput.Model // 用户名输入框
 	passwordInput textinput.Model // 密码输入框
-	focusIndex    int             // 焦点索引（0: 用户名, 1: 密码, 2: 登录按钮）
+	focusIndex    int             // 焦点索引（0: 用户名, 1: 密码, 2: 记住我, 3: 登录按钮）
+
+	// 记住我
+	rememberMe bool
 
 	// 状态
 	state    loginState // 当前状态
@@ -92,6 +95,7 @@ func New(cfg *config.Config, client *api.Client) Model {
 		config:        cfg,
 		usernameInput: ui,
 		passwordInput: pi,
+		rememberMe:    true,
 		state:         stateInput,
 	}
 }
@@ -111,21 +115,27 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case tea.KeyTab, tea.KeyShiftTab:
 			// 切换焦点
 			if msg.Type == tea.KeyTab {
-				m.focusIndex = (m.focusIndex + 1) % 3
+				m.focusIndex = (m.focusIndex + 1) % 4
 			} else {
-				m.focusIndex = (m.focusIndex - 1 + 3) % 3
+				m.focusIndex = (m.focusIndex - 1 + 4) % 4
 			}
 			m.updateFocus()
 			return m, nil
 
+		case tea.KeySpace:
+			if m.focusIndex == 2 {
+				m.rememberMe = !m.rememberMe
+			}
+			return m, nil
+
 		case tea.KeyEnter:
 			if m.state == stateInput {
-				if m.focusIndex == 2 {
+				if m.focusIndex == 3 {
 					// 点击登录按钮
 					return m, m.doLogin()
 				}
 				// 切换到下一个输入框
-				m.focusIndex = (m.focusIndex + 1) % 3
+				m.focusIndex = (m.focusIndex + 1) % 4
 				m.updateFocus()
 			}
 			return m, nil
@@ -168,6 +178,23 @@ func (m *Model) updateFocus() {
 	}
 }
 
+// renderCheckbox 渲染复选框
+func (m Model) renderCheckbox(label string, checked bool, focused bool) string {
+	var checkbox string
+	if checked {
+		checkbox = "[x]"
+	} else {
+		checkbox = "[ ]"
+	}
+
+	style := styles.TextStyle
+	if focused {
+		style = styles.TitleStyle
+	}
+
+	return style.Render(fmt.Sprintf("%s %s", checkbox, label))
+}
+
 // doLogin 执行登录
 func (m Model) doLogin() tea.Cmd {
 	return func() tea.Msg {
@@ -187,25 +214,28 @@ func (m Model) View() string {
 	var b strings.Builder
 
 	// 标题
-	title := styles.TitleStyle.Render("Disk TUI 客户端")
+	title := styles.TitleStyle.Render("Disk TUI Client")
 	b.WriteString(lipgloss.NewStyle().Margin(2, 0, 1, 0).Render(title))
 	b.WriteString("\n")
 
-	// 服务器地址
-	server := styles.MutedStyle.Render(fmt.Sprintf("服务器: %s", m.config.Server.URL))
-	b.WriteString(server)
-	b.WriteString("\n\n")
-
 	// 用户名输入框
-	b.WriteString(m.renderInput("用户名", &m.usernameInput, m.focusIndex == 0))
+	b.WriteString(m.renderInput("账号", &m.usernameInput, m.focusIndex == 0))
 	b.WriteString("\n")
 
 	// 密码输入框
 	b.WriteString(m.renderInput("密码", &m.passwordInput, m.focusIndex == 1))
+	b.WriteString("\n")
+
+	// 记住我复选框
+	b.WriteString(m.renderCheckbox("记住我", m.rememberMe, m.focusIndex == 2))
 	b.WriteString("\n\n")
 
 	// 登录按钮
-	b.WriteString(m.renderButton("登录", m.focusIndex == 2))
+	buttonText := "登录"
+	if m.state == stateLogging {
+		buttonText = "登录中..."
+	}
+	b.WriteString(m.renderButton(buttonText, m.focusIndex == 3))
 	b.WriteString("\n\n")
 
 	// 状态信息
@@ -216,10 +246,15 @@ func (m Model) View() string {
 		b.WriteString(styles.ErrorStyle.Render("✗ " + m.errorMsg))
 	}
 
+	b.WriteString("\n")
+
+	// 提示信息
+	hint := styles.MutedStyle.Render("提示: 新用户请在 Web 端注册")
+	b.WriteString(hint)
 	b.WriteString("\n\n")
 
 	// 帮助提示
-	help := styles.MutedStyle.Render("[Tab] 切换  [Enter] 确认  [Esc] 退出")
+	help := styles.MutedStyle.Render("[Tab] 切换  [Enter] 确认  [Space] 勾选  [Esc] 退出")
 	b.WriteString(help)
 
 	// 居中渲染

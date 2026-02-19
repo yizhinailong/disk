@@ -3,6 +3,9 @@
 // 提供颜色方案、组件样式和工具函数，
 // 确保终端界面视觉呈现的一致性。
 //
+// 基于设计规范: docs/ui/design/*.md
+// 颜色方案: Solarized Dark 适配
+//
 // 作者: LiuFeng (liufeng.code@outlook.com)
 // 日期: 2026-02-18
 // 版权: Copyright (c) 2026
@@ -16,17 +19,54 @@ import (
 
 // =============================================================================
 // 颜色定义 (Color Definitions)
-// Based on docs/ui/tui/02-界面设计规范.md Section 5
+// Based on docs/ui/design/main-window.md Section "颜色方案"
 // =============================================================================
 
-// 主色调 (Primary Colors)
+// 16色方案 (16-color scheme)
+const (
+	// 16ColorPrimary - 主色 (Blue)
+	_16ColorPrimary = lipgloss.Color("4")
+	// 16ColorBackground - 背景色 (Black)
+	_16ColorBackground = lipgloss.Color("0")
+	// 16ColorForeground - 前景色 (White)
+	_16ColorForeground = lipgloss.Color("7")
+	// 16ColorSelectedBg - 选中背景 (Blue)
+	_16ColorSelectedBg = lipgloss.Color("4")
+	// 16ColorSelectedFg - 选中文字 (White)
+	_16ColorSelectedFg = lipgloss.Color("7")
+)
+
+// 256色方案 (256-color scheme)
+const (
+	// Color256Primary - 主色
+	Color256Primary = lipgloss.Color("33")
+	// Color256Background - 背景色
+	Color256Background = lipgloss.Color("235")
+	// Color256Foreground - 前景色
+	Color256Foreground = lipgloss.Color("252")
+	// Color256SelectedBg - 选中背景
+	Color256SelectedBg = lipgloss.Color("24")
+	// Color256SelectedFg - 选中文字
+	Color256SelectedFg = lipgloss.Color("231")
+)
+
+// 24位色方案 (True Color / 24-bit)
 var (
-	// ColorPrimary - 主色，用于标题、选中项背景
+	// ColorPrimary - 主色 #268bd2，用于标题、选中项背景
 	ColorPrimary = lipgloss.Color("#268bd2")
-	// ColorSecondary - 辅助色，用于链接、次要信息
+	// ColorSecondary - 辅助色 #2aa198，用于链接、次要信息
 	ColorSecondary = lipgloss.Color("#2aa198")
 	// ColorAccent - 强调色
 	ColorAccent = lipgloss.Color("#2aa198")
+
+	// ColorBackground - 背景色 #1e1e1e
+	ColorBackground = lipgloss.Color("#1e1e1e")
+	// ColorForeground - 前景色 #d4d4d4
+	ColorForeground = lipgloss.Color("#d4d4d4")
+	// ColorSelectedBg - 选中背景 #005f87
+	ColorSelectedBg = lipgloss.Color("#005f87")
+	// ColorSelectedFg - 选中文字 #ffffff
+	ColorSelectedFg = lipgloss.Color("#ffffff")
 )
 
 // 状态颜色 (Status Colors)
