@@ -6,7 +6,9 @@ set(Controllers_HEADERS
     controllers/FileController.hpp
     controllers/FolderController.hpp
     controllers/HealthController.hpp
+    controllers/OperationLogController.hpp
     controllers/ShareController.hpp
+    controllers/SystemController.hpp
     controllers/TrashController.hpp
     controllers/UserController.hpp
 )
@@ -15,7 +17,9 @@ set(Controllers_SOURCES
     controllers/FileController.cpp
     controllers/FolderController.cpp
     controllers/HealthController.cpp
+    controllers/OperationLogController.cpp
     controllers/ShareController.cpp
+    controllers/SystemController.cpp
     controllers/TrashController.cpp
     controllers/UserController.cpp
 )
@@ -75,8 +79,10 @@ set(Services_HEADERS
     services/FileService.hpp
     services/FolderService.hpp
     services/HealthService.hpp
+    services/OperationLogService.hpp
     services/RedisService.hpp
     services/ShareService.hpp
+    services/SystemService.hpp
     services/TokenService.hpp
     services/TrashService.hpp
     services/UserService.hpp
@@ -87,8 +93,10 @@ set(Services_SOURCES
     services/FileService.cpp
     services/FolderService.cpp
     services/HealthService.cpp
+    services/OperationLogService.cpp
     services/RedisService.cpp
     services/ShareService.cpp
+    services/SystemService.cpp
     services/TokenService.cpp
     services/TrashService.cpp
     services/UserService.cpp

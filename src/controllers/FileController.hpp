@@ -59,6 +59,13 @@ namespace disk::file {
             "RateLimitFilter"
         );
         ADD_METHOD_TO(
+            FileController::GetDetail,
+            "/api/file/{file_id}",
+            drogon::Get,
+            "JwtAuthFilter",
+            "RateLimitFilter"
+        );
+        ADD_METHOD_TO(
             FileController::DownloadInfo,
             "/api/file/download/{file_id}/info",
             drogon::Get,
@@ -150,6 +157,16 @@ namespace disk::file {
          */
         [[nodiscard]]
         auto List(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+
+        /**
+         * @brief 获取文件详情
+         * @param request HTTP请求对象
+         * @param file_id 文件ID（路径参数）
+         * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
+         */
+        [[nodiscard]]
+        auto GetDetail(drogon::HttpRequestPtr request, std::string file_id)
+            -> drogon::Task<drogon::HttpResponsePtr>;
 
         /**
          * @brief 获取下载信息

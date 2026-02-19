@@ -397,6 +397,9 @@ clang-format -i src/controllers/AuthController.cpp
  - [x] 单元测试框架
  - [x] 完整的项目文档
 - [x] 健康检查 API (`GET /api/health`)
+- [x] 系统信息 API (`GET /api/system/info`)
+- [x] 文件详情 API (`GET /api/file/{file_id}`)
+- [x] 操作日志 API (`GET /api/logs`)
 
 **TUI 客户端 (Go/Bubble Tea)**
 - [x] 项目骨架和配置管理
@@ -410,12 +413,11 @@ clang-format -i src/controllers/AuthController.cpp
 
 ### ⏳ 进行中
 
-- [ ] TUI 上传下载功能完善（进度显示、多任务）
+- [ ] TUI 上传下载功能完善（分片上传、断点续传）
 - [ ] TUI 设置界面
 
 ### 📝 计划中
 
-- [ ] 系统信息 API (`GET /api/system/info`)
 - [ ] 操作日志
 - [ ] 桌面客户端 (QT/QML)
 - [ ] 性能优化

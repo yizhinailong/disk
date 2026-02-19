@@ -1,0 +1,95 @@
+/**
+ * @file OperationLogController.cpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 操作日志控制器
+ * @version 0.1
+ * @date 2026-02-18
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
+#include "OperationLogController.hpp"
+
+#include "utils/Response.hpp"
+
+namespace disk::log {
+
+    OperationLogController::OperationLogController()
+        : m_log_service(std::make_unique<OperationLogService>(drogon::app().getDbClient())) {
+        LOG_DEBUG << "OperationLogController 初始化完成";
+    }
+
+    auto OperationLogController::GetList(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到获取操作日志请求: " << request->getPeerAddr().toIpPort();
+
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+
+        int page = 1;
+        int page_size = 20;
+
+        auto page_str = request->getParameter("page");
+        if (!page_str.empty()) {
+            try {
+                page = std::stoi(page_str);
+                if (page < 1) {
+                    page = 1;
+                }
+            } catch (...) {
+                page = 1;
+            }
+        }
+
+        auto page_size_str = request->getParameter("page_size");
+        if (!page_size_str.empty()) {
+            try {
+                page_size = std::stoi(page_size_str);
+                if (page_size < 1) {
+                    page_size = 20;
+                }
+                if (page_size > 100) {
+                    page_size = 100;
+                }
+            } catch (...) {
+                page_size = 20;
+            }
+        }
+
+        auto result = co_await m_log_service->GetList(user_id, page, page_size);
+        if (!result) {
+            LOG_ERROR << "获取操作日志失败: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        Json::Value items(Json::arrayValue);
+        for (const auto& item : result->items) {
+            Json::Value json;
+            json["id"] = static_cast<Json::UInt64>(item.id);
+            json["action"] = item.action;
+            json["target_type"] = item.target_type;
+            if (item.target_id > 0) {
+                json["target_id"] = static_cast<Json::UInt64>(item.target_id);
+            }
+            if (!item.target_name.empty()) {
+                json["target_name"] = item.target_name;
+            }
+            if (!item.details.empty()) {
+                json["details"] = item.details;
+            }
+            json["ip_address"] = item.ip_address;
+            json["created_at"] = item.created_at;
+            items.append(json);
+        }
+
+        Json::Value data;
+        data["items"] = items;
+        data["total"] = result->total;
+        data["page"] = page;
+        data["page_size"] = page_size;
+
+        co_return Response::Success(data);
+    }
+
+} // namespace disk::log

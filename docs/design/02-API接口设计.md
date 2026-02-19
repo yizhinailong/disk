@@ -1084,9 +1084,7 @@ Authorization: Bearer <access_token>
 **GET** `/api/file/{file_id}`
 
 #### 实现状态
-**未实现**
-
-> **⚠️ 实现范围说明**：本接口不在当前 file-read-loop 优先级范围内，暂不实现。客户端可通过 `GET /api/file/list` 获取文件元信息。
+**✅ 已实现**
 
 获取单个文件的详细信息。
 
@@ -1106,24 +1104,43 @@ Authorization: Bearer <access_token>
 |------|------|------|
 | file_id | integer | 文件 ID |
 
+#### 响应字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| file | object | 文件信息 |
+| file.file_id | integer | 文件 ID |
+| file.filename | string | 文件名 |
+| file.file_size | integer | 文件大小（字节） |
+| file.file_hash | string | 文件 MD5 哈希 |
+| file.mime_type | string | MIME 类型 |
+| file.supports_range | boolean | 是否支持断点续传 |
+
 #### 错误响应矩阵
 
 | HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
 |------------|--------|----------|----------|----------|
 | 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
-| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
 | 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
-| 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
 | 404 | 50005 | `FileNotFound` | 文件不存在 | 指定的 file_id 不存在或不属于当前用户 |
 
-**40106 TokenMissing 响应示例**：
+#### 成功响应示例
 
 ```json
 {
-  "code": 40106,
-  "message": "未提供令牌",
-  "data": null
+  "code": 0,
+  "message": "success",
+  "data": {
+    "file": {
+      "file_id": 123,
+      "filename": "document.pdf",
+      "file_size": 1048576,
+      "file_hash": "abc123def456789...",
+      "mime_type": "application/pdf",
+      "supports_range": true
+    }
+  }
 }
 ```
 
@@ -3302,9 +3319,9 @@ If-Range: "d41d8cd98f00b204e9800998ecf8427e"
 **GET** `/api/system/info`
 
 #### 实现状态
-**未实现**
+**✅ 已实现**
 
-获取系统信息（需要管理员权限）。
+获取系统信息（需要认证）。
 
 #### 请求头
 
@@ -3314,7 +3331,24 @@ Authorization: Bearer <access_token>
 
 | Header | 必填 | 说明 |
 |--------|------|------|
-| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+| Authorization | 是 | Bearer 访问令牌 |
+
+#### 响应字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| version | string | 系统版本 |
+| drogon_version | string | Drogon 框架版本 |
+| build_time | string | 构建时间 |
+| uptime | integer | 运行时间（秒） |
+| connections | object | 连接信息 |
+| connections.current | integer | 当前连接数 |
+| connections.peak | integer | 峰值连接数 |
+| storage | object | 存储统计 |
+| storage.total_users | integer | 用户总数 |
+| storage.total_files | integer | 文件总数 |
+| storage.total_folders | integer | 文件夹总数 |
+| storage.total_size | integer | 文件总大小（字节） |
 
 #### 错误响应矩阵
 
@@ -3322,21 +3356,8 @@ Authorization: Bearer <access_token>
 |------------|--------|----------|----------|----------|
 | 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Token 已超过有效期 |
-| 403 | 10005 | `PermissionDenied` | 权限不足 | 非管理员用户访问 |
 
-**403 PermissionDenied 响应示例**：
-
-```json
-{
-  "code": 10005,
-  "message": "权限不足",
-  "data": {
-    "required_role": "admin"
-  }
-}
-```
-
-#### 响应示例
+#### 成功响应示例
 
 ```json
 {
@@ -3345,17 +3366,17 @@ Authorization: Bearer <access_token>
   "data": {
     "version": "1.0.0",
     "drogon_version": "1.9.11",
-    "build_time": "2026-01-01T00:00:00Z",
+    "build_time": "Feb 18 2026 20:30:00",
     "uptime": 86400,
     "connections": {
-      "current": 150,
-      "peak": 500,
-      "total": 10000
+      "current": 1,
+      "peak": 10
     },
     "storage": {
-      "total": 1099511627776,
-      "used": 549755813888,
-      "available": 549755813888
+      "total_users": 100,
+      "total_files": 5000,
+      "total_folders": 200,
+      "total_size": 549755813888
     }
   }
 }

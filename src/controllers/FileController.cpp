@@ -235,6 +235,40 @@ namespace disk::file {
         co_return Response::Success(result->ToJson());
     }
 
+    auto FileController::GetDetail(drogon::HttpRequestPtr request, std::string file_id)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "收到获取文件详情请求: " << request->getPeerAddr().toIpPort()
+                 << ", file_id=" << file_id;
+
+        // 1. 解析并验证路径参数
+        auto parse_result = DownloadInfoRequest::FromPath(file_id);
+        if (!parse_result) {
+            LOG_WARN << "获取文件详情请求参数验证失败: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+        LOG_DEBUG << "获取文件详情参数验证通过: file_id=" << parse_result->file_id;
+
+        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+
+        // 3. 调用 Service 层获取文件详情（复用 GetDownloadInfo）
+        auto result = co_await m_file_service->GetDownloadInfo(parse_result->file_id, user_id);
+        if (!result) {
+            LOG_ERROR << "获取文件详情失败: " << result.error().message << " (user_id=" << user_id
+                      << ", file_id=" << file_id << ")";
+            co_return Response::Error(result.error());
+        }
+
+        // 4. 构造响应
+        Json::Value data;
+        data["file"] = result->ToJson();
+
+        LOG_INFO << "获取文件详情成功: filename=" << result->filename << " (user_id=" << user_id
+                 << ", file_id=" << file_id << ")";
+        co_return Response::Success(data);
+    }
+
     auto FileController::DownloadInfo(drogon::HttpRequestPtr request, std::string file_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
