@@ -108,7 +108,7 @@ func findUploadedFile(t *testing.T, client *api.Client, fileName string, parentI
 		t.Fatalf("获取文件列表失败: %v", err)
 	}
 
-	for _, f := range list.Files {
+	for _, f := range list.Items {
 		if f.Name == fileName {
 			return f.ID
 		}
