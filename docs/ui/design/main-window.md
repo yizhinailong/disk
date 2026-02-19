@@ -1,0 +1,483 @@
+# 主窗口设计
+
+## 概述
+
+主窗口是 Disk 桌面客户端的核心界面，包含标题栏、侧边栏、工具栏、主内容区和状态栏。
+
+---
+
+## Qt/QML 设计
+
+### 窗口布局
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          标题栏 (40px)                               │
+├────────────┬────────────────────────────────────────────────────────┤
+│            │                    工具栏 (48px)                        │
+│            ├────────────────────────────────────────────────────────┤
+│   侧边栏    │                                                        │
+│  (200px)   │                                                        │
+│            │                     主内容区                             │
+│            │                    (自适应)                              │
+│            │                                                        │
+│            │                                                        │
+│            ├────────────────────────────────────────────────────────┤
+│            │                   传输面板 (0-200px)                    │
+├────────────┴────────────────────────────────────────────────────────┤
+│                         状态栏 (32px)                                 │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 标题栏设计
+
+**高度**: 40px
+
+**内容结构**:
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ [Logo] Disk                      [最小化] [最大化] [关闭]           │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**设计要点**:
+- 无边框窗口，自定义标题栏
+- 拖拽区域为整个标题栏
+- Windows 风格：按钮在右侧
+- macOS 风格：按钮在左侧（红黄绿）
+
+### 侧边栏设计
+
+**宽度**: 200px（可调整）
+
+**内容结构**:
+```
+┌──────────────────┐
+│                  │
+│  🏠 全部文件      │  <- 导航项
+│  ⭐ 收藏夹       │
+│  📤 传输列表      │
+│  🗑️ 回收站       │
+│  🔗 我的分享      │
+│                  │
+│  ──────────────  │  <- 分隔线
+│                  │
+│  📁 文档         │  <- 快速访问
+│  📁 图片         │
+│  📁 视频         │
+│                  │
+└──────────────────┘
+```
+
+**设计要点**:
+- 导航项使用图标+文字
+- 选中项高亮背景
+- 悬停显示背景色
+- 快速访问区域可折叠
+
+### 工具栏设计
+
+**高度**: 48px
+
+**内容结构**:
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ [⬆ 上传] [📁 新建] │ [◀] [▶] [🔄] │ [🔍 搜索框] │ [⋮ 更多] [⚙] │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**功能分区**:
+
+| 区域 | 功能 |
+|------|------|
+| 左侧 | 主要操作（上传、新建） |
+| 中左 | 导航控制（返回、前进、刷新） |
+| 中右 | 搜索框 |
+| 右侧 | 更多操作、设置 |
+
+### 状态栏设计
+
+**高度**: 32px
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  15 个项目                                   已用 2.5 GB / 10 GB     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Qt Widget 设计
+
+### QMainWindow 布局
+
+```
+QMainWindow
+├── QWidget (自定义标题栏 m_titleBar)
+├── QToolBar (工具栏)
+├── QWidget (中央区域)
+│   └── QHBoxLayout
+│       ├── QWidget (侧边栏 m_sideBar)
+│       └── QStackedWidget (主内容区 m_contentStack)
+│           ├── QWidget (网格视图页)
+│           ├── QWidget (列表视图页)
+│           └── QWidget (详情视图页)
+├── QWidget (传输面板 m_transferPanel)
+└── QStatusBar (状态栏)
+```
+
+### 组件实现
+
+```cpp
+class MainWindow : public QMainWindow {
+    Q_OBJECT
+    
+public:
+    explicit MainWindow(QWidget* parent = nullptr);
+    
+private:
+    void setupUi();
+    void setupMenuBar();      // QMenuBar
+    void setupToolBar();      // QToolBar
+    void setupSideBar();      // QWidget 或 QDockWidget
+    void setupCentralWidget(); // QStackedWidget
+    void setupStatusBar();    // QStatusBar
+    
+private:
+    QWidget* m_titleBar;        // 自定义标题栏
+    QWidget* m_sideBar;         // 侧边栏
+    QStackedWidget* m_contentStack;  // 主内容区堆叠布局
+    QWidget* m_transferPanel;   // 传输面板
+    QStatusBar* m_statusBar;    // 状态栏
+};
+```
+
+### 标题栏 QWidget 实现
+
+```cpp
+class TitleBar : public QWidget {
+    Q_OBJECT
+    
+public:
+    explicit TitleBar(QWidget* parent = nullptr);
+    
+protected:
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    
+private:
+    QLabel* m_logoLabel;
+    QLabel* m_titleLabel;
+    QPushButton* m_minBtn;
+    QPushButton* m_maxBtn;
+    QPushButton* m_closeBtn;
+};
+```
+
+**QStyleSheet 样式**:
+
+```css
+TitleBar {
+    background-color: #FFFFFF;
+    border-bottom: 1px solid #E0E0E0;
+}
+
+TitleBar QPushButton {
+    background-color: transparent;
+    border: none;
+    width: 40px;
+    height: 32px;
+    border-radius: 4px;
+}
+
+TitleBar QPushButton:hover {
+    background-color: #E0E0E0;
+}
+
+TitleBar QPushButton#closeBtn:hover {
+    background-color: #F44336;
+}
+```
+
+### 侧边栏 QWidget 实现
+
+```cpp
+class SideBar : public QWidget {
+    Q_OBJECT
+    
+public:
+    explicit SideBar(QWidget* parent = nullptr);
+    
+private:
+    void setupNavigationItems();
+    void setupQuickAccess();
+    
+private:
+    QVBoxLayout* m_mainLayout;
+    QButtonGroup* m_navButtonGroup;  // 导航按钮组
+    QFrame* m_separator;              // 分隔线
+    QWidget* m_quickAccessWidget;     // 快速访问区域
+};
+```
+
+**QStyleSheet 样式**:
+
+```css
+SideBar {
+    background-color: #FAFAFA;
+    border-right: 1px solid #E0E0E0;
+    min-width: 200px;
+    max-width: 300px;
+}
+
+SideBar QToolButton {
+    background-color: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    text-align: left;
+    font-size: 14px;
+}
+
+SideBar QToolButton:hover {
+    background-color: #E0E0E0;
+}
+
+SideBar QToolButton:checked {
+    background-color: #BBDEFB;
+    color: #1976D2;
+}
+```
+
+### 工具栏 QToolBar 实现
+
+```cpp
+void MainWindow::setupToolBar() {
+    QToolBar* toolbar = addToolBar("MainToolBar");
+    toolbar->setMovable(false);
+    toolbar->setIconSize(QSize(24, 24));
+    toolbar->setFixedHeight(48);
+    
+    // 主要操作
+    QAction* uploadAction = toolbar->addAction(QIcon(":/icons/upload.svg"), tr("上传"));
+    QAction* newFolderAction = toolbar->addAction(QIcon(":/icons/folder-new.svg"), tr("新建"));
+    
+    toolbar->addSeparator();
+    
+    // 导航控制
+    QAction* backAction = toolbar->addAction(QIcon(":/icons/back.svg"), tr("返回"));
+    QAction* forwardAction = toolbar->addAction(QIcon(":/icons/forward.svg"), tr("前进"));
+    QAction* refreshAction = toolbar->addAction(QIcon(":/icons/refresh.svg"), tr("刷新"));
+}
+```
+
+**QStyleSheet 样式**:
+
+```css
+QToolBar {
+    background-color: #FFFFFF;
+    border-bottom: 1px solid #E0E0E0;
+    spacing: 8px;
+    padding: 4px 8px;
+}
+
+QToolBar QToolButton {
+    background-color: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 8px;
+}
+
+QToolBar QToolButton:hover {
+    background-color: #E0E0E0;
+}
+```
+
+### 状态栏 QStatusBar 实现
+
+```cpp
+void MainWindow::setupStatusBar() {
+    QStatusBar* statusBar = this->statusBar();
+    statusBar->setFixedHeight(32);
+    
+    // 左侧：项目数量
+    QLabel* itemCountLabel = new QLabel(tr("15 个项目"));
+    statusBar->addWidget(itemCountLabel);
+    
+    // 右侧：存储空间
+    QLabel* storageLabel = new QLabel(tr("已用 2.5 GB / 10 GB"));
+    statusBar->addPermanentWidget(storageLabel);
+}
+```
+
+**QStyleSheet 样式**:
+
+```css
+QStatusBar {
+    background-color: #FAFAFA;
+    border-top: 1px solid #E0E0E0;
+    font-size: 12px;
+    color: #757575;
+}
+
+QStatusBar QLabel {
+    color: #757575;
+    padding: 0 8px;
+}
+```
+
+---
+
+## TUI 设计
+
+### 分区布局
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           1. 顶部状态栏 (1行)                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                          2. 面包屑导航区 (1行)                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│                                                                         │
+│                         3. 主内容区 (自适应)                             │
+│                         文件/文件夹列表                                   │
+│                                                                         │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                         4. 传输状态栏 (0-N行)                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                          5. 底部操作栏 (1行)                             │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 完整界面示例
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Disk TUI v1.0 │ 用户: john_doe │ 已用: 2.5GB/10GB (25%) │ 2026-02-16  │
+├─────────────────────────────────────────────────────────────────────────┤
+│  路径: 根目录 > 文档 > 工作                                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ 📁 2024项目                                                      │   │
+│  │ 📁 会议记录                                                      │   │
+│  │ 📄 年度报告.docx ..................................... 1.2 MB   │   │
+│  │ 📄 项目计划.xlsx ..................................... 856 KB   │   │
+│  │ 📷 团队合影.jpg ..................................... 2.3 MB   │   │
+│  │ 🎬 产品演示.mp4 ..................................... 45.6 MB  │   │
+│  │ 🎵 背景音乐.mp3 ..................................... 3.8 MB   │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│  选择: 年度报告.docx │ 共 7 项 │ 第 1/1 页                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│  上传: 文档.pdf ██████████████████░░░░░░ 67% │ 速度: 2.1 MB/s           │
+├─────────────────────────────────────────────────────────────────────────┤
+│  [u]上传 [d]下载 [r]重命名 [m]移动 [c]复制 [x]删除 [n]新建 [?]帮助     │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 顶部状态栏
+
+**高度**: 1 行
+
+**字段说明**:
+
+| 字段 | 格式 | 示例 |
+|------|------|------|
+| 应用名称 | `Disk TUI v{version}` | `Disk TUI v1.0` |
+| 用户信息 | `用户: {username}` | `用户: john_doe` |
+| 存储空间 | `{已用}/{总量} ({百分比}%)` | `2.5GB/10GB (25%)` |
+| 日期时间 | `YYYY-MM-DD HH:MM` | `2026-02-16 14:30` |
+
+**样式**:
+- 背景: 主色调（蓝色）
+- 前景: 白色
+- 分隔符: `│`
+
+### 面包屑导航区
+
+**高度**: 1 行
+
+**内容结构**:
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  路径: 根目录 > 文件夹1 > 文件夹2 > ...                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**交互**:
+- 点击路径项可跳转到对应目录
+- 当前目录高亮显示
+- 路径过长时从左侧截断显示 `... > 最后两级`
+
+### 底部操作栏
+
+**高度**: 1 行
+
+**默认显示**:
+```
+[u]上传 [d]下载 [r]重命名 [m]移动 [c]复制 [x]删除 [n]新建 [?]帮助
+```
+
+**上下文感知**:
+- 回收站页面: `[r]恢复 [x]彻底删除 [E]清空 [?]帮助`
+- 帮助页面: `[q]返回`
+
+### 颜色方案
+
+| 元素 | 16色 | 256色 | 24位色 |
+|------|------|-------|--------|
+| 主色 | Blue (4) | 33 | #268bd2 |
+| 背景 | Black (0) | 235 | #1e1e1e |
+| 前景 | White (7) | 252 | #d4d4d4 |
+| 选中背景 | Blue (4) | 24 | #005f87 |
+| 选中文字 | White (7) | 231 | #ffffff |
+
+---
+
+## 响应式设计
+
+### 断点定义
+
+| 名称 | 宽度 | 说明 |
+|------|------|------|
+| Compact | < 800px | 侧边栏收起 |
+| Medium | 800-1200px | 侧边栏展开 |
+| Expanded | > 1200px | 侧边栏展开，三栏布局 |
+
+### 适配策略
+
+#### Compact 模式 (< 800px)
+
+**Qt**:
+- 侧边栏自动收起，点击按钮展开
+- 工具栏简化，部分按钮移至菜单
+- 文件网格列数减少
+
+**TUI**:
+- 状态栏精简显示
+- 面包屑导航截断显示
+- 文件名超长截断 + `...`
+- 操作栏分页显示快捷键
+
+#### Medium 模式 (800-1200px)
+
+- 侧边栏展开
+- 完整工具栏
+- 标准网格布局
+
+#### Expanded 模式 (> 1200px)
+
+**Qt**:
+- 侧边栏可加宽
+- 可选三栏布局（目录树 + 列表 + 详情）
+- 更大的文件网格
+
+**TUI**:
+- 状态栏显示更多详细信息
+- 文件列表支持多列显示
+- 可选显示详细列（大小、修改时间、类型）
+
+---
+
+*最后更新: 2026-02-19*
