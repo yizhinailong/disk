@@ -51,7 +51,7 @@ namespace disk::trash {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<TrashListRequest> {
-            LOG_DEBUG << "开始解析回收站列表请求参数";
+            LOG_DEBUG << "Start parsing trash list request parameters";
 
             TrashListRequest request;
 
@@ -61,13 +61,19 @@ namespace disk::trash {
                 try {
                     int page_value = std::stoi(page_str);
                     if (page_value < 1) {
-                        LOG_WARN << "参数 'page' 必须大于等于1";
-                        return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'page' 必须大于等于1"));
+                        LOG_WARN << "Parameter 'page' must be greater than or equal to 1";
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::ValidationFailed,
+                            "Parameter 'page' must be greater than or equal to 1"
+                        ));
                     }
                     request.page = page_value;
                 } catch (const std::exception& e) {
-                    LOG_WARN << "参数 'page' 格式错误: " << page_str;
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'page' 格式错误: 期望正整数"));
+                    LOG_WARN << "Parameter 'page' invalid format: " << page_str;
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'page' invalid format: expected positive integer"
+                    ));
                 }
             }
 
@@ -77,17 +83,24 @@ namespace disk::trash {
                 try {
                     int page_size_value = std::stoi(page_size_str);
                     if (page_size_value < 1 || page_size_value > 100) {
-                        LOG_WARN << "参数 'page_size' 必须在1-100之间";
-                        return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'page_size' 必须在1-100之间"));
+                        LOG_WARN << "Parameter 'page_size' must be between 1-100";
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::ValidationFailed,
+                            "Parameter 'page_size' must be between 1-100"
+                        ));
                     }
                     request.page_size = page_size_value;
                 } catch (const std::exception& e) {
-                    LOG_WARN << "参数 'page_size' 格式错误: " << page_size_str;
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'page_size' 格式错误: 期望1-100之间的整数"));
+                    LOG_WARN << "Parameter 'page_size' invalid format: " << page_size_str;
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'page_size' invalid format: expected integer between 1-100"
+                    ));
                 }
             }
 
-            LOG_DEBUG << "解析到回收站列表请求: page=" << request.page << ", page_size=" << request.page_size;
+            LOG_DEBUG << "Parsed trash list request: page=" << request.page
+                      << ", page_size=" << request.page_size;
 
             return request;
         }
@@ -107,37 +120,50 @@ namespace disk::trash {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<TrashBatchRequest> {
-            LOG_DEBUG << "开始解析批量操作请求参数";
+            LOG_DEBUG << "Start parsing batch operation request parameters";
 
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
-                LOG_WARN << "请求体不是有效的 JSON";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+                LOG_WARN << "Request body is not valid JSON";
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
+                );
             }
 
             const auto& json = *json_ptr;
 
             // 检查必填字段
             if (!json.isMember("trash_ids")) {
-                LOG_WARN << "缺少必需参数: trash_ids";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: trash_ids"));
+                LOG_WARN << "Missing required parameter: trash_ids";
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: trash_ids")
+                );
             }
 
             // 检查字段类型
             if (!json["trash_ids"].isArray()) {
-                LOG_WARN << "参数 'trash_ids' 类型错误: 期望数组";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'trash_ids' 类型错误: 期望数组"));
+                LOG_WARN << "Parameter 'trash_ids' type error: expected array";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Parameter 'trash_ids' type error: expected array"
+                ));
             }
 
             const auto& ids_array = json["trash_ids"];
             if (ids_array.empty()) {
-                LOG_WARN << "参数 'trash_ids' 不能为空数组";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'trash_ids' 不能为空数组"));
+                LOG_WARN << "Parameter 'trash_ids' cannot be empty array";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Parameter 'trash_ids' cannot be empty array"
+                ));
             }
 
             if (ids_array.size() > 100) {
-                LOG_WARN << "参数 'trash_ids' 超出最大长度限制 (100)";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'trash_ids' 最多支持100个ID"));
+                LOG_WARN << "Parameter 'trash_ids' exceeds maximum length limit (100)";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Parameter 'trash_ids' supports at most 100 IDs"
+                ));
             }
 
             TrashBatchRequest request;
@@ -145,25 +171,28 @@ namespace disk::trash {
 
             for (Json::ArrayIndex i = 0; i < ids_array.size(); ++i) {
                 if (!ids_array[i].isIntegral()) {
-                    LOG_WARN << "参数 'trash_ids[" << i << "]' 类型错误: 期望正整数";
+                    LOG_WARN << "Parameter 'trash_ids[" << i
+                             << "]' type error: expected positive integer";
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
-                        std::string("参数 'trash_ids[") + std::to_string(i) + "]' 类型错误: 期望正整数"
+                        std::string("Parameter 'trash_ids[") + std::to_string(i) +
+                            "]' type error: expected positive integer"
                     ));
                 }
 
                 auto id_value = ids_array[i].asUInt64();
                 if (id_value == 0) {
-                    LOG_WARN << "参数 'trash_ids[" << i << "]' 必须为正整数";
+                    LOG_WARN << "Parameter 'trash_ids[" << i << "]' must be a positive integer";
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
-                        std::string("参数 'trash_ids[") + std::to_string(i) + "]' 必须为正整数"
+                        std::string("Parameter 'trash_ids[") + std::to_string(i) +
+                            "]' must be a positive integer"
                     ));
                 }
                 request.trash_ids.push_back(id_value);
             }
 
-            LOG_DEBUG << "解析到批量操作请求: " << request.trash_ids.size() << " 个ID";
+            LOG_DEBUG << "Parsed batch operation request: " << request.trash_ids.size() << " IDs";
 
             return request;
         }

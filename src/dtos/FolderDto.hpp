@@ -50,26 +50,33 @@ namespace disk::folder {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<CreateFolderRequest> {
-            LOG_DEBUG << "开始解析创建文件夹请求参数";
+            LOG_DEBUG << "Start parsing create folder request parameters";
 
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
-                LOG_WARN << "请求体不是有效的 JSON";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+                LOG_WARN << "Request body is not valid JSON";
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
+                );
             }
 
             const auto& json = *json_ptr;
 
             // 检查必填字段
             if (!json.isMember("name")) {
-                LOG_WARN << "缺少必需参数: name";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: name"));
+                LOG_WARN << "Missing required parameter: name";
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: name")
+                );
             }
 
             // 检查字段类型
             if (!json["name"].isString()) {
-                LOG_WARN << "参数 'name' 类型错误: 期望字符串";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'name' 类型错误: 期望字符串"));
+                LOG_WARN << "Parameter 'name' type error: expected string";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Parameter 'name' type error: expected string"
+                ));
             }
 
             CreateFolderRequest request;
@@ -78,8 +85,11 @@ namespace disk::folder {
             // 处理可选参数 parent_id
             if (json.isMember("parent_id")) {
                 if (!json["parent_id"].isIntegral()) {
-                    LOG_WARN << "参数 'parent_id' 类型错误: 期望整数";
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'parent_id' 类型错误: 期望整数"));
+                    LOG_WARN << "Parameter 'parent_id' type error: expected integer";
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'parent_id' type error: expected integer"
+                    ));
                 }
                 request.parent_id = json["parent_id"].asUInt64();
             }
@@ -87,39 +97,55 @@ namespace disk::folder {
             // Rule 6: 去除首尾空格
             request.TrimName();
 
-            LOG_DEBUG << "解析到创建文件夹请求: name=\"" << request.name << "\", parent_id=" << request.parent_id;
+            LOG_DEBUG << "Parsed create folder request: name=\"" << request.name
+                      << "\", parent_id=" << request.parent_id;
 
             // Rule 1: 长度验证 (1-255)
             if (!request.ValidateLength()) {
-                LOG_WARN << "文件夹名称长度无效: " << request.name.length();
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "文件夹名称长度必须在 1-255 字符之间"));
+                LOG_WARN << "Invalid folder name length: " << request.name.length();
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Folder name length must be between 1-255 characters"
+                ));
             }
 
             // Rule 2: 禁止字符验证
             if (!request.ValidateForbiddenChars()) {
-                LOG_WARN << "文件夹名称包含禁止字符: " << request.name;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件夹名称包含禁止字符：/ \\ : * ? \" < > | 或控制字符"));
+                LOG_WARN << "Folder name contains forbidden characters: " << request.name;
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidFilename,
+                    "Folder name contains forbidden characters: / \\ : * ? \" < > | or control "
+                    "characters"
+                ));
             }
 
             // Rule 3: 保留名称验证
             if (!request.ValidateReservedNames()) {
-                LOG_WARN << "文件夹名称为保留名称: " << request.name;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件夹名称不能为保留名称 \".\" 或 \"..\""));
+                LOG_WARN << "Folder name is a reserved name: " << request.name;
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidFilename,
+                    "Folder name cannot be reserved name \".\" or \"..\""
+                ));
             }
 
             // Rule 4: 隐藏文件夹验证
             if (!request.ValidateNotHidden()) {
-                LOG_WARN << "文件夹名称以点开头（隐藏文件夹）: " << request.name;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件夹名称不能以 \".\" 开头"));
+                LOG_WARN << "Folder name starts with a dot (hidden folder): " << request.name;
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidFilename, "Folder name cannot start with \".\"")
+                );
             }
 
             // Rule 5: 字符集验证 (仅 ASCII 可打印字符)
             if (!request.ValidateCharset()) {
-                LOG_WARN << "文件夹名称包含非 ASCII 字符: " << request.name;
-                return std::unexpected(ErrorInfo(ErrorCode::InvalidFilename, "文件夹名称仅允许 ASCII 可打印字符"));
+                LOG_WARN << "Folder name contains non-ASCII characters: " << request.name;
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidFilename,
+                    "Folder name only allows ASCII printable characters"
+                ));
             }
 
-            LOG_DEBUG << "请求参数验证通过";
+            LOG_DEBUG << "Request parameter validation passed";
             return request;
         }
 
@@ -233,7 +259,7 @@ namespace disk::folder {
         /// 从 HTTP 请求查询参数解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<FolderTreeRequest> {
-            LOG_DEBUG << "开始解析文件夹树请求参数";
+            LOG_DEBUG << "Start parsing folder tree request parameters";
 
             FolderTreeRequest request;
 
@@ -244,13 +270,19 @@ namespace disk::folder {
                     size_t pos = 0;
                     auto value = std::stoull(parent_id_str, &pos);
                     if (pos != parent_id_str.length()) {
-                        LOG_WARN << "参数 'parent_id' 格式无效: " << parent_id_str;
-                        return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'parent_id' 格式无效"));
+                        LOG_WARN << "Parameter 'parent_id' invalid format: " << parent_id_str;
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::ValidationFailed,
+                            "Parameter 'parent_id' invalid format"
+                        ));
                     }
                     request.parent_id = value;
                 } catch (const std::exception& e) {
-                    LOG_WARN << "参数 'parent_id' 格式无效: " << parent_id_str;
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'parent_id' 格式无效"));
+                    LOG_WARN << "Parameter 'parent_id' invalid format: " << parent_id_str;
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'parent_id' invalid format"
+                    ));
                 }
             }
 
@@ -261,23 +293,32 @@ namespace disk::folder {
                     size_t pos = 0;
                     auto value = std::stoi(depth_str, &pos);
                     if (pos != depth_str.length()) {
-                        LOG_WARN << "参数 'depth' 格式无效: " << depth_str;
-                        return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'depth' 格式无效"));
+                        LOG_WARN << "Parameter 'depth' invalid format: " << depth_str;
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::ValidationFailed,
+                            "Parameter 'depth' invalid format"
+                        ));
                     }
                     request.depth = value;
                 } catch (const std::exception& e) {
-                    LOG_WARN << "参数 'depth' 格式无效: " << depth_str;
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'depth' 格式无效"));
+                    LOG_WARN << "Parameter 'depth' invalid format: " << depth_str;
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ValidationFailed, "Parameter 'depth' invalid format")
+                    );
                 }
             }
 
             // 验证 depth >= -1
             if (request.depth < -1) {
-                LOG_WARN << "参数 'depth' 不能小于 -1: " << request.depth;
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'depth' 不能小于 -1"));
+                LOG_WARN << "Parameter 'depth' cannot be less than -1: " << request.depth;
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Parameter 'depth' cannot be less than -1"
+                ));
             }
 
-            LOG_DEBUG << "解析到文件夹树请求: parent_id=" << request.parent_id << ", depth=" << request.depth;
+            LOG_DEBUG << "Parsed folder tree request: parent_id=" << request.parent_id
+                      << ", depth=" << request.depth;
 
             return request;
         }

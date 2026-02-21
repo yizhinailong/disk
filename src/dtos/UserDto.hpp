@@ -46,54 +46,74 @@ namespace disk::user {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<ChangePasswordRequest> {
-            LOG_DEBUG << "开始解析修改密码请求参数";
+        static auto FromRequest(const drogon::HttpRequestPtr& req)
+            -> Result<ChangePasswordRequest> {
+            LOG_DEBUG << "Start parsing change password request parameters";
 
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
-                LOG_WARN << "请求体不是有效的 JSON";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+                LOG_WARN << "Request body is not valid JSON";
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
+                );
             }
 
             const auto& json = *json_ptr;
 
             // 检查必填字段
             if (!json.isMember("old_password")) {
-                LOG_WARN << "缺少必需参数: old_password";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: old_password"));
+                LOG_WARN << "Missing required parameter: old_password";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Missing required parameter: old_password"
+                ));
             }
             if (!json.isMember("new_password")) {
-                LOG_WARN << "缺少必需参数: new_password";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "缺少必需参数: new_password"));
+                LOG_WARN << "Missing required parameter: new_password";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Missing required parameter: new_password"
+                ));
             }
 
             // 检查字段类型
             if (!json["old_password"].isString()) {
-                LOG_WARN << "参数 'old_password' 类型错误: 期望字符串";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'old_password' 类型错误: 期望字符串"));
+                LOG_WARN << "Parameter 'old_password' type error: expected string";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Parameter 'old_password' type error: expected string"
+                ));
             }
             if (!json["new_password"].isString()) {
-                LOG_WARN << "参数 'new_password' 类型错误: 期望字符串";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'new_password' 类型错误: 期望字符串"));
+                LOG_WARN << "Parameter 'new_password' type error: expected string";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Parameter 'new_password' type error: expected string"
+                ));
             }
 
             ChangePasswordRequest request;
             request.old_password = json["old_password"].asString();
             request.new_password = json["new_password"].asString();
 
-            LOG_DEBUG << "解析到修改密码请求";
+            LOG_DEBUG << "Parsed change password request";
 
             if (!request.ValidateNewPassword()) {
-                LOG_WARN << "新密码格式错误";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "新密码格式错误"));
+                LOG_WARN << "New password format error";
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "New password format error")
+                );
             }
 
             if (request.old_password == request.new_password) {
-                LOG_WARN << "新密码不能与旧密码相同";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "新密码不能与旧密码相同"));
+                LOG_WARN << "New password cannot be the same as old password";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "New password cannot be the same as old password"
+                ));
             }
 
-            LOG_DEBUG << "请求参数验证通过";
+            LOG_DEBUG << "Request parameters validated";
 
             return request;
         }
@@ -105,7 +125,9 @@ namespace disk::user {
             if (new_password.length() < 8 || new_password.length() > 64) {
                 return false;
             }
-            static const std::regex password_regex("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,64}$");
+            static const std::regex password_regex(
+                "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,64}$"
+            );
             return std::regex_match(new_password, password_regex);
         }
     };
@@ -127,12 +149,14 @@ namespace disk::user {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<UpdateProfileRequest> {
-            LOG_DEBUG << "开始解析更新用户资料请求参数";
+            LOG_DEBUG << "Start parsing update profile request parameters";
 
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
-                LOG_WARN << "请求体不是有效的 JSON";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "请求体不是有效的 JSON"));
+                LOG_WARN << "Request body is not valid JSON";
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
+                );
             }
 
             const auto& json = *json_ptr;
@@ -141,20 +165,25 @@ namespace disk::user {
             // 解析 nickname（可选）
             if (json.isMember("nickname")) {
                 if (json["nickname"].isNull()) {
-                    LOG_WARN << "参数 'nickname' 不能为 null";
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'nickname' 不能为 null"));
+                    LOG_WARN << "Parameter 'nickname' cannot be null";
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'nickname' cannot be null"
+                    ));
                 }
                 if (!json["nickname"].isString()) {
-                    LOG_WARN << "参数 'nickname' 类型错误: 期望字符串";
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'nickname' 类型错误: 期望字符串"));
+                    LOG_WARN << "Parameter 'nickname' type error: expected string";
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'nickname' type error: expected string"
+                    ));
                 }
                 std::string nickname_value = json["nickname"].asString();
                 nickname_value.erase(
                     nickname_value.begin(),
-                    std::ranges::find_if(
-                        nickname_value,
-                        [](unsigned char ch) { return !std::isspace(ch); }
-                    )
+                    std::ranges::find_if(nickname_value, [](unsigned char ch) {
+                        return !std::isspace(ch);
+                    })
                 );
                 nickname_value.erase(
                     std::ranges::find_if(
@@ -172,20 +201,24 @@ namespace disk::user {
             // 解析 avatar（可选）
             if (json.isMember("avatar")) {
                 if (json["avatar"].isNull()) {
-                    LOG_WARN << "参数 'avatar' 不能为 null";
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'avatar' 不能为 null"));
+                    LOG_WARN << "Parameter 'avatar' cannot be null";
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ValidationFailed, "Parameter 'avatar' cannot be null")
+                    );
                 }
                 if (!json["avatar"].isString()) {
-                    LOG_WARN << "参数 'avatar' 类型错误: 期望字符串";
-                    return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "参数 'avatar' 类型错误: 期望字符串"));
+                    LOG_WARN << "Parameter 'avatar' type error: expected string";
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'avatar' type error: expected string"
+                    ));
                 }
                 std::string avatar_value = json["avatar"].asString();
                 avatar_value.erase(
                     avatar_value.begin(),
-                    std::ranges::find_if(
-                        avatar_value,
-                        [](unsigned char ch) { return !std::isspace(ch); }
-                    )
+                    std::ranges::find_if(avatar_value, [](unsigned char ch) {
+                        return !std::isspace(ch);
+                    })
                 );
                 avatar_value.erase(
                     std::ranges::find_if(
@@ -202,25 +235,31 @@ namespace disk::user {
 
             // 验证字段长度
             if (request.nickname.has_value() && !request.ValidateNickname()) {
-                LOG_WARN << "昵称格式错误";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "昵称长度必须在1-64字符之间"));
+                LOG_WARN << "Nickname format error";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Nickname length must be between 1-64 characters"
+                ));
             }
 
             if (request.avatar.has_value() && !request.ValidateAvatar()) {
-                LOG_WARN << "头像格式错误";
-                return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "头像链接长度必须在1-512字符之间"));
+                LOG_WARN << "Avatar format error";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Avatar URL length must be between 1-512 characters"
+                ));
             }
 
             // 至少提供一个字段
             if (!request.nickname.has_value() && !request.avatar.has_value()) {
-                LOG_WARN << "至少需要提供一个字段";
+                LOG_WARN << "At least one field must be provided";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
-                    "至少需要提供一个字段（nickname 或 avatar）"
+                    "At least one field must be provided (nickname or avatar)"
                 ));
             }
 
-            LOG_DEBUG << "请求参数验证通过";
+            LOG_DEBUG << "Request parameters validated";
 
             return request;
         }
