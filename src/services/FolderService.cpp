@@ -22,14 +22,14 @@ namespace disk::folder {
 
     FolderService::FolderService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        LOG_DEBUG << "FolderService 初始化完成";
+        LOG_DEBUG << "FolderService initialized";
     }
 
     auto FolderService::CreateFolder(CreateFolderRequest request, uint64_t user_id)
         -> drogon::Task<Result<CreateFolderResponse>> {
 
-        LOG_DEBUG << "开始创建文件夹: name=\"" << request.name << "\", parent_id=" << request.parent_id
-                  << ", user_id=" << user_id;
+        LOG_DEBUG << "Starting create folder: name=\"" << request.name
+                  << "\", parent_id=" << request.parent_id << ", user_id=" << user_id;
 
         // 1. 验证父文件夹（如果 parent_id > 0）
         std::string parent_path = "/";
@@ -38,19 +38,21 @@ namespace disk::folder {
         if (request.parent_id > 0) {
             auto parent_result = co_await FindAndValidateParent(request.parent_id, user_id);
             if (!parent_result) {
-                LOG_WARN << "父文件夹验证失败: parent_id=" << request.parent_id;
+                LOG_WARN << "Parent folder validation failed: parent_id=" << request.parent_id;
                 co_return std::unexpected(parent_result.error());
             }
 
             const auto& parent = *parent_result;
             parent_path = parent.getValueOfPath();
             parent_depth = parent.getValueOfDepth();
-            LOG_DEBUG << "父文件夹验证通过: path=" << parent_path << ", depth=" << parent_depth;
+            LOG_DEBUG << "Parent folder validated: path=" << parent_path
+                      << ", depth=" << parent_depth;
         }
 
         // 2. 检查同名文件夹是否已存在
         if (co_await IsFolderNameExists(request.name, request.parent_id, user_id)) {
-            LOG_WARN << "同名文件夹已存在: name=\"" << request.name << "\", parent_id=" << request.parent_id;
+            LOG_WARN << "Folder with same name already exists: name=\"" << request.name
+                     << "\", parent_id=" << request.parent_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FolderAlreadyExists));
         }
 
@@ -58,7 +60,8 @@ namespace disk::folder {
         std::string folder_path = parent_path + request.name + "/";
         uint32_t folder_depth = parent_depth + 1;
 
-        LOG_DEBUG << "计算文件夹路径: path=\"" << folder_path << "\", depth=" << folder_depth;
+        LOG_DEBUG << "Calculated folder path: path=\"" << folder_path
+                  << "\", depth=" << folder_depth;
 
         // 4. 创建文件夹记录
         Folders folder;
@@ -75,11 +78,13 @@ namespace disk::folder {
         try {
             CoroMapper<Folders> mapper(m_db_client);
             folder = co_await mapper.insert(folder);
-            LOG_INFO << "文件夹创建成功: name=\"" << request.name << "\" (ID: " << folder.getValueOfId()
-                     << ", user_id: " << user_id << ")";
+            LOG_INFO << "Folder created successfully: name=\"" << request.name
+                     << "\" (ID: " << folder.getValueOfId() << ", user_id: " << user_id << ")";
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "文件夹创建失败: name=\"" << request.name << "\" - " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "创建文件夹失败，请稍后重试"));
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "创建文件夹失败，请稍后重试")
+            );
         }
 
         // 6. 更新父文件夹的 item_count（如果 parent_id > 0）
@@ -123,8 +128,11 @@ namespace disk::folder {
         }
     }
 
-    auto FolderService::IsFolderNameExists(const std::string& name, uint64_t parent_id, uint64_t user_id) const
-        -> drogon::Task<bool> {
+    auto FolderService::IsFolderNameExists(
+        const std::string& name,
+        uint64_t parent_id,
+        uint64_t user_id
+    ) const -> drogon::Task<bool> {
 
         try {
             CoroMapper<Folders> mapper(m_db_client);
@@ -162,16 +170,16 @@ namespace disk::folder {
                       << ", new_count=" << parent.getValueOfItemCount();
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "更新父文件夹 item_count 失败: parent_id=" << parent_id
-                     << " - " << e.base().what();
+            LOG_WARN << "更新父文件夹 item_count 失败: parent_id=" << parent_id << " - "
+                     << e.base().what();
         }
     }
 
     auto FolderService::GetFolderTree(uint64_t user_id, uint64_t parent_id, int depth)
         -> drogon::Task<Result<FolderTreeNode>> {
 
-        LOG_DEBUG << "开始获取文件夹树: user_id=" << user_id
-                  << ", parent_id=" << parent_id << ", depth=" << depth;
+        LOG_DEBUG << "开始获取文件夹树: user_id=" << user_id << ", parent_id=" << parent_id
+                  << ", depth=" << depth;
 
         // 1. 验证父文件夹归属（如果 parent_id > 0）
         if (parent_id > 0) {
@@ -216,7 +224,9 @@ namespace disk::folder {
 
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "查询文件夹树失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "获取文件夹树失败，请稍后重试"));
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "获取文件夹树失败，请稍后重试")
+            );
         }
 
         // 4. 构建树结构
@@ -249,7 +259,8 @@ namespace disk::folder {
         }
     }
 
-    auto FolderService::BuildTreeFromFlatList(std::vector<FolderNodeData>& nodes, uint64_t root_id) const
+    auto
+    FolderService::BuildTreeFromFlatList(std::vector<FolderNodeData>& nodes, uint64_t root_id) const
         -> FolderTreeNode {
 
         // 构建 parent_id -> children 映射
@@ -351,7 +362,8 @@ namespace disk::folder {
         BreadcrumbResponse response;
         response.path = std::move(path);
 
-        LOG_DEBUG << "面包屑导航获取成功: folder_id=" << folder_id << ", depth=" << response.path.size();
+        LOG_DEBUG << "面包屑导航获取成功: folder_id=" << folder_id
+                  << ", depth=" << response.path.size();
 
         co_return response;
     }

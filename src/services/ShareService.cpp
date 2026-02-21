@@ -52,7 +52,8 @@ namespace disk::share {
 
     auto ShareService::Create(CreateShareRequest request, uint64_t user_id)
         -> drogon::Task<Result<CreateShareResponse>> {
-        LOG_INFO << "创建分享: user_id=" << user_id << ", file_ids.size()=" << request.file_ids.size();
+        LOG_INFO << "Creating share: user_id=" << user_id
+                 << ", file_ids.size()=" << request.file_ids.size();
 
         // 1. 验证文件所有权
         auto files_result = co_await ValidateFileOwnership(request.file_ids, user_id);
@@ -76,8 +77,10 @@ namespace disk::share {
         if (request.password.has_value() && !request.password->empty()) {
             auto hash_result = utils::HashUtil::HashPassword(*request.password);
             if (!hash_result) {
-                LOG_ERROR << "密码哈希失败";
-                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "密码加密失败"));
+                LOG_ERROR << "Password hashing failed";
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Password encryption failed")
+                );
             }
             password_hash = *hash_result;
         }
@@ -104,8 +107,10 @@ namespace disk::share {
         try {
             created_share = co_await share_mapper.insert(share);
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "创建分享失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "创建分享失败"));
+            LOG_ERROR << "Failed to create share: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to create share")
+            );
         }
 
         // 6. 创建分享文件关联
@@ -120,8 +125,10 @@ namespace disk::share {
             try {
                 co_await sf_mapper.insert(sf);
             } catch (const DrogonDbException& e) {
-                LOG_ERROR << "创建分享文件关联失败: " << e.base().what();
-                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "创建分享文件关联失败"));
+                LOG_ERROR << "Failed to create share-file association: " << e.base().what();
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to create share-file association")
+                );
             }
         }
 
@@ -136,13 +143,13 @@ namespace disk::share {
         response.expires_at = expires_at.has_value() ? FormatDateTime(*expires_at) : "";
         response.created_at = FormatDateTime(created_share.getValueOfCreatedAt());
 
-        LOG_INFO << "分享创建成功: share_code=" << share_code;
+        LOG_INFO << "Share created successfully: share_code=" << share_code;
         co_return response;
     }
 
     auto ShareService::List(const ShareListRequest& request, uint64_t user_id)
         -> drogon::Task<Result<ShareListResponse>> {
-        LOG_DEBUG << "获取分享列表: user_id=" << user_id << ", status=" << request.status;
+        LOG_DEBUG << "Getting share list: user_id=" << user_id << ", status=" << request.status;
 
         CoroMapper<Shares> mapper(m_db_client);
 
@@ -159,21 +166,24 @@ namespace disk::share {
         try {
             total = co_await mapper.count(criteria);
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "获取分享数量失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "获取分享列表失败"));
+            LOG_ERROR << "Failed to get share count: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to get share list")
+            );
         }
 
         // 分页查询
         std::vector<Shares> shares;
         try {
-            shares = co_await mapper
-                         .orderBy(Shares::Cols::_created_at, SortOrder::DESC)
+            shares = co_await mapper.orderBy(Shares::Cols::_created_at, SortOrder::DESC)
                          .offset((request.page - 1) * request.page_size)
                          .limit(request.page_size)
                          .findBy(criteria);
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "获取分享列表失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "获取分享列表失败"));
+            LOG_ERROR << "Failed to get share list: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to get share list")
+            );
         }
 
         // 构建响应
@@ -220,14 +230,16 @@ namespace disk::share {
         response.pagination.page = request.page;
         response.pagination.page_size = request.page_size;
         response.pagination.total = total;
-        response.pagination.total_pages = request.page_size > 0 ? (total + request.page_size - 1) / request.page_size : 0;
+        response.pagination.total_pages =
+            request.page_size > 0 ? (total + request.page_size - 1) / request.page_size : 0;
 
         co_return response;
     }
 
     auto ShareService::Detail(const ShareDetailRequest& request, uint64_t user_id)
         -> drogon::Task<Result<ShareDetailResponse>> {
-        LOG_DEBUG << "获取分享详情: share_id=" << request.share_id << ", user_id=" << user_id;
+        LOG_DEBUG << "Getting share details: share_id=" << request.share_id
+                  << ", user_id=" << user_id;
 
         // 验证分享所有权
         auto share_result = co_await ValidateShareOwnership(request.share_id, user_id);
@@ -275,7 +287,8 @@ namespace disk::share {
 
     auto ShareService::Update(const UpdateShareRequest& request, uint64_t user_id)
         -> drogon::Task<Result<UpdateShareResponse>> {
-        LOG_INFO << "更新分享设置: share_id=" << request.share_id << ", user_id=" << user_id;
+        LOG_INFO << "Updating share settings: share_id=" << request.share_id
+                 << ", user_id=" << user_id;
 
         // 验证分享所有权
         auto share_result = co_await ValidateShareOwnership(request.share_id, user_id);
@@ -286,7 +299,9 @@ namespace disk::share {
 
         // 验证分享状态（必须是有效状态）
         if (!IsShareActive(share)) {
-            co_return std::unexpected(ErrorInfo(ErrorCode::ShareExpired, "分享已取消或已过期，无法更新"));
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ShareExpired, "Share cancelled or expired, cannot update")
+            );
         }
 
         auto now = trantor::Date::now();
@@ -307,7 +322,9 @@ namespace disk::share {
             } else {
                 auto hash_result = utils::HashUtil::HashPassword(*request.password);
                 if (!hash_result) {
-                    co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "密码加密失败"));
+                    co_return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Password encryption failed")
+                    );
                 }
                 share.setPasswordHash(*hash_result);
             }
@@ -325,8 +342,10 @@ namespace disk::share {
         try {
             co_await mapper.update(share);
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "更新分享失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "更新分享失败"));
+            LOG_ERROR << "Failed to update share: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to update share")
+            );
         }
 
         // 构建响应
@@ -341,13 +360,14 @@ namespace disk::share {
         response.permission = share.getValueOfPermission();
         response.updated_at = FormatDateTime(now);
 
-        LOG_INFO << "分享更新成功: share_id=" << request.share_id;
+        LOG_INFO << "Share updated successfully: share_id=" << request.share_id;
         co_return response;
     }
 
     auto ShareService::Cancel(const CancelShareRequest& request, uint64_t user_id)
         -> drogon::Task<Result<CancelShareResponse>> {
-        LOG_INFO << "批量取消分享: user_id=" << user_id << ", share_ids.size()=" << request.share_ids.size();
+        LOG_INFO << "Batch cancel shares: user_id=" << user_id
+                 << ", share_ids.size()=" << request.share_ids.size();
 
         CancelShareResponse response;
         response.summary.total = static_cast<int>(request.share_ids.size());
@@ -365,11 +385,9 @@ namespace disk::share {
 
             if (shares.empty()) {
                 result.status = "failed";
-                result.error = CancelShareError{
-                    .code = static_cast<int>(ErrorCode::ShareNotFound),
-                    .message = "分享不存在",
-                    .reason = "share_not_found"
-                };
+                result.error = CancelShareError{ .code = static_cast<int>(ErrorCode::ShareNotFound),
+                                                 .message = "Share not found",
+                                                 .reason = "share_not_found" };
                 response.results.push_back(result);
                 response.summary.failed++;
                 continue;
@@ -380,11 +398,10 @@ namespace disk::share {
             // 验证所有权
             if (share.getValueOfUserId() != user_id) {
                 result.status = "failed";
-                result.error = CancelShareError{
-                    .code = static_cast<int>(ErrorCode::ShareAccessDenied),
-                    .message = "无权限访问",
-                    .reason = "access_denied"
-                };
+                result.error =
+                    CancelShareError{ .code = static_cast<int>(ErrorCode::ShareAccessDenied),
+                                      .message = "Access denied",
+                                      .reason = "access_denied" };
                 response.results.push_back(result);
                 response.summary.failed++;
                 continue;
@@ -393,11 +410,10 @@ namespace disk::share {
             // 检查是否已取消
             if (share.getValueOfStatus() == static_cast<int8_t>(ShareStatus::Cancelled)) {
                 result.status = "failed";
-                result.error = CancelShareError{
-                    .code = static_cast<int>(ErrorCode::ValidationFailed),
-                    .message = "分享已取消",
-                    .reason = "already_cancelled"
-                };
+                result.error =
+                    CancelShareError{ .code = static_cast<int>(ErrorCode::ValidationFailed),
+                                      .message = "Share already cancelled",
+                                      .reason = "already_cancelled" };
                 response.results.push_back(result);
                 response.summary.failed++;
                 continue;
@@ -412,20 +428,18 @@ namespace disk::share {
                 result.status = "success";
                 response.summary.succeeded++;
             } catch (const DrogonDbException& e) {
-                LOG_ERROR << "取消分享失败: " << e.base().what();
+                LOG_ERROR << "Failed to cancel share: " << e.base().what();
                 result.status = "failed";
-                result.error = CancelShareError{
-                    .code = static_cast<int>(ErrorCode::InternalError),
-                    .message = "操作失败",
-                    .reason = "internal_error"
-                };
+                result.error = CancelShareError{ .code = static_cast<int>(ErrorCode::InternalError),
+                                                 .message = "Operation failed",
+                                                 .reason = "internal_error" };
                 response.summary.failed++;
             }
 
             response.results.push_back(result);
         }
 
-        LOG_INFO << "批量取消分享完成: succeeded=" << response.summary.succeeded
+        LOG_INFO << "Batch cancel shares completed: succeeded=" << response.summary.succeeded
                  << ", failed=" << response.summary.failed;
 
         co_return response;
@@ -433,7 +447,7 @@ namespace disk::share {
 
     auto ShareService::Access(const AccessShareRequest& request, const std::string& ip_address)
         -> drogon::Task<Result<AccessShareResponse>> {
-        LOG_INFO << "验证分享访问: share_id=" << request.share_id;
+        LOG_INFO << "Verifying share access: share_id=" << request.share_id;
 
         // 查找分享
         auto share_result = co_await FindShareByCode(request.share_id);
@@ -444,12 +458,14 @@ namespace disk::share {
 
         // 验证分享状态
         if (!IsShareActive(share)) {
-            co_return std::unexpected(ErrorInfo(ErrorCode::ShareExpired, "分享已取消"));
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ShareExpired, "Share has been cancelled")
+            );
         }
 
         // 验证是否过期
         if (share.getExpiresAt() != nullptr && IsShareExpired(share)) {
-            co_return std::unexpected(ErrorInfo(ErrorCode::ShareExpired, "分享已过期"));
+            co_return std::unexpected(ErrorInfo(ErrorCode::ShareExpired, "Share has expired"));
         }
 
         // 验证密码
@@ -461,12 +477,16 @@ namespace disk::share {
             }
 
             if (!request.password.has_value() || request.password->empty()) {
-                co_return std::unexpected(ErrorInfo(ErrorCode::SharePasswordError, "需要输入访问密码"));
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::SharePasswordError, "Access password required")
+                );
             }
 
             if (!VerifyPassword(share, *request.password)) {
                 co_await RecordPasswordFailure(request.share_id, ip_address);
-                co_return std::unexpected(ErrorInfo(ErrorCode::SharePasswordError, "访问密码错误"));
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::SharePasswordError, "Incorrect access password")
+                );
             }
         }
 
@@ -505,13 +525,14 @@ namespace disk::share {
         response.permission = share.getValueOfPermission();
         response.files = share_files;
 
-        LOG_INFO << "分享访问验证成功: share_id=" << request.share_id;
+        LOG_INFO << "Share access verified successfully: share_id=" << request.share_id;
         co_return response;
     }
 
     auto ShareService::Browse(const BrowseShareRequest& request, uint64_t share_id)
         -> drogon::Task<Result<BrowseShareResponse>> {
-        LOG_DEBUG << "浏览分享内容: share_id=" << request.share_id << ", internal_share_id=" << share_id;
+        LOG_DEBUG << "Browsing share content: share_id=" << request.share_id
+                  << ", internal_share_id=" << share_id;
 
         // 获取分享的文件列表
         auto share_files = co_await GetShareFiles(share_id);
@@ -539,7 +560,8 @@ namespace disk::share {
 
     auto ShareService::DownloadMeta(const DownloadShareRequest& request, uint64_t share_id)
         -> drogon::Task<Result<ShareFile>> {
-        LOG_DEBUG << "获取下载元数据: share_id=" << request.share_id << ", file_id=" << request.file_id;
+        LOG_DEBUG << "Getting download metadata: share_id=" << request.share_id
+                  << ", file_id=" << request.file_id;
 
         // 获取分享文件列表
         auto share_files = co_await GetShareFiles(share_id);
@@ -553,12 +575,13 @@ namespace disk::share {
             }
         }
 
-        co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "文件不在分享中"));
+        co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "File not in share"));
     }
 
     auto ShareService::GetDownloadInfo(const DownloadShareRequest& request, uint64_t share_id)
         -> drogon::Task<Result<DownloadInfo>> {
-        LOG_DEBUG << "获取下载信息: share_id=" << request.share_id << ", file_id=" << request.file_id;
+        LOG_DEBUG << "Getting download info: share_id=" << request.share_id
+                  << ", file_id=" << request.file_id;
 
         // 1. 获取分享信息，验证下载权限
         CoroMapper<Shares> share_mapper(m_db_client);
@@ -566,14 +589,16 @@ namespace disk::share {
         try {
             share = co_await share_mapper.findOne(Criteria(Shares::Cols::_id, share_id));
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "获取分享信息失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "分享不存在"));
+            LOG_ERROR << "Failed to get share info: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "Share not found"));
         }
 
         if (share.getValueOfPermission() != "download") {
-            LOG_WARN << "分享权限不足: share_id=" << share_id
+            LOG_WARN << "Insufficient share permissions: share_id=" << share_id
                      << ", permission=" << share.getValueOfPermission();
-            co_return std::unexpected(ErrorInfo(ErrorCode::ShareAccessDenied, "分享设置为仅查看，不允许下载"));
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ShareAccessDenied, "Share is view-only, download not allowed")
+            );
         }
 
         // 2. 验证文件属于分享内容，获取文件基本信息
@@ -582,10 +607,13 @@ namespace disk::share {
 
         std::vector<ShareFiles> share_files;
         try {
-            share_files = co_await sf_mapper.findBy(Criteria(ShareFiles::Cols::_share_id, share_id));
+            share_files =
+                co_await sf_mapper.findBy(Criteria(ShareFiles::Cols::_share_id, share_id));
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "获取分享文件关联失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "获取分享文件失败"));
+            LOG_ERROR << "Failed to get share-file associations: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to get share file")
+            );
         }
 
         drogon_model::disk::Files file;
@@ -594,20 +622,19 @@ namespace disk::share {
         for (const auto& sf : share_files) {
             if (sf.getValueOfItemType() == "file" && sf.getValueOfItemId() == request.file_id) {
                 try {
-                    file = co_await file_mapper.findOne(
-                        Criteria(Files::Cols::_id, request.file_id)
-                    );
+                    file =
+                        co_await file_mapper.findOne(Criteria(Files::Cols::_id, request.file_id));
                     found = true;
                     break;
                 } catch (const DrogonDbException& e) {
-                    LOG_WARN << "获取文件失败: file_id=" << request.file_id;
-                    co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "文件不存在"));
+                    LOG_WARN << "Failed to get file: file_id=" << request.file_id;
+                    co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "File not found"));
                 }
             }
         }
 
         if (!found) {
-            co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "文件不在分享中"));
+            co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "File not in share"));
         }
 
         // 3. 获取文件内容（存储路径）
@@ -619,8 +646,8 @@ namespace disk::share {
                 Criteria(drogon_model::disk::FileContents::Cols::_id, file.getValueOfContentId())
             );
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "获取文件内容失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "文件内容不存在"));
+            LOG_ERROR << "Failed to get file content: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "File content not found"));
         }
 
         // 4. 构建下载信息
@@ -629,7 +656,8 @@ namespace disk::share {
         info.filename = file.getValueOfName();
         info.storage_path = content.getValueOfStoragePath();
         info.file_size = file.getValueOfSize();
-        info.mime_type = content.getMimeType() ? content.getValueOfMimeType() : "application/octet-stream";
+        info.mime_type =
+            content.getMimeType() ? content.getValueOfMimeType() : "application/octet-stream";
         info.hash_md5 = content.getValueOfHashMd5();
 
         co_return info;
@@ -643,20 +671,21 @@ namespace disk::share {
             auto shares = co_await mapper.findBy(Criteria(Shares::Cols::_share_code, share_code));
 
             if (shares.empty()) {
-                co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "分享不存在"));
+                co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "Share not found"));
             }
 
             co_return shares[0];
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "查找分享失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "查找分享失败"));
+            LOG_ERROR << "Failed to find share: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to find share"));
         }
     }
 
     // ==================== 私有方法 ====================
 
     auto ShareService::GenerateShareCode() -> std::string {
-        constexpr const char* chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        constexpr const char* chars =
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         constexpr int code_length = 8;
 
         std::random_device rd;
@@ -673,10 +702,14 @@ namespace disk::share {
         return code;
     }
 
-    auto ShareService::ValidateFileOwnership(const std::vector<uint64_t>& file_ids, uint64_t user_id) const
-        -> drogon::Task<Result<std::vector<Files>>> {
+    auto ShareService::ValidateFileOwnership(
+        const std::vector<uint64_t>& file_ids,
+        uint64_t user_id
+    ) const -> drogon::Task<Result<std::vector<Files>>> {
         if (file_ids.empty()) {
-            co_return std::unexpected(ErrorInfo(ErrorCode::InvalidParameter, "文件ID列表不能为空"));
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InvalidParameter, "File ID list cannot be empty")
+            );
         }
 
         CoroMapper<Files> mapper(m_db_client);
@@ -686,14 +719,15 @@ namespace disk::share {
         for (auto file_id : file_ids) {
             try {
                 auto file_opt = co_await mapper.findOne(
-                    Criteria(Files::Cols::_id, file_id) &&
-                    Criteria(Files::Cols::_user_id, user_id)
+                    Criteria(Files::Cols::_id, file_id) && Criteria(Files::Cols::_user_id, user_id)
                 );
 
                 files.push_back(file_opt);
             } catch (const DrogonDbException& e) {
-                LOG_WARN << "文件不存在或不属于用户: file_id=" << file_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "文件不存在或无权限"));
+                LOG_WARN << "File not found or not owned by user: file_id=" << file_id;
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::FileNotFound, "File not found or no permission")
+                );
             }
         }
 
@@ -708,13 +742,14 @@ namespace disk::share {
         }
 
         if (share_result->getValueOfUserId() != user_id) {
-            co_return std::unexpected(ErrorInfo(ErrorCode::ShareAccessDenied, "无权限访问"));
+            co_return std::unexpected(ErrorInfo(ErrorCode::ShareAccessDenied, "Access denied"));
         }
 
         co_return *share_result;
     }
 
-    auto ShareService::GetShareFiles(uint64_t share_id) const -> drogon::Task<std::vector<ShareFile>> {
+    auto ShareService::GetShareFiles(uint64_t share_id) const
+        -> drogon::Task<std::vector<ShareFile>> {
         CoroMapper<ShareFiles> sf_mapper(m_db_client);
         CoroMapper<Files> file_mapper(m_db_client);
         CoroMapper<Folders> folder_mapper(m_db_client);
@@ -722,7 +757,8 @@ namespace disk::share {
         std::vector<ShareFile> result;
 
         try {
-            auto share_files = co_await sf_mapper.findBy(Criteria(ShareFiles::Cols::_share_id, share_id));
+            auto share_files =
+                co_await sf_mapper.findBy(Criteria(ShareFiles::Cols::_share_id, share_id));
 
             for (const auto& sf : share_files) {
                 if (sf.getValueOfItemType() == "file") {
@@ -738,7 +774,7 @@ namespace disk::share {
                         sf_item.size = file.getValueOfSize();
                         result.push_back(sf_item);
                     } catch (const DrogonDbException& e) {
-                        LOG_WARN << "获取分享文件失败: file_id=" << sf.getValueOfItemId();
+                        LOG_WARN << "Failed to get share file: file_id=" << sf.getValueOfItemId();
                     }
                 } else if (sf.getValueOfItemType() == "folder") {
                     try {
@@ -753,12 +789,13 @@ namespace disk::share {
                         sf_item.size = 0;
                         result.push_back(sf_item);
                     } catch (const DrogonDbException& e) {
-                        LOG_WARN << "获取分享文件夹失败: folder_id=" << sf.getValueOfItemId();
+                        LOG_WARN << "Failed to get share folder: folder_id="
+                                 << sf.getValueOfItemId();
                     }
                 }
             }
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "获取分享文件列表失败: " << e.base().what();
+            LOG_ERROR << "Failed to get share file list: " << e.base().what();
         }
 
         co_return result;
@@ -795,7 +832,7 @@ namespace disk::share {
                 share_id
             );
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "更新访问次数失败: " << e.base().what();
+            LOG_ERROR << "Failed to update view count: " << e.base().what();
         }
     }
 
@@ -806,7 +843,7 @@ namespace disk::share {
                 share_id
             );
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "更新下载次数失败: " << e.base().what();
+            LOG_ERROR << "Failed to update download count: " << e.base().what();
         }
     }
 
@@ -818,7 +855,7 @@ namespace disk::share {
                 share_id
             );
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "更新时间戳失败: " << e.base().what();
+            LOG_ERROR << "Failed to update timestamp: " << e.base().what();
         }
     }
 
@@ -852,8 +889,10 @@ namespace disk::share {
         return "/s/" + share_code;
     }
 
-    auto ShareService::CheckPasswordRateLimit(const std::string& share_code, const std::string& ip_address) const
-        -> drogon::Task<Result<void>> {
+    auto ShareService::CheckPasswordRateLimit(
+        const std::string& share_code,
+        const std::string& ip_address
+    ) const -> drogon::Task<Result<void>> {
         if (!m_redis_service) {
             co_return {};
         }
@@ -867,7 +906,7 @@ namespace disk::share {
                 if (count >= 5) {
                     co_return std::unexpected(ErrorInfo(
                         ErrorCode::TooManyRequests,
-                        "密码验证次数过多，请稍后再试"
+                        "Too many password verification attempts, please try again later"
                     ));
                 }
             } catch (...) {
@@ -878,8 +917,10 @@ namespace disk::share {
         co_return {};
     }
 
-    auto ShareService::RecordPasswordFailure(const std::string& share_code, const std::string& ip_address)
-        -> drogon::Task<void> {
+    auto ShareService::RecordPasswordFailure(
+        const std::string& share_code,
+        const std::string& ip_address
+    ) -> drogon::Task<void> {
         if (!m_redis_service) {
             co_return;
         }

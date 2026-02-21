@@ -29,15 +29,15 @@ namespace disk::services {
 
     CleanupService::CleanupService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        LOG_DEBUG << "CleanupService 初始化完成";
+        LOG_DEBUG << "CleanupService initialized";
     }
 
     auto CleanupService::CleanupExpiredTrash() -> drogon::Task<Result<int>> {
-        LOG_INFO << "开始清理过期回收站项目";
+        LOG_INFO << "Starting cleanup of expired trash items";
 
         try {
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, item_type, item_size, item_data FROM trash WHERE expires_at < NOW()"
+                "SELECT id, user_id, item_type, item_size, item_data FROM trash " "WHERE " "exp" "i" "r" "e" "s" "_at < " "NOW()"
             );
 
             int deleted_count = 0;
@@ -54,23 +54,20 @@ namespace disk::services {
                 if (item_type == "file") {
                     Json::Value item_data;
                     Json::Reader reader;
-                    if (reader.parse(item_data_str, item_data) && item_data.isMember("content_id")) {
+                    if (reader.parse(item_data_str, item_data) &&
+                        item_data.isMember("content_id")) {
                         auto content_id = item_data["content_id"].asUInt64();
                         co_await DecrementContentRefCount(content_id);
                     }
                 }
 
-                co_await m_db_client->execSqlCoro(
-                    "DELETE FROM trash WHERE id = ?",
-                    trash_id
-                );
+                co_await m_db_client->execSqlCoro("DELETE FROM trash WHERE id = ?", trash_id);
 
                 user_storage_delta[user_id] -= static_cast<int64_t>(item_size);
                 deleted_count++;
 
-                LOG_DEBUG << "清理回收站项目: trash_id=" << trash_id
-                          << ", user_id=" << user_id
-                          << ", size=" << item_size;
+                LOG_DEBUG << "Cleaned up trash item: trash_id=" << trash_id
+                          << ", user_id=" << user_id << ", size=" << item_size;
             }
 
             for (const auto& [user_id, delta] : user_storage_delta) {
@@ -79,24 +76,27 @@ namespace disk::services {
                 }
             }
 
-            LOG_INFO << "回收站清理完成: deleted_count=" << deleted_count;
+            LOG_INFO << "Trash cleanup completed: deleted_count=" << deleted_count;
             co_return deleted_count;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "清理过期回收站数据库错误: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "清理过期回收站失败"));
+            LOG_ERROR << "Database error cleaning expired trash: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to clean expired trash")
+            );
         } catch (const std::exception& e) {
-            LOG_ERROR << "清理过期回收站未知错误: " << e.what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "清理过期回收站失败"));
+            LOG_ERROR << "Unknown error cleaning expired trash: " << e.what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to clean expired trash")
+            );
         }
     }
 
     auto CleanupService::UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void> {
         try {
             CoroMapper<Users> mapper(m_db_client);
-            auto user = co_await mapper.findOne(
-                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
-            );
+            auto user =
+                co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
 
             auto new_used = static_cast<int64_t>(user.getValueOfStorageUsed()) + delta;
             if (new_used < 0) {
@@ -106,12 +106,12 @@ namespace disk::services {
             user.setStorageUsed(static_cast<uint64_t>(new_used));
             co_await mapper.update(user);
 
-            LOG_DEBUG << "存储使用量已更新: user_id=" << user_id
-                      << ", delta=" << delta
+            LOG_DEBUG << "Storage usage updated: user_id=" << user_id << ", delta=" << delta
                       << ", new_used=" << new_used;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "更新存储使用量失败: user_id=" << user_id << " - " << e.base().what();
+            LOG_ERROR << "Failed to update storage usage: user_id=" << user_id << " - "
+                      << e.base().what();
         }
     }
 
@@ -126,11 +126,12 @@ namespace disk::services {
             if (current_ref_count > 0) {
                 content.setRefCount(current_ref_count - 1);
                 co_await mapper.update(content);
-                LOG_DEBUG << "文件内容引用计数递减: content_id=" << content_id
+                LOG_DEBUG << "File content reference count decremented: content_id=" << content_id
                           << ", ref_count=" << (current_ref_count - 1);
             }
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "更新文件内容引用计数失败: content_id=" << content_id << " - " << e.base().what();
+            LOG_WARN << "Failed to update file content reference count: content_id=" << content_id
+                     << " - " << e.base().what();
         }
     }
 

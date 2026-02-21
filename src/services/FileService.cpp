@@ -45,7 +45,7 @@ namespace disk::file {
 
     FileService::FileService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        LOG_DEBUG << "FileService 初始化完成";
+        LOG_DEBUG << "FileService initialization completed";
     }
 
     // ==================== InitUpload ====================
@@ -53,26 +53,26 @@ namespace disk::file {
     auto FileService::InitUpload(InitUploadRequest request, uint64_t user_id)
         -> drogon::Task<Result<InitUploadResponse>> {
 
-        LOG_DEBUG << "开始初始化上传: filename=\"" << request.filename
+        LOG_DEBUG << "Starting initialize upload: filename=\"" << request.filename
                   << "\", file_size=" << request.file_size << ", file_hash=" << request.file_hash
                   << ", parent_id=" << request.parent_id << ", user_id=" << user_id;
 
         // 1. 检查存储配额
         auto quota_result = co_await CheckStorageQuota(user_id, request.file_size);
         if (!quota_result) {
-            LOG_WARN << "存储配额检查失败: user_id=" << user_id;
+            LOG_WARN << "Storage quota check failed: user_id=" << user_id;
             co_return std::unexpected(quota_result.error());
         }
 
         // 2. 检测秒传：查找已存在的内容
         auto existing_content = co_await FindExistingContent(request.file_hash);
         if (existing_content.has_value()) {
-            LOG_INFO << "秒传检测成功: file_hash=" << request.file_hash
+            LOG_INFO << "Instant upload check successful: file_hash=" << request.file_hash
                      << ", content_id=" << existing_content.value();
 
             // 检查同名文件是否存在
             if (co_await IsFilenameExists(request.parent_id, request.filename, user_id)) {
-                LOG_WARN << "同名文件已存在: " << request.filename;
+                LOG_WARN << "File with same name already exists: " << request.filename;
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
             }
 
@@ -119,12 +119,14 @@ namespace disk::file {
                               .parent_id = file.getValueOfFolderId(),
                               .created_at = file.getValueOfCreatedAt().toDbStringLocal() };
 
-                LOG_INFO << "秒传完成: file_id=" << file.getValueOfId();
+                LOG_INFO << "Instant upload completed: file_id=" << file.getValueOfId();
                 co_return response;
 
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_ERROR << "秒传创建文件记录失败: " << e.base().what();
-                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "创建文件记录失败"));
+                LOG_ERROR << "Instant upload create file record failed: " << e.base().what();
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to create file record")
+                );
             }
         }
 
@@ -132,7 +134,7 @@ namespace disk::file {
         auto existing_task = co_await FindExistingTask(user_id, request.file_hash);
         if (existing_task.has_value()) {
             const auto& task = existing_task.value();
-            LOG_INFO << "断点续传检测成功: upload_id=" << task.getValueOfId()
+            LOG_INFO << "Resume upload check successful: upload_id=" << task.getValueOfId()
                      << ", uploaded_chunks=" << task.getValueOfUploadedChunks();
 
             InitUploadResponse response;
@@ -179,7 +181,7 @@ namespace disk::file {
             CoroMapper<UploadTasks> mapper(m_db_client);
             task = co_await mapper.insert(task);
 
-            LOG_INFO << "上传任务创建成功: upload_id=" << task.getValueOfId()
+            LOG_INFO << "Upload task created successfully: upload_id=" << task.getValueOfId()
                      << ", total_chunks=" << total_chunks;
 
             InitUploadResponse response;
@@ -192,8 +194,10 @@ namespace disk::file {
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "创建上传任务失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "创建上传任务失败"));
+            LOG_ERROR << "Failed to create upload task: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to create upload task")
+            );
         }
     }
 
@@ -207,13 +211,14 @@ namespace disk::file {
         uint64_t user_id
     ) -> drogon::Task<Result<UploadChunkResponse>> {
 
-        LOG_DEBUG << "开始上传分片: upload_id=" << upload_id << ", chunk_index=" << chunk_index
-                  << ", chunk_hash=" << chunk_hash << ", data_size=" << chunk_data.size();
+        LOG_DEBUG << "Starting upload chunk: upload_id=" << upload_id
+                  << ", chunk_index=" << chunk_index << ", chunk_hash=" << chunk_hash
+                  << ", data_size=" << chunk_data.size();
 
         // 1. 查找并验证上传任务
         auto task_result = co_await FindUploadTask(upload_id, user_id);
         if (!task_result) {
-            LOG_WARN << "上传任务验证失败: " << upload_id;
+            LOG_WARN << "Upload task verification failed: " << upload_id;
             co_return std::unexpected(task_result.error());
         }
 
@@ -221,22 +226,29 @@ namespace disk::file {
 
         // 2. 验证任务未过期
         if (task.getValueOfExpiresAt() < trantor::Date::now()) {
-            LOG_WARN << "上传任务已过期: " << upload_id;
-            co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound, "上传任务已过期"));
+            LOG_WARN << "Upload task expired: " << upload_id;
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::UploadTaskNotFound, "Upload task expired")
+            );
         }
 
         // 3. 验证分片索引有效
         if (chunk_index >= task.getValueOfTotalChunks()) {
-            LOG_WARN << "分片索引超出范围: chunk_index=" << chunk_index
+            LOG_WARN << "Chunk index out of range: chunk_index=" << chunk_index
                      << ", total_chunks=" << task.getValueOfTotalChunks();
-            co_return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "分片索引超出范围"));
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Chunk index out of range")
+            );
         }
 
         // 4. 验证分片哈希
         auto actual_hash = FileHashUtil::HashMd5(chunk_data);
         if (actual_hash != chunk_hash) {
-            LOG_WARN << "分片哈希不匹配: expected=" << chunk_hash << ", actual=" << actual_hash;
-            co_return std::unexpected(ErrorInfo(ErrorCode::ChunkVerifyFailed, "分片哈希不匹配"));
+            LOG_WARN << "Chunk hash mismatch: expected=" << chunk_hash
+                     << ", actual=" << actual_hash;
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ChunkVerifyFailed, "Chunk hash mismatch")
+            );
         }
 
         // 5. 创建临时目录并写入分片
@@ -245,24 +257,31 @@ namespace disk::file {
 
         if (!std::filesystem::exists(temp_dir)) {
             if (!std::filesystem::create_directories(temp_dir, ec)) {
-                LOG_ERROR << "创建临时目录失败: " << temp_dir << " - " << ec.message();
-                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "创建临时目录失败"));
+                LOG_ERROR << "Failed to create temp directory: " << temp_dir << " - "
+                          << ec.message();
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to create temp directory")
+                );
             }
         }
 
         auto chunk_file_path = GetChunkFilePath(upload_id, chunk_index);
         std::ofstream chunk_file(chunk_file_path, std::ios::binary);
         if (!chunk_file) {
-            LOG_ERROR << "打开分片文件失败: " << chunk_file_path;
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "打开分片文件失败"));
+            LOG_ERROR << "Failed to open chunk file: " << chunk_file_path;
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to open chunk file")
+            );
         }
 
         chunk_file.write(chunk_data.data(), chunk_data.size());
         chunk_file.close();
 
         if (!chunk_file) {
-            LOG_ERROR << "写入分片文件失败: " << chunk_file_path;
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "写入分片文件失败"));
+            LOG_ERROR << "Failed to write chunk file: " << chunk_file_path;
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to write chunk file")
+            );
         }
 
         // 6. 更新已上传分片列表
@@ -275,7 +294,8 @@ namespace disk::file {
             updated_task.setUploadedChunks(SerializeUploadedChunks(uploaded_chunks));
             co_await mapper.update(updated_task);
 
-            LOG_DEBUG << "分片上传成功: upload_id=" << upload_id << ", chunk_index=" << chunk_index;
+            LOG_DEBUG << "Chunk upload successful: upload_id=" << upload_id
+                      << ", chunk_index=" << chunk_index;
 
             UploadChunkResponse response;
             response.chunk_index = chunk_index;
@@ -284,8 +304,10 @@ namespace disk::file {
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "更新上传任务失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "更新上传任务失败"));
+            LOG_ERROR << "Failed to update upload task: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to update upload task")
+            );
         }
     }
 
@@ -294,12 +316,12 @@ namespace disk::file {
     auto FileService::CompleteUpload(std::string upload_id, uint64_t user_id)
         -> drogon::Task<Result<CompleteUploadResponse>> {
 
-        LOG_DEBUG << "开始完成上传: upload_id=" << upload_id << ", user_id=" << user_id;
+        LOG_DEBUG << "Starting complete upload: upload_id=" << upload_id << ", user_id=" << user_id;
 
         // 1. 查找并验证上传任务
         auto task_result = co_await FindUploadTask(upload_id, user_id);
         if (!task_result) {
-            LOG_WARN << "上传任务验证失败: " << upload_id;
+            LOG_WARN << "Upload task verification failed: " << upload_id;
             co_return std::unexpected(task_result.error());
         }
 
@@ -308,17 +330,21 @@ namespace disk::file {
         // 2. 验证所有分片已上传
         auto uploaded_chunks = ParseUploadedChunks(task.getValueOfUploadedChunks());
         if (uploaded_chunks.size() != task.getValueOfTotalChunks()) {
-            LOG_WARN << "分片未全部上传: uploaded=" << uploaded_chunks.size()
+            LOG_WARN << "Not all chunks uploaded: uploaded=" << uploaded_chunks.size()
                      << ", total=" << task.getValueOfTotalChunks();
-            co_return std::unexpected(ErrorInfo(ErrorCode::ValidationFailed, "分片未全部上传"));
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Not all chunks uploaded")
+            );
         }
 
         // 3. 组装分片
         auto assemble_path = GetAssembleFilePath(upload_id);
         std::ofstream assemble_file(assemble_path, std::ios::binary);
         if (!assemble_file) {
-            LOG_ERROR << "创建组装文件失败: " << assemble_path;
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "创建组装文件失败"));
+            LOG_ERROR << "Failed to create assemble file: " << assemble_path;
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to create assemble file")
+            );
         }
 
         std::array<char, 8192> buffer{};
@@ -326,10 +352,12 @@ namespace disk::file {
             auto chunk_path = GetChunkFilePath(upload_id, i);
             std::ifstream chunk_file(chunk_path, std::ios::binary);
             if (!chunk_file) {
-                LOG_ERROR << "打开分片文件失败: " << chunk_path;
+                LOG_ERROR << "Failed to open chunk file: " << chunk_path;
                 assemble_file.close();
                 std::filesystem::remove(assemble_path);
-                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "打开分片文件失败"));
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to open chunk file")
+                );
             }
 
             while (chunk_file.read(buffer.data(), buffer.size())) {
@@ -343,28 +371,34 @@ namespace disk::file {
         assemble_file.close();
 
         if (!assemble_file) {
-            LOG_ERROR << "写入组装文件失败: " << assemble_path;
+            LOG_ERROR << "Failed to write assemble file: " << assemble_path;
             std::filesystem::remove(assemble_path);
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "写入组装文件失败"));
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to write assemble file")
+            );
         }
 
         // 4. 计算并验证最终 MD5
         auto hash_result = FileHashUtil::HashFileMd5(assemble_path);
         if (!hash_result) {
-            LOG_ERROR << "计算文件 MD5 失败";
+            LOG_ERROR << "Failed to compute file MD5";
             std::filesystem::remove(assemble_path);
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "计算文件哈希失败"));
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to compute file hash")
+            );
         }
 
         const auto& final_hash = hash_result.value();
         if (final_hash != task.getValueOfFileHash()) {
-            LOG_ERROR << "文件哈希不匹配: expected=" << task.getValueOfFileHash()
+            LOG_ERROR << "File hash mismatch: expected=" << task.getValueOfFileHash()
                       << ", actual=" << final_hash;
             std::filesystem::remove(assemble_path);
-            co_return std::unexpected(ErrorInfo(ErrorCode::ChunkVerifyFailed, "文件哈希验证失败"));
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ChunkVerifyFailed, "File hash verification failed")
+            );
         }
 
-        LOG_DEBUG << "文件哈希验证通过: " << final_hash;
+        LOG_DEBUG << "File hash verification passed: " << final_hash;
 
         // 5. 检查去重
         auto existing_content = co_await FindExistingContent(final_hash);
@@ -384,7 +418,7 @@ namespace disk::file {
                 // 删除临时组装文件
                 std::filesystem::remove(assemble_path);
 
-                LOG_DEBUG << "文件去重成功: content_id=" << content_id;
+                LOG_DEBUG << "File dedup successful: content_id=" << content_id;
 
             } else {
                 // 创建新的 FileContents 记录
@@ -399,16 +433,18 @@ namespace disk::file {
                 // 移动临时文件到最终存储位置
                 std::filesystem::rename(assemble_path, final_storage_path, ec);
                 if (ec) {
-                    LOG_ERROR << "移动文件失败: " << ec.message();
-                    co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "移动文件失败"));
+                    LOG_ERROR << "Failed to move file: " << ec.message();
+                    co_return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Failed to move file")
+                    );
                 }
 
                 // 计算 SHA256
                 auto sha256_result = FileHashUtil::HashFileSha256(final_storage_path);
                 if (!sha256_result) {
-                    LOG_ERROR << "计算 SHA256 失败";
+                    LOG_ERROR << "Failed to compute SHA256";
                     co_return std::unexpected(
-                        ErrorInfo(ErrorCode::InternalError, "计算 SHA256 失败")
+                        ErrorInfo(ErrorCode::InternalError, "Failed to compute SHA256")
                     );
                 }
 
@@ -425,7 +461,7 @@ namespace disk::file {
                 content = co_await content_mapper.insert(content);
                 content_id = content.getValueOfId();
 
-                LOG_DEBUG << "FileContents 创建成功: content_id=" << content_id;
+                LOG_DEBUG << "FileContents created successfully: content_id=" << content_id;
             }
 
             // 6. 检查同名文件
@@ -434,7 +470,7 @@ namespace disk::file {
                     task.getValueOfFilename(),
                     user_id
                 )) {
-                LOG_WARN << "同名文件已存在: " << task.getValueOfFilename();
+                LOG_WARN << "File with same name already exists: " << task.getValueOfFilename();
                 // 回滚：减少引用计数或删除内容
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
             }
@@ -455,7 +491,7 @@ namespace disk::file {
             CoroMapper<Files> file_mapper(m_db_client);
             file = co_await file_mapper.insert(file);
 
-            LOG_INFO << "Files 记录创建成功: file_id=" << file.getValueOfId();
+            LOG_INFO << "Files record created successfully: file_id=" << file.getValueOfId();
 
             // 8. 更新用户存储使用量
             co_await UpdateStorageUsed(user_id, static_cast<int64_t>(task.getValueOfFileSize()));
@@ -468,9 +504,9 @@ namespace disk::file {
                 auto temp_dir = GetTempDirPath(upload_id);
                 std::filesystem::remove_all(temp_dir);
 
-                LOG_DEBUG << "上传任务清理完成: " << upload_id;
+                LOG_DEBUG << "Upload task cleanup completed: " << upload_id;
             } catch (const std::exception& e) {
-                LOG_WARN << "清理上传任务失败（不影响结果）: " << e.what();
+                LOG_WARN << "Failed to cleanup upload task (non-critical): " << e.what();
             }
 
             // 10. 返回响应
@@ -483,14 +519,16 @@ namespace disk::file {
                                       .parent_id = file.getValueOfFolderId(),
                                       .created_at = file.getValueOfCreatedAt().toDbStringLocal() };
 
-            LOG_INFO << "文件上传完成: file_id=" << file.getValueOfId()
+            LOG_INFO << "File upload completed: file_id=" << file.getValueOfId()
                      << ", filename=" << task.getValueOfFilename();
 
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "数据库操作失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "数据库操作失败"));
+            LOG_ERROR << "Database operation failed: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Database operation failed")
+            );
         }
     }
 
@@ -499,12 +537,12 @@ namespace disk::file {
     auto FileService::CancelUpload(std::string upload_id, uint64_t user_id)
         -> drogon::Task<Result<void>> {
 
-        LOG_DEBUG << "开始取消上传: upload_id=" << upload_id << ", user_id=" << user_id;
+        LOG_DEBUG << "Starting cancel upload: upload_id=" << upload_id << ", user_id=" << user_id;
 
         // 1. 查找并验证上传任务
         auto task_result = co_await FindUploadTask(upload_id, user_id);
         if (!task_result) {
-            LOG_WARN << "上传任务验证失败: " << upload_id;
+            LOG_WARN << "Upload task verification failed: " << upload_id;
             co_return std::unexpected(task_result.error());
         }
 
@@ -516,9 +554,10 @@ namespace disk::file {
 
         if (std::filesystem::exists(temp_dir)) {
             if (std::filesystem::remove_all(temp_dir, ec) == 0U) {
-                LOG_WARN << "删除临时目录失败: " << temp_dir << " - " << ec.message();
+                LOG_WARN << "Failed to delete temp directory: " << temp_dir << " - "
+                         << ec.message();
             } else {
-                LOG_DEBUG << "临时目录已删除: " << temp_dir;
+                LOG_DEBUG << "Temp directory deleted: " << temp_dir;
             }
         }
 
@@ -527,12 +566,14 @@ namespace disk::file {
             CoroMapper<UploadTasks> mapper(m_db_client);
             co_await mapper.deleteByPrimaryKey(upload_id);
 
-            LOG_INFO << "上传任务已取消并删除: upload_id=" << upload_id;
+            LOG_INFO << "Upload task cancelled and deleted: upload_id=" << upload_id;
             co_return {};
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "删除上传任务失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "删除上传任务失败"));
+            LOG_ERROR << "Failed to delete upload task: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to delete upload task")
+            );
         }
     }
 
@@ -541,7 +582,7 @@ namespace disk::file {
     auto FileService::GetFileList(FileListRequest request, uint64_t user_id)
         -> drogon::Task<Result<FileListResponse>> {
 
-        LOG_DEBUG << "开始获取文件列表: parent_id=" << request.parent_id
+        LOG_DEBUG << "Starting get file list: parent_id=" << request.parent_id
                   << ", page=" << request.page << ", page_size=" << request.page_size
                   << ", sort_by=" << request.sort_by << ", sort_order=" << request.sort_order
                   << ", type=" << request.type << ", user_id=" << user_id;
@@ -554,9 +595,9 @@ namespace disk::file {
                     Criteria(Folders::Cols::_id, CompareOperator::EQ, request.parent_id) &&
                     Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id)
                 );
-                LOG_DEBUG << "文件夹验证通过: folder_id=" << request.parent_id;
+                LOG_DEBUG << "Folder verification passed: folder_id=" << request.parent_id;
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "文件夹不存在或无权限: folder_id=" << request.parent_id;
+                LOG_WARN << "Folder not found or no permission: folder_id=" << request.parent_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
             }
         }
@@ -602,7 +643,7 @@ namespace disk::file {
                     all_items.push_back(item);
                 }
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "查询文件列表失败: " << e.base().what();
+                LOG_WARN << "Failed to query file list: " << e.base().what();
             }
         }
 
@@ -626,7 +667,7 @@ namespace disk::file {
                     all_items.push_back(item);
                 }
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "查询文件夹列表失败: " << e.base().what();
+                LOG_WARN << "Failed to query folder list: " << e.base().what();
             }
         }
 
@@ -665,7 +706,8 @@ namespace disk::file {
                                 .total = total,
                                 .total_pages = total_pages };
 
-        LOG_DEBUG << "文件列表获取成功: total=" << total << ", page=" << request.page;
+        LOG_DEBUG << "File list retrieved successfully: total=" << total
+                  << ", page=" << request.page;
         co_return response;
     }
 
@@ -674,7 +716,7 @@ namespace disk::file {
     auto FileService::GetDownloadInfo(uint64_t file_id, uint64_t user_id)
         -> drogon::Task<Result<DownloadInfoResponse>> {
 
-        LOG_DEBUG << "开始获取下载信息: file_id=" << file_id << ", user_id=" << user_id;
+        LOG_DEBUG << "Starting get download info: file_id=" << file_id << ", user_id=" << user_id;
 
         // 1. 查找文件并验证归属
         try {
@@ -686,8 +728,10 @@ namespace disk::file {
 
             // 2. 获取文件内容信息
             if (!file.getContentId()) {
-                LOG_ERROR << "文件缺少 content_id: file_id=" << file_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::FileReadError, "文件内容信息缺失"));
+                LOG_ERROR << "File missing content_id: file_id=" << file_id;
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::FileReadError, "File content info missing")
+                );
             }
 
             CoroMapper<FileContents> content_mapper(m_db_client);
@@ -705,12 +749,12 @@ namespace disk::file {
                                                                      file.getValueOfMimeType();
             response.supports_range = true;
 
-            LOG_DEBUG << "下载信息获取成功: filename=" << response.filename
+            LOG_DEBUG << "Download info retrieved successfully: filename=" << response.filename
                       << ", size=" << response.file_size;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "文件不存在或无权限: file_id=" << file_id;
+            LOG_WARN << "File not found or no permission: file_id=" << file_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
         }
     }
@@ -720,7 +764,7 @@ namespace disk::file {
     auto FileService::GetDownloadData(uint64_t file_id, uint64_t user_id)
         -> drogon::Task<Result<DownloadInfo>> {
 
-        LOG_DEBUG << "开始获取下载数据: file_id=" << file_id << ", user_id=" << user_id;
+        LOG_DEBUG << "Starting get download data: file_id=" << file_id << ", user_id=" << user_id;
 
         // 1. 查找文件并验证归属
         try {
@@ -732,8 +776,10 @@ namespace disk::file {
 
             // 2. 获取文件内容信息
             if (!file.getContentId()) {
-                LOG_ERROR << "文件缺少 content_id: file_id=" << file_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::FileReadError, "文件内容信息缺失"));
+                LOG_ERROR << "File missing content_id: file_id=" << file_id;
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::FileReadError, "File content info missing")
+                );
             }
 
             CoroMapper<FileContents> content_mapper(m_db_client);
@@ -752,12 +798,12 @@ namespace disk::file {
             info.storage_path = content.getValueOfStoragePath();
             info.supports_range = true;
 
-            LOG_DEBUG << "下载数据获取成功: filename=" << info.filename
+            LOG_DEBUG << "Download data retrieved successfully: filename=" << info.filename
                       << ", storage_path=" << info.storage_path;
             co_return info;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "文件不存在或无权限: file_id=" << file_id;
+            LOG_WARN << "File not found or no permission: file_id=" << file_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
         }
     }
@@ -767,7 +813,8 @@ namespace disk::file {
     auto FileService::Rename(uint64_t file_id, std::string new_name, uint64_t user_id)
         -> drogon::Task<Result<RenameResponse>> {
 
-        LOG_DEBUG << "开始重命名文件: file_id=" << file_id << ", new_name=\"" << new_name << "\""
+        LOG_DEBUG << "Starting rename file: file_id=" << file_id << ", new_name=\"" << new_name
+                  << "\""
                   << ", user_id=" << user_id;
 
         try {
@@ -778,7 +825,7 @@ namespace disk::file {
             );
 
             if (file.getValueOfName() == new_name) {
-                LOG_DEBUG << "新名称与当前名称相同，跳过更新";
+                LOG_DEBUG << "New name same as current name, skipping update";
                 RenameResponse response;
                 response.id = file.getValueOfId();
                 response.name = file.getValueOfName();
@@ -788,7 +835,7 @@ namespace disk::file {
 
             auto folder_id = file.getValueOfFolderId();
             if (co_await IsFilenameExists(folder_id, new_name, user_id)) {
-                LOG_WARN << "目标文件夹已存在同名文件: " << new_name;
+                LOG_WARN << "Target folder already has file with same name: " << new_name;
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
             }
 
@@ -797,7 +844,7 @@ namespace disk::file {
             file.setUpdatedAt(trantor::Date::now());
             co_await mapper.update(file);
 
-            LOG_INFO << "文件重命名成功: file_id=" << file_id << ", new_name=\"" << new_name
+            LOG_INFO << "File rename successful: file_id=" << file_id << ", new_name=\"" << new_name
                      << "\"";
 
             RenameResponse response;
@@ -807,7 +854,7 @@ namespace disk::file {
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "文件不存在或无权限: file_id=" << file_id;
+            LOG_WARN << "File not found or no permission: file_id=" << file_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
         }
     }
@@ -817,7 +864,7 @@ namespace disk::file {
     auto FileService::Move(MoveRequest request, uint64_t user_id)
         -> drogon::Task<Result<MoveResponse>> {
 
-        LOG_DEBUG << "开始移动文件: file_ids.size()=" << request.file_ids.size()
+        LOG_DEBUG << "Starting move file: file_ids.size()=" << request.file_ids.size()
                   << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
         if (request.target_folder_id != 0) {
@@ -827,9 +874,11 @@ namespace disk::file {
                     Criteria(Folders::Cols::_id, CompareOperator::EQ, request.target_folder_id) &&
                     Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id)
                 );
-                LOG_DEBUG << "目标文件夹验证通过: folder_id=" << request.target_folder_id;
+                LOG_DEBUG << "Target folder verification passed: folder_id="
+                          << request.target_folder_id;
             } catch (const drogon::orm::DrogonDbException&) {
-                LOG_WARN << "目标文件夹不存在或无权限: folder_id=" << request.target_folder_id;
+                LOG_WARN << "Target folder not found or no permission: folder_id="
+                         << request.target_folder_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
             }
         }
@@ -845,7 +894,7 @@ namespace disk::file {
                 );
 
                 if (file.getValueOfFolderId() == request.target_folder_id) {
-                    LOG_DEBUG << "文件已在目标文件夹，跳过: file_id=" << file_id;
+                    LOG_DEBUG << "File already in target folder, skipping: file_id=" << file_id;
                     ++moved_count;
                     continue;
                 }
@@ -855,7 +904,8 @@ namespace disk::file {
                         file.getValueOfName(),
                         user_id
                     )) {
-                    LOG_WARN << "目标文件夹已存在同名文件，跳过: " << file.getValueOfName();
+                    LOG_WARN << "Target folder already has file with same name, skipping: "
+                             << file.getValueOfName();
                     continue;
                 }
 
@@ -864,14 +914,14 @@ namespace disk::file {
                 co_await file_mapper.update(file);
 
                 ++moved_count;
-                LOG_DEBUG << "文件移动成功: file_id=" << file_id;
+                LOG_DEBUG << "File move successful: file_id=" << file_id;
 
             } catch (const drogon::orm::DrogonDbException&) {
-                LOG_WARN << "文件不存在或移动失败，跳过: file_id=" << file_id;
+                LOG_WARN << "File not found or move failed, skipping: file_id=" << file_id;
             }
         }
 
-        LOG_INFO << "文件移动完成: moved_count=" << moved_count;
+        LOG_INFO << "File move completed: moved_count=" << moved_count;
 
         MoveResponse response;
         response.moved_count = moved_count;
@@ -883,7 +933,7 @@ namespace disk::file {
     auto FileService::Copy(CopyRequest request, uint64_t user_id)
         -> drogon::Task<Result<CopyResponse>> {
 
-        LOG_DEBUG << "开始复制文件: file_ids.size()=" << request.file_ids.size()
+        LOG_DEBUG << "Starting copy file: file_ids.size()=" << request.file_ids.size()
                   << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
         if (request.target_folder_id != 0) {
@@ -893,9 +943,11 @@ namespace disk::file {
                     Criteria(Folders::Cols::_id, CompareOperator::EQ, request.target_folder_id) &&
                     Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id)
                 );
-                LOG_DEBUG << "目标文件夹验证通过: folder_id=" << request.target_folder_id;
+                LOG_DEBUG << "Target folder verification passed: folder_id="
+                          << request.target_folder_id;
             } catch (const drogon::orm::DrogonDbException&) {
-                LOG_WARN << "目标文件夹不存在或无权限: folder_id=" << request.target_folder_id;
+                LOG_WARN << "Target folder not found or no permission: folder_id="
+                         << request.target_folder_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
             }
         }
@@ -907,8 +959,10 @@ namespace disk::file {
                 Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
             );
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "查询用户信息失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "查询用户信息失败"));
+            LOG_ERROR << "Failed to query user info: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to query user info")
+            );
         }
 
         auto storage_used = user.getValueOfStorageUsed();

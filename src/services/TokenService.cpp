@@ -32,15 +32,18 @@ namespace disk::services {
         : m_jwt_secret(std::move(jwt_secret)),
           m_redis_client(std::move(redis_client)),
           m_redis_service(std::make_shared<disk::services::RedisService>(m_redis_client)) {
-        LOG_DEBUG << "TokenService 初始化完成";
+        LOG_DEBUG << "TokenService initialization completed";
     }
 
     // TokenService构造函数（外部提供RedisService）
-    TokenService::TokenService(std::string jwt_secret, std::shared_ptr<disk::services::RedisService> redis_service)
+    TokenService::TokenService(
+        std::string jwt_secret,
+        std::shared_ptr<disk::services::RedisService> redis_service
+    )
         : m_jwt_secret(std::move(jwt_secret)),
           m_redis_client(nullptr),
           m_redis_service(std::move(redis_service)) {
-        LOG_DEBUG << "TokenService 初始化完成";
+        LOG_DEBUG << "TokenService initialization completed";
     }
 
     auto TokenService::GenerateTokens(uint64_t user_id, const std::string& username) const
@@ -57,31 +60,29 @@ namespace disk::services {
 
         // 生成 Access Token (带唯一 JTI)
         jwt::builder<jwt::default_clock, traits> access_builder{ jwt::default_clock{} };
-        auto access_token = access_builder
-                                .set_issuer("disk")
-                                .set_type("JWT")
-                                .set_subject(std::to_string(user_id))
-                                .set_payload_claim("username", username)
-                                .set_payload_claim("type", "access")
-                                .set_payload_claim("jti", access_jti)
-                                .set_issued_at(now)
-                                .set_expires_at(now + std::chrono::seconds(GetAccessTokenExpireSeconds()))
-                                .sign(jwt::algorithm::hs256{ m_jwt_secret });
+        auto access_token =
+            access_builder.set_issuer("disk")
+                .set_type("JWT")
+                .set_subject(std::to_string(user_id))
+                .set_payload_claim("username", username)
+                .set_payload_claim("type", "access")
+                .set_payload_claim("jti", access_jti)
+                .set_issued_at(now)
+                .set_expires_at(now + std::chrono::seconds(GetAccessTokenExpireSeconds()))
+                .sign(jwt::algorithm::hs256{ m_jwt_secret });
 
         // 生成 Refresh Token (带唯一 JTI)
         jwt::builder<jwt::default_clock, traits> refresh_builder{ jwt::default_clock{} };
-        auto refresh_token = refresh_builder
-                                 .set_issuer("disk")
-                                 .set_type("JWT")
-                                 .set_subject(std::to_string(user_id))
-                                 .set_payload_claim("type", "refresh")
-                                 .set_payload_claim("jti", refresh_jti)
-                                 .set_issued_at(now)
-                                 .set_expires_at(now + std::chrono::seconds(GetRefreshTokenExpireSeconds()))
-                                 .sign(jwt::algorithm::hs256{ m_jwt_secret });
-
-        LOG_DEBUG << "生成令牌对: user_id=" << user_id
-                  << ", access_jti=" << access_jti
+        auto refresh_token =
+            refresh_builder.set_issuer("disk")
+                .set_type("JWT")
+                .set_subject(std::to_string(user_id))
+                .set_payload_claim("type", "refresh")
+                .set_payload_claim("jti", refresh_jti)
+                .set_issued_at(now)
+                .set_expires_at(now + std::chrono::seconds(GetRefreshTokenExpireSeconds()))
+                .sign(jwt::algorithm::hs256{ m_jwt_secret });
+        LOG_DEBUG << "Generating token pair: user_id=" << user_id << ", access_jti=" << access_jti
                   << ", refresh_jti=" << refresh_jti;
         return { access_token, refresh_token };
     }
@@ -110,17 +111,18 @@ namespace disk::services {
 
             const auto user_id = std::stoull(user_id_str);
 
-            LOG_DEBUG << "JWT 验证成功: user_id=" << user_id << ", username=" << username;
+            LOG_DEBUG << "JWT verification successful: user_id=" << user_id
+                      << ", username=" << username;
             return std::make_pair(user_id, username);
 
         } catch (const jwt::error::token_verification_exception& e) {
-            LOG_WARN << "JWT 验证失败: " << e.what();
+            LOG_WARN << "JWT verification failed: " << e.what();
             if (std::string(e.what()).find("expired") != std::string::npos) {
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenExpired));
             }
             return std::unexpected(ErrorInfo(disk::error::Code::InvalidToken));
         } catch (const std::exception& e) {
-            LOG_WARN << "JWT 解析失败: " << e.what();
+            LOG_WARN << "JWT parsing failed: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
     }
@@ -149,17 +151,18 @@ namespace disk::services {
             const auto user_id_str = decoded.get_subject();
             const auto user_id = std::stoull(user_id_str);
 
-            LOG_DEBUG << "刷新令牌验证成功: user_id=" << user_id << ", jti=" << jti;
+            LOG_DEBUG << "Refresh token verification successful: user_id=" << user_id
+                      << ", jti=" << jti;
             return std::make_pair(user_id, jti);
 
         } catch (const jwt::error::token_verification_exception& e) {
-            LOG_WARN << "刷新令牌验证失败: " << e.what();
+            LOG_WARN << "Refresh token verification failed: " << e.what();
             if (std::string(e.what()).find("expired") != std::string::npos) {
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenExpired));
             }
             return std::unexpected(ErrorInfo(disk::error::Code::InvalidRefreshToken));
         } catch (const std::exception& e) {
-            LOG_WARN << "刷新令牌解析失败: " << e.what();
+            LOG_WARN << "Refresh token parsing failed: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
     }
@@ -197,20 +200,21 @@ namespace disk::services {
 
         auto get_result = co_await m_redis_service->Get(key);
         if (!get_result) {
-            LOG_WARN << "Refresh token 不存在: user_id=" << user_id;
+            LOG_WARN << "Refresh token does not exist: user_id=" << user_id;
             co_return std::unexpected(ErrorInfo(disk::error::Code::InvalidRefreshToken));
         }
 
         const auto& current_hash = get_result.value();
         if (current_hash != old_hash) {
-            LOG_WARN << "Refresh token 已被使用或已刷新: user_id=" << user_id;
+            LOG_WARN << "Refresh token already used or refreshed: user_id=" << user_id;
             co_return std::unexpected(ErrorInfo(disk::error::Code::RefreshTokenAlreadyUsed));
         }
 
         co_return co_await m_redis_service->Set(key, new_hash, REFRESH_TOKEN_TTL);
     }
 
-    auto TokenService::InvalidateAccessToken(const std::string& token) -> drogon::Task<Result<void>> {
+    auto TokenService::InvalidateAccessToken(const std::string& token)
+        -> drogon::Task<Result<void>> {
         auto jti_result = ExtractJti(token);
         if (!jti_result) {
             co_return std::unexpected(jti_result.error());
@@ -244,13 +248,13 @@ namespace disk::services {
                 return jti.as_string();
             }
 
-            LOG_WARN << "令牌缺少 JTI claim";
+            LOG_WARN << "Token missing JTI claim";
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         } catch (const jwt::error::token_verification_exception& e) {
-            LOG_WARN << "提取 JTI 失败: " << e.what();
+            LOG_WARN << "Failed to extract JTI: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         } catch (const std::exception& e) {
-            LOG_WARN << "提取 JTI 失败: " << e.what();
+            LOG_WARN << "Failed to extract JTI: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
     }
@@ -271,7 +275,7 @@ namespace disk::services {
 
             return static_cast<int>(remaining);
         } catch (const std::exception& e) {
-            LOG_WARN << "计算 TTL 失败: " << e.what();
+            LOG_WARN << "Failed to calculate TTL: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
     }
@@ -290,16 +294,16 @@ namespace disk::services {
 
         try {
             jwt::builder<jwt::default_clock, traits> builder{ jwt::default_clock{} };
-            auto token = builder
-                             .set_issuer("disk_share")
-                             .set_type("JWT")
-                             .set_subject(std::to_string(share_id))
-                             .set_payload_claim("share_code", share_code)
-                             .set_payload_claim("type", "share")
-                             .set_payload_claim("jti", jti)
-                             .set_issued_at(now)
-                             .set_expires_at(now + std::chrono::seconds(GetShareTokenExpireSeconds()))
-                             .sign(jwt::algorithm::hs256{ jwt_secret });
+            auto token =
+                builder.set_issuer("disk_share")
+                    .set_type("JWT")
+                    .set_subject(std::to_string(share_id))
+                    .set_payload_claim("share_code", share_code)
+                    .set_payload_claim("type", "share")
+                    .set_payload_claim("jti", jti)
+                    .set_issued_at(now)
+                    .set_expires_at(now + std::chrono::seconds(GetShareTokenExpireSeconds()))
+                    .sign(jwt::algorithm::hs256{ jwt_secret });
 
             LOG_DEBUG << "生成分享令牌: share_code=" << share_code << ", share_id=" << share_id;
             return token;
@@ -337,11 +341,7 @@ namespace disk::services {
             const auto share_id = std::stoull(share_id_str);
 
             LOG_DEBUG << "分享令牌验证成功: share_code=" << share_code << ", share_id=" << share_id;
-            return ShareTokenClaims{
-                .share_code = share_code,
-                .share_id = share_id,
-                .jti = jti
-            };
+            return ShareTokenClaims{ .share_code = share_code, .share_id = share_id, .jti = jti };
 
         } catch (const jwt::error::token_verification_exception& e) {
             LOG_WARN << "分享令牌验证失败: " << e.what();
@@ -372,11 +372,13 @@ namespace disk::services {
             co_return std::unexpected(hash_result.error());
         }
 
-        const auto key = disk::redis::RedisKeyPrefix::BuildShareTokenKey(share_code, hash_result.value());
+        const auto key =
+            disk::redis::RedisKeyPrefix::BuildShareTokenKey(share_code, hash_result.value());
         co_return co_await m_redis_service->Set(key, "1", SHARE_TOKEN_TTL);
     }
 
-    auto TokenService::VerifyShareTokenWithRedis(const std::string& share_code, const std::string& token)
+    auto
+    TokenService::VerifyShareTokenWithRedis(const std::string& share_code, const std::string& token)
         -> drogon::Task<Result<ShareTokenClaims>> {
         auto verify_result = VerifyShareToken(m_jwt_secret, token);
         if (!verify_result) {
@@ -402,7 +404,8 @@ namespace disk::services {
             co_return std::unexpected(hash_result.error());
         }
 
-        const auto key = disk::redis::RedisKeyPrefix::BuildShareTokenBlacklistKey(hash_result.value());
+        const auto key =
+            disk::redis::RedisKeyPrefix::BuildShareTokenBlacklistKey(hash_result.value());
         co_return co_await m_redis_service->Set(key, "1", SHARE_TOKEN_TTL);
     }
 

@@ -48,8 +48,10 @@ namespace disk::log {
 
             co_return {};
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "记录操作日志失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "记录操作日志失败"));
+            LOG_ERROR << "Failed to record operation log: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to record operation log")
+            );
         }
     }
 
@@ -69,23 +71,20 @@ namespace disk::log {
                 response.total = count_result[0]["count"].as<int>();
             }
 
-            auto result =
-                co_await m_db_client->execSqlCoro(
-                    "SELECT id, user_id, action, target_type, target_id, target_name, " "       "
-                                                                                        "details, "
-                                                                                        "ip_"
-                                                                                        "address, "
-                                                                                        "created_"
-                                                                                        "at " "FROM"
-                                                                                              " ope"
-                                                                                              "rati"
-                                                                                              "on_"
-                                                                                              "logs"
-                                                                                              " " "WHERE user_id = ? " "ORDER BY created_at DESC " "LIMIT ? OFFSET ?",
-                    user_id,
-                    page_size,
-                    offset
-                );
+            auto result = co_await m_db_client->execSqlCoro(
+                "SELECT id, user_id, action, target_type, target_id, " "target_name, " "       " "d"
+                                                                                                 "e"
+                                                                                                 "t"
+                                                                                                 "a"
+                                                                                                 "i"
+                                                                                                 "l"
+                                                                                                 "s"
+                                                                                                 ","
+                                                                                                 " " "ip_" "address, " "created_" "at " "FROM" " ope" "rati" "on_" "logs" " " "WHERE user_id = ? " "ORDER BY created_at DESC " "LIMIT ? OFFSET ?",
+                user_id,
+                page_size,
+                offset
+            );
 
             for (const auto& row : result) {
                 OperationLogItem item;
@@ -109,8 +108,10 @@ namespace disk::log {
 
             co_return response;
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "查询操作日志失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "查询操作日志失败"));
+            LOG_ERROR << "Failed to query operation logs: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to query operation logs")
+            );
         }
     }
 

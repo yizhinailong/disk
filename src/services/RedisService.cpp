@@ -19,7 +19,7 @@ namespace disk::services {
 
     RedisService::RedisService(drogon::nosql::RedisClientPtr redis_client)
         : m_redis_client(std::move(redis_client)) {
-        LOG_DEBUG << "RedisService 初始化成功";
+        LOG_DEBUG << "RedisService initialized";
     }
 
     // ==================== 通用方法实现 ====================
@@ -28,18 +28,10 @@ namespace disk::services {
         -> drogon::Task<Result<void>> {
         try {
             if (ttl > 0) {
-                co_await m_redis_client->execCommandCoro(
-                    "SETEX %s %d %s",
-                    key.c_str(),
-                    ttl,
-                    value.c_str()
-                );
+                co_await m_redis_client
+                    ->execCommandCoro("SETEX %s %d %s", key.c_str(), ttl, value.c_str());
             } else {
-                co_await m_redis_client->execCommandCoro(
-                    "SET %s %s",
-                    key.c_str(),
-                    value.c_str()
-                );
+                co_await m_redis_client->execCommandCoro("SET %s %s", key.c_str(), value.c_str());
             }
 
             LOG_DEBUG << "Redis SET: key=" << key << ", ttl=" << ttl;
@@ -47,10 +39,10 @@ namespace disk::services {
             co_return {};
 
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis操作失败: SET, key=" << key << ", error=" << ex.what();
+            LOG_ERROR << "Redis operation failed: SET, key=" << key << ", error=" << ex.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::RedisOperationFailed,
-                "Redis操作失败: " + std::string(ex.what())
+                "Redis operation failed: " + std::string(ex.what())
             ));
         }
     }
@@ -62,10 +54,9 @@ namespace disk::services {
             if (result.isNil()) {
                 LOG_DEBUG << "Redis GET: key=" << key;
 
-                co_return std::unexpected(ErrorInfo(
-                    ErrorCode::RedisKeyNotFound,
-                    "Redis键不存在: " + key
-                ));
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::RedisKeyNotFound, "Redis key not found: " + key)
+                );
             }
 
             const auto value = result.asString();
@@ -75,10 +66,10 @@ namespace disk::services {
             co_return value;
 
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis操作失败: GET, key=" << key << ", error=" << ex.what();
+            LOG_ERROR << "Redis operation failed: GET, key=" << key << ", error=" << ex.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::RedisOperationFailed,
-                "Redis操作失败: " + std::string(ex.what())
+                "Redis operation failed: " + std::string(ex.what())
             ));
         }
     }
@@ -92,10 +83,10 @@ namespace disk::services {
             co_return {};
 
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis操作失败: DEL, key=" << key << ", error=" << ex.what();
+            LOG_ERROR << "Redis operation failed: DEL, key=" << key << ", error=" << ex.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::RedisOperationFailed,
-                "Redis操作失败: " + std::string(ex.what())
+                "Redis operation failed: " + std::string(ex.what())
             ));
         }
     }
@@ -110,20 +101,22 @@ namespace disk::services {
             co_return exists == 1;
 
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis操作失败: EXISTS, key=" << key << ", error=" << ex.what();
+            LOG_ERROR << "Redis operation failed: EXISTS, key=" << key << ", error=" << ex.what();
             co_return false;
         }
     }
 
-    auto RedisService::Expire(const std::string& key, int ttl)
-        -> drogon::Task<Result<void>> {
+    auto RedisService::Expire(const std::string& key, int ttl) -> drogon::Task<Result<void>> {
         try {
-            auto result = co_await m_redis_client->execCommandCoro("EXPIRE %s %d", key.c_str(), ttl);
+            auto result =
+                co_await m_redis_client->execCommandCoro("EXPIRE %s %d", key.c_str(), ttl);
 
             if (result.asInteger() == 0) {
                 LOG_DEBUG << "Redis EXPIRE: key=" << key << ", ttl=" << ttl;
 
-                co_return std::unexpected(ErrorInfo(ErrorCode::RedisKeyNotFound, "Redis键不存在: " + key));
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::RedisKeyNotFound, "Redis key not found: " + key)
+                );
             }
 
             LOG_DEBUG << "Redis EXPIRE: key=" << key << ", ttl=" << ttl;
@@ -131,10 +124,10 @@ namespace disk::services {
             co_return {};
 
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis操作失败: EXPIRE, key=" << key << ", error=" << ex.what();
+            LOG_ERROR << "Redis operation failed: EXPIRE, key=" << key << ", error=" << ex.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::RedisOperationFailed,
-                "Redis操作失败: " + std::string(ex.what())
+                "Redis operation failed: " + std::string(ex.what())
             ));
         }
     }
@@ -148,11 +141,8 @@ namespace disk::services {
         try {
             if (ttl == 0) {
                 for (const auto& pair : pairs) {
-                    co_await m_redis_client->execCommandCoro(
-                        "SET %s %s",
-                        pair.key.c_str(),
-                        pair.value.c_str()
-                    );
+                    co_await m_redis_client
+                        ->execCommandCoro("SET %s %s", pair.key.c_str(), pair.value.c_str());
                 }
             } else {
                 co_await m_redis_client->execCommandCoro("MULTI");
@@ -172,11 +162,11 @@ namespace disk::services {
             co_return {};
 
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis操作失败: MSET, count=" << pairs.size()
+            LOG_ERROR << "Redis operation failed: MSET, count=" << pairs.size()
                       << ", error=" << ex.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::RedisOperationFailed,
-                "Redis操作失败: " + std::string(ex.what())
+                "Redis operation failed: " + std::string(ex.what())
             ));
         }
     }
@@ -201,11 +191,11 @@ namespace disk::services {
             co_return values;
 
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis操作失败: MGET, count=" << keys.size()
+            LOG_ERROR << "Redis operation failed: MGET, count=" << keys.size()
                       << ", error=" << ex.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::RedisOperationFailed,
-                "Redis操作失败: " + std::string(ex.what())
+                "Redis operation failed: " + std::string(ex.what())
             ));
         }
     }
@@ -224,21 +214,18 @@ namespace disk::services {
             co_return deleted;
 
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis操作失败: MDELETE, count=" << keys.size()
+            LOG_ERROR << "Redis operation failed: MDELETE, count=" << keys.size()
                       << ", error=" << ex.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::RedisOperationFailed,
-                "Redis操作失败: " + std::string(ex.what())
+                "Redis operation failed: " + std::string(ex.what())
             ));
         }
     }
 
     auto RedisService::Incr(const std::string& key) -> drogon::Task<Result<std::int64_t>> {
         try {
-            auto result = co_await m_redis_client->execCommandCoro(
-                "INCR %s",
-                key.c_str()
-            );
+            auto result = co_await m_redis_client->execCommandCoro("INCR %s", key.c_str());
             const auto new_value = result.asInteger();
 
             LOG_DEBUG << "Redis INCR: key=" << key << ", new_value=" << new_value;
@@ -246,10 +233,10 @@ namespace disk::services {
             co_return new_value;
 
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis操作失败: INCR, key=" << key << ", error=" << ex.what();
+            LOG_ERROR << "Redis operation failed: INCR, key=" << key << ", error=" << ex.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::RedisOperationFailed,
-                "Redis操作失败: " + std::string(ex.what())
+                "Redis operation failed: " + std::string(ex.what())
             ));
         }
     }
@@ -257,22 +244,20 @@ namespace disk::services {
     auto RedisService::IncrBy(const std::string& key, std::int64_t increment)
         -> drogon::Task<Result<std::int64_t>> {
         try {
-            auto result = co_await m_redis_client->execCommandCoro(
-                "INCRBY %s %lld",
-                key.c_str(),
-                increment
-            );
+            auto result =
+                co_await m_redis_client->execCommandCoro("INCRBY %s %lld", key.c_str(), increment);
             const auto new_value = result.asInteger();
 
-            LOG_DEBUG << "Redis INCRBY: key=" << key << ", increment=" << increment << ", new_value=" << new_value;
+            LOG_DEBUG << "Redis INCRBY: key=" << key << ", increment=" << increment
+                      << ", new_value=" << new_value;
 
             co_return new_value;
 
         } catch (const drogon::nosql::RedisException& ex) {
-            LOG_ERROR << "Redis操作失败: INCRBY, key=" << key << ", error=" << ex.what();
+            LOG_ERROR << "Redis operation failed: INCRBY, key=" << key << ", error=" << ex.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::RedisOperationFailed,
-                "Redis操作失败: " + std::string(ex.what())
+                "Redis operation failed: " + std::string(ex.what())
             ));
         }
     }

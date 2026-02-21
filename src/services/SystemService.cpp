@@ -70,10 +70,11 @@ namespace disk::system {
             }
 
             // 获取文件总数和总大小
-            auto files_result = co_await m_db_client->execSqlCoro(
-                "SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as total_size FROM files WHERE "
-                "deleted_at IS NULL"
-            );
+            auto files_result =
+                co_await m_db_client->execSqlCoro(
+                    "SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as total_size FROM files "
+                    "WHERE " "deleted_at IS NULL"
+                );
             if (!files_result.empty()) {
                 stats.total_files = files_result[0]["count"].as<int64_t>();
                 stats.total_size = files_result[0]["total_size"].as<int64_t>();
@@ -87,7 +88,7 @@ namespace disk::system {
                 stats.total_folders = folders_result[0]["count"].as<int64_t>();
             }
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "获取存储统计失败: " << e.base().what();
+            LOG_ERROR << "Failed to get storage stats: " << e.base().what();
         }
 
         co_return stats;
