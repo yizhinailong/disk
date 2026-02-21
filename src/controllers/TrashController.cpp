@@ -18,13 +18,13 @@ namespace disk::trash {
 
     TrashController::TrashController()
         : m_trash_service(std::make_unique<TrashService>(drogon::app().getDbClient())) {
-        LOG_DEBUG << "TrashController 初始化完成";
+        LOG_DEBUG << "TrashController initialized";
     }
 
     auto TrashController::List(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到获取回收站列表请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received get trash list request: " << request->getPeerAddr().toIpPort();
 
         // Step 1: Extract user_id from request attributes (set by JwtAuthFilter)
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -32,25 +32,23 @@ namespace disk::trash {
         // Step 2: Parse and validate request DTO
         auto parse_result = TrashListRequest::FromRequest(request);
         if (!parse_result) {
-            LOG_WARN << "回收站列表请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Trash list request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
         // Step 3: Call service to get trash items
-        auto list_result = co_await m_trash_service->List(
-            user_id,
-            parse_result->page,
-            parse_result->page_size
-        );
+        auto list_result =
+            co_await m_trash_service->List(user_id, parse_result->page, parse_result->page_size);
         if (!list_result) {
-            LOG_ERROR << "获取回收站列表失败: " << list_result.error().message;
+            LOG_ERROR << "Failed to get trash list: " << list_result.error().message;
             co_return Response::Error(list_result.error());
         }
 
         // Step 4: Get total count for pagination
         auto count_result = co_await m_trash_service->Count(user_id);
         if (!count_result) {
-            LOG_ERROR << "获取回收站数量失败: " << count_result.error().message;
+            LOG_ERROR << "Failed to get trash count: " << count_result.error().message;
             co_return Response::Error(count_result.error());
         }
 
@@ -60,14 +58,10 @@ namespace disk::trash {
             items.append(item.ToJson());
         }
 
-        auto pagination = Pagination::Create(
-            parse_result->page,
-            parse_result->page_size,
-            *count_result
-        );
+        auto pagination =
+            Pagination::Create(parse_result->page, parse_result->page_size, *count_result);
 
-        LOG_INFO << "获取回收站列表成功: user_id=" << user_id
-                 << ", total=" << *count_result;
+        LOG_INFO << "Get trash list successful: user_id=" << user_id << ", total=" << *count_result;
         co_return Response::Paginated(items, pagination);
     }
 
@@ -87,10 +81,7 @@ namespace disk::trash {
         }
 
         // Step 3: Call service to restore items
-        auto restore_result = co_await m_trash_service->Restore(
-            user_id,
-            parse_result->trash_ids
-        );
+        auto restore_result = co_await m_trash_service->Restore(user_id, parse_result->trash_ids);
         if (!restore_result) {
             LOG_ERROR << "批量恢复失败: " << restore_result.error().message;
             co_return Response::Error(restore_result.error());
@@ -120,10 +111,7 @@ namespace disk::trash {
         }
 
         // Step 3: Call service to delete items
-        auto delete_result = co_await m_trash_service->Delete(
-            user_id,
-            parse_result->trash_ids
-        );
+        auto delete_result = co_await m_trash_service->Delete(user_id, parse_result->trash_ids);
         if (!delete_result) {
             LOG_ERROR << "批量删除失败: " << delete_result.error().message;
             co_return Response::Error(delete_result.error());

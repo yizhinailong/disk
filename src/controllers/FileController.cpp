@@ -20,21 +20,22 @@ namespace disk::file {
 
     FileController::FileController()
         : m_file_service(std::make_unique<FileService>(drogon::app().getDbClient())) {
-        LOG_DEBUG << "FileController 初始化完成";
+        LOG_DEBUG << "FileController initialized";
     }
 
     auto FileController::InitUpload(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到初始化上传请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received initialize upload request: " << request->getPeerAddr().toIpPort();
 
         // 1. 解析并验证请求参数
         auto parse_result = InitUploadRequest::FromRequest(request);
         if (!parse_result) {
-            LOG_WARN << "初始化上传请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Initialize upload request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        LOG_DEBUG << "初始化上传参数验证通过: filename=\"" << parse_result->filename
+        LOG_DEBUG << "Initialize upload parameters validated: filename=\"" << parse_result->filename
                   << "\", file_size=" << parse_result->file_size
                   << ", parent_id=" << parse_result->parent_id;
 
@@ -44,13 +45,13 @@ namespace disk::file {
         // 3. 调用 Service 层初始化上传
         auto result = co_await m_file_service->InitUpload(*parse_result, user_id);
         if (!result) {
-            LOG_ERROR << "初始化上传失败: " << result.error().message << " (user_id=" << user_id
-                      << ")";
+            LOG_ERROR << "Initialize upload failed: " << result.error().message
+                      << " (user_id=" << user_id << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "初始化上传成功: upload_id=" << result->upload_id
+        LOG_INFO << "Initialize upload successful: upload_id=" << result->upload_id
                  << ", instant_upload=" << result->instant_upload << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
@@ -58,7 +59,7 @@ namespace disk::file {
     auto FileController::UploadChunk(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到上传分片请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received upload chunk request: " << request->getPeerAddr().toIpPort();
 
         // 1. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -71,21 +72,21 @@ namespace disk::file {
 
         // 验证必填参数
         if (upload_id.empty()) {
-            LOG_WARN << "上传分片请求缺少 upload_id 参数";
+            LOG_WARN << "Upload chunk request missing upload_id parameter";
             co_return Response::Error(
-                ErrorInfo(ErrorCode::ValidationFailed, "缺少 upload_id 参数")
+                ErrorInfo(ErrorCode::ValidationFailed, "Missing upload_id parameter")
             );
         }
         if (chunk_index_str.empty()) {
-            LOG_WARN << "上传分片请求缺少 chunk_index 参数";
+            LOG_WARN << "Upload chunk request missing chunk_index parameter";
             co_return Response::Error(
-                ErrorInfo(ErrorCode::ValidationFailed, "缺少 chunk_index 参数")
+                ErrorInfo(ErrorCode::ValidationFailed, "Missing chunk_index parameter")
             );
         }
         if (chunk_hash.empty()) {
-            LOG_WARN << "上传分片请求缺少 chunk_hash 参数";
+            LOG_WARN << "Upload chunk request missing chunk_hash parameter";
             co_return Response::Error(
-                ErrorInfo(ErrorCode::ValidationFailed, "缺少 chunk_hash 参数")
+                ErrorInfo(ErrorCode::ValidationFailed, "Missing chunk_hash parameter")
             );
         }
 
@@ -94,25 +95,26 @@ namespace disk::file {
         try {
             chunk_index = static_cast<uint32_t>(std::stoul(chunk_index_str));
         } catch (...) {
-            LOG_WARN << "chunk_index 格式无效: " << chunk_index_str;
+            LOG_WARN << "Invalid chunk_index format: " << chunk_index_str;
             co_return Response::Error(
-                ErrorInfo(ErrorCode::ValidationFailed, "chunk_index 格式无效")
+                ErrorInfo(ErrorCode::ValidationFailed, "Invalid chunk_index format")
             );
         }
 
         // 验证 chunk_hash 格式（32位小写十六进制）
         if (chunk_hash.length() != 32) {
-            LOG_WARN << "chunk_hash 格式错误: " << chunk_hash;
-            co_return Response::Error(
-                ErrorInfo(ErrorCode::ValidationFailed, "chunk_hash 必须是 32 位小写十六进制字符串")
-            );
+            LOG_WARN << "Invalid chunk_hash format: " << chunk_hash;
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::ValidationFailed,
+                "chunk_hash must be 32-character lowercase hex string"
+            ));
         }
         for (char c : chunk_hash) {
             if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
-                LOG_WARN << "chunk_hash 格式错误: " << chunk_hash;
+                LOG_WARN << "Invalid chunk_hash format: " << chunk_hash;
                 co_return Response::Error(ErrorInfo(
                     ErrorCode::ValidationFailed,
-                    "chunk_hash 必须是 32 位小写十六进制字符串"
+                    "chunk_hash must be 32-character lowercase hex string"
                 ));
             }
         }
@@ -120,11 +122,11 @@ namespace disk::file {
         // 3. 获取分片数据（从请求体）
         const auto& chunk_data = request->body();
         if (chunk_data.empty()) {
-            LOG_WARN << "上传分片请求缺少分片数据";
-            co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "缺少分片数据"));
+            LOG_WARN << "Upload chunk request missing chunk data";
+            co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "Missing chunk data"));
         }
 
-        LOG_DEBUG << "上传分片参数验证通过: upload_id=" << upload_id
+        LOG_DEBUG << "Upload chunk parameters validated: upload_id=" << upload_id
                   << ", chunk_index=" << chunk_index << ", chunk_size=" << chunk_data.size();
 
         // 4. 调用 Service 层上传分片
@@ -132,14 +134,14 @@ namespace disk::file {
             co_await m_file_service
                 ->UploadChunk(upload_id, chunk_index, chunk_hash, std::string(chunk_data), user_id);
         if (!result) {
-            LOG_ERROR << "上传分片失败: " << result.error().message << " (user_id=" << user_id
-                      << ", upload_id=" << upload_id << ")";
+            LOG_ERROR << "Upload chunk failed: " << result.error().message
+                      << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";
             co_return Response::Error(result.error());
         }
 
         // 5. 构造响应
-        LOG_INFO << "上传分片成功: chunk_index=" << result->chunk_index << " (user_id=" << user_id
-                 << ", upload_id=" << upload_id << ")";
+        LOG_INFO << "Upload chunk successful: chunk_index=" << result->chunk_index
+                 << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
