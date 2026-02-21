@@ -305,10 +305,11 @@ namespace disk::services {
                     .set_expires_at(now + std::chrono::seconds(GetShareTokenExpireSeconds()))
                     .sign(jwt::algorithm::hs256{ jwt_secret });
 
-            LOG_DEBUG << "生成分享令牌: share_code=" << share_code << ", share_id=" << share_id;
+            LOG_DEBUG << "Generated share token: share_code=" << share_code
+                      << ", share_id=" << share_id;
             return token;
         } catch (const std::exception& e) {
-            LOG_ERROR << "生成分享令牌失败: " << e.what();
+            LOG_ERROR << "Failed to generate share token: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::InternalError, "令牌生成失败"));
         }
     }

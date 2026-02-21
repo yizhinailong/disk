@@ -981,7 +981,7 @@ namespace disk::file {
                 total_copy_size += file.getValueOfSize();
                 files_to_copy.emplace_back(file_id, file);
             } catch (const drogon::orm::DrogonDbException&) {
-                LOG_WARN << "文件不存在或无权限，跳过: file_id=" << file_id;
+                LOG_WARN << "File not found or no permission, skipping: file_id=" << file_id;
             }
         }
 
