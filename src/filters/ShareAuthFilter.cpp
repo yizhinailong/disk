@@ -25,7 +25,7 @@ namespace disk::filters {
                   drogon::app().getRedisClient()
               )
           ) {
-        LOG_DEBUG << "ShareAuthFilter 初始化完成";
+        LOG_DEBUG << "ShareAuthFilter initialized";
     }
 
     auto ShareAuthFilter::doFilter(const drogon::HttpRequestPtr& request)
@@ -37,7 +37,8 @@ namespace disk::filters {
             co_return disk::Response::Error(disk::error::Code::TokenMissing);
         }
 
-        auto verify_result = co_await m_token_service->VerifyShareTokenWithRedis("", share_token_header);
+        auto verify_result =
+            co_await m_token_service->VerifyShareTokenWithRedis("", share_token_header);
 
         if (!verify_result) {
             const auto& error = verify_result.error();
@@ -47,8 +48,7 @@ namespace disk::filters {
                 case disk::error::Code::TokenRevoked:
                     co_return disk::Response::Error(disk::error::Code::TokenRevoked);
                 case disk::error::Code::TokenMalformed:
-                default:
-                    co_return disk::Response::Error(disk::error::Code::TokenMalformed);
+                default                               : co_return disk::Response::Error(disk::error::Code::TokenMalformed);
             }
         }
 
@@ -56,7 +56,7 @@ namespace disk::filters {
         request->attributes()->insert("share_code", claims.share_code);
         request->attributes()->insert("share_id", claims.share_id);
 
-        LOG_DEBUG << "分享令牌认证成功: share_code=" << claims.share_code
+        LOG_DEBUG << "Share token authentication successful: share_code=" << claims.share_code
                   << ", share_id=" << claims.share_id;
         co_return nullptr;
     }

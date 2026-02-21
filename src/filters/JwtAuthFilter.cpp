@@ -28,7 +28,7 @@ namespace disk::filters {
                   drogon::app().getRedisClient()
               )
           ) {
-        LOG_DEBUG << "JwtAuthFilter 初始化完成";
+        LOG_DEBUG << "JwtAuthFilter initialized";
     }
 
     auto JwtAuthFilter::doFilter(const drogon::HttpRequestPtr& request)
@@ -61,7 +61,7 @@ namespace disk::filters {
             const auto jti = decoded.get_payload_claim("jti").as_string();
 
             if (co_await m_token_service->IsAccessTokenRevoked(jti)) {
-                LOG_WARN << "令牌已被撤销: user_id=" << user_id << ", jti=" << jti;
+                LOG_WARN << "Token revoked: user_id=" << user_id << ", jti=" << jti;
                 co_return disk::Response::Error(disk::error::Code::TokenRevoked);
             }
         }
@@ -69,7 +69,8 @@ namespace disk::filters {
         request->attributes()->insert("user_id", user_id);
         request->attributes()->insert("username", username);
 
-        LOG_DEBUG << "JWT 认证成功: user_id=" << user_id << ", username=" << username;
+        LOG_DEBUG << "JWT authentication successful: user_id=" << user_id
+                  << ", username=" << username;
         co_return nullptr;
     }
 

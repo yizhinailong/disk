@@ -23,7 +23,7 @@ namespace disk::filters {
         : m_redis_service(
               std::make_unique<disk::services::RedisService>(drogon::app().getRedisClient())
           ) {
-        LOG_DEBUG << "UploadRateLimitFilter 初始化完成";
+        LOG_DEBUG << "UploadRateLimitFilter initialized";
     }
 
     auto UploadRateLimitFilter::doFilter(const drogon::HttpRequestPtr& request)
@@ -32,7 +32,7 @@ namespace disk::filters {
         // 从 request attributes 获取 user_id（由 JwtAuthFilter 设置）
         auto attrs = request->attributes();
         if (!attrs) {
-            LOG_WARN << "无法获取 request attributes";
+            LOG_WARN << "Cannot get request attributes";
             co_return nullptr;
         }
 
@@ -53,13 +53,13 @@ namespace disk::filters {
             try {
                 current_count = std::stoll(get_result.value());
             } catch (const std::exception& e) {
-                LOG_ERROR << "解析计数失败: " << e.what();
+                LOG_ERROR << "Failed to parse count: " << e.what();
                 current_count = 0;
             }
         }
 
         if (current_count >= DEFAULT_LIMIT) {
-            LOG_WARN << "上传频率限制: user_id=" << user_id << ", count=" << current_count;
+            LOG_WARN << "Upload rate limit: user_id=" << user_id << ", count=" << current_count;
 
             auto response = disk::Response::Error(disk::error::Code::TooManyRequests);
             response->addHeader("X-RateLimit-Limit", std::to_string(DEFAULT_LIMIT));
@@ -72,7 +72,7 @@ namespace disk::filters {
         // 原子递增计数
         auto incr_result = co_await m_redis_service->Incr(key);
         if (!incr_result) {
-            LOG_ERROR << "Redis 递增失败: " << incr_result.error().message;
+            LOG_ERROR << "Redis increment failed: " << incr_result.error().message;
             // Redis 失败时不阻止请求
             co_return nullptr;
         }
@@ -86,8 +86,8 @@ namespace disk::filters {
         // 注意：这里不能直接设置响应头，因为响应还没生成
         // 可以在 request attributes 中存储，让后续处理添加
 
-        LOG_DEBUG << "上传频率检查通过: user_id=" << user_id << ", count=" << incr_result.value()
-                  << "/" << DEFAULT_LIMIT;
+        LOG_DEBUG << "Upload rate limit check passed: user_id=" << user_id
+                  << ", count=" << incr_result.value() << "/" << DEFAULT_LIMIT;
 
         co_return nullptr;
     }
