@@ -196,28 +196,30 @@ namespace disk::file {
         // 3. 调用 Service 层取消上传
         auto result = co_await m_file_service->CancelUpload(upload_id, user_id);
         if (!result) {
-            LOG_ERROR << "取消上传失败: " << result.error().message << " (user_id=" << user_id
-                      << ", upload_id=" << upload_id << ")";
+            LOG_ERROR << "Cancel upload failed: " << result.error().message
+                      << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 返回成功响应
-        LOG_INFO << "取消上传成功: upload_id=" << upload_id << " (user_id=" << user_id << ")";
+        LOG_INFO << "Cancel upload successful: upload_id=" << upload_id << " (user_id=" << user_id
+                 << ")";
         co_return Response::Success({});
     }
 
     auto FileController::List(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到获取文件列表请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received file list request: " << request->getPeerAddr().toIpPort();
 
         // 1. 解析并验证请求参数
         auto parse_result = FileListRequest::FromRequest(request);
         if (!parse_result) {
-            LOG_WARN << "获取文件列表请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "File list request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        LOG_DEBUG << "获取文件列表参数验证通过: parent_id=" << parse_result->parent_id
+        LOG_DEBUG << "File list parameters validated: parent_id=" << parse_result->parent_id
                   << ", page=" << parse_result->page << ", page_size=" << parse_result->page_size
                   << ", sort_by=" << parse_result->sort_by
                   << ", sort_order=" << parse_result->sort_order << ", type=" << parse_result->type;
@@ -228,30 +230,31 @@ namespace disk::file {
         // 3. 调用 Service 层获取文件列表
         auto result = co_await m_file_service->GetFileList(*parse_result, user_id);
         if (!result) {
-            LOG_ERROR << "获取文件列表失败: " << result.error().message << " (user_id=" << user_id
-                      << ")";
+            LOG_ERROR << "Get file list failed: " << result.error().message
+                      << " (user_id=" << user_id << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "获取文件列表成功: items=" << result->items.size() << " (user_id=" << user_id
-                 << ")";
+        LOG_INFO << "Get file list successful: items=" << result->items.size()
+                 << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
     auto FileController::GetDetail(drogon::HttpRequestPtr request, std::string file_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到获取文件详情请求: " << request->getPeerAddr().toIpPort()
+        LOG_INFO << "Received get file detail request: " << request->getPeerAddr().toIpPort()
                  << ", file_id=" << file_id;
 
         // 1. 解析并验证路径参数
         auto parse_result = DownloadInfoRequest::FromPath(file_id);
         if (!parse_result) {
-            LOG_WARN << "获取文件详情请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Get file detail request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        LOG_DEBUG << "获取文件详情参数验证通过: file_id=" << parse_result->file_id;
+        LOG_DEBUG << "Get file detail parameters validated: file_id=" << parse_result->file_id;
 
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -259,8 +262,8 @@ namespace disk::file {
         // 3. 调用 Service 层获取文件详情（复用 GetDownloadInfo）
         auto result = co_await m_file_service->GetDownloadInfo(parse_result->file_id, user_id);
         if (!result) {
-            LOG_ERROR << "获取文件详情失败: " << result.error().message << " (user_id=" << user_id
-                      << ", file_id=" << file_id << ")";
+            LOG_ERROR << "Get file detail failed: " << result.error().message
+                      << " (user_id=" << user_id << ", file_id=" << file_id << ")";
             co_return Response::Error(result.error());
         }
 
@@ -268,24 +271,25 @@ namespace disk::file {
         Json::Value data;
         data["file"] = result->ToJson();
 
-        LOG_INFO << "获取文件详情成功: filename=" << result->filename << " (user_id=" << user_id
-                 << ", file_id=" << file_id << ")";
+        LOG_INFO << "Get file detail successful: filename=" << result->filename
+                 << " (user_id=" << user_id << ", file_id=" << file_id << ")";
         co_return Response::Success(data);
     }
 
     auto FileController::DownloadInfo(drogon::HttpRequestPtr request, std::string file_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到获取下载信息请求: " << request->getPeerAddr().toIpPort()
+        LOG_INFO << "Received get download info request: " << request->getPeerAddr().toIpPort()
                  << ", file_id=" << file_id;
 
         // 1. 解析并验证路径参数
         auto parse_result = disk::file::DownloadInfoRequest::FromPath(file_id);
         if (!parse_result) {
-            LOG_WARN << "获取下载信息请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Get download info request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        LOG_DEBUG << "获取下载信息参数验证通过: file_id=" << parse_result->file_id;
+        LOG_DEBUG << "Get download info parameters validated: file_id=" << parse_result->file_id;
 
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -293,13 +297,13 @@ namespace disk::file {
         // 3. 调用 Service 层获取下载信息
         auto result = co_await m_file_service->GetDownloadInfo(parse_result->file_id, user_id);
         if (!result) {
-            LOG_ERROR << "获取下载信息失败: " << result.error().message << " (user_id=" << user_id
-                      << ", file_id=" << file_id << ")";
+            LOG_ERROR << "Get download info failed: " << result.error().message
+                      << " (user_id=" << user_id << ", file_id=" << file_id << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "获取下载信息成功: filename=" << result->filename
+        LOG_INFO << "Get download info successful: filename=" << result->filename
                  << ", size=" << result->file_size << " (user_id=" << user_id
                  << ", file_id=" << file_id << ")";
         co_return Response::Success(result->ToJson());
@@ -308,16 +312,17 @@ namespace disk::file {
     auto FileController::Download(drogon::HttpRequestPtr request, std::string file_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到下载文件请求: " << request->getPeerAddr().toIpPort()
+        LOG_INFO << "Received download file request: " << request->getPeerAddr().toIpPort()
                  << ", file_id=" << file_id;
 
         // 1. 解析并验证路径参数
         auto parse_result = disk::file::DownloadRequest::FromPath(file_id);
         if (!parse_result) {
-            LOG_WARN << "下载文件请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Download file request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        LOG_DEBUG << "下载文件参数验证通过: file_id=" << parse_result->file_id;
+        LOG_DEBUG << "Download file parameters validated: file_id=" << parse_result->file_id;
 
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -325,20 +330,20 @@ namespace disk::file {
         // 3. 获取下载文件信息
         auto info_result = co_await m_file_service->GetDownloadData(parse_result->file_id, user_id);
         if (!info_result) {
-            LOG_ERROR << "获取下载数据失败: " << info_result.error().message
+            LOG_ERROR << "Get download data failed: " << info_result.error().message
                       << " (user_id=" << user_id << ", file_id=" << file_id << ")";
             co_return Response::Error(info_result.error());
         }
 
         const auto& download_info = *info_result;
-        LOG_INFO << "获取下载信息成功: file_id=" << file_id
+        LOG_INFO << "Get download info successful: file_id=" << file_id
                  << ", filename=" << download_info.filename << ", size=" << download_info.file_size
                  << ", storage_path=" << download_info.storage_path;
 
         // 4. 检查文件是否存在
         if (!std::filesystem::exists(download_info.storage_path)) {
-            LOG_ERROR << "文件不存在: " << download_info.storage_path;
-            co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "文件不存在"));
+            LOG_ERROR << "File not found: " << download_info.storage_path;
+            co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "File not found"));
         }
 
         // 5. 解析 Range 请求头
@@ -347,7 +352,7 @@ namespace disk::file {
 
         // 6. 处理 Range 请求
         if (range_request.has_range && !range_request.satisfiable) {
-            LOG_WARN << "Range 请求无法满足: " << range_header
+            LOG_WARN << "Range request not satisfiable: " << range_header
                      << ", file_size=" << download_info.file_size;
 
             auto resp = drogon::HttpResponse::newHttpResponse();
@@ -360,11 +365,11 @@ namespace disk::file {
             Json::Value error_data;
             error_data["file_size"] = static_cast<Json::UInt64>(download_info.file_size);
             error_data["requested_range"] = range_header;
-            error_data["reason"] = "请求的起始位置超出文件大小";
+            error_data["reason"] = "Requested start position exceeds file size";
 
             Json::Value body;
             body["code"] = 10002;
-            body["message"] = "请求范围无效";
+            body["message"] = "Invalid request range";
             body["data"] = error_data;
 
             resp->setBody(body.toStyledString());
@@ -374,8 +379,8 @@ namespace disk::file {
         // 7. 读取文件内容
         std::ifstream file(download_info.storage_path, std::ios::binary);
         if (!file.is_open()) {
-            LOG_ERROR << "无法打开文件: " << download_info.storage_path;
-            co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "无法打开文件"));
+            LOG_ERROR << "Cannot open file: " << download_info.storage_path;
+            co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "Cannot open file"));
         }
 
         uint64_t start = range_request.has_range ? range_request.start : 0;
@@ -396,11 +401,11 @@ namespace disk::file {
                                         std::to_string(end) + "/" +
                                         std::to_string(download_info.file_size);
             resp->addHeader("Content-Range", content_range);
-            LOG_INFO << "返回部分内容: start=" << start << ", end=" << end
+            LOG_INFO << "Returning partial content: start=" << start << ", end=" << end
                      << ", total=" << download_info.file_size;
         } else {
             resp->setStatusCode(drogon::HttpStatusCode::k200OK);
-            LOG_INFO << "返回完整文件: size=" << download_info.file_size;
+            LOG_INFO << "Returning full file: size=" << download_info.file_size;
         }
 
         // 设置响应头
@@ -423,17 +428,18 @@ namespace disk::file {
     auto FileController::Rename(drogon::HttpRequestPtr request, std::string file_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到重命名请求: " << request->getPeerAddr().toIpPort()
+        LOG_INFO << "Received rename request: " << request->getPeerAddr().toIpPort()
                  << ", file_id=" << file_id;
 
         // 1. 解析并验证路径参数和请求体
         auto parse_result = RenameRequest::FromPathAndRequest(file_id, request);
         if (!parse_result) {
-            LOG_WARN << "重命名请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Rename request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        LOG_DEBUG << "重命名参数验证通过: file_id=" << parse_result->file_id << ", new_name=\""
-                  << parse_result->new_name << "\"";
+        LOG_DEBUG << "Rename parameters validated: file_id=" << parse_result->file_id
+                  << ", new_name=\"" << parse_result->new_name << "\"";
 
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -445,13 +451,14 @@ namespace disk::file {
             user_id
         );
         if (!result) {
-            LOG_ERROR << "重命名失败: " << result.error().message << " (user_id=" << user_id
+            LOG_ERROR << "Rename failed: " << result.error().message << " (user_id=" << user_id
                       << ", file_id=" << file_id << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "重命名成功: file_id=" << file_id << ", new_name=\"" << result->name << "\""
+        LOG_INFO << "Rename successful: file_id=" << file_id << ", new_name=\"" << result->name
+                 << "\""
                  << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
@@ -459,15 +466,17 @@ namespace disk::file {
     auto FileController::Move(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到移动文件请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received move file request: " << request->getPeerAddr().toIpPort();
 
         // 1. 解析并验证请求参数
         auto parse_result = MoveRequest::FromRequest(request);
         if (!parse_result) {
-            LOG_WARN << "移动文件请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Move file request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        LOG_DEBUG << "移动文件参数验证通过: file_ids.size()=" << parse_result->file_ids.size()
+        LOG_DEBUG << "Move file parameters validated: file_ids.size()="
+                  << parse_result->file_ids.size()
                   << ", target_folder_id=" << parse_result->target_folder_id;
 
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
@@ -476,29 +485,31 @@ namespace disk::file {
         // 3. 调用 Service 层移动文件
         auto result = co_await m_file_service->Move(*parse_result, user_id);
         if (!result) {
-            LOG_ERROR << "移动文件失败: " << result.error().message << " (user_id=" << user_id
+            LOG_ERROR << "Move file failed: " << result.error().message << " (user_id=" << user_id
                       << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "移动文件成功: moved_count=" << result->moved_count << " (user_id=" << user_id
-                 << ")";
+        LOG_INFO << "Move file successful: moved_count=" << result->moved_count
+                 << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
     auto FileController::Copy(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到复制文件请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received copy file request: " << request->getPeerAddr().toIpPort();
 
         // 1. 解析并验证请求参数
         auto parse_result = CopyRequest::FromRequest(request);
         if (!parse_result) {
-            LOG_WARN << "复制文件请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Copy file request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        LOG_DEBUG << "复制文件参数验证通过: file_ids.size()=" << parse_result->file_ids.size()
+        LOG_DEBUG << "Copy file parameters validated: file_ids.size()="
+                  << parse_result->file_ids.size()
                   << ", target_folder_id=" << parse_result->target_folder_id;
 
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
@@ -507,29 +518,31 @@ namespace disk::file {
         // 3. 调用 Service 层复制文件
         auto result = co_await m_file_service->Copy(*parse_result, user_id);
         if (!result) {
-            LOG_ERROR << "复制文件失败: " << result.error().message << " (user_id=" << user_id
+            LOG_ERROR << "Copy file failed: " << result.error().message << " (user_id=" << user_id
                       << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "复制文件成功: copied_count=" << result->copied_count << " (user_id=" << user_id
-                 << ")";
+        LOG_INFO << "Copy file successful: copied_count=" << result->copied_count
+                 << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
     auto FileController::Delete(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到删除文件请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received delete file request: " << request->getPeerAddr().toIpPort();
 
         // 1. 解析并验证请求参数
         auto parse_result = DeleteRequest::FromRequest(request);
         if (!parse_result) {
-            LOG_WARN << "删除文件请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Delete file request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        LOG_DEBUG << "删除文件参数验证通过: file_ids.size()=" << parse_result->file_ids.size();
+        LOG_DEBUG << "Delete file parameters validated: file_ids.size()="
+                  << parse_result->file_ids.size();
 
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -537,13 +550,13 @@ namespace disk::file {
         // 3. 调用 Service 层删除文件
         auto result = co_await m_file_service->Delete(*parse_result, user_id);
         if (!result) {
-            LOG_ERROR << "删除文件失败: " << result.error().message << " (user_id=" << user_id
+            LOG_ERROR << "Delete file failed: " << result.error().message << " (user_id=" << user_id
                       << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "删除文件成功: deleted_count=" << result->deleted_count
+        LOG_INFO << "Delete file successful: deleted_count=" << result->deleted_count
                  << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
@@ -551,15 +564,17 @@ namespace disk::file {
     auto FileController::Search(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到文件搜索请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received file search request: " << request->getPeerAddr().toIpPort();
 
         // 1. 解析并验证请求参数
         auto parse_result = SearchRequest::FromRequest(request);
         if (!parse_result) {
-            LOG_WARN << "文件搜索请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "File search request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        LOG_DEBUG << "文件搜索参数验证通过: keyword=\"" << parse_result->keyword << "\"";
+        LOG_DEBUG << "File search parameters validated: keyword=\"" << parse_result->keyword
+                  << "\"";
 
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -567,13 +582,13 @@ namespace disk::file {
         // 3. 调用 Service 层搜索文件
         auto result = co_await m_file_service->Search(*parse_result, user_id);
         if (!result) {
-            LOG_ERROR << "文件搜索失败: " << result.error().message << " (user_id=" << user_id
+            LOG_ERROR << "File search failed: " << result.error().message << " (user_id=" << user_id
                       << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "文件搜索成功: total=" << result->pagination.total
+        LOG_INFO << "File search successful: total=" << result->pagination.total
                  << ", page=" << result->pagination.page << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }

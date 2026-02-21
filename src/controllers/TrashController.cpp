@@ -131,7 +131,7 @@ namespace disk::trash {
     auto TrashController::DeleteAll(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到清空回收站请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received empty trash request: " << request->getPeerAddr().toIpPort();
 
         // Step 1: Extract user_id from request attributes (set by JwtAuthFilter)
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -139,12 +139,12 @@ namespace disk::trash {
         // Step 2: Call service to clear all trash
         auto delete_all_result = co_await m_trash_service->DeleteAll(user_id);
         if (!delete_all_result) {
-            LOG_ERROR << "清空回收站失败: " << delete_all_result.error().message;
+            LOG_ERROR << "Failed to empty trash: " << delete_all_result.error().message;
             co_return Response::Error(delete_all_result.error());
         }
 
         // Step 3: Return success response with statistics
-        LOG_INFO << "清空回收站完成: user_id=" << user_id
+        LOG_INFO << "Empty trash completed: user_id=" << user_id
                  << ", deleted_count=" << delete_all_result->deleted_count
                  << ", freed_space=" << delete_all_result->freed_space;
         co_return Response::Success(delete_all_result->ToJson());
