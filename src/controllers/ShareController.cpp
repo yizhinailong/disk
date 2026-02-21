@@ -141,7 +141,8 @@ namespace disk::share {
         // 1. 解析并验证请求参数
         auto parse_result = UpdateShareRequest::FromRequest(request, share_id);
         if (!parse_result) {
-            LOG_WARN << "更新分享设置请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Update share settings request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
         LOG_DEBUG << "更新分享设置参数验证通过: share_id=" << parse_result->share_id

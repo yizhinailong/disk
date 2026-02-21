@@ -84,7 +84,7 @@ namespace disk::trash {
         // Step 3: Call service to restore items
         auto restore_result = co_await m_trash_service->Restore(user_id, parse_result->trash_ids);
         if (!restore_result) {
-            LOG_ERROR << "批量恢复失败: " << restore_result.error().message;
+            LOG_ERROR << "Batch restore failed: " << restore_result.error().message;
             co_return Response::Error(restore_result.error());
         }
 

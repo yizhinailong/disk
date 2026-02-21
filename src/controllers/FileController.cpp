@@ -157,7 +157,7 @@ namespace disk::file {
                      << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        LOG_DEBUG << "完成上传参数验证通过: upload_id=" << parse_result->upload_id;
+        LOG_DEBUG << "Complete upload parameters validated: upload_id=" << parse_result->upload_id;
 
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");

@@ -120,7 +120,7 @@ namespace disk::user {
         // Step 2: Call service
         auto result = co_await m_user_service->GetStorage(user_id);
         if (!result) {
-            LOG_ERROR << "获取存储统计失败: " << result.error().message;
+            LOG_ERROR << "Failed to get storage stats: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
@@ -128,7 +128,7 @@ namespace disk::user {
         Json::Value data;
         data = result->ToJson();
 
-        LOG_INFO << "获取存储统计成功: user_id=" << user_id;
+        LOG_INFO << "Get storage stats successful: user_id=" << user_id;
         co_return Response::Success(data);
     }
 
