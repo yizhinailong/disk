@@ -68,7 +68,7 @@ namespace disk::trash {
     auto TrashController::Restore(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到批量恢复请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received batch restore request: " << request->getPeerAddr().toIpPort();
 
         // Step 1: Extract user_id from request attributes (set by JwtAuthFilter)
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -76,7 +76,8 @@ namespace disk::trash {
         // Step 2: Parse and validate request DTO
         auto parse_result = TrashBatchRequest::FromRequest(request);
         if (!parse_result) {
-            LOG_WARN << "批量恢复请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Batch restore request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 

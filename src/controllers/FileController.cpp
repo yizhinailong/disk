@@ -148,12 +148,13 @@ namespace disk::file {
     auto FileController::CompleteUpload(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到完成上传请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received complete upload request: " << request->getPeerAddr().toIpPort();
 
         // 1. 解析并验证请求参数
         auto parse_result = CompleteUploadRequest::FromRequest(request);
         if (!parse_result) {
-            LOG_WARN << "完成上传请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Complete upload request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
         LOG_DEBUG << "完成上传参数验证通过: upload_id=" << parse_result->upload_id;

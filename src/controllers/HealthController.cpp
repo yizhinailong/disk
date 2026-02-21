@@ -22,12 +22,12 @@ namespace disk::health {
                   drogon::app().getRedisClient()
               )
           ) {
-        LOG_DEBUG << "HealthController 初始化完成";
+        LOG_DEBUG << "HealthController initialized";
     }
 
     auto HealthController::Check(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
-        LOG_DEBUG << "收到健康检查请求: " << request->getPeerAddr().toIpPort();
+        LOG_DEBUG << "Received health check request: " << request->getPeerAddr().toIpPort();
 
         auto health_result = co_await m_health_service->Check();
 

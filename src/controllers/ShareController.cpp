@@ -127,15 +127,15 @@ namespace disk::share {
         }
 
         // 4. 构造响应
-        LOG_INFO << "获取分享详情成功: share_id=" << share_id << ", files=" << result->files.size()
-                 << " (user_id=" << user_id << ")";
+        LOG_INFO << "Get share details successful: share_id=" << share_id
+                 << ", files=" << result->files.size() << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
     auto ShareController::Update(drogon::HttpRequestPtr request, std::string share_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到更新分享设置请求: " << request->getPeerAddr().toIpPort()
+        LOG_INFO << "Received update share settings request: " << request->getPeerAddr().toIpPort()
                  << ", share_id=" << share_id;
 
         // 1. 解析并验证请求参数
