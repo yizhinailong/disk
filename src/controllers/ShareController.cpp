@@ -145,8 +145,8 @@ namespace disk::share {
                      << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        LOG_DEBUG << "更新分享设置参数验证通过: share_id=" << parse_result->share_id
-                  << ", expire_days="
+        LOG_DEBUG << "Update share settings parameter validation passed: share_id="
+                  << parse_result->share_id << ", expire_days="
                   << (parse_result->expire_days.has_value() ?
                           std::to_string(*parse_result->expire_days) :
                           "null")
@@ -162,13 +162,14 @@ namespace disk::share {
         // 3. 调用 Service 层更新分享设置
         auto result = co_await m_share_service->Update(*parse_result, user_id);
         if (!result) {
-            LOG_ERROR << "更新分享设置失败: " << result.error().message << " (user_id=" << user_id
-                      << ", share_id=" << share_id << ")";
+            LOG_ERROR << "Update share settings failed: " << result.error().message
+                      << " (user_id=" << user_id << ", share_id=" << share_id << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "更新分享设置成功: share_id=" << share_id << " (user_id=" << user_id << ")";
+        LOG_INFO << "Update share settings successful: share_id=" << share_id
+                 << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 

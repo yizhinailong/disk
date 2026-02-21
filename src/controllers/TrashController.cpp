@@ -89,7 +89,7 @@ namespace disk::trash {
         }
 
         // Step 4: Return success response with batch results
-        LOG_INFO << "批量恢复完成: user_id=" << user_id
+        LOG_INFO << "Batch restore completed: user_id=" << user_id
                  << ", total=" << restore_result->summary.total
                  << ", success=" << restore_result->summary.success_count
                  << ", failure=" << restore_result->summary.failure_count;
@@ -99,7 +99,8 @@ namespace disk::trash {
     auto TrashController::Delete(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到批量彻底删除请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received batch permanent delete request: "
+                 << request->getPeerAddr().toIpPort();
 
         // Step 1: Extract user_id from request attributes (set by JwtAuthFilter)
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -107,14 +108,15 @@ namespace disk::trash {
         // Step 2: Parse and validate request DTO
         auto parse_result = TrashBatchRequest::FromRequest(request);
         if (!parse_result) {
-            LOG_WARN << "批量删除请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Batch delete request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
         // Step 3: Call service to delete items
         auto delete_result = co_await m_trash_service->Delete(user_id, parse_result->trash_ids);
         if (!delete_result) {
-            LOG_ERROR << "批量删除失败: " << delete_result.error().message;
+            LOG_ERROR << "Batch delete failed: " << delete_result.error().message;
             co_return Response::Error(delete_result.error());
         }
 

@@ -165,13 +165,14 @@ namespace disk::file {
         // 3. 调用 Service 层完成上传
         auto result = co_await m_file_service->CompleteUpload(parse_result->upload_id, user_id);
         if (!result) {
-            LOG_ERROR << "完成上传失败: " << result.error().message << " (user_id=" << user_id
-                      << ", upload_id=" << parse_result->upload_id << ")";
+            LOG_ERROR << "Complete upload failed: " << result.error().message
+                      << " (user_id=" << user_id << ", upload_id=" << parse_result->upload_id
+                      << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 构造响应
-        LOG_INFO << "完成上传成功: file_id=" << result->file.id << ", filename=\""
+        LOG_INFO << "Complete upload successful: file_id=" << result->file.id << ", filename=\""
                  << result->file.name << "\""
                  << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
@@ -180,7 +181,7 @@ namespace disk::file {
     auto FileController::CancelUpload(drogon::HttpRequestPtr request, std::string upload_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到取消上传请求: " << request->getPeerAddr().toIpPort()
+        LOG_INFO << "Received cancel upload request: " << request->getPeerAddr().toIpPort()
                  << ", upload_id=" << upload_id;
 
         // 1. 验证 upload_id 非空

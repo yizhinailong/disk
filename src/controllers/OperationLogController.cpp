@@ -17,13 +17,13 @@ namespace disk::log {
 
     OperationLogController::OperationLogController()
         : m_log_service(std::make_unique<OperationLogService>(drogon::app().getDbClient())) {
-        LOG_DEBUG << "OperationLogController 初始化完成";
+        LOG_DEBUG << "OperationLogController initialized";
     }
 
     auto OperationLogController::GetList(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到获取操作日志请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received get operation logs request: " << request->getPeerAddr().toIpPort();
 
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
@@ -59,7 +59,7 @@ namespace disk::log {
 
         auto result = co_await m_log_service->GetList(user_id, page, page_size);
         if (!result) {
-            LOG_ERROR << "获取操作日志失败: " << result.error().message;
+            LOG_ERROR << "Failed to get operation logs: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
