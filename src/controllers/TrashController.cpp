@@ -121,7 +121,7 @@ namespace disk::trash {
         }
 
         // Step 4: Return success response with batch results
-        LOG_INFO << "批量删除完成: user_id=" << user_id
+        LOG_INFO << "Batch delete completed: user_id=" << user_id
                  << ", total=" << delete_result->summary.total
                  << ", success=" << delete_result->summary.success_count
                  << ", failure=" << delete_result->summary.failure_count;

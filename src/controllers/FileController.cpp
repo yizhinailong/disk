@@ -186,8 +186,8 @@ namespace disk::file {
 
         // 1. 验证 upload_id 非空
         if (upload_id.empty()) {
-            LOG_WARN << "取消上传请求缺少 upload_id";
-            co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "缺少 upload_id"));
+            LOG_WARN << "Cancel upload request missing upload_id";
+            co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "Missing upload_id"));
         }
 
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）

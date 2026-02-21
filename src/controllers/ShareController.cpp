@@ -176,12 +176,13 @@ namespace disk::share {
     auto ShareController::Cancel(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "收到批量取消分享请求: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received batch cancel shares request: " << request->getPeerAddr().toIpPort();
 
         // 1. 解析并验证请求参数
         auto parse_result = CancelShareRequest::FromRequest(request);
         if (!parse_result) {
-            LOG_WARN << "批量取消分享请求参数验证失败: " << parse_result.error().message;
+            LOG_WARN << "Batch cancel shares request parameter validation failed: "
+                     << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
         LOG_DEBUG << "批量取消分享参数验证通过: share_ids.size()="
