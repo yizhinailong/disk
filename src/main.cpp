@@ -3,17 +3,17 @@
 #include "services/CleanupService.hpp"
 
 auto main() -> int {
-    LOG_INFO << "网盘系统启动中...";
+    LOG_INFO << "Disk system starting...";
 
     // 初始化 libsodium 加密库
     if (sodium_init() < 0) {
-        LOG_ERROR << "libsodium 初始化失败";
+        LOG_ERROR << "libsodium initialization failed";
         return 1;
     }
-    LOG_INFO << "libsodium 初始化成功";
+    LOG_INFO << "libsodium initialized successfully";
 
-    LOG_INFO << "Drogon 框架版本：" << drogon::getVersion();
-    LOG_INFO << "Web 服务监听在 http://127.0.0.1:8080";
+    LOG_INFO << "Drogon framework version: " << drogon::getVersion();
+    LOG_INFO << "Web server listening on http://127.0.0.1:8080";
 
     // 注册启动后定时清理任务
     drogon::app().registerBeginningAdvice([]() {
@@ -25,16 +25,16 @@ auto main() -> int {
         drogon::app().getLoop()->runEvery(
             3600.0,
             drogon::async_func([cleanup_service]() -> drogon::Task<void> {
-                LOG_INFO << "定时清理任务开始执行";
+                LOG_INFO << "Scheduled cleanup task started";
                 const auto& service = cleanup_service;
                 auto result = co_await service->CleanupExpiredTrash();
                 if (!result) {
-                    LOG_ERROR << "定时清理任务失败: " << result.error().message;
+                    LOG_ERROR << "Scheduled cleanup task failed: " << result.error().message;
                 }
             })
         );
 
-        LOG_INFO << "定时清理任务已注册（每小时执行）";
+        LOG_INFO << "Scheduled cleanup task registered (runs every hour)";
     });
 
     drogon::app().loadConfigFile("config.json").run();
