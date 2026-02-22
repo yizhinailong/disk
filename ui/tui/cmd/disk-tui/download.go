@@ -34,10 +34,10 @@ var (
 // 从 Disk 云存储下载文件到本地。
 var downloadCmd = &cobra.Command{
 	Use:   "download <file_id>",
-	Short: "下载文件",
-	Long: `从 Disk 云存储下载文件到本地。
+	Short: "Download file",
+	Long: `Download file from Disk cloud storage to local.
 
-支持断点续传和进度显示。使用 --info 可以查看文件信息而不下载。`,
+Supports resuming interrupted downloads and progress display. Use --info to view file information without downloading.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runDownload(cmd, args); err != nil {
@@ -48,19 +48,19 @@ var downloadCmd = &cobra.Command{
 }
 
 func init() {
-	downloadCmd.Flags().StringVarP(&downloadOutput, "output", "o", "", "输出目录（默认当前目录）")
-	downloadCmd.Flags().BoolVar(&downloadInfo, "info", false, "仅显示文件信息")
+	downloadCmd.Flags().StringVarP(&downloadOutput, "output", "o", "", "output directory (default: current directory)")
+	downloadCmd.Flags().BoolVar(&downloadInfo, "info", false, "show file info only")
 	rootCmd.AddCommand(downloadCmd)
 }
 
 func runDownload(cmd *cobra.Command, args []string) error {
 	fileID, err := strconv.ParseUint(args[0], 10, 64)
 	if err != nil {
-		return fmt.Errorf("无效的文件 ID: %s", args[0])
+		return fmt.Errorf("invalid file ID: %s", args[0])
 	}
 
 	if err := config.Init(); err != nil {
-		return fmt.Errorf("配置初始化失败: %w", err)
+		return fmt.Errorf("failed to initialize config: %w", err)
 	}
 
 	if serverURL := viper.GetString("server"); serverURL != "" {
@@ -71,26 +71,26 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	client := api.NewClient(cfg, store.NewTokenStore(cfg.GetTokenPath()))
 
 	if err := client.LoadToken(); err != nil {
-		return fmt.Errorf("加载令牌失败: %w（请先登录）", err)
+		return fmt.Errorf("failed to load token: %w (please login first)", err)
 	}
 	if !client.IsLoggedIn() {
-		return fmt.Errorf("未登录，请先登录")
+		return fmt.Errorf("not logged in, please login first")
 	}
 
 	file, err := client.File.Get(context.Background(), fileID)
 	if err != nil {
-		return fmt.Errorf("获取文件信息失败: %w", err)
+		return fmt.Errorf("failed to get file info: %w", err)
 	}
 
 	if file.IsFolder() {
-		return fmt.Errorf("不支持下载文件夹: %s", file.Name)
+		return fmt.Errorf("downloading folders is not supported: %s", file.Name)
 	}
 
 	if downloadInfo {
-		fmt.Printf("文件名: %s\n", file.Name)
-		fmt.Printf("大小: %s\n", formatDownloadSize(int64(file.Size)))
-		fmt.Printf("类型: %s\n", file.MimeType)
-		fmt.Printf("哈希: %s\n", file.Hash)
+		fmt.Printf("Filename: %s\n", file.Name)
+		fmt.Printf("Size: %s\n", formatDownloadSize(int64(file.Size)))
+		fmt.Printf("Type: %s\n", file.MimeType)
+		fmt.Printf("Hash: %s\n", file.Hash)
 		return nil
 	}
 
@@ -101,18 +101,18 @@ func runDownload(cmd *cobra.Command, args []string) error {
 
 	absPath, err := filepath.Abs(outputDir)
 	if err != nil {
-		return fmt.Errorf("获取输出路径失败: %w", err)
+		return fmt.Errorf("failed to get output path: %w", err)
 	}
 
 	info, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("输出目录不存在: %s", absPath)
+			return fmt.Errorf("output directory does not exist: %s", absPath)
 		}
-		return fmt.Errorf("访问输出目录失败: %w", err)
+		return fmt.Errorf("failed to access output directory: %w", err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("输出路径不是目录: %s", absPath)
+		return fmt.Errorf("output path is not a directory: %s", absPath)
 	}
 
 	d := downloader.New(client)
@@ -122,10 +122,10 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		printDownloadProgress(info)
 	})
 	if err != nil {
-		return fmt.Errorf("下载失败: %w", err)
+		return fmt.Errorf("download failed: %w", err)
 	}
 
-	fmt.Printf("\n✓ 已下载: %s (%s)\n", task.FileName, formatDownloadSize(task.FileSize))
+	fmt.Printf("\n✓ Downloaded: %s (%s)\n", task.FileName, formatDownloadSize(task.FileSize))
 	return nil
 }
 

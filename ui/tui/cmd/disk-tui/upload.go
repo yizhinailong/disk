@@ -32,11 +32,11 @@ var (
 // 将本地文件上传到 Disk 云存储。
 var uploadCmd = &cobra.Command{
 	Use:   "upload <file>",
-	Short: "上传文件",
-	Long: `将本地文件上传到 Disk 云存储。
+	Short: "Upload file",
+	Long: `Upload local file to Disk cloud storage.
 
-支持大文件分片上传和自动断点续传。
-使用 --parent 指定目标文件夹（默认根目录）。`,
+Supports large file chunked upload and automatic resume.
+Use --parent to specify target folder (default: root).`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runUpload(cmd, args); err != nil {

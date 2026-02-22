@@ -127,11 +127,11 @@ func (u *Uploader) SetStateManager(mgr *StateManager) {
 func (u *Uploader) CreateTask(filePath string, parentID uint64) (*UploadTask, error) {
 	info, err := os.Stat(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("无法访问文件: %w", err)
+		return nil, fmt.Errorf("cannot access file: %w", err)
 	}
 
 	if info.IsDir() {
-		return nil, fmt.Errorf("不支持上传文件夹")
+		return nil, fmt.Errorf("uploading folders is not supported")
 	}
 
 	chunks := int(info.Size() / int64(u.chunkSize))

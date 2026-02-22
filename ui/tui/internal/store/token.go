@@ -58,18 +58,18 @@ func (s *TokenStore) Save(data *TokenData) error {
 	// 序列化
 	plaintext, err := json.Marshal(data)
 	if err != nil {
-		return fmt.Errorf("序列化令牌失败: %w", err)
+		return fmt.Errorf("failed to serialize token: %w", err)
 	}
 
 	// 确保目录存在
 	dir := filepath.Dir(s.filePath)
 	if err := os.MkdirAll(dir, 0700); err != nil {
-		return fmt.Errorf("创建目录失败: %w", err)
+		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
 	// 写入文件（权限 600）
 	if err := os.WriteFile(s.filePath, plaintext, 0600); err != nil {
-		return fmt.Errorf("写入文件失败: %w", err)
+		return fmt.Errorf("failed to write file: %w", err)
 	}
 
 	return nil
@@ -88,13 +88,13 @@ func (s *TokenStore) Load() (*TokenData, error) {
 		if os.IsNotExist(err) {
 			return nil, nil // 文件不存在，返回 nil（未登录）
 		}
-		return nil, fmt.Errorf("读取文件失败: %w", err)
+		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	// 反序列化
 	var tokenData TokenData
 	if err := json.Unmarshal(data, &tokenData); err != nil {
-		return nil, fmt.Errorf("反序列化失败: %w", err)
+		return nil, fmt.Errorf("failed to deserialize: %w", err)
 	}
 
 	return &tokenData, nil

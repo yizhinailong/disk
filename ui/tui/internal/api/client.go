@@ -165,7 +165,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 	// 检查并刷新 Token（仅当需要认证时）
 	if c.NeedRefresh() {
 		if err := c.Auth.Refresh(ctx); err != nil {
-			return fmt.Errorf("刷新令牌失败: %w", err)
+			return fmt.Errorf("failed to refresh token: %w", err)
 		}
 	}
 
@@ -174,7 +174,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 	if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
-			return fmt.Errorf("序列化请求失败: %w", err)
+			return fmt.Errorf("failed to serialize request: %w", err)
 		}
 		reqBody = bytes.NewReader(data)
 	}
@@ -182,7 +182,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 	url := c.config.Server.URL + path
 	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
-		return fmt.Errorf("创建请求失败: %w", err)
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -197,20 +197,20 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 	// 发送请求
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("请求失败: %w", err)
+		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// 读取响应
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("读取响应失败: %w", err)
+		return fmt.Errorf("failed to read response: %w", err)
 	}
 
 	// 解析响应
 	var apiResp models.ApiResponse[json.RawMessage]
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		return fmt.Errorf("解析响应失败: %w", err)
+		return fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	// 检查错误
@@ -221,7 +221,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 	// 解析数据
 	if result != nil && apiResp.Data != nil {
 		if err := json.Unmarshal(apiResp.Data, result); err != nil {
-			return fmt.Errorf("解析数据失败: %w", err)
+			return fmt.Errorf("failed to parse data: %w", err)
 		}
 	}
 
@@ -238,7 +238,7 @@ type APIError struct {
 
 // Error 实现 error 接口
 func (e *APIError) Error() string {
-	return fmt.Sprintf("API错误(%d): %s", e.Code, e.Message)
+	return fmt.Sprintf("API Error(%d): %s", e.Code, e.Message)
 }
 
 // IsAuthError 检查是否为认证错误
@@ -276,7 +276,7 @@ func (c *Client) doMultipartRequest(ctx context.Context, method, path string, fi
 	// 检查并刷新 Token
 	if c.NeedRefresh() {
 		if err := c.Auth.Refresh(ctx); err != nil {
-			return fmt.Errorf("刷新令牌失败: %w", err)
+			return fmt.Errorf("failed to refresh token: %w", err)
 		}
 	}
 
@@ -287,7 +287,7 @@ func (c *Client) doMultipartRequest(ctx context.Context, method, path string, fi
 	// 添加普通字段
 	for key, value := range fields {
 		if err := writer.WriteField(key, value); err != nil {
-			return fmt.Errorf("写入字段 %s 失败: %w", key, err)
+			return fmt.Errorf("failed to write field %s: %w", key, err)
 		}
 	}
 
@@ -295,22 +295,22 @@ func (c *Client) doMultipartRequest(ctx context.Context, method, path string, fi
 	for fieldName, file := range files {
 		part, err := writer.CreateFormFile(fieldName, file.Filename)
 		if err != nil {
-			return fmt.Errorf("创建文件字段 %s 失败: %w", fieldName, err)
+			return fmt.Errorf("failed to create file field %s: %w", fieldName, err)
 		}
 		if _, err := part.Write(file.Data); err != nil {
-			return fmt.Errorf("写入文件数据失败: %w", err)
+			return fmt.Errorf("failed to write file data: %w", err)
 		}
 	}
 
 	if err := writer.Close(); err != nil {
-		return fmt.Errorf("关闭 multipart writer 失败: %w", err)
+		return fmt.Errorf("failed to close multipart writer: %w", err)
 	}
 
 	// 创建请求
 	url := c.config.Server.URL + path
 	req, err := http.NewRequestWithContext(ctx, method, url, &body)
 	if err != nil {
-		return fmt.Errorf("创建请求失败: %w", err)
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", writer.FormDataContentType())
@@ -325,20 +325,20 @@ func (c *Client) doMultipartRequest(ctx context.Context, method, path string, fi
 	// 发送请求
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("请求失败: %w", err)
+		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// 读取响应
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("读取响应失败: %w", err)
+		return fmt.Errorf("failed to read response: %w", err)
 	}
 
 	// 解析响应
 	var apiResp models.ApiResponse[json.RawMessage]
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		return fmt.Errorf("解析响应失败: %w", err)
+		return fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	// 检查错误
@@ -349,7 +349,7 @@ func (c *Client) doMultipartRequest(ctx context.Context, method, path string, fi
 	// 解析数据
 	if result != nil && apiResp.Data != nil {
 		if err := json.Unmarshal(apiResp.Data, result); err != nil {
-			return fmt.Errorf("解析数据失败: %w", err)
+			return fmt.Errorf("failed to parse data: %w", err)
 		}
 	}
 

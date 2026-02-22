@@ -35,12 +35,12 @@ var cfgFile string
 // 默认行为是启动 TUI 界面，支持 --version、--config、--server 等全局参数。
 var rootCmd = &cobra.Command{
 	Use:   "disk-tui",
-	Short: "Disk 网盘系统终端客户端",
-	Long: `Disk TUI 是一个基于 Bubble Tea 框架的终端用户界面客户端，
-为 Disk 网盘系统提供命令行访问能力。
+	Short: "Disk cloud storage terminal client",
+	Long: `Disk TUI is a terminal user interface client based on Bubble Tea framework,
+providing command-line access to the Disk cloud storage system.
 
-支持文件管理、上传下载、文件分享、回收站等功能。
-默认启动交互式 TUI 界面，也支持通过子命令进行非交互式操作。`,
+Supports file management, upload/download, file sharing, trash, and more.
+By default, starts an interactive TUI interface, also supports non-interactive operations via subcommands.`,
 	Run: runTUI,
 }
 
@@ -57,7 +57,7 @@ func runTUI(cmd *cobra.Command, args []string) {
 
 	// 初始化配置
 	if err := config.Init(); err != nil {
-		fmt.Fprintf(os.Stderr, "配置初始化失败: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to initialize config: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -77,7 +77,7 @@ func runTUI(cmd *cobra.Command, args []string) {
 	)
 
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "启动失败: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to start: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -89,9 +89,9 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	// 持久化标志（所有子命令可用）
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "配置文件路径")
-	rootCmd.PersistentFlags().String("server", "", "服务器地址")
-	rootCmd.PersistentFlags().Bool("version", false, "显示版本信息")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file path")
+	rootCmd.PersistentFlags().String("server", "", "server address")
+	rootCmd.PersistentFlags().Bool("version", false, "show version information")
 
 	// 绑定到 Viper
 	viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))

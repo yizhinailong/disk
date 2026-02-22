@@ -191,7 +191,7 @@ func (m *Model) DoDownload() tea.Cmd {
 			return OperationMsg{
 				Operation: "download",
 				Success:   false,
-				Error:     fmt.Errorf("请选择一个文件"),
+				Error:     fmt.Errorf("please select a file"),
 			}
 		}
 
@@ -244,7 +244,7 @@ func (m *Model) DoRename(newName string) tea.Cmd {
 			return OperationMsg{
 				Operation: "rename",
 				Success:   false,
-				Error:     fmt.Errorf("未选择文件"),
+				Error:     fmt.Errorf("no file selected"),
 			}
 		}
 
@@ -279,7 +279,7 @@ func (m *Model) DoDelete() tea.Cmd {
 				return OperationMsg{
 					Operation: "delete",
 					Success:   false,
-					Error:     fmt.Errorf("未选择文件"),
+					Error:     fmt.Errorf("no file selected"),
 				}
 			}
 			fileIDs = append(fileIDs, file.ID)
@@ -317,7 +317,7 @@ func (m *Model) DoMove(targetFolderID uint64) tea.Cmd {
 				return OperationMsg{
 					Operation: "move",
 					Success:   false,
-					Error:     fmt.Errorf("未选择文件"),
+					Error:     fmt.Errorf("no file selected"),
 				}
 			}
 			fileIDs = append(fileIDs, file.ID)
@@ -355,7 +355,7 @@ func (m *Model) DoCopy(targetFolderID uint64) tea.Cmd {
 				return OperationMsg{
 					Operation: "copy",
 					Success:   false,
-					Error:     fmt.Errorf("未选择文件"),
+					Error:     fmt.Errorf("no file selected"),
 				}
 			}
 			fileIDs = append(fileIDs, file.ID)
@@ -401,13 +401,13 @@ func (m *Model) DoCreateFolder(name string) tea.Cmd {
 func getDownloadDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("无法获取用户目录: %w", err)
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
 	}
 
 	downloadDir := filepath.Join(homeDir, "Downloads")
 	if _, err := os.Stat(downloadDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(downloadDir, 0755); err != nil {
-			return "", fmt.Errorf("无法创建下载目录: %w", err)
+			return "", fmt.Errorf("failed to create download directory: %w", err)
 		}
 	}
 
@@ -466,7 +466,7 @@ func (m *Model) DoCreateShare(expireDays int, password string) tea.Cmd {
 			file := m.fileList.SelectedFile()
 			if file == nil {
 				return ShareCreatedMsg{
-					Error: fmt.Errorf("未选择文件"),
+					Error: fmt.Errorf("no file selected"),
 				}
 			}
 			fileIDs = append(fileIDs, file.ID)

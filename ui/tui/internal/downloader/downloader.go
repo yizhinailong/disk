@@ -119,7 +119,7 @@ func (d *Downloader) Download(ctx context.Context, task *DownloadTask, progressF
 
 	if _, err := os.Stat(task.SavePath); err == nil {
 		task.Status = StatusFailed
-		task.Error = fmt.Errorf("文件已存在: %s", task.SavePath)
+		task.Error = fmt.Errorf("file already exists: %s", task.SavePath)
 		return task.Error
 	}
 

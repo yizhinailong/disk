@@ -95,7 +95,7 @@ func Init() error {
 	// 读取配置文件
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return fmt.Errorf("读取配置文件失败: %w", err)
+			return fmt.Errorf("failed to read config file: %w", err)
 		}
 		// 配置文件不存在时使用默认值
 	}
@@ -103,7 +103,7 @@ func Init() error {
 	// 解析到结构体
 	cfg = &Config{}
 	if err := viper.Unmarshal(cfg); err != nil {
-		return fmt.Errorf("解析配置失败: %w", err)
+		return fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	return nil

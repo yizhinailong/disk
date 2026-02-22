@@ -186,7 +186,7 @@ func (m *StateManager) Delete(uploadID string) error {
 	// 如果全部删除，删除文件
 	if len(newStates) == 0 {
 		if err := os.Remove(m.filePath); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("删除状态文件失败: %w", err)
+			return fmt.Errorf("failed to delete state file: %w", err)
 		}
 		return nil
 	}
@@ -231,7 +231,7 @@ func (m *StateManager) Update(state *UploadState) error {
 	}
 
 	if !found {
-		return fmt.Errorf("上传状态不存在: %s", state.UploadID)
+		return fmt.Errorf("upload state not found: %s", state.UploadID)
 	}
 
 	return m.saveAll(states)
@@ -250,12 +250,12 @@ func (m *StateManager) loadAll() ([]*UploadState, error) {
 		if os.IsNotExist(err) {
 			return []*UploadState{}, nil
 		}
-		return nil, fmt.Errorf("读取状态文件失败: %w", err)
+		return nil, fmt.Errorf("failed to read state file: %w", err)
 	}
 
 	var sf stateFile
 	if err := json.Unmarshal(data, &sf); err != nil {
-		return nil, fmt.Errorf("解析状态文件失败: %w", err)
+		return nil, fmt.Errorf("failed to parse state file: %w", err)
 	}
 
 	return sf.Uploads, nil
@@ -275,18 +275,18 @@ func (m *StateManager) saveAll(states []*UploadState) error {
 
 	data, err := json.MarshalIndent(sf, "", "  ")
 	if err != nil {
-		return fmt.Errorf("序列化状态失败: %w", err)
+		return fmt.Errorf("failed to serialize state: %w", err)
 	}
 
 	// 确保目录存在
 	dir := filepath.Dir(m.filePath)
 	if err := os.MkdirAll(dir, 0700); err != nil {
-		return fmt.Errorf("创建目录失败: %w", err)
+		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
 	// 写入文件（权限 600）
 	if err := os.WriteFile(m.filePath, data, 0600); err != nil {
-		return fmt.Errorf("写入状态文件失败: %w", err)
+		return fmt.Errorf("failed to write state file: %w", err)
 	}
 
 	return nil
