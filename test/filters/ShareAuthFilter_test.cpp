@@ -27,37 +27,55 @@ namespace {
         auto http_status = disk::error::GetHttpStatus(Code::TokenMissing);
         EXPECT_EQ(http_status, drogon::k401Unauthorized);
         auto message = disk::error::GetErrorMessage(Code::TokenMissing);
-        EXPECT_EQ(message, std::string("未提供令牌"));
+        EXPECT_EQ(message, std::string("Token not provided"));
     }
 
     TEST(ShareAuthFilterTest, ErrorMappingContract_TokenMalformed) {
         auto http_status = disk::error::GetHttpStatus(Code::TokenMalformed);
         EXPECT_EQ(http_status, drogon::k401Unauthorized);
         auto message = disk::error::GetErrorMessage(Code::TokenMalformed);
-        EXPECT_EQ(message, std::string("令牌格式错误"));
+        EXPECT_EQ(message, std::string("Token format error"));
     }
 
     TEST(ShareAuthFilterTest, ErrorMappingContract_TokenExpired) {
         auto http_status = disk::error::GetHttpStatus(Code::TokenExpired);
         EXPECT_EQ(http_status, drogon::k401Unauthorized);
         auto message = disk::error::GetErrorMessage(Code::TokenExpired);
-        EXPECT_EQ(message, std::string("令牌已过期"));
+        EXPECT_EQ(message, std::string("Token expired"));
     }
 
     TEST(ShareAuthFilterTest, ErrorMappingContract_TokenRevoked) {
         auto http_status = disk::error::GetHttpStatus(Code::TokenRevoked);
         EXPECT_EQ(http_status, drogon::k401Unauthorized);
         auto message = disk::error::GetErrorMessage(Code::TokenRevoked);
-        EXPECT_EQ(message, std::string("令牌已被注销"));
+        EXPECT_EQ(message, std::string("Token revoked"));
     }
 
     TEST(ShareAuthFilterTest, ErrorCodesAreDistinct) {
-        EXPECT_NE(static_cast<uint32_t>(Code::TokenMissing), static_cast<uint32_t>(Code::TokenMalformed));
-        EXPECT_NE(static_cast<uint32_t>(Code::TokenMissing), static_cast<uint32_t>(Code::TokenExpired));
-        EXPECT_NE(static_cast<uint32_t>(Code::TokenMissing), static_cast<uint32_t>(Code::TokenRevoked));
-        EXPECT_NE(static_cast<uint32_t>(Code::TokenMalformed), static_cast<uint32_t>(Code::TokenExpired));
-        EXPECT_NE(static_cast<uint32_t>(Code::TokenMalformed), static_cast<uint32_t>(Code::TokenRevoked));
-        EXPECT_NE(static_cast<uint32_t>(Code::TokenExpired), static_cast<uint32_t>(Code::TokenRevoked));
+        EXPECT_NE(
+            static_cast<uint32_t>(Code::TokenMissing),
+            static_cast<uint32_t>(Code::TokenMalformed)
+        );
+        EXPECT_NE(
+            static_cast<uint32_t>(Code::TokenMissing),
+            static_cast<uint32_t>(Code::TokenExpired)
+        );
+        EXPECT_NE(
+            static_cast<uint32_t>(Code::TokenMissing),
+            static_cast<uint32_t>(Code::TokenRevoked)
+        );
+        EXPECT_NE(
+            static_cast<uint32_t>(Code::TokenMalformed),
+            static_cast<uint32_t>(Code::TokenExpired)
+        );
+        EXPECT_NE(
+            static_cast<uint32_t>(Code::TokenMalformed),
+            static_cast<uint32_t>(Code::TokenRevoked)
+        );
+        EXPECT_NE(
+            static_cast<uint32_t>(Code::TokenExpired),
+            static_cast<uint32_t>(Code::TokenRevoked)
+        );
     }
 
     TEST(ShareAuthFilterTest, ServiceVerifyToken_MalformedPath_ReturnsMalformedCode) {

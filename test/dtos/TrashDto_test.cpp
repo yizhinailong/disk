@@ -30,7 +30,8 @@ using disk::trash::TrashListRequest;
 
 // ==================== TrashListRequest Tests ====================
 
-static auto CreateListRequest(const std::string& page, const std::string& page_size) -> drogon::HttpRequestPtr {
+static auto CreateListRequest(const std::string& page, const std::string& page_size)
+    -> drogon::HttpRequestPtr {
     auto req = drogon::HttpRequest::newHttpRequest();
     if (!page.empty()) {
         req->setParameter("page", page);
@@ -340,7 +341,7 @@ TEST(BatchResultItem, FailedItemWithErrorDetails) {
     item.trash_id = 999;
     item.status = "failed";
     item.code = 10003;
-    item.message = "资源不存在";
+    item.message = "Resource not found";
     item.field = "trash_id";
     item.value = "999";
 
@@ -350,7 +351,7 @@ TEST(BatchResultItem, FailedItemWithErrorDetails) {
     EXPECT_EQ(json["status"].asString(), "failed");
     EXPECT_TRUE(json.isMember("error"));
     EXPECT_EQ(json["error"]["code"].asUInt(), 10003);
-    EXPECT_EQ(json["error"]["message"].asString(), "资源不存在");
+    EXPECT_EQ(json["error"]["message"].asString(), "Resource not found");
     EXPECT_EQ(json["error"]["field"].asString(), "trash_id");
     EXPECT_EQ(json["error"]["value"].asString(), "999");
     EXPECT_FALSE(json.isMember("data"));
@@ -417,7 +418,7 @@ TEST(BatchRestoreResponse, ToJsonCorrectStructure) {
     failed1.trash_id = 3;
     failed1.status = "failed";
     failed1.code = 10003;
-    failed1.message = "资源不存在";
+    failed1.message = "Resource not found";
     failed1.field = "trash_id";
     failed1.value = "3";
 
@@ -443,7 +444,7 @@ TEST(BatchRestoreResponse, ToJsonCorrectStructure) {
     EXPECT_EQ(json["results"][2]["trash_id"].asUInt64(), 3);
     EXPECT_EQ(json["results"][2]["status"].asString(), "failed");
     EXPECT_EQ(json["results"][2]["error"]["code"].asUInt(), 10003);
-    EXPECT_EQ(json["results"][2]["error"]["message"].asString(), "资源不存在");
+    EXPECT_EQ(json["results"][2]["error"]["message"].asString(), "Resource not found");
     EXPECT_EQ(json["results"][2]["error"]["field"].asString(), "trash_id");
     EXPECT_EQ(json["results"][2]["error"]["value"].asString(), "3");
 }

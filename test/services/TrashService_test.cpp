@@ -127,7 +127,7 @@ namespace disk::trash {
             item.trash_id = 40;
             item.status = "failed";
             item.code = static_cast<uint16_t>(ErrorCode::ResourceNotFound);
-            item.message = "回收站项目不存在";
+            item.message = "Trash item not found";
             item.field = "trash_id";
             item.value = "40";
 
@@ -136,8 +136,11 @@ namespace disk::trash {
             EXPECT_EQ(json["trash_id"].asUInt64(), 40u);
             EXPECT_EQ(json["status"].asString(), "failed");
             ASSERT_TRUE(json.isMember("error"));
-            EXPECT_EQ(json["error"]["code"].asUInt(), static_cast<uint32_t>(ErrorCode::ResourceNotFound));
-            EXPECT_EQ(json["error"]["message"].asString(), "回收站项目不存在");
+            EXPECT_EQ(
+                json["error"]["code"].asUInt(),
+                static_cast<uint32_t>(ErrorCode::ResourceNotFound)
+            );
+            EXPECT_EQ(json["error"]["message"].asString(), "Trash item not found");
             EXPECT_EQ(json["error"]["field"].asString(), "trash_id");
             EXPECT_EQ(json["error"]["value"].asString(), "40");
         }
@@ -153,7 +156,10 @@ namespace disk::trash {
 
             EXPECT_EQ(json["status"].asString(), "failed");
             ASSERT_TRUE(json.isMember("error"));
-            EXPECT_EQ(json["error"]["code"].asUInt(), static_cast<uint32_t>(ErrorCode::InternalError));
+            EXPECT_EQ(
+                json["error"]["code"].asUInt(),
+                static_cast<uint32_t>(ErrorCode::InternalError)
+            );
         }
 
         // ==================== TrashService Batch Summary Tests ====================
@@ -189,7 +195,10 @@ namespace disk::trash {
 
             auto json = summary.ToJson();
 
-            EXPECT_EQ(json["total"].asInt(), json["success_count"].asInt() + json["failure_count"].asInt());
+            EXPECT_EQ(
+                json["total"].asInt(),
+                json["success_count"].asInt() + json["failure_count"].asInt()
+            );
         }
 
         // ==================== TrashService Batch Response Tests ====================
@@ -346,11 +355,9 @@ namespace disk::trash {
 
         TEST_F(TrashServiceAutoRenameTest, FileRenameMultipleConflicts) {
             // Multiple conflicts increment the number
-            std::vector<std::string> conflicts = {
-                "report (1).pdf",
-                "report (2).pdf",
-                "report (10).pdf"
-            };
+            std::vector<std::string> conflicts = { "report (1).pdf",
+                                                   "report (2).pdf",
+                                                   "report (10).pdf" };
 
             for (size_t i = 0; i < conflicts.size(); ++i) {
                 EXPECT_TRUE(conflicts[i].find(" (") != std::string::npos);

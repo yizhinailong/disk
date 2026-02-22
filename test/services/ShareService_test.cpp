@@ -219,11 +219,9 @@ namespace disk::share {
             CancelShareResult result;
             result.share_id = "cancel002";
             result.status = "failed";
-            result.error = CancelShareError{
-                .code = static_cast<int>(ErrorCode::ShareNotFound),
-                .message = "分享不存在",
-                .reason = "share_not_found"
-            };
+            result.error = CancelShareError{ .code = static_cast<int>(ErrorCode::ShareNotFound),
+                                             .message = "Share not found",
+                                             .reason = "share_not_found" };
 
             auto json = result.ToJson();
 
@@ -231,7 +229,7 @@ namespace disk::share {
             EXPECT_EQ(json["status"].asString(), "failed");
             ASSERT_TRUE(json.isMember("error"));
             EXPECT_EQ(json["error"]["code"].asInt(), static_cast<int>(ErrorCode::ShareNotFound));
-            EXPECT_EQ(json["error"]["message"].asString(), "分享不存在");
+            EXPECT_EQ(json["error"]["message"].asString(), "Share not found");
             EXPECT_EQ(json["error"]["reason"].asString(), "share_not_found");
         }
 
@@ -252,11 +250,9 @@ namespace disk::share {
             CancelShareResult failed;
             failed.share_id = "share003";
             failed.status = "failed";
-            failed.error = CancelShareError{
-                .code = static_cast<int>(ErrorCode::ShareAccessDenied),
-                .message = "无权限访问",
-                .reason = "access_denied"
-            };
+            failed.error = CancelShareError{ .code = static_cast<int>(ErrorCode::ShareAccessDenied),
+                                             .message = "Access denied",
+                                             .reason = "access_denied" };
 
             response.results.push_back(success1);
             response.results.push_back(success2);
@@ -436,7 +432,10 @@ namespace disk::share {
             pagination.total = 45;
 
             // Expected: (45 + 20 - 1) / 20 = 64 / 20 = 3
-            pagination.total_pages = pagination.page_size > 0 ? (pagination.total + pagination.page_size - 1) / pagination.page_size : 0;
+            pagination.total_pages =
+                pagination.page_size > 0 ?
+                    (pagination.total + pagination.page_size - 1) / pagination.page_size :
+                    0;
 
             EXPECT_EQ(pagination.total_pages, 3);
         }
@@ -493,7 +492,9 @@ namespace disk::share {
 
             // The response is valid regardless of success/failure count
             // HTTP 200 should always be returned for batch operations
-            EXPECT_TRUE(response.summary.succeeded + response.summary.failed == response.summary.total);
+            EXPECT_TRUE(
+                response.summary.succeeded + response.summary.failed == response.summary.total
+            );
         }
 
         TEST_F(ShareServiceContractTest, ShareIdIsExternalIdentifier) {
@@ -533,7 +534,7 @@ namespace disk::share {
 
             // Verify error message
             auto message = Error::GetErrorMessage(ErrorCode::FileNotFound);
-            EXPECT_EQ(message, std::string("文件不存在"));
+            EXPECT_EQ(message, std::string("File not found"));
         }
 
         // Regression test for HTTP 416 Range Not Satisfiable
@@ -573,7 +574,7 @@ namespace disk::share {
 
             // Verify error message
             auto message = Error::GetErrorMessage(ErrorCode::TokenMalformed);
-            EXPECT_EQ(message, std::string("令牌格式错误"));
+            EXPECT_EQ(message, std::string("Token format error"));
         }
 
         // Regression test for share token expired (40108)
@@ -588,7 +589,7 @@ namespace disk::share {
 
             // Verify error message
             auto message = Error::GetErrorMessage(ErrorCode::TokenExpired);
-            EXPECT_EQ(message, std::string("令牌已过期"));
+            EXPECT_EQ(message, std::string("Token expired"));
         }
 
         // Regression test for batch cancel mixed outcomes summary contract
@@ -617,20 +618,16 @@ namespace disk::share {
             CancelShareResult failed1;
             failed1.share_id = "sh_004";
             failed1.status = "failed";
-            failed1.error = CancelShareError{
-                .code = static_cast<int>(ErrorCode::ShareNotFound),
-                .message = "分享不存在",
-                .reason = "share_not_found"
-            };
+            failed1.error = CancelShareError{ .code = static_cast<int>(ErrorCode::ShareNotFound),
+                                              .message = "Share not found",
+                                              .reason = "share_not_found" };
 
             CancelShareResult failed2;
             failed2.share_id = "sh_005";
             failed2.status = "failed";
-            failed2.error = CancelShareError{
-                .code = static_cast<int>(ErrorCode::ShareExpired),
-                .message = "分享已过期",
-                .reason = "share_expired"
-            };
+            failed2.error = CancelShareError{ .code = static_cast<int>(ErrorCode::ShareExpired),
+                                              .message = "Share expired",
+                                              .reason = "share_expired" };
 
             response.results = { success1, success2, success3, failed1, failed2 };
 
@@ -679,7 +676,7 @@ namespace disk::share {
 
             // Verify error message
             auto message = Error::GetErrorMessage(ErrorCode::TokenMissing);
-            EXPECT_EQ(message, std::string("未提供令牌"));
+            EXPECT_EQ(message, std::string("Token not provided"));
         }
 
         // Regression test for share access denied (60004)
@@ -694,7 +691,7 @@ namespace disk::share {
 
             // Verify error message
             auto message = Error::GetErrorMessage(ErrorCode::ShareAccessDenied);
-            EXPECT_EQ(message, std::string("无权限访问"));
+            EXPECT_EQ(message, std::string("Access denied"));
         }
 
     } // namespace
