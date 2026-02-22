@@ -986,8 +986,8 @@ namespace disk::file {
         }
 
         if (storage_used + total_copy_size > storage_quota) {
-            LOG_WARN << "存储空间不足: used=" << storage_used << ", quota=" << storage_quota
-                     << ", copy_size=" << total_copy_size;
+            LOG_WARN << "Insufficient storage space: used=" << storage_used
+                     << ", quota=" << storage_quota << ", copy_size=" << total_copy_size;
             co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
         }
 
@@ -1003,7 +1003,8 @@ namespace disk::file {
                         file.getValueOfName(),
                         user_id
                     )) {
-                    LOG_WARN << "目标文件夹已存在同名文件，跳过: " << file.getValueOfName();
+                    LOG_WARN << "Target folder already has file with same name, skipping: "
+                             << file.getValueOfName();
                     continue;
                 }
 
@@ -1036,11 +1037,11 @@ namespace disk::file {
                 actual_copy_size += file.getValueOfSize();
                 new_files.push_back({ .old_id = old_id, .new_id = new_file.getValueOfId() });
 
-                LOG_DEBUG << "文件复制成功: old_id=" << old_id
+                LOG_DEBUG << "File copy successful: old_id=" << old_id
                           << ", new_id=" << new_file.getValueOfId();
 
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_ERROR << "复制文件失败: file_id=" << old_id << " - " << e.base().what();
+                LOG_ERROR << "Failed to copy file: file_id=" << old_id << " - " << e.base().what();
             }
         }
 
@@ -1048,7 +1049,7 @@ namespace disk::file {
             co_await UpdateStorageUsed(user_id, static_cast<int64_t>(actual_copy_size));
         }
 
-        LOG_INFO << "文件复制完成: copied_count=" << copied_count
+        LOG_INFO << "File copy completed: copied_count=" << copied_count
                  << ", total_size=" << actual_copy_size;
 
         CopyResponse response;
@@ -1062,7 +1063,7 @@ namespace disk::file {
     auto FileService::Delete(DeleteRequest request, uint64_t user_id)
         -> drogon::Task<Result<DeleteResponse>> {
 
-        LOG_DEBUG << "开始删除文件: file_ids.size()=" << request.file_ids.size()
+        LOG_DEBUG << "Starting delete file: file_ids.size()=" << request.file_ids.size()
                   << ", user_id=" << user_id;
 
         int deleted_count = 0;
@@ -1102,15 +1103,15 @@ namespace disk::file {
                 co_await file_mapper.deleteByPrimaryKey(file.getValueOfId());
 
                 ++deleted_count;
-                LOG_DEBUG << "文件移入回收站: file_id=" << file_id;
+                LOG_DEBUG << "File moved to trash: file_id=" << file_id;
 
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "文件不存在或删除失败，跳过: file_id=" << file_id << " - "
-                         << e.base().what();
+                LOG_WARN << "File not found or delete failed, skipping: file_id=" << file_id
+                         << " - " << e.base().what();
             }
         }
 
-        LOG_INFO << "文件删除完成: deleted_count=" << deleted_count;
+        LOG_INFO << "File delete completed: deleted_count=" << deleted_count;
 
         DeleteResponse response;
         response.deleted_count = deleted_count;
@@ -1122,8 +1123,8 @@ namespace disk::file {
     auto FileService::Search(SearchRequest request, uint64_t user_id)
         -> drogon::Task<Result<SearchResponse>> {
 
-        LOG_DEBUG << "开始搜索文件: keyword=\"" << request.keyword << "\", type=" << request.type
-                  << ", folder_id="
+        LOG_DEBUG << "Starting search file: keyword=\"" << request.keyword
+                  << "\", type=" << request.type << ", folder_id="
                   << (request.folder_id.has_value() ? std::to_string(*request.folder_id) : "null")
                   << ", page=" << request.page << ", page_size=" << request.page_size
                   << ", user_id=" << user_id;
@@ -1179,7 +1180,7 @@ namespace disk::file {
                     all_items.push_back(item);
                 }
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "搜索文件失败: " << e.base().what();
+                LOG_WARN << "Failed to search files: " << e.base().what();
             }
         }
 
@@ -1214,7 +1215,7 @@ namespace disk::file {
                     all_items.push_back(item);
                 }
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "搜索文件夹失败: " << e.base().what();
+                LOG_WARN << "Failed to search folders: " << e.base().what();
             }
         }
 
@@ -1244,7 +1245,7 @@ namespace disk::file {
                                 .total = total,
                                 .total_pages = total_pages };
 
-        LOG_DEBUG << "搜索完成: total=" << total << ", page=" << request.page;
+        LOG_DEBUG << "Search completed: total=" << total << ", page=" << request.page;
         co_return response;
     }
 
@@ -1262,17 +1263,20 @@ namespace disk::file {
             auto storage_quota = user.getValueOfStorageQuota();
 
             if (storage_used + file_size > storage_quota) {
-                LOG_WARN << "存储空间不足: used=" << storage_used << ", quota=" << storage_quota
-                         << ", file_size=" << file_size;
+                LOG_WARN << "Insufficient storage space: used=" << storage_used
+                         << ", quota=" << storage_quota << ", file_size=" << file_size;
                 co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
             }
 
-            LOG_DEBUG << "存储配额检查通过: used=" << storage_used << ", quota=" << storage_quota;
+            LOG_DEBUG << "Storage quota check passed: used=" << storage_used
+                      << ", quota=" << storage_quota;
             co_return {};
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "查询用户存储配额失败: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "查询存储配额失败"));
+            LOG_ERROR << "Failed to query user storage quota: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to query storage quota")
+            );
         }
     }
 
@@ -1318,7 +1322,7 @@ namespace disk::file {
             auto task = co_await mapper.findByPrimaryKey(upload_id);
 
             if (task.getValueOfUserId() != user_id) {
-                LOG_WARN << "上传任务不属于当前用户: upload_id=" << upload_id
+                LOG_WARN << "Upload task does not belong to current user: upload_id=" << upload_id
                          << ", task_user_id=" << task.getValueOfUserId()
                          << ", request_user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
@@ -1327,7 +1331,7 @@ namespace disk::file {
             co_return task;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "查询上传任务失败: " << e.base().what();
+            LOG_ERROR << "Failed to query upload task: " << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
         }
     }
@@ -1345,11 +1349,11 @@ namespace disk::file {
             user.setStorageUsed(static_cast<uint64_t>(new_used));
             co_await mapper.update(user);
 
-            LOG_DEBUG << "存储使用量已更新: user_id=" << user_id << ", delta=" << delta
+            LOG_DEBUG << "Storage usage updated: user_id=" << user_id << ", delta=" << delta
                       << ", new_used=" << new_used;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "更新存储使用量失败: " << e.base().what();
+            LOG_ERROR << "Failed to update storage usage: " << e.base().what();
         }
     }
 
@@ -1430,7 +1434,7 @@ namespace disk::file {
             co_return count > 0;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "检查文件名失败: " << e.base().what();
+            LOG_ERROR << "Failed to check filename: " << e.base().what();
             co_return false;
         }
     }

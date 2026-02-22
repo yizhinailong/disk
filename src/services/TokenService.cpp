@@ -310,7 +310,9 @@ namespace disk::services {
             return token;
         } catch (const std::exception& e) {
             LOG_ERROR << "Failed to generate share token: " << e.what();
-            return std::unexpected(ErrorInfo(disk::error::Code::InternalError, "令牌生成失败"));
+            return std::unexpected(
+                ErrorInfo(disk::error::Code::InternalError, "Token generation failed")
+            );
         }
     }
 
@@ -319,7 +321,7 @@ namespace disk::services {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
         if (token.empty()) {
-            return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed, "令牌为空"));
+            return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed, "Token is empty"));
         }
 
         try {
@@ -341,17 +343,18 @@ namespace disk::services {
             const auto share_id_str = decoded.get_subject();
             const auto share_id = std::stoull(share_id_str);
 
-            LOG_DEBUG << "分享令牌验证成功: share_code=" << share_code << ", share_id=" << share_id;
+            LOG_DEBUG << "Share token verification successful: share_code=" << share_code
+                      << ", share_id=" << share_id;
             return ShareTokenClaims{ .share_code = share_code, .share_id = share_id, .jti = jti };
 
         } catch (const jwt::error::token_verification_exception& e) {
-            LOG_WARN << "分享令牌验证失败: " << e.what();
+            LOG_WARN << "Share token verification failed: " << e.what();
             if (std::string(e.what()).find("expired") != std::string::npos) {
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenExpired));
             }
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         } catch (const std::exception& e) {
-            LOG_WARN << "分享令牌解析失败: " << e.what();
+            LOG_WARN << "Share token parsing failed: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
     }
@@ -392,7 +395,7 @@ namespace disk::services {
         }
 
         if (co_await IsShareTokenRevoked(hash_result.value())) {
-            LOG_WARN << "分享令牌已被撤销: share_code=" << share_code;
+            LOG_WARN << "Share token has been revoked: share_code=" << share_code;
             co_return std::unexpected(ErrorInfo(disk::error::Code::TokenRevoked));
         }
 
