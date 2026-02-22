@@ -199,63 +199,63 @@ namespace disk::error {
     inline auto GetErrorMessage(Code code) -> std::string {
         static const std::unordered_map<Code, std::string> message_map = {
             // 成功
-            {                 Code::Success,                "success" },
+            {                 Code::Success,                                "success" },
 
             // 通用错误
-            {        Code::InvalidParameter,           "请求参数错误" },
-            {        Code::ValidationFailed,           "参数校验失败" },
-            {        Code::ResourceNotFound,             "资源不存在" },
-            {        Code::ResourceConflict,               "资源冲突" },
-            {         Code::TooManyRequests,           "请求过于频繁" },
-            {           Code::InternalError,         "服务器内部错误" },
+            {        Code::InvalidParameter,             "Invalid request parameters" },
+            {        Code::ValidationFailed,            "Parameter validation failed" },
+            {        Code::ResourceNotFound,                     "Resource not found" },
+            {        Code::ResourceConflict,                      "Resource conflict" },
+            {         Code::TooManyRequests,                      "Too many requests" },
+            {           Code::InternalError,                  "Internal server error" },
 
             // 认证错误
-            {          Code::UsernameExists,         "用户名已被注册" },
-            {             Code::EmailExists,           "邮箱已被注册" },
-            {           Code::InvalidFormat,         "参数格式不正确" },
-            {            Code::UserNotFound,             "用户不存在" },
-            {      Code::InvalidCredentials,       "用户名或密码错误" },
-            {           Code::AccountLocked, "账户已锁定，请稍后重试" },
-            {         Code::AccountDisabled,           "账户已被禁用" },
-            {            Code::InvalidToken,       "令牌无效或已过期" },
-            {            Code::TokenMissing,             "未提供令牌" },
-            {          Code::TokenMalformed,           "令牌格式错误" },
-            {            Code::TokenExpired,             "令牌已过期" },
-            {          Code::TokenWrongType,           "令牌类型错误" },
-            {     Code::InvalidRefreshToken,           "刷新令牌无效" },
-            { Code::RefreshTokenAlreadyUsed,       "刷新令牌已被使用" },
-            {            Code::TokenRevoked,           "令牌已被注销" },
+            {          Code::UsernameExists,            "Username already registered" },
+            {             Code::EmailExists,               "Email already registered" },
+            {           Code::InvalidFormat,               "Invalid parameter format" },
+            {            Code::UserNotFound,                         "User not found" },
+            {      Code::InvalidCredentials,           "Invalid username or password" },
+            {           Code::AccountLocked, "Account locked, please try again later" },
+            {         Code::AccountDisabled,              "Account has been disabled" },
+            {            Code::InvalidToken,               "Token invalid or expired" },
+            {            Code::TokenMissing,                     "Token not provided" },
+            {          Code::TokenMalformed,                     "Token format error" },
+            {            Code::TokenExpired,                          "Token expired" },
+            {          Code::TokenWrongType,                       "Token type error" },
+            {     Code::InvalidRefreshToken,                  "Invalid refresh token" },
+            { Code::RefreshTokenAlreadyUsed,             "Refresh token already used" },
+            {            Code::TokenRevoked,                          "Token revoked" },
 
             // 文件错误
-            {         Code::InvalidFilename,             "文件名无效" },
-            {      Code::FileTypeNotAllowed,         "文件类型不允许" },
-            {        Code::FileSizeExceeded,       "文件大小超出限制" },
-            {    Code::StorageQuotaExceeded,           "存储空间不足" },
-            {            Code::FileNotFound,             "文件不存在" },
-            {          Code::FolderNotFound,           "文件夹不存在" },
-            {       Code::FileAlreadyExists,         "同名文件已存在" },
-            {      Code::UploadTaskNotFound, "上传任务不存在或已过期" },
-            {       Code::ChunkVerifyFailed,           "分片校验失败" },
-            {     Code::FolderAlreadyExists,       "同名文件夹已存在" },
-            {           Code::FileReadError,           "文件读取失败" },
+            {         Code::InvalidFilename,                       "Invalid filename" },
+            {      Code::FileTypeNotAllowed,                  "File type not allowed" },
+            {        Code::FileSizeExceeded,                "File size exceeds limit" },
+            {    Code::StorageQuotaExceeded,             "Insufficient storage space" },
+            {            Code::FileNotFound,                         "File not found" },
+            {          Code::FolderNotFound,                       "Folder not found" },
+            {       Code::FileAlreadyExists,     "File with same name already exists" },
+            {      Code::UploadTaskNotFound,       "Upload task not found or expired" },
+            {       Code::ChunkVerifyFailed,              "Chunk verification failed" },
+            {     Code::FolderAlreadyExists,   "Folder with same name already exists" },
+            {           Code::FileReadError,                       "File read failed" },
 
             // 分享错误
-            {           Code::ShareNotFound,             "分享不存在" },
-            {            Code::ShareExpired,             "分享已过期" },
-            {      Code::SharePasswordError,           "分享密码错误" },
-            {       Code::ShareAccessDenied,             "无权限访问" },
+            {           Code::ShareNotFound,                        "Share not found" },
+            {            Code::ShareExpired,                          "Share expired" },
+            {      Code::SharePasswordError,                   "Share password error" },
+            {       Code::ShareAccessDenied,                          "Access denied" },
 
             // Redis错误
-            {   Code::RedisConnectionFailed,          "Redis连接失败" },
-            {    Code::RedisOperationFailed,          "Redis操作失败" },
-            {        Code::RedisKeyNotFound,        "Redis key不存在" },
+            {   Code::RedisConnectionFailed,                "Redis connection failed" },
+            {    Code::RedisOperationFailed,                 "Redis operation failed" },
+            {        Code::RedisKeyNotFound,                    "Redis key not found" },
         };
 
         auto it = message_map.find(code);
         if (it != message_map.end()) {
             return it->second;
         }
-        return "未知错误";
+        return "Unknown error";
     }
 
     /**
@@ -315,14 +315,10 @@ namespace disk::error {
         std::string message;
 
         /// 仅使用错误码构造，使用默认消息
-        explicit ErrorInfo(Code c)
-            : code(c),
-              message(GetErrorMessage(c)) {}
+        explicit ErrorInfo(Code c) : code(c), message(GetErrorMessage(c)) {}
 
         /// 使用错误码和自定义消息构造
-        ErrorInfo(Code c, std::string msg)
-            : code(c),
-              message(std::move(msg)) {}
+        ErrorInfo(Code c, std::string msg) : code(c), message(std::move(msg)) {}
 
         /// 获取 HTTP 状态码
         [[nodiscard]]
@@ -353,8 +349,7 @@ namespace disk::error {
      * }
      * @endcode
      */
-    template <typename T>
-    using Result = std::expected<T, ErrorInfo>;
+    template <typename T> using Result = std::expected<T, ErrorInfo>;
 
     /**
      * @brief 无返回值的结果类型
@@ -389,5 +384,4 @@ namespace disk::error {
 namespace Error = disk::error;
 using ErrorCode = Error::Code;
 using ErrorInfo = Error::ErrorInfo;
-template <typename T>
-using Result = Error::Result<T>;
+template <typename T> using Result = Error::Result<T>;

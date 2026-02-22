@@ -22,16 +22,18 @@ namespace disk::utils {
         const auto* env_secret = std::getenv("JWT_SECRET");
 
         if (env_secret != nullptr && std::strlen(env_secret) >= MIN_SECRET_LENGTH) {
-            LOG_INFO << "从环境变量读取 JWT 密钥";
+            LOG_INFO << "Reading JWT secret from environment variable";
             return env_secret;
         }
         if (env_secret != nullptr) {
-            LOG_ERROR << "JWT_SECRET 长度不足，至少需要 " << MIN_SECRET_LENGTH << " 字符";
+            LOG_ERROR << "JWT_SECRET length is insufficient, at least " << MIN_SECRET_LENGTH
+                      << " characters required";
         }
 
         static std::once_flag warning_flag;
         std::call_once(warning_flag, [] {
-            LOG_WARN << "JWT_SECRET 未正确配置，使用默认密钥（仅开发环境）";
+            LOG_WARN
+                << "JWT_SECRET not properly configured, using default secret (development only)";
         });
 
         return m_jwt_secret;

@@ -49,7 +49,9 @@ namespace disk::utils {
         [[nodiscard]]
         static auto HashPassword(const std::string& password) -> Result<std::string> {
             if (password.empty()) {
-                return std::unexpected(ErrorInfo(ErrorCode::InternalError, "密码不能为空"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Password cannot be empty")
+                );
             }
 
             // 使用 libsodium 的 Argon2id 算法
@@ -63,7 +65,10 @@ namespace disk::utils {
                     crypto_pwhash_OPSLIMIT_INTERACTIVE, // 适合交互式应用的计算强度
                     crypto_pwhash_MEMLIMIT_INTERACTIVE  // 适合交互式应用的内存限制
                 ) != 0) {
-                return std::unexpected(ErrorInfo(ErrorCode::InternalError, "内存不足，密码哈希失败"));
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InternalError,
+                    "Memory allocation failed, password hash failed"
+                ));
             }
 
             return std::string(hashed_password.data());
@@ -102,7 +107,9 @@ namespace disk::utils {
         [[nodiscard]]
         static auto HashToken(const std::string& token) -> Result<TokenHash> {
             if (token.empty()) {
-                return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Token 不能为空"));
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Token cannot be empty")
+                );
             }
 
             TokenHash hash{};
@@ -110,12 +117,10 @@ namespace disk::utils {
             // NOLINTNEXTLINE: Required by libsodium crypto_hash_sha256 API
             const auto* data = reinterpret_cast<const unsigned char*>(token.c_str());
 
-            if (crypto_hash_sha256(
-                    hash.data(),
-                    data,
-                    token.length()
-                ) != 0) {
-                return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Token 哈希计算失败"));
+            if (crypto_hash_sha256(hash.data(), data, token.length()) != 0) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Token hash calculation failed")
+                );
             }
 
             return hash;
