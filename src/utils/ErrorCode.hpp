@@ -349,7 +349,8 @@ namespace disk::error {
      * }
      * @endcode
      */
-    template <typename T> using Result = std::expected<T, ErrorInfo>;
+    template <typename T>
+    using Result = std::expected<T, ErrorInfo>;
 
     /**
      * @brief 无返回值的结果类型
@@ -384,4 +385,5 @@ namespace disk::error {
 namespace Error = disk::error;
 using ErrorCode = Error::Code;
 using ErrorInfo = Error::ErrorInfo;
-template <typename T> using Result = Error::Result<T>;
+template <typename T>
+using Result = Error::Result<T>;
