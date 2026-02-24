@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
+import "views"
 import "styles"
 
 ApplicationWindow {
@@ -18,30 +19,35 @@ ApplicationWindow {
     Material.accent: theme.primary
 
     property string serverUrl: "http://127.0.0.1:8080"
+    property string prefillAccount: ""
 
     StackView {
         id: pageStack
+        objectName: "pageStack"
         anchors.fill: parent
         initialItem: loginView
     }
 
     Component {
         id: loginView
-        Rectangle {
-            color: "transparent"
-            Button {
-                anchors.centerIn: parent
-                text: qsTr("创建账号")
-                onClicked: pageStack.push(registerView, { "theme": theme })
-            }
+        LoginView {
+            theme: theme
+            serverUrl: root.serverUrl
+            prefillAccount: root.prefillAccount
+            onRegisterRequested: pageStack.push(registerView, { "theme": theme, "serverUrl": root.serverUrl })
         }
     }
 
     Component {
         id: registerView
-        Rectangle {
-            color: "transparent"
-            // Empty placeholder for RegisterView
+        RegisterView {
+            theme: theme
+            serverUrl: root.serverUrl
+            onRegistered: function(username, email) {
+                root.prefillAccount = username
+                pageStack.pop()
+            }
+            onBackRequested: pageStack.pop()
         }
     }
 }

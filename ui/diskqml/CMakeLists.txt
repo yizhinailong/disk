@@ -18,6 +18,9 @@ qt_add_qml_module(appdiskqml
         qml/Main.qml
         qml/App.qml
         qml/styles/AppTheme.qml
+        qml/views/LoginView.qml
+        qml/views/RegisterView.qml
+        tests/qml/tst_RegisterView.qml
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
