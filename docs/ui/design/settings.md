@@ -4,6 +4,7 @@
 
 设置页面用于管理 Disk 客户端的配置选项，包括服务器设置、传输设置、外观设置等。
 
+视觉样式：默认使用目标框架的默认样式与系统配色；本文档仅约束布局与交互，不约束具体配色、字体或深浅色切换。
 ---
 
 ## Qt/QML 设计
@@ -28,10 +29,6 @@
 │  └────────────────────────────────────────────────────────────────┘ │
 │  ┌─ 外观设置 ─────────────────────────────────────────────────────┐ │
 │  │                                                                │ │
-│  │  主题:       [跟随系统 ▼]                                      │ │
-│  │              ○ 跟随系统                                        │ │
-│  │              ○ 浅色                                            │ │
-│  │              ○ 深色                                            │ │
 │  │                                                                │ │
 │  │  [✓] 开机自启动                                               │ │
 │  │  [✓] 最小化到系统托盘                                         │ │
@@ -48,9 +45,8 @@
 
 | 分组 | 配置项 |
 |------|--------|
-| 服务器设置 | 服务器地址 |
 | 传输设置 | 下载目录、并发上传数、并发下载数 |
-| 外观设置 | 主题、开机自启动、最小化到托盘、显示通知、删除确认 |
+| 外观设置 | 开机自启动、最小化到托盘、显示通知、删除确认 |
 
 ---
 
@@ -66,15 +62,12 @@ public:
     
 private slots:
     void OnBrowseDownloadDir();
-    void OnThemeChanged(int index);
-    void OnAccept();
-    void OnRestoreDefaults();
+
     
 private:
     void LoadSettings();
     void SaveSettings();
-    void ApplyTheme(const QString& theme);
-    
+
     // 服务器设置
     QLineEdit* m_serverUrlEdit;
     
@@ -85,11 +78,7 @@ private:
     QSpinBox* m_concurrentDownloadsSpin;
     
     // 外观设置
-    QComboBox* m_themeCombo;
-    QCheckBox* m_autoStartCheck;
-    QCheckBox* m_minimizeToTrayCheck;
-    QCheckBox* m_showNotificationsCheck;
-    QCheckBox* m_confirmDeleteCheck;
+
     
     // 按钮
     QPushButton* m_okBtn;
@@ -133,21 +122,13 @@ void SettingsDialog::SetupUi() {
     QGroupBox* appearanceGroup = new QGroupBox(tr("外观设置"));
     QVBoxLayout* appearanceLayout = new QVBoxLayout(appearanceGroup);
     
-    m_themeCombo = new QComboBox();
-    m_themeCombo->addItems({tr("跟随系统"), tr("浅色"), tr("深色")});
-    
+
     m_autoStartCheck = new QCheckBox(tr("开机自启动"));
     m_minimizeToTrayCheck = new QCheckBox(tr("最小化到系统托盘"));
     m_showNotificationsCheck = new QCheckBox(tr("显示系统通知"));
     m_confirmDeleteCheck = new QCheckBox(tr("删除前确认"));
     
-    appearanceLayout->addWidget(new QLabel(tr("主题:")));
-    appearanceLayout->addWidget(m_themeCombo);
-    appearanceLayout->addSpacing(8);
     appearanceLayout->addWidget(m_autoStartCheck);
-    appearanceLayout->addWidget(m_minimizeToTrayCheck);
-    appearanceLayout->addWidget(m_showNotificationsCheck);
-    appearanceLayout->addWidget(m_confirmDeleteCheck);
     
     // 添加到主布局
     mainLayout->addWidget(serverGroup);
@@ -171,44 +152,7 @@ void SettingsDialog::SetupUi() {
 }
 ```
 
-### QStyleSheet 样式
 
-```css
-SettingsDialog QGroupBox {
-    font-weight: bold;
-    border: 1px solid #E0E0E0;
-    border-radius: 4px;
-    margin-top: 12px;
-    padding-top: 8px;
-}
-
-SettingsDialog QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    padding: 0 8px;
-    background-color: white;
-}
-
-SettingsDialog QLineEdit,
-SettingsDialog QSpinBox {
-    border: 1px solid #E0E0E0;
-    border-radius: 4px;
-    padding: 6px;
-    min-width: 200px;
-}
-
-SettingsDialog QPushButton {
-    background-color: #2196F3;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 16px;
-}
-
-SettingsDialog QPushButton:hover {
-    background-color: #1976D2;
-}
-```
 
 ### AppConfig 配置管理
 
@@ -235,12 +179,7 @@ public:
     bool ShowNotifications() const;
     bool ConfirmDelete() const;
     
-    QString Theme() const;
-    void SetTheme(const QString& theme);
-    
-signals:
-    void ThemeChanged(const QString& theme);
-    void SettingsChanged();
+
     
 private:
     QSettings m_settings;
@@ -283,7 +222,6 @@ private:
 | concurrent_downloads | integer | 3 | 并发下载数 |
 | chunk_size | integer | 5242880 | 分片大小（5MB） |
 | auto_refresh_token | boolean | true | 自动刷新令牌 |
-| theme | string | default | 主题 |
 
 ### 配置文件位置
 
@@ -317,17 +255,8 @@ private:
 | minimize_to_tray | boolean | true | 最小化到托盘 |
 | show_notifications | boolean | true | 显示系统通知 |
 | confirm_delete | boolean | true | 删除前确认 |
-| theme | string | system | 主题：system/light/dark |
-| chunk_size | integer | 5242880 | 分片大小（5MB） |
 | auto_refresh_token | boolean | true | 自动刷新令牌 |
 
-### 主题选项
-
-| 选项 | 说明 |
-|------|------|
-| system | 跟随系统主题 |
-| light | 强制浅色主题 |
-| dark | 强制深色主题 |
 
 ### 验证规则
 

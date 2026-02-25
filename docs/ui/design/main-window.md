@@ -4,6 +4,7 @@
 
 主窗口是 Disk 桌面客户端的核心界面，包含标题栏、侧边栏、工具栏、主内容区和状态栏。
 
+视觉样式：默认使用目标框架的默认样式与系统配色；本文档仅约束布局与交互，不约束具体配色、字体或深浅色切换。
 ---
 
 ## Qt/QML 设计
@@ -174,30 +175,7 @@ private:
 };
 ```
 
-**QStyleSheet 样式**:
 
-```css
-TitleBar {
-    background-color: #FFFFFF;
-    border-bottom: 1px solid #E0E0E0;
-}
-
-TitleBar QPushButton {
-    background-color: transparent;
-    border: none;
-    width: 40px;
-    height: 32px;
-    border-radius: 4px;
-}
-
-TitleBar QPushButton:hover {
-    background-color: #E0E0E0;
-}
-
-TitleBar QPushButton#closeBtn:hover {
-    background-color: #F44336;
-}
-```
 
 ### 侧边栏 QWidget 实现
 
@@ -220,34 +198,7 @@ private:
 };
 ```
 
-**QStyleSheet 样式**:
 
-```css
-SideBar {
-    background-color: #FAFAFA;
-    border-right: 1px solid #E0E0E0;
-    min-width: 200px;
-    max-width: 300px;
-}
-
-SideBar QToolButton {
-    background-color: transparent;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 16px;
-    text-align: left;
-    font-size: 14px;
-}
-
-SideBar QToolButton:hover {
-    background-color: #E0E0E0;
-}
-
-SideBar QToolButton:checked {
-    background-color: #BBDEFB;
-    color: #1976D2;
-}
-```
 
 ### 工具栏 QToolBar 实现
 
@@ -271,27 +222,7 @@ void MainWindow::setupToolBar() {
 }
 ```
 
-**QStyleSheet 样式**:
 
-```css
-QToolBar {
-    background-color: #FFFFFF;
-    border-bottom: 1px solid #E0E0E0;
-    spacing: 8px;
-    padding: 4px 8px;
-}
-
-QToolBar QToolButton {
-    background-color: transparent;
-    border: none;
-    border-radius: 4px;
-    padding: 8px;
-}
-
-QToolBar QToolButton:hover {
-    background-color: #E0E0E0;
-}
-```
 
 ### 状态栏 QStatusBar 实现
 
@@ -310,21 +241,7 @@ void MainWindow::setupStatusBar() {
 }
 ```
 
-**QStyleSheet 样式**:
 
-```css
-QStatusBar {
-    background-color: #FAFAFA;
-    border-top: 1px solid #E0E0E0;
-    font-size: 12px;
-    color: #757575;
-}
-
-QStatusBar QLabel {
-    color: #757575;
-    padding: 0 8px;
-}
-```
 
 ---
 
@@ -423,15 +340,6 @@ QStatusBar QLabel {
 - 回收站页面: `[r]恢复 [x]彻底删除 [E]清空 [?]帮助`
 - 帮助页面: `[q]返回`
 
-### 颜色方案
-
-| 元素 | 16色 | 256色 | 24位色 |
-|------|------|-------|--------|
-| 主色 | Blue (4) | 33 | #268bd2 |
-| 背景 | Black (0) | 235 | #1e1e1e |
-| 前景 | White (7) | 252 | #d4d4d4 |
-| 选中背景 | Blue (4) | 24 | #005f87 |
-| 选中文字 | White (7) | 231 | #ffffff |
 
 ---
 

@@ -4,6 +4,7 @@
 
 注册页面是新用户创建 Disk 网盘账号的入口，收集用户名、邮箱和密码信息，提供即时表单验证和错误反馈。
 
+视觉样式：默认使用目标框架的默认样式与系统配色；本文档仅约束布局与交互，不约束具体配色、字体或深浅色切换。
 ---
 
 ## Qt/QML 设计
@@ -17,8 +18,7 @@
 │    │                         │    │                                │    │
 │    │                         │    │         [Logo] Disk            │    │
 │    │                         │    │                                │    │
-│    │      渐变背景            │    │       创建新账号               │    │
-│    │   #FFF0F5 → #E0F7FA     │    │                                │    │
+│    │      渐变背景            │    │                                │    │
 │    │                         │    │   ┌────────────────────────┐   │    │
 │    │   ┌─────────────────┐   │    │   │  登录   │  注册  ✓   │   │    │
 │    │   │  欢迎语/插图     │   │    │   └────────────────────────┘   │    │
@@ -47,7 +47,6 @@
 | 组件 | 属性 | 规范 |
 |------|------|------|
 | Logo | 尺寸 | 48x48 px |
-| 标题 | 字号 | H1 (24px), 加粗 |
 | Tab 切换 | 高度 | 40px |
 | 输入框 | 高度 | 52px |
 | 输入框 | 圆角 | 12px |
@@ -76,50 +75,7 @@
 - **加载状态**：注册中显示加载动画，按钮禁用
 - **成功跳转**：注册成功后切换到登录页，预填用户名
 
-### 样式规范
 
-| 元素 | 属性 | 值 |
-|------|------|-----|
-| 卡片背景 | 背景色 | #FFFFFF |
-| 卡片阴影 | box-shadow | 0 4px 24px rgba(0,0,0,0.08) |
-| 左侧背景 | 渐变 | linear-gradient(135deg, #FFF0F5, #E0F7FA) |
-| 输入框 | 高度 | 52px |
-| 输入框 | 内边距 | 14px 16px |
-| 输入框 | 边框 | 1px solid #E2E8F0 |
-| 输入框 | 圆角 | 12px |
-| 输入框 | 字号 | 14px |
-| 输入框聚焦 | 边框色 | #FF6B6B |
-| 输入框错误 | 边框色 | #E53E3E |
-| 主按钮 | 背景色 | #FF6B6B |
-| 主按钮 | 文字色 | #FFFFFF |
-| 主按钮 | 高度 | 52px |
-| 主按钮 | 圆角 | 12px |
-| 主按钮 | 字号 | 16px |
-| 主按钮 | 字重 | 600 (semibold) |
-| 主按钮悬停 | 背景色 | #FF8787 |
-| 主按钮禁用 | 背景色 | #CBD5E0 |
-| 文字色 | 主文字 | #2D3748 |
-| 文字色 | 次要文字 | #718096 |
-| 文字色 | 提示文字 | #A0AEC0 |
-| 链接色 | 链接 | #FF6B6B |
-| 成功色 | 匹配成功 | #48BB78 |
-
-### 调色板
-
-| Token | 值 | 用途 |
-|-------|-----|------|
-| `--color-primary` | #FF6B6B | 主按钮、链接、聚焦边框 |
-| `--color-primary-hover` | #FF8787 | 主按钮悬停 |
-| `--color-secondary` | #4ECDC4 | 装饰元素 |
-| `--color-background` | #FFFFFF | 卡片背景 |
-| `--color-surface` | #FAFAFC | 页面背景 |
-| `--color-text` | #2D3748 | 主要文字 |
-| `--color-text-muted` | #718096 | 次要文字 |
-| `--color-border` | #E2E8F0 | 输入框边框 |
-| `--color-success` | #48BB78 | 成功状态、匹配指示 |
-| `--color-error` | #E53E3E | 错误状态 |
-| `--radius-sm` | 12px | 输入框、按钮圆角 |
-| `--radius-lg` | 16px | 卡片圆角 |
 
 ---
 
@@ -180,95 +136,7 @@ QDialog (居中显示, 最小 900x600)
 | m_registerTab | QPushButton | 注册标签按钮 (当前选中) |
 | m_statusLabel | QLabel | 状态/错误信息显示 |
 
-### QStyleSheet 样式
 
-```css
-/* 对话框 */
-QDialog {
-    background-color: #FAFAFC;
-}
-
-/* 左侧装饰区 */
-QWidget#decorationPanel {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-        stop:0 #FFF0F5, stop:1 #E0F7FA);
-}
-
-/* 右侧表单卡片 */
-QWidget#formCard {
-    background-color: #FFFFFF;
-    border-radius: 16px;
-}
-
-/* 输入框 */
-QLineEdit {
-    border: 1px solid #E2E8F0;
-    border-radius: 12px;
-    padding: 14px 16px;
-    min-height: 24px;
-    font-size: 14px;
-    background-color: #FFFFFF;
-}
-
-QLineEdit:focus {
-    border-color: #FF6B6B;
-}
-
-QLineEdit[error="true"] {
-    border-color: #E53E3E;
-    background-color: #FFF5F5;
-}
-
-/* Tab 按钮 */
-QPushButton#tabButton {
-    background-color: transparent;
-    color: #718096;
-    border: none;
-    border-bottom: 2px solid transparent;
-    padding: 12px 24px;
-    font-size: 14px;
-    font-weight: 500;
-}
-
-QPushButton#tabButton:checked {
-    color: #FF6B6B;
-    border-bottom-color: #FF6B6B;
-}
-
-/* 注册按钮 */
-QPushButton#registerButton {
-    background-color: #FF6B6B;
-    color: #FFFFFF;
-    border: none;
-    border-radius: 12px;
-    padding: 14px 24px;
-    font-size: 16px;
-    font-weight: 600;
-}
-
-QPushButton#registerButton:hover {
-    background-color: #FF8787;
-}
-
-QPushButton#registerButton:disabled {
-    background-color: #CBD5E0;
-}
-
-/* 链接标签 */
-QLabel#linkLabel {
-    color: #FF6B6B;
-}
-
-QLabel#linkLabel:hover {
-    text-decoration: underline;
-}
-
-/* 协议提示 */
-QLabel#legalLabel {
-    color: #718096;
-    font-size: 12px;
-}
-```
 
 ### 交互实现
 
@@ -340,8 +208,8 @@ TUI 客户端不提供注册功能，用户需通过桌面客户端或 Web 端�
 
 ### 禁用状态
 
-- 按钮背景色变为 `#CBD5E0`
-- 文字色变为 `#A0AEC0`
+- 按钮背景色变暗
+- 文字色变淡
 - 鼠标悬停无效果
 - 不响应点击事件
 

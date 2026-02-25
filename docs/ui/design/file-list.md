@@ -4,6 +4,7 @@
 
 文件列表是 Disk 客户端的核心组件，展示当前目录下的文件和文件夹，支持网格视图和列表视图两种显示模式。
 
+视觉样式：默认使用目标框架的默认样式与系统配色；本文档仅约束布局与交互，不约束具体配色、字体或深浅色切换。
 ---
 
 ## Qt/QML 设计
@@ -109,30 +110,6 @@ QWidget* MainWindow::createGridViewPage() {
 }
 ```
 
-**QStyleSheet 样式**:
-
-```css
-QListWidget {
-    background-color: #FFFFFF;
-    border: none;
-    outline: none;
-}
-
-QListWidget::item {
-    background-color: transparent;
-    border-radius: 8px;
-    padding: 8px;
-}
-
-QListWidget::item:hover {
-    background-color: #F5F5F5;
-}
-
-QListWidget::item:selected {
-    background-color: #BBDEFB;
-    border: 1px solid #2196F3;
-}
-```
 
 ### 列表视图 (QTableWidget)
 
@@ -158,37 +135,6 @@ QWidget* MainWindow::createListViewPage() {
 }
 ```
 
-**QStyleSheet 样式**:
-
-```css
-QTableWidget {
-    background-color: #FFFFFF;
-    border: none;
-    gridline-color: #E0E0E0;
-}
-
-QTableWidget::item {
-    padding: 8px;
-    border-bottom: 1px solid #E0E0E0;
-}
-
-QTableWidget::item:hover {
-    background-color: #F5F5F5;
-}
-
-QTableWidget::item:selected {
-    background-color: #BBDEFB;
-    color: #212121;
-}
-
-QHeaderView::section {
-    background-color: #FAFAFA;
-    padding: 8px;
-    border: none;
-    border-bottom: 2px solid #E0E0E0;
-    font-weight: bold;
-}
-```
 
 ### 视图切换实现
 
@@ -308,18 +254,18 @@ private:
 
 #### 文件类型图标
 
-| 类型 | 图标 | 颜色 | 扩展名 |
-|------|------|------|--------|
-| 文档 | 📄 | #2196F3 | doc, docx, txt |
-| 表格 | 📊 | #4CAF50 | xls, xlsx, csv |
-| 演示 | 📽️ | #FF9800 | ppt, pptx |
-| PDF | 📕 | #F44336 | pdf |
-| 图片 | 🖼️ | #9C27B0 | jpg, png, gif |
-| 视频 | 🎬 | #E91E63 | mp4, avi, mkv |
-| 音频 | 🎵 | #00BCD4 | mp3, wav, flac |
-| 压缩包 | 📦 | #795548 | zip, rar, 7z |
-| 代码 | 💻 | #607D8B | cpp, py, js |
-| 未知 | 📎 | #9E9E9E | 其他 |
+| 类型 | 图标 | 扩展名 |
+|------|------|--------|
+| 文档 | 📄 | doc, docx, txt |
+| 表格 | 📊 | xls, xlsx, csv |
+| 演示 | 🎥️ | ppt, pptx |
+| PDF | 📕 | pdf |
+| 图片 | 🖼️ | jpg, png, gif |
+| 视频 | 🎦 | mp4, avi, mkv |
+| 音频 | 🎵 | mp3, wav, flac |
+| 压缩包 | 📦 | zip, rar, 7z |
+| 代码 | 💻 | cpp, py, js |
+| 未知 | 📎 | 其他 |
 
 ### 文件大小格式化
 

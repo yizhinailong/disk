@@ -4,6 +4,7 @@
 
 传输面板用于显示和管理文件上传/下载任务，支持查看进度、暂停、继续和取消操作。
 
+视觉样式：默认使用目标框架的默认样式与系统配色；本文档仅约束布局与交互，不约束具体配色、字体或深浅色切换。
 ---
 
 ## Qt/QML 设计
@@ -48,13 +49,13 @@
 
 ### 状态颜色
 
-| 状态 | 颜色 | 说明 |
-|------|------|------|
-| 进行中 | Primary (#2196F3) | 正在传输 |
-| 已暂停 | Warning (#FF9800) | 用户暂停 |
-| 已完成 | Success (#4CAF50) | 传输完成 |
-| 失败 | Error (#F44336) | 传输失败 |
-| 等待中 | Gray (#9E9E9E) | 等待开始 |
+| 状态 | 说明 |
+|------|------|
+| 进行中 | 正在传输 |
+| 已暂停 | 用户暂停 |
+| 已完成 | 传输完成 |
+| 失败 | 传输失败 |
+| 等待中 | 等待开始 |
 
 ---
 
@@ -134,42 +135,6 @@ public:
 };
 ```
 
-### QStyleSheet 样式
-
-```css
-TransferPanel {
-    background-color: #FAFAFA;
-    border-top: 1px solid #E0E0E0;
-}
-
-TransferPanel QTabWidget::pane {
-    border: none;
-    background-color: #FFFFFF;
-}
-
-TransferPanel QTabBar::tab {
-    padding: 8px 16px;
-    border: none;
-}
-
-TransferPanel QTabBar::tab:selected {
-    background-color: #BBDEFB;
-    color: #1976D2;
-}
-
-TransferPanel QProgressBar {
-    background-color: #E0E0E0;
-    border: none;
-    border-radius: 2px;
-    height: 4px;
-    text-align: center;
-}
-
-TransferPanel QProgressBar::chunk {
-    background-color: #2196F3;
-    border-radius: 2px;
-}
-```
 
 ### 面板展开动画
 
@@ -306,8 +271,8 @@ void TransferPanel::togglePanel() {
 | 参数 | 值 |
 |------|-----|
 | 高度 | 4px |
-| 已完成颜色 | Primary (#2196F3) |
-| 未完成颜色 | Border (#E0E0E0) |
+| 已完成颜色 | Primary 色 |
+| 未完成颜色 | Border 色 |
 | 圆角 | 2px |
 | TUI 长度 | 20-40 字符 |
 

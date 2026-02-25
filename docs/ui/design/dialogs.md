@@ -4,6 +4,7 @@
 
 对话框是 Disk 客户端中用于确认操作、收集用户输入和显示进度的通用组件。
 
+视觉样式：默认使用目标框架的默认样式与系统配色；本文档仅约束布局与交互，不约束具体配色、字体或深浅色切换。
 ---
 
 ## Qt/QML 设计
@@ -46,8 +47,7 @@
 ```
 
 **输入框规格**:
-- 高度: 36px
-- 边框: 1px solid #E0E0E0
+- 边框: 1px solid
 - 聚焦: Primary 边框
 - 圆角: 4px
 - 内边距: 12px
@@ -73,8 +73,6 @@
 
 **进度条规格**:
 - 高度: 4px
-- 已完成: Primary (#2196F3)
-- 未完成: Border (#E0E0E0)
 - 圆角: 2px
 
 ---
@@ -95,38 +93,6 @@ void MainWindow::showDeleteConfirm(const QString& filename) {
     msgBox.button(QMessageBox::Ok)->setText(tr("确认删除"));
     
     msgBox.exec();
-}
-```
-
-**QStyleSheet 样式**:
-
-```css
-QMessageBox {
-    background-color: #FFFFFF;
-}
-
-QMessageBox QLabel {
-    color: #212121;
-    font-size: 14px;
-}
-
-QMessageBox QPushButton {
-    background-color: #2196F3;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 16px;
-    min-width: 80px;
-}
-
-QMessageBox QPushButton:hover {
-    background-color: #1976D2;
-}
-
-QMessageBox QPushButton:text("取消") {
-    background-color: transparent;
-    color: #212121;
-    border: 1px solid #E0E0E0;
 }
 ```
 
@@ -173,7 +139,7 @@ void RenameDialog::setupUi() {
     
     // 错误标签
     m_errorLabel = new QLabel();
-    m_errorLabel->setStyleSheet("color: #F44336;");
+    m_errorLabel->setObjectName("errorLabel");
     mainLayout->addWidget(m_errorLabel);
     
     // 弹性空间

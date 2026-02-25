@@ -4,6 +4,7 @@
 
 回收站页面展示已删除的文件和文件夹，支持恢复、彻底删除和清空回收站操作。
 
+视觉样式：默认使用目标框架的默认样式与系统配色；本文档仅约束布局与交互，不约束具体配色、字体或深浅色切换。
 ---
 
 ## Qt/QML 设计
@@ -94,31 +95,6 @@ private:
 };
 ```
 
-### QStyleSheet 样式
-
-```css
-TrashView QTableView {
-    background-color: #FFFFFF;
-    border: none;
-    gridline-color: #E0E0E0;
-}
-
-TrashView QPushButton {
-    background-color: #2196F3;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 16px;
-}
-
-TrashView QPushButton#deleteBtn {
-    background-color: #F44336;
-}
-
-TrashView QPushButton#emptyBtn {
-    background-color: #FF9800;
-}
-```
 
 ### 彻底删除确认
 
@@ -198,14 +174,6 @@ void TrashView::OnEmptyTrash() {
 | `E` | 清空回收站（需确认） |
 | `q` | 返回文件列表 |
 
-### 颜色方案
-
-| 元素 | 颜色 | 说明 |
-|------|------|------|
-| 标题 | Yellow (#b58900) | 警示色 |
-| 即将过期 | Red (#dc322f) | 剩余 < 7 天 |
-| 恢复按钮 | Green (#859900) | 恢复操作 |
-| 删除按钮 | Red (#dc322f) | 危险操作 |
 
 ### 即将过期提示
 
