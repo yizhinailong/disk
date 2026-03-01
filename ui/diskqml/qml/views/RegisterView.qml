@@ -5,7 +5,7 @@ import QtQuick.Layouts
 Item {
     id: root
 
-    property var theme
+
     property string serverUrl: "http://127.0.0.1:8080"
     
     // Default HTTP client implementation
@@ -56,7 +56,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: theme ? theme.background : "#FAFAFA"
+        color: "#FAFAFA"
         
         ScrollView {
             anchors.fill: parent
@@ -66,9 +66,9 @@ Item {
             ColumnLayout {
                 width: Math.min(400, parent.width * 0.9)
                 anchors.horizontalCenter: parent.horizontalCenter
-                spacing: theme ? theme.md : 16
+                spacing: 16
                 
-                Item { Layout.preferredHeight: theme ? theme.xl : 32 } // Spacer
+                Item { Layout.preferredHeight: 32 } // Spacer
                 
                 // Back button
                 Button {
@@ -80,13 +80,13 @@ Item {
 
                 Label {
                     text: "创建新账号"
-                    font.pixelSize: theme ? theme.h1 : 24
+                    font.pixelSize: 24
                     font.bold: true
-                    color: theme ? theme.textPrimary : "#212121"
+                    color: "#212121"
                     Layout.alignment: Qt.AlignHCenter
                 }
 
-                Item { Layout.preferredHeight: theme ? theme.md : 16 } // Spacer
+                Item { Layout.preferredHeight: 16 } // Spacer
                 
                 // Global Error Message
                 Label {
@@ -94,8 +94,8 @@ Item {
                     objectName: "globalErrorLabel"
                     visible: root.globalError !== ""
                     text: root.globalError
-                    color: theme ? theme.error : "#F44336"
-                    font.pixelSize: theme ? theme.body : 14
+                    color: "#F44336"
+                    font.pixelSize: 14
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
@@ -104,11 +104,11 @@ Item {
                 // Username
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: theme ? theme.xs : 4
+                    spacing: 4
                     Label {
                         text: "用户名"
-                        color: theme ? theme.textPrimary : "#212121"
-                        font.pixelSize: theme ? theme.body : 14
+                        color: "#212121"
+                        font.pixelSize: 14
                     }
                     TextField {
                         id: usernameInput
@@ -122,8 +122,8 @@ Item {
                     Label {
                         objectName: "usernameErrorLabel"
                         text: "需为4-32个字符，仅支持字母、数字、下划线"
-                        color: theme ? theme.error : "#F44336"
-                        font.pixelSize: theme ? theme.caption : 12
+                        color: "#F44336"
+                        font.pixelSize: 12
                         visible: usernameInput.text.length > 0 && !isUsernameValid()
                     }
                 }
@@ -131,11 +131,11 @@ Item {
                 // Email
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: theme ? theme.xs : 4
+                    spacing: 4
                     Label {
                         text: "邮箱"
-                        color: theme ? theme.textPrimary : "#212121"
-                        font.pixelSize: theme ? theme.body : 14
+                        color: "#212121"
+                        font.pixelSize: 14
                     }
                     TextField {
                         id: emailInput
@@ -149,8 +149,8 @@ Item {
                     Label {
                         objectName: "emailErrorLabel"
                         text: "请输入有效的邮箱格式"
-                        color: theme ? theme.error : "#F44336"
-                        font.pixelSize: theme ? theme.caption : 12
+                        color: "#F44336"
+                        font.pixelSize: 12
                         visible: emailInput.text.length > 0 && !isEmailValid()
                     }
                 }
@@ -158,15 +158,15 @@ Item {
                 // Password
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: theme ? theme.xs : 4
+                    spacing: 4
                     Label {
                         text: "密码"
-                        color: theme ? theme.textPrimary : "#212121"
-                        font.pixelSize: theme ? theme.body : 14
+                        color: "#212121"
+                        font.pixelSize: 14
                     }
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: theme ? theme.xs : 4
+                        spacing: 4
                         TextField {
                             id: passwordInput
                             objectName: "passwordInput"
@@ -188,8 +188,8 @@ Item {
                     Label {
                         objectName: "passwordErrorLabel"
                         text: "8-64个字符，必须同时包含大小写字母和数字，仅支持字母和数字"
-                        color: theme ? theme.error : "#F44336"
-                        font.pixelSize: theme ? theme.caption : 12
+                        color: "#F44336"
+                        font.pixelSize: 12
                         visible: passwordInput.text.length > 0 && !isPasswordValid()
                         wrapMode: Text.Wrap
                         Layout.fillWidth: true
@@ -199,11 +199,11 @@ Item {
                 // Confirm Password
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: theme ? theme.xs : 4
+                    spacing: 4
                     Label {
                         text: "确认密码"
-                        color: theme ? theme.textPrimary : "#212121"
-                        font.pixelSize: theme ? theme.body : 14
+                        color: "#212121"
+                        font.pixelSize: 14
                     }
                     TextField {
                         id: confirmPasswordInput
@@ -218,33 +218,33 @@ Item {
                     Label {
                         objectName: "confirmPasswordErrorLabel"
                         text: "两次输入的密码不一致"
-                        color: theme ? theme.error : "#F44336"
-                        font.pixelSize: theme ? theme.caption : 12
+                        color: "#F44336"
+                        font.pixelSize: 12
                         visible: confirmPasswordInput.text.length > 0 && confirmPasswordInput.text !== passwordInput.text
                     }
                 }
 
-                Item { Layout.preferredHeight: theme ? theme.md : 16 } // Spacer
+                Item { Layout.preferredHeight: 16 } // Spacer
 
                 // Register Button
                 Button {
                     id: submitButton
                     objectName: "submitButton"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: theme ? theme.buttonHeight : 40
+                    Layout.preferredHeight: 40
                     text: root.loading ? "注册中..." : "注册"
                     enabled: isFormValid() && !root.loading
                     
                     background: Rectangle {
-                        color: submitButton.enabled ? (theme ? theme.primary : "#2196F3") : (theme ? theme.border : "#E0E0E0")
-                        radius: theme ? theme.radiusMedium : 8
+                        color: submitButton.enabled ? "#2196F3" : "#E0E0E0"
+                        radius: 8
                     }
                     contentItem: Text {
                         text: submitButton.text
-                        color: submitButton.enabled ? "#FFFFFF" : (theme ? theme.textSecondary : "#757575")
+                        color: submitButton.enabled ? "#FFFFFF" : "#757575"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                        font.pixelSize: theme ? theme.body : 14
+                        font.pixelSize: 14
                         font.bold: true
                     }
                     
@@ -299,7 +299,7 @@ Item {
                     }
                 }
                 
-                Item { Layout.preferredHeight: theme ? theme.xl : 32 } // Bottom spacer
+                Item { Layout.preferredHeight: 32 } // Bottom spacer
             }
         }
     }

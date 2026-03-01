@@ -17,7 +17,6 @@ qt_add_qml_module(appdiskqml
     QML_FILES
         qml/Main.qml
         qml/App.qml
-        qml/styles/AppTheme.qml
         qml/views/LoginView.qml
         qml/views/RegisterView.qml
 )
