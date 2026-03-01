@@ -81,6 +81,7 @@ set(Services_HEADERS
     services/HealthService.hpp
     services/OperationLogService.hpp
     services/RedisService.hpp
+    services/ScheduledTasks.hpp
     services/ShareService.hpp
     services/SystemService.hpp
     services/TokenService.hpp
@@ -95,6 +96,7 @@ set(Services_SOURCES
     services/HealthService.cpp
     services/OperationLogService.cpp
     services/RedisService.cpp
+    services/ScheduledTasks.cpp
     services/ShareService.cpp
     services/SystemService.cpp
     services/TokenService.cpp

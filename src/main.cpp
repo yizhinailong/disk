@@ -1,6 +1,6 @@
 #include <drogon/drogon.h>
 
-#include "services/CleanupService.hpp"
+#include "services/ScheduledTasks.hpp"
 
 auto main() -> int {
     LOG_INFO << "Disk system starting...";
@@ -17,24 +17,8 @@ auto main() -> int {
 
     // 注册启动后定时清理任务
     drogon::app().registerBeginningAdvice([]() {
-        using disk::services::CleanupService;
-        auto cleanup_service = std::make_shared<CleanupService>(drogon::app().getDbClient());
-
-        // async_func wraps the coroutine lambda in std::function<void()> that keeps
-        // captures alive. runEvery stores the function for program lifetime.
-        drogon::app().getLoop()->runEvery(
-            3600.0,
-            drogon::async_func([cleanup_service]() -> drogon::Task<void> {
-                LOG_INFO << "Scheduled cleanup task started";
-                const auto& service = cleanup_service;
-                auto result = co_await service->CleanupExpiredTrash();
-                if (!result) {
-                    LOG_ERROR << "Scheduled cleanup task failed: " << result.error().message;
-                }
-            })
-        );
-
-        LOG_INFO << "Scheduled cleanup task registered (runs every hour)";
+        disk::services::ScheduledTasks::Initialize(drogon::app().getDbClient());
+        disk::services::ScheduledTasks::Register();
     });
 
     drogon::app().loadConfigFile("config.json").run();
