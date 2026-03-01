@@ -38,7 +38,7 @@
       "timeout": -1.0
     }
   ],
-"plugins": [
+  "plugins": [
     {
       "name": "drogon::plugin::GlobalFilters",
       "config": {
@@ -60,7 +60,7 @@
       "config": {
         "log_path": "",
         "log_file": "log",
-        "log_level": "INFO",
+        "log_level": "DEBUG",
         "log_size_limit": 10485760,
         "max_files": 10,
         "use_spdlog": true,
