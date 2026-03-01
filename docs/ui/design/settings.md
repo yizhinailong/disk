@@ -178,10 +178,12 @@ public:
     bool MinimizeToTray() const;
     bool ShowNotifications() const;
     bool ConfirmDelete() const;
-    
 
-    
 private:
+    AppConfig() : m_settings(
+        QDir::homePath() + "/.config/disk/desktop/settings.ini",
+        QSettings::IniFormat
+    ) {}
     QSettings m_settings;
 };
 ```
@@ -227,8 +229,8 @@ private:
 
 | 平台 | 路径 |
 |------|------|
-| Linux/macOS | `~/.config/disk-tui/config.json` |
-| Windows | `%APPDATA%\disk-tui\config.json` |
+| Linux/macOS | `~/.config/disk/tui/config.json` |
+| Windows | `%USERPROFILE%\.config\disk\tui\config.json` |
 
 ### 专用快捷键
 

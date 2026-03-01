@@ -1896,7 +1896,7 @@ func (c *UserCache) IsExpired() bool {
 
 ```
 1. 默认值（代码内置）
-2. 配置文件 (~/.config/disk-tui/config.yaml)
+2. 配置文件 (~/.config/disk/tui/config.yaml)
 3. 环境变量 (DISK_*)
 4. CLI 参数（最高优先级）
 ```
@@ -1981,7 +1981,7 @@ func DefaultConfig() *Config {
             InsecureSkipVerify: false,
         },
         Storage: StorageConfig{
-            ConfigDir:         filepath.Join(homeDir, ".config", "disk-tui"),
+            ConfigDir:         filepath.Join(homeDir, ".config", "disk", "tui"),
             DownloadDir:       filepath.Join(homeDir, "Downloads"),
             ChunkSize:         5 * 1024 * 1024, // 5MB
             ConcurrentUploads: 3,
@@ -2005,7 +2005,7 @@ func DefaultConfig() *Config {
 ### 7.3 配置文件示例
 
 ```yaml
-# ~/.config/disk-tui/config.yaml
+# ~/.config/disk/tui/config.yaml
 
 # 服务器配置
 server:
@@ -2021,7 +2021,7 @@ server:
 # 存储配置
 storage:
   # 配置目录（令牌文件存储位置）
-  config_dir: ~/.config/disk-tui
+  config_dir: ~/.config/disk/tui
   # 下载目录
   download_dir: ~/Downloads
   # 分片上传大小（字节），默认 5MB
@@ -2034,7 +2034,7 @@ log:
   # 日志级别: debug, info, warn, error
   level: info
   # 日志文件（空则仅输出到终端）
-  # file: ~/.config/disk-tui/disk-tui.log
+  # file: ~/.config/disk/tui/disk-tui.log
   # 是否输出到终端
   console: true
 
@@ -2082,7 +2082,7 @@ func Load(cmd *cobra.Command) (*Config, error) {
     v.SetConfigName("config")
     v.SetConfigType("yaml")
     v.AddConfigPath(cfg.Storage.ConfigDir)
-    v.AddConfigPath("$HOME/.config/disk-tui")
+    v.AddConfigPath("$HOME/.config/disk/tui")
     v.AddConfigPath(".")
 
     // 读取配置文件
@@ -2186,7 +2186,7 @@ func GetConfigDir() string {
     }
 
     homeDir, _ := os.UserHomeDir()
-    return filepath.Join(homeDir, ".config", "disk-tui")
+    return filepath.Join(homeDir, ".config", "disk", "tui")
 }
 ```
 
