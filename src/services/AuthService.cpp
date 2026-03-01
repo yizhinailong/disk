@@ -39,8 +39,7 @@ namespace disk::auth {
     }
 
     auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {
-        LOG_DEBUG << "Starting user registration: " << request.username << " <" << request.email
-                  << ">";
+        LOG_DEBUG << "Starting user registration: " << request.username;
 
         // 1. 检查用户名是否已存在
         if (co_await IsUsernameExists(request.username)) {
@@ -50,7 +49,7 @@ namespace disk::auth {
 
         // 2. 检查邮箱是否已存在
         if (co_await IsEmailExists(request.email)) {
-            LOG_WARN << "Email already exists: " << request.email;
+            LOG_WARN << "Email already exists: " << request.email.substr(0, 3) << "***@***";
             co_return std::unexpected(ErrorInfo(ErrorCode::EmailExists));
         }
 
@@ -316,7 +315,7 @@ namespace disk::auth {
         try {
             CoroMapper<Users> mapper(m_db_client);
             auto count = co_await mapper.count(Criteria(Users::Cols::_email, email));
-            LOG_DEBUG << "Check email existence: " << email << " - "
+            LOG_DEBUG << "Check email existence: " << email.substr(0, 3) << "***@***" << " - "
                       << (count > 0 ? "exists" : "not found");
             co_return count > 0;
         } catch (const drogon::orm::DrogonDbException& e) {
