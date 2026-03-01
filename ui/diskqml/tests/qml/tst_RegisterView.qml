@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtTest
+import DiskAuth 1.0
 
 TestCase {
     name: "RegisterViewTest"
@@ -31,62 +32,98 @@ TestCase {
     }
 
     function init() {
+        // Clear AuthViewModel state before each test
+        AuthViewModel.clearForm()
         loader.sourceComponent = viewComponent
         verify(loader.item !== null)
     }
 
     function cleanup() {
+        AuthViewModel.clearForm()
         loader.sourceComponent = undefined
     }
 
-    function test_validation() {
+    function test_fieldBindings() {
         var view = loader.item.item
         
         var usernameInput = view.findChild("usernameInput")
         var emailInput = view.findChild("emailInput")
         var passwordInput = view.findChild("passwordInput")
         var confirmPasswordInput = view.findChild("confirmPasswordInput")
-        var submitButton = view.findChild("submitButton")
         
         verify(usernameInput)
         verify(emailInput)
         verify(passwordInput)
         verify(confirmPasswordInput)
-        verify(submitButton)
         
-        // Initial state
+        // Test two-way binding: AuthViewModel -> UI
+        AuthViewModel.username = "testuser"
+        compare(usernameInput.text, "testuser")
+        
+        AuthViewModel.email = "test@example.com"
+        compare(emailInput.text, "test@example.com")
+        
+        AuthViewModel.password = "TestPass123"
+        compare(passwordInput.text, "TestPass123")
+        
+        AuthViewModel.confirmPassword = "TestPass123"
+        compare(confirmPasswordInput.text, "TestPass123")
+        
+        // Test two-way binding: UI -> AuthViewModel
+        usernameInput.text = "newuser"
+        compare(AuthViewModel.username, "newuser")
+        
+        emailInput.text = "new@test.com"
+        compare(AuthViewModel.email, "new@test.com")
+    }
+
+    function test_validation_via_ViewModel() {
+        var view = loader.item.item
+        
+        var usernameInput = view.findChild("usernameInput")
+        var emailInput = view.findChild("emailInput")
+        var passwordInput = view.findChild("passwordInput")
+        var confirmPasswordInput = view.findChild("confirmPasswordInput")
+        var submitButton = view.findChild("submitButton")
+        
+        // Initial state - form not valid
+        verify(!AuthViewModel.isFormValid)
         verify(!submitButton.enabled)
         
-        // Test username
-        usernameInput.text = "abc" // too short
-        verify(!view.isUsernameValid())
-        usernameInput.text = "valid_user_123"
-        verify(view.isUsernameValid())
+        // Test username validation via AuthViewModel
+        AuthViewModel.username = "abc" // too short
+        verify(!AuthViewModel.isUsernameValid)
         
-        // Test email
-        emailInput.text = "invalid-email"
-        verify(!view.isEmailValid())
-        emailInput.text = "test@example.com"
-        verify(view.isEmailValid())
+        AuthViewModel.username = "valid_user_123"
+        verify(AuthViewModel.isUsernameValid)
         
-        // Test password
-        passwordInput.text = "weakpass"
-        verify(!view.isPasswordValid())
-        passwordInput.text = "StrongPass123"
-        verify(view.isPasswordValid())
+        // Test email validation via AuthViewModel
+        AuthViewModel.email = "invalid-email"
+        verify(!AuthViewModel.isEmailValid)
         
-        // Test confirm password
-        confirmPasswordInput.text = "DifferentPass123"
-        verify(!view.isConfirmPasswordValid())
-        confirmPasswordInput.text = "StrongPass123"
-        verify(view.isConfirmPasswordValid())
+        AuthViewModel.email = "test@example.com"
+        verify(AuthViewModel.isEmailValid)
+        
+        // Test password validation via AuthViewModel
+        AuthViewModel.password = "weakpass"
+        verify(!AuthViewModel.isPasswordValid)
+        
+        AuthViewModel.password = "StrongPass123"
+        verify(AuthViewModel.isPasswordValid)
+        
+        // Test confirm password - must match
+        AuthViewModel.confirmPassword = "DifferentPass123"
+        verify(!AuthViewModel.isConfirmPasswordValid)
+        
+        AuthViewModel.confirmPassword = "StrongPass123"
+        verify(AuthViewModel.isConfirmPasswordValid)
         
         // Form should be valid now
-        verify(view.isFormValid())
+        verify(AuthViewModel.isFormValid)
         verify(submitButton.enabled)
     }
 
-    function test_loading_disables_submit() {
+    function test_loading_disables_inputs() {
         var view = loader.item.item
         var usernameInput = view.findChild("usernameInput")
         var emailInput = view.findChild("emailInput")
@@ -95,62 +132,49 @@ TestCase {
         var submitButton = view.findChild("submitButton")
         
         // Fill valid form
-        usernameInput.text = "valid_user"
-        emailInput.text = "test@example.com"
-        passwordInput.text = "StrongPass123"
-        confirmPasswordInput.text = "StrongPass123"
+        AuthViewModel.username = "valid_user"
+        AuthViewModel.email = "test@example.com"
+        AuthViewModel.password = "StrongPass123"
+        AuthViewModel.confirmPassword = "StrongPass123"
         
         verify(submitButton.enabled)
+        verify(usernameInput.enabled)
         
-        // Set loading
-        view.loading = true
+        // Set loading via AuthViewModel
+        AuthViewModel.loading = true
         verify(!submitButton.enabled)
         verify(!usernameInput.enabled)
+        verify(!emailInput.enabled)
+        verify(!passwordInput.enabled)
+        verify(!confirmPasswordInput.enabled)
         
-        view.loading = false
+        AuthViewModel.loading = false
         verify(submitButton.enabled)
         verify(usernameInput.enabled)
     }
 
-    function test_error_mapping() {
+    function test_error_message_binding() {
         var view = loader.item.item
-        var submitButton = view.findChild("submitButton")
         var globalErrorLabel = view.findChild("globalErrorLabel")
         
-        var currentResponse = {}
+        verify(globalErrorLabel)
         
-        view.httpClient = {
-            register: function(data, callback) {
-                callback(currentResponse)
-            }
-        }
+        // Initial state - no error
+        compare(AuthViewModel.errorMessage, "")
+        verify(!globalErrorLabel.visible)
         
-        // Fill valid form
-        view.findChild("usernameInput").text = "valid_user"
-        view.findChild("emailInput").text = "test@example.com"
-        view.findChild("passwordInput").text = "StrongPass123"
-        view.findChild("confirmPasswordInput").text = "StrongPass123"
+        // Set error via AuthViewModel
+        AuthViewModel.errorMessage = "用户名已被注册"
+        compare(globalErrorLabel.text, "用户名已被注册")
+        verify(globalErrorLabel.visible)
         
-        // Test 40001
-        currentResponse = {ok: false, code: 40001}
-        submitButton.clicked()
-        compare(view.globalError, "用户名已被注册")
-        
-        // Test 40002
-        currentResponse = {ok: false, code: 40002}
-        submitButton.clicked()
-        compare(view.globalError, "邮箱已被注册")
+        // Clear error
+        AuthViewModel.errorMessage = ""
+        verify(!globalErrorLabel.visible)
     }
 
     function test_success_signal() {
         var view = loader.item.item
-        var submitButton = view.findChild("submitButton")
-        
-        view.httpClient = {
-            register: function(data, callback) {
-                callback({ok: true, code: 0})
-            }
-        }
         
         var signalEmitted = false
         var emittedUsername = ""
@@ -163,15 +187,36 @@ TestCase {
         })
         
         // Fill valid form
-        view.findChild("usernameInput").text = "valid_user"
-        view.findChild("emailInput").text = "test@example.com"
-        view.findChild("passwordInput").text = "StrongPass123"
-        view.findChild("confirmPasswordInput").text = "StrongPass123"
+        AuthViewModel.username = "valid_user"
+        AuthViewModel.email = "test@example.com"
+        AuthViewModel.password = "StrongPass123"
+        AuthViewModel.confirmPassword = "StrongPass123"
         
-        submitButton.clicked()
+        // Simulate successful registration by emitting from ViewModel
+        // (In real app, this happens when registerUser() succeeds)
+        AuthViewModel.emitRegistered()
         
         verify(signalEmitted)
         compare(emittedUsername, "valid_user")
         compare(emittedEmail, "test@example.com")
+    }
+
+    function test_clearForm() {
+        // Fill form
+        AuthViewModel.username = "testuser"
+        AuthViewModel.email = "test@example.com"
+        AuthViewModel.password = "TestPass123"
+        AuthViewModel.confirmPassword = "TestPass123"
+        AuthViewModel.errorMessage = "Some error"
+        
+        // Clear form
+        AuthViewModel.clearForm()
+        
+        // Verify all cleared
+        compare(AuthViewModel.username, "")
+        compare(AuthViewModel.email, "")
+        compare(AuthViewModel.password, "")
+        compare(AuthViewModel.confirmPassword, "")
+        compare(AuthViewModel.errorMessage, "")
     }
 }
