@@ -27,11 +27,13 @@ namespace disk::services {
     static constexpr int ACCESS_TOKEN_TTL = 7200;
     static constexpr int SHARE_TOKEN_TTL = 3600;
 
-    // TokenService构造函数（内部创建RedisService）
+    // TokenService构造函数（使用 RedisService 单例）
     TokenService::TokenService(std::string jwt_secret, drogon::nosql::RedisClientPtr redis_client)
         : m_jwt_secret(std::move(jwt_secret)),
           m_redis_client(std::move(redis_client)),
-          m_redis_service(std::make_shared<disk::services::RedisService>(m_redis_client)) {
+          m_redis_service(disk::services::RedisService::GetInstance()) {
+        // Initialize RedisService singleton if not already initialized
+        disk::services::RedisService::Initialize(m_redis_client);
         LOG_DEBUG << "TokenService initialization completed";
     }
 

@@ -17,9 +17,14 @@ namespace disk::services {
 
     using disk::error::ErrorInfo;
 
-    RedisService::RedisService(drogon::nosql::RedisClientPtr redis_client)
-        : m_redis_client(std::move(redis_client)) {
-        LOG_DEBUG << "RedisService initialized";
+    // ==================== 单例初始化 ====================
+
+    auto RedisService::Initialize(drogon::nosql::RedisClientPtr redis_client) -> void {
+        auto instance = GetInstance();
+        if (!instance->m_redis_client) {
+            instance->m_redis_client = std::move(redis_client);
+            LOG_DEBUG << "RedisService initialized";
+        }
     }
 
     // ==================== 通用方法实现 ====================

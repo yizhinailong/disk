@@ -45,9 +45,11 @@ namespace disk::share {
     )
         : m_db_client(std::move(db_client)),
           m_redis_client(std::move(redis_client)),
-          m_redis_service(std::make_shared<disk::services::RedisService>(m_redis_client)),
-          m_jwt_secret(std::move(jwt_secret)) {}
-
+          m_redis_service(disk::services::RedisService::GetInstance()),
+          m_jwt_secret(std::move(jwt_secret)) {
+        // Initialize RedisService singleton if not already initialized
+        disk::services::RedisService::Initialize(m_redis_client);
+    }
     // ==================== 公共方法 ====================
 
     auto ShareService::Create(CreateShareRequest request, uint64_t user_id)

@@ -17,6 +17,7 @@
 #include <drogon/nosql/RedisClient.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/Singleton.hpp"
 
 namespace disk::services {
 
@@ -39,19 +40,39 @@ namespace disk::services {
     };
 
     /**
-     * @brief Redis 服务类
+     * @brief Redis 服务类（单例）
      *
      * 封装 Redis 客户端操作，提供通用 Redis 接口
+     * 继承自 Singleton<RedisService>，确保全局只有一个实例
+     *
+     * 使用方式：
+     * @code
+     * // 在应用启动时初始化（只需调用一次）
+     * RedisService::Initialize(redis_client);
+     *
+     * // 在任何地方获取实例
+     * auto redis = RedisService::GetInstance();
+     * co_await redis->Set("key", "value");
+     * @endcode
      */
-    class RedisService {
+    class RedisService : public disk::utils::Singleton<RedisService> {
+        friend class disk::utils::Singleton<RedisService>;
+
     public:
-        explicit RedisService(drogon::nosql::RedisClientPtr redis_client);
+        /**
+         * @brief 初始化 RedisService 单例
+         * @param redis_client Redis 客户端
+         *
+         * @note 此方法应在应用启动时调用一次。
+         *       多次调用是安全的，但只有第一次调用有效。
+         */
+        static auto Initialize(drogon::nosql::RedisClientPtr redis_client) -> void;
+
         ~RedisService() = default;
         RedisService(const RedisService&) = delete;
         auto operator=(const RedisService&) -> RedisService& = delete;
-        RedisService(RedisService&&) = default;
-        auto operator=(RedisService&&) -> RedisService& = default;
-
+        RedisService(RedisService&&) = delete;
+        auto operator=(RedisService&&) -> RedisService& = delete;
         // ==================== 通用方法 ====================
 
         /**
@@ -144,6 +165,11 @@ namespace disk::services {
         auto IncrBy(const std::string& key, std::int64_t increment) -> drogon::Task<Result<std::int64_t>>;
 
     private:
+        /**
+         * @brief 私有构造函数（单例模式）
+         */
+        RedisService() = default;
+
         drogon::nosql::RedisClientPtr m_redis_client;
     };
 

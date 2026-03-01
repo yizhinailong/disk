@@ -28,13 +28,15 @@ namespace disk::auth {
 
     AuthService::AuthService(const drogon::nosql::RedisClientPtr& redis_client)
         : m_db_client(drogon::app().getDbClient()),
-          m_redis_service(std::make_shared<disk::services::RedisService>(redis_client)),
+          m_redis_service(disk::services::RedisService::GetInstance()),
           m_token_service(
               std::make_unique<disk::services::TokenService>(
                   ConfigMgr::GetInstance()->GetJwtSecret(),
                   m_redis_service
               )
           ) {
+        // Initialize RedisService singleton if not already initialized
+        disk::services::RedisService::Initialize(redis_client);
         LOG_DEBUG << "AuthService initialized";
     }
 
