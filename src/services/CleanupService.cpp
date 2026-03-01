@@ -29,7 +29,7 @@ namespace disk::services {
 
     CleanupService::CleanupService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-
+        LOG_DEBUG << "CleanupService initialization completed";
     }
 
     auto CleanupService::CleanupExpiredTrash() -> drogon::Task<Result<int>> {

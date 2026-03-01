@@ -22,7 +22,7 @@ namespace disk::folder {
 
     FolderService::FolderService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-
+        LOG_DEBUG << "FolderService initialization completed";
     }
 
     auto FolderService::CreateFolder(CreateFolderRequest request, uint64_t user_id)

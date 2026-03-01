@@ -35,6 +35,7 @@ namespace disk::auth {
         // Initialize TokenService singleton
         disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
 
+        LOG_DEBUG << "AuthService initialization completed";
     }
 
     auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {

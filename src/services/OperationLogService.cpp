@@ -18,7 +18,9 @@
 namespace disk::log {
 
     OperationLogService::OperationLogService(drogon::orm::DbClientPtr db_client)
-        : m_db_client(std::move(db_client)) {}
+        : m_db_client(std::move(db_client)) {
+        LOG_DEBUG << "OperationLogService initialization completed";
+        }
 
     auto OperationLogService::Log(const OperationLogEntry& entry) -> drogon::Task<Result<void>> {
         try {
