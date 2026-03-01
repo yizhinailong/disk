@@ -21,7 +21,7 @@ namespace disk::filters {
     ShareAuthFilter::ShareAuthFilter() {
         // Initialize TokenService singleton
         disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
-        LOG_DEBUG << "ShareAuthFilter initialized";
+
     }
 
     auto ShareAuthFilter::doFilter(const drogon::HttpRequestPtr& request)

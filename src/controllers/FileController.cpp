@@ -20,7 +20,6 @@ namespace disk::file {
 
     FileController::FileController()
         : m_file_service(std::make_unique<FileService>(drogon::app().getDbClient())) {
-        LOG_DEBUG << "FileController initialized";
     }
 
     auto FileController::InitUpload(drogon::HttpRequestPtr request)

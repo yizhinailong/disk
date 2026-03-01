@@ -34,7 +34,7 @@ namespace disk::auth {
         disk::services::RedisService::Initialize(redis_client);
         // Initialize TokenService singleton
         disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
-        LOG_DEBUG << "AuthService initialized";
+
     }
 
     auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {

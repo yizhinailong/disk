@@ -24,7 +24,7 @@ namespace disk::filters {
     JwtAuthFilter::JwtAuthFilter() {
         // Initialize TokenService singleton
         disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
-        LOG_DEBUG << "JwtAuthFilter initialized";
+
     }
 
     auto JwtAuthFilter::doFilter(const drogon::HttpRequestPtr& request)

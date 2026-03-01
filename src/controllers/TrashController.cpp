@@ -18,7 +18,6 @@ namespace disk::trash {
 
     TrashController::TrashController()
         : m_trash_service(std::make_unique<TrashService>(drogon::app().getDbClient())) {
-        LOG_DEBUG << "TrashController initialized";
     }
 
     auto TrashController::List(drogon::HttpRequestPtr request)

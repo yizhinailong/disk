@@ -30,7 +30,7 @@ namespace disk::user {
 
     UserService::UserService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        LOG_DEBUG << "UserService initialized";
+
     }
 
     auto UserService::GetProfile(uint64_t user_id) -> drogon::Task<Result<UserProfileResponse>> {

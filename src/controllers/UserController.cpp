@@ -18,7 +18,6 @@ namespace disk::user {
 
     UserController::UserController()
         : m_user_service(std::make_unique<UserService>(drogon::app().getDbClient())) {
-        LOG_DEBUG << "UserController initialized";
     }
 
     auto UserController::GetProfile(drogon::HttpRequestPtr request)

@@ -30,7 +30,6 @@ namespace disk::share {
                   ConfigMgr::GetInstance()->GetJwtSecret()
               )
           ) {
-        LOG_DEBUG << "ShareController initialized";
     }
 
     // ==================== 所有者端点（JWT 保护） ====================

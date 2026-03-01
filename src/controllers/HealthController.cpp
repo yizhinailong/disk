@@ -22,7 +22,6 @@ namespace disk::health {
                   drogon::app().getRedisClient()
               )
           ) {
-        LOG_DEBUG << "HealthController initialized";
     }
 
     auto HealthController::Check(drogon::HttpRequestPtr request)
