@@ -1,11 +1,11 @@
 # PROJECT KNOWLEDGE BASE
 
 **Generated:** 2026-02-17
-**Stack:** C++23/Drogon + Go 1.25/Bubble Tea
+**Stack:** C++23/Drogon + Go 1.25/Bubble Tea + Qt 6.8/QML
 
 ## OVERVIEW
 
-Dual-project monorepo: C++ backend (高性能网盘) + Go TUI client. JWT auth, file management, sharing, trash.
+Multi-project monorepo: C++ backend (高性能网盘) + Go TUI client + Qt/QML desktop client. JWT auth, file management, sharing, trash.
 
 ## STRUCTURE
 
@@ -21,6 +21,10 @@ disk/
 ├── ui/tui/                 # Go TUI Client (Bubble Tea)
 │   ├── cmd/disk-tui/       # Entry point
 │   └── internal/           # app, api, config, models, store, ui
+├── ui/diskqml/             # Qt/QML Desktop Client
+│   ├── src/                # C++ backend layer (api, services, viewmodels)
+│   ├── qml/                # QML presentation layer (views, components)
+│   └── tests/              # QML unit tests
 ├── test/                   # GTest unit tests
 ├── docs/                   # 设计文档 (00-06)
 └── sql/                    # DB init scripts
@@ -38,6 +42,11 @@ disk/
 | Redis operations | `src/services/RedisService.cpp` |
 | TUI pages | `ui/tui/internal/ui/pages/` |
 | TUI components | `ui/tui/internal/ui/components/` |
+| QML views | `ui/diskqml/qml/views/` |
+| QML components | `ui/diskqml/qml/components/` |
+| QML viewmodels | `ui/diskqml/src/viewmodels/` |
+| QML services | `ui/diskqml/src/services/` |
+| QML API client | `ui/diskqml/src/api/` |
 | Config | `config.json` (backend), `ui/tui/configs/` (TUI) |
 | Tests | `test/` mirrors `src/` structure |
 
@@ -91,6 +100,41 @@ public:
 - Viper for config
 - Package structure mirrors internal domain
 
+### QML (Qt/QML Desktop Client)
+
+**Tech Stack:**
+- Qt 6.8+
+- C++20
+- Qt MVVM pattern (QObject + Q_PROPERTY + Q_INVOKABLE)
+- QSettings for local storage
+
+**Architecture:**
+- C++ layer handles ALL business logic: API client, services, viewmodels, models, storage
+- QML layer handles ONLY UI presentation: views, components, dialogs
+- QML/JavaScript MUST NOT contain business logic
+
+**Naming:** (Follow C++ backend conventions)
+- Classes/Structs: `PascalCase` -> `AuthService`, `FileViewModel`
+- Functions/Methods: `camelCase` (QML) / `PascalCase` (C++)
+- Private members: `m_snake_case` -> `m_auth_service`
+- QML properties: `camelCase` -> `userName`, `isLoggedIn`
+- Signals: `camelCase` + `Changed` -> `userNameChanged`
+
+**ViewModel Pattern:**
+```cpp
+class FileViewModel : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(QString fileName READ fileName NOTIFY fileNameChanged)
+public:
+    Q_INVOKABLE void loadFile(const QString& fileId);
+signals:
+    void fileNameChanged();
+};
+```
+
+**Key Principle:**
+QML/JavaScript ONLY handles UI rendering. All business logic, API calls, and data processing MUST be in C++.
+
 ## ANTI-PATTERNS
 
 - **NO** `as any`, `@ts-ignore` equivalents - no type suppression
@@ -125,6 +169,18 @@ cd ui/tui && go build -o build/disk-tui ./cmd/disk-tui
 
 # Run TUI
 ./ui/tui/build/disk-tui --server http://127.0.0.1:8080
+
+# Build QML (Linux)
+cd ui/diskqml && cmake -B build -S . && cmake --build build
+
+# Build QML (Windows - Qt Creator)
+# Open ui/diskqml/CMakeLists.txt in Qt Creator and build
+
+# Run QML (Linux)
+./ui/diskqml/build/appdiskqml
+
+# Run QML (Windows)
+./ui/diskqml/build/Desktop_Qt_6_11_0_llvm_mingw_64_bit-Debug/appdiskqml.exe
 ```
 
 ## ENVIRONMENT
