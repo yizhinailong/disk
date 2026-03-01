@@ -27,25 +27,16 @@ namespace disk::services {
     static constexpr int ACCESS_TOKEN_TTL = 7200;
     static constexpr int SHARE_TOKEN_TTL = 3600;
 
-    // TokenService构造函数（使用 RedisService 单例）
-    TokenService::TokenService(std::string jwt_secret, drogon::nosql::RedisClientPtr redis_client)
-        : m_jwt_secret(std::move(jwt_secret)),
-          m_redis_client(std::move(redis_client)),
-          m_redis_service(disk::services::RedisService::GetInstance()) {
-        // Initialize RedisService singleton if not already initialized
-        disk::services::RedisService::Initialize(m_redis_client);
+    // TokenService 私有构造函数（单例模式）
+    TokenService::TokenService()
+        : m_jwt_secret(),
+          m_redis_client(nullptr),
+          m_redis_service(RedisService::GetInstance()) {
         LOG_DEBUG << "TokenService initialization completed";
     }
 
-    // TokenService构造函数（外部提供RedisService）
-    TokenService::TokenService(
-        std::string jwt_secret,
-        std::shared_ptr<disk::services::RedisService> redis_service
-    )
-        : m_jwt_secret(std::move(jwt_secret)),
-          m_redis_client(nullptr),
-          m_redis_service(std::move(redis_service)) {
-        LOG_DEBUG << "TokenService initialization completed";
+    void TokenService::Initialize(std::string jwt_secret) {
+        GetInstance()->m_jwt_secret = std::move(jwt_secret);
     }
 
     auto TokenService::GenerateTokens(uint64_t user_id, const std::string& username) const

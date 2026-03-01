@@ -27,6 +27,5 @@ namespace disk::filters {
             -> drogon::Task<drogon::HttpResponsePtr> override;
 
     private:
-        std::unique_ptr<disk::services::TokenService> m_token_service;
     };
 } // namespace disk::filters

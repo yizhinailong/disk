@@ -20,14 +20,10 @@
 namespace disk::filters {
 
     using disk::utils::ConfigMgr;
-
-    JwtAuthFilter::JwtAuthFilter()
-        : m_token_service(
-              std::make_unique<disk::services::TokenService>(
-                  ConfigMgr::GetInstance()->GetJwtSecret(),
-                  drogon::app().getRedisClient()
-              )
-          ) {
+    using disk::services::TokenService;
+    JwtAuthFilter::JwtAuthFilter() {
+        // Initialize TokenService singleton
+        disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
         LOG_DEBUG << "JwtAuthFilter initialized";
     }
 
@@ -46,7 +42,7 @@ namespace disk::filters {
 
         const auto token = auth_header.substr(7);
 
-        auto verify_result = m_token_service->VerifyAccessToken(token);
+        auto verify_result = TokenService::GetInstance()->VerifyAccessToken(token);
         if (!verify_result) {
             co_return disk::Response::Error(verify_result.error());
         }
@@ -60,7 +56,7 @@ namespace disk::filters {
         if (decoded.has_payload_claim("jti")) {
             const auto jti = decoded.get_payload_claim("jti").as_string();
 
-            if (co_await m_token_service->IsAccessTokenRevoked(jti)) {
+            if (co_await TokenService::GetInstance()->IsAccessTokenRevoked(jti)) {
                 LOG_WARN << "Token revoked: user_id=" << user_id << ", jti=" << jti;
                 co_return disk::Response::Error(disk::error::Code::TokenRevoked);
             }

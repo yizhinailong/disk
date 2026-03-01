@@ -18,6 +18,7 @@
 #include <drogon/nosql/RedisClient.h>
 
 #include "services/RedisService.hpp"
+#include "utils/Singleton.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::services {
@@ -35,22 +36,25 @@ namespace disk::services {
      * @brief 统一JWT令牌服务
      *
      * 提供 Access Token、Refresh Token 和 Share Token 的生成与验证。
+     *
+     * 单例模式：使用 TokenService::Initialize() 初始化，TokenService::GetInstance() 获取实例。
      */
-    class TokenService {
+    class TokenService : public utils::Singleton<TokenService> {
+        friend class utils::Singleton<TokenService>;
+
     public:
         /**
-         * @brief 构造函数（内部创建RedisService）
+         * @brief 初始化单例
          * @param jwt_secret JWT签名密钥
-         * @param redis_client Redis客户端
+         * @note 必须在使用 GetInstance() 之前调用一次
          */
-        explicit TokenService(std::string jwt_secret, drogon::nosql::RedisClientPtr redis_client);
+        static void Initialize(std::string jwt_secret);
 
-        /**
-         * @brief 构造函数（外部提供RedisService）
-         * @param jwt_secret JWT签名密钥
-         * @param redis_service 已创建的RedisService
-         */
-        explicit TokenService(std::string jwt_secret, std::shared_ptr<RedisService> redis_service);
+        // Delete copy and move operations
+        TokenService(const TokenService&) = delete;
+        TokenService& operator=(const TokenService&) = delete;
+        TokenService(TokenService&&) = delete;
+        TokenService& operator=(TokenService&&) = delete;
 
         // ==================== Access/Refresh Token 实例方法 ====================
 
@@ -241,6 +245,11 @@ namespace disk::services {
         auto IsShareTokenRevoked(const std::string& token_hash) -> drogon::Task<bool>;
 
     private:
+        /**
+         * @brief 私有构造函数（单例模式）
+         */
+        TokenService();
+
         /**
          * @brief 从 JWT 中提取 JTI
          * @param token JWT 令牌
