@@ -24,8 +24,7 @@ namespace disk::system {
             SystemController::GetInfo,
             "/api/system/info",
             drogon::Get,
-            "JwtAuthFilter",
-            "RateLimitFilter"
+            "disk::filters::JwtAuthFilter",
         );
         METHOD_LIST_END
 

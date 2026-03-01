@@ -38,29 +38,25 @@ namespace disk::user {
             UserController::GetProfile,
             "/api/user/profile",
             drogon::Get,
-            "JwtAuthFilter",
-            "RateLimitFilter"
+            "disk::filters::JwtAuthFilter",
         );
         ADD_METHOD_TO(
             UserController::UpdateProfile,
             "/api/user/profile",
             drogon::Patch,
-            "JwtAuthFilter",
-            "RateLimitFilter"
+            "disk::filters::JwtAuthFilter",
         );
         ADD_METHOD_TO(
             UserController::UpdatePassword,
             "/api/user/password",
             drogon::Put,
-            "JwtAuthFilter",
-            "RateLimitFilter"
+            "disk::filters::JwtAuthFilter",
         );
         ADD_METHOD_TO(
             UserController::GetStorage,
             "/api/user/storage",
             drogon::Get,
-            "JwtAuthFilter",
-            "RateLimitFilter"
+            "disk::filters::JwtAuthFilter",
         );
         METHOD_LIST_END
 

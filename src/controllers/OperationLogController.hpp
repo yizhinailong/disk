@@ -24,8 +24,7 @@ namespace disk::log {
             OperationLogController::GetList,
             "/api/logs",
             drogon::Get,
-            "JwtAuthFilter",
-            "RateLimitFilter"
+            "disk::filters::JwtAuthFilter",
         );
         METHOD_LIST_END
 
