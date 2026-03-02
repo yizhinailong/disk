@@ -29,6 +29,21 @@ namespace disk::qml::api {
         /// @param ctx     Context object – callback is NOT invoked if ctx is destroyed
         /// @param cb      Completion callback (always on main thread)
         virtual auto PostJson(const QString& path, const QJsonObject& body, QObject* ctx, PostJsonCallback cb) -> void = 0;
+
+        /// Issue an async POST with JSON body using a per-request bearer token.
+        /// The shared factory state is NOT mutated; a local copy is used.
+        /// @param path        API path (e.g. "/api/auth/logout")
+        /// @param body        JSON request body
+        /// @param bearerToken Bearer token for this request only
+        /// @param ctx         Context object – callback is NOT invoked if ctx is destroyed
+        /// @param cb          Completion callback (always on main thread)
+        virtual auto PostJsonWithBearerToken(
+            const QString& path,
+            const QJsonObject& body,
+            const QString& bearerToken,
+            QObject* ctx,
+            PostJsonCallback cb
+        ) -> void = 0;
     };
 
 } // namespace disk::qml::api

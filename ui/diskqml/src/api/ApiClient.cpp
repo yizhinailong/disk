@@ -43,4 +43,34 @@ namespace disk::qml::api {
         });
     }
 
+    auto ApiClient::PostJsonWithBearerToken(
+        const QString& path,
+        const QJsonObject& body,
+        const QString& bearerToken,
+        QObject* ctx,
+        PostJsonCallback cb
+    ) -> void {
+        // Copy factory to avoid mutating shared state
+        QNetworkRequestFactory local = m_factory;
+        local.setBearerToken(bearerToken.toUtf8());
+        auto req = local.createRequest(path);
+
+        m_rest.post(req, QJsonDocument(body), ctx, [cb = std::move(cb)](QRestReply& reply) {
+            ApiReply r;
+            r.error.hasNetworkError = reply.hasError();
+            r.error.networkError   = reply.error();
+            r.error.networkErrorString = reply.errorString();
+            r.error.httpStatus     = reply.httpStatus();
+            r.error.httpStatusSuccess = (r.error.httpStatus >= 200 && r.error.httpStatus <= 299);
+            r.body = reply.readBody();
+            if (!r.body.isEmpty()) {
+                QJsonDocument doc = QJsonDocument::fromJson(r.body, &r.jsonParseError);
+                if (r.jsonParseError.error == QJsonParseError::NoError) {
+                    r.json = std::move(doc);
+                }
+            }
+            cb(std::move(r));
+        });
+    }
+
 } // namespace disk::qml::api

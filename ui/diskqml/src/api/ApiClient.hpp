@@ -22,6 +22,14 @@ namespace disk::qml::api {
 
         auto PostJson(const QString& path, const QJsonObject& body, QObject* ctx, PostJsonCallback cb) -> void override;
 
+        auto PostJsonWithBearerToken(
+            const QString& path,
+            const QJsonObject& body,
+            const QString& bearerToken,
+            QObject* ctx,
+            PostJsonCallback cb
+        ) -> void override;
+
     private:
         QNetworkAccessManager m_nam;
         QRestAccessManager m_rest;
