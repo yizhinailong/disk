@@ -8,6 +8,45 @@
 
 namespace disk::qml::models {
 
+    // ==================== Request DTOs ====================
+
+    struct RegisterRequest {
+        QString username;
+        QString email;
+        QString password;
+
+        [[nodiscard]] auto ToJsonObject() const -> QJsonObject {
+            QJsonObject obj;
+            obj.insert(QLatin1String("username"), username);
+            obj.insert(QLatin1String("email"), email);
+            obj.insert(QLatin1String("password"), password);
+            return obj;
+        }
+    };
+
+    struct LoginRequest {
+        QString account;
+        QString password;
+
+        [[nodiscard]] auto ToJsonObject() const -> QJsonObject {
+            QJsonObject obj;
+            obj.insert(QLatin1String("account"), account);
+            obj.insert(QLatin1String("password"), password);
+            return obj;
+        }
+    };
+
+    struct RefreshTokenRequest {
+        QString refreshToken;
+
+        [[nodiscard]] auto ToJsonObject() const -> QJsonObject {
+            QJsonObject obj;
+            obj.insert(QLatin1String("refresh_token"), refreshToken);
+            return obj;
+        }
+    };
+
+    // ==================== Response DTOs ====================
     // ---------------------------------------------------------------------------
     // Plain data structs (no Q_OBJECT / Q_PROPERTY)
     // ---------------------------------------------------------------------------

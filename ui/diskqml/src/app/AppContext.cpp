@@ -21,21 +21,37 @@ namespace disk::qml::app {
         viewmodels::LoginViewModel* loginViewModel,
         viewmodels::RegisterViewModel* registerViewModel,
         QObject* parent
-    )
-        : QObject(parent), m_config_store(configStore), m_token_store(tokenStore), m_api_client(apiClient), m_auth_api(authApi), m_auth_service(authService), m_login_view_model(loginViewModel), m_register_view_model(registerViewModel) {
+    ) : QObject(parent),
+        m_config_store(configStore),
+        m_token_store(tokenStore),
+        m_api_client(apiClient),
+        m_auth_api(authApi),
+        m_auth_service(authService),
+        m_login_view_model(loginViewModel),
+        m_register_view_model(registerViewModel) {
         // Update isLoggedIn based on existing token state
         m_is_logged_in = m_token_store->HasValidAccessToken();
 
         // Connect login success → update username and logged-in state
-        connect(m_login_view_model, &viewmodels::LoginViewModel::loginSucceeded, this, [this](const QString& username) {
-            SetLoggedInUserName(username);
-            UpdateIsLoggedIn();
-        });
+        connect(
+            m_login_view_model,
+            &viewmodels::LoginViewModel::loginSucceeded,
+            this,
+            [this](const QString& username) {
+                SetLoggedInUserName(username);
+                UpdateIsLoggedIn();
+            }
+        );
 
         // Connect register success → (user still needs to login, but cache username)
-        connect(m_register_view_model, &viewmodels::RegisterViewModel::registerSucceeded, this, [this](const QString& /*username*/, const QString& /*email*/) {
-            // Registration doesn't auto-login; no state change needed here
-        });
+        connect(
+            m_register_view_model,
+            &viewmodels::RegisterViewModel::registerSucceeded,
+            this,
+            [this](const QString& /*username*/, const QString& /*email*/) {
+                // Registration doesn't auto-login; no state change needed here
+            }
+        );
     }
 
     auto AppContext::LoginViewModel() const -> QObject* {

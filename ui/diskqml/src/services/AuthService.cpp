@@ -8,11 +8,9 @@
 
 namespace disk::qml::services {
 
-    namespace {
-        const QRegularExpression kUsernamePattern(QStringLiteral("^[a-zA-Z0-9_]{4,32}$"));
-        const QRegularExpression kEmailPattern(QStringLiteral("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"));
-        const QRegularExpression kPasswordPattern(QStringLiteral("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,64}$"));
-    } // namespace
+    const QRegularExpression kUsernamePattern(QStringLiteral("^[a-zA-Z0-9_]{4,32}$"));
+    const QRegularExpression kEmailPattern(QStringLiteral("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"));
+    const QRegularExpression kPasswordPattern(QStringLiteral("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,64}$"));
 
     AuthService::AuthService(api::IAuthApi* authApi, storage::TokenStore* tokenStore)
         : m_auth_api(authApi), m_token_store(tokenStore) {
