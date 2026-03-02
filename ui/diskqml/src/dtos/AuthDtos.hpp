@@ -1,3 +1,14 @@
+/**
+ * @file AuthDtos.hpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief Auth request/response DTOs and JSON parsing helpers for the QML client
+ * @version 0.1
+ * @date 2026-03-02
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
 #pragma once
 
 #include <QJsonDocument>
@@ -10,6 +21,15 @@ namespace disk::qml::models {
 
     // ==================== Request DTOs ====================
 
+    /**
+     * @brief Registration request DTO
+     *
+     * @details
+     * JSON keys produced by ToJsonObject():
+     * - "username": display name for the new account
+     * - "email":    account e-mail address
+     * - "password": plain-text password (transmitted over TLS)
+     */
     struct RegisterRequest {
         QString username;
         QString email;
@@ -24,6 +44,14 @@ namespace disk::qml::models {
         }
     };
 
+    /**
+     * @brief Login request DTO
+     *
+     * @details
+     * JSON keys produced by ToJsonObject():
+     * - "account":  username or e-mail accepted by the server
+     * - "password": plain-text password (transmitted over TLS)
+     */
     struct LoginRequest {
         QString account;
         QString password;
@@ -36,6 +64,13 @@ namespace disk::qml::models {
         }
     };
 
+    /**
+     * @brief Token-refresh request DTO
+     *
+     * @details
+     * JSON keys produced by ToJsonObject():
+     * - "refresh_token": single-use refresh token obtained at login
+     */
     struct RefreshTokenRequest {
         QString refreshToken;
 
@@ -51,45 +86,86 @@ namespace disk::qml::models {
     // Plain data structs (no Q_OBJECT / Q_PROPERTY)
     // ---------------------------------------------------------------------------
 
+    /**
+     * @brief User information DTO
+     *
+     * @details
+     * Populated from the "user" object inside register/login responses.
+     * Storage values are in bytes; createdAt is an ISO-8601 string.
+     */
     struct UserDto {
         quint64 id{};
         QString username;
         QString email;
         QString nickname;
-        quint64 storageQuota{};
-        quint64 storageUsed{};
-        QString createdAt;
+        quint64 storageQuota{}; ///< Total allocated storage in bytes
+        quint64 storageUsed{};  ///< Currently consumed storage in bytes
+        QString createdAt;      ///< Account creation timestamp (ISO-8601)
     };
 
+    /**
+     * @brief Register endpoint result DTO
+     *
+     * @details
+     * Wraps the UserDto returned after a successful registration.
+     */
     struct RegisterResultDto {
         UserDto user;
     };
 
+    /**
+     * @brief Login endpoint result DTO
+     *
+     * @details
+     * Contains the token pair and the authenticated user's profile.
+     */
     struct LoginResultDto {
         QString accessToken;
         QString refreshToken;
         QString tokenType;
-        int expiresIn{};
+        int expiresIn{}; ///< Access-token lifetime in seconds (e.g. 7200)
         UserDto user;
     };
 
+    /**
+     * @brief Token-refresh endpoint result DTO
+     *
+     * @details
+     * Contains a new token pair issued in exchange for the consumed refresh token.
+     */
     struct RefreshResultDto {
         QString accessToken;
         QString refreshToken;
-        int expiresIn{};
+        int expiresIn{}; ///< New access-token lifetime in seconds
     };
 
-    /// Uniform JSON envelope: { "code": 0, "message": "success", "data": ... }
+    /**
+     * @brief Uniform JSON envelope: { "code": 0, "message": "success", "data": ... }
+     *
+     * @details
+     * All API responses are wrapped in this envelope.
+     * The `data` field holds QJsonValue::Null when absent or explicitly null.
+     */
     struct ApiEnvelope {
         int code{};
         QString message;
-        QJsonValue data; // QJsonValue::Null when absent / null
+        QJsonValue data; ///< Payload; QJsonValue::Null when absent / null
     };
 
     // ---------------------------------------------------------------------------
     // Pure-function parsers – return std::nullopt on missing / wrong-type fields
     // ---------------------------------------------------------------------------
 
+    /**
+     * @brief Parse a raw JSON document into an ApiEnvelope.
+     *
+     * @details
+     * Expected shape: { "code": <int>, "message": "<string>", "data": <any> }
+     *
+     * @param doc  Parsed QJsonDocument from the HTTP response body.
+     * @return     Populated ApiEnvelope, or std::nullopt if the document is not
+     *             an object or if "code" / "message" fields are absent.
+     */
     inline auto ParseEnvelope(const QJsonDocument& doc) -> std::optional<ApiEnvelope> {
         if (!doc.isObject()) {
             return std::nullopt;
@@ -108,6 +184,21 @@ namespace disk::qml::models {
         return env;
     }
 
+    /**
+     * @brief Parse a JSON object into a UserDto.
+     *
+     * @details
+     * Expected shape:
+     * {
+     *   "id": <number>, "username": "<string>", "email": "<string>",
+     *   "nickname": "<string>", "storage_quota": <number>,
+     *   "storage_used": <number>, "created_at": "<string>"
+     * }
+     *
+     * @param obj  JSON object containing the user fields.
+     * @return     Populated UserDto, or std::nullopt if the object is empty or
+     *             "username" is missing.
+     */
     inline auto ParseUserDto(const QJsonObject& obj) -> std::optional<UserDto> {
         if (obj.isEmpty()) {
             return std::nullopt;
@@ -129,8 +220,16 @@ namespace disk::qml::models {
         return user;
     }
 
-    /// Parse register result from envelope data value.
-    /// Expected shape: data = { "user": { ... } }
+    /**
+     * @brief Parse register result from envelope data value.
+     *
+     * @details
+     * Expected shape: data = { "user": { ... } }
+     *
+     * @param dataVal  The `data` field extracted from ApiEnvelope.
+     * @return         Populated RegisterResultDto, or std::nullopt on missing /
+     *                 wrong-type fields.
+     */
     inline auto ParseRegisterResult(const QJsonValue& dataVal) -> std::optional<RegisterResultDto> {
         if (!dataVal.isObject()) {
             return std::nullopt;
@@ -152,10 +251,18 @@ namespace disk::qml::models {
         return result;
     }
 
-    /// Parse login result from envelope data value.
-    /// Expected shape: data = { "access_token": "...", "refresh_token": "...",
-    ///                          "token_type": "Bearer", "expires_in": 7200,
-    ///                          "user": { ... } }
+    /**
+     * @brief Parse login result from envelope data value.
+     *
+     * @details
+     * Expected shape: data = { "access_token": "...", "refresh_token": "...",
+     *                          "token_type": "Bearer", "expires_in": 7200,
+     *                          "user": { ... } }
+     *
+     * @param dataVal  The `data` field extracted from ApiEnvelope.
+     * @return         Populated LoginResultDto, or std::nullopt on missing /
+     *                 wrong-type fields.
+     */
     inline auto ParseLoginResult(const QJsonValue& dataVal) -> std::optional<LoginResultDto> {
         if (!dataVal.isObject()) {
             return std::nullopt;
@@ -187,9 +294,17 @@ namespace disk::qml::models {
         return result;
     }
 
-    /// Parse refresh result from envelope data value.
-    /// Expected shape: data = { "access_token": "...", "refresh_token": "...",
-    ///                          "expires_in": 7200 }
+    /**
+     * @brief Parse refresh result from envelope data value.
+     *
+     * @details
+     * Expected shape: data = { "access_token": "...", "refresh_token": "...",
+     *                          "expires_in": 7200 }
+     *
+     * @param dataVal  The `data` field extracted from ApiEnvelope.
+     * @return         Populated RefreshResultDto, or std::nullopt on missing /
+     *                 wrong-type fields.
+     */
     inline auto ParseRefreshResult(const QJsonValue& dataVal) -> std::optional<RefreshResultDto> {
         if (!dataVal.isObject()) {
             return std::nullopt;

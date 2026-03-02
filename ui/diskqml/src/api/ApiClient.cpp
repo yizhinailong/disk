@@ -1,3 +1,13 @@
+/**
+ * @file ApiClient.cpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief ApiClient implementation
+ * @version 0.1
+ * @date 2026-03-02
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
 #include "ApiClient.hpp"
 
 #include <QHttpHeaders>

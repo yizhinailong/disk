@@ -1,9 +1,21 @@
+/**
+ * @file RegisterViewModel.cpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief RegisterViewModel implementation
+ * @version 0.1
+ * @date 2026-03-02
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
 #include "RegisterViewModel.hpp"
 
 #include <QJSEngine>
 #include <QQmlEngine>
 
 #include <services/AuthService.hpp>
+
 namespace disk::qml::viewmodels {
 
     RegisterViewModel::RegisterViewModel(services::AuthService* authService, QObject* parent)

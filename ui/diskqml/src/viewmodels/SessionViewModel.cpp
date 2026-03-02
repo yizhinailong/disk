@@ -1,3 +1,14 @@
+/**
+ * @file SessionViewModel.cpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief SessionViewModel implementation
+ * @version 0.1
+ * @date 2026-03-02
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
 #include "SessionViewModel.hpp"
 
 #include <QJSEngine>

@@ -1,3 +1,13 @@
+/**
+ * @file AuthService.cpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief AuthService implementation
+ * @version 0.1
+ * @date 2026-03-02
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
 #include "AuthService.hpp"
 
 #include <QRegularExpression>

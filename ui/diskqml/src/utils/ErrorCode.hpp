@@ -1,3 +1,13 @@
+/**
+ * @file ErrorCode.hpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief QML client error codes and user-facing message mapping
+ * @version 0.1
+ * @date 2026-03-02
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
 #pragma once
 
 #include <QString>
@@ -5,6 +15,13 @@
 
 namespace disk::qml::utils {
 
+    /**
+     * @brief Strongly-typed error codes mirroring backend HTTP/business error codes.
+     * @details Code ranges:
+     *   - 0       : Success
+     *   - 10xxx   : Common errors (e.g., invalid parameter, rate limit, internal error)
+     *   - 40xxx   : Auth errors (e.g., user not found, invalid credentials, token issues)
+     */
     enum class ErrorCode : int {
         // Common
         Success = 0,
@@ -33,6 +50,11 @@ namespace disk::qml::utils {
         TokenRevoked = 40111,
     };
 
+    /**
+     * @brief Convert a raw integer error code into the corresponding ErrorCode enum value.
+     * @param code  The integer error code received from the server response.
+     * @return An optional ErrorCode if the code is recognised; std::nullopt otherwise.
+     */
     inline auto ErrorCodeFromInt(int code) -> std::optional<ErrorCode> {
         switch (code) {
             case 0    : return ErrorCode::Success;
@@ -61,6 +83,15 @@ namespace disk::qml::utils {
         }
     }
 
+    /**
+     * @brief Map an error code to a localised user-facing message string.
+     * @details For well-known codes a fixed Chinese message is returned.  For
+     *          unrecognised codes the function falls back to @p fallbackServerMessage
+     *          when it is non-empty, and returns "未知错误" otherwise.
+     * @param code                  The integer error code received from the server.
+     * @param fallbackServerMessage Optional server-provided message used as fallback.
+     * @return A QString suitable for display in the UI.
+     */
     inline auto ToUserMessage(int code, const QString& fallbackServerMessage) -> QString {
         switch (code) {
             case 10002:
