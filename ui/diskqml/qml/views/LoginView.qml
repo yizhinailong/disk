@@ -1,3 +1,13 @@
+/**
+ * @file LoginView.qml
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 登录页面
+ * @version 0.1
+ * @date 2026-03-02
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -10,6 +20,8 @@ Item {
     property string prefillAccount: ""
 
     signal registerRequested
+
+    // ==================== 页面布局 ====================
 
     Rectangle {
         anchors.fill: parent
@@ -29,7 +41,7 @@ Item {
                 Layout.bottomMargin: 32
             }
 
-            // Error Message
+            // 错误信息
             Label {
                 id: errorLabel
                 visible: LoginViewModel.errorMessage !== ""
@@ -112,7 +124,7 @@ Item {
         }
     }
 
-    // Handle prefill from parent (e.g., after registration)
+    // ==================== 状态联动 ====================
     onPrefillAccountChanged: {
         if (prefillAccount !== "") {
             LoginViewModel.account = prefillAccount

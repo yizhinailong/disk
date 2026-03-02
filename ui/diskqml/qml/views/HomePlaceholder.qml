@@ -1,3 +1,13 @@
+/**
+ * @file HomePlaceholder.qml
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 已登录主页占位页面
+ * @version 0.1
+ * @date 2026-03-02
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -9,6 +19,7 @@ Item {
 
     signal logoutRequested
 
+    // ==================== 页面布局 ====================
     Rectangle {
         anchors.fill: parent
         color: "#FAFAFA"
@@ -49,7 +60,7 @@ Item {
         }
     }
 
-    // Navigate away when logged out
+    // ==================== 登录状态监听 ====================
     Connections {
         target: SessionViewModel
         function onIsLoggedInChanged() {

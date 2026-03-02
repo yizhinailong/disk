@@ -1,3 +1,13 @@
+/**
+ * @file RegisterView.qml
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 注册页面
+ * @version 0.1
+ * @date 2026-03-02
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -11,10 +21,12 @@ Item {
 
     property bool showPassword: false
 
+    // ==================== 页面布局 ====================
     Rectangle {
         anchors.fill: parent
         color: "#FAFAFA"
 
+        // ==================== 注册表单 ====================
         ScrollView {
             anchors.fill: parent
             contentWidth: availableWidth
@@ -27,9 +39,9 @@ Item {
 
                 Item {
                     Layout.preferredHeight: 32
-                } // Spacer
+                } // 间距
 
-                // Back button
+                // 返回按钮
                 Button {
                     text: "← 返回"
                     flat: true
@@ -47,9 +59,9 @@ Item {
 
                 Item {
                     Layout.preferredHeight: 16
-                } // Spacer
+                } // 间距
 
-                // Global Error Message
+                // 全局错误信息
                 Label {
                     id: globalErrorLabel
                     objectName: "globalErrorLabel"
@@ -62,7 +74,7 @@ Item {
                     wrapMode: Text.Wrap
                 }
 
-                // Username
+                // 用户名
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 4
@@ -85,7 +97,7 @@ Item {
                     }
                 }
 
-                // Email
+                // 邮箱
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 4
@@ -108,7 +120,7 @@ Item {
                     }
                 }
 
-                // Password
+                // 密码
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 4
@@ -145,7 +157,7 @@ Item {
                     }
                 }
 
-                // Confirm Password
+                // 确认密码
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 4
@@ -171,9 +183,9 @@ Item {
 
                 Item {
                     Layout.preferredHeight: 16
-                } // Spacer
+                } // 间距
 
-                // Register Button
+                // 注册按钮
                 Button {
                     id: submitButton
                     objectName: "submitButton"
@@ -203,11 +215,12 @@ Item {
 
                 Item {
                     Layout.preferredHeight: 32
-                } // Bottom spacer
+                } // 底部间距
             }
         }
     }
 
+    // ==================== 状态监听 ====================
     Connections {
         target: RegisterViewModel
         function onRegisterSucceeded(username, email) {
