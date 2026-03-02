@@ -14,6 +14,7 @@ set(TEST_SOURCES
     services/ShareService_test.cpp
     services/TokenService_test.cpp
     services/TrashService_test.cpp
+    services/OperationLogJsonDetails_test.cpp
     filters/ShareAuthFilter_test.cpp
     dtos/AuthDto_test.cpp
     dtos/FileDto_test.cpp
