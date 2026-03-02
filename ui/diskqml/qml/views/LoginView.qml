@@ -2,15 +2,14 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
+import Disk 1.0
 
 Item {
     id: root
 
-
-    property string serverUrl
     property string prefillAccount: ""
 
-    signal registerRequested()
+    signal registerRequested
 
     Rectangle {
         anchors.fill: parent
@@ -30,14 +29,29 @@ Item {
                 Layout.bottomMargin: 32
             }
 
+            // Error Message
+            Label {
+                id: errorLabel
+                visible: AppContext.loginViewModel.errorMessage !== ""
+                text: AppContext.loginViewModel.errorMessage
+                color: "#F44336"
+                font.pixelSize: 14
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+            }
+
             TextField {
                 id: accountField
+                objectName: "accountField"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 36
                 placeholderText: qsTr("账号或邮箱")
-                text: root.prefillAccount
+                text: AppContext.loginViewModel.account
+                onTextChanged: AppContext.loginViewModel.account = text
                 font.pixelSize: 14
                 color: "#212121"
+                enabled: !AppContext.loginViewModel.loading
             }
 
             RowLayout {
@@ -46,12 +60,16 @@ Item {
 
                 TextField {
                     id: passwordField
+                    objectName: "passwordField"
                     Layout.fillWidth: true
                     Layout.preferredHeight: 36
                     placeholderText: qsTr("密码")
                     echoMode: showPasswordBtn.checked ? TextInput.Normal : TextInput.Password
+                    text: AppContext.loginViewModel.password
+                    onTextChanged: AppContext.loginViewModel.password = text
                     font.pixelSize: 14
                     color: "#212121"
+                    enabled: !AppContext.loginViewModel.loading
                 }
 
                 Button {
@@ -60,21 +78,24 @@ Item {
                     checkable: true
                     flat: true
                     Layout.preferredHeight: 36
+                    enabled: !AppContext.loginViewModel.loading
                 }
             }
 
             Button {
                 id: loginButton
-                text: qsTr("登录")
+                objectName: "loginButton"
+                text: AppContext.loginViewModel.loading ? qsTr("登录中...") : qsTr("登录")
                 Layout.fillWidth: true
                 Layout.preferredHeight: 40
                 Layout.topMargin: 16
+                enabled: AppContext.loginViewModel.canSubmit && !AppContext.loginViewModel.loading
                 
                 Material.background: "#2196F3"
                 Material.foreground: "#FFFFFF"
                 
                 onClicked: {
-                    console.log("Login requested for:", accountField.text)
+                    AppContext.loginViewModel.submit()
                 }
             }
 
@@ -85,14 +106,16 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 flat: true
                 Material.foreground: "#2196F3"
+                enabled: !AppContext.loginViewModel.loading
                 onClicked: root.registerRequested()
             }
         }
     }
 
+    // Handle prefill from parent (e.g., after registration)
     onPrefillAccountChanged: {
         if (prefillAccount !== "") {
-            accountField.text = prefillAccount
+            AppContext.loginViewModel.account = prefillAccount
         }
     }
 }
