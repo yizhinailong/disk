@@ -85,6 +85,7 @@ diskqml_add_test(tst_diskqml_authdtos    tests/cpp/tst_AuthDtos.cpp)
 diskqml_add_test(tst_diskqml_authservice tests/cpp/tst_AuthService.cpp)
 diskqml_add_test(tst_diskqml_viewmodels  tests/cpp/tst_ViewModels.cpp)
 diskqml_add_test(tst_diskqml_authrequestdtos tests/cpp/tst_AuthRequestDtos.cpp)
+diskqml_add_test(tst_diskqml_authapi     tests/cpp/tst_AuthApi.cpp)
 
 # Static enforcement: QML must not contain business logic
 add_test(NAME diskqml-no-qml-logic
