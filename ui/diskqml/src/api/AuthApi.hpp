@@ -17,7 +17,13 @@ namespace disk::qml::api {
         /// @param client  Pointer to the API client (must outlive this object)
         explicit AuthApi(ApiClient* client);
 
-        virtual auto Register(const QString& username, const QString& email, const QString& password, QObject* ctx, AuthApiCallback cb) -> void;
+        virtual auto Register(
+            const QString& username,
+            const QString& email,
+            const QString& password,
+            QObject* ctx,
+            AuthApiCallback cb
+        ) -> void;
 
         virtual auto Login(const QString& account, const QString& password, QObject* ctx, AuthApiCallback cb) -> void;
 

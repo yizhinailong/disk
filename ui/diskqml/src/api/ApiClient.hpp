@@ -1,16 +1,16 @@
 #pragma once
 
+#include <QByteArray>
 #include <QNetworkAccessManager>
 #include <QNetworkRequestFactory>
 #include <QObject>
 #include <QRestAccessManager>
+#include <QString>
 #include <functional>
-
-#include "ApiReply.hpp"
 
 namespace disk::qml::api {
 
-    using PostJsonCallback = std::function<void(ApiReply reply)>;
+    using PostJsonCallback = std::function<void(bool hasNetworkError, QString networkErrorString, int httpStatus, QByteArray body)>;
 
     /// REST client built on Qt 6.8 QRestAccessManager + QNetworkRequestFactory.
     /// Owns a QNetworkAccessManager and wraps it with QRestAccessManager.

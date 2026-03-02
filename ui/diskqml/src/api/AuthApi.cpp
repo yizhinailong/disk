@@ -1,5 +1,6 @@
 #include "AuthApi.hpp"
 
+#include <QByteArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -8,6 +9,40 @@
 #include "ApiClient.hpp"
 
 namespace disk::qml::api {
+    namespace {
+        auto ParseEnvelopeFromReply(
+            bool hasNetworkError,
+            const QString& networkErrorString,
+            const QByteArray& body,
+            AuthApiCallback& cb
+        ) -> void {
+            if (hasNetworkError) {
+                cb(models::ApiEnvelope{}, networkErrorString);
+                return;
+            }
+
+            if (body.isEmpty()) {
+                cb(models::ApiEnvelope{}, QStringLiteral("Failed to parse response JSON"));
+                return;
+            }
+
+            QJsonParseError parseError;
+            const QJsonDocument json = QJsonDocument::fromJson(body, &parseError);
+            if (parseError.error != QJsonParseError::NoError) {
+                cb(models::ApiEnvelope{}, QStringLiteral("Failed to parse response JSON"));
+                return;
+            }
+
+            auto envelope = models::ParseEnvelope(json);
+            if (!envelope) {
+                cb(models::ApiEnvelope{}, QStringLiteral("Invalid envelope format"));
+                return;
+            }
+
+            cb(std::move(*envelope), QString{});
+        }
+    } // namespace
+
     AuthApi::AuthApi(ApiClient* client)
         : m_client(client) {
     }
@@ -28,21 +63,8 @@ namespace disk::qml::api {
             QStringLiteral("/api/auth/register"),
             body,
             ctx,
-            [cb = std::move(cb)](ApiReply reply) {
-                if (reply.error.hasNetworkError) {
-                    cb(models::ApiEnvelope{}, reply.error.networkErrorString);
-                    return;
-                }
-                if (!reply.json) {
-                    cb(models::ApiEnvelope{}, QStringLiteral("Failed to parse response JSON"));
-                    return;
-                }
-                auto envelope = models::ParseEnvelope(*reply.json);
-                if (!envelope) {
-                    cb(models::ApiEnvelope{}, QStringLiteral("Invalid envelope format"));
-                    return;
-                }
-                cb(std::move(*envelope), QString{});
+            [cb = std::move(cb)](bool hasNetworkError, QString networkErrorString, int, QByteArray body) mutable {
+                ParseEnvelopeFromReply(hasNetworkError, networkErrorString, body, cb);
             }
         );
     }
@@ -61,21 +83,8 @@ namespace disk::qml::api {
             QStringLiteral("/api/auth/login"),
             body,
             ctx,
-            [cb = std::move(cb)](ApiReply reply) {
-                if (reply.error.hasNetworkError) {
-                    cb(models::ApiEnvelope{}, reply.error.networkErrorString);
-                    return;
-                }
-                if (!reply.json) {
-                    cb(models::ApiEnvelope{}, QStringLiteral("Failed to parse response JSON"));
-                    return;
-                }
-                auto envelope = models::ParseEnvelope(*reply.json);
-                if (!envelope) {
-                    cb(models::ApiEnvelope{}, QStringLiteral("Invalid envelope format"));
-                    return;
-                }
-                cb(std::move(*envelope), QString{});
+            [cb = std::move(cb)](bool hasNetworkError, QString networkErrorString, int, QByteArray body) mutable {
+                ParseEnvelopeFromReply(hasNetworkError, networkErrorString, body, cb);
             }
         );
     }
@@ -92,21 +101,8 @@ namespace disk::qml::api {
             QStringLiteral("/api/auth/refresh"),
             body,
             ctx,
-            [cb = std::move(cb)](ApiReply reply) {
-                if (reply.error.hasNetworkError) {
-                    cb(models::ApiEnvelope{}, reply.error.networkErrorString);
-                    return;
-                }
-                if (!reply.json) {
-                    cb(models::ApiEnvelope{}, QStringLiteral("Failed to parse response JSON"));
-                    return;
-                }
-                auto envelope = models::ParseEnvelope(*reply.json);
-                if (!envelope) {
-                    cb(models::ApiEnvelope{}, QStringLiteral("Invalid envelope format"));
-                    return;
-                }
-                cb(std::move(*envelope), QString{});
+            [cb = std::move(cb)](bool hasNetworkError, QString networkErrorString, int, QByteArray body) mutable {
+                ParseEnvelopeFromReply(hasNetworkError, networkErrorString, body, cb);
             }
         );
     }
@@ -123,21 +119,8 @@ namespace disk::qml::api {
             body,
             accessToken,
             ctx,
-            [cb = std::move(cb)](ApiReply reply) {
-                if (reply.error.hasNetworkError) {
-                    cb(models::ApiEnvelope{}, reply.error.networkErrorString);
-                    return;
-                }
-                if (!reply.json) {
-                    cb(models::ApiEnvelope{}, QStringLiteral("Failed to parse response JSON"));
-                    return;
-                }
-                auto envelope = models::ParseEnvelope(*reply.json);
-                if (!envelope) {
-                    cb(models::ApiEnvelope{}, QStringLiteral("Invalid envelope format"));
-                    return;
-                }
-                cb(std::move(*envelope), QString{});
+            [cb = std::move(cb)](bool hasNetworkError, QString networkErrorString, int, QByteArray body) mutable {
+                ParseEnvelopeFromReply(hasNetworkError, networkErrorString, body, cb);
             }
         );
     }

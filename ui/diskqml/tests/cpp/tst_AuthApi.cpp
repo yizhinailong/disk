@@ -6,7 +6,6 @@
 #include <memory>
 
 #include <api/ApiClient.hpp>
-#include <api/ApiReply.hpp>
 #include <api/AuthApi.hpp>
 #include <models/AuthDtos.hpp>
 
@@ -44,42 +43,8 @@ public:
     }
 };
 
-// ---------------------------------------------------------------------------
-// Helper: build an ApiReply with a JSON body
-// ---------------------------------------------------------------------------
-static auto makeJsonReply(const QJsonObject& obj, int httpStatus = 200) -> api::ApiReply {
-    api::ApiReply reply;
-    reply.error.hasNetworkError = false;
-    reply.error.httpStatus = httpStatus;
-    reply.error.httpStatusSuccess = (httpStatus >= 200 && httpStatus < 300);
-    const QByteArray raw = QJsonDocument(obj).toJson(QJsonDocument::Compact);
-    reply.body = raw;
-    reply.json = QJsonDocument::fromJson(raw, &reply.jsonParseError);
-    return reply;
-}
-
-static auto makeNetworkErrorReply(const QString& errStr) -> api::ApiReply {
-    api::ApiReply reply;
-    reply.error.hasNetworkError = true;
-    reply.error.networkError = QNetworkReply::ConnectionRefusedError;
-    reply.error.networkErrorString = errStr;
-    return reply;
-}
-
-static auto makeRawBodyReply(const QByteArray& raw, int httpStatus = 200) -> api::ApiReply {
-    api::ApiReply reply;
-    reply.error.hasNetworkError = false;
-    reply.error.httpStatus = httpStatus;
-    reply.error.httpStatusSuccess = (httpStatus >= 200 && httpStatus < 300);
-    reply.body = raw;
-    // Only set json optional if parse succeeds — mirrors ApiClient behaviour
-    QJsonParseError parseErr;
-    QJsonDocument doc = QJsonDocument::fromJson(raw, &parseErr);
-    reply.jsonParseError = parseErr;
-    if (parseErr.error == QJsonParseError::NoError) {
-        reply.json = std::move(doc);
-    }
-    return reply;
+static auto makeJsonBody(const QJsonObject& obj) -> QByteArray {
+    return QJsonDocument(obj).toJson(QJsonDocument::Compact);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +96,7 @@ private slots:
         QJsonObject envelopeObj = makeEnvelopeObj(0, QStringLiteral("success"));
 
         m_fake_client.postJsonHandler = [&](auto, auto, auto, api::PostJsonCallback cb) {
-            cb(makeJsonReply(envelopeObj, 200));
+            cb(false, QString{}, 200, makeJsonBody(envelopeObj));
         };
 
         bool called = false;
@@ -159,7 +124,7 @@ private slots:
         QJsonObject envelopeObj = makeEnvelopeObj(40001, QStringLiteral("username exists"));
 
         m_fake_client.postJsonHandler = [&](auto, auto, auto, api::PostJsonCallback cb) {
-            cb(makeJsonReply(envelopeObj, 400));
+            cb(false, QString{}, 400, makeJsonBody(envelopeObj));
         };
 
         bool called = false;
@@ -184,7 +149,7 @@ private slots:
     // -----------------------------------------------------------------------
     void networkError_returnsErrorString() {
         m_fake_client.postJsonHandler = [](auto, auto, auto, api::PostJsonCallback cb) {
-            cb(makeNetworkErrorReply(QStringLiteral("connection refused")));
+            cb(true, QStringLiteral("connection refused"), 0, QByteArray{});
         };
 
         bool called = false;
@@ -207,7 +172,7 @@ private slots:
     // -----------------------------------------------------------------------
     void parseError_returnsErrorMessage() {
         m_fake_client.postJsonHandler = [](auto, auto, auto, api::PostJsonCallback cb) {
-            cb(makeRawBodyReply(QByteArrayLiteral("not-json-at-all"), 200));
+            cb(false, QString{}, 200, QByteArrayLiteral("not-json-at-all"));
         };
 
         bool called = false;
@@ -235,7 +200,7 @@ private slots:
         badEnvelope["status"] = 1;
 
         m_fake_client.postJsonHandler = [&](auto, auto, auto, api::PostJsonCallback cb) {
-            cb(makeJsonReply(badEnvelope, 200));
+            cb(false, QString{}, 200, makeJsonBody(badEnvelope));
         };
 
         bool called = false;
@@ -261,7 +226,7 @@ private slots:
         QJsonObject envelopeObj = makeEnvelopeObj(0, QStringLiteral("success"));
 
         m_fake_client.postJsonWithBearerTokenHandler = [&](auto, auto, auto, auto, api::PostJsonCallback cb) {
-            cb(makeJsonReply(envelopeObj, 200));
+            cb(false, QString{}, 200, makeJsonBody(envelopeObj));
         };
 
         bool called = false;

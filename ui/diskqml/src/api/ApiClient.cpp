@@ -10,7 +10,7 @@ namespace disk::qml::api {
 
     ApiClient::ApiClient(QObject* parent)
         : QObject(parent), m_nam(this), m_rest(&m_nam, this) {
-        m_factory.setTransferTimeout(std::chrono::milliseconds{10000});
+        m_factory.setTransferTimeout(std::chrono::milliseconds{ 10000 });
         m_factory.commonHeaders().append(QHttpHeaders::WellKnownHeader::Accept, "application/json");
     }
 
@@ -26,20 +26,7 @@ namespace disk::qml::api {
         auto req = m_factory.createRequest(path);
 
         m_rest.post(req, QJsonDocument(body), ctx, [cb = std::move(cb)](QRestReply& reply) {
-            ApiReply r;
-            r.error.hasNetworkError = reply.hasError();
-            r.error.networkError   = reply.error();
-            r.error.networkErrorString = reply.errorString();
-            r.error.httpStatus     = reply.httpStatus();
-            r.error.httpStatusSuccess = (r.error.httpStatus >= 200 && r.error.httpStatus <= 299);
-            r.body = reply.readBody();
-            if (!r.body.isEmpty()) {
-                QJsonDocument doc = QJsonDocument::fromJson(r.body, &r.jsonParseError);
-                if (r.jsonParseError.error == QJsonParseError::NoError) {
-                    r.json = std::move(doc);
-                }
-            }
-            cb(std::move(r));
+            cb(reply.hasError(), reply.errorString(), reply.httpStatus(), reply.readBody());
         });
     }
 
@@ -56,20 +43,7 @@ namespace disk::qml::api {
         auto req = local.createRequest(path);
 
         m_rest.post(req, QJsonDocument(body), ctx, [cb = std::move(cb)](QRestReply& reply) {
-            ApiReply r;
-            r.error.hasNetworkError = reply.hasError();
-            r.error.networkError   = reply.error();
-            r.error.networkErrorString = reply.errorString();
-            r.error.httpStatus     = reply.httpStatus();
-            r.error.httpStatusSuccess = (r.error.httpStatus >= 200 && r.error.httpStatus <= 299);
-            r.body = reply.readBody();
-            if (!r.body.isEmpty()) {
-                QJsonDocument doc = QJsonDocument::fromJson(r.body, &r.jsonParseError);
-                if (r.jsonParseError.error == QJsonParseError::NoError) {
-                    r.json = std::move(doc);
-                }
-            }
-            cb(std::move(r));
+            cb(reply.hasError(), reply.errorString(), reply.httpStatus(), reply.readBody());
         });
     }
 

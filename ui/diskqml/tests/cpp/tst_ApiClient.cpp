@@ -4,11 +4,10 @@
 #include <QJsonObject>
 #include <QTcpServer>
 #include <QTcpSocket>
-#include <QTimer>
 #include <QTest>
+#include <QTimer>
 
 #include <api/ApiClient.hpp>
-#include <api/ApiReply.hpp>
 
 using namespace disk::qml;
 
@@ -88,14 +87,16 @@ private slots:
         bool callbackFired = false;
         QEventLoop loop;
 
-        client.PostJson(QStringLiteral("/test"), QJsonObject{}, this, [&](api::ApiReply reply) {
+        client.PostJson(QStringLiteral("/test"), QJsonObject{}, this, [&](bool hasNetworkError, QString, int httpStatus, QByteArray responseBody) {
             callbackFired = true;
 
-            QCOMPARE(reply.error.httpStatus, 400);
-            QCOMPARE(reply.error.hasNetworkError, false);
-            QVERIFY2(reply.json.has_value(), "JSON body should be preserved for HTTP 400");
-            QCOMPARE(reply.json->object()["code"].toInt(), 40101);
-            QCOMPARE(reply.json->object()["message"].toString(), QStringLiteral("invalid"));
+            QCOMPARE(httpStatus, 400);
+            QCOMPARE(hasNetworkError, false);
+            QJsonParseError parseError;
+            const QJsonDocument json = QJsonDocument::fromJson(responseBody, &parseError);
+            QCOMPARE(parseError.error, QJsonParseError::NoError);
+            QCOMPARE(json.object()["code"].toInt(), 40101);
+            QCOMPARE(json.object()["message"].toString(), QStringLiteral("invalid"));
 
             loop.quit();
         });
@@ -134,14 +135,16 @@ private slots:
         bool callbackFired = false;
         QEventLoop loop;
 
-        client.PostJson(QStringLiteral("/test"), QJsonObject{}, this, [&](api::ApiReply reply) {
+        client.PostJson(QStringLiteral("/test"), QJsonObject{}, this, [&](bool hasNetworkError, QString, int httpStatus, QByteArray responseBody) {
             callbackFired = true;
 
-            QCOMPARE(reply.error.httpStatus, 200);
-            QCOMPARE(reply.error.hasNetworkError, false);
-            QVERIFY2(reply.json.has_value(), "JSON body should be preserved for HTTP 200");
-            QCOMPARE(reply.json->object()["code"].toInt(), 0);
-            QCOMPARE(reply.json->object()["message"].toString(), QStringLiteral("success"));
+            QCOMPARE(httpStatus, 200);
+            QCOMPARE(hasNetworkError, false);
+            QJsonParseError parseError;
+            const QJsonDocument json = QJsonDocument::fromJson(responseBody, &parseError);
+            QCOMPARE(parseError.error, QJsonParseError::NoError);
+            QCOMPARE(json.object()["code"].toInt(), 0);
+            QCOMPARE(json.object()["message"].toString(), QStringLiteral("success"));
 
             loop.quit();
         });
@@ -178,12 +181,13 @@ private slots:
         bool callbackFired = false;
         QEventLoop loop;
 
-        client.PostJson(QStringLiteral("/test"), QJsonObject{}, this, [&](api::ApiReply reply) {
+        client.PostJson(QStringLiteral("/test"), QJsonObject{}, this, [&](bool, QString, int httpStatus, QByteArray responseBody) {
             callbackFired = true;
 
-            QCOMPARE(reply.error.httpStatus, 500);
-            QVERIFY2(!reply.json.has_value(), "json optional must be empty for non-JSON body");
-            QVERIFY2(reply.jsonParseError.error != QJsonParseError::NoError, "jsonParseError must be set when body is not valid JSON");
+            QCOMPARE(httpStatus, 500);
+            QJsonParseError parseError;
+            QJsonDocument::fromJson(responseBody, &parseError);
+            QVERIFY2(parseError.error != QJsonParseError::NoError, "jsonParseError must be set when body is not valid JSON");
 
             loop.quit();
         });
