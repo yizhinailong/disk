@@ -39,7 +39,7 @@ Item {
 
                 Label {
                     text: "创建新账号"
-                    font.pixelSize: 24
+                    font.pixelSize: 20
                     font.bold: true
                     color: "#212121"
                     Layout.alignment: Qt.AlignHCenter
@@ -181,7 +181,7 @@ Item {
                     Layout.preferredHeight: 40
                     text: RegisterViewModel.loading ? "注册中..." : "注册"
                     enabled: RegisterViewModel.canSubmit
-                    && !RegisterViewModel.loading
+                             && !RegisterViewModel.loading
 
                     background: Rectangle {
                         color: submitButton.enabled ? "#2196F3" : "#E0E0E0"

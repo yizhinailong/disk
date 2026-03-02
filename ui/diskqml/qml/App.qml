@@ -7,8 +7,8 @@ import "views"
 ApplicationWindow {
     id: root
     visible: true
-    width: 640
-    height: 480
+    width: 960
+    height: 600
     title: qsTr("Disk - 云盘客户端")
 
     Material.theme: Material.Light
@@ -34,7 +34,7 @@ ApplicationWindow {
     Component {
         id: registerView
         RegisterView {
-            onRegistered: function(username, email) {
+            onRegistered: function (username, email) {
                 root.prefillAccount = username
                 pageStack.pop()
             }
