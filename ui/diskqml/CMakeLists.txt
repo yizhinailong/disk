@@ -86,6 +86,9 @@ diskqml_add_test(tst_diskqml_authservice tests/cpp/tst_AuthService.cpp)
 diskqml_add_test(tst_diskqml_viewmodels  tests/cpp/tst_ViewModels.cpp)
 diskqml_add_test(tst_diskqml_authrequestdtos tests/cpp/tst_AuthRequestDtos.cpp)
 diskqml_add_test(tst_diskqml_authapi     tests/cpp/tst_AuthApi.cpp)
+diskqml_add_test(tst_diskqml_apiclient   tests/cpp/tst_ApiClient.cpp)
+# ApiClient integration test needs QTcpServer from Qt6::Network
+target_link_libraries(tst_diskqml_apiclient PRIVATE Qt6::Network)
 
 # Static enforcement: QML must not contain business logic
 add_test(NAME diskqml-no-qml-logic
