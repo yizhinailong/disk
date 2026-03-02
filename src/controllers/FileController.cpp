@@ -109,7 +109,7 @@ namespace disk::file {
             ));
         }
         for (char c : chunk_hash) {
-            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+            if ((c < '0' || c > '9') && (c < 'a' || c > 'f')) {
                 LOG_WARN << "Invalid chunk_hash format: " << chunk_hash;
                 co_return Response::Error(ErrorInfo(
                     ErrorCode::ValidationFailed,
