@@ -1,0 +1,164 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "displayName": "Base Configuration",
+      "description": "Base configuration for diskqml (no vcpkg toolchain)",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}",
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "Qt6_DIR": "$env{QT6_DIR}",
+        "CMAKE_PREFIX_PATH": "$env{CMAKE_PREFIX_PATH}"
+      },
+      "warnings": {
+        "dev": false
+      }
+    },
+    {
+      "name": "linux-base-clang",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++"
+      },
+      "environment": {
+        "CMAKE_BUILD_PARALLEL_LEVEL": "16"
+      }
+    },
+    {
+      "name": "linux-debug-clang",
+      "inherits": "linux-base-clang",
+      "displayName": "Linux Debug Clang (diskqml)",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-release-clang",
+      "inherits": "linux-base-clang",
+      "displayName": "Linux Release Clang (diskqml)",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-debug",
+      "inherits": "windows-base",
+      "displayName": "Windows Debug (diskqml)",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "windows-release",
+      "inherits": "windows-base",
+      "displayName": "Windows Release (diskqml)",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "base-build",
+      "hidden": true,
+      "jobs": 16
+    },
+    {
+      "name": "condition-windows",
+      "hidden": true,
+      "inherits": "base-build",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "condition-linux",
+      "hidden": true,
+      "inherits": "base-build",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "windows-debug",
+      "inherits": "condition-windows",
+      "configurePreset": "windows-debug",
+      "displayName": "Build Windows Debug (diskqml)",
+      "description": "Build diskqml in Debug mode on Windows",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-release",
+      "inherits": "condition-windows",
+      "configurePreset": "windows-release",
+      "displayName": "Build Windows Release (diskqml)",
+      "description": "Build diskqml in Release mode on Windows",
+      "configuration": "Release"
+    },
+    {
+      "name": "linux-debug-clang",
+      "inherits": "condition-linux",
+      "configurePreset": "linux-debug-clang",
+      "displayName": "Build Linux Debug Clang (diskqml)",
+      "description": "Build diskqml in Debug mode on Linux with Clang",
+      "configuration": "Debug"
+    },
+    {
+      "name": "linux-release-clang",
+      "inherits": "condition-linux",
+      "configurePreset": "linux-release-clang",
+      "displayName": "Build Linux Release Clang (diskqml)",
+      "description": "Build diskqml in Release mode on Linux with Clang",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "condition-linux",
+      "hidden": true,
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-debug-clang",
+      "inherits": "condition-linux",
+      "configurePreset": "linux-debug-clang",
+      "displayName": "Test Linux Debug Clang (diskqml)",
+      "description": "Run diskqml tests for Linux Debug build with Clang"
+    }
+  ]
+}
