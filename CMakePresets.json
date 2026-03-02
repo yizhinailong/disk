@@ -68,7 +68,8 @@
       },
       "cacheVariables": {
         "CMAKE_CXX_COMPILER": "clang-cl",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache"
+        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache",
+        "CMAKE_PREFIX_PATH": "$env{QT6_INSTALL_DIR}"
       },
       "environment": {
         "VCPKG_DEFAULT_TRIPLET": "x64-windows"
