@@ -25,7 +25,9 @@ namespace disk::system {
     )
         : m_db_client(std::move(db_client)),
           m_redis_client(std::move(redis_client)),
-          m_start_time(std::chrono::steady_clock::now()) {}
+          m_start_time(std::chrono::steady_clock::now()) {
+        LOG_DEBUG << "SystemService initialization completed";
+    }
 
     auto SystemService::GetInfo(uint64_t user_id) -> drogon::Task<Result<SystemInfo>> {
         SystemInfo info;

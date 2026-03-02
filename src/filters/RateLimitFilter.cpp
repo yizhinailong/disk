@@ -20,10 +20,10 @@ namespace disk::filters {
     using disk::redis::RedisKeyPrefix;
 
     RateLimitFilter::RateLimitFilter()
-        : m_redis_service(
-              std::make_unique<disk::services::RedisService>(drogon::app().getRedisClient())
-          ) {
-        LOG_DEBUG << "RateLimitFilter initialized";
+        : m_redis_service(disk::services::RedisService::GetInstance()) {
+        // Initialize RedisService singleton if not already initialized
+        disk::services::RedisService::Initialize(drogon::app().getRedisClient());
+
     }
 
     auto RateLimitFilter::doFilter(const drogon::HttpRequestPtr& request)

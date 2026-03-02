@@ -38,29 +38,25 @@ namespace disk::trash {
             TrashController::List,
             "/api/trash",
             drogon::Get,
-            "JwtAuthFilter",
-            "RateLimitFilter"
+            "disk::filters::JwtAuthFilter",
         );
         ADD_METHOD_TO(
             TrashController::Restore,
             "/api/trash/restore",
             drogon::Post,
-            "JwtAuthFilter",
-            "RateLimitFilter"
+            "disk::filters::JwtAuthFilter",
         );
         ADD_METHOD_TO(
             TrashController::Delete,
             "/api/trash",
             drogon::Delete,
-            "JwtAuthFilter",
-            "RateLimitFilter"
+            "disk::filters::JwtAuthFilter",
         );
         ADD_METHOD_TO(
             TrashController::DeleteAll,
             "/api/trash/all",
             drogon::Delete,
-            "JwtAuthFilter",
-            "RateLimitFilter"
+            "disk::filters::JwtAuthFilter",
         );
         METHOD_LIST_END
 

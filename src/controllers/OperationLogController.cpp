@@ -17,7 +17,6 @@ namespace disk::log {
 
     OperationLogController::OperationLogController()
         : m_log_service(std::make_unique<OperationLogService>(drogon::app().getDbClient())) {
-        LOG_DEBUG << "OperationLogController initialized";
     }
 
     auto OperationLogController::GetList(drogon::HttpRequestPtr request)

@@ -18,7 +18,6 @@ namespace disk::folder {
 
     FolderController::FolderController()
         : m_folder_service(std::make_unique<FolderService>(drogon::app().getDbClient())) {
-        LOG_DEBUG << "FolderController initialized";
     }
 
     auto FolderController::CreateFolder(drogon::HttpRequestPtr request)

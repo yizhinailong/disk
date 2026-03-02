@@ -33,7 +33,7 @@ namespace disk::trash {
 
     TrashService::TrashService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        LOG_DEBUG << "TrashService initialized";
+        LOG_DEBUG << "TrashService initialization completed";
     }
 
     // ==================== 公共方法实现 ====================

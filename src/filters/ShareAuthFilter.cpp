@@ -17,15 +17,11 @@
 namespace disk::filters {
 
     using disk::utils::ConfigMgr;
+    using disk::services::TokenService;
+    ShareAuthFilter::ShareAuthFilter() {
+        // Initialize TokenService singleton
+        disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
 
-    ShareAuthFilter::ShareAuthFilter()
-        : m_token_service(
-              std::make_unique<disk::services::TokenService>(
-                  ConfigMgr::GetInstance()->GetJwtSecret(),
-                  drogon::app().getRedisClient()
-              )
-          ) {
-        LOG_DEBUG << "ShareAuthFilter initialized";
     }
 
     auto ShareAuthFilter::doFilter(const drogon::HttpRequestPtr& request)
@@ -38,7 +34,7 @@ namespace disk::filters {
         }
 
         auto verify_result =
-            co_await m_token_service->VerifyShareTokenWithRedis("", share_token_header);
+            co_await TokenService::GetInstance()->VerifyShareTokenWithRedis("", share_token_header);
 
         if (!verify_result) {
             const auto& error = verify_result.error();

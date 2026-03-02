@@ -17,9 +17,14 @@ namespace disk::services {
 
     using disk::error::ErrorInfo;
 
-    RedisService::RedisService(drogon::nosql::RedisClientPtr redis_client)
-        : m_redis_client(std::move(redis_client)) {
-        LOG_DEBUG << "RedisService initialized";
+    // ==================== 单例初始化 ====================
+
+    auto RedisService::Initialize(drogon::nosql::RedisClientPtr redis_client) -> void {
+        auto instance = GetInstance();
+        if (!instance->m_redis_client) {
+            instance->m_redis_client = std::move(redis_client);
+            LOG_DEBUG << "RedisService initialized";
+        }
     }
 
     // ==================== 通用方法实现 ====================
@@ -34,7 +39,7 @@ namespace disk::services {
                 co_await m_redis_client->execCommandCoro("SET %s %s", key.c_str(), value.c_str());
             }
 
-            LOG_DEBUG << "Redis SET: key=" << key << ", ttl=" << ttl;
+            LOG_TRACE << "Redis SET: key=" << key << ", ttl=" << ttl;
 
             co_return {};
 
@@ -52,7 +57,7 @@ namespace disk::services {
             auto result = co_await m_redis_client->execCommandCoro("GET %s", key.c_str());
 
             if (result.isNil()) {
-                LOG_DEBUG << "Redis GET: key=" << key;
+                LOG_TRACE << "Redis GET: key=" << key;
 
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::RedisKeyNotFound, "Redis key not found: " + key)
@@ -61,7 +66,7 @@ namespace disk::services {
 
             const auto value = result.asString();
 
-            LOG_DEBUG << "Redis GET: key=" << key;
+            LOG_TRACE << "Redis GET: key=" << key;
 
             co_return value;
 
@@ -78,7 +83,7 @@ namespace disk::services {
         try {
             co_await m_redis_client->execCommandCoro("DEL %s", key.c_str());
 
-            LOG_DEBUG << "Redis DEL: key=" << key;
+            LOG_TRACE << "Redis DEL: key=" << key;
 
             co_return {};
 
@@ -96,7 +101,7 @@ namespace disk::services {
             auto result = co_await m_redis_client->execCommandCoro("EXISTS %s", key.c_str());
             const auto exists = result.asInteger();
 
-            LOG_DEBUG << "Redis EXISTS: key=" << key << ", exists=" << (exists == 1);
+            LOG_TRACE << "Redis EXISTS: key=" << key << ", exists=" << (exists == 1);
 
             co_return exists == 1;
 
@@ -112,14 +117,14 @@ namespace disk::services {
                 co_await m_redis_client->execCommandCoro("EXPIRE %s %d", key.c_str(), ttl);
 
             if (result.asInteger() == 0) {
-                LOG_DEBUG << "Redis EXPIRE: key=" << key << ", ttl=" << ttl;
+                LOG_TRACE << "Redis EXPIRE: key=" << key << ", ttl=" << ttl;
 
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::RedisKeyNotFound, "Redis key not found: " + key)
                 );
             }
 
-            LOG_DEBUG << "Redis EXPIRE: key=" << key << ", ttl=" << ttl;
+            LOG_TRACE << "Redis EXPIRE: key=" << key << ", ttl=" << ttl;
 
             co_return {};
 
@@ -157,7 +162,7 @@ namespace disk::services {
                 co_await m_redis_client->execCommandCoro("EXEC");
             }
 
-            LOG_DEBUG << "Redis MSET: count=" << pairs.size() << ", ttl=" << ttl;
+            LOG_TRACE << "Redis MSET: count=" << pairs.size() << ", ttl=" << ttl;
 
             co_return {};
 
@@ -186,7 +191,7 @@ namespace disk::services {
                 values.push_back(result.asArray()[i].isNil() ? "" : result.asArray()[i].asString());
             }
 
-            LOG_DEBUG << "Redis MGET: count=" << keys.size();
+            LOG_TRACE << "Redis MGET: count=" << keys.size();
 
             co_return values;
 
@@ -209,7 +214,7 @@ namespace disk::services {
             auto result = co_await m_redis_client->execCommandCoro("DEL %s", keys[0].c_str());
             const auto deleted = result.asInteger();
 
-            LOG_DEBUG << "Redis MDELETE: count=" << keys.size() << ", deleted=" << deleted;
+            LOG_TRACE << "Redis MDELETE: count=" << keys.size() << ", deleted=" << deleted;
 
             co_return deleted;
 
@@ -228,7 +233,7 @@ namespace disk::services {
             auto result = co_await m_redis_client->execCommandCoro("INCR %s", key.c_str());
             const auto new_value = result.asInteger();
 
-            LOG_DEBUG << "Redis INCR: key=" << key << ", new_value=" << new_value;
+            LOG_TRACE << "Redis INCR: key=" << key << ", new_value=" << new_value;
 
             co_return new_value;
 
@@ -248,7 +253,7 @@ namespace disk::services {
                 co_await m_redis_client->execCommandCoro("INCRBY %s %lld", key.c_str(), increment);
             const auto new_value = result.asInteger();
 
-            LOG_DEBUG << "Redis INCRBY: key=" << key << ", increment=" << increment
+            LOG_TRACE << "Redis INCRBY: key=" << key << ", increment=" << increment
                       << ", new_value=" << new_value;
 
             co_return new_value;

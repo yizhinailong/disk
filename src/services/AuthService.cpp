@@ -21,6 +21,7 @@ namespace disk::auth {
 
     using disk::utils::ConfigMgr;
     using disk::utils::HashUtil;
+    using disk::services::TokenService;
     using drogon::orm::CompareOperator;
     using drogon::orm::CoroMapper;
     using drogon::orm::Criteria;
@@ -28,19 +29,17 @@ namespace disk::auth {
 
     AuthService::AuthService(const drogon::nosql::RedisClientPtr& redis_client)
         : m_db_client(drogon::app().getDbClient()),
-          m_redis_service(std::make_shared<disk::services::RedisService>(redis_client)),
-          m_token_service(
-              std::make_unique<disk::services::TokenService>(
-                  ConfigMgr::GetInstance()->GetJwtSecret(),
-                  m_redis_service
-              )
-          ) {
-        LOG_DEBUG << "AuthService initialized";
+          m_redis_service(disk::services::RedisService::GetInstance()) {
+        // Initialize RedisService singleton if not already initialized
+        disk::services::RedisService::Initialize(redis_client);
+        // Initialize TokenService singleton
+        disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
+
+        LOG_DEBUG << "AuthService initialization completed";
     }
 
     auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {
-        LOG_DEBUG << "Starting user registration: " << request.username << " <" << request.email
-                  << ">";
+        LOG_DEBUG << "Starting user registration: " << request.username;
 
         // 1. 检查用户名是否已存在
         if (co_await IsUsernameExists(request.username)) {
@@ -50,7 +49,7 @@ namespace disk::auth {
 
         // 2. 检查邮箱是否已存在
         if (co_await IsEmailExists(request.email)) {
-            LOG_WARN << "Email already exists: " << request.email;
+            LOG_WARN << "Email already exists: " << request.email.substr(0, 3) << "***@***";
             co_return std::unexpected(ErrorInfo(ErrorCode::EmailExists));
         }
 
@@ -160,11 +159,11 @@ namespace disk::auth {
 
         // 4. 生成令牌
         auto [access_token, refresh_token] =
-            m_token_service->GenerateTokens(user.getValueOfId(), user.getValueOfUsername());
+            TokenService::GetInstance()->GenerateTokens(user.getValueOfId(), user.getValueOfUsername());
 
         // 5. 存储 refresh_token 到 Redis
         auto store_result =
-            co_await m_token_service->StoreRefreshToken(user.getValueOfId(), refresh_token);
+            co_await TokenService::GetInstance()->StoreRefreshToken(user.getValueOfId(), refresh_token);
         if (!store_result.has_value()) {
             LOG_WARN << "Failed to store refresh_token in Redis: " << user.getValueOfId();
         }
@@ -190,7 +189,7 @@ namespace disk::auth {
         LOG_DEBUG << "Starting token refresh";
 
         // 1. 验证刷新令牌
-        auto verify_result = m_token_service->VerifyRefreshToken(request.refresh_token);
+        auto verify_result = TokenService::GetInstance()->VerifyRefreshToken(request.refresh_token);
         if (!verify_result) {
             LOG_WARN << "Refresh token verification failed";
             co_return std::unexpected(verify_result.error());
@@ -221,10 +220,10 @@ namespace disk::auth {
 
             // 4. 生成新的令牌对
             auto [access_token, new_refresh_token] =
-                m_token_service->GenerateTokens(user.getValueOfId(), user.getValueOfUsername());
+                TokenService::GetInstance()->GenerateTokens(user.getValueOfId(), user.getValueOfUsername());
 
             // 5. 刷新 Redis 中的 token（原子操作）
-            auto refresh_result = co_await m_token_service->RefreshRefreshToken(
+            auto refresh_result = co_await TokenService::GetInstance()->RefreshRefreshToken(
                 user.getValueOfId(),
                 request.refresh_token,
                 new_refresh_token
@@ -261,7 +260,7 @@ namespace disk::auth {
         LOG_INFO << "User logout: user_id=" << user_id << ", ip=" << ip_address;
 
         // 步骤 1: 使访问令牌失效
-        auto invalidate_result = co_await m_token_service->InvalidateAccessToken(access_token);
+        auto invalidate_result = co_await TokenService::GetInstance()->InvalidateAccessToken(access_token);
         if (!invalidate_result.has_value()) {
             LOG_WARN << "Access token invalidation failed: user_id=" << user_id;
             co_return std::unexpected(
@@ -270,7 +269,7 @@ namespace disk::auth {
         }
 
         // 步骤 2: 撤销刷新令牌
-        auto revoke_result = co_await m_token_service->RevokeRefreshToken(user_id);
+        auto revoke_result = co_await TokenService::GetInstance()->RevokeRefreshToken(user_id);
         if (!revoke_result) {
             LOG_WARN << "Refresh token revocation failed: user_id=" << user_id;
             // 不中断流程，继续返回成功
@@ -316,7 +315,7 @@ namespace disk::auth {
         try {
             CoroMapper<Users> mapper(m_db_client);
             auto count = co_await mapper.count(Criteria(Users::Cols::_email, email));
-            LOG_DEBUG << "Check email existence: " << email << " - "
+            LOG_DEBUG << "Check email existence: " << email.substr(0, 3) << "***@***" << " - "
                       << (count > 0 ? "exists" : "not found");
             co_return count > 0;
         } catch (const drogon::orm::DrogonDbException& e) {

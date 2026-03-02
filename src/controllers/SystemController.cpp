@@ -22,7 +22,6 @@ namespace disk::system {
                   drogon::app().getRedisClient()
               )
           ) {
-        LOG_DEBUG << "SystemController initialized";
     }
 
     auto SystemController::GetInfo(drogon::HttpRequestPtr request)
