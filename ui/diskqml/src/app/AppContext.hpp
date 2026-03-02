@@ -3,29 +3,17 @@
 #include <QObject>
 #include <QString>
 
+#include <QtQml/qjsengine.h>
+#include <QtQml/qqmlengine.h>
 #include <QtQml/qqmlregistration.h>
 
-namespace disk::qml::utils {
-    class ConfigStore;
-}
-
-namespace disk::qml::api {
-    class ApiClient;
-    class AuthApi;
-} // namespace disk::qml::api
-
-namespace disk::qml::services {
-    class TokenStore;
-    class AuthService;
-} // namespace disk::qml::services
-
-namespace disk::qml::viewmodels {
-    class LoginViewModel;
-    class RegisterViewModel;
-} // namespace disk::qml::viewmodels
-
-class QQmlEngine;
-class QJSEngine;
+#include <api/ApiClient.hpp>
+#include <api/AuthApi.hpp>
+#include <services/AuthService.hpp>
+#include <services/TokenStore.hpp>
+#include <utils/ConfigStore.hpp>
+#include <viewmodels/LoginViewModel.hpp>
+#include <viewmodels/RegisterViewModel.hpp>
 
 namespace disk::qml::app {
 
