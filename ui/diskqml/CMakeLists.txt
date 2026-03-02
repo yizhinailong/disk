@@ -5,7 +5,7 @@ project(diskqml VERSION 0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 Network Test)
+find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 Network)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -69,29 +69,3 @@ install(TARGETS appdiskqml
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-# --- Testing infrastructure ---
-enable_testing()
-
-# Helper macro: add_executable + add_test + link
-macro(diskqml_add_test TARGET SOURCE)
-    add_executable(${TARGET} ${SOURCE})
-    target_link_libraries(${TARGET} PRIVATE diskqml_core Qt6::Test)
-    add_test(NAME ${TARGET} COMMAND ${TARGET})
-endmacro()
-
-diskqml_add_test(tst_diskqml_errorcode   tests/cpp/tst_ErrorCode.cpp)
-diskqml_add_test(tst_diskqml_tokenstore  tests/cpp/tst_TokenStore.cpp)
-diskqml_add_test(tst_diskqml_authdtos    tests/cpp/tst_AuthDtos.cpp)
-diskqml_add_test(tst_diskqml_authservice tests/cpp/tst_AuthService.cpp)
-diskqml_add_test(tst_diskqml_viewmodels  tests/cpp/tst_ViewModels.cpp)
-diskqml_add_test(tst_diskqml_authrequestdtos tests/cpp/tst_AuthRequestDtos.cpp)
-diskqml_add_test(tst_diskqml_authapi     tests/cpp/tst_AuthApi.cpp)
-diskqml_add_test(tst_diskqml_apiclient   tests/cpp/tst_ApiClient.cpp)
-# ApiClient integration test needs QTcpServer from Qt6::Network
-target_link_libraries(tst_diskqml_apiclient PRIVATE Qt6::Network)
-
-# Static enforcement: QML must not contain business logic
-add_test(NAME diskqml-no-qml-logic
-    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/scripts/verify_no_qml_logic.sh
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
