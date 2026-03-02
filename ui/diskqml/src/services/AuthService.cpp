@@ -9,11 +9,9 @@
 namespace disk::qml::services {
 
     namespace {
-
         const QRegularExpression kUsernamePattern(QStringLiteral("^[a-zA-Z0-9_]{4,32}$"));
         const QRegularExpression kEmailPattern(QStringLiteral("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"));
         const QRegularExpression kPasswordPattern(QStringLiteral("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,64}$"));
-
     } // namespace
 
     AuthService::AuthService(api::IAuthApi* authApi, storage::TokenStore* tokenStore)
@@ -32,7 +30,13 @@ namespace disk::qml::services {
         return kPasswordPattern.match(password).hasMatch();
     }
 
-    auto AuthService::Register(const QString& username, const QString& email, const QString& password, QObject* ctx, RegisterCallback cb) -> void {
+    auto AuthService::Register(
+        const QString& username,
+        const QString& email,
+        const QString& password,
+        QObject* ctx,
+        RegisterCallback cb
+    ) -> void {
         if (!ValidateUsername(username) || !ValidateEmail(email) || !ValidatePassword(password)) {
             cb(std::nullopt, utils::ToUserMessage(static_cast<int>(utils::ErrorCode::InvalidFormat), QString{}));
             return;
@@ -65,9 +69,17 @@ namespace disk::qml::services {
         );
     }
 
-    auto AuthService::Login(const QString& account, const QString& password, QObject* ctx, LoginCallback cb) -> void {
+    auto AuthService::Login(
+        const QString& account,
+        const QString& password,
+        QObject* ctx,
+        LoginCallback cb
+    ) -> void {
         if (account.trimmed().isEmpty() || password.isEmpty()) {
-            cb(std::nullopt, utils::ToUserMessage(static_cast<int>(utils::ErrorCode::InvalidParameter), QString{}));
+            cb(
+                std::nullopt,
+                utils::ToUserMessage(static_cast<int>(utils::ErrorCode::InvalidParameter), QString{})
+            );
             return;
         }
 
@@ -98,9 +110,16 @@ namespace disk::qml::services {
         );
     }
 
-    auto AuthService::Refresh(const QString& refreshToken, QObject* ctx, RefreshCallback cb) -> void {
+    auto AuthService::Refresh(
+        const QString& refreshToken,
+        QObject* ctx,
+        RefreshCallback cb
+    ) -> void {
         if (refreshToken.trimmed().isEmpty()) {
-            cb(std::nullopt, utils::ToUserMessage(static_cast<int>(utils::ErrorCode::InvalidParameter), QString{}));
+            cb(
+                std::nullopt,
+                utils::ToUserMessage(static_cast<int>(utils::ErrorCode::InvalidParameter), QString{})
+            );
             return;
         }
 
@@ -146,7 +165,8 @@ namespace disk::qml::services {
                     return;
                 }
 
-                if (envelope.code == static_cast<int>(utils::ErrorCode::Success) || IsLocalLogoutSuccessCode(envelope.code)) {
+                if (envelope.code == static_cast<int>(utils::ErrorCode::Success) ||
+                    IsLocalLogoutSuccessCode(envelope.code)) {
                     m_token_store->Clear();
                     cb(true, QString{});
                     return;

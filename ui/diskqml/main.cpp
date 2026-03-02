@@ -1,6 +1,5 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
-#include <QtQml>
 #include <QQuickStyle>
 
 #include <api/ApiClient.hpp>
@@ -43,7 +42,7 @@ int main(int argc, char* argv[]) {
     );
 
     // --- QML engine setup ---
-    qmlRegisterSingletonInstance("Disk", 1, 0, "AppContext", &appContext);
+    disk::qml::app::AppContext::SetInstance(&appContext);
 
     QQmlApplicationEngine engine;
     QObject::connect(
@@ -53,7 +52,7 @@ int main(int argc, char* argv[]) {
         []() { QCoreApplication::exit(-1); },
         Qt::QueuedConnection
     );
-    engine.loadFromModule("diskqml", "Main");
+    engine.loadFromModule("Disk", "Main");
 
     return app.exec();
 }

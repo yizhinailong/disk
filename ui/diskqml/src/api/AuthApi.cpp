@@ -6,12 +6,17 @@
 #include "IApiClient.hpp"
 
 namespace disk::qml::api {
-
     AuthApi::AuthApi(IApiClient* client)
         : m_client(client) {
     }
 
-    auto AuthApi::Register(const QString& username, const QString& email, const QString& password, QObject* ctx, AuthApiCallback cb) -> void {
+    auto AuthApi::Register(
+        const QString& username,
+        const QString& email,
+        const QString& password,
+        QObject* ctx,
+        AuthApiCallback cb
+    ) -> void {
         QJsonObject body;
         body[QLatin1String("username")] = username;
         body[QLatin1String("email")] = email;
@@ -40,7 +45,12 @@ namespace disk::qml::api {
         );
     }
 
-    auto AuthApi::Login(const QString& account, const QString& password, QObject* ctx, AuthApiCallback cb) -> void {
+    auto AuthApi::Login(
+        const QString& account,
+        const QString& password,
+        QObject* ctx,
+        AuthApiCallback cb
+    ) -> void {
         QJsonObject body;
         body[QLatin1String("account")] = account;
         body[QLatin1String("password")] = password;
@@ -68,7 +78,11 @@ namespace disk::qml::api {
         );
     }
 
-    auto AuthApi::Refresh(const QString& refreshToken, QObject* ctx, AuthApiCallback cb) -> void {
+    auto AuthApi::Refresh(
+        const QString& refreshToken,
+        QObject* ctx,
+        AuthApiCallback cb
+    ) -> void {
         QJsonObject body;
         body[QLatin1String("refresh_token")] = refreshToken;
 
@@ -95,7 +109,11 @@ namespace disk::qml::api {
         );
     }
 
-    auto AuthApi::Logout(const QString& accessToken, QObject* ctx, AuthApiCallback cb) -> void {
+    auto AuthApi::Logout(
+        const QString& accessToken,
+        QObject* ctx,
+        AuthApiCallback cb
+    ) -> void {
         // Set the bearer token for Authorization header before issuing the request
         m_client->SetBearerToken(accessToken);
 

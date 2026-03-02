@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QtQml/qqmlregistration.h>
 
 namespace disk::qml::utils {
     class ConfigStore;
@@ -25,6 +26,9 @@ namespace disk::qml::viewmodels {
     class RegisterViewModel;
 } // namespace disk::qml::viewmodels
 
+class QQmlEngine;
+class QJSEngine;
+
 namespace disk::qml::app {
 
     /// Top-level DI aggregation object.
@@ -32,6 +36,8 @@ namespace disk::qml::app {
     /// Registered as a QML singleton instance in main.cpp.
     class AppContext : public QObject {
         Q_OBJECT
+        QML_ELEMENT
+        QML_SINGLETON
 
         Q_PROPERTY(QObject* loginViewModel READ LoginViewModel CONSTANT)
         Q_PROPERTY(QObject* registerViewModel READ RegisterViewModel CONSTANT)
@@ -49,6 +55,9 @@ namespace disk::qml::app {
             viewmodels::RegisterViewModel* registerViewModel,
             QObject* parent = nullptr
         );
+
+        static auto SetInstance(AppContext* instance) -> void;
+        static auto create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> AppContext*;
 
         [[nodiscard]] auto LoginViewModel() const -> QObject*;
         [[nodiscard]] auto RegisterViewModel() const -> QObject*;
@@ -75,6 +84,9 @@ namespace disk::qml::app {
 
         bool m_is_logged_in{ false };
         QString m_logged_in_user_name;
+
+        inline static AppContext* s_instance = nullptr;
+        inline static QJSEngine* s_engine = nullptr;
     };
 
 } // namespace disk::qml::app

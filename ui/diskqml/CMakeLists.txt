@@ -18,7 +18,6 @@ add_library(diskqml_core STATIC
     src/utils/ConfigStore.cpp
     src/viewmodels/LoginViewModel.cpp
     src/viewmodels/RegisterViewModel.cpp
-    src/app/AppContext.cpp
 )
 
 target_include_directories(diskqml_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -33,7 +32,11 @@ qt_add_executable(appdiskqml
 )
 
 qt_add_qml_module(appdiskqml
-    URI diskqml
+    URI Disk
+    VERSION 1.0
+    SOURCES
+        src/app/AppContext.cpp
+        src/app/AppContext.hpp
     QML_FILES
         qml/Main.qml
         qml/App.qml
@@ -41,6 +44,8 @@ qt_add_qml_module(appdiskqml
         qml/views/RegisterView.qml
         qml/views/HomePlaceholder.qml
 )
+
+target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/app)
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an

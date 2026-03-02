@@ -7,26 +7,28 @@ Item {
     id: root
 
     signal registered(string username, string email)
-    signal backRequested()
+    signal backRequested
 
     property bool showPassword: false
 
     Rectangle {
         anchors.fill: parent
         color: "#FAFAFA"
-        
+
         ScrollView {
             anchors.fill: parent
             contentWidth: availableWidth
             clip: true
-            
+
             ColumnLayout {
                 width: Math.min(400, parent.width * 0.9)
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 16
-                
-                Item { Layout.preferredHeight: 32 } // Spacer
-                
+
+                Item {
+                    Layout.preferredHeight: 32
+                } // Spacer
+
                 // Back button
                 Button {
                     text: "← 返回"
@@ -43,8 +45,10 @@ Item {
                     Layout.alignment: Qt.AlignHCenter
                 }
 
-                Item { Layout.preferredHeight: 16 } // Spacer
-                
+                Item {
+                    Layout.preferredHeight: 16
+                } // Spacer
+
                 // Global Error Message
                 Label {
                     id: globalErrorLabel
@@ -62,11 +66,6 @@ Item {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 4
-                    Label {
-                        text: "用户名"
-                        color: "#212121"
-                        font.pixelSize: 14
-                    }
                     TextField {
                         id: usernameInput
                         objectName: "usernameInput"
@@ -90,11 +89,6 @@ Item {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 4
-                    Label {
-                        text: "邮箱"
-                        color: "#212121"
-                        font.pixelSize: 14
-                    }
                     TextField {
                         id: emailInput
                         objectName: "emailInput"
@@ -118,11 +112,6 @@ Item {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 4
-                    Label {
-                        text: "密码"
-                        color: "#212121"
-                        font.pixelSize: 14
-                    }
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 4
@@ -160,11 +149,6 @@ Item {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 4
-                    Label {
-                        text: "确认密码"
-                        color: "#212121"
-                        font.pixelSize: 14
-                    }
                     TextField {
                         id: confirmPasswordInput
                         objectName: "confirmPasswordInput"
@@ -185,7 +169,9 @@ Item {
                     }
                 }
 
-                Item { Layout.preferredHeight: 16 } // Spacer
+                Item {
+                    Layout.preferredHeight: 16
+                } // Spacer
 
                 // Register Button
                 Button {
@@ -194,8 +180,9 @@ Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 40
                     text: AppContext.registerViewModel.loading ? "注册中..." : "注册"
-                    enabled: AppContext.registerViewModel.canSubmit && !AppContext.registerViewModel.loading
-                    
+                    enabled: AppContext.registerViewModel.canSubmit
+                             && !AppContext.registerViewModel.loading
+
                     background: Rectangle {
                         color: submitButton.enabled ? "#2196F3" : "#E0E0E0"
                         radius: 8
@@ -208,17 +195,19 @@ Item {
                         font.pixelSize: 14
                         font.bold: true
                     }
-                    
+
                     onClicked: {
-                        AppContext.registerViewModel.submit();
+                        AppContext.registerViewModel.submit()
                     }
                 }
-                
-                Item { Layout.preferredHeight: 32 } // Bottom spacer
+
+                Item {
+                    Layout.preferredHeight: 32
+                } // Bottom spacer
             }
         }
     }
-    
+
     Connections {
         target: AppContext.registerViewModel
         function onRegisterSucceeded(username, email) {

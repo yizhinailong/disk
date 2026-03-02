@@ -7,6 +7,8 @@
 #include <utils/ConfigStore.hpp>
 #include <viewmodels/LoginViewModel.hpp>
 #include <viewmodels/RegisterViewModel.hpp>
+#include <QJSEngine>
+#include <QQmlEngine>
 
 namespace disk::qml::app {
 
@@ -87,6 +89,29 @@ namespace disk::qml::app {
         }
         m_is_logged_in = loggedIn;
         emit isLoggedInChanged();
+    }
+
+    auto AppContext::SetInstance(AppContext* instance) -> void {
+        s_instance = instance;
+    }
+
+    auto AppContext::create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> AppContext* {
+        // The instance has to exist before it is used. We cannot replace it.
+        Q_ASSERT(s_instance != nullptr);
+
+        // The engine has to have the same thread affinity as the singleton.
+        Q_ASSERT(qmlEngine->thread() == s_instance->thread());
+
+        // There can only be one engine accessing the singleton.
+        if (s_engine) {
+            Q_ASSERT(jsEngine == s_engine);
+        } else {
+            s_engine = jsEngine;
+        }
+
+        // Explicitly specify C++ ownership so that the engine doesn't delete the instance.
+        QJSEngine::setObjectOwnership(s_instance, QJSEngine::CppOwnership);
+        return s_instance;
     }
 
 } // namespace disk::qml::app
