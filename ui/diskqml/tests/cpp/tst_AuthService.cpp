@@ -2,6 +2,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTest>
+#include <QTemporaryDir>
+#include <memory>
 
 #include <api/IAuthApi.hpp>
 #include <models/AuthDtos.hpp>
@@ -96,7 +98,8 @@ class tst_AuthService : public QObject {
 
 private:
     FakeAuthApi m_fake_api;
-    storage::TokenStore m_store;
+    std::unique_ptr<QTemporaryDir> m_temp_dir;
+    std::unique_ptr<storage::TokenStore> m_store;
     services::AuthService* m_service = nullptr;
 
 private slots:
@@ -107,18 +110,22 @@ private slots:
     }
 
     void init() {
-        m_store.Clear();
+        m_temp_dir = std::make_unique<QTemporaryDir>();
+        QVERIFY(m_temp_dir->isValid());
+        m_store = std::make_unique<storage::TokenStore>(m_temp_dir->path());
+        m_store->Clear();
         m_fake_api.registerFn = nullptr;
         m_fake_api.loginFn = nullptr;
         m_fake_api.refreshFn = nullptr;
         m_fake_api.logoutFn = nullptr;
-        m_service = new services::AuthService(&m_fake_api, &m_store);
+        m_service = new services::AuthService(&m_fake_api, m_store.get());
     }
 
     void cleanup() {
         delete m_service;
         m_service = nullptr;
-        m_store.Clear();
+        m_store.reset();
+        m_temp_dir.reset();
     }
 
     // -----------------------------------------------------------------------
@@ -301,9 +308,9 @@ private slots:
         QVERIFY(called);
 
         // Verify tokens persisted in store
-        QCOMPARE(m_store.AccessToken(), QStringLiteral("at-123"));
-        QCOMPARE(m_store.RefreshToken(), QStringLiteral("rt-456"));
-        QVERIFY(m_store.HasValidAccessToken());
+        QCOMPARE(m_store->AccessToken(), QStringLiteral("at-123"));
+        QCOMPARE(m_store->RefreshToken(), QStringLiteral("rt-456"));
+        QVERIFY(m_store->HasValidAccessToken());
     }
 
     void login_errorEnvelope_doesNotStoreTokens() {
@@ -316,7 +323,7 @@ private slots:
             QVERIFY(!err.isEmpty());
         });
 
-        QVERIFY(m_store.AccessToken().isEmpty());
+        QVERIFY(m_store->AccessToken().isEmpty());
     }
 
     void login_networkError_doesNotStoreTokens() {
@@ -329,7 +336,7 @@ private slots:
             QVERIFY(!err.isEmpty());
         });
 
-        QVERIFY(m_store.AccessToken().isEmpty());
+        QVERIFY(m_store->AccessToken().isEmpty());
     }
 
     // -----------------------------------------------------------------------
@@ -364,8 +371,8 @@ private slots:
         });
         QVERIFY(called);
 
-        QCOMPARE(m_store.AccessToken(), QStringLiteral("new-at"));
-        QCOMPARE(m_store.RefreshToken(), QStringLiteral("new-rt"));
+        QCOMPARE(m_store->AccessToken(), QStringLiteral("new-at"));
+        QCOMPARE(m_store->RefreshToken(), QStringLiteral("new-rt"));
     }
 
     // -----------------------------------------------------------------------
@@ -373,7 +380,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void logout_emptyToken_clearsStoreAndSucceeds() {
-        m_store.Save("a", "r", 3600);
+        m_store->Save("a", "r", 3600);
 
         bool called = false;
         m_service->Logout("", this, [&](bool ok, QString err) {
@@ -382,11 +389,11 @@ private slots:
             QVERIFY(err.isEmpty());
         });
         QVERIFY(called);
-        QVERIFY(m_store.AccessToken().isEmpty());
+        QVERIFY(m_store->AccessToken().isEmpty());
     }
 
     void logout_successEnvelope_clearsStore() {
-        m_store.Save("a", "r", 3600);
+        m_store->Save("a", "r", 3600);
 
         m_fake_api.logoutFn = [](auto, auto, api::AuthApiCallback cb) {
             cb(makeEnvelope(0, "success"), QString{});
@@ -399,11 +406,11 @@ private slots:
             QVERIFY(err.isEmpty());
         });
         QVERIFY(called);
-        QVERIFY(m_store.AccessToken().isEmpty());
+        QVERIFY(m_store->AccessToken().isEmpty());
     }
 
     void logout_tokenExpiredCode_stillClearsStore() {
-        m_store.Save("a", "r", 3600);
+        m_store->Save("a", "r", 3600);
 
         m_fake_api.logoutFn = [](auto, auto, api::AuthApiCallback cb) {
             // 40108 = TokenExpired — should still be treated as success
@@ -417,11 +424,11 @@ private slots:
             QVERIFY(err.isEmpty());
         });
         QVERIFY(called);
-        QVERIFY(m_store.AccessToken().isEmpty());
+        QVERIFY(m_store->AccessToken().isEmpty());
     }
 
     void logout_networkError_doesNotClearStore() {
-        m_store.Save("a", "r", 3600);
+        m_store->Save("a", "r", 3600);
 
         m_fake_api.logoutFn = [](auto, auto, api::AuthApiCallback cb) {
             cb(models::ApiEnvelope{}, QStringLiteral("timeout"));
@@ -433,11 +440,11 @@ private slots:
         });
 
         // Store should NOT be cleared on network error
-        QCOMPARE(m_store.AccessToken(), QStringLiteral("a"));
+        QCOMPARE(m_store->AccessToken(), QStringLiteral("a"));
     }
 
     void logout_serverError_doesNotClearStore() {
-        m_store.Save("a", "r", 3600);
+        m_store->Save("a", "r", 3600);
 
         m_fake_api.logoutFn = [](auto, auto, api::AuthApiCallback cb) {
             cb(makeEnvelope(10006, "internal error"), QString{});
@@ -448,7 +455,7 @@ private slots:
             QVERIFY(!err.isEmpty());
         });
 
-        QCOMPARE(m_store.AccessToken(), QStringLiteral("a"));
+        QCOMPARE(m_store->AccessToken(), QStringLiteral("a"));
     }
 };
 
