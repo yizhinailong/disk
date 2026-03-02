@@ -176,11 +176,11 @@ namespace disk::qml::services {
     }
 
     auto AuthService::MapTransportError(const QString& networkError) const -> QString {
-        if (networkError.contains(QLatin1String("parse"), Qt::CaseInsensitive) ||
-            networkError.contains(QLatin1String("envelope"), Qt::CaseInsensitive)) {
-            return QStringLiteral("服务器响应解析失败");
+        // If we have a network error, treat it as already user-friendly and return as-is
+        if (!networkError.isEmpty()) {
+            return networkError;
         }
-
+        // Generic fallback (shouldn't normally reach here)
         return QStringLiteral("网络连接失败，请检查网络");
     }
 
