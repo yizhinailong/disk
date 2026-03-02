@@ -29,7 +29,7 @@ namespace disk::qml::api {
             body,
             ctx,
             [cb = std::move(cb)](ApiReply reply) {
-                if (reply.error.hasNetworkError || !reply.error.httpStatusSuccess) {
+                if (reply.error.hasNetworkError) {
                     cb(models::ApiEnvelope{}, reply.error.networkErrorString);
                     return;
                 }
@@ -62,7 +62,7 @@ namespace disk::qml::api {
             body,
             ctx,
             [cb = std::move(cb)](ApiReply reply) {
-                if (reply.error.hasNetworkError || !reply.error.httpStatusSuccess) {
+                if (reply.error.hasNetworkError) {
                     cb(models::ApiEnvelope{}, reply.error.networkErrorString);
                     return;
                 }
@@ -93,7 +93,7 @@ namespace disk::qml::api {
             body,
             ctx,
             [cb = std::move(cb)](ApiReply reply) {
-                if (reply.error.hasNetworkError || !reply.error.httpStatusSuccess) {
+                if (reply.error.hasNetworkError) {
                     cb(models::ApiEnvelope{}, reply.error.networkErrorString);
                     return;
                 }
@@ -116,17 +116,15 @@ namespace disk::qml::api {
         QObject* ctx,
         AuthApiCallback cb
     ) -> void {
-        // Set the bearer token for Authorization header before issuing the request
-        m_client->SetBearerToken(accessToken);
-
         QJsonObject body; // empty body {}
 
-        m_client->PostJson(
+        m_client->PostJsonWithBearerToken(
             QStringLiteral("/api/auth/logout"),
             body,
+            accessToken,
             ctx,
             [cb = std::move(cb)](ApiReply reply) {
-                if (reply.error.hasNetworkError || !reply.error.httpStatusSuccess) {
+                if (reply.error.hasNetworkError) {
                     cb(models::ApiEnvelope{}, reply.error.networkErrorString);
                     return;
                 }
