@@ -4,6 +4,7 @@
 #include <QJsonObject>
 
 #include "IApiClient.hpp"
+#include <models/AuthDtos.hpp>
 
 namespace disk::qml::api {
     AuthApi::AuthApi(IApiClient* client)
@@ -17,11 +18,11 @@ namespace disk::qml::api {
         QObject* ctx,
         AuthApiCallback cb
     ) -> void {
-        QJsonObject body;
-        body[QLatin1String("username")] = username;
-        body[QLatin1String("email")] = email;
-        body[QLatin1String("password")] = password;
-
+        models::RegisterRequest dto;
+        dto.username = username;
+        dto.email = email;
+        dto.password = password;
+        const QJsonObject body = dto.ToJsonObject();
         m_client->PostJson(
             QStringLiteral("/api/auth/register"),
             body,
@@ -51,10 +52,10 @@ namespace disk::qml::api {
         QObject* ctx,
         AuthApiCallback cb
     ) -> void {
-        QJsonObject body;
-        body[QLatin1String("account")] = account;
-        body[QLatin1String("password")] = password;
-
+        models::LoginRequest dto;
+        dto.account = account;
+        dto.password = password;
+        const QJsonObject body = dto.ToJsonObject();
         m_client->PostJson(
             QStringLiteral("/api/auth/login"),
             body,
@@ -83,9 +84,9 @@ namespace disk::qml::api {
         QObject* ctx,
         AuthApiCallback cb
     ) -> void {
-        QJsonObject body;
-        body[QLatin1String("refresh_token")] = refreshToken;
-
+        models::RefreshTokenRequest dto;
+        dto.refreshToken = refreshToken;
+        const QJsonObject body = dto.ToJsonObject();
         m_client->PostJson(
             QStringLiteral("/api/auth/refresh"),
             body,
