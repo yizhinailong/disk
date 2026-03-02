@@ -1,20 +1,19 @@
 #pragma once
 
-#include <QJsonDocument>
+#include "ApiReply.hpp"
+
 #include <QJsonObject>
 #include <QObject>
 #include <QString>
 #include <QUrl>
 #include <functional>
-#include <optional>
 
 namespace disk::qml::api {
 
-    /// Callback type for PostJson: receives optional JSON document and error string.
-    /// On success: json has value, networkError is empty.
-    /// On failure: json is std::nullopt, networkError describes the issue.
-    using PostJsonCallback =
-        std::function<void(std::optional<QJsonDocument> json, QString networkError)>;
+    /// Callback type for PostJson: receives a structured ApiReply.
+    /// On success: reply.error.httpStatusSuccess is true, reply.json may have value.
+    /// On transport failure: reply.error.hasNetworkError is true.
+    using PostJsonCallback = std::function<void(ApiReply reply)>;
 
     /// Minimal network abstraction for mocking in tests.
     class IApiClient {
