@@ -18,7 +18,7 @@ Item {
             spacing: 24
 
             Label {
-                text: qsTr("欢迎, %1").arg(AppContext.loggedInUserName)
+                text: qsTr("欢迎, %1").arg(SessionViewModel.loggedInUserName)
                 font.pixelSize: 24
                 font.bold: true
                 color: "#212121"
@@ -43,7 +43,7 @@ Item {
                 Material.foreground: "#FFFFFF"
                 
                 onClicked: {
-                    AppContext.logout()
+                    SessionViewModel.logout()
                 }
             }
         }
@@ -51,9 +51,9 @@ Item {
 
     // Navigate away when logged out
     Connections {
-        target: AppContext
+        target: SessionViewModel
         function onIsLoggedInChanged() {
-            if (!AppContext.isLoggedIn) {
+            if (!SessionViewModel.isLoggedIn) {
                 root.logoutRequested()
             }
         }

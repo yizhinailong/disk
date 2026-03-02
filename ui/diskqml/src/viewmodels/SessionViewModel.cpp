@@ -1,80 +1,50 @@
-#include "AppContext.hpp"
+#include "SessionViewModel.hpp"
 
 #include <QJSEngine>
 #include <QQmlEngine>
 
-#include <api/ApiClient.hpp>
-#include <api/AuthApi.hpp>
 #include <services/AuthService.hpp>
 #include <services/TokenStore.hpp>
-#include <utils/ConfigStore.hpp>
 #include <viewmodels/LoginViewModel.hpp>
-#include <viewmodels/RegisterViewModel.hpp>
 
-namespace disk::qml::app {
+namespace disk::qml::viewmodels {
 
-    AppContext::AppContext(
-        utils::ConfigStore* configStore,
+    SessionViewModel::SessionViewModel(
+        LoginViewModel* loginViewModel,
         services::TokenStore* tokenStore,
-        api::ApiClient* apiClient,
-        api::AuthApi* authApi,
         services::AuthService* authService,
-        viewmodels::LoginViewModel* loginViewModel,
-        viewmodels::RegisterViewModel* registerViewModel,
         QObject* parent
     ) : QObject(parent),
-        m_config_store(configStore),
-        m_token_store(tokenStore),
-        m_api_client(apiClient),
-        m_auth_api(authApi),
-        m_auth_service(authService),
         m_login_view_model(loginViewModel),
-        m_register_view_model(registerViewModel) {
-        // Update isLoggedIn based on existing token state
+        m_token_store(tokenStore),
+        m_auth_service(authService) {
+        // Initialize logged-in state from existing token
         m_is_logged_in = m_token_store->HasValidAccessToken();
 
         // Connect login success → update username and logged-in state
         connect(
             m_login_view_model,
-            &viewmodels::LoginViewModel::loginSucceeded,
+            &LoginViewModel::loginSucceeded,
             this,
             [this](const QString& username) {
                 SetLoggedInUserName(username);
                 UpdateIsLoggedIn();
             }
         );
-
-        // Connect register success → (user still needs to login, but cache username)
-        connect(
-            m_register_view_model,
-            &viewmodels::RegisterViewModel::registerSucceeded,
-            this,
-            [this](const QString& /*username*/, const QString& /*email*/) {
-                // Registration doesn't auto-login; no state change needed here
-            }
-        );
     }
 
-    auto AppContext::LoginViewModel() const -> QObject* {
-        return m_login_view_model;
-    }
-
-    auto AppContext::RegisterViewModel() const -> QObject* {
-        return m_register_view_model;
-    }
-
-    auto AppContext::IsLoggedIn() const -> bool {
+    auto SessionViewModel::IsLoggedIn() const -> bool {
         return m_is_logged_in;
     }
 
-    auto AppContext::LoggedInUserName() const -> const QString& {
+    auto SessionViewModel::LoggedInUserName() const -> const QString& {
         return m_logged_in_user_name;
     }
 
-    void AppContext::logout() {
+    void SessionViewModel::logout() {
         const QString accessToken = m_token_store->AccessToken();
 
-        // Context object prevents callback invocation if AppContext is destroyed
+        // Context object prevents callback invocation if SessionViewModel is destroyed
         auto* ctx = new QObject(this);
 
         m_auth_service->Logout(
@@ -91,7 +61,7 @@ namespace disk::qml::app {
         );
     }
 
-    auto AppContext::SetLoggedInUserName(const QString& name) -> void {
+    auto SessionViewModel::SetLoggedInUserName(const QString& name) -> void {
         if (m_logged_in_user_name == name) {
             return;
         }
@@ -99,7 +69,7 @@ namespace disk::qml::app {
         emit loggedInUserNameChanged();
     }
 
-    auto AppContext::UpdateIsLoggedIn() -> void {
+    auto SessionViewModel::UpdateIsLoggedIn() -> void {
         const bool loggedIn = m_token_store->HasValidAccessToken();
         if (m_is_logged_in == loggedIn) {
             return;
@@ -108,11 +78,11 @@ namespace disk::qml::app {
         emit isLoggedInChanged();
     }
 
-    auto AppContext::SetInstance(AppContext* instance) -> void {
+    auto SessionViewModel::SetInstance(SessionViewModel* instance) -> void {
         s_instance = instance;
     }
 
-    auto AppContext::create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> AppContext* {
+    auto SessionViewModel::create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> SessionViewModel* {
         // The instance has to exist before it is used. We cannot replace it.
         Q_ASSERT(s_instance != nullptr);
 
@@ -131,4 +101,4 @@ namespace disk::qml::app {
         return s_instance;
     }
 
-} // namespace disk::qml::app
+} // namespace disk::qml::viewmodels

@@ -3,6 +3,10 @@
 #include <QObject>
 #include <QString>
 
+#include <QtQml/qjsengine.h>
+#include <QtQml/qqmlengine.h>
+#include <QtQml/qqmlregistration.h>
+
 namespace disk::qml::services {
     class AuthService;
 }
@@ -11,6 +15,8 @@ namespace disk::qml::viewmodels {
 
     class RegisterViewModel : public QObject {
         Q_OBJECT
+        QML_ELEMENT
+        QML_SINGLETON
 
         Q_PROPERTY(QString username READ Username WRITE SetUsername NOTIFY usernameChanged)
         Q_PROPERTY(QString email READ Email WRITE SetEmail NOTIFY emailChanged)
@@ -26,6 +32,9 @@ namespace disk::qml::viewmodels {
 
     public:
         explicit RegisterViewModel(services::AuthService* authService, QObject* parent = nullptr);
+
+        static auto SetInstance(RegisterViewModel* instance) -> void;
+        static auto create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> RegisterViewModel*;
 
         [[nodiscard]] auto Username() const -> const QString&;
         [[nodiscard]] auto Email() const -> const QString&;
@@ -86,6 +95,9 @@ namespace disk::qml::viewmodels {
         QString m_email_error;
         QString m_password_error;
         QString m_confirm_password_error;
+
+        inline static RegisterViewModel* s_instance = nullptr;
+        inline static QJSEngine* s_engine = nullptr;
     };
 
 } // namespace disk::qml::viewmodels

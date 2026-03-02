@@ -53,8 +53,8 @@ Item {
                 Label {
                     id: globalErrorLabel
                     objectName: "globalErrorLabel"
-                    visible: AppContext.registerViewModel.errorMessage !== ""
-                    text: AppContext.registerViewModel.errorMessage
+                    visible: RegisterViewModel.errorMessage !== ""
+                    text: RegisterViewModel.errorMessage
                     color: "#F44336"
                     font.pixelSize: 14
                     Layout.fillWidth: true
@@ -72,16 +72,16 @@ Item {
                         Layout.fillWidth: true
                         placeholderText: "4-32个字符，仅包含字母、数字、下划线"
                         maximumLength: 32
-                        enabled: !AppContext.registerViewModel.loading
-                        text: AppContext.registerViewModel.username
-                        onTextChanged: AppContext.registerViewModel.username = text
+                        enabled: !RegisterViewModel.loading
+                        text: RegisterViewModel.username
+                        onTextChanged: RegisterViewModel.username = text
                     }
                     Label {
                         objectName: "usernameErrorLabel"
-                        text: AppContext.registerViewModel.usernameError
+                        text: RegisterViewModel.usernameError
                         color: "#F44336"
                         font.pixelSize: 12
-                        visible: AppContext.registerViewModel.usernameError !== ""
+                        visible: RegisterViewModel.usernameError !== ""
                     }
                 }
 
@@ -95,16 +95,16 @@ Item {
                         Layout.fillWidth: true
                         placeholderText: "请输入有效邮箱地址"
                         maximumLength: 254
-                        enabled: !AppContext.registerViewModel.loading
-                        text: AppContext.registerViewModel.email
-                        onTextChanged: AppContext.registerViewModel.email = text
+                        enabled: !RegisterViewModel.loading
+                        text: RegisterViewModel.email
+                        onTextChanged: RegisterViewModel.email = text
                     }
                     Label {
                         objectName: "emailErrorLabel"
-                        text: AppContext.registerViewModel.emailError
+                        text: RegisterViewModel.emailError
                         color: "#F44336"
                         font.pixelSize: 12
-                        visible: AppContext.registerViewModel.emailError !== ""
+                        visible: RegisterViewModel.emailError !== ""
                     }
                 }
 
@@ -122,24 +122,24 @@ Item {
                             placeholderText: "设置密码"
                             echoMode: root.showPassword ? TextInput.Normal : TextInput.Password
                             maximumLength: 64
-                            enabled: !AppContext.registerViewModel.loading
-                            text: AppContext.registerViewModel.password
-                            onTextChanged: AppContext.registerViewModel.password = text
+                            enabled: !RegisterViewModel.loading
+                            text: RegisterViewModel.password
+                            onTextChanged: RegisterViewModel.password = text
                         }
                         Button {
                             id: showPasswordButton
                             objectName: "showPasswordButton"
                             text: root.showPassword ? "隐藏" : "显示"
                             onClicked: root.showPassword = !root.showPassword
-                            enabled: !AppContext.registerViewModel.loading
+                            enabled: !RegisterViewModel.loading
                         }
                     }
                     Label {
                         objectName: "passwordErrorLabel"
-                        text: AppContext.registerViewModel.passwordError
+                        text: RegisterViewModel.passwordError
                         color: "#F44336"
                         font.pixelSize: 12
-                        visible: AppContext.registerViewModel.passwordError !== ""
+                        visible: RegisterViewModel.passwordError !== ""
                         wrapMode: Text.Wrap
                         Layout.fillWidth: true
                     }
@@ -156,16 +156,16 @@ Item {
                         placeholderText: "请再次输入密码"
                         echoMode: root.showPassword ? TextInput.Normal : TextInput.Password
                         maximumLength: 64
-                        enabled: !AppContext.registerViewModel.loading
-                        text: AppContext.registerViewModel.confirmPassword
-                        onTextChanged: AppContext.registerViewModel.confirmPassword = text
+                        enabled: !RegisterViewModel.loading
+                        text: RegisterViewModel.confirmPassword
+                        onTextChanged: RegisterViewModel.confirmPassword = text
                     }
                     Label {
                         objectName: "confirmPasswordErrorLabel"
-                        text: AppContext.registerViewModel.confirmPasswordError
+                        text: RegisterViewModel.confirmPasswordError
                         color: "#F44336"
                         font.pixelSize: 12
-                        visible: AppContext.registerViewModel.confirmPasswordError !== ""
+                        visible: RegisterViewModel.confirmPasswordError !== ""
                     }
                 }
 
@@ -179,9 +179,9 @@ Item {
                     objectName: "submitButton"
                     Layout.fillWidth: true
                     Layout.preferredHeight: 40
-                    text: AppContext.registerViewModel.loading ? "注册中..." : "注册"
-                    enabled: AppContext.registerViewModel.canSubmit
-                             && !AppContext.registerViewModel.loading
+                    text: RegisterViewModel.loading ? "注册中..." : "注册"
+                    enabled: RegisterViewModel.canSubmit
+                    && !RegisterViewModel.loading
 
                     background: Rectangle {
                         color: submitButton.enabled ? "#2196F3" : "#E0E0E0"
@@ -197,7 +197,7 @@ Item {
                     }
 
                     onClicked: {
-                        AppContext.registerViewModel.submit()
+                        RegisterViewModel.submit()
                     }
                 }
 
@@ -209,7 +209,7 @@ Item {
     }
 
     Connections {
-        target: AppContext.registerViewModel
+        target: RegisterViewModel
         function onRegisterSucceeded(username, email) {
             root.registered(username, email)
         }

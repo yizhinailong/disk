@@ -20,7 +20,7 @@ ApplicationWindow {
         id: pageStack
         objectName: "pageStack"
         anchors.fill: parent
-        initialItem: AppContext.isLoggedIn ? homeView : loginView
+        initialItem: SessionViewModel.isLoggedIn ? homeView : loginView
     }
 
     Component {
@@ -54,9 +54,9 @@ ApplicationWindow {
 
     // Handle login state changes
     Connections {
-        target: AppContext
+        target: SessionViewModel
         function onIsLoggedInChanged() {
-            if (AppContext.isLoggedIn) {
+            if (SessionViewModel.isLoggedIn) {
                 pageStack.clear()
                 pageStack.push(homeView)
             } else {

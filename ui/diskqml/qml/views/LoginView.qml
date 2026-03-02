@@ -32,8 +32,8 @@ Item {
             // Error Message
             Label {
                 id: errorLabel
-                visible: AppContext.loginViewModel.errorMessage !== ""
-                text: AppContext.loginViewModel.errorMessage
+                visible: LoginViewModel.errorMessage !== ""
+                text: LoginViewModel.errorMessage
                 color: "#F44336"
                 font.pixelSize: 14
                 Layout.fillWidth: true
@@ -47,11 +47,11 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 36
                 placeholderText: qsTr("账号或邮箱")
-                text: AppContext.loginViewModel.account
-                onTextChanged: AppContext.loginViewModel.account = text
+                text: LoginViewModel.account
+                onTextChanged: LoginViewModel.account = text
                 font.pixelSize: 14
                 color: "#212121"
-                enabled: !AppContext.loginViewModel.loading
+                enabled: !LoginViewModel.loading
             }
 
             RowLayout {
@@ -65,11 +65,11 @@ Item {
                     Layout.preferredHeight: 36
                     placeholderText: qsTr("密码")
                     echoMode: showPasswordBtn.checked ? TextInput.Normal : TextInput.Password
-                    text: AppContext.loginViewModel.password
-                    onTextChanged: AppContext.loginViewModel.password = text
+                    text: LoginViewModel.password
+                    onTextChanged: LoginViewModel.password = text
                     font.pixelSize: 14
                     color: "#212121"
-                    enabled: !AppContext.loginViewModel.loading
+                    enabled: !LoginViewModel.loading
                 }
 
                 Button {
@@ -78,24 +78,24 @@ Item {
                     checkable: true
                     flat: true
                     Layout.preferredHeight: 36
-                    enabled: !AppContext.loginViewModel.loading
+                    enabled: !LoginViewModel.loading
                 }
             }
 
             Button {
                 id: loginButton
                 objectName: "loginButton"
-                text: AppContext.loginViewModel.loading ? qsTr("登录中...") : qsTr("登录")
+                text: LoginViewModel.loading ? qsTr("登录中...") : qsTr("登录")
                 Layout.fillWidth: true
                 Layout.preferredHeight: 40
                 Layout.topMargin: 16
-                enabled: AppContext.loginViewModel.canSubmit && !AppContext.loginViewModel.loading
+                enabled: LoginViewModel.canSubmit && !LoginViewModel.loading
                 
                 Material.background: "#2196F3"
                 Material.foreground: "#FFFFFF"
                 
                 onClicked: {
-                    AppContext.loginViewModel.submit()
+                    LoginViewModel.submit()
                 }
             }
 
@@ -106,7 +106,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 flat: true
                 Material.foreground: "#2196F3"
-                enabled: !AppContext.loginViewModel.loading
+                enabled: !LoginViewModel.loading
                 onClicked: root.registerRequested()
             }
         }
@@ -115,7 +115,7 @@ Item {
     // Handle prefill from parent (e.g., after registration)
     onPrefillAccountChanged: {
         if (prefillAccount !== "") {
-            AppContext.loginViewModel.account = prefillAccount
+            LoginViewModel.account = prefillAccount
         }
     }
 }

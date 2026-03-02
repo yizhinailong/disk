@@ -1,7 +1,9 @@
 #include "RegisterViewModel.hpp"
 
-#include <services/AuthService.hpp>
+#include <QJSEngine>
+#include <QQmlEngine>
 
+#include <services/AuthService.hpp>
 namespace disk::qml::viewmodels {
 
     RegisterViewModel::RegisterViewModel(services::AuthService* authService, QObject* parent)
@@ -249,6 +251,29 @@ namespace disk::qml::viewmodels {
         }
         m_confirm_password_error = error;
         emit confirmPasswordErrorChanged();
+    }
+
+    auto RegisterViewModel::SetInstance(RegisterViewModel* instance) -> void {
+        s_instance = instance;
+    }
+
+    auto RegisterViewModel::create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> RegisterViewModel* {
+        // The instance has to exist before it is used. We cannot replace it.
+        Q_ASSERT(s_instance != nullptr);
+
+        // The engine has to have the same thread affinity as the singleton.
+        Q_ASSERT(qmlEngine->thread() == s_instance->thread());
+
+        // There can only be one engine accessing the singleton.
+        if (s_engine) {
+            Q_ASSERT(jsEngine == s_engine);
+        } else {
+            s_engine = jsEngine;
+        }
+
+        // Explicitly specify C++ ownership so that the engine doesn't delete the instance.
+        QJSEngine::setObjectOwnership(s_instance, QJSEngine::CppOwnership);
+        return s_instance;
     }
 
 } // namespace disk::qml::viewmodels

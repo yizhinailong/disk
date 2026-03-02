@@ -4,7 +4,7 @@
 
 #include <api/ApiClient.hpp>
 #include <api/AuthApi.hpp>
-#include <app/AppContext.hpp>
+#include <viewmodels/SessionViewModel.hpp>
 #include <services/AuthService.hpp>
 #include <services/TokenStore.hpp>
 #include <utils/ConfigStore.hpp>
@@ -31,18 +31,16 @@ int main(int argc, char* argv[]) {
     disk::qml::viewmodels::LoginViewModel loginViewModel(&authService);
     disk::qml::viewmodels::RegisterViewModel registerViewModel(&authService);
 
-    disk::qml::app::AppContext appContext(
-        &configStore,
-        &tokenStore,
-        &apiClient,
-        &authApi,
-        &authService,
+    disk::qml::viewmodels::SessionViewModel sessionViewModel(
         &loginViewModel,
-        &registerViewModel
+        &tokenStore,
+        &authService
     );
 
     // --- QML engine setup ---
-    disk::qml::app::AppContext::SetInstance(&appContext);
+    disk::qml::viewmodels::LoginViewModel::SetInstance(&loginViewModel);
+    disk::qml::viewmodels::RegisterViewModel::SetInstance(&registerViewModel);
+    disk::qml::viewmodels::SessionViewModel::SetInstance(&sessionViewModel);
 
     QQmlApplicationEngine engine;
     QObject::connect(
