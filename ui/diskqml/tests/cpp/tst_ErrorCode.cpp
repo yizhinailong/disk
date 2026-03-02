@@ -1,10 +1,10 @@
 #include <QTest>
 
-#include <utils/AuthError.hpp>
+#include <utils/ErrorCode.hpp>
 
 using namespace disk::qml::utils;
 
-class tst_AuthError : public QObject {
+class tst_ErrorCode : public QObject {
     Q_OBJECT
 
 private slots:
@@ -93,5 +93,5 @@ private slots:
     }
 };
 
-QTEST_APPLESS_MAIN(tst_AuthError)
-#include "tst_AuthError.moc"
+QTEST_APPLESS_MAIN(tst_ErrorCode)
+#include "tst_ErrorCode.moc"

@@ -4,7 +4,7 @@
 
 #include <api/IAuthApi.hpp>
 #include <storage/TokenStore.hpp>
-#include <utils/AuthError.hpp>
+#include <utils/ErrorCode.hpp>
 
 namespace disk::qml::services {
 

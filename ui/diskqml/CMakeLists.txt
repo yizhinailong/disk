@@ -15,7 +15,6 @@ add_library(diskqml_core STATIC
     src/api/AuthApi.cpp
     src/services/AuthService.cpp
     src/storage/TokenStore.cpp
-    src/utils/AuthError.cpp
     src/utils/ConfigStore.cpp
     src/viewmodels/LoginViewModel.cpp
     src/viewmodels/RegisterViewModel.cpp
@@ -75,7 +74,7 @@ macro(diskqml_add_test TARGET SOURCE)
     add_test(NAME ${TARGET} COMMAND ${TARGET})
 endmacro()
 
-diskqml_add_test(tst_diskqml_autherror   tests/cpp/tst_AuthError.cpp)
+diskqml_add_test(tst_diskqml_errorcode   tests/cpp/tst_ErrorCode.cpp)
 diskqml_add_test(tst_diskqml_tokenstore  tests/cpp/tst_TokenStore.cpp)
 diskqml_add_test(tst_diskqml_authdtos    tests/cpp/tst_AuthDtos.cpp)
 diskqml_add_test(tst_diskqml_authservice tests/cpp/tst_AuthService.cpp)
