@@ -1,13 +1,17 @@
 #include "ApiClient.hpp"
 
+#include <QHttpHeaders>
 #include <QJsonDocument>
 #include <QNetworkRequest>
 #include <QRestReply>
+#include <chrono>
 
 namespace disk::qml::api {
 
     ApiClient::ApiClient(QObject* parent)
         : QObject(parent), m_nam(this), m_rest(&m_nam, this) {
+        m_factory.setTransferTimeout(std::chrono::milliseconds{10000});
+        m_factory.commonHeaders().append(QHttpHeaders::WellKnownHeader::Accept, "application/json");
     }
 
     auto ApiClient::SetBaseUrl(const QUrl& url) -> void {
@@ -20,7 +24,6 @@ namespace disk::qml::api {
 
     auto ApiClient::PostJson(const QString& path, const QJsonObject& body, QObject* ctx, PostJsonCallback cb) -> void {
         auto req = m_factory.createRequest(path);
-        req.setTransferTimeout(10000);
 
         m_rest.post(req, QJsonDocument(body), ctx, [cb = std::move(cb)](QRestReply& reply) {
             ApiReply r;
