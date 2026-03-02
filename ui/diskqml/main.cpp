@@ -1,6 +1,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QtQml>
+#include <QQuickStyle>
 
 #include <api/ApiClient.hpp>
 #include <api/AuthApi.hpp>
@@ -13,6 +14,7 @@
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
+    QQuickStyle::setStyle("Material");
 
     QCoreApplication::setOrganizationName("Disk");
     QCoreApplication::setApplicationName("diskqml");
