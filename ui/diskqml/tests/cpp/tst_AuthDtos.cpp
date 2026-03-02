@@ -3,7 +3,7 @@
 #include <QJsonValue>
 #include <QTest>
 
-#include <models/AuthDtos.hpp>
+#include <dtos/AuthDtos.hpp>
 
 using namespace disk::qml::models;
 

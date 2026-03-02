@@ -4,7 +4,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-#include <models/AuthDtos.hpp>
+#include <dtos/AuthDtos.hpp>
 
 #include "ApiClient.hpp"
 

@@ -5,7 +5,7 @@
 #include <functional>
 #include <optional>
 
-#include <models/AuthDtos.hpp>
+#include <dtos/AuthDtos.hpp>
 
 namespace disk::qml::api {
     class AuthApi;

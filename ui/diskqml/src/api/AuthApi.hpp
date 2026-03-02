@@ -4,7 +4,7 @@
 #include <QString>
 #include <functional>
 
-#include <models/AuthDtos.hpp>
+#include <dtos/AuthDtos.hpp>
 
 namespace disk::qml::api {
 

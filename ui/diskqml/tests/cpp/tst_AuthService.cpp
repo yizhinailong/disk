@@ -7,7 +7,7 @@
 #include <memory>
 
 #include <api/AuthApi.hpp>
-#include <models/AuthDtos.hpp>
+#include <dtos/AuthDtos.hpp>
 #include <services/AuthService.hpp>
 #include <services/TokenStore.hpp>
 

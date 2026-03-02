@@ -7,7 +7,7 @@
 
 #include <api/ApiClient.hpp>
 #include <api/AuthApi.hpp>
-#include <models/AuthDtos.hpp>
+#include <dtos/AuthDtos.hpp>
 
 using namespace disk::qml;
 
