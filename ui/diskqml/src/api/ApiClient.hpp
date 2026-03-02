@@ -1,34 +1,39 @@
 #pragma once
 
-#include "IApiClient.hpp"
-
 #include <QNetworkAccessManager>
 #include <QNetworkRequestFactory>
 #include <QObject>
 #include <QRestAccessManager>
+#include <functional>
+
+#include "ApiReply.hpp"
 
 namespace disk::qml::api {
 
+    using PostJsonCallback = std::function<void(ApiReply reply)>;
+
     /// REST client built on Qt 6.8 QRestAccessManager + QNetworkRequestFactory.
     /// Owns a QNetworkAccessManager and wraps it with QRestAccessManager.
-    class ApiClient final : public QObject, public IApiClient {
+    class ApiClient : public QObject {
         Q_OBJECT
 
     public:
         explicit ApiClient(QObject* parent = nullptr);
 
-        auto SetBaseUrl(const QUrl& url) -> void override;
-        auto SetBearerToken(const QString& token) -> void override;
+        virtual auto SetBaseUrl(const QUrl& url) -> void;
+        virtual auto SetBearerToken(const QString& token) -> void;
 
-        auto PostJson(const QString& path, const QJsonObject& body, QObject* ctx, PostJsonCallback cb) -> void override;
+        virtual auto PostJson(const QString& path, const QJsonObject& body, QObject* ctx, PostJsonCallback cb) -> void;
 
-        auto PostJsonWithBearerToken(
+        virtual auto PostJsonWithBearerToken(
             const QString& path,
             const QJsonObject& body,
             const QString& bearerToken,
             QObject* ctx,
             PostJsonCallback cb
-        ) -> void override;
+        ) -> void;
+
+        ~ApiClient() override = default;
 
     private:
         QNetworkAccessManager m_nam;

@@ -1,27 +1,34 @@
 #pragma once
 
-#include "IAuthApi.hpp"
+#include <QObject>
+#include <QString>
+#include <functional>
+
+#include <models/AuthDtos.hpp>
 
 namespace disk::qml::api {
 
-    class IApiClient;
+    using AuthApiCallback = std::function<void(models::ApiEnvelope envelope, QString networkError)>;
 
-    /// Concrete auth API implementation that delegates to IApiClient::PostJson.
-    class AuthApi final : public IAuthApi {
+    class ApiClient;
+
+    class AuthApi {
     public:
         /// @param client  Pointer to the API client (must outlive this object)
-        explicit AuthApi(IApiClient* client);
+        explicit AuthApi(ApiClient* client);
 
-        auto Register(const QString& username, const QString& email, const QString& password, QObject* ctx, AuthApiCallback cb) -> void override;
+        virtual auto Register(const QString& username, const QString& email, const QString& password, QObject* ctx, AuthApiCallback cb) -> void;
 
-        auto Login(const QString& account, const QString& password, QObject* ctx, AuthApiCallback cb) -> void override;
+        virtual auto Login(const QString& account, const QString& password, QObject* ctx, AuthApiCallback cb) -> void;
 
-        auto Refresh(const QString& refreshToken, QObject* ctx, AuthApiCallback cb) -> void override;
+        virtual auto Refresh(const QString& refreshToken, QObject* ctx, AuthApiCallback cb) -> void;
 
-        auto Logout(const QString& accessToken, QObject* ctx, AuthApiCallback cb) -> void override;
+        virtual auto Logout(const QString& accessToken, QObject* ctx, AuthApiCallback cb) -> void;
+
+        virtual ~AuthApi() = default;
 
     private:
-        IApiClient* m_client;
+        ApiClient* m_client;
     };
 
 } // namespace disk::qml::api

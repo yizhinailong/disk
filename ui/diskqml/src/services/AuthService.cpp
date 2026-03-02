@@ -2,7 +2,7 @@
 
 #include <QRegularExpression>
 
-#include <api/IAuthApi.hpp>
+#include <api/AuthApi.hpp>
 #include <services/TokenStore.hpp>
 #include <utils/ErrorCode.hpp>
 
@@ -12,7 +12,7 @@ namespace disk::qml::services {
     const QRegularExpression kEmailPattern(QStringLiteral("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"));
     const QRegularExpression kPasswordPattern(QStringLiteral("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,64}$"));
 
-    AuthService::AuthService(api::IAuthApi* authApi, TokenStore* tokenStore)
+    AuthService::AuthService(api::AuthApi* authApi, TokenStore* tokenStore)
         : m_auth_api(authApi), m_token_store(tokenStore) {
     }
 

@@ -5,9 +5,9 @@
 #include <functional>
 #include <memory>
 
+#include <api/ApiClient.hpp>
 #include <api/ApiReply.hpp>
 #include <api/AuthApi.hpp>
-#include <api/IApiClient.hpp>
 #include <models/AuthDtos.hpp>
 
 using namespace disk::qml;
@@ -15,7 +15,7 @@ using namespace disk::qml;
 // ---------------------------------------------------------------------------
 // FakeApiClient — injectable lambdas for PostJson / PostJsonWithBearerToken
 // ---------------------------------------------------------------------------
-class FakeApiClient : public api::IApiClient {
+class FakeApiClient : public api::ApiClient {
 public:
     std::function<void(const QString&, const QJsonObject&, QObject*, api::PostJsonCallback)> postJsonHandler;
     std::function<void(const QString&, const QJsonObject&, const QString&, QObject*, api::PostJsonCallback)> postJsonWithBearerTokenHandler;

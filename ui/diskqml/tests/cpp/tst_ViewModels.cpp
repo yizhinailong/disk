@@ -2,9 +2,10 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <functional>
 #include <memory>
 
-#include <api/IAuthApi.hpp>
+#include <api/AuthApi.hpp>
 #include <models/AuthDtos.hpp>
 #include <services/AuthService.hpp>
 #include <services/TokenStore.hpp>
@@ -14,10 +15,13 @@
 using namespace disk::qml;
 
 // ---------------------------------------------------------------------------
-// Fake IAuthApi — same pattern as tst_AuthService
 // ---------------------------------------------------------------------------
-class FakeAuthApi : public api::IAuthApi {
+class FakeAuthApi : public api::AuthApi {
 public:
+    FakeAuthApi()
+        : api::AuthApi(nullptr) {
+    }
+
     std::function<void(const QString&, const QString&, const QString&, QObject*, api::AuthApiCallback)> registerFn;
     std::function<void(const QString&, const QString&, QObject*, api::AuthApiCallback)> loginFn;
     std::function<void(const QString&, QObject*, api::AuthApiCallback)> refreshFn;

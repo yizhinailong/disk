@@ -5,10 +5,10 @@
 
 #include <models/AuthDtos.hpp>
 
-#include "IApiClient.hpp"
+#include "ApiClient.hpp"
 
 namespace disk::qml::api {
-    AuthApi::AuthApi(IApiClient* client)
+    AuthApi::AuthApi(ApiClient* client)
         : m_client(client) {
     }
 

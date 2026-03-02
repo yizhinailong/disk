@@ -8,7 +8,7 @@
 #include <models/AuthDtos.hpp>
 
 namespace disk::qml::api {
-    class IAuthApi;
+    class AuthApi;
 }
 
 namespace disk::qml::services {
@@ -24,7 +24,7 @@ namespace disk::qml::services {
         using RefreshCallback = std::function<void(std::optional<models::RefreshResultDto> result, QString errorMessage)>;
         using LogoutCallback = std::function<void(bool ok, QString errorMessage)>;
 
-        AuthService(api::IAuthApi* authApi, TokenStore* tokenStore);
+        AuthService(api::AuthApi* authApi, TokenStore* tokenStore);
 
         auto ValidateUsername(const QString& username) const -> bool;
         auto ValidateEmail(const QString& email) const -> bool;
@@ -40,7 +40,7 @@ namespace disk::qml::services {
         auto MapEnvelopeError(const models::ApiEnvelope& envelope) const -> QString;
         auto IsLocalLogoutSuccessCode(int code) const -> bool;
 
-        api::IAuthApi* m_auth_api;
+        api::AuthApi* m_auth_api;
         TokenStore* m_token_store;
     };
 
