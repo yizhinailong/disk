@@ -16,6 +16,7 @@
 #include "utils/ConfigMgr.hpp"
 #include "utils/HashUtil.hpp"
 #include "utils/RedisKeyPrefix.hpp"
+#include <json/writer.h>
 
 namespace disk::auth {
 
@@ -283,7 +284,11 @@ namespace disk::auth {
             log.setUserId(user_id);
             log.setAction("logout");
             log.setTargetId(0); // 登出操作无 target
-            log.setDetails("User logged out");
+            Json::Value details_json;
+            details_json["message"] = "User logged out";
+            Json::StreamWriterBuilder builder;
+            builder["indentation"] = "";
+            log.setDetails(Json::writeString(builder, details_json));
             log.setIpAddress(std::string(ip_address));
             log.setCreatedAt(trantor::Date::now());
 
