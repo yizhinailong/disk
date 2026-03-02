@@ -7,9 +7,9 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-#include <storage/TokenStore.hpp>
+#include <services/TokenStore.hpp>
 
-using namespace disk::qml::storage;
+using namespace disk::qml::services;
 
 class tst_TokenStore : public QObject {
     Q_OBJECT

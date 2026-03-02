@@ -5,7 +5,7 @@
 #include <QStandardPaths>
 #include <QString>
 
-namespace disk::qml::storage {
+namespace disk::qml::services {
 
     class TokenStore {
     public:
@@ -26,4 +26,4 @@ namespace disk::qml::storage {
         QString m_base_dir;
     };
 
-} // namespace disk::qml::storage
+} // namespace disk::qml::services

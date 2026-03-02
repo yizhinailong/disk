@@ -6,7 +6,7 @@
 #include <api/AuthApi.hpp>
 #include <app/AppContext.hpp>
 #include <services/AuthService.hpp>
-#include <storage/TokenStore.hpp>
+#include <services/TokenStore.hpp>
 #include <utils/ConfigStore.hpp>
 #include <viewmodels/LoginViewModel.hpp>
 #include <viewmodels/RegisterViewModel.hpp>
@@ -20,7 +20,7 @@ int main(int argc, char* argv[]) {
 
     // --- Dependency construction (order matters) ---
     disk::qml::utils::ConfigStore configStore;
-    disk::qml::storage::TokenStore tokenStore;
+    disk::qml::services::TokenStore tokenStore;
 
     disk::qml::api::ApiClient apiClient;
     apiClient.SetBaseUrl(configStore.ServerUrl());

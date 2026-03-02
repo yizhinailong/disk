@@ -9,12 +9,12 @@ find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 Network Test)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
-# --- diskqml_core static library (Wave 1: auth/api/storage/utils) ---
+# --- diskqml_core static library (Wave 1: auth/api/services/utils) ---
 add_library(diskqml_core STATIC
     src/api/ApiClient.cpp
     src/api/AuthApi.cpp
     src/services/AuthService.cpp
-    src/storage/TokenStore.cpp
+    src/services/TokenStore.cpp
     src/utils/ConfigStore.cpp
     src/viewmodels/LoginViewModel.cpp
     src/viewmodels/RegisterViewModel.cpp

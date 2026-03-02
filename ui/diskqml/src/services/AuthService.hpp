@@ -11,7 +11,7 @@ namespace disk::qml::api {
     class IAuthApi;
 }
 
-namespace disk::qml::storage {
+namespace disk::qml::services {
     class TokenStore;
 }
 
@@ -24,7 +24,7 @@ namespace disk::qml::services {
         using RefreshCallback = std::function<void(std::optional<models::RefreshResultDto> result, QString errorMessage)>;
         using LogoutCallback = std::function<void(bool ok, QString errorMessage)>;
 
-        AuthService(api::IAuthApi* authApi, storage::TokenStore* tokenStore);
+        AuthService(api::IAuthApi* authApi, TokenStore* tokenStore);
 
         auto ValidateUsername(const QString& username) const -> bool;
         auto ValidateEmail(const QString& email) const -> bool;
@@ -41,7 +41,7 @@ namespace disk::qml::services {
         auto IsLocalLogoutSuccessCode(int code) const -> bool;
 
         api::IAuthApi* m_auth_api;
-        storage::TokenStore* m_token_store;
+        TokenStore* m_token_store;
     };
 
 } // namespace disk::qml::services

@@ -5,11 +5,11 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
-#include <QTimeZone>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QTimeZone>
 
-namespace disk::qml::storage {
+namespace disk::qml::services {
 
     static constexpr int kJsonVersion = 1;
     static const QString kFileName = QStringLiteral("token.json");
@@ -207,4 +207,4 @@ namespace disk::qml::storage {
         return QDateTime::currentDateTimeUtc().addSecs(skewSeconds) < expiresAt;
     }
 
-} // namespace disk::qml::storage
+} // namespace disk::qml::services

@@ -1,20 +1,21 @@
 #include "AppContext.hpp"
 
+#include <QJSEngine>
+#include <QQmlEngine>
+
 #include <api/ApiClient.hpp>
 #include <api/AuthApi.hpp>
 #include <services/AuthService.hpp>
-#include <storage/TokenStore.hpp>
+#include <services/TokenStore.hpp>
 #include <utils/ConfigStore.hpp>
 #include <viewmodels/LoginViewModel.hpp>
 #include <viewmodels/RegisterViewModel.hpp>
-#include <QJSEngine>
-#include <QQmlEngine>
 
 namespace disk::qml::app {
 
     AppContext::AppContext(
         utils::ConfigStore* configStore,
-        storage::TokenStore* tokenStore,
+        services::TokenStore* tokenStore,
         api::ApiClient* apiClient,
         api::AuthApi* authApi,
         services::AuthService* authService,

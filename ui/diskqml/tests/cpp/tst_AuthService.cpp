@@ -1,14 +1,14 @@
 #include <QCoreApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QTest>
 #include <QTemporaryDir>
+#include <QTest>
 #include <memory>
 
 #include <api/IAuthApi.hpp>
 #include <models/AuthDtos.hpp>
 #include <services/AuthService.hpp>
-#include <storage/TokenStore.hpp>
+#include <services/TokenStore.hpp>
 
 using namespace disk::qml;
 
@@ -99,7 +99,7 @@ class tst_AuthService : public QObject {
 private:
     FakeAuthApi m_fake_api;
     std::unique_ptr<QTemporaryDir> m_temp_dir;
-    std::unique_ptr<storage::TokenStore> m_store;
+    std::unique_ptr<services::TokenStore> m_store;
     services::AuthService* m_service = nullptr;
 
 private slots:
@@ -112,7 +112,7 @@ private slots:
     void init() {
         m_temp_dir = std::make_unique<QTemporaryDir>();
         QVERIFY(m_temp_dir->isValid());
-        m_store = std::make_unique<storage::TokenStore>(m_temp_dir->path());
+        m_store = std::make_unique<services::TokenStore>(m_temp_dir->path());
         m_store->Clear();
         m_fake_api.registerFn = nullptr;
         m_fake_api.loginFn = nullptr;

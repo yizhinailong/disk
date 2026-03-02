@@ -2,14 +2,11 @@
 
 #include <QObject>
 #include <QString>
+
 #include <QtQml/qqmlregistration.h>
 
 namespace disk::qml::utils {
     class ConfigStore;
-}
-
-namespace disk::qml::storage {
-    class TokenStore;
 }
 
 namespace disk::qml::api {
@@ -18,8 +15,9 @@ namespace disk::qml::api {
 } // namespace disk::qml::api
 
 namespace disk::qml::services {
+    class TokenStore;
     class AuthService;
-}
+} // namespace disk::qml::services
 
 namespace disk::qml::viewmodels {
     class LoginViewModel;
@@ -47,7 +45,7 @@ namespace disk::qml::app {
     public:
         explicit AppContext(
             utils::ConfigStore* configStore,
-            storage::TokenStore* tokenStore,
+            services::TokenStore* tokenStore,
             api::ApiClient* apiClient,
             api::AuthApi* authApi,
             services::AuthService* authService,
@@ -75,7 +73,7 @@ namespace disk::qml::app {
         auto UpdateIsLoggedIn() -> void;
 
         utils::ConfigStore* m_config_store;
-        storage::TokenStore* m_token_store;
+        services::TokenStore* m_token_store;
         api::ApiClient* m_api_client;
         api::AuthApi* m_auth_api;
         services::AuthService* m_auth_service;
