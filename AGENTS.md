@@ -24,7 +24,6 @@ disk/
 ├── ui/diskqml/             # Qt/QML Desktop Client
 │   ├── src/                # C++ backend layer (api, services, viewmodels)
 │   ├── qml/                # QML presentation layer (views, components)
-│   └── tests/              # Qt Test (C++) business logic tests
 ├── test/                   # GTest unit tests
 ├── docs/                   # 设计文档 (00-06)
 └── sql/                    # DB init scripts
