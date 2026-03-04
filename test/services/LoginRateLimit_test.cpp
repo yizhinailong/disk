@@ -11,19 +11,13 @@
 
 #include <gtest/gtest.h>
 
-#include "services/AuthService.hpp"
-#include "utils/ErrorCode.hpp"
-
 namespace {
 
-    using disk::auth::AuthService;
-    using disk::error::Code;
-
-    TEST(LoginRateLimit, DISABLED_RedisRequired_FourAttempts_Allowed) {
+    TEST(LoginRateLimit, DISABLED_RedisRequiredFourAttemptsAllowed) {
         // 【需要 Redis 环境】4 次登录尝试允许通过
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
         // 测试步骤：
         // 1. 创建 AuthService 实例
         // 2. 模拟同一 IP 地址的 4 次登录尝试
@@ -33,11 +27,11 @@ namespace {
         SUCCEED() << "测试已跳过：需要 Redis 环境";
     }
 
-    TEST(LoginRateLimit, DISABLED_RedisRequired_FiveAttempts_Blocked) {
+    TEST(LoginRateLimit, DISABLED_RedisRequiredFiveAttemptsBlocked) {
         // 【需要 Redis 环境】5 次登录尝试被阻止
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
         // 测试步骤：
         // 1. 创建 AuthService 实例
         // 2. 模拟同一 IP 地址的 5 次登录尝试
@@ -47,11 +41,11 @@ namespace {
         SUCCEED() << "测试已跳过：需要 Redis 环境";
     }
 
-    TEST(LoginRateLimit, DISABLED_RedisRequired_AfterReset_Allowed) {
+    TEST(LoginRateLimit, DISABLED_RedisRequiredAfterResetAllowed) {
         // 【需要 Redis 环境】5 分钟后重置允许登录
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
         // 测试步骤：
         // 1. 创建 AuthService 实例
         // 2. 模拟同一 IP 地址的 5 次登录尝试（触发限制）
@@ -62,11 +56,11 @@ namespace {
         SUCCEED() << "测试已跳过：需要 Redis 环境";
     }
 
-    TEST(LoginRateLimit, DISABLED_RedisRequired_SuccessClearsCounter) {
+    TEST(LoginRateLimit, DISABLED_RedisRequiredSuccessClearsCounter) {
         // 【需要 Redis 环境】成功登录清除计数器
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
         // 测试步骤：
         // 1. 创建 AuthService 实例
         // 2. 模拟同一 IP 地址的 3 次失败登录尝试
@@ -77,11 +71,11 @@ namespace {
         SUCCEED() << "测试已跳过：需要 Redis 环境";
     }
 
-    TEST(LoginRateLimit, DISABLED_RedisRequired_DifferentIPs_Independent) {
+    TEST(LoginRateLimit, DISABLED_RedisRequiredDifferentIPsIndependent) {
         // 【需要 Redis 环境】不同 IP 地址独立计数
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
         // 测试步骤：
         // 1. 创建 AuthService 实例
         // 2. 模拟 IP1 的 5 次登录尝试（触发限制）
@@ -92,11 +86,11 @@ namespace {
         SUCCEED() << "测试已跳过：需要 Redis 环境";
     }
 
-    TEST(LoginRateLimit, DISABLED_RedisRequired_RedisDown_FailsOpen) {
+    TEST(LoginRateLimit, DISABLED_RedisRequiredRedisDownFailsOpen) {
         // 【需要 Redis 环境】Redis 宕机时允许登录（Fail-Open）
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
         // 测试步骤：
         // 1. 创建 AuthService 实例
         // 2. 模拟 Redis 连接失败场景
