@@ -45,6 +45,7 @@ qt_add_qml_module(appdiskqml
         qml/views/LoginView.qml
         qml/views/RegisterView.qml
         qml/views/HomePlaceholder.qml
+        qml/views/MainWindowView.qml
 )
 
 target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/viewmodels)
