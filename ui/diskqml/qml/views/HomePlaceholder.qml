@@ -10,7 +10,6 @@
  */
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls.Material
 import QtQuick.Layouts
 import Disk 1.0
 
@@ -50,8 +49,17 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.topMargin: 32
                 
-                Material.background: "#F44336"
-                Material.foreground: "#FFFFFF"
+                background: Rectangle {
+                    color: "#F44336"
+                    radius: 4
+                }
+                contentItem: Text {
+                    text: logoutButton.text
+                    color: "#FFFFFF"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    font.pixelSize: 14
+                }
                 
                 onClicked: {
                     SessionViewModel.logout()

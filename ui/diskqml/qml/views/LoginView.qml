@@ -10,7 +10,6 @@
  */
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls.Material
 import QtQuick.Layouts
 import Disk 1.0
 
@@ -103,8 +102,17 @@ Item {
                 Layout.topMargin: 16
                 enabled: LoginViewModel.canSubmit && !LoginViewModel.loading
                 
-                Material.background: "#2196F3"
-                Material.foreground: "#FFFFFF"
+                background: Rectangle {
+                    color: loginButton.enabled ? "#2196F3" : "#BDBDBD"
+                    radius: 4
+                }
+                contentItem: Text {
+                    text: loginButton.text
+                    color: "#FFFFFF"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    font.pixelSize: 14
+                }
                 
                 onClicked: {
                     LoginViewModel.submit()
@@ -117,7 +125,6 @@ Item {
                 text: qsTr("创建账号")
                 Layout.alignment: Qt.AlignHCenter
                 flat: true
-                Material.foreground: "#2196F3"
                 enabled: !LoginViewModel.loading
                 onClicked: root.registerRequested()
             }

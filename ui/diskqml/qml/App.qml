@@ -10,7 +10,6 @@
  */
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls.Material
 import Disk 1.0
 import "views"
 
@@ -20,9 +19,6 @@ ApplicationWindow {
     width: 960
     height: 600
     title: qsTr("Disk - 云盘客户端")
-
-    Material.theme: Material.Light
-    Material.accent: "#2196F3"
 
     property string prefillAccount: ""
 
