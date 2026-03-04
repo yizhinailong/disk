@@ -24,7 +24,7 @@
 │            │                                                        │
 │            │                                                        │
 │            ├────────────────────────────────────────────────────────┤
-│            │                   传输面板 (0-200px)                    │
+│            │                   (无固定面板)                        │
 ├────────────┴────────────────────────────────────────────────────────┤
 │                         状态栏 (32px)                                 │
 └─────────────────────────────────────────────────────────────────────┘
@@ -53,20 +53,25 @@
 
 **内容结构**:
 ```
+文件模式:
 ┌──────────────────┐
+│ 首页             │
 │                  │
-│  🏠 全部文件      │  <- 导航项
-│  ⭐ 收藏夹       │
-│  📤 传输列表      │
-│  🗑️ 回收站       │
-│  🔗 我的分享      │
+│ 我的文件         │
+│ 回收站           │
 │                  │
-│  ──────────────  │  <- 分隔线
+│ 传输             │  (点击切换到传输模式)
+└──────────────────┘
+
+传输模式:
+┌──────────────────┐
+│ 首页             │
 │                  │
-│  📁 文档         │  <- 快速访问
-│  📁 图片         │
-│  📁 视频         │
+│ 上传             │
+│ 下载             │
+│ 分享             │
 │                  │
+│ 文件             │  (点击切换到文件模式)
 └──────────────────┘
 ```
 
@@ -74,7 +79,17 @@
 - 导航项使用图标+文字
 - 选中项高亮背景
 - 悬停显示背景色
-- 快速访问区域可折叠
+- 侧边栏支持两种模式切换：文件模式和传输模式
+- 文件模式：首页、我的文件、回收站，底部切换按钮
+- 传输模式：首页、上传、下载、分享，底部切换按钮
+- ~~快速访问区域~~ (已移除，统一通过我的文件浏览)
+
+**已移除的导航项**:
+- 全部文件 → 合并为我的文件
+- 收藏夹 → 暂不实现
+- 传输列表 → 改为传输模式下的上传/下载页面
+- 我的分享 → 改为传输模式下的分享页面
+- 快速访问 → 暂不实现
 
 ### 工具栏设计
 
@@ -120,12 +135,22 @@ QMainWindow
 │   └── QHBoxLayout
 │       ├── QWidget (侧边栏 m_sideBar)
 │       └── QStackedWidget (主内容区 m_contentStack)
-│           ├── QWidget (网格视图页)
-│           ├── QWidget (列表视图页)
+│           ├── QWidget (首页页)
+│           ├── QWidget (我的文件页)
+│           ├── QWidget (回收站页)
+│           ├── QWidget (上传页)
+│           ├── QWidget (下载页)
+│           ├── QWidget (分享页)
 │           └── QWidget (详情视图页)
-├── QWidget (传输面板 m_transferPanel)
 └── QStatusBar (状态栏)
 ```
+
+**页面设计文档**:
+- [首页设计](home.md) - 首页模块设计
+- [文件列表页面设计](file-list.md) - 文件列表设计
+- [传输面板设计](transfer-panel.md) - 上传下载设计
+- [回收站设计](trash.md) - 回收站设计
+- [分享管理设计](share.md) - 分享功能设计
 
 ### 组件实现
 
@@ -146,9 +171,8 @@ private:
     
 private:
     QWidget* m_titleBar;        // 自定义标题栏
-    QWidget* m_sideBar;         // 侧边栏
+    QWidget* m_sideBar;         // 侧边栏（支持文件/传输模式切换）
     QStackedWidget* m_contentStack;  // 主内容区堆叠布局
-    QWidget* m_transferPanel;   // 传输面板
     QStatusBar* m_statusBar;    // 状态栏
 };
 ```
@@ -187,14 +211,14 @@ public:
     explicit SideBar(QWidget* parent = nullptr);
     
 private:
-    void setupNavigationItems();
-    void setupQuickAccess();
+    void setupFileModeItems();    // 文件模式导航项
+    void setupTransferModeItems(); // 传输模式导航项
+    void switchMode();            // 切换文件/传输模式
     
-private:
+    private:
     QVBoxLayout* m_mainLayout;
     QButtonGroup* m_navButtonGroup;  // 导航按钮组
-    QFrame* m_separator;              // 分隔线
-    QWidget* m_quickAccessWidget;     // 快速访问区域
+    bool m_isTransferMode;           // 当前是否为传输模式
 };
 ```
 
