@@ -19,13 +19,25 @@ Item {
             Layout.fillHeight: true
             Layout.preferredWidth: root.width * 0.45
             color: palette.window
-            
+
             // Background gradient
             Rectangle {
                 anchors.fill: parent
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: Qt.tint(palette.window, Qt.rgba(palette.highlight.r, palette.highlight.g, palette.highlight.b, 0.15)) }
-                    GradientStop { position: 1.0; color: Qt.tint(palette.window, Qt.rgba(palette.highlight.r, palette.highlight.g, palette.highlight.b, 0.05)) }
+                    GradientStop {
+                        position: 0.0
+                        color: Qt.tint(palette.window,
+                                       Qt.rgba(palette.highlight.r,
+                                               palette.highlight.g,
+                                               palette.highlight.b, 0.15))
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: Qt.tint(palette.window,
+                                       Qt.rgba(palette.highlight.r,
+                                               palette.highlight.g,
+                                               palette.highlight.b, 0.05))
+                    }
                 }
             }
 
@@ -138,7 +150,9 @@ Item {
                         Label {
                             text: qsTr("登录你的账号")
                             font.pixelSize: 14
-                            color: Qt.rgba(palette.windowText.r, palette.windowText.g, palette.windowText.b, 0.6)
+                            color: Qt.rgba(palette.windowText.r,
+                                           palette.windowText.g,
+                                           palette.windowText.b, 0.6)
                             Layout.alignment: Qt.AlignHCenter
                         }
                     }
@@ -148,7 +162,9 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 44
                         radius: 22
-                        color: Qt.rgba(palette.windowText.r, palette.windowText.g, palette.windowText.b, 0.05)
+                        color: Qt.rgba(palette.windowText.r,
+                                       palette.windowText.g,
+                                       palette.windowText.b, 0.05)
 
                         RowLayout {
                             anchors.fill: parent
@@ -213,8 +229,16 @@ Item {
 
                             background: Rectangle {
                                 radius: 12
-                                color: accountField.activeFocus ? palette.base : Qt.rgba(palette.windowText.r, palette.windowText.g, palette.windowText.b, 0.03)
-                                border.color: accountField.activeFocus ? palette.highlight : Qt.rgba(palette.windowText.r, palette.windowText.g, palette.windowText.b, 0.1)
+                                color: accountField.activeFocus ? palette.base : Qt.rgba(
+                                                                      palette.windowText.r,
+                                                                      palette.windowText.g,
+                                                                      palette.windowText.b,
+                                                                      0.03)
+                                border.color: accountField.activeFocus ? palette.highlight : Qt.rgba(
+                                                                             palette.windowText.r,
+                                                                             palette.windowText.g,
+                                                                             palette.windowText.b,
+                                                                             0.1)
                                 border.width: accountField.activeFocus ? 2 : 1
                             }
                             leftPadding: 16
@@ -246,7 +270,11 @@ Item {
 
                             background: Rectangle {
                                 radius: 12
-                                color: passwordField.activeFocus ? palette.base : Qt.rgba(palette.windowText.r, palette.windowText.g, palette.windowText.b, 0.03)
+                                color: passwordField.activeFocus ? palette.base : Qt.rgba(
+                                                                       palette.windowText.r,
+                                                                       palette.windowText.g,
+                                                                       palette.windowText.b,
+                                                                       0.03)
                                 border.color: passwordField.activeFocus ? palette.highlight : Qt.rgba(palette.windowText.r, palette.windowText.g, palette.windowText.b, 0.1)
                                 border.width: passwordField.activeFocus ? 2 : 1
                             }
@@ -273,14 +301,18 @@ Item {
                                 width: 36
                                 height: 36
                                 enabled: !LoginViewModel.loading
-                                
+
                                 background: Item {}
 
                                 contentItem: Text {
                                     anchors.centerIn: parent
                                     text: "👁"
                                     font.pixelSize: 16
-                                    color: showPasswordBtn.checked ? palette.highlight : Qt.rgba(palette.windowText.r, palette.windowText.g, palette.windowText.b, 0.4)
+                                    color: showPasswordBtn.checked ? palette.highlight : Qt.rgba(
+                                                                         palette.windowText.r,
+                                                                         palette.windowText.g,
+                                                                         palette.windowText.b,
+                                                                         0.4)
                                 }
                             }
                         }
@@ -308,36 +340,42 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 52
                         Layout.topMargin: 8
-                        enabled: LoginViewModel.canSubmit && !LoginViewModel.loading
-                        
+                        enabled: LoginViewModel.canSubmit
+                                 && !LoginViewModel.loading
+
                         background: Rectangle {
                             radius: 12
-                            color: loginButton.enabled ? palette.highlight : Qt.rgba(palette.highlight.r, palette.highlight.g, palette.highlight.b, 0.5)
+                            color: loginButton.enabled ? palette.highlight : Qt.rgba(
+                                                             palette.highlight.r,
+                                                             palette.highlight.g,
+                                                             palette.highlight.b,
+                                                             0.5)
                         }
 
                         contentItem: Item {
                             anchors.fill: parent
-                            
+
                             RowLayout {
                                 anchors.centerIn: parent
                                 spacing: 8
-                                
+
                                 BusyIndicator {
                                     running: LoginViewModel.loading
                                     visible: LoginViewModel.loading
                                     Layout.preferredWidth: 20
                                     Layout.preferredHeight: 20
                                 }
-                                
+
                                 Text {
-                                    text: LoginViewModel.loading ? qsTr("登录中...") : qsTr("登 录")
+                                    text: LoginViewModel.loading ? qsTr("登录中...") : qsTr(
+                                                                       "登 录")
                                     color: palette.highlightedText
                                     font.pixelSize: 16
                                     font.bold: true
                                 }
                             }
                         }
-                        
+
                         onClicked: {
                             LoginViewModel.submit()
                         }
