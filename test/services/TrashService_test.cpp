@@ -9,8 +9,6 @@
  *
  */
 
-#include "services/TrashService.hpp"
-
 #include <gtest/gtest.h>
 
 #include "dtos/TrashDto.hpp"
@@ -45,11 +43,11 @@ namespace disk::trash {
 
             auto json = response.ToJson();
 
-            EXPECT_EQ(json["id"].asUInt64(), 1u);
+            EXPECT_EQ(json["id"].asUInt64(), 1U);
             EXPECT_EQ(json["type"].asString(), "file");
-            EXPECT_EQ(json["original_id"].asUInt64(), 100u);
+            EXPECT_EQ(json["original_id"].asUInt64(), 100U);
             EXPECT_EQ(json["name"].asString(), "document.pdf");
-            EXPECT_EQ(json["size"].asUInt64(), 2048u);
+            EXPECT_EQ(json["size"].asUInt64(), 2048U);
             EXPECT_EQ(json["original_path"].asString(), "/docs/document.pdf");
         }
 
@@ -67,7 +65,7 @@ namespace disk::trash {
             auto json = response.ToJson();
 
             EXPECT_EQ(json["type"].asString(), "folder");
-            EXPECT_EQ(json["size"].asUInt64(), 0u);
+            EXPECT_EQ(json["size"].asUInt64(), 0U);
         }
 
         // ==================== TrashService Batch Result Tests ====================
@@ -84,9 +82,9 @@ namespace disk::trash {
 
             auto json = item.ToJson();
 
-            EXPECT_EQ(json["trash_id"].asUInt64(), 10u);
+            EXPECT_EQ(json["trash_id"].asUInt64(), 10U);
             EXPECT_EQ(json["status"].asString(), "success");
-            EXPECT_EQ(json["file_id"].asUInt64(), 500u);
+            EXPECT_EQ(json["file_id"].asUInt64(), 500U);
             EXPECT_EQ(json["path"].asString(), "/restored_docs/report.pdf");
             EXPECT_FALSE(json.isMember("error"));
             EXPECT_FALSE(json.isMember("freed_space"));
@@ -101,9 +99,9 @@ namespace disk::trash {
 
             auto json = item.ToJson();
 
-            EXPECT_EQ(json["trash_id"].asUInt64(), 20u);
+            EXPECT_EQ(json["trash_id"].asUInt64(), 20U);
             EXPECT_EQ(json["status"].asString(), "success");
-            EXPECT_EQ(json["folder_id"].asUInt64(), 600u);
+            EXPECT_EQ(json["folder_id"].asUInt64(), 600U);
             EXPECT_EQ(json["path"].asString(), "/restored_folder/subfolder/");
         }
 
@@ -115,9 +113,9 @@ namespace disk::trash {
 
             auto json = item.ToJson();
 
-            EXPECT_EQ(json["trash_id"].asUInt64(), 30u);
+            EXPECT_EQ(json["trash_id"].asUInt64(), 30U);
             EXPECT_EQ(json["status"].asString(), "success");
-            EXPECT_EQ(json["freed_space"].asUInt64(), 4096u);
+            EXPECT_EQ(json["freed_space"].asUInt64(), 4096U);
             EXPECT_FALSE(json.isMember("file_id"));
             EXPECT_FALSE(json.isMember("error"));
         }
@@ -133,7 +131,7 @@ namespace disk::trash {
 
             auto json = item.ToJson();
 
-            EXPECT_EQ(json["trash_id"].asUInt64(), 40u);
+            EXPECT_EQ(json["trash_id"].asUInt64(), 40U);
             EXPECT_EQ(json["status"].asString(), "failed");
             ASSERT_TRUE(json.isMember("error"));
             EXPECT_EQ(
@@ -237,7 +235,7 @@ namespace disk::trash {
 
             ASSERT_TRUE(json.isMember("summary"));
             ASSERT_TRUE(json.isMember("results"));
-            EXPECT_EQ(json["results"].size(), 3u);
+            EXPECT_EQ(json["results"].size(), 3U);
             EXPECT_EQ(json["results"][0]["status"].asString(), "success");
             EXPECT_EQ(json["results"][1]["status"].asString(), "success");
             EXPECT_EQ(json["results"][2]["status"].asString(), "failed");
@@ -266,9 +264,9 @@ namespace disk::trash {
 
             ASSERT_TRUE(json.isMember("summary"));
             ASSERT_TRUE(json.isMember("results"));
-            EXPECT_EQ(json["results"].size(), 2u);
-            EXPECT_EQ(json["results"][0]["freed_space"].asUInt64(), 1024u);
-            EXPECT_EQ(json["results"][1]["freed_space"].asUInt64(), 2048u);
+            EXPECT_EQ(json["results"].size(), 2U);
+            EXPECT_EQ(json["results"][0]["freed_space"].asUInt64(), 1024U);
+            EXPECT_EQ(json["results"][1]["freed_space"].asUInt64(), 2048U);
         }
 
         // ==================== TrashService DeleteAll Response Tests ====================
@@ -283,14 +281,14 @@ namespace disk::trash {
             auto json = response.ToJson();
 
             EXPECT_EQ(json["deleted_count"].asInt(), 15);
-            EXPECT_EQ(json["freed_space"].asUInt64(), 102400u);
+            EXPECT_EQ(json["freed_space"].asUInt64(), 102400U);
         }
 
         TEST_F(TrashServiceDeleteAllTest, DeleteAllResponseDefaults) {
             DeleteAllResponse response;
 
             EXPECT_EQ(response.deleted_count, 0);
-            EXPECT_EQ(response.freed_space, 0u);
+            EXPECT_EQ(response.freed_space, 0U);
         }
 
         TEST_F(TrashServiceDeleteAllTest, DeleteAllEmptyTrash) {
@@ -301,7 +299,7 @@ namespace disk::trash {
             auto json = response.ToJson();
 
             EXPECT_EQ(json["deleted_count"].asInt(), 0);
-            EXPECT_EQ(json["freed_space"].asUInt64(), 0u);
+            EXPECT_EQ(json["freed_space"].asUInt64(), 0U);
         }
 
         // ==================== TrashService Path Computation Tests ====================
@@ -377,7 +375,6 @@ namespace disk::trash {
 
         TEST_F(TrashServiceAutoRenameTest, NoExtensionFileRename) {
             // Files without extension should still get renamed: filename (n)
-            std::string original = "Makefile";
             std::string renamed = "Makefile (1)";
 
             EXPECT_TRUE(renamed.find(" (1)") != std::string::npos);

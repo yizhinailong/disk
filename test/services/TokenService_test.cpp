@@ -19,7 +19,6 @@
 
 #include <chrono>
 #include <string>
-#include <utility>
 
 #include <gtest/gtest.h>
 #include <jwt-cpp/jwt.h>
@@ -30,10 +29,9 @@
 namespace {
 
     using disk::error::Code;
-    using disk::services::ShareTokenClaims;
     using disk::services::TokenService;
 
-    static constexpr const char* TEST_JWT_SECRET = "test_secret_key_for_share_token_32b";
+    constexpr const char* TEST_JWT_SECRET = "test_secret_key_for_share_token_32b";
 
     // ================================================================================
     // 统一 TokenService 分享令牌静态 API 测试
@@ -46,7 +44,7 @@ namespace {
      * - 静态方法，接受 jwt_secret, share_code, share_id
      * - 返回 Result<std::string>
      */
-    TEST(TokenServiceShareTest, GenerateShareToken_ValidInput_ReturnsToken) {
+    TEST(TokenServiceShareTest, GenerateShareTokenValidInputReturnsToken) {
         std::string jwt_secret = TEST_JWT_SECRET;
         std::string share_code = "AbCd12";
         uint64_t share_id = 12345;
@@ -66,7 +64,7 @@ namespace {
      * - claims: share_code, share_id (subject), jti
      * - TTL = 3600 秒
      */
-    TEST(TokenServiceShareTest, GenerateShareToken_ValidInput_CorrectClaims) {
+    TEST(TokenServiceShareTest, GenerateShareTokenValidInputCorrectClaims) {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
         std::string jwt_secret = TEST_JWT_SECRET;
@@ -93,7 +91,7 @@ namespace {
      * - 静态方法，接受 jwt_secret, token
      * - 返回 Result<ShareTokenClaims>
      */
-    TEST(TokenServiceShareTest, VerifyShareToken_ValidToken_ReturnsClaims) {
+    TEST(TokenServiceShareTest, VerifyShareTokenValidTokenReturnsClaims) {
         std::string jwt_secret = TEST_JWT_SECRET;
         std::string share_code = "AbCd12";
         uint64_t share_id = 12345;
@@ -112,7 +110,7 @@ namespace {
     /**
      * @brief 测试空令牌验证返回 TokenMalformed 错误
      */
-    TEST(TokenServiceShareTest, VerifyShareToken_EmptyToken_ReturnsMalformedError) {
+    TEST(TokenServiceShareTest, VerifyShareTokenEmptyTokenReturnsMalformedError) {
         std::string jwt_secret = TEST_JWT_SECRET;
         std::string empty_token;
 
@@ -125,7 +123,7 @@ namespace {
     /**
      * @brief 测试非法格式的令牌返回 TokenMalformed 错误
      */
-    TEST(TokenServiceShareTest, VerifyShareToken_InvalidBase64Token_ReturnsMalformedError) {
+    TEST(TokenServiceShareTest, VerifyShareTokenInvalidBase64TokenReturnsMalformedError) {
         std::string jwt_secret = TEST_JWT_SECRET;
         std::string invalid_token = "not.a.valid.jwt";
 
@@ -138,7 +136,7 @@ namespace {
     /**
      * @brief 测试错误密钥验证返回 TokenMalformed 错误
      */
-    TEST(TokenServiceShareTest, VerifyShareToken_WrongSecret_ReturnsMalformedError) {
+    TEST(TokenServiceShareTest, VerifyShareTokenWrongSecretReturnsMalformedError) {
         std::string jwt_secret = TEST_JWT_SECRET;
         std::string wrong_secret = "wrong_secret_key_for_share_token_";
         std::string share_code = "AbCd12";
@@ -156,7 +154,7 @@ namespace {
     /**
      * @brief 测试过期令牌返回 TokenExpired 错误
      */
-    TEST(TokenServiceShareTest, VerifyShareToken_ExpiredToken_ReturnsTokenExpiredError) {
+    TEST(TokenServiceShareTest, VerifyShareTokenExpiredTokenReturnsTokenExpiredError) {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
         auto now = std::chrono::system_clock::now();
@@ -183,7 +181,7 @@ namespace {
     /**
      * @brief 测试错误令牌类型返回 TokenWrongType 错误
      */
-    TEST(TokenServiceShareTest, VerifyShareToken_WrongTokenType_ReturnsTokenWrongTypeError) {
+    TEST(TokenServiceShareTest, VerifyShareTokenWrongTokenTypeReturnsTokenWrongTypeError) {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
         auto now = std::chrono::system_clock::now();
@@ -209,7 +207,7 @@ namespace {
     /**
      * @brief 测试错误签发者返回 TokenMalformed 错误
      */
-    TEST(TokenServiceShareTest, VerifyShareToken_WrongIssuer_ReturnsMalformedError) {
+    TEST(TokenServiceShareTest, VerifyShareTokenWrongIssuerReturnsMalformedError) {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
         auto now = std::chrono::system_clock::now();
@@ -235,7 +233,7 @@ namespace {
     /**
      * @brief 测试统一 TokenService 是否提供 ExtractShareTokenHash 静态方法
      */
-    TEST(TokenServiceShareTest, ExtractShareTokenHash_ValidToken_ReturnsHash) {
+    TEST(TokenServiceShareTest, ExtractShareTokenHashValidTokenReturnsHash) {
         std::string jwt_secret = TEST_JWT_SECRET;
         std::string share_code = "AbCd12";
         uint64_t share_id = 12345;
@@ -252,7 +250,7 @@ namespace {
     /**
      * @brief 测试提取空令牌哈希返回错误
      */
-    TEST(TokenServiceShareTest, ExtractShareTokenHash_EmptyToken_ReturnsError) {
+    TEST(TokenServiceShareTest, ExtractShareTokenHashEmptyTokenReturnsError) {
         std::string empty_token;
 
         auto hash_result = TokenService::ExtractShareTokenHash(empty_token);
@@ -265,7 +263,7 @@ namespace {
      *
      * 契约要求：TTL = 3600 秒（1小时）
      */
-    TEST(TokenServiceShareTest, GetShareTokenExpireSeconds_Returns3600) {
+    TEST(TokenServiceShareTest, GetShareTokenExpireSecondsReturns3600) {
         auto expire_seconds = TokenService::GetShareTokenExpireSeconds();
 
         EXPECT_GT(expire_seconds, 0) << "Expire seconds should be positive";
@@ -275,7 +273,7 @@ namespace {
     /**
      * @brief 测试相同输入生成的令牌有不同的 JTI
      */
-    TEST(TokenServiceShareTest, GenerateShareToken_SameInput_DifferentJtis) {
+    TEST(TokenServiceShareTest, GenerateShareTokenSameInputDifferentJtis) {
         std::string jwt_secret = TEST_JWT_SECRET;
         std::string share_code = "AbCd12";
         uint64_t share_id = 12345;
@@ -298,7 +296,7 @@ namespace {
     /**
      * @brief 测试不同 share_code 生成不同的令牌
      */
-    TEST(TokenServiceShareTest, GenerateShareToken_DifferentShareCodes_DifferentTokens) {
+    TEST(TokenServiceShareTest, GenerateShareTokenDifferentShareCodesDifferentTokens) {
         std::string jwt_secret = TEST_JWT_SECRET;
         uint64_t share_id = 12345;
 
@@ -324,7 +322,7 @@ namespace {
      *
      * 此测试断言：有效的分享令牌在静态验证中不会返回 TokenRevoked
      */
-    TEST(TokenServiceShareTest, VerifyShareToken_ValidToken_NeverReturnsTokenRevoked) {
+    TEST(TokenServiceShareTest, VerifyShareTokenValidTokenNeverReturnsTokenRevoked) {
         std::string jwt_secret = TEST_JWT_SECRET;
         std::string share_code = "Revoke1";
         uint64_t share_id = 99999;
@@ -351,7 +349,7 @@ namespace {
      * 实际的撤销检查（VerifyShareTokenWithRedis）需要 Redis 环境，
      * 此测试验证错误码本身的定义。
      */
-    TEST(TokenServiceShareTest, TokenRevokedErrorCode_ContractDefined) {
+    TEST(TokenServiceShareTest, TokenRevokedErrorCodeContractDefined) {
         // 验证 TokenRevoked 错误码存在
         auto http_status = disk::error::GetHttpStatus(Code::TokenRevoked);
         EXPECT_EQ(http_status, drogon::k401Unauthorized);
@@ -381,7 +379,7 @@ namespace {
      * - claims: share_code, share_id (subject), jti
      * - TTL = 3600 秒
      */
-    TEST(TokenServiceShareTest, MigrationContinuity_LegacyTokenVerifiableByUnified) {
+    TEST(TokenServiceShareTest, MigrationContinuityLegacyTokenVerifiableByUnified) {
         // 永久跳过 - 旧服务已移除，迁移已完成
         GTEST_SKIP() << "Migration complete: share token APIs unified into TokenService";
     }
