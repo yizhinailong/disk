@@ -30,7 +30,6 @@ using disk::share::CancelShareError;
 using disk::share::CancelShareRequest;
 using disk::share::CancelShareResponse;
 using disk::share::CancelShareResult;
-using disk::share::CancelShareSummary;
 using disk::share::CreateShareRequest;
 using disk::share::CreateShareResponse;
 using disk::share::DownloadShareRequest;
