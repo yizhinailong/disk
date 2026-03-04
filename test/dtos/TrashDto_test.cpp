@@ -429,7 +429,7 @@ TEST(BatchRestoreResponse, ToJsonCorrectStructure) {
     EXPECT_EQ(json["summary"]["total"].asInt(), 3);
     EXPECT_EQ(json["summary"]["success_count"].asInt(), 2);
     EXPECT_EQ(json["summary"]["failure_count"].asInt(), 1);
-    EXPECT_EQ(json["results"].size(), 3u);
+    EXPECT_EQ(json["results"].size(), 3U);
 
     EXPECT_EQ(json["results"][0]["trash_id"].asUInt64(), 1);
     EXPECT_EQ(json["results"][0]["status"].asString(), "success");
@@ -472,7 +472,7 @@ TEST(BatchDeleteResponse, ToJsonCorrectStructure) {
     EXPECT_EQ(json["summary"]["total"].asInt(), 2);
     EXPECT_EQ(json["summary"]["success_count"].asInt(), 2);
     EXPECT_EQ(json["summary"]["failure_count"].asInt(), 0);
-    EXPECT_EQ(json["results"].size(), 2u);
+    EXPECT_EQ(json["results"].size(), 2U);
 
     EXPECT_EQ(json["results"][0]["trash_id"].asUInt64(), 10);
     EXPECT_EQ(json["results"][0]["status"].asString(), "success");
