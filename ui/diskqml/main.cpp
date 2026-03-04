@@ -1,17 +1,21 @@
+#include <QDebug>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQuickStyle>
 
 #include <api/ApiClient.hpp>
 #include <api/AuthApi.hpp>
-#include <viewmodels/SessionViewModel.hpp>
 #include <services/AuthService.hpp>
 #include <services/TokenStore.hpp>
 #include <utils/ConfigStore.hpp>
 #include <viewmodels/LoginViewModel.hpp>
 #include <viewmodels/RegisterViewModel.hpp>
+#include <viewmodels/SessionViewModel.hpp>
+
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
+    QQuickStyle::setStyle("Fusion");
 
     QCoreApplication::setOrganizationName("Disk");
     QCoreApplication::setApplicationName("diskqml");
