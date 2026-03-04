@@ -26,7 +26,7 @@ target_link_libraries(diskqml_core
 
 # --- Main executable ---
 qt_add_executable(appdiskqml
-    main.cpp
+    src/main.cpp
 )
 
 qt_add_qml_module(appdiskqml
