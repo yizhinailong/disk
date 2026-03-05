@@ -15,9 +15,9 @@ qt_standard_project_setup(REQUIRES 6.8)
 add_library(diskqml_core STATIC
     src/api/ApiClient.cpp
     src/api/AuthApi.cpp
-    # --- Future: api services (FileApi, FolderApi, ShareApi, TrashApi, UserApi) ---
-    # src/api/FileApi.cpp
-    # src/api/FolderApi.cpp
+    # --- Future: api services (ShareApi, TrashApi) ---
+    src/api/FileApi.cpp
+    src/api/FolderApi.cpp
     # src/api/ShareApi.cpp
     # src/api/TrashApi.cpp
     src/api/UserApi.cpp
@@ -25,8 +25,8 @@ add_library(diskqml_core STATIC
     src/services/TokenStore.cpp
     src/services/TokenRefreshCoordinator.cpp
     # --- Future: services (FileService, FolderService, ShareService, TrashService, UserService) ---
-    # src/services/FileService.cpp
-    # src/services/FolderService.cpp
+    src/services/FileService.cpp
+    src/services/FolderService.cpp
     # src/services/ShareService.cpp
     # src/services/TrashService.cpp
     # src/services/UserService.cpp
@@ -64,6 +64,10 @@ qt_add_qml_module(appdiskqml
         src/viewmodels/RegisterViewModel.hpp
         src/viewmodels/SessionViewModel.cpp
         src/viewmodels/SessionViewModel.hpp
+        src/models/FileListModel.cpp
+        src/models/FileListModel.hpp
+        src/models/BreadcrumbModel.cpp
+        src/models/BreadcrumbModel.hpp
         # --- Future: viewmodels (FileListViewModel, TransferViewModel, ShareViewModel, TrashViewModel, SettingsViewModel) ---
         # src/viewmodels/FileListViewModel.cpp
         # src/viewmodels/FileListViewModel.hpp
@@ -96,6 +100,7 @@ qt_add_qml_module(appdiskqml
 )
 
 target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/viewmodels)
+target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/models)
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an
 # explicit, fixed bundle identifier manually though.
