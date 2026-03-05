@@ -68,6 +68,14 @@ namespace disk::qml::api {
         m_rest.post(req, QJsonDocument(body), ctx, MakeReplyHandler(std::move(cb)));
     }
 
+    // ==================== POST Raw Bytes ====================
+
+    auto ApiClient::PostRaw(const QString& path, const QUrlQuery& query, const QByteArray& body, QObject* ctx, ApiReplyCallback cb) -> void {
+        auto req = m_factory.createRequest(path, query);
+        req.setHeader(QNetworkRequest::ContentTypeHeader, QByteArrayLiteral("application/octet-stream"));
+        m_rest.sendCustomRequest(req, "POST", body, ctx, MakeReplyHandler(std::move(cb)));
+    }
+
     // ==================== GET ====================
 
     auto ApiClient::Get(const QString& path, QObject* ctx, ApiReplyCallback cb) -> void {
@@ -172,6 +180,16 @@ namespace disk::qml::api {
         req.setHeader(QNetworkRequest::ContentTypeHeader, QByteArrayLiteral("application/json"));
         const QByteArray jsonBody = QJsonDocument(body).toJson(QJsonDocument::Compact);
         m_rest.sendCustomRequest(req, "DELETE", jsonBody, ctx, MakeReplyHandler(std::move(cb)));
+    }
+
+    // ==================== Streaming ====================
+
+    auto ApiClient::NetworkAccessManager() -> QNetworkAccessManager* {
+        return &m_nam;
+    }
+
+    auto ApiClient::CreateStreamingRequest(const QString& path) -> QNetworkRequest {
+        return m_factory.createRequest(path);
     }
 
 } // namespace disk::qml::api

@@ -12,6 +12,7 @@
 
 #include <QByteArray>
 #include <QNetworkAccessManager>
+#include <QNetworkRequest>
 #include <QNetworkRequestFactory>
 #include <QObject>
 #include <QRestAccessManager>
@@ -83,6 +84,16 @@ namespace disk::qml::api {
             QObject* ctx,
             ApiReplyCallback cb
         ) -> void;
+
+        // ==================== POST Raw Bytes ====================
+
+        /**
+         * @brief POST raw bytes to @p path with @p query parameters using the shared bearer token.
+         *
+         * Used for chunk upload where the body is raw file data (not JSON).
+         * Content-Type is set to application/octet-stream.
+         */
+        virtual auto PostRaw(const QString& path, const QUrlQuery& query, const QByteArray& body, QObject* ctx, ApiReplyCallback cb) -> void;
 
         // ==================== GET ====================
 
@@ -181,6 +192,25 @@ namespace disk::qml::api {
             QObject* ctx,
             ApiReplyCallback cb
         ) -> void;
+
+        // ==================== Streaming ====================
+
+        /**
+         * @brief Access the raw QNetworkAccessManager for streaming downloads.
+         *
+         * @note The DownloadEngine uses this to issue GET requests whose
+         *       QNetworkReply is read incrementally (readyRead) rather than
+         *       buffered entirely in memory.
+         */
+        [[nodiscard]] auto NetworkAccessManager() -> QNetworkAccessManager*;
+
+        /**
+         * @brief Create a QNetworkRequest from the factory with bearer token applied.
+         *
+         * @param path  API path, e.g. "/api/file/download/42".
+         * @return A QNetworkRequest with the base URL and bearer token configured.
+         */
+        [[nodiscard]] auto CreateStreamingRequest(const QString& path) -> QNetworkRequest;
 
         ~ApiClient() override = default;
 
