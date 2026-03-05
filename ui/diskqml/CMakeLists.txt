@@ -9,13 +9,35 @@ find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 Network)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
-# --- diskqml_core static library (Wave 1: auth/api/services/utils) ---
+# --- diskqml_core static library ---
+# Pattern: All non-QML-facing C++ sources go here (api, services, models, utils, transfers)
+# DO NOT add QObject/QAbstractListModel classes with QML_ELEMENT to this target.
 add_library(diskqml_core STATIC
     src/api/ApiClient.cpp
     src/api/AuthApi.cpp
+    # --- Future: api services (FileApi, FolderApi, ShareApi, TrashApi, UserApi) ---
+    # src/api/FileApi.cpp
+    # src/api/FolderApi.cpp
+    # src/api/ShareApi.cpp
+    # src/api/TrashApi.cpp
+    # src/api/UserApi.cpp
     src/services/AuthService.cpp
     src/services/TokenStore.cpp
+    # --- Future: services (FileService, FolderService, ShareService, TrashService, UserService) ---
+    # src/services/FileService.cpp
+    # src/services/FolderService.cpp
+    # src/services/ShareService.cpp
+    # src/services/TrashService.cpp
+    # src/services/UserService.cpp
     src/utils/ConfigStore.cpp
+    # --- Future: models (FileListModel, BreadcrumbModel, TransferQueueModel) ---
+    # src/models/FileListModel.cpp
+    # src/models/BreadcrumbModel.cpp
+    # src/models/TransferQueueModel.cpp
+    # --- Future: transfers subsystem ---
+    # src/transfers/TransferManager.cpp
+    # src/transfers/UploadTask.cpp
+    # src/transfers/DownloadTask.cpp
 )
 
 target_include_directories(diskqml_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -29,6 +51,8 @@ qt_add_executable(appdiskqml
     src/main.cpp
 )
 
+# Pattern: QML-facing viewmodels (QObject/QAbstractListModel with QML_ELEMENT) go in SOURCES.
+# All QML pages, components, and dialogs go in QML_FILES.
 qt_add_qml_module(appdiskqml
     URI Disk
     VERSION 1.0
@@ -39,6 +63,17 @@ qt_add_qml_module(appdiskqml
         src/viewmodels/RegisterViewModel.hpp
         src/viewmodels/SessionViewModel.cpp
         src/viewmodels/SessionViewModel.hpp
+        # --- Future: viewmodels (FileListViewModel, TransferViewModel, ShareViewModel, TrashViewModel, SettingsViewModel) ---
+        # src/viewmodels/FileListViewModel.cpp
+        # src/viewmodels/FileListViewModel.hpp
+        # src/viewmodels/TransferViewModel.cpp
+        # src/viewmodels/TransferViewModel.hpp
+        # src/viewmodels/ShareViewModel.cpp
+        # src/viewmodels/ShareViewModel.hpp
+        # src/viewmodels/TrashViewModel.cpp
+        # src/viewmodels/TrashViewModel.hpp
+        # src/viewmodels/SettingsViewModel.cpp
+        # src/viewmodels/SettingsViewModel.hpp
     QML_FILES
         qml/Main.qml
         qml/App.qml
@@ -46,6 +81,17 @@ qt_add_qml_module(appdiskqml
         qml/views/RegisterView.qml
         qml/views/HomePlaceholder.qml
         qml/views/MainWindowView.qml
+        # --- Future: QML pages/components/dialogs ---
+        # qml/views/FileListView.qml
+        # qml/views/TrashView.qml
+        # qml/views/ShareView.qml
+        # qml/views/SettingsView.qml
+        # qml/components/FileCard.qml
+        # qml/components/BreadcrumbBar.qml
+        # qml/components/TransferPanel.qml
+        # qml/dialogs/RenameDialog.qml
+        # qml/dialogs/ShareDialog.qml
+        # qml/dialogs/ConfirmDialog.qml
 )
 
 target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/viewmodels)
