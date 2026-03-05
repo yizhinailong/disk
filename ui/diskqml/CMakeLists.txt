@@ -23,6 +23,7 @@ add_library(diskqml_core STATIC
     # src/api/UserApi.cpp
     src/services/AuthService.cpp
     src/services/TokenStore.cpp
+    src/services/TokenRefreshCoordinator.cpp
     # --- Future: services (FileService, FolderService, ShareService, TrashService, UserService) ---
     # src/services/FileService.cpp
     # src/services/FolderService.cpp
