@@ -35,10 +35,13 @@ add_library(diskqml_core STATIC
     # src/models/FileListModel.cpp
     # src/models/BreadcrumbModel.cpp
     # src/models/TransferQueueModel.cpp
-    # --- Future: transfers subsystem ---
+    # --- Transfers subsystem ---
+    src/transfers/TransferStore.cpp
     # src/transfers/TransferManager.cpp
     # src/transfers/UploadTask.cpp
     # src/transfers/DownloadTask.cpp
+    src/transfers/DownloadEngine.cpp
+    src/transfers/UploadEngine.cpp
 )
 
 target_include_directories(diskqml_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -71,6 +74,9 @@ qt_add_qml_module(appdiskqml
         # --- Future: viewmodels (TransferViewModel, ShareViewModel, TrashViewModel, SettingsViewModel) ---
         src/viewmodels/FileListViewModel.cpp
         src/viewmodels/FileListViewModel.hpp
+        src/transfers/TransferQueueModel.cpp
+        src/transfers/TransferQueueModel.hpp
+        src/transfers/TransferItem.hpp
         # src/viewmodels/TransferViewModel.cpp
         # src/viewmodels/TransferViewModel.hpp
         # src/viewmodels/ShareViewModel.cpp
@@ -104,6 +110,7 @@ qt_add_qml_module(appdiskqml
 
 target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/viewmodels)
 target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/models)
+target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/transfers)
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an
 # explicit, fixed bundle identifier manually though.
