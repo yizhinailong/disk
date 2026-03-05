@@ -19,7 +19,7 @@ add_library(diskqml_core STATIC
     src/api/FileApi.cpp
     src/api/FolderApi.cpp
     src/api/ShareApi.cpp
-    # src/api/TrashApi.cpp
+    src/api/TrashApi.cpp
     src/api/UserApi.cpp
     src/services/AuthService.cpp
     src/services/TokenStore.cpp
@@ -28,7 +28,7 @@ add_library(diskqml_core STATIC
     src/services/FileService.cpp
     src/services/FolderService.cpp
     # src/services/ShareService.cpp
-    # src/services/TrashService.cpp
+    src/services/TrashService.cpp
     # src/services/UserService.cpp
     src/utils/ConfigStore.cpp
     # --- Future: models (FileListModel, BreadcrumbModel, TransferQueueModel) ---
@@ -71,9 +71,13 @@ qt_add_qml_module(appdiskqml
         src/models/FileListModel.hpp
         src/models/BreadcrumbModel.cpp
         src/models/BreadcrumbModel.hpp
-        # --- Future: viewmodels (TransferViewModel, ShareViewModel, TrashViewModel, SettingsViewModel) ---
+        src/models/FolderTreeModel.cpp
+        src/models/FolderTreeModel.hpp
+        # --- Future: viewmodels (ShareViewModel, TrashViewModel) ---
         src/viewmodels/FileListViewModel.cpp
         src/viewmodels/FileListViewModel.hpp
+        src/viewmodels/TransfersViewModel.cpp
+        src/viewmodels/TransfersViewModel.hpp
         src/transfers/TransferQueueModel.cpp
         src/transfers/TransferQueueModel.hpp
         src/transfers/TransferItem.hpp
@@ -81,10 +85,12 @@ qt_add_qml_module(appdiskqml
         # src/viewmodels/TransferViewModel.hpp
         # src/viewmodels/ShareViewModel.cpp
         # src/viewmodels/ShareViewModel.hpp
-        # src/viewmodels/TrashViewModel.cpp
-        # src/viewmodels/TrashViewModel.hpp
-        # src/viewmodels/SettingsViewModel.cpp
-        # src/viewmodels/SettingsViewModel.hpp
+        src/viewmodels/TrashViewModel.cpp
+        src/viewmodels/TrashViewModel.hpp
+        src/models/TrashListModel.cpp
+        src/models/TrashListModel.hpp
+        src/viewmodels/SettingsViewModel.cpp
+        src/viewmodels/SettingsViewModel.hpp
     QML_FILES
         qml/Main.qml
         qml/App.qml
@@ -106,6 +112,7 @@ qt_add_qml_module(appdiskqml
         qml/dialogs/NewFolderDialog.qml
         qml/dialogs/RenameDialog.qml
         qml/dialogs/DeleteConfirmDialog.qml
+        qml/dialogs/FolderPickerDialog.qml
 )
 
 target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/viewmodels)

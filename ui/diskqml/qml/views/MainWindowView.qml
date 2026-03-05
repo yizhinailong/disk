@@ -214,6 +214,11 @@ Item {
                         font.pixelSize: 13
                         ToolTip.visible: hovered
                         ToolTip.text: "上传文件"
+                        visible: root.currentNav === "files"
+                        onClicked: {
+                            root.isTransferMode = true
+                            root.currentNav = "upload"
+                        }
                     }
 
                     ToolButton {
@@ -221,6 +226,12 @@ Item {
                         font.pixelSize: 13
                         ToolTip.visible: hovered
                         ToolTip.text: "新建文件夹"
+                        visible: root.currentNav === "files"
+                        onClicked: {
+                            if (pageLoader.item && pageLoader.item.newFolderDialog) {
+                                pageLoader.item.newFolderDialog.open()
+                            }
+                        }
                     }
 
                     // 分隔线
@@ -237,7 +248,9 @@ Item {
                         font.pixelSize: 14
                         ToolTip.visible: hovered
                         ToolTip.text: "返回"
-                        enabled: false  // 将由 FileListViewModel 控制
+                        visible: root.currentNav === "files"
+                        enabled: FileListViewModel.canGoBack
+                        onClicked: FileListViewModel.goBack()
                     }
 
                     ToolButton {
@@ -245,7 +258,9 @@ Item {
                         font.pixelSize: 14
                         ToolTip.visible: hovered
                         ToolTip.text: "前进"
-                        enabled: false  // 将由 FileListViewModel 控制
+                        visible: root.currentNav === "files"
+                        enabled: FileListViewModel.canGoForward
+                        onClicked: FileListViewModel.goForward()
                     }
 
                     ToolButton {
@@ -253,6 +268,8 @@ Item {
                         font.pixelSize: 14
                         ToolTip.visible: hovered
                         ToolTip.text: "刷新"
+                        visible: root.currentNav === "files"
+                        onClicked: FileListViewModel.refresh()
                     }
 
                     // 弹簧
@@ -264,6 +281,8 @@ Item {
                         placeholderText: "搜索..."
                         Layout.preferredWidth: 200
                         font.pixelSize: 13
+                        visible: root.currentNav === "files"
+                        onTextChanged: FileListViewModel.search(text)
                     }
 
                     // 分隔线
@@ -348,7 +367,9 @@ Item {
                     // 左侧：项目数量（后续由 FileListViewModel 绑定）
                     Label {
                         id: itemCountLabel
-                        text: ""
+                        text: root.currentNav === "files" && FileListViewModel.totalItems > 0
+                              ? FileListViewModel.totalItems + " 个项目"
+                              : ""
                         color: palette.placeholderText
                         font.pixelSize: 12
                     }
