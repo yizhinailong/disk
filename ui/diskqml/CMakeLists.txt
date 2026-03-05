@@ -20,7 +20,7 @@ add_library(diskqml_core STATIC
     # src/api/FolderApi.cpp
     # src/api/ShareApi.cpp
     # src/api/TrashApi.cpp
-    # src/api/UserApi.cpp
+    src/api/UserApi.cpp
     src/services/AuthService.cpp
     src/services/TokenStore.cpp
     src/services/TokenRefreshCoordinator.cpp

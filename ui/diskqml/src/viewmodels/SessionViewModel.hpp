@@ -1,7 +1,7 @@
 /**
  * @file SessionViewModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QML singleton session state and logout action
+ * @brief QML singleton session state, storage metrics, and logout action
  * @version 0.1
  * @date 2026-03-02
  *
@@ -23,6 +23,10 @@ namespace disk::qml::services {
     class TokenStore;
 } // namespace disk::qml::services
 
+namespace disk::qml::utils {
+    class ConfigStore;
+} // namespace disk::qml::utils
+
 namespace disk::qml::viewmodels {
 
     class LoginViewModel;
@@ -31,8 +35,9 @@ namespace disk::qml::viewmodels {
      * @brief QML singleton that tracks global session state and provides logout.
      *
      * @details
-     * Exposes whether the user is logged in and their username to QML, reacting
-     * to login events from LoginViewModel and token state from TokenStore.
+     * Exposes whether the user is logged in, their username, storage quota/usage
+     * metrics, and the configured server URL to QML, reacting to login events
+     * from LoginViewModel and token state from TokenStore.
      * The logout() action calls the server API and then unconditionally clears
      * local token state regardless of the server response.
      *
@@ -51,11 +56,27 @@ namespace disk::qml::viewmodels {
         /// Username of the currently logged-in user; empty when not logged in.
         Q_PROPERTY(QString loggedInUserName READ LoggedInUserName NOTIFY loggedInUserNameChanged)
 
+        /// Storage consumed by the current user (bytes); 0 when not logged in.
+        Q_PROPERTY(qint64 storageUsed READ StorageUsed NOTIFY storageUsedChanged)
+        /// Storage quota allocated to the current user (bytes); 0 when not logged in.
+        Q_PROPERTY(qint64 storageQuota READ StorageQuota NOTIFY storageQuotaChanged)
+
+        /// Human-readable formatted storage used (e.g. "1.23 GB").
+        Q_PROPERTY(QString storageUsedFormatted READ StorageUsedFormatted NOTIFY storageUsedChanged)
+        /// Human-readable formatted storage quota (e.g. "10.00 GB").
+        Q_PROPERTY(QString storageQuotaFormatted READ StorageQuotaFormatted NOTIFY storageQuotaChanged)
+        /// Storage usage as a percentage (0.0–100.0); 0.0 when quota is 0.
+        Q_PROPERTY(double storagePercentage READ StoragePercentage NOTIFY storagePercentageChanged)
+
+        /// Configured server URL (read-only, set once at construction).
+        Q_PROPERTY(QString serverUrl READ ServerUrl CONSTANT)
+
     public:
         explicit SessionViewModel(
             LoginViewModel* loginViewModel,
             services::TokenStore* tokenStore,
             services::AuthService* authService,
+            utils::ConfigStore* configStore,
             QObject* parent = nullptr
         );
 
@@ -86,6 +107,12 @@ namespace disk::qml::viewmodels {
 
         [[nodiscard]] auto IsLoggedIn() const -> bool;
         [[nodiscard]] auto LoggedInUserName() const -> const QString&;
+        [[nodiscard]] auto StorageUsed() const -> qint64;
+        [[nodiscard]] auto StorageQuota() const -> qint64;
+        [[nodiscard]] auto StorageUsedFormatted() const -> QString;
+        [[nodiscard]] auto StorageQuotaFormatted() const -> QString;
+        [[nodiscard]] auto StoragePercentage() const -> double;
+        [[nodiscard]] auto ServerUrl() const -> const QString&;
 
         /**
          * @brief Send a logout request and clear local session state.
@@ -105,12 +132,18 @@ namespace disk::qml::viewmodels {
     signals:
         void isLoggedInChanged();
         void loggedInUserNameChanged();
+        void storageUsedChanged();
+        void storageQuotaChanged();
+        void storagePercentageChanged();
 
     private:
         // ==================== Private Helpers ====================
 
         auto SetLoggedInUserName(const QString& name) -> void;
         auto UpdateIsLoggedIn() -> void;
+        auto SetStorageUsed(qint64 bytes) -> void;
+        auto SetStorageQuota(qint64 bytes) -> void;
+        static auto FormatBytes(qint64 bytes) -> QString;
 
         // ==================== State ====================
 
@@ -120,6 +153,9 @@ namespace disk::qml::viewmodels {
 
         bool m_is_logged_in{ false };
         QString m_logged_in_user_name;
+        qint64 m_storage_used{ 0 };
+        qint64 m_storage_quota{ 0 };
+        QString m_server_url;
 
         inline static SessionViewModel* s_instance = nullptr;
         inline static QJSEngine* s_engine = nullptr;

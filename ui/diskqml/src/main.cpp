@@ -36,7 +36,8 @@ int main(int argc, char* argv[]) {
     disk::qml::viewmodels::SessionViewModel sessionViewModel(
         &loginViewModel,
         &tokenStore,
-        &authService
+        &authService,
+        &configStore
     );
 
     // --- QML engine setup ---

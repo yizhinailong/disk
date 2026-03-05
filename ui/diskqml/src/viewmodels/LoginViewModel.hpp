@@ -96,7 +96,7 @@ namespace disk::qml::viewmodels {
          * @details
          * No-op if canSubmit is false or a request is already in flight.
          * Sets loading=true and clears any previous error, then calls
-         * AuthService::Login(). On success, emits loginSucceeded(username).
+         * AuthService::Login(). On success, emits loginSucceeded(username, storageUsed, storageQuota).
          * On failure, sets errorMessage and clears loading.
          *
          * A child context QObject is used so that the callback is automatically
@@ -121,7 +121,7 @@ namespace disk::qml::viewmodels {
         void loadingChanged();
         void errorMessageChanged();
         void canSubmitChanged();
-        void loginSucceeded(const QString& username);
+        void loginSucceeded(const QString& username, quint64 storageUsed, quint64 storageQuota);
 
     private:
         // ==================== Private Helpers ====================

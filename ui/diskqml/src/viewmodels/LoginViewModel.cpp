@@ -86,7 +86,7 @@ namespace disk::qml::viewmodels {
                     return;
                 }
 
-                emit loginSucceeded(result->user.username);
+                emit loginSucceeded(result->user.username, result->user.storageUsed, result->user.storageQuota);
             }
         );
     }
