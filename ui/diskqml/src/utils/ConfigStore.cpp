@@ -10,6 +10,8 @@
  */
 #include "ConfigStore.hpp"
 
+#include <QStandardPaths>
+
 namespace disk::qml::utils {
 
     ConfigStore::ConfigStore() = default;
@@ -50,6 +52,78 @@ namespace disk::qml::utils {
     auto ConfigStore::SetConcurrentDownloads(int value) -> void {
         m_settings.beginGroup("transfers");
         m_settings.setValue("concurrentDownloads", qBound(1, value, 10));
+        m_settings.endGroup();
+    }
+
+    // ==================== Downloads ====================
+
+    auto ConfigStore::DownloadDir() const -> QString {
+        m_settings.beginGroup("transfers");
+        const QString dir = m_settings.value(
+            "downloadDir",
+            QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)
+        ).toString();
+        m_settings.endGroup();
+        return dir;
+    }
+
+    auto ConfigStore::SetDownloadDir(const QString& path) -> void {
+        m_settings.beginGroup("transfers");
+        m_settings.setValue("downloadDir", path);
+        m_settings.endGroup();
+    }
+
+    // ==================== UI Preferences ====================
+
+    auto ConfigStore::AutoStart() const -> bool {
+        m_settings.beginGroup("ui");
+        const bool val = m_settings.value("autoStart", false).toBool();
+        m_settings.endGroup();
+        return val;
+    }
+
+    auto ConfigStore::SetAutoStart(bool value) -> void {
+        m_settings.beginGroup("ui");
+        m_settings.setValue("autoStart", value);
+        m_settings.endGroup();
+    }
+
+    auto ConfigStore::MinimizeToTray() const -> bool {
+        m_settings.beginGroup("ui");
+        const bool val = m_settings.value("minimizeToTray", false).toBool();
+        m_settings.endGroup();
+        return val;
+    }
+
+    auto ConfigStore::SetMinimizeToTray(bool value) -> void {
+        m_settings.beginGroup("ui");
+        m_settings.setValue("minimizeToTray", value);
+        m_settings.endGroup();
+    }
+
+    auto ConfigStore::ShowNotifications() const -> bool {
+        m_settings.beginGroup("ui");
+        const bool val = m_settings.value("showNotifications", true).toBool();
+        m_settings.endGroup();
+        return val;
+    }
+
+    auto ConfigStore::SetShowNotifications(bool value) -> void {
+        m_settings.beginGroup("ui");
+        m_settings.setValue("showNotifications", value);
+        m_settings.endGroup();
+    }
+
+    auto ConfigStore::ConfirmDelete() const -> bool {
+        m_settings.beginGroup("ui");
+        const bool val = m_settings.value("confirmDelete", true).toBool();
+        m_settings.endGroup();
+        return val;
+    }
+
+    auto ConfigStore::SetConfirmDelete(bool value) -> void {
+        m_settings.beginGroup("ui");
+        m_settings.setValue("confirmDelete", value);
         m_settings.endGroup();
     }
 
