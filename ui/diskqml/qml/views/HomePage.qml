@@ -1,32 +1,353 @@
 /**
  * @file HomePage.qml
- * @brief 首页 - 最近文件、快捷操作、存储概览
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 首页 - 快捷操作、最近文件（占位）、存储空间概览
+ * @version 0.1
+ * @date 2026-03-05
+ *
+ * @copyright Copyright (c) 2026
+ *
  */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Disk 1.0
 
 Item {
     id: root
 
-    ColumnLayout {
+    // ==================== 导航信号 ====================
+
+    /// 切换到传输模式 - 上传页面
+    signal navigateToUpload()
+    /// 切换到传输模式 - 下载页面
+    signal navigateToDownload()
+    /// 切换到文件模式 - 我的文件
+    signal navigateToFiles()
+
+    // ==================== 内容 ====================
+
+    ScrollView {
         anchors.fill: parent
-        anchors.margins: 24
-        spacing: 16
+        contentWidth: availableWidth
+        clip: true
 
-        Label {
-            text: "首页"
-            font.pixelSize: 20
-            font.bold: true
-            color: palette.windowText
+        ColumnLayout {
+            width: parent.width
+            spacing: 0
+
+            // ==================== 页面标题 ====================
+
+            Label {
+                text: "首页"
+                font.pixelSize: 22
+                font.bold: true
+                color: palette.windowText
+                Layout.topMargin: 24
+                Layout.leftMargin: 24
+                Layout.rightMargin: 24
+            }
+
+            Label {
+                text: SessionViewModel.isLoggedIn
+                      ? "欢迎回来，" + SessionViewModel.loggedInUserName
+                      : "欢迎使用 Disk 云盘"
+                font.pixelSize: 14
+                color: palette.placeholderText
+                Layout.topMargin: 4
+                Layout.leftMargin: 24
+                Layout.rightMargin: 24
+            }
+
+            // ==================== 快捷操作 ====================
+
+            Label {
+                text: "快捷操作"
+                font.pixelSize: 16
+                font.bold: true
+                color: palette.windowText
+                Layout.topMargin: 24
+                Layout.leftMargin: 24
+            }
+
+            Row {
+                Layout.topMargin: 12
+                Layout.leftMargin: 24
+                Layout.rightMargin: 24
+                spacing: 12
+
+                // 上传文件
+                Button {
+                    width: 120
+                    height: 80
+                    onClicked: root.navigateToUpload()
+
+                    contentItem: ColumnLayout {
+                        spacing: 4
+
+                        Label {
+                            text: "⬆"
+                            font.pixelSize: 24
+                            Layout.alignment: Qt.AlignHCenter
+                            color: palette.buttonText
+                        }
+
+                        Label {
+                            text: "上传文件"
+                            font.pixelSize: 12
+                            Layout.alignment: Qt.AlignHCenter
+                            color: palette.buttonText
+                        }
+                    }
+
+                    ToolTip.visible: hovered
+                    ToolTip.text: "上传文件"
+                }
+
+                // 新建文件夹
+                Button {
+                    width: 120
+                    height: 80
+                    onClicked: root.navigateToFiles()
+
+                    contentItem: ColumnLayout {
+                        spacing: 4
+
+                        Label {
+                            text: "📁"
+                            font.pixelSize: 24
+                            Layout.alignment: Qt.AlignHCenter
+                            color: palette.buttonText
+                        }
+
+                        Label {
+                            text: "新建文件夹"
+                            font.pixelSize: 12
+                            Layout.alignment: Qt.AlignHCenter
+                            color: palette.buttonText
+                        }
+                    }
+
+                    ToolTip.visible: hovered
+                    ToolTip.text: "新建文件夹（进入文件页面）"
+                }
+
+                // 上传队列
+                Button {
+                    width: 120
+                    height: 80
+                    onClicked: root.navigateToUpload()
+
+                    contentItem: ColumnLayout {
+                        spacing: 4
+
+                        Label {
+                            text: "⬆"
+                            font.pixelSize: 24
+                            Layout.alignment: Qt.AlignHCenter
+                            color: palette.buttonText
+                        }
+
+                        Label {
+                            text: "上传队列"
+                            font.pixelSize: 12
+                            Layout.alignment: Qt.AlignHCenter
+                            color: palette.buttonText
+                        }
+                    }
+
+                    ToolTip.visible: hovered
+                    ToolTip.text: "查看上传任务"
+                }
+
+                // 下载队列
+                Button {
+                    width: 120
+                    height: 80
+                    onClicked: root.navigateToDownload()
+
+                    contentItem: ColumnLayout {
+                        spacing: 4
+
+                        Label {
+                            text: "⬇"
+                            font.pixelSize: 24
+                            Layout.alignment: Qt.AlignHCenter
+                            color: palette.buttonText
+                        }
+
+                        Label {
+                            text: "下载队列"
+                            font.pixelSize: 12
+                            Layout.alignment: Qt.AlignHCenter
+                            color: palette.buttonText
+                        }
+                    }
+
+                    ToolTip.visible: hovered
+                    ToolTip.text: "查看下载任务"
+                }
+            }
+
+            // ==================== 存储空间 ====================
+
+            Label {
+                text: "存储空间"
+                font.pixelSize: 16
+                font.bold: true
+                color: palette.windowText
+                Layout.topMargin: 28
+                Layout.leftMargin: 24
+            }
+
+            Rectangle {
+                Layout.topMargin: 12
+                Layout.leftMargin: 24
+                Layout.rightMargin: 24
+                Layout.fillWidth: true
+                Layout.preferredHeight: storageCol.implicitHeight + 24
+                color: palette.base
+                radius: 8
+                border.color: palette.mid
+                border.width: 1
+
+                ColumnLayout {
+                    id: storageCol
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 8
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        Label {
+                            text: SessionViewModel.isLoggedIn
+                                  ? "已使用 " + SessionViewModel.storageUsedFormatted
+                                    + " / " + SessionViewModel.storageQuotaFormatted
+                                  : "未登录"
+                            font.pixelSize: 13
+                            color: palette.windowText
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Label {
+                            visible: SessionViewModel.isLoggedIn
+                            text: {
+                                var pct = SessionViewModel.storagePercentage;
+                                return pct.toFixed(1) + "%";
+                            }
+                            font.pixelSize: 13
+                            color: {
+                                var pct = SessionViewModel.storagePercentage;
+                                if (pct >= 100) return "#D32F2F";
+                                if (pct >= 80) return "#F57C00";
+                                return palette.placeholderText;
+                            }
+                        }
+                    }
+
+                    ProgressBar {
+                        Layout.fillWidth: true
+                        from: 0
+                        to: 100
+                        value: SessionViewModel.isLoggedIn ? SessionViewModel.storagePercentage : 0
+
+                        background: Rectangle {
+                            implicitWidth: 200
+                            implicitHeight: 8
+                            radius: 4
+                            color: palette.midlight
+                        }
+
+                        contentItem: Item {
+                            implicitWidth: 200
+                            implicitHeight: 8
+
+                            Rectangle {
+                                width: parent.parent.visualPosition * parent.width
+                                height: parent.height
+                                radius: 4
+                                color: {
+                                    var pct = SessionViewModel.storagePercentage;
+                                    if (pct >= 100) return "#D32F2F";
+                                    if (pct >= 80) return "#F57C00";
+                                    return "#1976D2";
+                                }
+                            }
+                        }
+                    }
+
+                    Label {
+                        visible: SessionViewModel.storagePercentage >= 80
+                                 && SessionViewModel.storagePercentage < 100
+                        text: "⚠ 存储空间即将用尽，请清理文件"
+                        font.pixelSize: 12
+                        color: "#F57C00"
+                    }
+
+                    Label {
+                        visible: SessionViewModel.storagePercentage >= 100
+                        text: "❌ 存储空间已满，无法上传新文件"
+                        font.pixelSize: 12
+                        color: "#D32F2F"
+                    }
+                }
+            }
+
+            // ==================== 最近文件 ====================
+
+            Label {
+                text: "最近文件"
+                font.pixelSize: 16
+                font.bold: true
+                color: palette.windowText
+                Layout.topMargin: 28
+                Layout.leftMargin: 24
+            }
+
+            // 占位 — 最近文件区域
+            // 后续 Task 13 完成后，FileListViewModel 会提供最近文件数据
+            Rectangle {
+                Layout.topMargin: 12
+                Layout.leftMargin: 24
+                Layout.rightMargin: 24
+                Layout.fillWidth: true
+                Layout.preferredHeight: 160
+                color: palette.base
+                radius: 8
+                border.color: palette.mid
+                border.width: 1
+
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: 8
+
+                    Label {
+                        text: "📭"
+                        font.pixelSize: 32
+                        Layout.alignment: Qt.AlignHCenter
+                        color: palette.placeholderText
+                    }
+
+                    Label {
+                        text: "暂无最近文件"
+                        font.pixelSize: 14
+                        Layout.alignment: Qt.AlignHCenter
+                        color: palette.placeholderText
+                    }
+
+                    Label {
+                        text: "上传您的第一个文件吧"
+                        font.pixelSize: 12
+                        Layout.alignment: Qt.AlignHCenter
+                        color: palette.placeholderText
+                    }
+                }
+            }
+
+            // 底部留白
+            Item { Layout.preferredHeight: 24 }
         }
-
-        Label {
-            text: "欢迎使用 Disk 云盘"
-            font.pixelSize: 14
-            color: palette.placeholderText
-        }
-
-        Item { Layout.fillHeight: true }
     }
 }

@@ -302,6 +302,28 @@ Item {
                 source: root.pageSourceForNav(root.currentNav)
             }
 
+            // ==================== 页面信号路由 ====================
+
+            Connections {
+                target: pageLoader.item
+                ignoreUnknownSignals: true
+
+                function onNavigateToUpload() {
+                    root.isTransferMode = true
+                    root.currentNav = "upload"
+                }
+
+                function onNavigateToDownload() {
+                    root.isTransferMode = true
+                    root.currentNav = "download"
+                }
+
+                function onNavigateToFiles() {
+                    root.isTransferMode = false
+                    root.currentNav = "files"
+                }
+            }
+
             // ==================== 状态栏 (32px) ====================
             Rectangle {
                 id: statusBar
