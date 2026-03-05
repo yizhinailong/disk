@@ -12,11 +12,27 @@
 
 #include <QHttpHeaders>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkRequest>
 #include <QRestReply>
 #include <chrono>
 
 namespace disk::qml::api {
+
+    // ==================== Helpers ====================
+
+    namespace {
+
+        /// Common reply handler shared by all request methods.
+        auto MakeReplyHandler(ApiReplyCallback cb) {
+            return [cb = std::move(cb)](QRestReply& reply) {
+                cb(reply.hasError(), reply.errorString(), reply.httpStatus(), reply.readBody());
+            };
+        }
+
+    } // anonymous namespace
+
+    // ==================== Ctor / Config ====================
 
     ApiClient::ApiClient(QObject* parent)
         : QObject(parent), m_nam(this), m_rest(&m_nam, this) {
@@ -32,12 +48,11 @@ namespace disk::qml::api {
         m_factory.setBearerToken(token.toUtf8());
     }
 
-    auto ApiClient::PostJson(const QString& path, const QJsonObject& body, QObject* ctx, PostJsonCallback cb) -> void {
-        auto req = m_factory.createRequest(path);
+    // ==================== POST ====================
 
-        m_rest.post(req, QJsonDocument(body), ctx, [cb = std::move(cb)](QRestReply& reply) {
-            cb(reply.hasError(), reply.errorString(), reply.httpStatus(), reply.readBody());
-        });
+    auto ApiClient::PostJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void {
+        auto req = m_factory.createRequest(path);
+        m_rest.post(req, QJsonDocument(body), ctx, MakeReplyHandler(std::move(cb)));
     }
 
     auto ApiClient::PostJsonWithBearerToken(
@@ -45,16 +60,118 @@ namespace disk::qml::api {
         const QJsonObject& body,
         const QString& bearerToken,
         QObject* ctx,
-        PostJsonCallback cb
+        ApiReplyCallback cb
     ) -> void {
-        // Copy factory to avoid mutating shared state
         QNetworkRequestFactory local = m_factory;
         local.setBearerToken(bearerToken.toUtf8());
         auto req = local.createRequest(path);
+        m_rest.post(req, QJsonDocument(body), ctx, MakeReplyHandler(std::move(cb)));
+    }
 
-        m_rest.post(req, QJsonDocument(body), ctx, [cb = std::move(cb)](QRestReply& reply) {
-            cb(reply.hasError(), reply.errorString(), reply.httpStatus(), reply.readBody());
-        });
+    // ==================== GET ====================
+
+    auto ApiClient::Get(const QString& path, QObject* ctx, ApiReplyCallback cb) -> void {
+        auto req = m_factory.createRequest(path);
+        m_rest.get(req, ctx, MakeReplyHandler(std::move(cb)));
+    }
+
+    auto ApiClient::Get(const QString& path, const QUrlQuery& query, QObject* ctx, ApiReplyCallback cb) -> void {
+        auto req = m_factory.createRequest(path, query);
+        m_rest.get(req, ctx, MakeReplyHandler(std::move(cb)));
+    }
+
+    auto ApiClient::GetWithBearerToken(
+        const QString& path,
+        const QUrlQuery& query,
+        const QString& bearerToken,
+        QObject* ctx,
+        ApiReplyCallback cb
+    ) -> void {
+        QNetworkRequestFactory local = m_factory;
+        local.setBearerToken(bearerToken.toUtf8());
+        auto req = local.createRequest(path, query);
+        m_rest.get(req, ctx, MakeReplyHandler(std::move(cb)));
+    }
+
+    // ==================== PUT ====================
+
+    auto ApiClient::PutJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void {
+        auto req = m_factory.createRequest(path);
+        m_rest.put(req, QJsonDocument(body), ctx, MakeReplyHandler(std::move(cb)));
+    }
+
+    auto ApiClient::PutJsonWithBearerToken(
+        const QString& path,
+        const QJsonObject& body,
+        const QString& bearerToken,
+        QObject* ctx,
+        ApiReplyCallback cb
+    ) -> void {
+        QNetworkRequestFactory local = m_factory;
+        local.setBearerToken(bearerToken.toUtf8());
+        auto req = local.createRequest(path);
+        m_rest.put(req, QJsonDocument(body), ctx, MakeReplyHandler(std::move(cb)));
+    }
+
+    // ==================== PATCH ====================
+
+    auto ApiClient::PatchJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void {
+        auto req = m_factory.createRequest(path);
+        m_rest.patch(req, QJsonDocument(body), ctx, MakeReplyHandler(std::move(cb)));
+    }
+
+    auto ApiClient::PatchJsonWithBearerToken(
+        const QString& path,
+        const QJsonObject& body,
+        const QString& bearerToken,
+        QObject* ctx,
+        ApiReplyCallback cb
+    ) -> void {
+        QNetworkRequestFactory local = m_factory;
+        local.setBearerToken(bearerToken.toUtf8());
+        auto req = local.createRequest(path);
+        m_rest.patch(req, QJsonDocument(body), ctx, MakeReplyHandler(std::move(cb)));
+    }
+
+    // ==================== DELETE ====================
+
+    auto ApiClient::Delete(const QString& path, QObject* ctx, ApiReplyCallback cb) -> void {
+        auto req = m_factory.createRequest(path);
+        m_rest.deleteResource(req, ctx, MakeReplyHandler(std::move(cb)));
+    }
+
+    auto ApiClient::DeleteWithBearerToken(
+        const QString& path,
+        const QString& bearerToken,
+        QObject* ctx,
+        ApiReplyCallback cb
+    ) -> void {
+        QNetworkRequestFactory local = m_factory;
+        local.setBearerToken(bearerToken.toUtf8());
+        auto req = local.createRequest(path);
+        m_rest.deleteResource(req, ctx, MakeReplyHandler(std::move(cb)));
+    }
+
+    auto ApiClient::DeleteJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void {
+        auto req = m_factory.createRequest(path);
+        req.setHeader(QNetworkRequest::ContentTypeHeader, QByteArrayLiteral("application/json"));
+        const QByteArray jsonBody = QJsonDocument(body).toJson(QJsonDocument::Compact);
+        m_rest.sendCustomRequest(req, "DELETE", jsonBody, ctx, MakeReplyHandler(std::move(cb)));
+    }
+
+    auto ApiClient::DeleteJsonWithBearerToken(
+        const QString& path,
+        const QJsonObject& body,
+        const QString& bearerToken,
+        QObject* ctx,
+        ApiReplyCallback cb
+    ) -> void {
+        QNetworkRequestFactory local = m_factory;
+        local.setBearerToken(bearerToken.toUtf8());
+        auto req = local.createRequest(path);
+        req.setHeader(QNetworkRequest::ContentTypeHeader, QByteArrayLiteral("application/json"));
+        const QByteArray jsonBody = QJsonDocument(body).toJson(QJsonDocument::Compact);
+        m_rest.sendCustomRequest(req, "DELETE", jsonBody, ctx, MakeReplyHandler(std::move(cb)));
     }
 
 } // namespace disk::qml::api

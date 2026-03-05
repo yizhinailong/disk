@@ -16,19 +16,25 @@
 #include <QObject>
 #include <QRestAccessManager>
 #include <QString>
+#include <QUrlQuery>
 #include <functional>
+
+class QJsonObject;
 
 namespace disk::qml::api {
 
     /**
-     * @brief Callback invoked when a POST request completes.
+     * @brief Callback invoked when an HTTP request completes.
      *
      * @param hasNetworkError  True if a network-level error occurred (no HTTP response received).
      * @param networkErrorString  Human-readable description of the network error; empty on success.
      * @param httpStatus  HTTP status code returned by the server (0 if hasNetworkError is true).
      * @param body  Raw response body bytes; may be empty on error.
      */
-    using PostJsonCallback = std::function<void(bool hasNetworkError, QString networkErrorString, int httpStatus, QByteArray body)>;
+    using ApiReplyCallback = std::function<void(bool hasNetworkError, QString networkErrorString, int httpStatus, QByteArray body)>;
+
+    /// @brief Legacy alias kept for source compatibility.
+    using PostJsonCallback = ApiReplyCallback;
 
     /**
      * @brief REST client built on Qt 6.8 QRestAccessManager + QNetworkRequestFactory.
@@ -36,6 +42,10 @@ namespace disk::qml::api {
      * Owns a QNetworkAccessManager and wraps it with QRestAccessManager.
      * All requests share a common base URL and optional bearer token configured
      * via SetBaseUrl() and SetBearerToken().
+     *
+     * Every request method has a variant that accepts an explicit bearerToken
+     * parameter. That token is applied to a local copy of the factory so it
+     * never mutates shared state.
      */
     class ApiClient : public QObject {
         Q_OBJECT
@@ -50,46 +60,126 @@ namespace disk::qml::api {
          */
         virtual auto SetBaseUrl(const QUrl& url) -> void;
         /**
-         * @brief Set the bearer token applied to all subsequent PostJson() calls.
+         * @brief Set the bearer token applied to all subsequent requests.
          *
          * @param token  Access token string (without "Bearer " prefix).
          */
         virtual auto SetBearerToken(const QString& token) -> void;
 
+        // ==================== POST ====================
+
         /**
          * @brief POST a JSON body to @p path using the shared factory bearer token.
-         *
-         * @param path  Request path relative to the base URL (e.g. "/api/auth/login").
-         * @param body  JSON object to serialize as the request body.
-         * @param ctx   Context QObject whose lifetime gates the callback.
-         *              The callback is NOT invoked after @p ctx is destroyed.
-         *              @p ctx must remain valid until either the reply arrives or the object is deleted.
-         * @param cb    Callback invoked on the Qt event loop when the reply is ready.
          */
-        virtual auto PostJson(const QString& path, const QJsonObject& body, QObject* ctx, PostJsonCallback cb) -> void;
+        virtual auto PostJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void;
 
         /**
          * @brief POST a JSON body with a caller-supplied bearer token, without mutating shared state.
-         *
-         * Unlike PostJson(), this method creates a local copy of the internal factory and
-         * sets @p bearerToken only on that copy. This avoids modifying the shared factory's
-         * bearer token, which would affect concurrent or subsequent requests.
-         *
-         * Typical use: logout, where the access token must be passed explicitly but the shared
-         * factory may already hold a different or no token.
-         *
-         * @param path         Request path relative to the base URL.
-         * @param body         JSON object to serialize as the request body.
-         * @param bearerToken  Token to use for this request only.
-         * @param ctx          Context QObject; callback is suppressed after destruction.
-         * @param cb           Callback invoked on the Qt event loop when the reply is ready.
          */
         virtual auto PostJsonWithBearerToken(
             const QString& path,
             const QJsonObject& body,
             const QString& bearerToken,
             QObject* ctx,
-            PostJsonCallback cb
+            ApiReplyCallback cb
+        ) -> void;
+
+        // ==================== GET ====================
+
+        /**
+         * @brief GET @p path (no query parameters) using the shared bearer token.
+         */
+        virtual auto Get(const QString& path, QObject* ctx, ApiReplyCallback cb) -> void;
+
+        /**
+         * @brief GET @p path with @p query parameters using the shared bearer token.
+         *
+         * @param query  URL query parameters built via QUrlQuery.
+         */
+        virtual auto Get(const QString& path, const QUrlQuery& query, QObject* ctx, ApiReplyCallback cb) -> void;
+
+        /**
+         * @brief GET @p path with a caller-supplied bearer token.
+         */
+        virtual auto GetWithBearerToken(
+            const QString& path,
+            const QUrlQuery& query,
+            const QString& bearerToken,
+            QObject* ctx,
+            ApiReplyCallback cb
+        ) -> void;
+
+        // ==================== PUT ====================
+
+        /**
+         * @brief PUT a JSON body to @p path using the shared bearer token.
+         */
+        virtual auto PutJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void;
+
+        /**
+         * @brief PUT a JSON body with a caller-supplied bearer token.
+         */
+        virtual auto PutJsonWithBearerToken(
+            const QString& path,
+            const QJsonObject& body,
+            const QString& bearerToken,
+            QObject* ctx,
+            ApiReplyCallback cb
+        ) -> void;
+
+        // ==================== PATCH ====================
+
+        /**
+         * @brief PATCH a JSON body to @p path using the shared bearer token.
+         */
+        virtual auto PatchJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void;
+
+        /**
+         * @brief PATCH a JSON body with a caller-supplied bearer token.
+         */
+        virtual auto PatchJsonWithBearerToken(
+            const QString& path,
+            const QJsonObject& body,
+            const QString& bearerToken,
+            QObject* ctx,
+            ApiReplyCallback cb
+        ) -> void;
+
+        // ==================== DELETE ====================
+
+        /**
+         * @brief DELETE @p path (no body) using the shared bearer token.
+         */
+        virtual auto Delete(const QString& path, QObject* ctx, ApiReplyCallback cb) -> void;
+
+        /**
+         * @brief DELETE @p path (no body) with a caller-supplied bearer token.
+         */
+        virtual auto DeleteWithBearerToken(
+            const QString& path,
+            const QString& bearerToken,
+            QObject* ctx,
+            ApiReplyCallback cb
+        ) -> void;
+
+        /**
+         * @brief DELETE with a JSON body via sendCustomRequest.
+         *
+         * QRestAccessManager::deleteResource() does not support request bodies.
+         * This method uses sendCustomRequest("DELETE", body) to work around
+         * that limitation. Required by the trash batch-delete endpoint.
+         */
+        virtual auto DeleteJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void;
+
+        /**
+         * @brief DELETE with a JSON body and a caller-supplied bearer token.
+         */
+        virtual auto DeleteJsonWithBearerToken(
+            const QString& path,
+            const QJsonObject& body,
+            const QString& bearerToken,
+            QObject* ctx,
+            ApiReplyCallback cb
         ) -> void;
 
         ~ApiClient() override = default;
