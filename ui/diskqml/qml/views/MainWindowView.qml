@@ -1,3 +1,13 @@
+/**
+ * @file MainWindowView.qml
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 主窗口壳：侧边栏(文件/传输双模式) + 工具栏 + 内容路由 + 状态栏
+ * @version 0.3
+ * @date 2026-03-05
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -6,15 +16,19 @@ import Disk 1.0
 Item {
     id: root
 
-    // File Mode vs Transfer Mode
-    property bool isTransferMode: false
-    // Current navigation selected
-    property string currentNav: isTransferMode ? "首页" : "首页"
+    // ==================== 状态 ====================
 
-    // Optional: propagate logout to App.qml if needed
+    /// 文件模式 vs 传输模式
+    property bool isTransferMode: false
+
+    /// 当前选中的导航 key（与 pageMap 对应）
+    property string currentNav: "home"
+
+    /// 向 App.qml 发出退出登录信号
     signal logoutRequested
 
-    // Keep track of logged out state
+    // ==================== 登出监听 ====================
+
     Connections {
         target: SessionViewModel
         function onIsLoggedInChanged() {
@@ -24,42 +38,143 @@ Item {
         }
     }
 
+    // ==================== 导航模型 ====================
+
+    /// 文件模式导航项
+    readonly property var fileNavItems: [
+        { key: "home",  label: "首页",   icon: "🏠" },
+        { key: "files", label: "我的文件", icon: "📁" },
+        { key: "trash", label: "回收站",  icon: "🗑" }
+    ]
+
+    /// 传输模式导航项
+    readonly property var transferNavItems: [
+        { key: "home",     label: "首页", icon: "🏠" },
+        { key: "upload",   label: "上传", icon: "⬆" },
+        { key: "download", label: "下载", icon: "⬇" },
+        { key: "share",    label: "分享", icon: "🔗" }
+    ]
+
+    /// 当前活跃的导航列表
+    readonly property var activeNavItems: isTransferMode ? transferNavItems : fileNavItems
+
+    // ==================== 页面 URL 映射 ====================
+
+    function pageSourceForNav(navKey: string) : string {
+        switch (navKey) {
+        case "home":     return "HomePage.qml"
+        case "files":    return "FilesPage.qml"
+        case "trash":    return "TrashPage.qml"
+        case "upload":   return "UploadPage.qml"
+        case "download": return "DownloadPage.qml"
+        case "share":    return "SharePage.qml"
+        case "settings": return "SettingsPage.qml"
+        default:         return "HomePage.qml"
+        }
+    }
+
+    // ==================== 布局 ====================
+
     RowLayout {
         anchors.fill: parent
         spacing: 0
 
-        // ==================== 侧边栏 ====================
+        // ==================== 侧边栏 (200px) ====================
         Rectangle {
-            width: 200
+            id: sidebar
             Layout.preferredWidth: 200
             Layout.fillHeight: true
-            color: "#F5F5F5" // 简单的占位背景色
-            
+            color: palette.window
+
+            // 右侧分隔线
+            Rectangle {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: 1
+                color: palette.mid
+            }
+
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 10
-                spacing: 8
+                anchors.margins: 8
+                spacing: 4
 
-                // 动态生成导航项
+                // 导航项
                 Repeater {
-                    model: root.isTransferMode ? ["首页", "上传", "下载", "分享"] : ["首页", "我的文件", "回收站"]
-                    delegate: Button {
-                        text: modelData
+                    model: root.activeNavItems
+
+                    delegate: ItemDelegate {
+                        id: navDelegate
                         Layout.fillWidth: true
-                        highlighted: root.currentNav === modelData
-                        onClicked: root.currentNav = modelData
+                        height: 40
+                        highlighted: root.currentNav === modelData.key
+                        onClicked: root.currentNav = modelData.key
+
+                        contentItem: RowLayout {
+                            spacing: 8
+
+                            Label {
+                                text: modelData.icon
+                                font.pixelSize: 16
+                                Layout.preferredWidth: 24
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+
+                            Label {
+                                text: modelData.label
+                                font.pixelSize: 14
+                                color: navDelegate.highlighted
+                                       ? palette.highlightedText
+                                       : palette.windowText
+                                Layout.fillWidth: true
+                            }
+                        }
+
+                        background: Rectangle {
+                            radius: 6
+                            color: navDelegate.highlighted
+                                   ? palette.highlight
+                                   : navDelegate.hovered ? palette.midlight : "transparent"
+                        }
                     }
                 }
 
-                Item { Layout.fillHeight: true } // 占位填充，把底部按钮推到最下
+                // 弹簧
+                Item { Layout.fillHeight: true }
 
-                // 底部模式切换按钮
-                Button {
-                    text: root.isTransferMode ? "文件" : "传输"
+                // 模式切换按钮
+                ItemDelegate {
+                    id: modeSwitchBtn
                     Layout.fillWidth: true
+                    height: 40
+
+                    contentItem: RowLayout {
+                        spacing: 8
+
+                        Label {
+                            text: root.isTransferMode ? "📁" : "📤"
+                            font.pixelSize: 16
+                            Layout.preferredWidth: 24
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+
+                        Label {
+                            text: root.isTransferMode ? "文件" : "传输"
+                            font.pixelSize: 14
+                            color: palette.windowText
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    background: Rectangle {
+                        radius: 6
+                        color: modeSwitchBtn.hovered ? palette.midlight : "transparent"
+                    }
+
                     onClicked: {
                         root.isTransferMode = !root.isTransferMode
-                        root.currentNav = "首页" // 切换模式时重置为首页
+                        root.currentNav = "home"
                     }
                 }
             }
@@ -71,97 +186,136 @@ Item {
             Layout.fillHeight: true
             spacing: 0
 
-            // ==================== 工具栏 ====================
+            // ==================== 工具栏 (48px) ====================
             Rectangle {
+                id: toolbar
                 Layout.fillWidth: true
-                height: 48
                 Layout.preferredHeight: 48
-                color: "#FFFFFF"
-                
-                // 底部边框线
+                color: palette.window
+
+                // 底部分隔线
                 Rectangle {
-                    width: parent.width
-                    height: 1
-                    color: "#E0E0E0"
+                    anchors.left: parent.left
+                    anchors.right: parent.right
                     anchors.bottom: parent.bottom
+                    height: 1
+                    color: palette.mid
                 }
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
-                    spacing: 12
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 12
+                    spacing: 4
 
                     // 左侧：主要操作
-                    ToolButton { text: "上传" }
-                    ToolButton { text: "新建" }
+                    ToolButton {
+                        text: "⬆ 上传"
+                        font.pixelSize: 13
+                        ToolTip.visible: hovered
+                        ToolTip.text: "上传文件"
+                    }
 
-                    // 垂直分割线
+                    ToolButton {
+                        text: "📁 新建"
+                        font.pixelSize: 13
+                        ToolTip.visible: hovered
+                        ToolTip.text: "新建文件夹"
+                    }
+
+                    // 分隔线
                     Rectangle {
                         width: 1
                         height: 24
-                        color: "#E0E0E0"
+                        color: palette.mid
+                        Layout.alignment: Qt.AlignVCenter
                     }
 
-                    // 中左：导航控制
-                    ToolButton { text: "返回" }
-                    ToolButton { text: "前进" }
-                    ToolButton { text: "刷新" }
+                    // 导航控制
+                    ToolButton {
+                        text: "◀"
+                        font.pixelSize: 14
+                        ToolTip.visible: hovered
+                        ToolTip.text: "返回"
+                        enabled: false  // 将由 FileListViewModel 控制
+                    }
 
-                    // 中心弹簧
+                    ToolButton {
+                        text: "▶"
+                        font.pixelSize: 14
+                        ToolTip.visible: hovered
+                        ToolTip.text: "前进"
+                        enabled: false  // 将由 FileListViewModel 控制
+                    }
+
+                    ToolButton {
+                        text: "🔄"
+                        font.pixelSize: 14
+                        ToolTip.visible: hovered
+                        ToolTip.text: "刷新"
+                    }
+
+                    // 弹簧
                     Item { Layout.fillWidth: true }
 
-                    // 中右：搜索框
+                    // 搜索框
                     TextField {
+                        id: searchField
                         placeholderText: "搜索..."
-                        width: 200
-            Layout.preferredWidth: 200
+                        Layout.preferredWidth: 200
+                        font.pixelSize: 13
                     }
 
-                    // 垂直分割线
+                    // 分隔线
                     Rectangle {
                         width: 1
                         height: 24
-                        color: "#E0E0E0"
+                        color: palette.mid
+                        Layout.alignment: Qt.AlignVCenter
                     }
 
-                    // 右侧：更多、设置、退出登录
-                    ToolButton { text: "更多" }
-                    ToolButton { text: "设置" }
-                    ToolButton { 
-                        text: "退出登录"
+                    // 设置
+                    ToolButton {
+                        text: "⚙"
+                        font.pixelSize: 16
+                        ToolTip.visible: hovered
+                        ToolTip.text: "设置"
+                        onClicked: root.currentNav = "settings"
+                    }
+
+                    // 退出登录
+                    ToolButton {
+                        text: "退出"
+                        font.pixelSize: 13
+                        ToolTip.visible: hovered
+                        ToolTip.text: "退出登录"
                         onClicked: SessionViewModel.logout()
                     }
                 }
             }
 
-            // ==================== 主内容区 ====================
-            Rectangle {
+            // ==================== 主内容区 (Loader路由) ====================
+            Loader {
+                id: pageLoader
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                color: "#FFFFFF"
-
-                Label {
-                    anchors.centerIn: parent
-                    text: root.currentNav + " 占位页面"
-                    font.pixelSize: 24
-                    color: "#9E9E9E"
-                }
+                source: root.pageSourceForNav(root.currentNav)
             }
 
-            // ==================== 状态栏 ====================
+            // ==================== 状态栏 (32px) ====================
             Rectangle {
+                id: statusBar
                 Layout.fillWidth: true
-                height: 32
                 Layout.preferredHeight: 32
-                color: "#F5F5F5"
-                
-                // 顶部边框线
+                color: palette.window
+
+                // 顶部分隔线
                 Rectangle {
-                    width: parent.width
-                    height: 1
-                    color: "#E0E0E0"
+                    anchors.left: parent.left
+                    anchors.right: parent.right
                     anchors.top: parent.top
+                    height: 1
+                    color: palette.mid
                 }
 
                 RowLayout {
@@ -169,20 +323,23 @@ Item {
                     anchors.leftMargin: 16
                     anchors.rightMargin: 16
 
-                    // 左侧：项目数量
+                    // 左侧：项目数量（后续由 FileListViewModel 绑定）
                     Label {
-                        text: "15 个项目"
-                        color: "#616161"
+                        id: itemCountLabel
+                        text: ""
+                        color: palette.placeholderText
                         font.pixelSize: 12
                     }
 
-                    // 占位
                     Item { Layout.fillWidth: true }
 
-                    // 右侧：容量使用情况
+                    // 右侧：存储使用情况
                     Label {
-                        text: "已用 2.5 GB / 10 GB"
-                        color: "#616161"
+                        text: SessionViewModel.isLoggedIn
+                              ? "已用 " + SessionViewModel.storageUsedFormatted
+                                + " / " + SessionViewModel.storageQuotaFormatted
+                              : ""
+                        color: palette.placeholderText
                         font.pixelSize: 12
                     }
                 }

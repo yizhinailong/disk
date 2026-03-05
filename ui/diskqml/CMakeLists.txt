@@ -68,9 +68,9 @@ qt_add_qml_module(appdiskqml
         src/models/FileListModel.hpp
         src/models/BreadcrumbModel.cpp
         src/models/BreadcrumbModel.hpp
-        # --- Future: viewmodels (FileListViewModel, TransferViewModel, ShareViewModel, TrashViewModel, SettingsViewModel) ---
-        # src/viewmodels/FileListViewModel.cpp
-        # src/viewmodels/FileListViewModel.hpp
+        # --- Future: viewmodels (TransferViewModel, ShareViewModel, TrashViewModel, SettingsViewModel) ---
+        src/viewmodels/FileListViewModel.cpp
+        src/viewmodels/FileListViewModel.hpp
         # src/viewmodels/TransferViewModel.cpp
         # src/viewmodels/TransferViewModel.hpp
         # src/viewmodels/ShareViewModel.cpp
@@ -87,10 +87,13 @@ qt_add_qml_module(appdiskqml
         qml/views/HomePlaceholder.qml
         qml/views/MainWindowView.qml
         # --- Future: QML pages/components/dialogs ---
-        # qml/views/FileListView.qml
-        # qml/views/TrashView.qml
-        # qml/views/ShareView.qml
-        # qml/views/SettingsView.qml
+        qml/views/HomePage.qml
+        qml/views/FilesPage.qml
+        qml/views/TrashPage.qml
+        qml/views/UploadPage.qml
+        qml/views/DownloadPage.qml
+        qml/views/SharePage.qml
+        qml/views/SettingsPage.qml
         # qml/components/FileCard.qml
         # qml/components/BreadcrumbBar.qml
         # qml/components/TransferPanel.qml
