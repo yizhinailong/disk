@@ -10,48 +10,13 @@
  */
 #include "AuthApi.hpp"
 
-#include <QByteArray>
-#include <QJsonDocument>
 #include <QJsonObject>
 
-#include <dtos/AuthDtos.hpp>
+#include <dtos/ApiEnvelope.hpp>
 
 #include "ApiClient.hpp"
 
 namespace disk::qml::api {
-    namespace {
-        auto ParseEnvelopeFromReply(
-            bool hasNetworkError,
-            const QString& networkErrorString,
-            const QByteArray& body,
-            AuthApiCallback& cb
-        ) -> void {
-            if (hasNetworkError) {
-                cb(models::ApiEnvelope{}, networkErrorString);
-                return;
-            }
-
-            if (body.isEmpty()) {
-                cb(models::ApiEnvelope{}, QStringLiteral("Failed to parse response JSON"));
-                return;
-            }
-
-            QJsonParseError parseError;
-            const QJsonDocument json = QJsonDocument::fromJson(body, &parseError);
-            if (parseError.error != QJsonParseError::NoError) {
-                cb(models::ApiEnvelope{}, QStringLiteral("Failed to parse response JSON"));
-                return;
-            }
-
-            auto envelope = models::ParseEnvelope(json);
-            if (!envelope) {
-                cb(models::ApiEnvelope{}, QStringLiteral("Invalid envelope format"));
-                return;
-            }
-
-            cb(std::move(*envelope), QString{});
-        }
-    } // namespace
 
     AuthApi::AuthApi(ApiClient* client)
         : m_client(client) {
@@ -74,7 +39,7 @@ namespace disk::qml::api {
             body,
             ctx,
             [cb = std::move(cb)](bool hasNetworkError, QString networkErrorString, int, QByteArray body) mutable {
-                ParseEnvelopeFromReply(hasNetworkError, networkErrorString, body, cb);
+                models::ParseEnvelopeFromReply(hasNetworkError, networkErrorString, body, cb);
             }
         );
     }
@@ -94,7 +59,7 @@ namespace disk::qml::api {
             body,
             ctx,
             [cb = std::move(cb)](bool hasNetworkError, QString networkErrorString, int, QByteArray body) mutable {
-                ParseEnvelopeFromReply(hasNetworkError, networkErrorString, body, cb);
+                models::ParseEnvelopeFromReply(hasNetworkError, networkErrorString, body, cb);
             }
         );
     }
@@ -112,7 +77,7 @@ namespace disk::qml::api {
             body,
             ctx,
             [cb = std::move(cb)](bool hasNetworkError, QString networkErrorString, int, QByteArray body) mutable {
-                ParseEnvelopeFromReply(hasNetworkError, networkErrorString, body, cb);
+                models::ParseEnvelopeFromReply(hasNetworkError, networkErrorString, body, cb);
             }
         );
     }
@@ -130,7 +95,7 @@ namespace disk::qml::api {
             accessToken,
             ctx,
             [cb = std::move(cb)](bool hasNetworkError, QString networkErrorString, int, QByteArray body) mutable {
-                ParseEnvelopeFromReply(hasNetworkError, networkErrorString, body, cb);
+                models::ParseEnvelopeFromReply(hasNetworkError, networkErrorString, body, cb);
             }
         );
     }

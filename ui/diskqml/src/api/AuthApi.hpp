@@ -12,13 +12,13 @@
 
 #include <QObject>
 #include <QString>
-#include <functional>
 
+#include <dtos/ApiEnvelope.hpp>
 #include <dtos/AuthDtos.hpp>
 
 namespace disk::qml::api {
 
-    using AuthApiCallback = std::function<void(models::ApiEnvelope envelope, QString networkError)>;
+    using AuthApiCallback = models::ApiCallback;
 
     class ApiClient;
 

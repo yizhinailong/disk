@@ -21,6 +21,9 @@ namespace disk::qml::utils {
      *   - 0       : Success
      *   - 10xxx   : Common errors (e.g., invalid parameter, rate limit, internal error)
      *   - 40xxx   : Auth errors (e.g., user not found, invalid credentials, token issues)
+     *   - 50xxx   : File errors (e.g., file not found, upload failed, quota exceeded)
+     *   - 60xxx   : Share errors (e.g., share not found, expired, wrong password)
+     *   - 70xxx   : Redis errors (server-side, shown as fallback messages)
      */
     enum class ErrorCode : int {
         // Common
@@ -48,6 +51,30 @@ namespace disk::qml::utils {
         TokenWrongType = 40109,
         RefreshTokenAlreadyUsed = 40110,
         TokenRevoked = 40111,
+
+        // File
+        InvalidFilename = 50001,
+        FileTypeNotAllowed = 50002,
+        FileSizeExceeded = 50003,
+        StorageQuotaExceeded = 50004,
+        FileNotFound = 50005,
+        FolderNotFound = 50006,
+        FileAlreadyExists = 50007,
+        UploadTaskNotFound = 50008,
+        ChunkVerifyFailed = 50009,
+        FolderAlreadyExists = 50010,
+        FileReadError = 50011,
+
+        // Share
+        ShareNotFound = 60001,
+        ShareExpired = 60002,
+        SharePasswordError = 60003,
+        ShareAccessDenied = 60004,
+
+        // Redis (server-side, user-facing fallback)
+        RedisConnectionFailed = 70001,
+        RedisOperationFailed = 70002,
+        RedisKeyNotFound = 70003,
     };
 
     /**
@@ -79,6 +106,27 @@ namespace disk::qml::utils {
             case 40109: return ErrorCode::TokenWrongType;
             case 40110: return ErrorCode::RefreshTokenAlreadyUsed;
             case 40111: return ErrorCode::TokenRevoked;
+            // File
+            case 50001: return ErrorCode::InvalidFilename;
+            case 50002: return ErrorCode::FileTypeNotAllowed;
+            case 50003: return ErrorCode::FileSizeExceeded;
+            case 50004: return ErrorCode::StorageQuotaExceeded;
+            case 50005: return ErrorCode::FileNotFound;
+            case 50006: return ErrorCode::FolderNotFound;
+            case 50007: return ErrorCode::FileAlreadyExists;
+            case 50008: return ErrorCode::UploadTaskNotFound;
+            case 50009: return ErrorCode::ChunkVerifyFailed;
+            case 50010: return ErrorCode::FolderAlreadyExists;
+            case 50011: return ErrorCode::FileReadError;
+            // Share
+            case 60001: return ErrorCode::ShareNotFound;
+            case 60002: return ErrorCode::ShareExpired;
+            case 60003: return ErrorCode::SharePasswordError;
+            case 60004: return ErrorCode::ShareAccessDenied;
+            // Redis
+            case 70001: return ErrorCode::RedisConnectionFailed;
+            case 70002: return ErrorCode::RedisOperationFailed;
+            case 70003: return ErrorCode::RedisKeyNotFound;
             default   : return std::nullopt;
         }
     }
@@ -104,6 +152,27 @@ namespace disk::qml::utils {
             case 40102: return QStringLiteral("账户已锁定，请15分钟后重试");
             case 40103: return QStringLiteral("账户已被禁用");
             case 40108: return QStringLiteral("令牌已过期");
+            // File errors
+            case 50001: return QStringLiteral("文件名无效");
+            case 50002: return QStringLiteral("不支持该文件类型");
+            case 50003: return QStringLiteral("文件大小超出限制");
+            case 50004: return QStringLiteral("存储空间不足");
+            case 50005: return QStringLiteral("文件不存在");
+            case 50006: return QStringLiteral("文件夹不存在");
+            case 50007: return QStringLiteral("同名文件已存在");
+            case 50008: return QStringLiteral("上传任务不存在或已过期");
+            case 50009: return QStringLiteral("分片校验失败，请重新上传");
+            case 50010: return QStringLiteral("同名文件夹已存在");
+            case 50011: return QStringLiteral("文件读取失败");
+            // Share errors
+            case 60001: return QStringLiteral("分享不存在");
+            case 60002: return QStringLiteral("分享链接已过期");
+            case 60003: return QStringLiteral("分享密码错误");
+            case 60004: return QStringLiteral("无权限访问该分享");
+            // Redis errors (server-side, user-facing fallback)
+            case 70001:
+            case 70002: return QStringLiteral("服务器错误，请稍后重试");
+            case 70003: return QStringLiteral("资源不存在");
             default:
                 if (!fallbackServerMessage.isEmpty()) {
                     return fallbackServerMessage;

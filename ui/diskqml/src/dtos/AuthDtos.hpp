@@ -11,11 +11,12 @@
 
 #pragma once
 
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QString>
 #include <optional>
+
+#include <dtos/ApiEnvelope.hpp>
 
 namespace disk::qml::models {
 
@@ -139,50 +140,8 @@ namespace disk::qml::models {
         int expiresIn{}; ///< New access-token lifetime in seconds
     };
 
-    /**
-     * @brief Uniform JSON envelope: { "code": 0, "message": "success", "data": ... }
-     *
-     * @details
-     * All API responses are wrapped in this envelope.
-     * The `data` field holds QJsonValue::Null when absent or explicitly null.
-     */
-    struct ApiEnvelope {
-        int code{};
-        QString message;
-        QJsonValue data; ///< Payload; QJsonValue::Null when absent / null
-    };
-
-    // ---------------------------------------------------------------------------
-    // Pure-function parsers – return std::nullopt on missing / wrong-type fields
-    // ---------------------------------------------------------------------------
-
-    /**
-     * @brief Parse a raw JSON document into an ApiEnvelope.
-     *
-     * @details
-     * Expected shape: { "code": <int>, "message": "<string>", "data": <any> }
-     *
-     * @param doc  Parsed QJsonDocument from the HTTP response body.
-     * @return     Populated ApiEnvelope, or std::nullopt if the document is not
-     *             an object or if "code" / "message" fields are absent.
-     */
-    inline auto ParseEnvelope(const QJsonDocument& doc) -> std::optional<ApiEnvelope> {
-        if (!doc.isObject()) {
-            return std::nullopt;
-        }
-
-        const QJsonObject obj = doc.object();
-        if (!obj.contains(QLatin1String("code")) ||
-            !obj.contains(QLatin1String("message"))) {
-            return std::nullopt;
-        }
-
-        ApiEnvelope env;
-        env.code = obj.value(QLatin1String("code")).toInt();
-        env.message = obj.value(QLatin1String("message")).toString();
-        env.data = obj.value(QLatin1String("data")); // QJsonValue::Undefined → Null
-        return env;
-    }
+    // NOTE: ApiEnvelope, ParseEnvelope, ParseEnvelopeFromReply, and ApiCallback
+    //       are defined in <dtos/ApiEnvelope.hpp> and shared across all API modules.
 
     /**
      * @brief Parse a JSON object into a UserDto.
