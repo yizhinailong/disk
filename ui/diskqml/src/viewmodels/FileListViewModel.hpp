@@ -29,10 +29,9 @@
 #include <QtQml/qjsengine.h>
 #include <QtQml/qqmlengine.h>
 
-namespace disk::qml::models {
-    class FileListModel;
-    class BreadcrumbModel;
-} // namespace disk::qml::models
+#include <models/BreadcrumbModel.hpp>
+#include <models/FileListModel.hpp>
+#include <models/FolderTreeModel.hpp>
 
 namespace disk::qml::services {
     class FileService;
@@ -114,6 +113,8 @@ namespace disk::qml::viewmodels {
         Q_PROPERTY(disk::qml::models::FileListModel* fileListModel READ FileListModelPtr CONSTANT)
         /// The breadcrumb model for QML binding.
         Q_PROPERTY(disk::qml::models::BreadcrumbModel* breadcrumbModel READ BreadcrumbModelPtr CONSTANT)
+        /// The folder tree model for QML FolderPickerDialog binding.
+        Q_PROPERTY(disk::qml::models::FolderTreeModel* folderTreeModel READ FolderTreeModelPtr CONSTANT)
 
         // ==================== Navigation History ====================
 
@@ -161,6 +162,7 @@ namespace disk::qml::viewmodels {
         [[nodiscard]] auto CanGoForward() const -> bool;
         [[nodiscard]] auto FileListModelPtr() const -> models::FileListModel*;
         [[nodiscard]] auto BreadcrumbModelPtr() const -> models::BreadcrumbModel*;
+        [[nodiscard]] auto FolderTreeModelPtr() const -> models::FolderTreeModel*;
 
         // ==================== Property Setters ====================
 
@@ -222,6 +224,12 @@ namespace disk::qml::viewmodels {
         Q_INVOKABLE void renameFile(qint64 fileId, const QString& newName);
         /// Soft-delete files/folders (moves to trash). If fileIds is empty, uses current selection.
         Q_INVOKABLE void deleteFiles(const QList<qint64>& fileIds);
+        /// Move files/folders to a target folder.
+        Q_INVOKABLE void moveFiles(const QList<qint64>& fileIds, qint64 targetFolderId);
+        /// Copy files/folders to a target folder.
+        Q_INVOKABLE void copyFiles(const QList<qint64>& fileIds, qint64 targetFolderId);
+        /// Load the folder tree for the FolderPickerDialog.
+        Q_INVOKABLE void loadFolderTree();
 
     signals:
         void currentFolderIdChanged();
@@ -270,6 +278,7 @@ namespace disk::qml::viewmodels {
 
         models::FileListModel* m_file_list_model;
         models::BreadcrumbModel* m_breadcrumb_model;
+        models::FolderTreeModel* m_folder_tree_model;
 
         qint64 m_current_folder_id{ 0 };
         QString m_current_path;

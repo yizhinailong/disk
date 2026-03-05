@@ -12,6 +12,7 @@
 
 #include <models/BreadcrumbModel.hpp>
 #include <models/FileListModel.hpp>
+#include <models/FolderTreeModel.hpp>
 #include <services/FileService.hpp>
 #include <services/FolderService.hpp>
 
@@ -27,7 +28,8 @@ namespace disk::qml::viewmodels {
         m_file_service(fileService),
         m_folder_service(folderService),
         m_file_list_model(new models::FileListModel(this)),
-        m_breadcrumb_model(new models::BreadcrumbModel(this)) {
+        m_breadcrumb_model(new models::BreadcrumbModel(this)),
+        m_folder_tree_model(new models::FolderTreeModel(this)) {
         // Configure search debounce timer: single-shot, 300ms delay
         m_search_debounce_timer.setSingleShot(true);
         m_search_debounce_timer.setInterval(300);
@@ -122,6 +124,10 @@ namespace disk::qml::viewmodels {
 
     auto FileListViewModel::BreadcrumbModelPtr() const -> models::BreadcrumbModel* {
         return m_breadcrumb_model;
+    }
+
+    auto FileListViewModel::FolderTreeModelPtr() const -> models::FolderTreeModel* {
+        return m_folder_tree_model;
     }
 
     // ==================== Property Setters ====================
@@ -472,6 +478,91 @@ namespace disk::qml::viewmodels {
                     QString(QStringLiteral("已删除 %1 个项目")).arg(count)
                 );
                 refresh();
+            }
+        );
+    }
+
+    void FileListViewModel::moveFiles(const QList<qint64>& fileIds, qint64 targetFolderId) {
+        if (fileIds.isEmpty()) {
+            emit fileOperationFailed(QStringLiteral("没有选中任何文件"));
+            return;
+        }
+
+        auto* ctx = new QObject(this);
+
+        m_file_service->MoveFiles(
+            fileIds,
+            targetFolderId,
+            ctx,
+            [this, ctx, count = fileIds.size()](std::optional<models::MoveResultDto> /*result*/, QString errorMessage) {
+                ctx->deleteLater();
+
+                if (!errorMessage.isEmpty()) {
+                    emit fileOperationFailed(errorMessage);
+                    return;
+                }
+
+                clearSelection();
+                emit fileOperationSucceeded(
+                    QString(QStringLiteral("已移动 %1 个项目")).arg(count)
+                );
+                refresh();
+            }
+        );
+    }
+
+    void FileListViewModel::copyFiles(const QList<qint64>& fileIds, qint64 targetFolderId) {
+        if (fileIds.isEmpty()) {
+            emit fileOperationFailed(QStringLiteral("没有选中任何文件"));
+            return;
+        }
+
+        auto* ctx = new QObject(this);
+
+        m_file_service->CopyFiles(
+            fileIds,
+            targetFolderId,
+            ctx,
+            [this, ctx, count = fileIds.size()](std::optional<models::CopyResultDto> /*result*/, QString errorMessage) {
+                ctx->deleteLater();
+
+                if (!errorMessage.isEmpty()) {
+                    emit fileOperationFailed(errorMessage);
+                    return;
+                }
+
+                emit fileOperationSucceeded(
+                    QString(QStringLiteral("已复制 %1 个项目")).arg(count)
+                );
+                refresh();
+            }
+        );
+    }
+
+    void FileListViewModel::loadFolderTree() {
+        m_folder_tree_model->SetLoading(true);
+
+        auto* ctx = new QObject(this);
+
+        m_folder_service->GetFolderTree(
+            0,  // root
+            -1, // unlimited depth
+            ctx,
+            [this, ctx](std::optional<models::FolderTreeResultDto> result, QString errorMessage) {
+                ctx->deleteLater();
+                m_folder_tree_model->SetLoading(false);
+
+                if (!errorMessage.isEmpty()) {
+                    emit fileOperationFailed(errorMessage);
+                    return;
+                }
+
+                if (!result) {
+                    emit fileOperationFailed(QStringLiteral("获取文件夹树失败"));
+                    return;
+                }
+
+                m_folder_tree_model->PopulateFromDto(result->tree);
             }
         );
     }

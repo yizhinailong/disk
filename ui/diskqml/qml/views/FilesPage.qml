@@ -15,6 +15,9 @@ Item {
     signal navigateToUpload
     signal navigateToDownload
 
+    // Expose newFolderDialog so MainWindowView toolbar can trigger it
+    property alias newFolderDialog: newFolderDialog
+
     // ==================== 初始化 ====================
 
     Component.onCompleted: {
@@ -627,16 +630,14 @@ Item {
         MenuItem {
             text: "📋 复制到..."
             onTriggered: {
-                // Stub — will show folder picker in Task 14b
-                console.log("Copy requested:", contextMenu.targetFileId)
+                folderPickerDialog.openForCopy([contextMenu.targetFileId], contextMenu.targetFileName)
             }
         }
 
         MenuItem {
             text: "📦 移动到..."
             onTriggered: {
-                // Stub — will show folder picker in Task 14b
-                console.log("Move requested:", contextMenu.targetFileId)
+                folderPickerDialog.openForMove([contextMenu.targetFileId], contextMenu.targetFileName)
             }
         }
 
@@ -671,6 +672,11 @@ Item {
 
     DeleteConfirmDialog {
         id: deleteConfirmDialog
+    }
+
+    FolderPickerDialog {
+        id: folderPickerDialog
+        folderTreeModel: FileListViewModel.folderTreeModel
     }
 
     // ==================== 操作结果提示 ====================
