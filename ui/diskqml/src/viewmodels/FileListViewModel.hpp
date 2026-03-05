@@ -26,6 +26,9 @@
 
 #include <QtQml/qqmlregistration.h>
 
+#include <QtQml/qjsengine.h>
+#include <QtQml/qqmlengine.h>
+
 namespace disk::qml::models {
     class FileListModel;
     class BreadcrumbModel;
@@ -54,6 +57,7 @@ namespace disk::qml::viewmodels {
     class FileListViewModel : public QObject {
         Q_OBJECT
         QML_ELEMENT
+        QML_SINGLETON
 
         // ==================== Navigation State ====================
 
@@ -124,6 +128,18 @@ namespace disk::qml::viewmodels {
             services::FolderService* folderService,
             QObject* parent = nullptr
         );
+
+        // ==================== Singleton ====================
+
+        /**
+         * @brief Register the pre-created instance for use by the QML engine.
+         */
+        static auto SetInstance(FileListViewModel* instance) -> void;
+
+        /**
+         * @brief QML singleton factory — called once by the QML engine.
+         */
+        static auto create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> FileListViewModel*;
 
         // ==================== Property Getters ====================
 
@@ -267,6 +283,9 @@ namespace disk::qml::viewmodels {
         // Navigation history
         QVector<qint64> m_back_history;
         QVector<qint64> m_forward_history;
+
+        inline static FileListViewModel* s_instance = nullptr;
+        inline static QJSEngine* s_engine = nullptr;
     };
 
 } // namespace disk::qml::viewmodels

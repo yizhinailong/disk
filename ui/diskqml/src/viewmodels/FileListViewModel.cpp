@@ -34,6 +34,22 @@ namespace disk::qml::viewmodels {
         connect(&m_search_debounce_timer, &QTimer::timeout, this, &FileListViewModel::ExecuteSearch);
     }
 
+    // ==================== Singleton ====================
+
+    auto FileListViewModel::SetInstance(FileListViewModel* instance) -> void {
+        s_instance = instance;
+    }
+
+    auto FileListViewModel::create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> FileListViewModel* {
+        Q_ASSERT(s_instance);
+        Q_ASSERT(!s_engine || s_engine == jsEngine);
+        s_engine = jsEngine;
+
+        // C++ side owns the instance; prevent engine from deleting it.
+        QJSEngine::setObjectOwnership(s_instance, QJSEngine::CppOwnership);
+        return s_instance;
+    }
+
     // ==================== Property Getters ====================
 
     auto FileListViewModel::CurrentFolderId() const -> qint64 {
