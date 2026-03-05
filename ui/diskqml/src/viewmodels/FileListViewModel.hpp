@@ -214,6 +214,15 @@ namespace disk::qml::viewmodels {
         /// Navigate to a specific page.
         Q_INVOKABLE void goToPage(int page);
 
+        // ==================== File Operations ====================
+
+        /// Create a new folder in the current directory.
+        Q_INVOKABLE void createFolder(const QString& name);
+        /// Rename a file or folder.
+        Q_INVOKABLE void renameFile(qint64 fileId, const QString& newName);
+        /// Soft-delete files/folders (moves to trash). If fileIds is empty, uses current selection.
+        Q_INVOKABLE void deleteFiles(const QList<qint64>& fileIds);
+
     signals:
         void currentFolderIdChanged();
         void currentPathChanged();
@@ -229,6 +238,10 @@ namespace disk::qml::viewmodels {
         void totalItemsChanged();
         void selectionChanged();
         void navigationHistoryChanged();
+        /// Emitted when a file operation (create/rename/delete) succeeds.
+        void fileOperationSucceeded(const QString& message);
+        /// Emitted when a file operation (create/rename/delete) fails.
+        void fileOperationFailed(const QString& message);
 
     private:
         // ==================== Private Helpers ====================

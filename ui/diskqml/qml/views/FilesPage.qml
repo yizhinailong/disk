@@ -122,6 +122,16 @@ Item {
                     }
                 }
 
+
+                // --- 新建文件夹 ---
+                ToolButton {
+                    text: "📁+"
+                    font.pixelSize: 14
+                    ToolTip.visible: hovered
+                    ToolTip.text: "新建文件夹"
+                    onClicked: newFolderDialog.open()
+                }
+
                 Item { Layout.fillWidth: true }
 
                 // --- 排序 ---
@@ -610,8 +620,7 @@ Item {
         MenuItem {
             text: "✏️ 重命名"
             onTriggered: {
-                // Stub — will show rename dialog in Task 14
-                console.log("Rename requested:", contextMenu.targetFileId, contextMenu.targetFileName)
+                renameDialog.openForFile(contextMenu.targetFileId, contextMenu.targetFileName)
             }
         }
 
@@ -645,9 +654,69 @@ Item {
         MenuItem {
             text: "🗑 删除"
             onTriggered: {
-                // Stub — will show confirm dialog in Task 14
-                console.log("Delete requested:", contextMenu.targetFileId)
+                deleteConfirmDialog.openForFiles([contextMenu.targetFileId], contextMenu.targetFileName)
             }
         }
     }
+
+    // ==================== 对话框 ====================
+
+    NewFolderDialog {
+        id: newFolderDialog
+    }
+
+    RenameDialog {
+        id: renameDialog
+    }
+
+    DeleteConfirmDialog {
+        id: deleteConfirmDialog
+    }
+
+    // ==================== 操作结果提示 ====================
+
+    Connections {
+        target: FileListViewModel
+
+        function onFileOperationSucceeded(message) {
+            successTooltip.text = message
+            successTooltip.visible = true
+            successTooltipTimer.restart()
+        }
+
+        function onFileOperationFailed(message) {
+            failTooltip.text = message
+            failTooltip.visible = true
+            failTooltipTimer.restart()
+        }
+    }
+
+    // --- Success tooltip ---
+    ToolTip {
+        id: successTooltip
+        timeout: 3000
+        y: parent.height - 60
+        x: (parent.width - width) / 2
+    }
+
+    Timer {
+        id: successTooltipTimer
+        interval: 3000
+        onTriggered: successTooltip.visible = false
+    }
+
+    // --- Fail tooltip ---
+    ToolTip {
+        id: failTooltip
+        timeout: 5000
+        y: parent.height - 60
+        x: (parent.width - width) / 2
+    }
+
+    Timer {
+        id: failTooltipTimer
+        interval: 5000
+        onTriggered: failTooltip.visible = false
+    }
+
 }

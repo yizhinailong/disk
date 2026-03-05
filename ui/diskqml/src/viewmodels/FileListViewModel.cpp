@@ -388,6 +388,94 @@ namespace disk::qml::viewmodels {
         }
     }
 
+    // ==================== File Operations ====================
+
+    void FileListViewModel::createFolder(const QString& name) {
+        if (name.trimmed().isEmpty()) {
+            emit fileOperationFailed(QStringLiteral("文件夹名称不能为空"));
+            return;
+        }
+
+        auto* ctx = new QObject(this);
+
+        m_folder_service->CreateFolder(
+            name.trimmed(),
+            m_current_folder_id,
+            ctx,
+            [this, ctx](std::optional<models::CreateFolderResultDto> /*result*/, QString errorMessage) {
+                ctx->deleteLater();
+
+                if (!errorMessage.isEmpty()) {
+                    emit fileOperationFailed(errorMessage);
+                    return;
+                }
+
+                emit fileOperationSucceeded(QStringLiteral("文件夹创建成功"));
+                refresh();
+            }
+        );
+    }
+
+    void FileListViewModel::renameFile(qint64 fileId, const QString& newName) {
+        if (newName.trimmed().isEmpty()) {
+            emit fileOperationFailed(QStringLiteral("名称不能为空"));
+            return;
+        }
+
+        auto* ctx = new QObject(this);
+
+        m_file_service->RenameFile(
+            fileId,
+            newName.trimmed(),
+            ctx,
+            [this, ctx](std::optional<models::RenameResultDto> /*result*/, QString errorMessage) {
+                ctx->deleteLater();
+
+                if (!errorMessage.isEmpty()) {
+                    emit fileOperationFailed(errorMessage);
+                    return;
+                }
+
+                emit fileOperationSucceeded(QStringLiteral("重命名成功"));
+                refresh();
+            }
+        );
+    }
+
+    void FileListViewModel::deleteFiles(const QList<qint64>& fileIds) {
+        QList<qint64> ids = fileIds;
+        if (ids.isEmpty()) {
+            // Use current selection if no explicit IDs provided
+            ids = selectedIds();
+        }
+
+        if (ids.isEmpty()) {
+            emit fileOperationFailed(QStringLiteral("没有选中任何文件"));
+            return;
+        }
+
+        auto* ctx = new QObject(this);
+
+        m_file_service->DeleteFiles(
+            ids,
+            ctx,
+            [this, ctx, count = ids.size()](std::optional<models::DeleteResultDto> /*result*/, QString errorMessage) {
+                ctx->deleteLater();
+
+                if (!errorMessage.isEmpty()) {
+                    emit fileOperationFailed(errorMessage);
+                    return;
+                }
+
+                clearSelection();
+                emit fileOperationSucceeded(
+                    QString(QStringLiteral("已删除 %1 个项目")).arg(count)
+                );
+                refresh();
+            }
+        );
+    }
+
     // ==================== Private Setters ====================
 
     auto FileListViewModel::SetLoading(bool loading) -> void {

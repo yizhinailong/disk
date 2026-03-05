@@ -18,7 +18,7 @@ add_library(diskqml_core STATIC
     # --- Future: api services (ShareApi, TrashApi) ---
     src/api/FileApi.cpp
     src/api/FolderApi.cpp
-    # src/api/ShareApi.cpp
+    src/api/ShareApi.cpp
     # src/api/TrashApi.cpp
     src/api/UserApi.cpp
     src/services/AuthService.cpp
@@ -103,9 +103,9 @@ qt_add_qml_module(appdiskqml
         # qml/components/FileCard.qml
         # qml/components/BreadcrumbBar.qml
         # qml/components/TransferPanel.qml
-        # qml/dialogs/RenameDialog.qml
-        # qml/dialogs/ShareDialog.qml
-        # qml/dialogs/ConfirmDialog.qml
+        qml/dialogs/NewFolderDialog.qml
+        qml/dialogs/RenameDialog.qml
+        qml/dialogs/DeleteConfirmDialog.qml
 )
 
 target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/viewmodels)
