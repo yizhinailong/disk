@@ -37,6 +37,15 @@ namespace disk::qml::utils {
          */
         auto SetServerUrl(const QUrl& url) -> void;
 
+        static constexpr int kDefaultConcurrentUploads   = 3;
+        static constexpr int kDefaultConcurrentDownloads = 3;
+
+        [[nodiscard]] auto ConcurrentUploads() const -> int;
+        auto SetConcurrentUploads(int value) -> void;
+
+        [[nodiscard]] auto ConcurrentDownloads() const -> int;
+        auto SetConcurrentDownloads(int value) -> void;
+
     private:
         mutable QSettings m_settings;
     };

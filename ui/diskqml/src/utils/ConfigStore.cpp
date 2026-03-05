@@ -27,4 +27,30 @@ namespace disk::qml::utils {
         m_settings.endGroup();
     }
 
+    auto ConfigStore::ConcurrentUploads() const -> int {
+        m_settings.beginGroup("transfers");
+        const int val = m_settings.value("concurrentUploads", kDefaultConcurrentUploads).toInt();
+        m_settings.endGroup();
+        return qBound(1, val, 10);
+    }
+
+    auto ConfigStore::SetConcurrentUploads(int value) -> void {
+        m_settings.beginGroup("transfers");
+        m_settings.setValue("concurrentUploads", qBound(1, value, 10));
+        m_settings.endGroup();
+    }
+
+    auto ConfigStore::ConcurrentDownloads() const -> int {
+        m_settings.beginGroup("transfers");
+        const int val = m_settings.value("concurrentDownloads", kDefaultConcurrentDownloads).toInt();
+        m_settings.endGroup();
+        return qBound(1, val, 10);
+    }
+
+    auto ConfigStore::SetConcurrentDownloads(int value) -> void {
+        m_settings.beginGroup("transfers");
+        m_settings.setValue("concurrentDownloads", qBound(1, value, 10));
+        m_settings.endGroup();
+    }
+
 } // namespace disk::qml::utils
