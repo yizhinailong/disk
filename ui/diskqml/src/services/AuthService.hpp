@@ -19,6 +19,7 @@
 
 namespace disk::qml::api {
     class AuthApi;
+    class ApiClient;
 }
 
 namespace disk::qml::services {
@@ -43,7 +44,7 @@ namespace disk::qml::services {
         using RefreshCallback = std::function<void(std::optional<models::RefreshResultDto> result, QString errorMessage)>;
         using LogoutCallback = std::function<void(bool ok, QString errorMessage)>;
 
-        AuthService(api::AuthApi* authApi, TokenStore* tokenStore);
+        AuthService(api::AuthApi* authApi, TokenStore* tokenStore, api::ApiClient* apiClient);
 
         /**
          * @brief Validates a username string.
@@ -118,6 +119,7 @@ namespace disk::qml::services {
 
         api::AuthApi* m_auth_api;
         TokenStore* m_token_store;
+        api::ApiClient* m_api_client;
     };
 
 } // namespace disk::qml::services

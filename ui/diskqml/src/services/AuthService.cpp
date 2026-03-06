@@ -12,6 +12,7 @@
 
 #include <QRegularExpression>
 
+#include <api/ApiClient.hpp>
 #include <api/AuthApi.hpp>
 #include <services/TokenStore.hpp>
 #include <utils/ErrorCode.hpp>
@@ -22,8 +23,8 @@ namespace disk::qml::services {
     const QRegularExpression kEmailPattern(QStringLiteral("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"));
     const QRegularExpression kPasswordPattern(QStringLiteral("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,64}$"));
 
-    AuthService::AuthService(api::AuthApi* authApi, TokenStore* tokenStore)
-        : m_auth_api(authApi), m_token_store(tokenStore) {
+    AuthService::AuthService(api::AuthApi* authApi, TokenStore* tokenStore, api::ApiClient* apiClient)
+        : m_auth_api(authApi), m_token_store(tokenStore), m_api_client(apiClient) {
     }
 
     auto AuthService::ValidateUsername(const QString& username) const -> bool {
@@ -113,6 +114,7 @@ namespace disk::qml::services {
                 }
 
                 m_token_store->Save(parsed->accessToken, parsed->refreshToken, parsed->expiresIn);
+                m_api_client->SetBearerToken(parsed->accessToken);
                 cb(std::move(parsed), QString{});
             }
         );
@@ -152,6 +154,7 @@ namespace disk::qml::services {
                 }
 
                 m_token_store->Save(parsed->accessToken, parsed->refreshToken, parsed->expiresIn);
+                m_api_client->SetBearerToken(parsed->accessToken);
                 cb(std::move(parsed), QString{});
             }
         );
@@ -160,6 +163,7 @@ namespace disk::qml::services {
     auto AuthService::Logout(const QString& accessToken, QObject* ctx, LogoutCallback cb) -> void {
         if (accessToken.trimmed().isEmpty()) {
             m_token_store->Clear();
+            m_api_client->SetBearerToken(QString{});
             cb(true, QString{});
             return;
         }
@@ -176,6 +180,7 @@ namespace disk::qml::services {
                 if (envelope.code == static_cast<int>(utils::ErrorCode::Success) ||
                     IsLocalLogoutSuccessCode(envelope.code)) {
                     m_token_store->Clear();
+                    m_api_client->SetBearerToken(QString{});
                     cb(true, QString{});
                     return;
                 }
