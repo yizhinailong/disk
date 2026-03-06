@@ -174,6 +174,9 @@ cd ui/diskqml && cmake -B build -S . && cmake --build build
 
 # Build QML (Windows - Qt Creator)
 # Open ui/diskqml/CMakeLists.txt in Qt Creator and build
+# Note: After Clean/Build, ensure BuildTargets (or blank/all) = appdiskqml.
+#       Verify: "Linking CXX executable appdiskqml.exe" in output.
+#       CLI: cmake --build <build-dir> --target appdiskqml
 
 # Run QML (Linux)
 ./ui/diskqml/build/appdiskqml
