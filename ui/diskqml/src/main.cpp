@@ -1,7 +1,10 @@
+#include <QCommandLineOption>
+#include <QCommandLineParser>
 #include <QDebug>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
+#include <QTimer>
 
 #include <api/ApiClient.hpp>
 #include <api/AuthApi.hpp>
@@ -95,6 +98,20 @@ int main(int argc, char* argv[]) {
         Qt::QueuedConnection
     );
     engine.loadFromModule("Disk", "Main");
+
+    // --- CLI parsing ---
+    QCommandLineParser parser;
+    parser.setApplicationDescription("Disk QML desktop client");
+    parser.addHelpOption();
+    QCommandLineOption smokeOption(
+        "smoke",
+        "Headless smoke mode: quit after QML loads (no network required)");
+    parser.addOption(smokeOption);
+    parser.process(app);
+
+    if (parser.isSet(smokeOption)) {
+        QTimer::singleShot(1500, &app, &QCoreApplication::quit);
+    }
 
     return app.exec();
 }

@@ -27,7 +27,7 @@ add_library(diskqml_core STATIC
     # --- Future: services (FileService, FolderService, ShareService, TrashService, UserService) ---
     src/services/FileService.cpp
     src/services/FolderService.cpp
-    # src/services/ShareService.cpp
+    src/services/ShareService.cpp
     src/services/TrashService.cpp
     # src/services/UserService.cpp
     src/utils/ConfigStore.cpp
@@ -83,12 +83,14 @@ qt_add_qml_module(appdiskqml
         src/transfers/TransferItem.hpp
         # src/viewmodels/TransferViewModel.cpp
         # src/viewmodels/TransferViewModel.hpp
-        # src/viewmodels/ShareViewModel.cpp
-        # src/viewmodels/ShareViewModel.hpp
+        src/viewmodels/ShareViewModel.cpp
+        src/viewmodels/ShareViewModel.hpp
         src/viewmodels/TrashViewModel.cpp
         src/viewmodels/TrashViewModel.hpp
         src/models/TrashListModel.cpp
         src/models/TrashListModel.hpp
+        src/models/ShareListModel.cpp
+        src/models/ShareListModel.hpp
         src/viewmodels/SettingsViewModel.cpp
         src/viewmodels/SettingsViewModel.hpp
     QML_FILES
