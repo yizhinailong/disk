@@ -9,22 +9,15 @@
  *
  */
 
-#include "services/RedisService.hpp"
-
 #include <gtest/gtest.h>
 
-#include "utils/ErrorCode.hpp"
-
 namespace {
-
-    using disk::error::Code;
-    using disk::services::RedisService;
 
     TEST(RedisServiceTest, DISABLED_Set) {
         // 【需要 Redis 环境】Set 操作测试
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
         // 测试步骤：
         // 1. 创建 RedisService 实例
         // 2. 创建 Redis 客户端
@@ -39,7 +32,7 @@ namespace {
         // 【需要 Redis 环境】Get 操作测试
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试
+        // TODO(liufeng): 在集成测试中运行此测试
         // 测试步骤：
         // 1. 创建 RedisService 实例
         // 2. 调用 Get 方法读取值
@@ -52,7 +45,7 @@ namespace {
         // 【需要 Redis 环境】Delete 操作测试
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试
+        // TODO(liufeng): 在集成测试中运行此测试
         // 测试步骤：
         // 1. 创建 RedisService 实例
         // 2. 调用 Delete 方法删除键
@@ -65,7 +58,7 @@ namespace {
         // 【需要 Redis 环境】Exists 操作测试
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试
+        // TODO(liufeng): 在集成测试中运行此测试
         // 测试步骤：
         // 1. 创建 RedisService 实例
         // 2. 调用 Exists 方法检查键是否存在
@@ -78,7 +71,7 @@ namespace {
         // 【需要 Redis 环境】Expire 操作测试
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试
+        // TODO(liufeng): 在集成测试中运行此测试
         // 测试步骤：
         // 1. 创建 RedisService 实例
         // 2. 先 Set 设置值
@@ -88,11 +81,11 @@ namespace {
         SUCCEED() << "测试已跳过：需要 Redis 环境";
     }
 
-    TEST(RedisServiceTest, DISABLED_RedisRequired_IncrNewKey_ReturnsOne) {
+    TEST(RedisServiceTest, DISABLED_RedisRequiredIncrNewKeyReturnsOne) {
         // 【需要 Redis 环境】Incr 新键返回 1
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
         // 测试步骤：
         // 1. 创建 RedisService 实例
         // 2. 对不存在的键调用 Incr 方法
@@ -102,11 +95,11 @@ namespace {
         SUCCEED() << "测试已跳过：需要 Redis 环境";
     }
 
-    TEST(RedisServiceTest, DISABLED_RedisRequired_IncrExistingKey_IncrementsValue) {
+    TEST(RedisServiceTest, DISABLED_RedisRequiredIncrExistingKeyIncrementsValue) {
         // 【需要 Redis 环境】Incr 现有键递增值
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
         // 测试步骤：
         // 1. 创建 RedisService 实例
         // 2. 先使用 Set 设置键的初始值
@@ -116,11 +109,11 @@ namespace {
         SUCCEED() << "测试已跳过：需要 Redis 环境";
     }
 
-    TEST(RedisServiceTest, DISABLED_RedisRequired_IncrBy_AddsSpecifiedAmount) {
+    TEST(RedisServiceTest, DISABLED_RedisRequiredIncrByAddsSpecifiedAmount) {
         // 【需要 Redis 环境】IncrBy 增加指定数量
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
         // 测试步骤：
         // 1. 创建 RedisService 实例
         // 2. 先使用 Set 设置键的初始值
@@ -130,11 +123,11 @@ namespace {
         SUCCEED() << "测试已跳过：需要 Redis 环境";
     }
 
-    TEST(RedisServiceTest, DISABLED_RedisRequired_IncrByNegative_DecrementsValue) {
+    TEST(RedisServiceTest, DISABLED_RedisRequiredIncrByNegativeDecrementsValue) {
         // 【需要 Redis 环境】IncrBy 负数减少值
         // 此测试需要实际 Redis 连接才能运行
         // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO: 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
+        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
         // 测试步骤：
         // 1. 创建 RedisService 实例
         // 2. 先使用 Set 设置键的初始值为 10
@@ -167,26 +160,26 @@ namespace {
 } // namespace
 
 // 保持 TokenService 专用测试
-TEST(RedisService, StoreRefreshToken_Success) {
+TEST(RedisService, StoreRefreshTokenSuccess) {
 }
 
-TEST(RedisService, StoreRefreshToken_InvalidToken) {
+TEST(RedisService, StoreRefreshTokenInvalidToken) {
 }
 
-TEST(RedisService, RefreshRefreshToken_Success) {
+TEST(RedisService, RefreshRefreshTokenSuccess) {
 }
 
-TEST(RedisService, RefreshRefreshToken_TokenAlreadyUsed) {
+TEST(RedisService, RefreshRefreshTokenTokenAlreadyUsed) {
 }
 
-TEST(RedisService, InvalidateAccessToken_Success) {
+TEST(RedisService, InvalidateAccessTokenSuccess) {
 }
 
-TEST(RedisService, RevokeRefreshToken_Success) {
+TEST(RedisService, RevokeRefreshTokenSuccess) {
 }
 
-TEST(RedisService, IsAccessTokenRevoked_True) {
+TEST(RedisService, IsAccessTokenRevokedTrue) {
 }
 
-TEST(RedisService, IsAccessTokenRevoked_False) {
+TEST(RedisService, IsAccessTokenRevokedFalse) {
 }

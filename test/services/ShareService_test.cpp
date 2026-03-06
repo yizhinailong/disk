@@ -9,7 +9,7 @@
  *
  */
 
-#include "services/ShareService.hpp"
+
 
 #include <gtest/gtest.h>
 
@@ -125,7 +125,7 @@ namespace disk::share {
 
             ASSERT_TRUE(json.isMember("items"));
             ASSERT_TRUE(json.isMember("pagination"));
-            EXPECT_EQ(json["items"].size(), 2u);
+            EXPECT_EQ(json["items"].size(), 2U);
             EXPECT_EQ(json["pagination"]["page"].asInt(), 1);
             EXPECT_EQ(json["pagination"]["page_size"].asInt(), 20);
             EXPECT_EQ(json["pagination"]["total"].asInt(), 45);
@@ -164,7 +164,7 @@ namespace disk::share {
             EXPECT_EQ(json["share_id"].asString(), "detail001");
             EXPECT_EQ(json["has_password"].asBool(), true);
             EXPECT_EQ(json["view_count"].asInt(), 150);
-            EXPECT_EQ(json["files"].size(), 2u);
+            EXPECT_EQ(json["files"].size(), 2U);
             EXPECT_EQ(json["files"][0]["name"].asString(), "report.pdf");
             EXPECT_EQ(json["files"][1]["name"].asString(), "data.xlsx");
         }
@@ -262,7 +262,7 @@ namespace disk::share {
 
             ASSERT_TRUE(json.isMember("summary"));
             ASSERT_TRUE(json.isMember("results"));
-            EXPECT_EQ(json["results"].size(), 3u);
+            EXPECT_EQ(json["results"].size(), 3U);
             EXPECT_EQ(json["summary"]["succeeded"].asInt(), 2);
             EXPECT_EQ(json["summary"]["failed"].asInt(), 1);
 
@@ -295,7 +295,7 @@ namespace disk::share {
             EXPECT_EQ(json["share_token"].asString(), "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...");
             EXPECT_EQ(json["expires_in"].asInt(), 3600);
             EXPECT_EQ(json["permission"].asString(), "download");
-            EXPECT_EQ(json["files"].size(), 1u);
+            EXPECT_EQ(json["files"].size(), 1U);
             EXPECT_EQ(json["files"][0]["name"].asString(), "shared_file.pdf");
         }
 
@@ -330,8 +330,8 @@ namespace disk::share {
 
             ASSERT_TRUE(json.isMember("items"));
             ASSERT_TRUE(json.isMember("breadcrumb"));
-            EXPECT_EQ(json["items"].size(), 2u);
-            EXPECT_EQ(json["breadcrumb"].size(), 1u);
+            EXPECT_EQ(json["items"].size(), 2U);
+            EXPECT_EQ(json["breadcrumb"].size(), 1U);
             EXPECT_EQ(json["items"][0]["type"].asString(), "folder");
             EXPECT_EQ(json["items"][1]["type"].asString(), "file");
         }
@@ -343,7 +343,7 @@ namespace disk::share {
 
             auto json = crumb.ToJson();
 
-            EXPECT_EQ(json["id"].asUInt64(), 123u);
+            EXPECT_EQ(json["id"].asUInt64(), 123U);
             EXPECT_EQ(json["name"].asString(), "Documents");
         }
 
@@ -406,10 +406,10 @@ namespace disk::share {
 
             auto json = file.ToJson();
 
-            EXPECT_EQ(json["id"].asUInt64(), 42u);
+            EXPECT_EQ(json["id"].asUInt64(), 42U);
             EXPECT_EQ(json["name"].asString(), "test_document.pdf");
             EXPECT_EQ(json["type"].asString(), "file");
-            EXPECT_EQ(json["size"].asUInt64(), 1234567u);
+            EXPECT_EQ(json["size"].asUInt64(), 1234567U);
         }
 
         // ==================== Pagination Tests ====================
@@ -526,7 +526,7 @@ namespace disk::share {
             // Error code 50005 = FileNotFound per ErrorCode.hpp
             // This error is returned when file_id is valid but not part of the share
             constexpr auto file_not_found_code = static_cast<uint32_t>(ErrorCode::FileNotFound);
-            EXPECT_EQ(file_not_found_code, 50005u);
+            EXPECT_EQ(file_not_found_code, 50005U);
 
             // HTTP status for FileNotFound should be 404
             auto status = Error::GetHttpStatus(ErrorCode::FileNotFound);
@@ -566,7 +566,7 @@ namespace disk::share {
         TEST_F(ShareApiRegressionTest, ShareTokenMalformedErrorCode) {
             // Error code 40107 = TokenMalformed per ErrorCode.hpp
             constexpr auto malformed_code = static_cast<uint32_t>(ErrorCode::TokenMalformed);
-            EXPECT_EQ(malformed_code, 40107u);
+            EXPECT_EQ(malformed_code, 40107U);
 
             // HTTP status for malformed token should be 401 Unauthorized
             auto status = Error::GetHttpStatus(ErrorCode::TokenMalformed);
@@ -581,7 +581,7 @@ namespace disk::share {
         TEST_F(ShareApiRegressionTest, ShareTokenExpiredErrorCode) {
             // Error code 40108 = TokenExpired per ErrorCode.hpp
             constexpr auto expired_code = static_cast<uint32_t>(ErrorCode::TokenExpired);
-            EXPECT_EQ(expired_code, 40108u);
+            EXPECT_EQ(expired_code, 40108U);
 
             // HTTP status for expired token should be 401 Unauthorized
             auto status = Error::GetHttpStatus(ErrorCode::TokenExpired);
@@ -635,7 +635,7 @@ namespace disk::share {
             EXPECT_EQ(response.summary.total, 5);
             EXPECT_EQ(response.summary.succeeded, 3);
             EXPECT_EQ(response.summary.failed, 2);
-            EXPECT_EQ(response.results.size(), 5u);
+            EXPECT_EQ(response.results.size(), 5U);
 
             // Verify JSON output structure
             auto json = response.ToJson();
@@ -644,7 +644,7 @@ namespace disk::share {
             EXPECT_EQ(json["summary"]["total"].asInt(), 5);
             EXPECT_EQ(json["summary"]["succeeded"].asInt(), 3);
             EXPECT_EQ(json["summary"]["failed"].asInt(), 2);
-            EXPECT_EQ(json["results"].size(), 5u);
+            EXPECT_EQ(json["results"].size(), 5U);
 
             // Verify each result has share_id and status
             for (const auto& result : json["results"]) {
@@ -668,7 +668,7 @@ namespace disk::share {
         TEST_F(ShareApiRegressionTest, ShareTokenMissingErrorCode) {
             // Error code 40106 = TokenMissing per ErrorCode.hpp
             constexpr auto missing_code = static_cast<uint32_t>(ErrorCode::TokenMissing);
-            EXPECT_EQ(missing_code, 40106u);
+            EXPECT_EQ(missing_code, 40106U);
 
             // HTTP status for missing token should be 401 Unauthorized
             auto status = Error::GetHttpStatus(ErrorCode::TokenMissing);
@@ -683,7 +683,7 @@ namespace disk::share {
         TEST_F(ShareApiRegressionTest, ShareAccessDeniedErrorCode) {
             // Error code 60004 = ShareAccessDenied per ErrorCode.hpp
             constexpr auto access_denied_code = static_cast<uint32_t>(ErrorCode::ShareAccessDenied);
-            EXPECT_EQ(access_denied_code, 60004u);
+            EXPECT_EQ(access_denied_code, 60004U);
 
             // HTTP status for access denied should be 403 Forbidden
             auto status = Error::GetHttpStatus(ErrorCode::ShareAccessDenied);

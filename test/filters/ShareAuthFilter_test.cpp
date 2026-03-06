@@ -21,30 +21,30 @@ namespace {
     using disk::error::Code;
     using disk::services::TokenService;
 
-    static constexpr const char* TEST_JWT_SECRET = "test_secret_key_for_share_token_32b";
+    constexpr const char* TEST_JWT_SECRET = "test_secret_key_for_share_token_32b";
 
-    TEST(ShareAuthFilterTest, ErrorMappingContract_TokenMissing) {
+    TEST(ShareAuthFilterTest, ErrorMappingContractTokenMissing) {
         auto http_status = disk::error::GetHttpStatus(Code::TokenMissing);
         EXPECT_EQ(http_status, drogon::k401Unauthorized);
         auto message = disk::error::GetErrorMessage(Code::TokenMissing);
         EXPECT_EQ(message, std::string("Token not provided"));
     }
 
-    TEST(ShareAuthFilterTest, ErrorMappingContract_TokenMalformed) {
+    TEST(ShareAuthFilterTest, ErrorMappingContractTokenMalformed) {
         auto http_status = disk::error::GetHttpStatus(Code::TokenMalformed);
         EXPECT_EQ(http_status, drogon::k401Unauthorized);
         auto message = disk::error::GetErrorMessage(Code::TokenMalformed);
         EXPECT_EQ(message, std::string("Token format error"));
     }
 
-    TEST(ShareAuthFilterTest, ErrorMappingContract_TokenExpired) {
+    TEST(ShareAuthFilterTest, ErrorMappingContractTokenExpired) {
         auto http_status = disk::error::GetHttpStatus(Code::TokenExpired);
         EXPECT_EQ(http_status, drogon::k401Unauthorized);
         auto message = disk::error::GetErrorMessage(Code::TokenExpired);
         EXPECT_EQ(message, std::string("Token expired"));
     }
 
-    TEST(ShareAuthFilterTest, ErrorMappingContract_TokenRevoked) {
+    TEST(ShareAuthFilterTest, ErrorMappingContractTokenRevoked) {
         auto http_status = disk::error::GetHttpStatus(Code::TokenRevoked);
         EXPECT_EQ(http_status, drogon::k401Unauthorized);
         auto message = disk::error::GetErrorMessage(Code::TokenRevoked);
@@ -78,27 +78,27 @@ namespace {
         );
     }
 
-    TEST(ShareAuthFilterTest, ServiceVerifyToken_MalformedPath_ReturnsMalformedCode) {
+    TEST(ShareAuthFilterTest, ServiceVerifyTokenMalformedPathReturnsMalformedCode) {
         auto result = TokenService::VerifyShareToken(TEST_JWT_SECRET, "malformed.token.string");
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error().code, Code::TokenMalformed);
     }
 
-    TEST(ShareAuthFilterTest, ServiceVerifyToken_EmptyPath_ReturnsMalformedCode) {
+    TEST(ShareAuthFilterTest, ServiceVerifyTokenEmptyPathReturnsMalformedCode) {
         auto result = TokenService::VerifyShareToken(TEST_JWT_SECRET, "");
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error().code, Code::TokenMalformed);
     }
 
-    TEST(ShareAuthFilterTest, DISABLED_FilterMissingToken_ReturnsTokenMissing) {
+    TEST(ShareAuthFilterTest, DISABLED_FilterMissingTokenReturnsTokenMissing) {
         SUCCEED() << "Filter integration test requires Drogon runtime with HTTP request context";
     }
 
-    TEST(ShareAuthFilterTest, DISABLED_FilterRevokedToken_ReturnsTokenRevoked) {
+    TEST(ShareAuthFilterTest, DISABLED_FilterRevokedTokenReturnsTokenRevoked) {
         SUCCEED() << "Filter revoked test requires Drogon runtime with Redis connection";
     }
 
-    TEST(ShareAuthFilterTest, DISABLED_FilterValidToken_SetsRequestAttributes) {
+    TEST(ShareAuthFilterTest, DISABLED_FilterValidTokenSetsRequestAttributes) {
         SUCCEED() << "Filter attribute test requires Drogon runtime with HTTP request context";
     }
 
