@@ -61,14 +61,16 @@ auto RunAuthSmokeTest() -> int {
     apiClient.SetBaseUrl(configStore.ServerUrl());
     apiClient.SetBearerToken(accessToken);
 
+
     api::FileApi fileApi(&apiClient);
     api::FolderApi folderApi(&apiClient);
+    api::TrashApi trashApi(&apiClient);
 
     // Event loop for async operations
     QEventLoop loop;
 
     int exitCode = 0;
-    int pendingCalls = 2; // Two API calls to complete
+    int pendingCalls = 3; // Three API calls to complete
     bool hadError = false;
 
     // 10-second timeout
@@ -128,6 +130,27 @@ auto RunAuthSmokeTest() -> int {
                 exitCode = 5;
             } else {
                 qDebug() << "Auth smoke test: Breadcrumb OK";
+            }
+            checkCompletion();
+        }
+    );
+
+    // Call 3: GET /api/trash
+    trashApi.List(
+        1,    // page
+        1,    // page_size (minimal)
+        &loop,
+        [&hadError, &exitCode, &checkCompletion](models::ApiEnvelope envelope, QString networkError) {
+            if (!networkError.isEmpty()) {
+                qCritical() << "Auth smoke test failed: Trash list network error:" << networkError;
+                hadError = true;
+                exitCode = 6;
+            } else if (envelope.IsError()) {
+                qCritical() << "Auth smoke test failed: Trash list API error (code=" << envelope.code << "):" << envelope.message;
+                hadError = true;
+                exitCode = 7;
+            } else {
+                qDebug() << "Auth smoke test: Trash list OK";
             }
             checkCompletion();
         }
