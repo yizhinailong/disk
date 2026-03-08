@@ -11,12 +11,14 @@
 #include "TrashService.hpp"
 
 #include <api/TrashApi.hpp>
+#include <services/TokenRefreshCoordinator.hpp>
 #include <utils/ErrorCode.hpp>
 
 namespace disk::qml::services {
 
-    TrashService::TrashService(api::TrashApi* trashApi)
-        : m_trash_api(trashApi) {
+    TrashService::TrashService(api::TrashApi* trashApi, TokenRefreshCoordinator* coordinator)
+        : m_trash_api(trashApi)
+        , m_coordinator(coordinator) {
     }
 
     auto TrashService::ListTrash(

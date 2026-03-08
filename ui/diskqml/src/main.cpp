@@ -17,6 +17,7 @@
 #include <services/FileService.hpp>
 #include <services/FolderService.hpp>
 #include <services/TrashService.hpp>
+#include <services/TokenRefreshCoordinator.hpp>
 #include <services/TokenStore.hpp>
 #include <utils/ConfigStore.hpp>
 #include <viewmodels/FileListViewModel.hpp>
@@ -185,9 +186,15 @@ int main(int argc, char* argv[]) {
     disk::qml::api::FolderApi folderApi(&apiClient);
     disk::qml::api::TrashApi trashApi(&apiClient);
     disk::qml::services::AuthService authService(&authApi, &tokenStore, &apiClient);
-    disk::qml::services::FileService fileService(&fileApi);
-    disk::qml::services::FolderService folderService(&folderApi);
-    disk::qml::services::TrashService trashService(&trashApi);
+
+    disk::qml::services::TokenRefreshCoordinator tokenRefreshCoordinator(
+        &authService,
+        &tokenStore,
+        &apiClient
+    );
+    disk::qml::services::FileService fileService(&fileApi, &tokenRefreshCoordinator);
+    disk::qml::services::FolderService folderService(&folderApi, &tokenRefreshCoordinator);
+    disk::qml::services::TrashService trashService(&trashApi, &tokenRefreshCoordinator);
 
     disk::qml::viewmodels::LoginViewModel loginViewModel(&authService);
     disk::qml::viewmodels::RegisterViewModel registerViewModel(&authService);
@@ -197,6 +204,13 @@ int main(int argc, char* argv[]) {
         &tokenStore,
         &authService,
         &configStore
+    );
+
+    QObject::connect(
+        &tokenRefreshCoordinator,
+        &disk::qml::services::TokenRefreshCoordinator::forceLogout,
+        &sessionViewModel,
+        &disk::qml::viewmodels::SessionViewModel::logout
     );
 
     disk::qml::viewmodels::FileListViewModel fileListViewModel(

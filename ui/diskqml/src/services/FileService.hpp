@@ -23,6 +23,7 @@ namespace disk::qml::api {
 }
 
 namespace disk::qml::services {
+    class TokenRefreshCoordinator;
 
     /**
      * @brief File service for the QML client.
@@ -43,7 +44,7 @@ namespace disk::qml::services {
         using DeleteCallback = std::function<void(std::optional<models::DeleteResultDto> result, QString errorMessage)>;
         using SearchCallback = std::function<void(std::optional<models::SearchResultDto> result, QString errorMessage)>;
 
-        explicit FileService(api::FileApi* fileApi);
+        explicit FileService(api::FileApi* fileApi, TokenRefreshCoordinator* coordinator = nullptr);
 
         /**
          * @brief Lists files and folders in a given parent folder.
@@ -132,6 +133,7 @@ namespace disk::qml::services {
         auto MapEnvelopeError(const models::ApiEnvelope& envelope) const -> QString;
 
         api::FileApi* m_file_api;
+        TokenRefreshCoordinator* m_coordinator{nullptr};
     };
 
 } // namespace disk::qml::services

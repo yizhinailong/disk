@@ -23,6 +23,7 @@ namespace disk::qml::api {
 }
 
 namespace disk::qml::services {
+    class TokenRefreshCoordinator;
 
     /**
      * @brief Trash service for the QML client.
@@ -41,7 +42,7 @@ namespace disk::qml::services {
         using DeleteCallback = std::function<void(std::optional<models::TrashBatchResultDto> result, QString errorMessage)>;
         using ClearAllCallback = std::function<void(std::optional<models::TrashClearResultDto> result, QString errorMessage)>;
 
-        explicit TrashService(api::TrashApi* trashApi);
+        explicit TrashService(api::TrashApi* trashApi, TokenRefreshCoordinator* coordinator = nullptr);
 
         /**
          * @brief Lists trashed items with pagination.
@@ -87,6 +88,7 @@ namespace disk::qml::services {
         auto MapEnvelopeError(const models::ApiEnvelope& envelope) const -> QString;
 
         api::TrashApi* m_trash_api;
+        TokenRefreshCoordinator* m_coordinator{nullptr};
     };
 
 } // namespace disk::qml::services

@@ -11,12 +11,14 @@
 #include "FolderService.hpp"
 
 #include <api/FolderApi.hpp>
+#include <services/TokenRefreshCoordinator.hpp>
 #include <utils/ErrorCode.hpp>
 
 namespace disk::qml::services {
 
-    FolderService::FolderService(api::FolderApi* folderApi)
-        : m_folder_api(folderApi) {
+    FolderService::FolderService(api::FolderApi* folderApi, TokenRefreshCoordinator* coordinator)
+        : m_folder_api(folderApi)
+        , m_coordinator(coordinator) {
     }
 
     auto FolderService::CreateFolder(

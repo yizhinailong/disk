@@ -11,12 +11,14 @@
 #include "FileService.hpp"
 
 #include <api/FileApi.hpp>
+#include <services/TokenRefreshCoordinator.hpp>
 #include <utils/ErrorCode.hpp>
 
 namespace disk::qml::services {
 
-    FileService::FileService(api::FileApi* fileApi)
-        : m_file_api(fileApi) {
+    FileService::FileService(api::FileApi* fileApi, TokenRefreshCoordinator* coordinator)
+        : m_file_api(fileApi)
+        , m_coordinator(coordinator) {
     }
 
     auto FileService::ListFiles(

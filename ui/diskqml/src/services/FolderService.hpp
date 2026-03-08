@@ -22,6 +22,7 @@ namespace disk::qml::api {
 }
 
 namespace disk::qml::services {
+    class TokenRefreshCoordinator;
 
     /**
      * @brief Folder service for the QML client.
@@ -38,7 +39,7 @@ namespace disk::qml::services {
         using BreadcrumbCallback = std::function<void(std::optional<models::BreadcrumbResultDto> result, QString errorMessage)>;
         using FolderTreeCallback = std::function<void(std::optional<models::FolderTreeResultDto> result, QString errorMessage)>;
 
-        explicit FolderService(api::FolderApi* folderApi);
+        explicit FolderService(api::FolderApi* folderApi, TokenRefreshCoordinator* coordinator = nullptr);
 
         /**
          * @brief Creates a new folder.
@@ -73,6 +74,7 @@ namespace disk::qml::services {
         auto MapEnvelopeError(const models::ApiEnvelope& envelope) const -> QString;
 
         api::FolderApi* m_folder_api;
+        TokenRefreshCoordinator* m_coordinator{nullptr};
     };
 
 } // namespace disk::qml::services
