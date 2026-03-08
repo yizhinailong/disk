@@ -65,10 +65,45 @@ namespace disk::qml::services {
         m_folder_api->GetBreadcrumb(
             folderId,
             ctx,
-            [this, cb = std::move(cb)](models::ApiEnvelope envelope, QString networkError) {
+            [this, folderId, ctx, cb, retried = false](models::ApiEnvelope envelope, QString networkError) mutable {
                 if (!networkError.isEmpty()) {
                     cb(std::nullopt, MapTransportError(networkError));
                     return;
+                }
+
+                // Check for 40108 TokenExpired - retry once if coordinator available
+                if (envelope.code == static_cast<int>(utils::ErrorCode::TokenExpired)) {
+                    if (m_coordinator && !retried) {
+                        retried = true;
+                        m_coordinator->HandleIfTokenExpired(envelope,
+                            [this, folderId, ctx, cb, envelope](bool success) {
+                                if (success) {
+                                    // Retry the request
+                                    m_folder_api->GetBreadcrumb(folderId, ctx,
+                                        [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
+                                            if (!retryNetworkError.isEmpty()) {
+                                                cb(std::nullopt, MapTransportError(retryNetworkError));
+                                                return;
+                                            }
+                                            if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                                                cb(std::nullopt, MapEnvelopeError(retryEnvelope));
+                                                return;
+                                            }
+                                            auto parsed = models::ParseBreadcrumbResult(retryEnvelope.data);
+                                            if (!parsed) {
+                                                cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                                                return;
+                                            }
+                                            cb(std::move(parsed), QString{});
+                                        }
+                                    );
+                                } else {
+                                    cb(std::nullopt, MapEnvelopeError(envelope));
+                                }
+                            }
+                        );
+                        return;
+                    }
                 }
 
                 if (envelope.code != static_cast<int>(utils::ErrorCode::Success)) {
