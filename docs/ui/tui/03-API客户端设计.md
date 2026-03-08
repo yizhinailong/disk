@@ -12,6 +12,9 @@
 4. **高效的缓存策略** - 减少重复请求，提升响应速度
 5. **灵活的配置管理** - 支持 CLI、环境变量、配置文件多源配置
 
+> **Note**: TUI implementation source directory (`ui/tui`) is not present in this repository. This document describes the API contract that the TUI client should follow, aligned with the backend API specification.
+
+---
 ### 1.2 架构原则
 
 | 原则 | 说明 |
@@ -1470,9 +1473,27 @@ func (s *ShareAPI) Cancel(ctx context.Context, shareIDs []string) error {
         DoJSON(nil)
 }
 
-// DownloadShare 下载分享文件
-func (s *ShareAPI) DownloadShare(ctx context.Context, shareCode string, fileID uint64, shareToken string) (io.ReadCloser, int64, error) {
-    path := fmt.Sprintf("/api/share/%s/download/%d", shareCode, fileID)
+// BrowseShare 浏览分享内容（使用 X-Share-Token）
+func (s *ShareAPI) BrowseShare(ctx context.Context, shareID string, folderID uint64, shareToken string) (*FileListResponse, error) {
+    path := fmt.Sprintf("/api/share/browse/%s", shareID)
+    
+    req := s.client.NewRequest(ctx, http.MethodGet, path).
+        WithHeader("X-Share-Token", shareToken)
+    
+    if folderID > 0 {
+        req.WithQuery("folder_id", strconv.FormatUint(folderID, 10))
+    }
+    
+    var resp FileListResponse
+    if err := req.DoJSON(&resp); err != nil {
+        return nil, err
+    }
+    return &resp, nil
+}
+
+// DownloadShare 下载分享文件（使用 X-Share-Token）
+func (s *ShareAPI) DownloadShare(ctx context.Context, shareID string, fileID uint64, shareToken string) (io.ReadCloser, int64, error) {
+    path := fmt.Sprintf("/api/share/download/%s/%d", shareID, fileID)
 
     resp, err := s.client.NewRequest(ctx, http.MethodGet, path).
         WithHeader("X-Share-Token", shareToken).

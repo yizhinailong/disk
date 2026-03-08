@@ -15,7 +15,7 @@
 
 主要目标：
 
-1. **端点契约完整性** - 覆盖全部 29 个 QML 客户端 API 端点
+1. **端点契约完整性** - 覆盖全部 32 个 QML 客户端 API 端点（不含上传端点，上传由专用传输引擎处理）
 2. **字段级精度** - 每个请求/响应字段的类型、约束、来源明确
 3. **认证状态机** - JWT 令牌生命周期和刷新策略
 4. **错误处理一致性** - 错误码映射和用户反馈策略
@@ -249,7 +249,7 @@ AuthService::Logout(accessToken, ctx, callback)
 |------|----------|----------|------|
 | Auth | 4 | None / Bearer | 注册/登录/刷新无需认证，登出需要 Bearer |
 | User | 4 | Bearer Token | 用户资料、密码、存储统计 |
-| File | 9 | Bearer Token | 文件列表、搜索、操作、下载 |
+| File | 9 | Bearer Token | 文件列表、搜索、操作、下载（上传由专用传输引擎处理，见第7节） |
 | Folder | 3 | Bearer Token | 文件夹创建、目录树、面包屑 |
 | Share | 8 | Bearer / X-Share-Token / None | 管理用 Bearer，浏览/下载用 X-Share-Token，访问无需认证 |
 | Trash | 4 | Bearer Token | 回收站列表、恢复、删除 |
