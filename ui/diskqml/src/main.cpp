@@ -175,6 +175,11 @@ int main(int argc, char* argv[]) {
     disk::qml::api::ApiClient apiClient;
     apiClient.SetBaseUrl(configStore.ServerUrl());
 
+    // Inject stored JWT token into ApiClient on startup
+    if (tokenStore.HasValidAccessToken()) {
+        apiClient.SetBearerToken(tokenStore.AccessToken());
+    }
+
     disk::qml::api::AuthApi authApi(&apiClient);
     disk::qml::api::FileApi fileApi(&apiClient);
     disk::qml::api::FolderApi folderApi(&apiClient);
