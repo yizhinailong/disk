@@ -31,34 +31,74 @@ namespace disk::qml::services {
         QObject* ctx,
         ListCallback cb
     ) -> void {
-        m_file_api->List(
-            parentId,
-            page,
-            pageSize,
-            sortBy,
-            sortOrder,
-            type,
-            ctx,
-            [this, cb = std::move(cb)](models::ApiEnvelope envelope, QString networkError) {
-                if (!networkError.isEmpty()) {
-                    cb(std::nullopt, MapTransportError(networkError));
-                    return;
-                }
+        auto performRequest = [this, parentId, page, pageSize, sortBy, sortOrder, type, ctx, cb, retried = false]() mutable {
+            m_file_api->List(
+                parentId,
+                page,
+                pageSize,
+                sortBy,
+                sortOrder,
+                type,
+                ctx,
+                [this, parentId, page, pageSize, sortBy, sortOrder, type, ctx, cb, retried](models::ApiEnvelope envelope, QString networkError) mutable {
+                    if (!networkError.isEmpty()) {
+                        cb(std::nullopt, MapTransportError(networkError));
+                        return;
+                    }
 
-                if (envelope.code != static_cast<int>(utils::ErrorCode::Success)) {
-                    cb(std::nullopt, MapEnvelopeError(envelope));
-                    return;
-                }
+                    // Check for 40108 TokenExpired - retry once if coordinator available
+                    if (envelope.code == static_cast<int>(utils::ErrorCode::TokenExpired)) {
+                        if (m_coordinator && !retried) {
+                            retried = true;
+                            m_coordinator->HandleIfTokenExpired(envelope,
+                                [this, parentId, page, pageSize, sortBy, sortOrder, type, ctx, cb, retried, envelope](bool success) {
+                                    if (success) {
+                                        // Retry the request with original parameters
+                                        m_file_api->List(parentId, page, pageSize, sortBy, sortOrder, type, ctx,
+                                            [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
+                                                if (!retryNetworkError.isEmpty()) {
+                                                    cb(std::nullopt, MapTransportError(retryNetworkError));
+                                                    return;
+                                                }
+                                                if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                                                    cb(std::nullopt, MapEnvelopeError(retryEnvelope));
+                                                    return;
+                                                }
+                                                auto parsed = models::ParseFileListResult(retryEnvelope.data);
+                                                if (!parsed) {
+                                                    cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                                                    return;
+                                                }
+                                                cb(std::move(parsed), QString{});
+                                            }
+                                        );
+                                    } else {
+                                        // Refresh failed, return error
+                                        cb(std::nullopt, MapEnvelopeError(envelope));
+                                    }
+                                }
+                            );
+                            return;
+                        }
+                    }
 
-                auto parsed = models::ParseFileListResult(envelope.data);
-                if (!parsed) {
-                    cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
-                    return;
-                }
+                    // Non-40108 or retry exhausted
+                    if (envelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                        cb(std::nullopt, MapEnvelopeError(envelope));
+                        return;
+                    }
 
-                cb(std::move(parsed), QString{});
-            }
-        );
+                    auto parsed = models::ParseFileListResult(envelope.data);
+                    if (!parsed) {
+                        cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                        return;
+                    }
+
+                    cb(std::move(parsed), QString{});
+                }
+            );
+        };
+        performRequest();
     }
 
     auto FileService::RenameFile(
