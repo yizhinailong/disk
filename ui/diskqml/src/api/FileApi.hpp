@@ -1,12 +1,12 @@
 /**
  * @file FileApi.hpp
+ * @brief 文件上传服务 API 客户端
+ * @details 提供文件列表、详情、下载、重命名、移动、复制、删除、搜索等文件相关的 HTTP API 调用
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief File API endpoints for list, detail, download, rename, move, copy, delete, search
  * @version 0.1
  * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
- *
  */
 #pragma once
 
@@ -24,14 +24,13 @@ namespace disk::qml::api {
     class ApiClient;
 
     /**
-     * @brief API wrapper for file-related endpoints (all require JWT auth).
+     * @brief 文件相关 API 封装（均需 JWT 认证）
      *
      * @details
-     * All methods use the shared bearer token configured on ApiClient.
-     * The caller must ensure the token is set (via ApiClient::SetBearerToken)
-     * before invoking these methods.
+     * 所有方法使用 ApiClient 上配置的共享 Bearer 令牌。
+     * 调用者需确保在调用这些方法前已设置令牌（通过 ApiClient::SetBearerToken）。
      *
-     * Wrapped endpoints:
+     * 封装的端点：
      * - GET    /api/file/list                      -> FileListResponse
      * - GET    /api/file/{file_id}                  -> FileDetailResponse
      * - GET    /api/file/download/{file_id}/info    -> DownloadInfoResponse
@@ -45,33 +44,32 @@ namespace disk::qml::api {
     class FileApi {
     public:
         /**
-         * @brief Construct a FileApi bound to the given API client.
+         * @brief 构造文件 API 客户端
          *
-         * @param client  Pointer to the shared ApiClient. The caller is responsible for
-         *                ensuring @p client outlives this FileApi instance.
+         * @param client API 客户端指针，调用者需确保该指针的生命周期长于此实例
          */
         explicit FileApi(ApiClient* client);
 
         /**
-         * @brief GET /api/file/list - fetch file list with pagination and filters.
+         * @brief GET /api/file/list - 获取分页文件列表
          *
          * @details
-         * Query parameters:
-         * - parent_id   (default 0, root folder)
-         * - page        (default 1)
-         * - page_size   (default 20, max 100)
-         * - sort_by     (name|size|created_at|updated_at, default name)
-         * - sort_order  (asc|desc, default asc)
-         * - type        (all|file|folder, default all)
+         * 查询参数：
+         * - parent_id   (默认 0，根文件夹)
+         * - page        (默认 1)
+         * - page_size   (默认 20，最大 100)
+         * - sort_by     (name|size|created_at|updated_at，默认 name)
+         * - sort_order  (asc|desc，默认 asc)
+         * - type        (all|file|folder，默认 all)
          *
-         * @param parentId   Parent folder ID (0 = root).
-         * @param page       Page number (1-based).
-         * @param pageSize   Items per page (1-100).
-         * @param sortBy     Sort field.
-         * @param sortOrder  Sort direction.
-         * @param type       Filter type.
-         * @param ctx        Context QObject; callback suppressed after destruction.
-         * @param cb         Invoked with the server envelope on completion.
+         * @param parentId 父文件夹 ID（0 = 根目录）
+         * @param page 页码（从 1 开始）
+         * @param pageSize 每页条数（1-100）
+         * @param sortBy 排序字段
+         * @param sortOrder 排序方向
+         * @param type 过滤类型
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto List(
             qint64 parentId,
@@ -85,46 +83,45 @@ namespace disk::qml::api {
         ) -> void;
 
         /**
-         * @brief GET /api/file/{file_id} - fetch file detail.
+         * @brief GET /api/file/{file_id} - 获取文件详情
          *
-         * @param fileId  File ID (positive integer).
-         * @param ctx     Context QObject; callback suppressed after destruction.
-         * @param cb      Invoked with the server envelope on completion.
+         * @param fileId 文件 ID（正整数）
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto GetDetail(qint64 fileId, QObject* ctx, FileApiCallback cb) -> void;
 
         /**
-         * @brief GET /api/file/download/{file_id}/info - fetch download metadata.
+         * @brief GET /api/file/download/{file_id}/info - 获取下载元数据
          *
          * @details
-         * Response data shape: { file_id, filename, file_size, file_hash,
-         *                        mime_type, supports_range }
+         * 响应数据结构: { file_id, filename, file_size, file_hash,
+         *                mime_type, supports_range }
          *
-         * @param fileId  File ID (positive integer).
-         * @param ctx     Context QObject; callback suppressed after destruction.
-         * @param cb      Invoked with the server envelope on completion.
+         * @param fileId 文件 ID（正整数）
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto DownloadInfo(qint64 fileId, QObject* ctx, FileApiCallback cb) -> void;
 
         /**
-         * @brief GET /api/file/download/{file_id} - download file binary.
+         * @brief GET /api/file/download/{file_id} - 下载文件二进制数据
          *
-         * @note This returns raw binary data. The callback receives the raw byte body
-         *       rather than a JSON envelope. Used by the download/transfer engine.
+         * @note 返回原始二进制数据，回调接收原始字节而非 JSON 封装，供下载引擎使用。
          *
-         * @param fileId  File ID (positive integer).
-         * @param ctx     Context QObject; callback suppressed after destruction.
-         * @param cb      Invoked with the raw reply (code/body).
+         * @param fileId 文件 ID（正整数）
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 原始响应回调（状态码/字节）
          */
         virtual auto Download(qint64 fileId, QObject* ctx, ApiReplyCallback cb) -> void;
 
         /**
-         * @brief PUT /api/file/{file_id}/rename - rename a file.
+         * @brief PUT /api/file/{file_id}/rename - 重命名文件
          *
-         * @param fileId   File ID (positive integer).
-         * @param newName  New file name.
-         * @param ctx      Context QObject; callback suppressed after destruction.
-         * @param cb       Invoked with the server envelope on completion.
+         * @param fileId 文件 ID（正整数）
+         * @param newName 新文件名
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto Rename(
             qint64 fileId,
@@ -134,12 +131,12 @@ namespace disk::qml::api {
         ) -> void;
 
         /**
-         * @brief PUT /api/file/move - move files to a target folder.
+         * @brief PUT /api/file/move - 移动文件到目标文件夹
          *
-         * @param fileIds         List of file IDs to move.
-         * @param targetFolderId  Destination folder ID (0 = root).
-         * @param ctx             Context QObject; callback suppressed after destruction.
-         * @param cb              Invoked with the server envelope on completion.
+         * @param fileIds 要移动的文件 ID 列表
+         * @param targetFolderId 目标文件夹 ID（0 = 根目录）
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto Move(
             const QList<qint64>& fileIds,
@@ -149,12 +146,12 @@ namespace disk::qml::api {
         ) -> void;
 
         /**
-         * @brief POST /api/file/copy - copy files to a target folder.
+         * @brief POST /api/file/copy - 复制文件到目标文件夹
          *
-         * @param fileIds         List of file IDs to copy.
-         * @param targetFolderId  Destination folder ID (0 = root).
-         * @param ctx             Context QObject; callback suppressed after destruction.
-         * @param cb              Invoked with the server envelope on completion.
+         * @param fileIds 要复制的文件 ID 列表
+         * @param targetFolderId 目标文件夹 ID（0 = 根目录）
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto Copy(
             const QList<qint64>& fileIds,
@@ -164,11 +161,11 @@ namespace disk::qml::api {
         ) -> void;
 
         /**
-         * @brief DELETE /api/file - soft-delete files (move to trash).
+         * @brief DELETE /api/file - 软删除文件（移至回收站）
          *
-         * @param fileIds  List of file IDs to delete.
-         * @param ctx      Context QObject; callback suppressed after destruction.
-         * @param cb       Invoked with the server envelope on completion.
+         * @param fileIds 要删除的文件 ID 列表
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto Delete(
             const QList<qint64>& fileIds,
@@ -177,23 +174,23 @@ namespace disk::qml::api {
         ) -> void;
 
         /**
-         * @brief GET /api/file/search - search files by keyword.
+         * @brief GET /api/file/search - 按关键词搜索文件
          *
          * @details
-         * Query parameters:
-         * - keyword    (required, 1-100 chars)
-         * - type       (all|file|folder, default all)
-         * - folder_id  (optional, scoped search)
-         * - page       (default 1)
-         * - page_size  (default 20, max 100)
+         * 查询参数：
+         * - keyword    (必填，1-100 字符)
+         * - type       (all|file|folder，默认 all)
+         * - folder_id  (可选，范围搜索)
+         * - page       (默认 1)
+         * - page_size  (默认 20，最大 100)
          *
-         * @param keyword   Search keyword (required).
-         * @param type      Filter type.
-         * @param folderId  Scope to folder (-1 = global search).
-         * @param page      Page number (1-based).
-         * @param pageSize  Items per page (1-100).
-         * @param ctx       Context QObject; callback suppressed after destruction.
-         * @param cb        Invoked with the server envelope on completion.
+         * @param keyword 搜索关键词（必填）
+         * @param type 过滤类型
+         * @param folderId 搜索范围（-1 = 全局搜索）
+         * @param page 页码（从 1 开始）
+         * @param pageSize 每页条数（1-100）
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto Search(
             const QString& keyword,

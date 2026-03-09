@@ -1,12 +1,12 @@
 /**
  * @file AuthApi.hpp
+ * @brief 认证服务 API 客户端
+ * @details 提供用户注册、登录、登出、令牌刷新等认证相关的 HTTP API 调用
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief Auth API endpoints for register/login/refresh/logout
  * @version 0.1
  * @date 2026-03-02
  *
  * @copyright Copyright (c) 2026
- *
  */
 #pragma once
 
@@ -25,21 +25,20 @@ namespace disk::qml::api {
     class AuthApi {
     public:
         /**
-         * @brief Construct an AuthApi bound to the given API client.
+         * @brief 构造认证服务 API 客户端
          *
-         * @param client  Pointer to the shared ApiClient. The caller is responsible for
-         *                ensuring @p client outlives this AuthApi instance.
+         * @param client API 客户端指针，调用者需确保该指针的生命周期长于此实例
          */
         explicit AuthApi(ApiClient* client);
 
         /**
-         * @brief POST /api/auth/register — create a new user account.
+         * @brief POST /api/auth/register — 创建新用户账号
          *
-         * @param username  Desired username.
-         * @param email     User email address.
-         * @param password  Plain-text password (hashed server-side).
-         * @param ctx       Context QObject; callback suppressed after destruction.
-         * @param cb        Invoked with the server envelope on completion.
+         * @param username 用户名
+         * @param email 邮箱地址
+         * @param password 密码（明文，服务端进行哈希处理）
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto Register(
             const QString& username,
@@ -50,33 +49,32 @@ namespace disk::qml::api {
         ) -> void;
 
         /**
-         * @brief POST /api/auth/login — authenticate and obtain tokens.
+         * @brief POST /api/auth/login — 用户登录并获取令牌
          *
-         * @param account   Username or email.
-         * @param password  Plain-text password.
-         * @param ctx       Context QObject; callback suppressed after destruction.
-         * @param cb        Invoked with the server envelope on completion.
+         * @param account 账号（用户名或邮箱）
+         * @param password 密码
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto Login(const QString& account, const QString& password, QObject* ctx, AuthApiCallback cb) -> void;
 
         /**
-         * @brief POST /api/auth/refresh — exchange a refresh token for new tokens.
+         * @brief POST /api/auth/refresh — 使用刷新令牌获取新令牌
          *
-         * @param refreshToken  Single-use refresh token obtained from login.
-         * @param ctx           Context QObject; callback suppressed after destruction.
-         * @param cb            Invoked with the server envelope on completion.
+         * @param refreshToken 刷新令牌（登录时获取，仅可使用一次）
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto Refresh(const QString& refreshToken, QObject* ctx, AuthApiCallback cb) -> void;
 
         /**
-         * @brief POST /api/auth/logout — invalidate the access token.
+         * @brief POST /api/auth/logout — 撤销访问令牌
          *
-         * Passes @p accessToken as a Bearer token for this request only, without
-         * modifying the shared factory token state.
+         * 使用 @p accessToken 作为 Bearer 令牌发起此请求，不修改共享工厂的令牌状态。
          *
-         * @param accessToken  Current access token to invalidate.
-         * @param ctx          Context QObject; callback suppressed after destruction.
-         * @param cb           Invoked with the server envelope on completion.
+         * @param accessToken 当前访问令牌
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto Logout(const QString& accessToken, QObject* ctx, AuthApiCallback cb) -> void;
 

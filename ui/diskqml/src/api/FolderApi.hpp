@@ -1,12 +1,12 @@
 /**
  * @file FolderApi.hpp
+ * @brief 文件夹 API 客户端
+ * @details 提供文件夹创建、目录树、面包屑导航等文件夹相关的 HTTP API 调用
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief Folder API endpoints for create, tree, and breadcrumb
  * @version 0.1
  * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
- *
  */
 #pragma once
 
@@ -22,14 +22,13 @@ namespace disk::qml::api {
     class ApiClient;
 
     /**
-     * @brief API wrapper for folder-related endpoints (all require JWT auth).
+     * @brief 文件夹相关 API 封装（均需 JWT 认证）
      *
      * @details
-     * All methods use the shared bearer token configured on ApiClient.
-     * The caller must ensure the token is set (via ApiClient::SetBearerToken)
-     * before invoking these methods.
+     * 所有方法使用 ApiClient 上配置的共享 Bearer 令牌。
+     * 调用者需确保在调用这些方法前已设置令牌（通过 ApiClient::SetBearerToken）。
      *
-     * Wrapped endpoints:
+     * 封装的端点：
      * - POST /api/folder/create                   -> CreateFolderResponse
      * - GET  /api/folder/tree                      -> FolderTreeNode[]
      * - GET  /api/folder/{folder_id}/breadcrumb    -> BreadcrumbResponse
@@ -37,24 +36,23 @@ namespace disk::qml::api {
     class FolderApi {
     public:
         /**
-         * @brief Construct a FolderApi bound to the given API client.
+         * @brief 构造文件夹 API 客户端
          *
-         * @param client  Pointer to the shared ApiClient. The caller is responsible for
-         *                ensuring @p client outlives this FolderApi instance.
+         * @param client API 客户端指针，调用者需确保该指针的生命周期长于此实例
          */
         explicit FolderApi(ApiClient* client);
 
         /**
-         * @brief POST /api/folder/create - create a new folder.
+         * @brief POST /api/folder/create - 创建新文件夹
          *
          * @details
-         * Request body: { "name": "<string>", "parent_id": <uint64> }
-         * Response data shape: { id, name, parent_id, path, created_at }
+         * 请求体: { "name": "<string>", "parent_id": <uint64> }
+         * 响应数据结构: { id, name, parent_id, path, created_at }
          *
-         * @param name      Folder name (1-255 ASCII printable chars).
-         * @param parentId  Parent folder ID (0 = root).
-         * @param ctx       Context QObject; callback suppressed after destruction.
-         * @param cb        Invoked with the server envelope on completion.
+         * @param name 文件夹名称（1-255 个可打印 ASCII 字符）
+         * @param parentId 父文件夹 ID（0 = 根目录）
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto CreateFolder(
             const QString& name,
@@ -64,19 +62,19 @@ namespace disk::qml::api {
         ) -> void;
 
         /**
-         * @brief GET /api/folder/tree - fetch folder tree structure.
+         * @brief GET /api/folder/tree - 获取文件夹树结构
          *
          * @details
-         * Query parameters:
-         * - parent_id  (default 0, root)
-         * - depth      (default -1, unlimited depth)
+         * 查询参数：
+         * - parent_id  (默认 0，根目录)
+         * - depth      (默认 -1，无限深度)
          *
-         * Response data shape: recursive { id, name, children: [...] }
+         * 响应数据结构: 递归 { id, name, children: [...] }
          *
-         * @param parentId  Root of the subtree to fetch (0 = root).
-         * @param depth     Max depth (-1 = unlimited).
-         * @param ctx       Context QObject; callback suppressed after destruction.
-         * @param cb        Invoked with the server envelope on completion.
+         * @param parentId 子树根节点（0 = 根目录）
+         * @param depth 最大深度（-1 = 无限制）
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto GetTree(
             qint64 parentId,
@@ -86,14 +84,14 @@ namespace disk::qml::api {
         ) -> void;
 
         /**
-         * @brief GET /api/folder/{folder_id}/breadcrumb - fetch breadcrumb path.
+         * @brief GET /api/folder/{folder_id}/breadcrumb - 获取面包屑路径
          *
          * @details
-         * Response data shape: { "path": [ { id, name }, ... ] }
+         * 响应数据结构: { "path": [ { id, name }, ... ] }
          *
-         * @param folderId  Folder ID to get breadcrumb for.
-         * @param ctx       Context QObject; callback suppressed after destruction.
-         * @param cb        Invoked with the server envelope on completion.
+         * @param folderId 文件夹 ID
+         * @param ctx 上下文 QObject，销毁时取消回调
+         * @param cb 服务器响应回调
          */
         virtual auto GetBreadcrumb(qint64 folderId, QObject* ctx, FolderApiCallback cb) -> void;
 

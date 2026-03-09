@@ -1,12 +1,12 @@
 /**
  * @file ApiClient.hpp
+ * @brief Qt REST 客户端封装
+ * @details 基于 Qt 6.8 QRestAccessManager + QNetworkRequestFactory 构建的 REST 客户端，供 QML 客户端使用
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief Qt REST client wrapper used by the QML client
  * @version 0.1
  * @date 2026-03-02
  *
  * @copyright Copyright (c) 2026
- *
  */
 #pragma once
 
@@ -25,28 +25,26 @@ class QJsonObject;
 namespace disk::qml::api {
 
     /**
-     * @brief Callback invoked when an HTTP request completes.
+     * @brief HTTP 请求完成时的回调函数
      *
-     * @param hasNetworkError  True if a network-level error occurred (no HTTP response received).
-     * @param networkErrorString  Human-readable description of the network error; empty on success.
-     * @param httpStatus  HTTP status code returned by the server (0 if hasNetworkError is true).
-     * @param body  Raw response body bytes; may be empty on error.
+     * @param hasNetworkError 是否发生网络层错误（未收到 HTTP 响应）
+     * @param networkErrorString 网络错误的可读描述；成功时为空
+     * @param httpStatus 服务器返回的 HTTP 状态码（hasNetworkError 为 true 时为 0）
+     * @param body 原始响应体字节；错误时可能为空
      */
     using ApiReplyCallback = std::function<void(bool hasNetworkError, QString networkErrorString, int httpStatus, QByteArray body)>;
 
-    /// @brief Legacy alias kept for source compatibility.
+    /// @brief 为保持源码兼容性保留的旧别名。
     using PostJsonCallback = ApiReplyCallback;
-
     /**
-     * @brief REST client built on Qt 6.8 QRestAccessManager + QNetworkRequestFactory.
+     * @brief 基于 Qt 6.8 QRestAccessManager + QNetworkRequestFactory 构建的 REST 客户端
      *
-     * Owns a QNetworkAccessManager and wraps it with QRestAccessManager.
-     * All requests share a common base URL and optional bearer token configured
-     * via SetBaseUrl() and SetBearerToken().
+     * 持有一个 QNetworkAccessManager 并用 QRestAccessManager 封装。
+     * 所有请求共享一个公共基础 URL 和可选的 Bearer 令牌，
+     * 通过 SetBaseUrl() 和 SetBearerToken() 配置。
      *
-     * Every request method has a variant that accepts an explicit bearerToken
-     * parameter. That token is applied to a local copy of the factory so it
-     * never mutates shared state.
+     * 每个请求方法都有一个接受显式 bearerToken 参数的变体。
+     * 该令牌应用于工厂的本地副本，因此不会修改共享状态。
      */
     class ApiClient : public QObject {
         Q_OBJECT
@@ -55,27 +53,27 @@ namespace disk::qml::api {
         explicit ApiClient(QObject* parent = nullptr);
 
         /**
-         * @brief Set the base URL for all requests created by the internal factory.
+         * @brief 设置内部工厂创建的所有请求的基础 URL
          *
-         * @param url  Base URL, e.g. "http://127.0.0.1:8080".
+         * @param url 基础 URL，例如 "http://127.0.0.1:8080"
          */
         virtual auto SetBaseUrl(const QUrl& url) -> void;
         /**
-         * @brief Set the bearer token applied to all subsequent requests.
+         * @brief 设置应用于所有后续请求的 Bearer 令牌
          *
-         * @param token  Access token string (without "Bearer " prefix).
+         * @param token 访问令牌字符串（不含 "Bearer " 前缀）
          */
         virtual auto SetBearerToken(const QString& token) -> void;
 
         // ==================== POST ====================
 
         /**
-         * @brief POST a JSON body to @p path using the shared factory bearer token.
+         * @brief 使用共享 Bearer 令牌向 @p path POST JSON 请求体
          */
         virtual auto PostJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void;
 
         /**
-         * @brief POST a JSON body with a caller-supplied bearer token, without mutating shared state.
+         * @brief 使用调用者提供的 Bearer 令牌 POST JSON 请求体，不修改共享状态
          */
         virtual auto PostJsonWithBearerToken(
             const QString& path,
@@ -88,29 +86,29 @@ namespace disk::qml::api {
         // ==================== POST Raw Bytes ====================
 
         /**
-         * @brief POST raw bytes to @p path with @p query parameters using the shared bearer token.
+         * @brief 使用共享 Bearer 令牌向 @p path POST 原始字节（带 @p query 参数）
          *
-         * Used for chunk upload where the body is raw file data (not JSON).
-         * Content-Type is set to application/octet-stream.
+         * 用于分片上传，请求体为原始文件数据（非 JSON）。
+         * Content-Type 设置为 application/octet-stream。
          */
         virtual auto PostRaw(const QString& path, const QUrlQuery& query, const QByteArray& body, QObject* ctx, ApiReplyCallback cb) -> void;
 
         // ==================== GET ====================
 
         /**
-         * @brief GET @p path (no query parameters) using the shared bearer token.
+         * @brief 使用共享 Bearer 令牌 GET @p path（无查询参数）
          */
         virtual auto Get(const QString& path, QObject* ctx, ApiReplyCallback cb) -> void;
 
         /**
-         * @brief GET @p path with @p query parameters using the shared bearer token.
+         * @brief 使用共享 Bearer 令牌 GET @p path（带 @p query 参数）
          *
-         * @param query  URL query parameters built via QUrlQuery.
+         * @param query 通过 QUrlQuery 构建的 URL 查询参数
          */
         virtual auto Get(const QString& path, const QUrlQuery& query, QObject* ctx, ApiReplyCallback cb) -> void;
 
         /**
-         * @brief GET @p path with a caller-supplied bearer token.
+         * @brief 使用调用者提供的 Bearer 令牌 GET @p path
          */
         virtual auto GetWithBearerToken(
             const QString& path,
@@ -123,12 +121,12 @@ namespace disk::qml::api {
         // ==================== PUT ====================
 
         /**
-         * @brief PUT a JSON body to @p path using the shared bearer token.
+         * @brief 使用共享 Bearer 令牌向 @p path PUT JSON 请求体
          */
         virtual auto PutJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void;
 
         /**
-         * @brief PUT a JSON body with a caller-supplied bearer token.
+         * @brief 使用调用者提供的 Bearer 令牌 PUT JSON 请求体
          */
         virtual auto PutJsonWithBearerToken(
             const QString& path,
@@ -141,12 +139,12 @@ namespace disk::qml::api {
         // ==================== PATCH ====================
 
         /**
-         * @brief PATCH a JSON body to @p path using the shared bearer token.
+         * @brief 使用共享 Bearer 令牌向 @p path PATCH JSON 请求体
          */
         virtual auto PatchJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void;
 
         /**
-         * @brief PATCH a JSON body with a caller-supplied bearer token.
+         * @brief 使用调用者提供的 Bearer 令牌 PATCH JSON 请求体
          */
         virtual auto PatchJsonWithBearerToken(
             const QString& path,
@@ -159,12 +157,12 @@ namespace disk::qml::api {
         // ==================== DELETE ====================
 
         /**
-         * @brief DELETE @p path (no body) using the shared bearer token.
+         * @brief 使用共享 Bearer 令牌 DELETE @p path（无请求体）
          */
         virtual auto Delete(const QString& path, QObject* ctx, ApiReplyCallback cb) -> void;
 
         /**
-         * @brief DELETE @p path (no body) with a caller-supplied bearer token.
+         * @brief 使用调用者提供的 Bearer 令牌 DELETE @p path（无请求体）
          */
         virtual auto DeleteWithBearerToken(
             const QString& path,
@@ -174,16 +172,16 @@ namespace disk::qml::api {
         ) -> void;
 
         /**
-         * @brief DELETE with a JSON body via sendCustomRequest.
+         * @brief 通过 sendCustomRequest 发送带 JSON 请求体的 DELETE 请求
          *
-         * QRestAccessManager::deleteResource() does not support request bodies.
-         * This method uses sendCustomRequest("DELETE", body) to work around
-         * that limitation. Required by the trash batch-delete endpoint.
+         * QRestAccessManager::deleteResource() 不支持请求体。
+         * 此方法使用 sendCustomRequest("DELETE", body) 绕过此限制。
+         * 回收站批量删除端点需要此方法。
          */
         virtual auto DeleteJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void;
 
         /**
-         * @brief DELETE with a JSON body and a caller-supplied bearer token.
+         * @brief 使用调用者提供的 Bearer 令牌发送带 JSON 请求体的 DELETE 请求
          */
         virtual auto DeleteJsonWithBearerToken(
             const QString& path,
@@ -196,19 +194,18 @@ namespace disk::qml::api {
         // ==================== Streaming ====================
 
         /**
-         * @brief Access the raw QNetworkAccessManager for streaming downloads.
+         * @brief 获取原始 QNetworkAccessManager 用于流式下载
          *
-         * @note The DownloadEngine uses this to issue GET requests whose
-         *       QNetworkReply is read incrementally (readyRead) rather than
-         *       buffered entirely in memory.
+         * @note DownloadEngine 使用此方法发起 GET 请求，其 QNetworkReply
+         *       通过 readyRead 信号增量读取，而非完全缓存在内存中。
          */
         [[nodiscard]] auto NetworkAccessManager() -> QNetworkAccessManager*;
 
         /**
-         * @brief Create a QNetworkRequest from the factory with bearer token applied.
+         * @brief 从工厂创建带有 Bearer 令牌的 QNetworkRequest
          *
-         * @param path  API path, e.g. "/api/file/download/42".
-         * @return A QNetworkRequest with the base URL and bearer token configured.
+         * @param path API 路径，例如 "/api/file/download/42"
+         * @return 配置了基础 URL 和 Bearer 令牌的 QNetworkRequest
          */
         [[nodiscard]] auto CreateStreamingRequest(const QString& path) -> QNetworkRequest;
 
