@@ -22,15 +22,15 @@ Dialog {
     standardButtons: Dialog.NoButton
     padding: 24
 
-    /// Operation mode: "move" or "copy"
+    ///< 操作模式（"move" 或 "copy"）
     property string mode: "move"
-    /// List of file IDs to move/copy.
+    ///< 待移动/复制的文件ID列表
     property var fileIds: []
-    /// Display name for single-item operations.
+    ///< 显示名称（单个文件操作时使用）
     property string displayName: ""
-    /// Currently selected folder ID (-1 = none selected).
+    ///< 当前选中的文件夹ID（-1 表示未选中）
     property int selectedFolderId: -1
-    /// The tree model instance (set from parent).
+    ///< 文件夹树模型（由父组件设置）
     property var folderTreeModel: null
 
     function openForMove(ids: var, name: string) {
@@ -39,7 +39,7 @@ Dialog {
         displayName = name
         selectedFolderId = -1
         dlg.open()
-        // Trigger tree load via ViewModel
+        // 触发通过 ViewModel 加载文件夹树
         FileListViewModel.loadFolderTree()
     }
 
@@ -49,7 +49,7 @@ Dialog {
         displayName = name
         selectedFolderId = -1
         dlg.open()
-        // Trigger tree load via ViewModel
+        // 触发通过 ViewModel 加载文件夹树
         FileListViewModel.loadFolderTree()
     }
 
@@ -57,7 +57,7 @@ Dialog {
         anchors.fill: parent
         spacing: 12
 
-        // --- Header ---
+        // --- 标题 ---
         Label {
             text: {
                 var op = dlg.mode === "move" ? "移动" : "复制"
@@ -71,7 +71,7 @@ Dialog {
             Layout.fillWidth: true
         }
 
-        // --- Root item (根目录) ---
+        // --- 根目录项 ---
         ItemDelegate {
             Layout.fillWidth: true
             height: 36
@@ -101,13 +101,13 @@ Dialog {
             }
         }
 
-        // --- Tree content ---
+        // --- 树形内容 ---
         ScrollView {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
 
-            // Loading indicator
+            // 加载指示器
             BusyIndicator {
                 anchors.centerIn: parent
                 running: dlg.folderTreeModel ? dlg.folderTreeModel.loading : false
@@ -128,7 +128,7 @@ Dialog {
                     contentItem: RowLayout {
                         spacing: 6
 
-                        // Indent is handled by TreeViewDelegate automatically
+                        // 缩进由 TreeViewDelegate 自动处理
 
                         Label {
                             text: treeView.isExpanded(row) ? "📂" : "📁"
@@ -162,7 +162,7 @@ Dialog {
             }
         }
 
-        // --- Button row ---
+        // --- 按钮行 ---
         RowLayout {
             Layout.fillWidth: true
             spacing: 12

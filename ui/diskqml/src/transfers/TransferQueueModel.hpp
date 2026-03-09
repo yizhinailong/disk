@@ -1,19 +1,28 @@
 /**
  * @file TransferQueueModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QAbstractListModel for upload/download transfer queues
+ * @brief 传输队列模型
+ * @details 用于上传/下载传输队列的 QAbstractListModel
  * @version 0.1
  * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  *
- * @details
- * Pure data model — no business logic, no API calls.
- * A ViewModel or TransferManager populates this model via
- * AddTransfer / UpdateProgress / RemoveTransfer.
+ * 角色语义：
+ * - TransferIdRole : QString 传输项 UUID
+ * - DirectionRole  : int 传输方向（0=上传, 1=下载）
+ * - FileNameRole   : QString 文件名
+ * - TotalBytesRole : qint64 总字节数
+ * - DoneBytesRole  : qint64 已完成字节数
+ * - StatusRole     : int 传输状态（0-4）
+ * - ProgressRole   : int 进度百分比 [0, 100]
+ * - SpeedRole      : qint64 传输速度（字节/秒）
+ * - EtaRole        : qint64 预估剩余时间（秒）
+ * - ErrorRole      : QString 错误消息
  *
- * Roles are aligned to the TransferItem struct and the
- * transfer-panel design spec (docs/ui/design/transfer-panel.md).
+ * 纯数据模型 — 无业务逻辑，无 API 调用。
+ * ViewModel 或 TransferManager 通过 AddTransfer / UpdateProgress / RemoveTransfer 填充此模型。
+ * 角色与 TransferItem 结构和传输面板设计规范（docs/ui/design/transfer-panel.md）对齐。
  */
 
 #pragma once
@@ -30,116 +39,126 @@
 namespace disk::qml::transfers {
 
     /**
-     * @brief QAbstractListModel exposing transfer items to QML ListView.
+     * @brief 向 QML ListView 暴露传输项的 QAbstractListModel
      *
-     * @details
-     * Provides the following roles for QML delegates:
+     * @details 为 QML 代理提供以下角色：
      *   - transferId, direction, fileName, totalBytes, doneBytes,
      *     status, progress, speed, eta, error
      *
-     * Populate via AddTransfer(). Update progress via UpdateProgress().
-     * The model does NOT manage actual file I/O; a TransferManager
-     * is responsible for driving transfers and calling update methods.
+     * 通过 AddTransfer() 填充。通过 UpdateProgress() 更新进度。
+     * 模型不管理实际的文件 I/O；TransferManager 负责驱动传输并调用更新方法。
      */
     class TransferQueueModel : public QAbstractListModel {
         Q_OBJECT
         QML_ELEMENT
 
-        /// Number of items currently in the model (convenience for QML).
+        /// 模型中当前的项目数量（QML 便捷属性）
         Q_PROPERTY(int count READ Count NOTIFY countChanged)
 
     public:
         /**
-         * @brief Custom data roles exposed to QML via roleNames().
+         * @brief 通过 roleNames() 向 QML 暴露的自定义数据角色
+         *
+         * @details 角色语义：
+         *   - TransferIdRole : QString 传输项 UUID
+         *   - DirectionRole  : int 传输方向（0=上传, 1=下载）
+         *   - FileNameRole   : QString 文件名
+         *   - TotalBytesRole : qint64 总字节数
+         *   - DoneBytesRole  : qint64 已完成字节数
+         *   - StatusRole     : int 传输状态（0-4）
+         *   - ProgressRole   : int 进度百分比 [0, 100]
+         *   - SpeedRole      : qint64 传输速度（字节/秒）
+         *   - EtaRole        : qint64 预估剩余时间（秒）
+         *   - ErrorRole      : QString 错误消息
          */
         enum Roles {
-            TransferIdRole = Qt::UserRole + 100,
-            DirectionRole,
-            FileNameRole,
-            TotalBytesRole,
-            DoneBytesRole,
-            StatusRole,
-            ProgressRole,
-            SpeedRole,
-            EtaRole,
-            ErrorRole,
+            TransferIdRole = Qt::UserRole + 100, ///< 传输项 UUID
+            DirectionRole,                       ///< 传输方向
+            FileNameRole,                        ///< 文件名
+            TotalBytesRole,                      ///< 总字节数
+            DoneBytesRole,                       ///< 已完成字节数
+            StatusRole,                          ///< 传输状态
+            ProgressRole,                        ///< 进度百分比
+            SpeedRole,                           ///< 传输速度
+            EtaRole,                             ///< 预估剩余时间
+            ErrorRole,                           ///< 错误消息
         };
         Q_ENUM(Roles)
 
         explicit TransferQueueModel(QObject* parent = nullptr);
         ~TransferQueueModel() override = default;
 
-        // ==================== QAbstractListModel interface ====================
+        // ==================== QAbstractListModel 接口 ====================
 
         [[nodiscard]] auto rowCount(const QModelIndex& parent = QModelIndex()) const -> int override;
         [[nodiscard]] auto data(const QModelIndex& index, int role = Qt::DisplayRole) const
             -> QVariant override;
         [[nodiscard]] auto roleNames() const -> QHash<int, QByteArray> override;
 
-        // ==================== Public API ====================
+        // ==================== 公共 API ====================
 
         [[nodiscard]] auto Count() const -> int;
 
         /**
-         * @brief Append a new transfer to the queue.
-         * @param item  Transfer data. Must have a unique id.
+         * @brief 向队列追加新传输项
+         * @param item 传输数据，必须有唯一的 id
          */
         Q_INVOKABLE void AddTransfer(const TransferItem& item);
 
         /**
-         * @brief Remove a transfer by id.
-         * @param id  Transfer UUID.
+         * @brief 按 ID 移除传输项
+         * @param id 传输 UUID
          */
         Q_INVOKABLE void RemoveTransfer(const QString& id);
 
         /**
-         * @brief Update the progress of an existing transfer.
+         * @brief 更新现有传输项的进度
          */
         Q_INVOKABLE void UpdateProgress(const QString& id, qint64 doneBytes, qint64 speed, qint64 eta);
 
         /**
-         * @brief Update the status of an existing transfer.
+         * @brief 更新现有传输项的状态
          */
         Q_INVOKABLE void UpdateStatus(const QString& id, TransferStatus status, const QString& error = {});
 
         /**
-         * @brief Remove all items with status == Completed.
+         * @brief 移除所有已完成的传输项
          */
         Q_INVOKABLE void ClearCompleted();
 
         /**
-         * @brief Remove all items with status == Failed.
+         * @brief 移除所有失败的传输项
          */
         Q_INVOKABLE void ClearFailed();
 
         /**
-         * @brief Set all Running items to Paused.
+         * @brief 将所有正在传输的项设为暂停
          */
         Q_INVOKABLE void PauseAll();
 
         /**
-         * @brief Set all Paused items to Queued (ready to be picked up by engine).
+         * @brief 将所有暂停的项设为排队（准备好被引擎处理）
          */
         Q_INVOKABLE void ResumeAll();
 
         /**
-         * @brief Remove all items from the model.
+         * @brief 从模型中移除所有项
          */
         Q_INVOKABLE void Clear();
 
         /**
-         * @brief Retrieve the item at @p row (bounds-checked).
-         * @return std::nullopt when @p row is out of range.
+         * @brief 检索 @p row 处的项目（边界检查）
+         * @return 当 @p row 超出范围时返回 std::nullopt
          */
         [[nodiscard]] auto ItemAt(int row) const -> std::optional<TransferItem>;
 
         /**
-         * @brief Retrieve all items (for persistence).
+         * @brief 获取所有项（用于持久化）
          */
         [[nodiscard]] auto Items() const -> const QVector<TransferItem>&;
 
         /**
-         * @brief Bulk-replace the entire model contents (used on rehydration from disk).
+         * @brief 批量替换整个模型内容（用于从磁盘恢复）
          */
         void ResetItems(const QVector<TransferItem>& items);
 
@@ -148,23 +167,23 @@ namespace disk::qml::transfers {
 
     private:
         /**
-         * @brief Find the row index for a given transfer id.
-         * @return -1 if not found.
+         * @brief 查找给定传输 ID 的行索引
+         * @return 未找到时返回 -1
          */
         [[nodiscard]] auto FindRow(const QString& id) const -> int;
 
         /**
-         * @brief Emit dataChanged for all roles on a single row.
+         * @brief 对单行的所有角色发出 dataChanged 信号
          */
         void EmitRowChanged(int row);
 
         /**
-         * @brief Remove items matching a given status.
+         * @brief 移除匹配给定状态的所有项
          */
         void RemoveByStatus(TransferStatus status);
 
         QVector<TransferItem> m_items;
-        QHash<QString, int> m_id_index; ///< id → row for O(1) lookups
+        QHash<QString, int> m_id_index; ///< id → 行索引，用于 O(1) 查找
     };
 
 } // namespace disk::qml::transfers

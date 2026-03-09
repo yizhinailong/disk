@@ -1,6 +1,7 @@
 /**
  * @file NewFolderDialog.qml
- * @brief 新建文件夹输入对话框 — 450px, 8px radius, input + confirm/cancel
+ * @brief 新建文件夹对话框
+ * @details 输入文件夹名称后创建新文件夹的对话框
  */
 import QtQuick
 import QtQuick.Controls

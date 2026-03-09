@@ -1,6 +1,7 @@
 /**
  * @file RenameDialog.qml
- * @brief 重命名输入对话框 — 450px, 8px radius, pre-filled input + confirm/cancel
+ * @brief 重命名对话框
+ * @details 重命名文件或文件夹的对话框，输入新名称后确认修改
  */
 import QtQuick
 import QtQuick.Controls
@@ -16,9 +17,9 @@ Dialog {
     standardButtons: Dialog.NoButton
     padding: 24
 
-    /// File ID to rename.
+    ///< 待重命名的文件ID
     property int targetFileId: 0
-    /// Current file name (pre-filled).
+    ///< 当前文件名（预填充）
     property string currentName: ""
 
     function openForFile(fileId: int, fileName: string) {

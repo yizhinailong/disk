@@ -1,6 +1,7 @@
 /**
  * @file DeleteConfirmDialog.qml
- * @brief 确认删除对话框 — 400px, 8px radius, ⚠️ icon, confirm/cancel
+ * @brief 删除确认对话框
+ * @details 确认删除文件的对话框，支持单个和批量删除，删除后移入回收站
  */
 import QtQuick
 import QtQuick.Controls
@@ -16,9 +17,9 @@ Dialog {
     standardButtons: Dialog.NoButton
     padding: 24
 
-    /// List of file IDs to delete.
+    ///< 待删除的文件ID列表
     property var targetFileIds: []
-    /// Display name (for single-file deletion).
+    ///< 显示名称（单个文件删除时使用）
     property string targetFileName: ""
 
     function openForFiles(fileIds: var, displayName: string) {
