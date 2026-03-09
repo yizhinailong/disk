@@ -401,20 +401,7 @@ clang-format -i src/controllers/AuthController.cpp
 - [x] 文件详情 API (`GET /api/file/{file_id}`)
 - [x] 操作日志 API (`GET /api/logs`)
 
-**TUI 客户端 (Go/Bubble Tea)**
-- [x] 项目骨架和配置管理
-- [x] API 客户端封装（认证、文件、文件夹、分享、回收站）
-- [x] Token 加密存储
-- [x] 登录界面
-- [x] 文件列表界面（vim 风格导航）
-- [x] 分享管理界面
-- [x] 回收站界面
-- [x] 上传下载框架
 
-### ⏳ 进行中
-
-- [ ] TUI 上传下载功能完善（分片上传、断点续传）
-- [ ] TUI 设置界面
 - [ ] 桌面客户端 (QT/QML) - 部分实现：7 API 类、8 ViewModel、7 服务、11 QML 视图
 
 ### 📝 计划中

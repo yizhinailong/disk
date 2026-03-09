@@ -1234,6 +1234,6 @@ request.setRawHeader("Authorization", "Bearer " + shareToken.toUtf8());
 
 ## 10. 参考文档
 
-- [TUI API 客户端设计](./03-API客户端设计.md) - TUI 客户端 API 设计参考
+- [后端 API 设计](../../02-API接口设计.md) - 后端完整 API 规范
 - [后端 API 设计](../../02-API接口设计.md) - 后端完整 API 规范
 - [QML 架构设计](./01-架构设计.md) - QML 客户端整体架构
