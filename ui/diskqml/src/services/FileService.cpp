@@ -305,6 +305,28 @@ namespace disk::qml::services {
         );
     }
 
+    auto FileService::GetRecentFiles(
+        int limit,
+        QObject* ctx,
+        ListCallback cb
+    ) -> void {
+        // Clamp limit to valid range [1, 100]
+        const int clampedLimit = qBound(1, limit, 100);
+        
+        // Call ListFiles with root folder (0), sort by updated_at desc
+        ListFiles(
+            0,                              // parent_id (root)
+            1,                              // page
+            clampedLimit,                   // page_size
+            QStringLiteral("updated_at"),  // sort_by
+            QStringLiteral("desc"),        // sort_order
+            QStringLiteral("all"),         // type
+            ctx,
+            cb
+        );
+    }
+
+
     auto FileService::MapTransportError(const QString& networkError) const -> QString {
         if (!networkError.isEmpty()) {
             return networkError;

@@ -306,42 +306,247 @@ Item {
                 Layout.leftMargin: 24
             }
 
-            // 占位 — 最近文件区域
-            // 后续 Task 13 完成后，FileListViewModel 会提供最近文件数据
-            Rectangle {
+            // 最近文件区域
+            Item {
+                id: recentFilesSection
                 Layout.topMargin: 12
                 Layout.leftMargin: 24
                 Layout.rightMargin: 24
                 Layout.fillWidth: true
-                Layout.preferredHeight: 160
-                color: palette.base
-                radius: 8
-                border.color: palette.mid
-                border.width: 1
+                Layout.preferredHeight: {
+                    if (FileListViewModel.recentFilesLoading) return 100
+                    if (FileListViewModel.recentFilesModel.count === 0) return 160
+                    return Math.min(10, FileListViewModel.recentFilesModel.count) * 48 + 44
+                }
 
-                ColumnLayout {
-                    anchors.centerIn: parent
-                    spacing: 8
+                // Load recent files on first show
+                Component.onCompleted: {
+                    FileListViewModel.loadRecentFiles()
+                }
 
-                    Label {
-                        text: "📭"
-                        font.pixelSize: 32
-                        Layout.alignment: Qt.AlignHCenter
-                        color: palette.placeholderText
+                // Header with refresh button
+                Rectangle {
+                    id: recentHeader
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: 36
+                    color: "transparent"
+
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: 8
+
+                        Label {
+                            text: "最近文件"
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: palette.windowText
+                        }
+
+                        Label {
+                            text: FileListViewModel.recentFilesModel.count > 0 
+                                  ? "(" + FileListViewModel.recentFilesModel.count + ")"
+                                  : ""
+                            font.pixelSize: 12
+                            color: palette.placeholderText
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        ToolButton {
+                            text: "🔄"
+                            font.pixelSize: 12
+                            implicitWidth: 28
+                            implicitHeight: 28
+                            ToolTip.visible: hovered
+                            ToolTip.text: "刷新"
+                            enabled: !FileListViewModel.recentFilesLoading
+                            onClicked: FileListViewModel.loadRecentFiles()
+                        }
+                    }
+                }
+
+                // Content area
+                Item {
+                    anchors.top: recentHeader.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+
+                    // Loading state
+                    BusyIndicator {
+                        anchors.centerIn: parent
+                        running: FileListViewModel.recentFilesLoading
+                        visible: FileListViewModel.recentFilesLoading
                     }
 
-                    Label {
-                        text: "暂无最近文件"
-                        font.pixelSize: 14
-                        Layout.alignment: Qt.AlignHCenter
-                        color: palette.placeholderText
+                    // Error state
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 8
+                        visible: !FileListViewModel.recentFilesLoading 
+                                 && FileListViewModel.recentFilesError !== ""
+
+                        Label {
+                            text: "⚠️ " + FileListViewModel.recentFilesError
+                            font.pixelSize: 13
+                            color: palette.placeholderText
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+
+                        Button {
+                            text: "重试"
+                            font.pixelSize: 12
+                            Layout.alignment: Qt.AlignHCenter
+                            onClicked: FileListViewModel.loadRecentFiles()
+                        }
                     }
 
-                    Label {
-                        text: "上传您的第一个文件吧"
-                        font.pixelSize: 12
-                        Layout.alignment: Qt.AlignHCenter
-                        color: palette.placeholderText
+                    // Empty state
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 8
+                        visible: !FileListViewModel.recentFilesLoading 
+                                 && FileListViewModel.recentFilesError === ""
+                                 && FileListViewModel.recentFilesModel.count === 0
+
+                        Label {
+                            text: "📭"
+                            font.pixelSize: 32
+                            Layout.alignment: Qt.AlignHCenter
+                            color: palette.placeholderText
+                        }
+
+                        Label {
+                            text: "暂无最近文件"
+                            font.pixelSize: 14
+                            Layout.alignment: Qt.AlignHCenter
+                            color: palette.placeholderText
+                        }
+
+                        Label {
+                            text: "上传您的第一个文件吧"
+                            font.pixelSize: 12
+                            Layout.alignment: Qt.AlignHCenter
+                            color: palette.placeholderText
+                        }
+                    }
+
+                    // Recent files list
+                    ListView {
+                        id: recentListView
+                        anchors.fill: parent
+                        visible: !FileListViewModel.recentFilesLoading 
+                                 && FileListViewModel.recentFilesError === ""
+                                 && FileListViewModel.recentFilesModel.count > 0
+                        clip: true
+                        model: FileListViewModel.recentFilesModel
+                        ScrollBar.vertical: ScrollBar {}
+                        spacing: 1
+
+                        // Helper functions (same as FilesPage)
+                        function fileIcon(fileType, mimeType) {
+                            if (fileType === "folder") return "📁"
+                            if (mimeType.startsWith("image/")) return "🖼️"
+                            if (mimeType.startsWith("video/")) return "🎦"
+                            if (mimeType.startsWith("audio/")) return "🎵"
+                            if (mimeType === "application/pdf") return "📕"
+                            if (mimeType.indexOf("spreadsheet") >= 0 || mimeType.indexOf("excel") >= 0 || mimeType.indexOf("csv") >= 0) return "📊"
+                            if (mimeType.indexOf("presentation") >= 0 || mimeType.indexOf("powerpoint") >= 0) return "🎥️"
+                            if (mimeType.indexOf("word") >= 0 || mimeType.indexOf("document") >= 0 || mimeType.startsWith("text/")) return "📄"
+                            if (mimeType.indexOf("zip") >= 0 || mimeType.indexOf("rar") >= 0 || mimeType.indexOf("tar") >= 0 || mimeType.indexOf("compress") >= 0 || mimeType.indexOf("7z") >= 0) return "📦"
+                            if (mimeType.indexOf("javascript") >= 0 || mimeType.indexOf("json") >= 0 || mimeType.indexOf("xml") >= 0 || mimeType.indexOf("x-c") >= 0 || mimeType.indexOf("python") >= 0) return "💻"
+                            return "📎"
+                        }
+
+                        function formatSize(bytes) {
+                            if (bytes < 1024) return bytes + " B"
+                            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"
+                            if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + " MB"
+                            return (bytes / 1073741824).toFixed(1) + " GB"
+                        }
+
+                        function formatDate(dateStr) {
+                            if (!dateStr) return "-"
+                            return dateStr.substring(0, 10)
+                        }
+
+                        delegate: Rectangle {
+                            width: recentListView.width
+                            height: 48
+                            color: recentItemMa.containsMouse ? palette.midlight : "transparent"
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: 1
+                                color: palette.mid
+                                opacity: 0.3
+                            }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 12
+                                spacing: 8
+
+                                // Icon
+                                Label {
+                                    text: recentListView.fileIcon(model.fileType, model.fileMimeType)
+                                    font.pixelSize: 18
+                                    Layout.preferredWidth: 24
+                                }
+
+                                // File name
+                                Label {
+                                    text: model.fileName
+                                    font.pixelSize: 13
+                                    elide: Text.ElideMiddle
+                                    Layout.fillWidth: true
+                                    color: palette.windowText
+                                }
+
+                                // Size
+                                Label {
+                                    text: model.fileIsFolder 
+                                          ? (model.fileItemCount + " 项")
+                                          : recentListView.formatSize(model.fileSize)
+                                    font.pixelSize: 11
+                                    color: palette.placeholderText
+                                    Layout.preferredWidth: 70
+                                    horizontalAlignment: Text.AlignRight
+                                }
+
+                                // Modified date
+                                Label {
+                                    text: recentListView.formatDate(model.fileUpdatedAt)
+                                    font.pixelSize: 11
+                                    color: palette.placeholderText
+                                    Layout.preferredWidth: 80
+                                    horizontalAlignment: Text.AlignRight
+                                }
+                            }
+
+                            MouseArea {
+                                id: recentItemMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+
+                                onClicked: {
+                                    if (model.fileIsFolder) {
+                                        // Navigate to folder in Files page
+                                        FileListViewModel.navigateToFolder(model.fileId)
+                                        root.navigateToFiles()
+                                    } else {
+                                        // Trigger download for file
+                                        TransfersViewModel.startDownload(model.fileId, SettingsViewModel.downloadDir)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

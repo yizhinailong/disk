@@ -24,12 +24,12 @@ namespace disk::qml::viewmodels {
         services::FileService* fileService,
         services::FolderService* folderService,
         QObject* parent
-    ) : QObject(parent),
         m_file_service(fileService),
         m_folder_service(folderService),
         m_file_list_model(new models::FileListModel(this)),
         m_breadcrumb_model(new models::BreadcrumbModel(this)),
-        m_folder_tree_model(new models::FolderTreeModel(this)) {
+        m_folder_tree_model(new models::FolderTreeModel(this)),
+        m_recent_files_model(new models::FileListModel(this)) {
         // Configure search debounce timer: single-shot, 300ms delay
         m_search_debounce_timer.setSingleShot(true);
         m_search_debounce_timer.setInterval(300);
@@ -128,6 +128,18 @@ namespace disk::qml::viewmodels {
 
     auto FileListViewModel::FolderTreeModelPtr() const -> models::FolderTreeModel* {
         return m_folder_tree_model;
+    }
+
+    auto FileListViewModel::RecentFilesModelPtr() const -> models::FileListModel* {
+        return m_recent_files_model;
+    }
+
+    auto FileListViewModel::RecentFilesLoading() const -> bool {
+        return m_recent_files_loading;
+    }
+
+    auto FileListViewModel::RecentFilesError() const -> const QString& {
+        return m_recent_files_error;
     }
 
     // ==================== Property Setters ====================
@@ -563,6 +575,50 @@ namespace disk::qml::viewmodels {
                 }
 
                 m_folder_tree_model->PopulateFromDto(result->tree);
+            }
+        );
+    }
+        );
+    }
+
+    void FileListViewModel::loadRecentFiles() {
+        // Set loading state
+        if (m_recent_files_loading) {
+            return;  // Already loading
+        }
+        m_recent_files_loading = true;
+        m_recent_files_error.clear();
+        emit recentFilesLoadingChanged();
+        emit recentFilesErrorChanged();
+
+        auto* ctx = new QObject(this);
+
+        m_file_service->GetRecentFiles(
+            kRecentFilesLimit,
+            ctx,
+            [this, ctx](std::optional<models::FileListResultDto> result, QString errorMessage) {
+                ctx->deleteLater();
+                m_recent_files_loading = false;
+                emit recentFilesLoadingChanged();
+
+                if (!errorMessage.isEmpty()) {
+                    m_recent_files_error = errorMessage;
+                    emit recentFilesErrorChanged();
+                    return;
+                }
+
+                if (!result) {
+                    m_recent_files_error = QStringLiteral("获取最近文件失败");
+                    emit recentFilesErrorChanged();
+                    return;
+                }
+
+                // Populate the recent files model
+                QVector<models::FileListItemData> items;
+                for (const auto& file : result->files) {
+                    items.append(file);
+                }
+                m_recent_files_model->ResetItems(items);
             }
         );
     }

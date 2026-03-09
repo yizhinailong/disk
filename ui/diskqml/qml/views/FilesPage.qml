@@ -613,10 +613,11 @@ Item {
             text: "⬇ 下载"
             visible: !contextMenu.targetIsFolder
             onTriggered: {
-                // Stub — will be wired when download engine is connected
-                console.log("Download requested:", contextMenu.targetFileId)
+                TransfersViewModel.startDownload(contextMenu.targetFileId, SettingsViewModel.downloadDir)
+                successTooltip.text = "已添加到下载队列"
+                successTooltip.visible = true
+                successTooltipTimer.restart()
             }
-        }
 
         MenuSeparator {}
 
@@ -645,10 +646,8 @@ Item {
             text: "🔗 分享"
             visible: !contextMenu.targetIsFolder
             onTriggered: {
-                // Stub — will show share dialog in Task 20
-                console.log("Share requested:", contextMenu.targetFileId)
+                ShareViewModel.createShare([contextMenu.targetFileId], 7, "", "view")
             }
-        }
 
         MenuSeparator {}
 
@@ -691,6 +690,21 @@ Item {
         }
 
         function onFileOperationFailed(message) {
+            failTooltip.text = message
+            failTooltip.visible = true
+            failTooltipTimer.restart()
+        }
+
+    Connections {
+        target: ShareViewModel
+
+        function onShareCreated(shareId, shareLink, password, expiresAt) {
+            successTooltip.text = "分享创建成功"
+            successTooltip.visible = true
+            successTooltipTimer.restart()
+        }
+
+        function onShareOperationFailed(message) {
             failTooltip.text = message
             failTooltip.visible = true
             failTooltipTimer.restart()

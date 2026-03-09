@@ -128,6 +128,19 @@ namespace disk::qml::services {
             SearchCallback cb
         ) -> void;
 
+        /**
+         * @brief Gets recent files (sorted by updated_at desc).
+         * @details Calls ListFiles with sort_by=updated_at, sort_order=desc.
+         * @param limit    Maximum number of files to return (1-100, default 10).
+         * @param ctx      QObject lifetime guard.
+         * @param cb       Receives (result, errorMessage). errorMessage is empty on success.
+         */
+        auto GetRecentFiles(
+            int limit,
+            QObject* ctx,
+            ListCallback cb
+        ) -> void;
+
     private:
         auto MapTransportError(const QString& networkError) const -> QString;
         auto MapEnvelopeError(const models::ApiEnvelope& envelope) const -> QString;

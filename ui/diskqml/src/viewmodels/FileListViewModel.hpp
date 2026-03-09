@@ -116,6 +116,15 @@ namespace disk::qml::viewmodels {
         /// The folder tree model for QML FolderPickerDialog binding.
         Q_PROPERTY(disk::qml::models::FolderTreeModel* folderTreeModel READ FolderTreeModelPtr CONSTANT)
 
+        // ==================== Recent Files ====================
+
+        /// Recent files model for QML binding (max 10 items, sorted by updated_at desc).
+        Q_PROPERTY(disk::qml::models::FileListModel* recentFilesModel READ RecentFilesModelPtr CONSTANT)
+        /// True while loading recent files.
+        Q_PROPERTY(bool recentFilesLoading READ RecentFilesLoading NOTIFY recentFilesLoadingChanged)
+        /// Error message if recent files failed to load.
+        Q_PROPERTY(QString recentFilesError READ RecentFilesError NOTIFY recentFilesErrorChanged)
+
         // ==================== Navigation History ====================
 
         /// True when back navigation is available.
@@ -163,6 +172,9 @@ namespace disk::qml::viewmodels {
         [[nodiscard]] auto FileListModelPtr() const -> models::FileListModel*;
         [[nodiscard]] auto BreadcrumbModelPtr() const -> models::BreadcrumbModel*;
         [[nodiscard]] auto FolderTreeModelPtr() const -> models::FolderTreeModel*;
+        [[nodiscard]] auto RecentFilesModelPtr() const -> models::FileListModel*;
+        [[nodiscard]] auto RecentFilesLoading() const -> bool;
+        [[nodiscard]] auto RecentFilesError() const -> const QString&;
 
         // ==================== Property Setters ====================
 
@@ -231,6 +243,11 @@ namespace disk::qml::viewmodels {
         /// Load the folder tree for the FolderPickerDialog.
         Q_INVOKABLE void loadFolderTree();
 
+        // ==================== Recent Files ====================
+
+        /// Load recent files (max 10 items, sorted by updated_at desc).
+        Q_INVOKABLE void loadRecentFiles();
+
     signals:
         void currentFolderIdChanged();
         void currentPathChanged();
@@ -250,6 +267,10 @@ namespace disk::qml::viewmodels {
         void fileOperationSucceeded(const QString& message);
         /// Emitted when a file operation (create/rename/delete) fails.
         void fileOperationFailed(const QString& message);
+
+        // ==================== Recent Files ====================
+        void recentFilesLoadingChanged();
+        void recentFilesErrorChanged();
 
     private:
         // ==================== Private Helpers ====================
@@ -305,6 +326,12 @@ namespace disk::qml::viewmodels {
         // Navigation history
         QVector<qint64> m_back_history;
         QVector<qint64> m_forward_history;
+
+        // Recent files
+        models::FileListModel* m_recent_files_model;
+        bool m_recent_files_loading{ false };
+        QString m_recent_files_error;
+        static constexpr int kRecentFilesLimit = 10;
 
         inline static FileListViewModel* s_instance = nullptr;
         inline static QJSEngine* s_engine = nullptr;
