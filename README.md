@@ -415,11 +415,11 @@ clang-format -i src/controllers/AuthController.cpp
 
 - [ ] TUI 上传下载功能完善（分片上传、断点续传）
 - [ ] TUI 设置界面
+- [ ] 桌面客户端 (QT/QML) - 部分实现：7 API 类、8 ViewModel、7 服务、11 QML 视图
 
 ### 📝 计划中
 
 - [ ] 操作日志
-- [ ] 桌面客户端 (QT/QML)
 - [ ] 性能优化
 - [ ] CDN 集成
 
