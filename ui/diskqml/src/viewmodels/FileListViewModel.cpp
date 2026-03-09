@@ -24,7 +24,7 @@ namespace disk::qml::viewmodels {
         services::FileService* fileService,
         services::FolderService* folderService,
         QObject* parent
-        m_file_service(fileService),
+    ) : m_file_service(fileService),
         m_folder_service(folderService),
         m_file_list_model(new models::FileListModel(this)),
         m_breadcrumb_model(new models::BreadcrumbModel(this)),
@@ -578,8 +578,6 @@ namespace disk::qml::viewmodels {
             }
         );
     }
-        );
-    }
 
     void FileListViewModel::loadRecentFiles() {
         // Set loading state
@@ -615,8 +613,18 @@ namespace disk::qml::viewmodels {
 
                 // Populate the recent files model
                 QVector<models::FileListItemData> items;
-                for (const auto& file : result->files) {
-                    items.append(file);
+                for (const auto& dto : result->items) {
+                    models::FileListItemData item;
+                    item.id = dto.id;
+                    item.name = dto.name;
+                    item.type = dto.type;
+                    item.size = static_cast<qint64>(dto.size);
+                    item.mimeType = dto.mimeType;
+                    item.hash = dto.hash;
+                    item.itemCount = dto.itemCount;
+                    item.createdAt = dto.createdAt;
+                    item.updatedAt = dto.updatedAt;
+                    items.append(item);
                 }
                 m_recent_files_model->ResetItems(items);
             }

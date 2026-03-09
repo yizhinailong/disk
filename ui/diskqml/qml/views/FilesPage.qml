@@ -618,6 +618,7 @@ Item {
                 successTooltip.visible = true
                 successTooltipTimer.restart()
             }
+        }
 
         MenuSeparator {}
 
@@ -648,6 +649,7 @@ Item {
             onTriggered: {
                 ShareViewModel.createShare([contextMenu.targetFileId], 7, "", "view")
             }
+        }
 
         MenuSeparator {}
 
@@ -694,6 +696,7 @@ Item {
             failTooltip.visible = true
             failTooltipTimer.restart()
         }
+    }
 
     Connections {
         target: ShareViewModel
