@@ -41,6 +41,40 @@ QML/JavaScript 仅处理 UI 渲染，所有业务逻辑、API 调用和数据处
 
 ---
 
+## 执行范围契约 (Execution Scope Contract)
+
+### 本迭代范围定义
+
+本文档定义的 API 端点契约中，以下范围适用于当前开发迭代：
+
+| 类别 | 状态 | 端点 | 理由与触发条件 |
+|------|------|------|------------------|
+| **分享功能** | **IN SCOPE** | 所有 Share 端点 (8个) | 核心业务功能，本次迭代完整实现 |
+| **用户配置文件** | **DEFERRED** | GET/PATCH `/api/user/profile` | 登录响应已提供 profile + quota 信息，独立刷新不是关键路径 |
+| **密码修改** | **DEFERRED** | PUT `/api/user/password` | 非关键路径功能 |
+| **存储统计** | **DEFERRED** | GET `/api/user/storage` | 登录响应已包含配额信息，独立刷新不是关键路径 |
+
+### 延后实现的触发条件
+
+**User 相关端点延后理由：**
+- 登录响应 (`POST /api/auth/login`) 已返回完整的用户信息，包括 `user.*` 字段（username, email, nickname, storage_quota, storage_used, created_at）
+- 客户端可以在登录时一次性获取并缓存所有必要的用户信息
+- 独立的配置文件刷新、密码修改、存储统计查询不是当前迭代的关键路径
+- 优先实现文件管理、分享功能等核心业务场景
+
+**未来实现触发：**
+> 当用户明确提出需要独立的配置文件编辑功能、密码修改界面、或实时的存储配额刷新时，再实现 `UserService` 和 `UserApi` 的 wiring，并将这些端点添加到主应用流程中。
+
+### 技术实现说明
+
+- `ShareApi` 类已存在但未在 `main.cpp` 中 wiring —— **将在本次迭代中完成 wiring**
+- `UserApi` 类已存在但未在 `main.cpp` 中 wiring —— **延后实现，直到上述触发条件满足**
+- Share 功能的 ViewModel、Service 层将完整实现，与 API 契约完全对等
+
+---
+
+
+
 ## 2. 响应信封规范
 
 ### 2.1 统一响应格式

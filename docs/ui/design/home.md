@@ -166,3 +166,26 @@
 ---
 
 *最后更新: 2026-03-04*
+
+## Qt/QML 实现状态
+
+### 已实现功能 (Wave 3)
+
+以下功能已在 `ui/diskqml/qml/views/HomePage.qml` (v0.1, 2026-03-05) 中实现:
+
+- **最近文件模块**:
+  - 完整的文件列表视图 (最多10条，按 updated_at 降序排列)
+  - 文件夹点击: 进入该文件夹 (通过 `FileListViewModel.navigateToFolder()`)
+  - 文件点击: 触发下载 (通过 `TransfersViewModel.startDownload()`)
+  - 显示字段: 图标、文件名、大小、修改时间
+  - 加载状态: Loading指示器、错误提示、空状态处理
+  - 刷新按钮: 手动刷新最近文件列表
+  - 实现: `FileListViewModel.loadRecentFiles()` 方法 (通过 `FileService.GetRecentFiles()`)
+
+- **快捷操作**: 上传文件、新建文件夹、上传队列、下载队列按钮
+- **存储空间**: 进度显示、超额警告 (>80% 警告色, >=100% 错误色)
+
+### 未实现/延后功能
+
+- 用户资料页面跳转 (DEFERRED - 超出Wave 3范围)
+- 存储管理设置页面 (DEFERRED - 超出Wave 3范围)

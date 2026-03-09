@@ -211,3 +211,29 @@
 ---
 
 *最后更新: 2026-02-19*
+
+## Qt/QML 实现状态
+
+### 已实现功能 (Wave 3)
+
+以下功能已在 `ui/diskqml/qml/views/FilesPage.qml` (v0.1, 2026-03-05) 中实现:
+
+- **文件操作**:
+  - **下载**: 右键菜单 "⬇ 下载" 调用 `TransfersViewModel.startDownload(fileId, downloadDir)`
+  - **分享**: 右键菜单 "🔗 分享" 调用 `ShareViewModel.createShare([fileId], 7, "", "view")`
+  - **重命名**: 调用 `FileListViewModel.renameFile()`
+  - **复制到**: 通过文件夹选择对话框选择目标文件夹
+  - **移动到**: 通过文件夹选择对话框选择目标文件夹
+  - **删除**: 软删除，移动到回收站
+  - **新建文件夹**: 调用 `FileListViewModel.createFolder()`
+
+- **视图模式**: 网格视图 (116x116 卡片) 和列表视图
+- **导航**: 面包屑导航、文件夹导航、分页 (pageSize=50)
+- **排序**: 按名称/大小/修改时间/创建时间排序，升序/降序切换
+- **多选**: Ctrl+点击单选、批量操作支持
+- **右键菜单**: 文件/文件夹的完整上下文菜单
+
+### 未实现/延后功能
+
+- 搜索功能 (DEFERRED - 后续Wave)
+- 文件预览功能 (DEFERRED - 后续Wave)
