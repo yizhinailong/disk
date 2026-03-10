@@ -184,11 +184,31 @@
 
 ---
 
-*最后更新: 2026-03-09*
+*最后更新: 2026-03-10*
 
-## Qt/QML 实现状态 (Wave 3)
+## Qt/QML 实现状态 (Wave 3 - 2026-03-10)
 
 本清单已验证与 Wave 3 实现状态一致。以下关键功能已完全实现:
+
+- **上传入口** (Section 2): `UploadDialog.qml` + `TransfersViewModel.startUpload()`
+  - FileDialog 文件选择 + 目标文件夹选择器 (当前/根目录/自定义)
+  - 实现于: `ui/diskqml/qml/dialogs/UploadDialog.qml:81`, `ui/diskqml/qml/views/MainWindowView.qml:749`
+
+- **用户资料管理** (Section 7): `UserPage.qml` + `UserViewModel` + `UserService`
+  - 资料/存储/密码修改三段式页面，实时验证
+  - 实现于: `ui/diskqml/qml/views/UserPage.qml` (2026-03-10)
+
+- **分享编辑** (Section 5): `SharePage.qml` + `ShareViewModel.updateShare()` + `ShareService.UpdateShare()`
+  - 上下文菜单编辑 + 有效期/密码/权限修改
+  - 实现于: `ui/diskqml/qml/views/SharePage.qml:795` (2026-03-10)
+
+- **平台集成** (Section 7): `PlatformIntegration.cpp` + `QSystemTrayIcon`
+  - 开机自启动、最小化到托盘、系统通知
+  - 实现于: `ui/diskqml/src/platform/PlatformIntegration.cpp` (2026-03-10)
+
+- **响应式布局** (Section 1): `MainWindowView.qml` layoutMode 属性
+  - Compact (<800px)/Medium (800-1200px)/Expanded (>1200px) 三种模式
+  - 实现于: `ui/diskqml/qml/views/MainWindowView.qml:23-29` (2026-03-10)
 
 - **分享管理** (Section 5): `SharePage.qml` + `ShareViewModel`
   - 分享列表、创建、取消、多选、分页
@@ -196,7 +216,6 @@
 
 - **首页最近文件** (Section 2): `HomePage.qml` + `FileListViewModel.loadRecentFiles()`
   - 最近文件列表 (max 10, 按 updated_at 降序)
-  - 文件夹点击导航、文件点击下载
   - 实现于: `ui/diskqml/qml/views/HomePage.qml` (2026-03-05)
 
 - **文件列表操作** (Section 3): `FilesPage.qml`
@@ -204,4 +223,13 @@
   - 分享操作: `ShareViewModel.createShare()`
   - 实现于: `ui/diskqml/qml/views/FilesPage.qml` (2026-03-05)
 
-**注**: 本清单基于设计文档和实际代码验证，无过度声明。
+**平台限制**:
+- **Linux**: 系统托盘需要支持的桌面环境 (GNOME/KDE/XFCE)；开机自启动依赖 XDG autostart
+- **Windows**: 完整支持托盘、自启动、通知；自启动需要应用在 PATH 中
+
+**本次周期排除范围** (详见 `parity-execution-contract.md`):
+- ✗ 头像上传功能 (不在 parity-matrix 声明范围内)
+- ✗ 后端 schema 变更 (后端已稳定，仅 QML 范围)
+- ✗ 全局事件总线架构 (MVP 范围，避免过度设计)
+
+**注**: 本清单基于设计文档和实际代码验证，无过度声明。所有实现均通过 grep 命令验证。
