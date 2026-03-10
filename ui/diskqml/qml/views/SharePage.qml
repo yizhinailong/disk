@@ -398,6 +398,9 @@ Item {
                                 contextMenu.targetShareId = model.shareId
                                 contextMenu.targetShareLink = model.shareLink
                                 contextMenu.targetShareStatus = model.shareStatus
+                                contextMenu.targetSharePermission = model.sharePermission
+                                contextMenu.targetShareHasPassword = model.shareHasPassword
+                                contextMenu.targetShareExpiresAt = model.shareExpiresAt
                                 contextMenu.popup()
                             } else if (mouse.modifiers & Qt.ControlModifier) {
                                 ShareViewModel.toggleSelection(model.shareId)
@@ -406,7 +409,6 @@ Item {
                                 ShareViewModel.toggleSelection(model.shareId)
                             }
                         }
-                    }
                 }
             }
         }
@@ -466,6 +468,9 @@ Item {
         property string targetShareId: ""
         property string targetShareLink: ""
         property string targetShareStatus: ""
+        property string targetSharePermission: ""
+        property bool targetShareHasPassword: false
+        property string targetShareExpiresAt: ""
 
         MenuItem {
             text: "📋 复制链接"
@@ -478,6 +483,19 @@ Item {
                     successTooltip.visible = true
                     successTooltipTimer.restart()
                 }
+            }
+        }
+
+        MenuItem {
+            text: "✏️ 编辑"
+            enabled: contextMenu.targetShareStatus === "active"
+            onTriggered: {
+                editShareDialog.openForShare(
+                    contextMenu.targetShareId,
+                    contextMenu.targetSharePermission,
+                    contextMenu.targetShareHasPassword,
+                    contextMenu.targetShareExpiresAt
+                )
             }
         }
 
@@ -651,6 +669,136 @@ Item {
         }
     }
 
+    // ==================== 编辑分享对话框 ====================
+
+    Dialog {
+        id: editShareDialog
+        title: "✏️ 编辑分享"
+        modal: true
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        width: 400
+
+        property string targetShareId: ""
+        property string originalPermission: ""
+        property bool originalHasPassword: false
+        property string originalExpiresAt: ""
+
+        function openForShare(shareId, permission, hasPassword, expiresAt) {
+            targetShareId = shareId
+            originalPermission = permission
+            originalHasPassword = hasPassword
+            originalExpiresAt = expiresAt
+
+            // Set permission combo
+            if (permission === "view") {
+                editPermissionCombo.currentIndex = 0
+            } else {
+                editPermissionCombo.currentIndex = 1
+            }
+
+            // Clear password field (user can set new password)
+            editPasswordField.text = ""
+            editPasswordClearCheckbox.checked = false
+
+            // Default to 7 days if editing
+            editExpireDaysCombo.currentIndex = 1
+
+            editShareDialog.open()
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 12
+
+            Label {
+                text: "有效期："
+                font.pixelSize: 12
+                color: palette.windowText
+            }
+
+            ComboBox {
+                id: editExpireDaysCombo
+                Layout.fillWidth: true
+                model: [
+                    { text: "1 天", value: 1 },
+                    { text: "7 天", value: 7 },
+                    { text: "30 天", value: 30 },
+                    { text: "永久", value: 365 }
+                ]
+                textRole: "text"
+                valueRole: "value"
+                currentIndex: 1
+            }
+
+            Label {
+                text: "访问密码（留空保持不变，勾选清除）："
+                font.pixelSize: 12
+                color: palette.windowText
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                TextField {
+                    id: editPasswordField
+                    Layout.fillWidth: true
+                    placeholderText: editShareDialog.originalHasPassword ? "当前已设置密码" : "当前无密码"
+                    font.pixelSize: 13
+                    echoMode: TextInput.Password
+                    maximumLength: 8
+                    enabled: !editPasswordClearCheckbox.checked
+                }
+
+                CheckBox {
+                    id: editPasswordClearCheckbox
+                    text: "清除密码"
+                    visible: editShareDialog.originalHasPassword
+                }
+            }
+
+            Label {
+                text: "权限："
+                font.pixelSize: 12
+                color: palette.windowText
+            }
+
+            ComboBox {
+                id: editPermissionCombo
+                Layout.fillWidth: true
+                model: [
+                    { text: "仅查看", value: "view" },
+                    { text: "可下载", value: "download" }
+                ]
+                textRole: "text"
+                valueRole: "value"
+            }
+        }
+
+        onAccepted: {
+            var expireDays = editExpireDaysCombo.currentValue
+            var permission = editPermissionCombo.currentValue
+
+            // Handle password: clear, keep, or set new
+            var password = ""
+            if (editPasswordClearCheckbox.checked) {
+                // Pass special marker to clear password
+                password = "__CLEAR__"
+            } else if (editPasswordField.text.trim() !== "") {
+                // New password provided
+                password = editPasswordField.text.trim()
+            }
+            // else: keep existing (empty string means no change)
+
+            ShareViewModel.updateShare(editShareDialog.targetShareId, expireDays, password, permission)
+        }
+
+        onRejected: {
+            editPasswordField.text = ""
+            editPasswordClearCheckbox.checked = false
+        }
+    }
+
     // ==================== 分享详情对话框 ====================
 
     Dialog {
@@ -786,4 +934,6 @@ Item {
         interval: 5000
         onTriggered: failTooltip.visible = false
     }
+}
+
 }
