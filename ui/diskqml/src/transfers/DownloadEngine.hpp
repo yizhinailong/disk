@@ -106,7 +106,47 @@ namespace disk::qml::transfers {
         auto FetchInfo(qint64 fileId, DownloadInfoCallback cb) -> void;
 
         /**
+         * @brief Fetch download metadata for a shared file.
+         */
+        auto FetchShareInfo(
+            const QString& shareId,
+            qint64 fileId,
+            const QString& shareToken,
+            DownloadInfoCallback cb
+        ) -> void;
+
+        /**
+         * @brief Prepare the download with metadata for a shared file.
+         */
+        auto PrepareForShare(
+            const DownloadInfo& info,
+            const QString& shareId,
+            const QString& shareToken,
+            const QString& destDir,
+            DownloadProgressCallback progressCb,
+            DownloadFinishedCallback finishedCb
+        ) -> void;
+        /**
+         * @brief Prepare the download with metadata without starting the transfer.
+         *
+         * @param info     Download metadata previously obtained via FetchInfo().
+         * @param destDir  Local directory where the file will be saved.
+         * @param progressCb  Called periodically with updated TransferItem state.
+         * @param finishedCb  Called once when the download completes, fails, or is cancelled.
+         *
+         * The item is created with Queued status. Call Begin() or Resume() to start.
+         */
+        auto Prepare(
+            const DownloadInfo& info,
+            const QString& destDir,
+            DownloadProgressCallback progressCb,
+            DownloadFinishedCallback finishedCb
+        ) -> void;
+
+        /**
          * @brief Start (or resume) downloading the file.
+         *
+         * @deprecated Use Prepare() + Begin() for queue-aware flow.
          *
          * @param info     Download metadata previously obtained via FetchInfo().
          * @param destDir  Local directory where the file will be saved.
@@ -126,7 +166,16 @@ namespace disk::qml::transfers {
         auto Pause() -> void;
 
         /**
-         * @brief Resume a paused download.
+         * @brief Begin the actual network transfer.
+         *
+         * Must be called after Prepare(). Sets status to Running and starts the request.
+         */
+        auto Begin() -> void;
+
+        /**
+         * @brief Resume a paused or queued download.
+         *
+         * Handles both Paused (mid-transfer) and Queued (prepared but not started) states.
          */
         auto Resume() -> void;
 
@@ -140,6 +189,12 @@ namespace disk::qml::transfers {
          */
         [[nodiscard]] auto Item() const -> const TransferItem&;
 
+        /// @brief Get the backend file ID being downloaded.
+        [[nodiscard]] auto FileId() const -> qint64 { return m_info.fileId; }
+
+        /// @brief Get the destination directory path.
+        [[nodiscard]] auto DestPath() const -> const QString& { return m_dest_dir; }
+
     signals:
         /**
          * @brief Emitted when the TransferItem state changes (progress, status, speed, eta).
@@ -147,6 +202,9 @@ namespace disk::qml::transfers {
         void itemChanged(const TransferItem& item);
 
     private:
+        /// Initialize paths and item from stored info (called by Prepare)
+        auto InitializeFromInfo() -> void;
+
         /// Start the network request (with optional Range header for resume)
         auto StartRequest() -> void;
 
@@ -169,6 +227,9 @@ namespace disk::qml::transfers {
         TransferItem m_item;
         DownloadInfo m_info;
         QString m_dest_dir;
+        QString m_share_id;
+        QString m_share_token;
+        bool m_is_share{ false };
         QString m_part_path;  ///< Full path to the .part file
         QString m_final_path; ///< Full path to the final file
 

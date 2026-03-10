@@ -58,20 +58,6 @@ namespace disk::qml::transfers {
         m_paused = false;
         m_cancelled = false;
 
-        // Add to queue model if not already present
-        if (m_queue_model) {
-            auto existing = m_queue_model->ItemAt(0); // Check if already added
-            // Simple check: just add it (AddTransfer should be idempotent on ID)
-            if (m_upload_id.isEmpty()) {
-                // First start — add to queue
-                m_queue_model->AddTransfer(m_transfer_item);
-                m_queue_model->UpdateStatus(m_transfer_item.id, TransferStatus::Running);
-            } else {
-                // Resume — update status
-                m_queue_model->UpdateStatus(m_transfer_item.id, TransferStatus::Running);
-            }
-        }
-
         if (m_upload_id.isEmpty()) {
             // First start: compute file hash, then init
             ComputeFileHash();

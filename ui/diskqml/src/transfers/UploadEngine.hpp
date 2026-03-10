@@ -84,6 +84,15 @@ namespace disk::qml::transfers {
         /// @brief Transfer item ID (UUID) for this upload.
         [[nodiscard]] auto TransferId() const -> const QString&;
 
+        /// @brief Get the transfer item data.
+        [[nodiscard]] auto Item() const -> const TransferItem& { return m_transfer_item; }
+
+        /// @brief Get the original file path being uploaded.
+        [[nodiscard]] auto FilePath() const -> const QString& { return m_file_path; }
+
+        /// @brief Get the parent folder ID for this upload.
+        [[nodiscard]] auto ParentId() const -> quint64 { return m_parent_id; }
+
     signals:
         /// @brief Emitted when the upload finishes (success, failure, or cancel).
         void finished(const QString& transferId, bool success, const QString& error);

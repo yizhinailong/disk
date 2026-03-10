@@ -12,6 +12,7 @@
 
 #include <models/ShareListModel.hpp>
 #include <services/ShareService.hpp>
+#include "TransfersViewModel.hpp"
 
 namespace disk::qml::viewmodels {
 
@@ -95,6 +96,22 @@ namespace disk::qml::viewmodels {
 
     void ShareViewModel::refresh() {
         FetchShareList();
+    }
+
+    void ShareViewModel::downloadFile(
+        const QString& shareId,
+        qint64 fileId,
+        const QString& shareToken,
+        const QString& destPath
+    ) {
+        auto* transfers = TransfersViewModel::Instance();
+        if (!transfers) {
+            emit downloadFailed(QStringLiteral("传输管理器未初始化"));
+            return;
+        }
+
+        transfers->startShareDownload(shareId, fileId, shareToken, destPath);
+        emit downloadStarted(fileId, QString{});
     }
 
     void ShareViewModel::createShare(

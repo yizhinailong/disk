@@ -15,6 +15,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkRequest>
+#include <QUrlQuery>
+#include <QJsonArray>
 
 #include <api/ApiClient.hpp>
 #include <dtos/ApiEnvelope.hpp>
@@ -106,6 +108,98 @@ namespace disk::qml::transfers {
         );
     }
 
+    auto DownloadEngine::FetchShareInfo(
+        const QString& shareId,
+        qint64 fileId,
+        const QString& shareToken,
+        DownloadInfoCallback cb
+    ) -> void {
+        auto* ctx = new QObject(this);
+
+        QString path = QStringLiteral("/api/share/browse/%1").arg(shareId);
+        auto req = m_client->CreateStreamingRequest(path);
+
+        QUrl url = req.url();
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("file_id"), QString::number(fileId));
+        url.setQuery(query);
+        req.setUrl(url);
+
+        req.setRawHeader(QByteArrayLiteral("X-Share-Token"), shareToken.toUtf8());
+
+        auto* nam = m_client->NetworkAccessManager();
+        auto* reply = nam->get(req);
+
+        connect(reply, &QNetworkReply::finished, ctx, [reply, cb = std::move(cb), ctx, fileId]() mutable {
+            ctx->deleteLater();
+            reply->deleteLater();
+
+            bool hasError = reply->error() != QNetworkReply::NoError;
+            QString err = hasError ? reply->errorString() : QString{};
+            QByteArray body = reply->readAll();
+
+            if (hasError) {
+                cb(std::nullopt, err.isEmpty() ? QStringLiteral("网络错误") : err);
+                return;
+            }
+            auto env = models::ParseEnvelope(body);
+            if (!env || !env->IsSuccess()) {
+                cb(std::nullopt, env ? env->message : QStringLiteral("获取失败"));
+                return;
+            }
+            auto dataObj = models::EnvelopeDataObject(*env);
+            DownloadInfo info;
+            info.fileId = fileId;
+            info.filename = QStringLiteral("share_%1").arg(fileId);
+            info.fileSize = 0;
+            info.supportsRange = true;
+            if (dataObj) {
+                auto items = dataObj->value(QStringLiteral("items")).toArray();
+                for (const auto& v : items) {
+                    auto item = v.toObject();
+                    if (static_cast<qint64>(item.value(QStringLiteral("id")).toDouble(0)) == fileId || items.size() == 1) {
+                        info.filename = item.value(QStringLiteral("name")).toString(info.filename);
+                        info.fileSize = static_cast<qint64>(item.value(QStringLiteral("size")).toDouble(0));
+                        break;
+                    }
+                }
+            }
+            cb(std::move(info), {});
+        });
+    }
+
+    auto DownloadEngine::PrepareForShare(
+        const DownloadInfo& info,
+        const QString& shareId,
+        const QString& shareToken,
+        const QString& destDir,
+        DownloadProgressCallback progressCb,
+        DownloadFinishedCallback finishedCb
+    ) -> void {
+        m_is_share = true;
+        m_share_id = shareId;
+        m_share_token = shareToken;
+        Prepare(info, destDir, std::move(progressCb), std::move(finishedCb));
+    }
+    // ==================== Prepare ====================
+
+    auto DownloadEngine::Prepare(
+        const DownloadInfo& info,
+        const QString& destDir,
+        DownloadProgressCallback progressCb,
+        DownloadFinishedCallback finishedCb
+    ) -> void {
+        m_info = info;
+        m_dest_dir = destDir;
+        m_progress_cb = std::move(progressCb);
+        m_finished_cb = std::move(finishedCb);
+
+        InitializeFromInfo();
+
+        // Keep status as Queued - don't start yet
+        EmitProgress();
+    }
+
     // ==================== Start ====================
 
     auto DownloadEngine::Start(
@@ -119,17 +213,17 @@ namespace disk::qml::transfers {
         m_progress_cb = std::move(progressCb);
         m_finished_cb = std::move(finishedCb);
 
-        // Build paths
-        m_final_path = QDir(destDir).filePath(info.filename);
-        m_part_path = m_final_path + QStringLiteral(".part");
+        InitializeFromInfo();
 
-        // Initialise the TransferItem
-        m_item = TransferItem::Create(TransferDirection::Download, info.filename, info.fileSize);
+        // Legacy behavior: start immediately
+        Begin();
+    }
 
-        // Check if .part file exists (resume scenario)
-        QFileInfo partInfo(m_part_path);
-        if (partInfo.exists() && partInfo.size() > 0 && info.supportsRange) {
-            m_item.doneBytes = partInfo.size();
+    // ==================== Begin ====================
+
+    auto DownloadEngine::Begin() -> void {
+        if (m_item.status != TransferStatus::Queued) {
+            return;
         }
 
         m_item.status = TransferStatus::Running;
@@ -163,6 +257,13 @@ namespace disk::qml::transfers {
     // ==================== Resume ====================
 
     auto DownloadEngine::Resume() -> void {
+        // Handle Queued (prepared but not started) - begin fresh transfer
+        if (m_item.status == TransferStatus::Queued) {
+            Begin();
+            return;
+        }
+
+        // Handle Paused (mid-transfer) - resume from last position
         if (m_item.status != TransferStatus::Paused) {
             return;
         }
@@ -206,6 +307,24 @@ namespace disk::qml::transfers {
         return m_item;
     }
 
+    // ==================== Private: InitializeFromInfo ====================
+
+    auto DownloadEngine::InitializeFromInfo() -> void {
+        // Build paths
+        m_final_path = QDir(m_dest_dir).filePath(m_info.filename);
+        m_part_path = m_final_path + QStringLiteral(".part");
+
+        // Initialise the TransferItem
+        m_item = TransferItem::Create(TransferDirection::Download, m_info.filename, m_info.fileSize);
+
+        // Check if .part file exists (resume scenario)
+        QFileInfo partInfo(m_part_path);
+        if (partInfo.exists() && partInfo.size() > 0 && m_info.supportsRange) {
+            m_item.doneBytes = partInfo.size();
+        }
+
+        // Status remains Queued until Begin() is called
+    }
     // ==================== Private: StartRequest ====================
 
     auto DownloadEngine::StartRequest() -> void {
@@ -225,9 +344,15 @@ namespace disk::qml::transfers {
         }
 
         // Build raw network request using ApiClient's streaming helper
-        auto req = m_client->CreateStreamingRequest(
-            QStringLiteral("/api/file/download/%1").arg(m_info.fileId)
-        );
+        QString endpoint = m_is_share 
+            ? QStringLiteral("/api/share/download/%1/%2").arg(m_share_id).arg(m_info.fileId)
+            : QStringLiteral("/api/file/download/%1").arg(m_info.fileId);
+            
+        auto req = m_client->CreateStreamingRequest(endpoint);
+
+        if (m_is_share && !m_share_token.isEmpty()) {
+            req.setRawHeader(QByteArrayLiteral("X-Share-Token"), m_share_token.toUtf8());
+        }
 
         // Set Range header for resume
         if (m_item.doneBytes > 0 && m_info.supportsRange) {

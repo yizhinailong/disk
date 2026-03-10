@@ -20,6 +20,10 @@
 #include <transfers/TransferStore.hpp>
 #include <transfers/UploadEngine.hpp>
 #include <utils/ConfigStore.hpp>
+#include <dtos/ApiEnvelope.hpp>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 namespace disk::qml::viewmodels {
 
@@ -53,6 +57,10 @@ namespace disk::qml::viewmodels {
 
     auto TransfersViewModel::SetInstance(TransfersViewModel* instance) -> void {
         s_instance = instance;
+    }
+
+    auto TransfersViewModel::Instance() -> TransfersViewModel* {
+        return s_instance;
     }
 
     auto TransfersViewModel::create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> TransfersViewModel* {
@@ -110,6 +118,9 @@ namespace disk::qml::viewmodels {
             const QString transferId = engine->TransferId();
             m_upload_engines.insert(transferId, engine);
 
+            // Add to model with Queued status - DrainUploadQueue will start when slot available
+            m_upload_model->AddTransfer(engine->Item());
+
             connect(engine, &transfers::UploadEngine::finished, this, &TransfersViewModel::OnUploadFinished);
         }
 
@@ -127,27 +138,16 @@ namespace disk::qml::viewmodels {
         engine->FetchInfo(fileId, [this, engine, destPath](std::optional<transfers::DownloadInfo> info, QString error) {
             if (!info) {
                 engine->deleteLater();
-                engine->deleteLater();
                 return;
             }
 
-
-            auto item = transfers::TransferItem::Create(
-                transfers::TransferDirection::Download,
-                info->filename,
-                info->fileSize
-            );
-            m_download_model->AddTransfer(item);
-
-            const QString transferId = item.id;
-            m_download_engines.insert(transferId, engine);
-
-
-            engine->Start(
+            // Prepare the engine with metadata but don't start yet
+            engine->Prepare(
                 *info,
                 destPath,
 
-                [this, transferId](const transfers::TransferItem& itemState) {
+                [this, engine](const transfers::TransferItem& itemState) {
+                    const QString transferId = engine->Item().id;
                     m_download_model->UpdateProgress(
                         transferId,
                         itemState.doneBytes,
@@ -158,14 +158,119 @@ namespace disk::qml::viewmodels {
                     UpdateCounts();
                 },
 
-                [this, transferId](const transfers::TransferItem& itemState) {
+                [this, engine](const transfers::TransferItem& itemState) {
+                    const QString transferId = engine->Item().id;
                     OnDownloadFinished(transferId);
                 }
             );
 
+            // Add the engine's item (with Queued status) to the model
+            const auto& item = engine->Item();
+            m_download_model->AddTransfer(item);
+
+            const QString transferId = item.id;
+            m_download_engines.insert(transferId, engine);
+
             UpdateCounts();
             SaveState();
+
+            // Let the queue drain policy decide when to start
+            DrainDownloadQueue();
         });
+    }
+
+    void TransfersViewModel::startShareDownload(
+        const QString& shareId,
+        qint64 fileId,
+        const QString& shareToken,
+        const QString& destPath
+    ) {
+        if (shareToken.isEmpty() || fileId <= 0) {
+            auto* ctx = new QObject(this);
+            QJsonObject reqObj;
+            reqObj.insert(QStringLiteral("share_id"), shareId);
+            reqObj.insert(QStringLiteral("password"), QStringLiteral(""));
+            
+            m_api_client->PostJson(QStringLiteral("/api/share/access"), reqObj, ctx,
+                [this, shareId, fileId, destPath, ctx](bool hasError, QString err, int, QByteArray body) {
+                    ctx->deleteLater();
+                    if (hasError) return;
+                    auto env = disk::qml::models::ParseEnvelope(body);
+                    if (!env || !env->IsSuccess()) return;
+                    auto data = disk::qml::models::EnvelopeDataObject(*env);
+                    if (!data) return;
+                    QString token = data->value(QStringLiteral("share_token")).toString();
+                    if (token.isEmpty()) return;
+
+                    if (fileId <= 0) {
+                        auto* ctx2 = new QObject(this);
+                        auto reqObj2 = m_api_client->CreateStreamingRequest(QStringLiteral("/api/share/browse/%1").arg(shareId));
+                        reqObj2.setRawHeader(QByteArrayLiteral("X-Share-Token"), token.toUtf8());
+                        
+                        auto* reply = m_api_client->NetworkAccessManager()->get(reqObj2);
+                        connect(reply, &QNetworkReply::finished, ctx2, [this, shareId, token, destPath, ctx2, reply]() mutable {
+                            ctx2->deleteLater();
+                            reply->deleteLater();
+                            if (reply->error() != QNetworkReply::NoError) return;
+                            auto env2 = disk::qml::models::ParseEnvelope(reply->readAll());
+                            if (!env2 || !env2->IsSuccess()) return;
+                            auto data2 = disk::qml::models::EnvelopeDataObject(*env2);
+                            if (!data2) return;
+                            auto items = data2->value(QStringLiteral("items")).toArray();
+                            for (const auto& val : items) {
+                                auto obj = val.toObject();
+                                qint64 id = static_cast<qint64>(obj.value(QStringLiteral("id")).toDouble(0));
+                                if (id > 0 && obj.value(QStringLiteral("type")).toString() == QStringLiteral("file")) {
+                                    startShareDownload(shareId, id, token, destPath);
+                                }
+                            }
+                        });
+                    } else {
+                        startShareDownload(shareId, fileId, token, destPath);
+                    }
+                }
+            );
+            return;
+        }
+
+        auto* engine = new transfers::DownloadEngine(m_api_client, this);
+        engine->FetchShareInfo(
+            shareId, fileId, shareToken,
+            [this, engine, shareId, shareToken, destPath](std::optional<transfers::DownloadInfo> info, QString error) {
+                if (!info) {
+                    engine->deleteLater();
+                    return;
+                }
+
+                engine->PrepareForShare(
+                    *info,
+                    shareId,
+                    shareToken,
+                    destPath,
+                    [this, engine](const transfers::TransferItem& itemState) {
+                        const QString transferId = engine->Item().id;
+                        m_download_model->UpdateProgress(
+                            transferId, itemState.doneBytes, itemState.speed, itemState.eta
+                        );
+                        m_download_model->UpdateStatus(transferId, itemState.status, itemState.error);
+                        UpdateCounts();
+                    },
+                    [this, engine](const transfers::TransferItem& itemState) {
+                        const QString transferId = engine->Item().id;
+                        OnDownloadFinished(transferId);
+                    }
+                );
+
+                const auto& item = engine->Item();
+                m_download_model->AddTransfer(item);
+                const QString transferId = item.id;
+                m_download_engines.insert(transferId, engine);
+
+                UpdateCounts();
+                SaveState();
+                DrainDownloadQueue();
+            }
+        );
     }
 
     // ==================== Transfer Control ====================
@@ -188,14 +293,17 @@ namespace disk::qml::viewmodels {
 
     void TransfersViewModel::resumeTransfer(const QString& id) {
         if (auto* ue = m_upload_engines.value(id, nullptr)) {
-            ue->Start();
+            // Set status to Queued and let drain policy handle starting
+            m_upload_model->UpdateStatus(id, transfers::TransferStatus::Queued);
             UpdateCounts();
+            DrainUploadQueue();
             return;
         }
         if (auto* de = m_download_engines.value(id, nullptr)) {
-            de->Resume();
-            m_download_model->UpdateStatus(id, transfers::TransferStatus::Running);
+            // Set status to Queued and let drain policy handle starting
+            m_download_model->UpdateStatus(id, transfers::TransferStatus::Queued);
             UpdateCounts();
+            DrainDownloadQueue();
             return;
         }
     }
@@ -219,32 +327,101 @@ namespace disk::qml::viewmodels {
     }
 
     void TransfersViewModel::retryTransfer(const QString& id) {
+        // --- Upload retry ---
+        if (auto* oldEngine = m_upload_engines.value(id, nullptr)) {
+            if (oldEngine->Item().status == transfers::TransferStatus::Failed) {
+                // Extract original params before deleting
+                const QString filePath = oldEngine->FilePath();
+                const quint64 parentId = oldEngine->ParentId();
 
-        const auto& uploadItems = m_upload_model->Items();
-        for (const auto& item : uploadItems) {
-            if (item.id == id && item.status == transfers::TransferStatus::Failed) {
-
+                // Remove old engine
                 m_upload_model->RemoveTransfer(id);
-                if (auto* oldEngine = m_upload_engines.take(id)) {
-                    oldEngine->deleteLater();
-                }
+                m_upload_engines.remove(id);
+                oldEngine->deleteLater();
+
+                // Create new engine with same params
+                auto* newEngine = new transfers::UploadEngine(
+                    filePath,
+                    parentId,
+                    m_api_client,
+                    m_upload_model,
+                    this
+                );
+
+                const QString newTransferId = newEngine->TransferId();
+                m_upload_engines.insert(newTransferId, newEngine);
+
+                // Add to model with Queued status
+                m_upload_model->AddTransfer(newEngine->Item());
+
+                // Connect finished signal
+                connect(newEngine, &transfers::UploadEngine::finished, this, &TransfersViewModel::OnUploadFinished);
 
                 UpdateCounts();
+                DrainUploadQueue();
                 SaveState();
                 return;
             }
         }
 
+        // --- Download retry ---
+        if (auto* oldEngine = m_download_engines.value(id, nullptr)) {
+            if (oldEngine->Item().status == transfers::TransferStatus::Failed) {
+                // Extract original params before deleting
+                const qint64 fileId = oldEngine->FileId();
+                const QString destPath = oldEngine->DestPath();
 
-        const auto& downloadItems = m_download_model->Items();
-        for (const auto& item : downloadItems) {
-            if (item.id == id && item.status == transfers::TransferStatus::Failed) {
+                // Remove old engine
                 m_download_model->RemoveTransfer(id);
-                if (auto* oldEngine = m_download_engines.take(id)) {
-                    oldEngine->deleteLater();
-                }
-                UpdateCounts();
-                SaveState();
+                m_download_engines.remove(id);
+                oldEngine->deleteLater();
+
+                // Create new engine and re-fetch info
+                auto* newEngine = new transfers::DownloadEngine(m_api_client, this);
+
+                newEngine->FetchInfo(fileId, [this, newEngine, destPath](std::optional<transfers::DownloadInfo> info, QString error) {
+                    if (!info) {
+                        newEngine->deleteLater();
+                        return;
+                    }
+
+                    // Prepare the engine with metadata but don't start yet
+                    newEngine->Prepare(
+                        *info,
+                        destPath,
+
+                        [this, newEngine](const transfers::TransferItem& itemState) {
+                            const QString transferId = newEngine->Item().id;
+                            m_download_model->UpdateProgress(
+                                transferId,
+                                itemState.doneBytes,
+                                itemState.speed,
+                                itemState.eta
+                            );
+                            m_download_model->UpdateStatus(transferId, itemState.status, itemState.error);
+                            UpdateCounts();
+                        },
+
+                        [this, newEngine](const transfers::TransferItem& itemState) {
+                            const QString transferId = newEngine->Item().id;
+                            OnDownloadFinished(transferId);
+                        }
+                    );
+
+                    // Add the engine's item (with Queued status) to the model
+                    const auto& item = newEngine->Item();
+                    m_download_model->AddTransfer(item);
+
+                    const QString transferId = item.id;
+                    m_download_engines.insert(transferId, newEngine);
+
+                    UpdateCounts();
+                    SaveState();
+
+                    // Let the queue drain policy decide when to start
+                    DrainDownloadQueue();
+                });
+
                 return;
             }
         }
@@ -278,14 +455,8 @@ namespace disk::qml::viewmodels {
         m_upload_model->ResumeAll();
         m_download_model->ResumeAll();
 
-
-        for (auto* engine : m_upload_engines) {
-            engine->Start();
-        }
-
-        for (auto* engine : m_download_engines) {
-            engine->Resume();
-        }
+        // Don't call Start() directly - let DrainUploadQueue/DrainDownloadQueue handle it
+        // since ResumeAll() already set status to Queued
 
         UpdateCounts();
         DrainUploadQueue();
@@ -298,13 +469,11 @@ namespace disk::qml::viewmodels {
         const int maxConcurrent = m_config_store->ConcurrentUploads();
         int running = 0;
 
-
         for (const auto& item : m_upload_model->Items()) {
             if (item.status == transfers::TransferStatus::Running) {
                 ++running;
             }
         }
-
 
         for (const auto& item : m_upload_model->Items()) {
             if (running >= maxConcurrent) {
@@ -312,6 +481,9 @@ namespace disk::qml::viewmodels {
             }
             if (item.status == transfers::TransferStatus::Queued) {
                 if (auto* engine = m_upload_engines.value(item.id, nullptr)) {
+                    // Update status to Running BEFORE starting, so if Start() fails immediately,
+                    // SetFailed() will correctly update to Failed status
+                    m_upload_model->UpdateStatus(item.id, transfers::TransferStatus::Running);
                     engine->Start();
                     ++running;
                 }

@@ -401,6 +401,8 @@ Item {
                                 contextMenu.targetSharePermission = model.sharePermission
                                 contextMenu.targetShareHasPassword = model.shareHasPassword
                                 contextMenu.targetShareExpiresAt = model.shareExpiresAt
+                                contextMenu.targetFileId = model.shareFileId || 0
+                                contextMenu.targetShareToken = model.shareToken || ""
                                 contextMenu.popup()
                             } else if (mouse.modifiers & Qt.ControlModifier) {
                                 ShareViewModel.toggleSelection(model.shareId)
@@ -473,6 +475,25 @@ Item {
         property string targetSharePermission: ""
         property bool targetShareHasPassword: false
         property string targetShareExpiresAt: ""
+
+        property var targetFileId: 0
+        property string targetShareToken: ""
+
+        MenuItem {
+            id: downloadShareMenuItem
+            text: "📥 下载"
+            enabled: contextMenu.targetSharePermission === "download" 
+                     && contextMenu.targetShareStatus === "active"
+            onTriggered: {
+                var destPath = StandardPaths.writableLocation(StandardPaths.DownloadLocation)
+                ShareViewModel.downloadFile(
+                    contextMenu.targetShareId,
+                    contextMenu.targetFileId,
+                    contextMenu.targetShareToken,
+                    destPath
+                )
+            }
+        }
 
         MenuItem {
             text: "📋 复制链接"

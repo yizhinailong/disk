@@ -91,6 +91,7 @@ namespace disk::qml::viewmodels {
         // ==================== Singleton ====================
 
         static auto SetInstance(TransfersViewModel* instance) -> void;
+        static auto Instance() -> TransfersViewModel*;
         static auto create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> TransfersViewModel*;
 
         // ==================== Property Getters ====================
@@ -116,6 +117,13 @@ namespace disk::qml::viewmodels {
         /// @param destPath Local destination directory path.
         Q_INVOKABLE void startDownload(qint64 fileId, const QString& destPath);
 
+        /// Start downloading a shared file (uses share token instead of JWT)
+        Q_INVOKABLE void startShareDownload(
+            const QString& shareId,
+            qint64 fileId,
+            const QString& shareToken,
+            const QString& destPath
+        );
         // ==================== Transfer Control ====================
 
         /// Pause a specific transfer (upload or download) by its UUID.

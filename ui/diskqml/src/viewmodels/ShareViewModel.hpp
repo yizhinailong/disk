@@ -107,6 +107,14 @@ namespace disk::qml::viewmodels {
         /// Reload the current page of share items.
         Q_INVOKABLE void refresh();
 
+        /// Download a shared file
+        Q_INVOKABLE void downloadFile(
+            const QString& shareId,
+            qint64 fileId,
+            const QString& shareToken,
+            const QString& destPath
+        );
+
         /// Create a new share.
         Q_INVOKABLE void createShare(
             const QList<qint64>& fileIds,
@@ -155,6 +163,11 @@ namespace disk::qml::viewmodels {
         void shareOperationSucceeded(const QString& message);
         /// Emitted when a share operation fails.
         void shareOperationFailed(const QString& message);
+
+        /// Emitted when a share download starts.
+        void downloadStarted(qint64 fileId, const QString& fileName);
+        /// Emitted when a share download fails to start.
+        void downloadFailed(const QString& error);
         /// Emitted when a share is created successfully.
         void shareCreated(
             const QString& shareId,
