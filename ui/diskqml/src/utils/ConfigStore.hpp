@@ -2,8 +2,6 @@
  * @file ConfigStore.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Client configuration persistence via QSettings
- * @version 0.1
- * @date 2026-03-02
  *
  * @copyright Copyright (c) 2026
  *

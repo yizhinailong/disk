@@ -2,8 +2,6 @@
  * @file TransferQueueModel.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief QAbstractListModel implementation for transfer queues
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  */

@@ -2,8 +2,6 @@
  * @file TokenStore.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Local persistence for access/refresh tokens
- * @version 0.1
- * @date 2026-03-02
  *
  * @copyright Copyright (c) 2026
  *

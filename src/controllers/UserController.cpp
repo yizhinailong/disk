@@ -2,8 +2,6 @@
  * @file UserController.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 用户控制器实现
- * @version 0.1
- * @date 2026-01-28
  *
  * @copyright Copyright (c) 2026
  *

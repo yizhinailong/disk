@@ -2,8 +2,6 @@
  * @file MainWindowView.qml
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 主窗口壳：侧边栏(文件/传输双模式) + 工具栏 + 内容路由 + 状态栏
- * @version 0.3
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  *

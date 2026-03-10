@@ -2,8 +2,6 @@
  * @file FileDto_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief File DTO unit tests
- * @version 0.1
- * @date 2026-02-14
  *
  * @copyright Copyright (c) 2026
  *

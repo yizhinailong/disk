@@ -2,8 +2,6 @@
  * @file ShareDto.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 分享模块数据传输对象
- * @version 0.1
- * @date 2026-02-15
  *
  * @copyright Copyright (c) 2026
  *

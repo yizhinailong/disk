@@ -3,8 +3,6 @@
  * @brief 用户 API 客户端
  * @details 提供用户资料、存储空间、密码管理等用户相关的 HTTP API 调用
  * @author LiuFeng (liufeng.code@outlook.com)
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  */

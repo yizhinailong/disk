@@ -2,8 +2,6 @@
  * @file AuthService.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief High-level auth orchestration for the QML client
- * @version 0.1
- * @date 2026-03-02
  *
  * @copyright Copyright (c) 2026
  *

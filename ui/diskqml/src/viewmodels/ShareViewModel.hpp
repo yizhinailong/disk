@@ -2,8 +2,6 @@
  * @file ShareViewModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief QML ViewModel for share management: list, create, cancel
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  *

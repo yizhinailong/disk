@@ -2,8 +2,6 @@
  * @file RateLimitFilter.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief API 频率限制过滤器实现
- * @version 0.1
- * @date 2026-02-16
  *
  * @copyright Copyright (c) 2026
  *

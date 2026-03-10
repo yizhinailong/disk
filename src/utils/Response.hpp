@@ -2,8 +2,6 @@
  * @file Response.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 统一 API 响应构造器
- * @version 0.1
- * @date 2026-01-14
  *
  * @copyright Copyright (c) 2026
  *

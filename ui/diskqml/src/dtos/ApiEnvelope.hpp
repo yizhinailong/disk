@@ -2,8 +2,6 @@
  * @file ApiEnvelope.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Shared API response envelope for the QML client
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  *

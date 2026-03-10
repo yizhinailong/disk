@@ -2,8 +2,6 @@
  * @file ErrorCode.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 系统错误码枚举定义及 Result 类型
- * @version 0.1
- * @date 2026-01-13
  *
  * @copyright Copyright (c) 2026
  *

@@ -2,8 +2,6 @@
  * @file AuthDto.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 认证模块数据传输对象（Data Transfer Objects）
- * @version 0.1
- * @date 2026-01-21
  *
  * @copyright Copyright (c) 2026
  *

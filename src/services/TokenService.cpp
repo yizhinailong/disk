@@ -2,8 +2,6 @@
  * @file TokenService.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 统一JWT令牌服务实现
- * @version 0.1
- * @date 2026-01-16
  *
  * @copyright Copyright (c) 2026
  *

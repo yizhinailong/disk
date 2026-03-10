@@ -2,8 +2,6 @@
  * @file AuthDto_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Auth DTO unit tests
- * @version 0.1
- * @date 2026-01-21
  *
  * @copyright Copyright (c) 2026
  *

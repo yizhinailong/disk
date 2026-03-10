@@ -2,8 +2,6 @@
  * @file CleanupService.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 系统清理服务
- * @version 0.1
- * @date 2026-02-16
  *
  * @copyright Copyright (c) 2026
  *

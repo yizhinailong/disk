@@ -2,8 +2,6 @@
  * @file PlatformIntegration.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Platform-specific integration for system tray, autostart, and notifications
- * @version 0.1
- * @date 2026-03-10
  *
  * @copyright Copyright (c) 2026
  *

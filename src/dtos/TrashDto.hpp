@@ -2,8 +2,6 @@
  * @file TrashDto.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 回收站模块数据传输对象（Data Transfer Objects）
- * @version 0.1
- * @date 2026-02-15
  *
  * @copyright Copyright (c) 2026
  *

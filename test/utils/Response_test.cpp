@@ -2,8 +2,6 @@
  * @file Response_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Response 工具测试
- * @version 0.1
- * @date 2026-01-17
  *
  * @copyright Copyright (c) 2026
  *

@@ -2,8 +2,6 @@
  * @file ScheduledTasks.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 定时任务管理器
- * @version 0.1
- * @date 2026-03-01
  *
  * @copyright Copyright (c) 2026
  *

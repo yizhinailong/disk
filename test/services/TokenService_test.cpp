@@ -2,8 +2,6 @@
  * @file TokenService_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 统一 TokenService 的分享令牌契约测试 (RED 阶段)
- * @version 0.1
- * @date 2026-02-15
  *
  * @copyright Copyright (c) 2026
  *

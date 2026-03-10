@@ -2,8 +2,6 @@
  * @file HomePage.qml
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 首页 - 快捷操作、最近文件（占位）、存储空间概览
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  *

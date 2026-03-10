@@ -3,8 +3,6 @@
  * @brief 回收站服务 API 客户端
  * @details 提供回收站项目列表、恢复、彻底删除、清空等回收站相关的 HTTP API 调用
  * @author LiuFeng (liufeng.code@outlook.com)
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  */

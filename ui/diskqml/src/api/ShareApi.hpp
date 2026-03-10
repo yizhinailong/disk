@@ -2,8 +2,6 @@
  * @file ShareApi.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Share API endpoints for create, list, detail, update, cancel, access, browse, download
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  *

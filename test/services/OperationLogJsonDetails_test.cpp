@@ -2,8 +2,6 @@
  * @file OperationLogJsonDetails_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Unit tests for logout operation log JSON details serialization round-trip
- * @version 0.1
- * @date 2026-03-02
  *
  * @copyright Copyright (c) 2026
  *

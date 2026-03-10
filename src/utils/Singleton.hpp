@@ -2,8 +2,6 @@
  * @file Singleton.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 单例模板类
- * @version 0.1
- * @date 2026-01-18
  *
  * @copyright Copyright (c) 2026
  *

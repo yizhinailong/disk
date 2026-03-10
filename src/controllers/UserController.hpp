@@ -3,8 +3,6 @@
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 用户控制器
  * @note Request 和 Response DTO 定义在 dtos/UserDto.hpp
- * @version 0.1
- * @date 2026-01-28
  *
  * @copyright Copyright (c) 2026
  *

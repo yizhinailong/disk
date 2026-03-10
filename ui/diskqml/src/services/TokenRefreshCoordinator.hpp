@@ -2,8 +2,6 @@
  * @file TokenRefreshCoordinator.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Single-flight token refresh coordinator with proactive refresh timer
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  *

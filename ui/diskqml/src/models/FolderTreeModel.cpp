@@ -2,8 +2,6 @@
  * @file FolderTreeModel.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief QAbstractItemModel implementation for folder tree hierarchy
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  */

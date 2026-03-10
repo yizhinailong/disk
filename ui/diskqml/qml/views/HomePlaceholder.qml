@@ -2,8 +2,6 @@
  * @file HomePlaceholder.qml
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 已登录主页占位页面
- * @version 0.1
- * @date 2026-03-02
  *
  * @copyright Copyright (c) 2026
  *

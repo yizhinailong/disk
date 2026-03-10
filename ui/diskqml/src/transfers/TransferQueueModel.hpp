@@ -3,8 +3,6 @@
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 传输队列模型
  * @details 用于上传/下载传输队列的 QAbstractListModel
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  *

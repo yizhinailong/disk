@@ -2,8 +2,6 @@
  * @file RedisService.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Redis 服务封装
- * @version 0.1
- * @date 2026-01-21
  *
  * @copyright Copyright (c) 2026
  *

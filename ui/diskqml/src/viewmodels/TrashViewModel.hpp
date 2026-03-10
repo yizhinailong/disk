@@ -2,8 +2,6 @@
  * @file TrashViewModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief QML ViewModel for trash management: list, restore, delete, clear
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  *

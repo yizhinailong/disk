@@ -2,8 +2,6 @@
  * @file AuthService.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 认证服务
- * @version 0.1
- * @date 2026-01-14
  *
  * @copyright Copyright (c) 2026
  *

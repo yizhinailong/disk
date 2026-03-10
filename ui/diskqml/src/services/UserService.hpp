@@ -2,8 +2,6 @@
  * @file UserService.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief High-level user domain orchestration for the QML client
- * @version 0.1
- * @date 2026-03-10
  *
  * @copyright Copyright (c) 2026
  *

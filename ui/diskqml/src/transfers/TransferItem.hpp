@@ -2,8 +2,6 @@
  * @file TransferItem.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Data struct representing a single upload/download transfer
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  *

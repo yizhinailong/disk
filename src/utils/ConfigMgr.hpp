@@ -2,8 +2,6 @@
  * @file ConfigMgr.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 配置管理类（单例）
- * @version 0.1
- * @date 2026-01-18
  *
  * @copyright Copyright (c) 2026
  *

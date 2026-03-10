@@ -2,8 +2,6 @@
  * @file UserDto.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 用户模块数据传输对象（Data Transfer Objects）
- * @version 0.1
- * @date 2026-01-28
  *
  * @copyright Copyright (c) 2026
  *

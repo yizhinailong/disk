@@ -2,8 +2,6 @@
  * @file TrashService.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 回收站服务
- * @version 0.1
- * @date 2026-02-15
  *
  * @copyright Copyright (c) 2026
  *

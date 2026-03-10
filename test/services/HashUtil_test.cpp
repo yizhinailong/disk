@@ -2,8 +2,6 @@
  * @file TokenHash_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief TokenHash 单元测试
- * @version 0.1
- * @date 2026-01-21
  *
  * @copyright Copyright (c) 2026
  *

@@ -2,8 +2,6 @@
  * @file FolderService.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 文件夹服务
- * @version 0.1
- * @date 2026-02-14
  *
  * @copyright Copyright (c) 2026
  *

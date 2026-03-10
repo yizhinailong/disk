@@ -2,8 +2,6 @@
  * @file UserViewModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief QML singleton ViewModel for user profile, storage, and password workflows
- * @version 0.1
- * @date 2026-03-10
  *
  * @copyright Copyright (c) 2026
  *

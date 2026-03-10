@@ -2,8 +2,6 @@
  * @file PlatformIntegration.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Platform-specific integration implementation
- * @version 0.1
- * @date 2026-03-10
  *
  * @copyright Copyright (c) 2026
  *

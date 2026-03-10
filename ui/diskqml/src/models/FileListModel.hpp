@@ -2,8 +2,6 @@
  * @file FileListModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief QAbstractListModel for file/folder items in the current directory
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  *

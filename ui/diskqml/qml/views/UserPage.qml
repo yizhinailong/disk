@@ -2,8 +2,6 @@
  * @file UserPage.qml
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 用户设置页 - 个人信息、存储空间、密码修改
- * @version 0.1
- * @date 2026-03-10
  *
  * @copyright Copyright (c) 2026
  *

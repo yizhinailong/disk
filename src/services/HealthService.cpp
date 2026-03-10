@@ -2,8 +2,6 @@
  * @file HealthService.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 健康检查服务
- * @version 0.1
- * @date 2026-02-18
  *
  * @copyright Copyright (c) 2026
  *

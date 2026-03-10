@@ -2,8 +2,6 @@
  * @file ShareService_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief ShareService 单元测试
- * @version 0.1
- * @date 2026-02-15
  *
  * @copyright Copyright (c) 2026
  *

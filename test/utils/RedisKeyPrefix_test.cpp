@@ -2,8 +2,6 @@
  * @file RedisKeyPrefix_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Redis key prefix construction tests
- * @version 0.1
- * @date 2026-01-28
  *
  * @copyright Copyright (c) 2026
  *

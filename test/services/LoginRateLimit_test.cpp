@@ -2,8 +2,6 @@
  * @file LoginRateLimit_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 登录频率限制单元测试
- * @version 0.1
- * @date 2026-01-25
  *
  * @copyright Copyright (c) 2026
  *

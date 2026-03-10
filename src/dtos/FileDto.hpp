@@ -2,8 +2,6 @@
  * @file FileDto.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 文件模块数据传输对象
- * @version 0.1
- * @date 2026-02-14
  *
  * @copyright Copyright (c) 2026
  *

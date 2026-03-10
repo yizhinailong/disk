@@ -3,8 +3,6 @@
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 认证控制器
  * @note Request 和 Response DTO 定义在 dtos/AuthDto.hpp
- * @version 0.1
- * @date 2026-01-14
  *
  * @copyright Copyright (c) 2026
  *

@@ -2,8 +2,6 @@
  * @file HashUtil.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 统一的哈希工具类（密码和 Token 哈希）
- * @version 0.1
- * @date 2026-01-21
  *
  * @copyright Copyright (c) 2026
  *

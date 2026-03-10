@@ -2,8 +2,6 @@
  * @file UploadRateLimitFilter.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 上传频率限制过滤器
- * @version 0.1
- * @date 2026-02-18
  *
  * @copyright Copyright (c) 2026
  *

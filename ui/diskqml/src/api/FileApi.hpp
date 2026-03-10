@@ -3,8 +3,6 @@
  * @brief 文件上传服务 API 客户端
  * @details 提供文件列表、详情、下载、重命名、移动、复制、删除、搜索等文件相关的 HTTP API 调用
  * @author LiuFeng (liufeng.code@outlook.com)
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  */

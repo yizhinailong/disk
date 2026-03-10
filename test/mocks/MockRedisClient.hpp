@@ -2,8 +2,6 @@
  * @file MockRedisClient.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Mock Redis client for testing
- * @version 0.1
- * @date 2026-01-21
  *
  * @copyright Copyright (c) 2026
  *

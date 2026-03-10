@@ -2,8 +2,6 @@
  * @file Pch.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 预编译头文件（包含所有第三方库头文件）
- * @version 0.2
- * @date 2026-01-08
  *
  * @details
  * 本文件包含项目中使用的所有第三方库头文件，按类别组织：

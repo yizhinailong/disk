@@ -2,8 +2,6 @@
  * @file ShareAuthFilter.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 分享令牌认证过滤器实现
- * @version 0.1
- * @date 2026-02-15
  *
  * @copyright Copyright (c) 2026
  *

@@ -2,8 +2,6 @@
  * @file UserService.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 用户服务实现
- * @version 0.1
- * @date 2026-01-28
  *
  * @copyright Copyright (c) 2026
  *

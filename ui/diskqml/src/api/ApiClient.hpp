@@ -3,8 +3,6 @@
  * @brief Qt REST 客户端封装
  * @details 基于 Qt 6.8 QRestAccessManager + QNetworkRequestFactory 构建的 REST 客户端，供 QML 客户端使用
  * @author LiuFeng (liufeng.code@outlook.com)
- * @version 0.1
- * @date 2026-03-02
  *
  * @copyright Copyright (c) 2026
  */

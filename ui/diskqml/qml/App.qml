@@ -2,8 +2,6 @@
  * @file App.qml
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 应用主窗口与页面栈（无边框 + 自定义标题栏）
- * @version 0.2
- * @date 2026-03-04
  *
  * @copyright Copyright (c) 2026
  *

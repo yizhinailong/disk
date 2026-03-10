@@ -2,8 +2,6 @@
  * @file RedisKeyPrefix.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief Redis key prefix construction utility class
- * @version 0.1
- * @date 2026-01-28
  *
  * @copyright Copyright (c) 2026
  *

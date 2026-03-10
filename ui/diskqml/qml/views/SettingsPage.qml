@@ -2,8 +2,6 @@
  * @file SettingsPage.qml
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief 设置页 - 服务器地址、下载目录、并发数、UI偏好
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  *

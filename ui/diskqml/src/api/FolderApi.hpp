@@ -3,8 +3,6 @@
  * @brief 文件夹 API 客户端
  * @details 提供文件夹创建、目录树、面包屑导航等文件夹相关的 HTTP API 调用
  * @author LiuFeng (liufeng.code@outlook.com)
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  */

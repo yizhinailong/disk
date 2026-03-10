@@ -3,8 +3,6 @@
  * @brief 认证服务 API 客户端
  * @details 提供用户注册、登录、登出、令牌刷新等认证相关的 HTTP API 调用
  * @author LiuFeng (liufeng.code@outlook.com)
- * @version 0.1
- * @date 2026-03-02
  *
  * @copyright Copyright (c) 2026
  */

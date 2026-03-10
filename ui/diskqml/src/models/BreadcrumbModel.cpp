@@ -2,8 +2,6 @@
  * @file BreadcrumbModel.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief QAbstractListModel implementation for breadcrumb navigation
- * @version 0.1
- * @date 2026-03-05
  *
  * @copyright Copyright (c) 2026
  */
