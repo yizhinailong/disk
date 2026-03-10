@@ -58,10 +58,6 @@ namespace disk::qml::viewmodels {
         return m_parse_error;
     }
 
-    auto ShareViewModel::ParseError() const -> const QString& {
-        return m_parse_error;
-    }
-
     auto ShareViewModel::CurrentPage() const -> int {
         return m_current_page;
     }
