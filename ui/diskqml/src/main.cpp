@@ -123,8 +123,6 @@ int main(int argc, char* argv[]) {
     disk::qml::viewmodels::ShareViewModel::SetInstance(&shareViewModel);
     disk::qml::viewmodels::TransfersViewModel::SetInstance(&transfersViewModel);
     disk::qml::viewmodels::UserViewModel::SetInstance(&userViewModel);
-    disk::qml::viewmodels::ShareViewModel::SetInstance(&shareViewModel);
-    disk::qml::viewmodels::TransfersViewModel::SetInstance(&transfersViewModel);
 
     QQmlApplicationEngine engine;
     QObject::connect(

@@ -186,10 +186,9 @@ namespace disk::qml::viewmodels {
         if (shareToken.isEmpty() || fileId <= 0) {
             auto* ctx = new QObject(this);
             QJsonObject reqObj;
-            reqObj.insert(QStringLiteral("share_id"), shareId);
             reqObj.insert(QStringLiteral("password"), QStringLiteral(""));
             
-            m_api_client->PostJson(QStringLiteral("/api/share/access"), reqObj, ctx,
+            m_api_client->PostJson(QStringLiteral("/api/share/access/%1").arg(shareId), reqObj, ctx,
                 [this, shareId, fileId, destPath, ctx](bool hasError, QString err, int, QByteArray body) {
                     ctx->deleteLater();
                     if (hasError) return;

@@ -72,6 +72,22 @@ namespace disk::qml::viewmodels {
         Q_PROPERTY(disk::qml::models::ShareListModel* shareListModel READ ShareListModelPtr CONSTANT)
 
     public:
+        /**
+         * @brief Password action for share update operations.
+         *
+         * @details
+         * Explicitly defines the intent for password handling:
+         * - Keep: Don't change the existing password
+         * - Clear: Remove the password protection
+         * - Set: Set a new password (value provided separately)
+         */
+        enum class PasswordAction {
+            Keep,   ///< Keep existing password unchanged
+            Clear,  ///< Remove password protection
+            Set,    ///< Set new password (use the provided password value)
+        };
+        Q_ENUM(PasswordAction)
+    public:
         explicit ShareViewModel(
             services::ShareService* shareService,
             QObject* parent = nullptr
@@ -122,9 +138,15 @@ namespace disk::qml::viewmodels {
         );
 
         /// Update an existing share's settings.
+        /// @param shareId      Share ID to update.
+        /// @param expireDays   New expiration in days (-1 = no change, 0 = permanent).
+        /// @param passwordAction How to handle password (Keep/Clear/Set).
+        /// @param password     New password value (only used when passwordAction == Set).
+        /// @param permission   New permission ("view"/"download", empty = no change).
         Q_INVOKABLE void updateShare(
             const QString& shareId,
             int expireDays,
+            PasswordAction passwordAction,
             const QString& password,
             const QString& permission
         );

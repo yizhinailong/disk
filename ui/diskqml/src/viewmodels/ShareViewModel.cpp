@@ -153,6 +153,7 @@ namespace disk::qml::viewmodels {
     void ShareViewModel::updateShare(
         const QString& shareId,
         int expireDays,
+        PasswordAction passwordAction,
         const QString& password,
         const QString& permission
     ) {
@@ -165,10 +166,23 @@ namespace disk::qml::viewmodels {
 
         auto* ctx = new QObject(this);
 
-        // Convert empty password to nullopt (no change)
+        // Convert PasswordAction to service-level semantics:
+        // - Keep: nullopt = no change to password
+        // - Clear: empty QString = remove password
+        // - Set: QString value = set new password
         std::optional<QString> passwordOpt;
-        if (!password.isEmpty()) {
-            passwordOpt = password;
+        switch (passwordAction) {
+            case PasswordAction::Keep:
+                // nullopt = no change
+                break;
+            case PasswordAction::Clear:
+                // Empty string = remove password
+                passwordOpt = QString{};
+                break;
+            case PasswordAction::Set:
+                // Actual password value
+                passwordOpt = password;
+                break;
         }
 
         m_share_service->UpdateShare(

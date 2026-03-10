@@ -402,9 +402,9 @@ Item {
                                 contextMenu.targetSharePermission = model.sharePermission
                                 contextMenu.targetShareHasPassword = model.shareHasPassword
                                 contextMenu.targetShareExpiresAt = model.shareExpiresAt
-                                contextMenu.targetFileId = model.shareFileId || 0
-                                contextMenu.targetShareToken = model.shareToken || ""
-                                contextMenu.popup()
+                                // Note: shareFileId and shareToken are not available from list
+                                // Download via share access requires separate flow
+
                             } else if (mouse.modifiers & Qt.ControlModifier) {
                                 ShareViewModel.toggleSelection(model.shareId)
                             } else {
@@ -476,23 +476,16 @@ Item {
         property string targetSharePermission: ""
         property bool targetShareHasPassword: false
         property string targetShareExpiresAt: ""
-
-        property var targetFileId: 0
-        property string targetShareToken: ""
+        // Note: targetFileId and targetShareToken removed - not available from share list
+        // To download shared files, use the share access flow (not implemented in list view)
 
         MenuItem {
             id: downloadShareMenuItem
             text: "📥 下载"
-            enabled: contextMenu.targetSharePermission === "download" 
-                     && contextMenu.targetShareStatus === "active"
+            enabled: false  // Disabled: share token not available from list; use file list to download
             onTriggered: {
-                var destPath = StandardPaths.writableLocation(StandardPaths.DownloadLocation)
-                ShareViewModel.downloadFile(
-                    contextMenu.targetShareId,
-                    contextMenu.targetFileId,
-                    contextMenu.targetShareToken,
-                    destPath
-                )
+                // This feature requires share access token which is not available
+                // from the share list. Use the file list to download files.
             }
         }
 
@@ -811,18 +804,21 @@ Item {
             var expireDays = editExpireDaysCombo.currentValue
             var permission = editPermissionCombo.currentValue
 
-            // Handle password: clear, keep, or set new
+            // Determine password action based on UI state:
+            // - Clear checkbox checked -> Clear (remove password)
+            // - Password field has text -> Set (new password)
+            // - Otherwise -> Keep (no change)
+            var passwordAction = ShareViewModel.PasswordAction.Keep
             var password = ""
+
             if (editPasswordClearCheckbox.checked) {
-                // Pass special marker to clear password
-                password = "__CLEAR__"
+                passwordAction = ShareViewModel.PasswordAction.Clear
             } else if (editPasswordField.text.trim() !== "") {
-                // New password provided
+                passwordAction = ShareViewModel.PasswordAction.Set
                 password = editPasswordField.text.trim()
             }
-            // else: keep existing (empty string means no change)
 
-            ShareViewModel.updateShare(editShareDialog.targetShareId, expireDays, password, permission)
+            ShareViewModel.updateShare(editShareDialog.targetShareId, expireDays, passwordAction, password, permission)
         }
 
         onRejected: {
