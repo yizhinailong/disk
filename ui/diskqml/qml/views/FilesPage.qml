@@ -518,48 +518,11 @@ Item {
 
         // ==================== 分页栏 ====================
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 36
-            color: "transparent"
-            visible: FileListViewModel.totalPages > 1
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 8
-
-                Item { Layout.fillWidth: true }
-
-                Label {
-                    text: "第 " + FileListViewModel.currentPage + " / " + FileListViewModel.totalPages + " 页"
-                    font.pixelSize: 12
-                    color: palette.placeholderText
-                }
-
-                Button {
-                    text: "上一页"
-                    font.pixelSize: 12
-                    enabled: FileListViewModel.currentPage > 1
-                    onClicked: FileListViewModel.goToPage(FileListViewModel.currentPage - 1)
-                }
-
-                Button {
-                    text: "下一页"
-                    font.pixelSize: 12
-                    enabled: FileListViewModel.currentPage < FileListViewModel.totalPages
-                    onClicked: FileListViewModel.goToPage(FileListViewModel.currentPage + 1)
-                }
-
-                Label {
-                    text: "共 " + FileListViewModel.totalItems + " 项"
-                    font.pixelSize: 12
-                    color: palette.placeholderText
-                }
-
-                Item { Layout.fillWidth: true }
-            }
+        PaginationBar {
+            currentPage: FileListViewModel.currentPage
+            totalPages: FileListViewModel.totalPages
+            totalItems: FileListViewModel.totalItems
+            onPageRequested: function(page) { FileListViewModel.goToPage(page) }
         }
     }
 
@@ -583,9 +546,7 @@ Item {
             visible: !contextMenu.targetIsFolder
             onTriggered: {
                 TransfersViewModel.startDownload(contextMenu.targetFileId, SettingsViewModel.downloadDir)
-                successTooltip.text = "已添加到下载队列"
-                successTooltip.visible = true
-                successTooltipTimer.restart()
+                notificationToast.showSuccess("已添加到下载队列")
             }
         }
 
@@ -659,15 +620,11 @@ Item {
         target: FileListViewModel
 
         function onFileOperationSucceeded(message) {
-            successTooltip.text = message
-            successTooltip.visible = true
-            successTooltipTimer.restart()
+            notificationToast.showSuccess(message)
         }
 
         function onFileOperationFailed(message) {
-            failTooltip.text = message
-            failTooltip.visible = true
-            failTooltipTimer.restart()
+            notificationToast.showError(message)
         }
     }
 
@@ -675,44 +632,15 @@ Item {
         target: ShareViewModel
 
         function onShareCreated(shareId, shareLink, password, expiresAt) {
-            successTooltip.text = "分享创建成功"
-            successTooltip.visible = true
-            successTooltipTimer.restart()
+            notificationToast.showSuccess("分享创建成功")
         }
 
         function onShareOperationFailed(message) {
-            failTooltip.text = message
-            failTooltip.visible = true
-            failTooltipTimer.restart()
+            notificationToast.showError(message)
         }
     }
 
-    // --- Success tooltip ---
-    ToolTip {
-        id: successTooltip
-        timeout: 3000
-        y: parent.height - 60
-        x: (parent.width - width) / 2
+    NotificationToast {
+        id: notificationToast
     }
-
-    Timer {
-        id: successTooltipTimer
-        interval: 3000
-        onTriggered: successTooltip.visible = false
-    }
-
-    // --- Fail tooltip ---
-    ToolTip {
-        id: failTooltip
-        timeout: 5000
-        y: parent.height - 60
-        x: (parent.width - width) / 2
-    }
-
-    Timer {
-        id: failTooltipTimer
-        interval: 5000
-        onTriggered: failTooltip.visible = false
-    }
-
 }

@@ -476,9 +476,7 @@ Item {
         
         onAccepted: {
             if (selectedFiles.length === 0) {
-                failTooltip.text = "请选择要上传的文件"
-                failTooltip.visible = true
-                failTooltipTimer.restart()
+                notificationToast.showError("请选择要上传的文件")
                 return
             }
             
@@ -747,9 +745,7 @@ Item {
                         TransfersViewModel.startUpload(pendingUploadFiles, targetFolderId)
 
                         // Show success feedback
-                        successTooltip.text = "已添加 " + pendingUploadFiles.length + " 个文件到上传队列"
-                        successTooltip.visible = true
-                        successTooltipTimer.restart()
+                        notificationToast.showSuccess("已添加 " + pendingUploadFiles.length + " 个文件到上传队列")
 
                         // Navigate to upload page to show progress
                         root.isTransferMode = true
@@ -766,31 +762,7 @@ Item {
 
     // ==================== 操作结果提示 ====================
 
-    // --- Success tooltip ---
-    ToolTip {
-        id: successTooltip
-        timeout: 3000
-        y: parent.height - 60
-        x: (parent.width - width) / 2
-    }
-
-    Timer {
-        id: successTooltipTimer
-        interval: 3000
-        onTriggered: successTooltip.visible = false
-    }
-
-    // --- Fail tooltip ---
-    ToolTip {
-        id: failTooltip
-        timeout: 5000
-        y: parent.height - 60
-        x: (parent.width - width) / 2
-    }
-
-    Timer {
-        id: failTooltipTimer
-        interval: 5000
-        onTriggered: failTooltip.visible = false
+    NotificationToast {
+        id: notificationToast
     }
 }

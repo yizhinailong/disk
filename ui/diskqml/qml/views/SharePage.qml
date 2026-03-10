@@ -403,48 +403,12 @@ Item {
 
         // ==================== 分页栏 ====================
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 36
-            color: "transparent"
-            visible: ShareViewModel.totalPages > 1
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 24
-                anchors.rightMargin: 24
-                spacing: 8
-
-                Item { Layout.fillWidth: true }
-
-                Label {
-                    text: "第 " + ShareViewModel.currentPage + " / " + ShareViewModel.totalPages + " 页"
-                    font.pixelSize: 12
-                    color: palette.placeholderText
-                }
-
-                Button {
-                    text: "上一页"
-                    font.pixelSize: 12
-                    enabled: ShareViewModel.currentPage > 1 && !ShareViewModel.loading
-                    onClicked: ShareViewModel.goToPage(ShareViewModel.currentPage - 1)
-                }
-
-                Button {
-                    text: "下一页"
-                    font.pixelSize: 12
-                    enabled: ShareViewModel.currentPage < ShareViewModel.totalPages && !ShareViewModel.loading
-                    onClicked: ShareViewModel.goToPage(ShareViewModel.currentPage + 1)
-                }
-
-                Label {
-                    text: "共 " + ShareViewModel.totalItems + " 项"
-                    font.pixelSize: 12
-                    color: palette.placeholderText
-                }
-
-                Item { Layout.fillWidth: true }
-            }
+        PaginationBar {
+            currentPage: ShareViewModel.currentPage
+            totalPages: ShareViewModel.totalPages
+            totalItems: ShareViewModel.totalItems
+            loading: ShareViewModel.loading
+            onPageRequested: function(page) { ShareViewModel.goToPage(page) }
         }
     }
 
@@ -479,9 +443,7 @@ Item {
                     clipboardText.text = contextMenu.targetShareLink
                     clipboardText.selectAll()
                     clipboardText.copy()
-                    successTooltip.text = "分享链接已复制到剪贴板"
-                    successTooltip.visible = true
-                    successTooltipTimer.restart()
+                    notificationToast.showSuccess("分享链接已复制到剪贴板")
                 }
             }
         }
@@ -878,9 +840,7 @@ Item {
                     clipboardText.text = copyText
                     clipboardText.selectAll()
                     clipboardText.copy()
-                    successTooltip.text = "已复制到剪贴板"
-                    successTooltip.visible = true
-                    successTooltipTimer.restart()
+                    notificationToast.showSuccess("已复制到剪贴板")
                 }
             }
         }
@@ -899,15 +859,11 @@ Item {
         target: ShareViewModel
 
         function onShareOperationSucceeded(message) {
-            successTooltip.text = message
-            successTooltip.visible = true
-            successTooltipTimer.restart()
+            notificationToast.showSuccess(message)
         }
 
         function onShareOperationFailed(message) {
-            failTooltip.text = message
-            failTooltip.visible = true
-            failTooltipTimer.restart()
+            notificationToast.showError(message)
         }
 
         function onShareCreated(shareId, shareLink, password, expiresAt) {
@@ -918,31 +874,7 @@ Item {
         }
     }
 
-    // --- Success tooltip ---
-    ToolTip {
-        id: successTooltip
-        timeout: 3000
-        y: parent.height - 60
-        x: (parent.width - width) / 2
-    }
-
-    Timer {
-        id: successTooltipTimer
-        interval: 3000
-        onTriggered: successTooltip.visible = false
-    }
-
-    // --- Fail tooltip ---
-    ToolTip {
-        id: failTooltip
-        timeout: 5000
-        y: parent.height - 60
-        x: (parent.width - width) / 2
-    }
-
-    Timer {
-        id: failTooltipTimer
-        interval: 5000
-        onTriggered: failTooltip.visible = false
+    NotificationToast {
+        id: notificationToast
     }
 }

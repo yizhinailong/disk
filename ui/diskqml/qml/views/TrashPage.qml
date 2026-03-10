@@ -400,48 +400,11 @@ Item {
 
         // ==================== 分页栏 ====================
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 36
-            color: "transparent"
-            visible: TrashViewModel.totalPages > 1
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 8
-
-                Item { Layout.fillWidth: true }
-
-                Label {
-                    text: "第 " + TrashViewModel.currentPage + " / " + TrashViewModel.totalPages + " 页"
-                    font.pixelSize: 12
-                    color: palette.placeholderText
-                }
-
-                Button {
-                    text: "上一页"
-                    font.pixelSize: 12
-                    enabled: TrashViewModel.currentPage > 1
-                    onClicked: TrashViewModel.goToPage(TrashViewModel.currentPage - 1)
-                }
-
-                Button {
-                    text: "下一页"
-                    font.pixelSize: 12
-                    enabled: TrashViewModel.currentPage < TrashViewModel.totalPages
-                    onClicked: TrashViewModel.goToPage(TrashViewModel.currentPage + 1)
-                }
-
-                Label {
-                    text: "共 " + TrashViewModel.totalItems + " 项"
-                    font.pixelSize: 12
-                    color: palette.placeholderText
-                }
-
-                Item { Layout.fillWidth: true }
-            }
+        PaginationBar {
+            currentPage: TrashViewModel.currentPage
+            totalPages: TrashViewModel.totalPages
+            totalItems: TrashViewModel.totalItems
+            onPageRequested: function(page) { TrashViewModel.goToPage(page) }
         }
     }
 
@@ -512,43 +475,15 @@ Item {
         target: TrashViewModel
 
         function onTrashOperationSucceeded(message) {
-            successTooltip.text = message
-            successTooltip.visible = true
-            successTooltipTimer.restart()
+            notificationToast.showSuccess(message)
         }
 
         function onTrashOperationFailed(message) {
-            failTooltip.text = message
-            failTooltip.visible = true
-            failTooltipTimer.restart()
+            notificationToast.showError(message)
         }
     }
 
-    // --- Success tooltip ---
-    ToolTip {
-        id: successTooltip
-        timeout: 3000
-        y: parent.height - 60
-        x: (parent.width - width) / 2
-    }
-
-    Timer {
-        id: successTooltipTimer
-        interval: 3000
-        onTriggered: successTooltip.visible = false
-    }
-
-    // --- Fail tooltip ---
-    ToolTip {
-        id: failTooltip
-        timeout: 5000
-        y: parent.height - 60
-        x: (parent.width - width) / 2
-    }
-
-    Timer {
-        id: failTooltipTimer
-        interval: 5000
-        onTriggered: failTooltip.visible = false
+    NotificationToast {
+        id: notificationToast
     }
 }
