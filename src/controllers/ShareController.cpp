@@ -11,14 +11,21 @@
 
 #include "ShareController.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <limits>
+#include <memory>
 
 #include "dtos/ShareDto.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::share {
+
+    namespace {
+        constexpr std::size_t DOWNLOAD_STREAM_CHUNK_BYTES = 64 * 1024;
+    }
 
     using disk::utils::ConfigMgr;
 
@@ -372,24 +379,56 @@ namespace disk::share {
             co_return resp;
         }
 
-        // 8. 读取文件内容
-        std::ifstream file(download_info.storage_path, std::ios::binary);
-        if (!file.is_open()) {
-            LOG_ERROR << "Failed to open file: " << download_info.storage_path;
-            co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "Failed to open file"));
-        }
-
         uint64_t start = range_request.has_range ? range_request.start : 0;
         uint64_t end = range_request.has_range ? range_request.end : download_info.file_size - 1;
         uint64_t content_length = end - start + 1;
 
-        file.seekg(static_cast<std::streampos>(start));
-        std::string content(content_length, '\0');
-        file.read(content.data(), static_cast<std::streamsize>(content_length));
-        file.close();
+        auto file = std::make_shared<std::ifstream>(download_info.storage_path, std::ios::binary);
+        if (!file->is_open()) {
+            LOG_ERROR << "Failed to open file: " << download_info.storage_path;
+            co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "Failed to open file"));
+        }
+        file->seekg(static_cast<std::streampos>(start));
 
-        // 9. 构建响应
-        auto resp = drogon::HttpResponse::newHttpResponse();
+        auto remaining = std::make_shared<uint64_t>(content_length);
+        auto resp = drogon::HttpResponse::newStreamResponse(
+            [file, remaining](char* buffer, std::size_t suggested_length) -> std::size_t {
+                if (!buffer) {
+                    if (file->is_open()) {
+                        file->close();
+                    }
+                    return 0;
+                }
+
+                if (*remaining == 0 || !file->is_open()) {
+                    return 0;
+                }
+
+                const auto max_remaining = static_cast<uint64_t>(
+                    std::numeric_limits<std::size_t>::max()
+                );
+                const auto bounded_remaining =
+                    static_cast<std::size_t>(std::min<uint64_t>(*remaining, max_remaining));
+                const auto read_size =
+                    std::min({ suggested_length, DOWNLOAD_STREAM_CHUNK_BYTES, bounded_remaining });
+
+                file->read(buffer, static_cast<std::streamsize>(read_size));
+                const auto read_bytes = static_cast<std::size_t>(file->gcount());
+                if (read_bytes == 0) {
+                    *remaining = 0;
+                    if (file->is_open()) {
+                        file->close();
+                    }
+                    return 0;
+                }
+
+                *remaining -= read_bytes;
+                if (*remaining == 0 && file->is_open()) {
+                    file->close();
+                }
+                return read_bytes;
+            }
+        );
 
         if (range_request.has_range) {
             resp->setStatusCode(drogon::HttpStatusCode::k206PartialContent);
@@ -415,8 +454,6 @@ namespace disk::share {
         if (!download_info.hash_md5.empty()) {
             resp->addHeader("ETag", "\"" + download_info.hash_md5 + "\"");
         }
-
-        resp->setBody(std::move(content));
 
         // 10. 增加下载次数
         co_await m_share_service->IncrementDownloadCount(internal_share_id);
