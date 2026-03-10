@@ -39,6 +39,10 @@ namespace disk::qml::viewmodels {
      * Tracks unsaved changes by comparing current values against persisted values.
      * On save(), writes to ConfigStore and updates ApiClient base URL if server URL changed.
      *
+     * Singleton boundary audit (Task 7): Page-scoped (settings form state).
+     * Kept as QML_SINGLETON for now to preserve typed registration and existing
+     * imports; future direction is explicit page-level instantiation/injection.
+     *
      * Singleton lifecycle: an application-owned instance must be created and
      * registered with SetInstance() before the QML engine calls create().
      */

@@ -37,6 +37,10 @@ namespace disk::qml::viewmodels {
      * @details
      * Coordinates listing, restore, permanent delete, and clear-all operations.
      * Delegates all network I/O to TrashService.
+     *
+     * Singleton boundary audit (Task 7): Page-scoped (trash page state).
+     * Kept as QML_SINGLETON for now to preserve typed registration and imports;
+     * planned migration target is explicit page-level instantiation/injection.
      */
     class TrashViewModel : public QObject {
         Q_OBJECT

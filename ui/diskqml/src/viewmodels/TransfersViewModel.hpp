@@ -52,6 +52,10 @@ namespace disk::qml::viewmodels {
      * - Creates UploadEngine/DownloadEngine per transfer, respecting concurrency limits.
      * - Persists queue state via TransferStore.
      * - Exposes counts and models for QML binding.
+     *
+     * Singleton boundary audit (Task 7): App-global. Transfer queues and running
+     * engines must survive page switches and be observable from multiple views,
+     * so this remains a typed QML singleton.
      */
     class TransfersViewModel : public QObject {
         Q_OBJECT

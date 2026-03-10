@@ -10,16 +10,17 @@
 #include <api/AuthApi.hpp>
 #include <api/FileApi.hpp>
 #include <api/FolderApi.hpp>
-#include <api/TrashApi.hpp>
 #include <api/ShareApi.hpp>
+#include <api/TrashApi.hpp>
 #include <api/UserApi.hpp>
+#include <platform/PlatformIntegration.hpp>
 #include <services/AuthService.hpp>
 #include <services/FileService.hpp>
 #include <services/FolderService.hpp>
+#include <services/ShareService.hpp>
 #include <services/TokenRefreshCoordinator.hpp>
 #include <services/TokenStore.hpp>
 #include <services/TrashService.hpp>
-#include <services/ShareService.hpp>
 #include <services/UserService.hpp>
 #include <transfers/TransferStore.hpp>
 #include <utils/ConfigStore.hpp>
@@ -28,11 +29,10 @@
 #include <viewmodels/RegisterViewModel.hpp>
 #include <viewmodels/SessionViewModel.hpp>
 #include <viewmodels/SettingsViewModel.hpp>
+#include <viewmodels/ShareViewModel.hpp>
 #include <viewmodels/TransfersViewModel.hpp>
 #include <viewmodels/TrashViewModel.hpp>
-#include <viewmodels/ShareViewModel.hpp>
 #include <viewmodels/UserViewModel.hpp>
-#include <platform/PlatformIntegration.hpp>
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
@@ -70,8 +70,8 @@ int main(int argc, char* argv[]) {
     disk::qml::services::FileService fileService(&fileApi, &tokenRefreshCoordinator);
     disk::qml::services::FolderService folderService(&folderApi, &tokenRefreshCoordinator);
     disk::qml::services::TrashService trashService(&trashApi, &tokenRefreshCoordinator);
-    disk::qml::services::ShareService shareService(&shareApi);
-    disk::qml::services::UserService userService(&userApi);
+    disk::qml::services::ShareService shareService(&shareApi, &tokenRefreshCoordinator);
+    disk::qml::services::UserService userService(&userApi, &tokenRefreshCoordinator);
 
     disk::qml::viewmodels::LoginViewModel loginViewModel(&authService);
     disk::qml::viewmodels::RegisterViewModel registerViewModel(&authService);

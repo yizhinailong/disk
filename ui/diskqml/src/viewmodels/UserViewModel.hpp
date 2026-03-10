@@ -34,6 +34,11 @@ namespace disk::qml::viewmodels {
      * - New password minimum length: 8 characters
      * - New password and confirm password must match
      *
+     * Singleton boundary audit (Task 7): Page-scoped (profile/settings page
+     * workflow state). Kept as QML_SINGLETON for now to preserve typed
+     * registration and imports; planned migration target is explicit
+     * instantiation/injection.
+     *
      * Singleton lifecycle: an application-owned instance must be created and
      * registered with SetInstance() before the QML engine calls create().
      */

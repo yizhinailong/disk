@@ -39,6 +39,10 @@ namespace disk::qml::viewmodels {
      * The logout() action calls the server API and then unconditionally clears
      * local token state regardless of the server response.
      *
+     * Singleton boundary audit (Task 7): App-global. This ViewModel is the
+     * shared authentication/session source of truth consumed across screens,
+     * so it remains a typed QML singleton.
+     *
      * Singleton lifecycle: an application-owned instance must be created and
      * registered with SetInstance() before the QML engine calls create().
      */

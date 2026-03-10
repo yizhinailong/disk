@@ -23,6 +23,8 @@ namespace disk::qml::api {
 
 namespace disk::qml::services {
 
+    class TokenRefreshCoordinator;
+
     /**
      * @brief Share service for the QML client.
      * @details Orchestrates share-related business workflows:
@@ -39,7 +41,7 @@ namespace disk::qml::services {
         using CancelCallback = std::function<void(std::optional<models::CancelShareResultDto> result, QString errorMessage)>;
         using UpdateCallback = std::function<void(std::optional<models::UpdateShareResultDto> result, QString errorMessage)>;
 
-        explicit ShareService(api::ShareApi* shareApi);
+        explicit ShareService(api::ShareApi* shareApi, TokenRefreshCoordinator* coordinator = nullptr);
 
         /**
          * @brief Creates a new share.
@@ -111,6 +113,7 @@ namespace disk::qml::services {
         auto MapEnvelopeError(const models::ApiEnvelope& envelope) const -> QString;
 
         api::ShareApi* m_share_api;
+        TokenRefreshCoordinator* m_coordinator{ nullptr };
     };
 
 } // namespace disk::qml::services

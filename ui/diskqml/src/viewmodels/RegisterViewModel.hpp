@@ -31,6 +31,10 @@ namespace disk::qml::viewmodels {
      * bindings. Inline field validation runs as the user types; a final submit()
      * call triggers the API request. All business logic stays in C++.
      *
+     * Singleton boundary audit (Task 7): Page-scoped (registration form state).
+     * Kept as QML_SINGLETON for now to preserve typed registration and current
+     * imports; planned migration target is explicit page-level instantiation.
+     *
      * Singleton lifecycle: an application-owned instance must be created and
      * registered with SetInstance() before the QML engine calls create().
      */

@@ -30,6 +30,10 @@ namespace disk::qml::viewmodels {
      * Q_PROPERTY bindings. Business logic and API calls are handled entirely in C++;
      * QML only drives the UI.
      *
+     * Singleton boundary audit (Task 7): Page-scoped (login form state).
+     * Kept as QML_SINGLETON for now to preserve typed registration and current
+     * imports; planned migration target is explicit page-level instantiation.
+     *
      * Singleton lifecycle: an application-owned instance must be created and
      * registered with SetInstance() before the QML engine calls create().
      */

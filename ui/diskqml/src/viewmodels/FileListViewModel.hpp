@@ -22,10 +22,9 @@
 #include <QTimer>
 #include <QVector>
 
-#include <QtQml/qqmlregistration.h>
-
 #include <QtQml/qjsengine.h>
 #include <QtQml/qqmlengine.h>
+#include <QtQml/qqmlregistration.h>
 
 #include <models/BreadcrumbModel.hpp>
 #include <models/FileListModel.hpp>
@@ -50,6 +49,10 @@ namespace disk::qml::viewmodels {
      *
      * Search uses a QTimer-based debounce (300 ms) so that rapid typing
      * does not flood the server with requests.
+     *
+     * Singleton boundary audit (Task 7): Page-scoped (file-browser page state).
+     * Kept as QML_SINGLETON for now to preserve typed registration and current
+     * QML imports; planned migration target is explicit instantiation/injection.
      */
     class FileListViewModel : public QObject {
         Q_OBJECT

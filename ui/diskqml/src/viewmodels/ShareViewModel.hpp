@@ -37,6 +37,10 @@ namespace disk::qml::viewmodels {
      * @details
      * Coordinates listing, create, and cancel operations.
      * Delegates all network I/O to ShareService.
+     *
+     * Singleton boundary audit (Task 7): Page-scoped (share management page).
+     * Kept as QML_SINGLETON for now to preserve typed registration and imports;
+     * planned migration target is explicit page-level instantiation/injection.
      */
     class ShareViewModel : public QObject {
         Q_OBJECT
@@ -82,11 +86,12 @@ namespace disk::qml::viewmodels {
          * - Set: Set a new password (value provided separately)
          */
         enum class PasswordAction {
-            Keep,   ///< Keep existing password unchanged
-            Clear,  ///< Remove password protection
-            Set,    ///< Set new password (use the provided password value)
+            Keep,  ///< Keep existing password unchanged
+            Clear, ///< Remove password protection
+            Set,   ///< Set new password (use the provided password value)
         };
         Q_ENUM(PasswordAction)
+
     public:
         explicit ShareViewModel(
             services::ShareService* shareService,

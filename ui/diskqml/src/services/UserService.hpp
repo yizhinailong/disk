@@ -22,6 +22,8 @@ namespace disk::qml::api {
 
 namespace disk::qml::services {
 
+    class TokenRefreshCoordinator;
+
     /**
      * @brief User service for the QML client.
      * @details Orchestrates user-related business workflows:
@@ -39,7 +41,7 @@ namespace disk::qml::services {
         using UpdateProfileCallback = std::function<void(std::optional<models::UpdateProfileResultDto> result, QString errorMessage)>;
         using ChangePasswordCallback = std::function<void(std::optional<models::ChangePasswordResultDto> result, QString errorMessage)>;
 
-        explicit UserService(api::UserApi* userApi);
+        explicit UserService(api::UserApi* userApi, TokenRefreshCoordinator* coordinator = nullptr);
 
         /**
          * @brief Fetches the authenticated user's profile.
@@ -85,6 +87,7 @@ namespace disk::qml::services {
         auto ValidatePassword(const QString& password) const -> bool;
 
         api::UserApi* m_user_api;
+        TokenRefreshCoordinator* m_coordinator{ nullptr };
     };
 
 } // namespace disk::qml::services

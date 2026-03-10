@@ -12,14 +12,15 @@
 #include <QRegularExpression>
 
 #include <api/UserApi.hpp>
+#include <services/TokenRefreshCoordinator.hpp>
 #include <utils/ErrorCode.hpp>
 
 namespace disk::qml::services {
 
     const QRegularExpression kPasswordPattern(QStringLiteral("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,64}$"));
 
-    UserService::UserService(api::UserApi* userApi)
-        : m_user_api(userApi) {
+    UserService::UserService(api::UserApi* userApi, TokenRefreshCoordinator* coordinator)
+        : m_user_api(userApi), m_coordinator(coordinator) {
     }
 
     auto UserService::ValidatePassword(const QString& password) const -> bool {
@@ -29,10 +30,39 @@ namespace disk::qml::services {
     auto UserService::GetProfile(QObject* ctx, ProfileCallback cb) -> void {
         m_user_api->GetProfile(
             ctx,
-            [this, cb = std::move(cb)](models::ApiEnvelope envelope, QString networkError) {
+            [this, ctx, cb, retried = false](models::ApiEnvelope envelope, QString networkError) mutable {
                 if (!networkError.isEmpty()) {
                     cb(std::nullopt, MapTransportError(networkError));
                     return;
+                }
+
+                if (envelope.code == static_cast<int>(utils::ErrorCode::TokenExpired)) {
+                    if (m_coordinator && !retried) {
+                        retried = true;
+                        m_coordinator->HandleIfTokenExpired(envelope, [this, ctx, cb, envelope](bool success) {
+                            if (success) {
+                                m_user_api->GetProfile(ctx, [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
+                                    if (!retryNetworkError.isEmpty()) {
+                                        cb(std::nullopt, MapTransportError(retryNetworkError));
+                                        return;
+                                    }
+                                    if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                                        cb(std::nullopt, MapEnvelopeError(retryEnvelope));
+                                        return;
+                                    }
+                                    auto parsed = models::ParseUserProfile(retryEnvelope.data);
+                                    if (!parsed) {
+                                        cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                                        return;
+                                    }
+                                    cb(std::move(parsed), QString{});
+                                });
+                            } else {
+                                cb(std::nullopt, MapEnvelopeError(envelope));
+                            }
+                        });
+                        return;
+                    }
                 }
 
                 if (envelope.code != static_cast<int>(utils::ErrorCode::Success)) {
@@ -54,10 +84,39 @@ namespace disk::qml::services {
     auto UserService::GetStorage(QObject* ctx, StorageCallback cb) -> void {
         m_user_api->GetStorage(
             ctx,
-            [this, cb = std::move(cb)](models::ApiEnvelope envelope, QString networkError) {
+            [this, ctx, cb, retried = false](models::ApiEnvelope envelope, QString networkError) mutable {
                 if (!networkError.isEmpty()) {
                     cb(std::nullopt, MapTransportError(networkError));
                     return;
+                }
+
+                if (envelope.code == static_cast<int>(utils::ErrorCode::TokenExpired)) {
+                    if (m_coordinator && !retried) {
+                        retried = true;
+                        m_coordinator->HandleIfTokenExpired(envelope, [this, ctx, cb, envelope](bool success) {
+                            if (success) {
+                                m_user_api->GetStorage(ctx, [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
+                                    if (!retryNetworkError.isEmpty()) {
+                                        cb(std::nullopt, MapTransportError(retryNetworkError));
+                                        return;
+                                    }
+                                    if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                                        cb(std::nullopt, MapEnvelopeError(retryEnvelope));
+                                        return;
+                                    }
+                                    auto parsed = models::ParseStorage(retryEnvelope.data);
+                                    if (!parsed) {
+                                        cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                                        return;
+                                    }
+                                    cb(std::move(parsed), QString{});
+                                });
+                            } else {
+                                cb(std::nullopt, MapEnvelopeError(envelope));
+                            }
+                        });
+                        return;
+                    }
                 }
 
                 if (envelope.code != static_cast<int>(utils::ErrorCode::Success)) {
@@ -95,10 +154,39 @@ namespace disk::qml::services {
             nickname,
             avatar,
             ctx,
-            [this, cb = std::move(cb)](models::ApiEnvelope envelope, QString networkError) {
+            [this, nickname, avatar, ctx, cb, retried = false](models::ApiEnvelope envelope, QString networkError) mutable {
                 if (!networkError.isEmpty()) {
                     cb(std::nullopt, MapTransportError(networkError));
                     return;
+                }
+
+                if (envelope.code == static_cast<int>(utils::ErrorCode::TokenExpired)) {
+                    if (m_coordinator && !retried) {
+                        retried = true;
+                        m_coordinator->HandleIfTokenExpired(envelope, [this, nickname, avatar, ctx, cb, envelope](bool success) {
+                            if (success) {
+                                m_user_api->UpdateProfile(nickname, avatar, ctx, [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
+                                    if (!retryNetworkError.isEmpty()) {
+                                        cb(std::nullopt, MapTransportError(retryNetworkError));
+                                        return;
+                                    }
+                                    if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                                        cb(std::nullopt, MapEnvelopeError(retryEnvelope));
+                                        return;
+                                    }
+                                    auto parsed = models::ParseUpdateProfileResult(retryEnvelope.data);
+                                    if (!parsed) {
+                                        cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                                        return;
+                                    }
+                                    cb(std::move(parsed), QString{});
+                                });
+                            } else {
+                                cb(std::nullopt, MapEnvelopeError(envelope));
+                            }
+                        });
+                        return;
+                    }
                 }
 
                 if (envelope.code != static_cast<int>(utils::ErrorCode::Success)) {
@@ -144,10 +232,39 @@ namespace disk::qml::services {
             oldPassword,
             newPassword,
             ctx,
-            [this, cb = std::move(cb)](models::ApiEnvelope envelope, QString networkError) {
+            [this, oldPassword, newPassword, ctx, cb, retried = false](models::ApiEnvelope envelope, QString networkError) mutable {
                 if (!networkError.isEmpty()) {
                     cb(std::nullopt, MapTransportError(networkError));
                     return;
+                }
+
+                if (envelope.code == static_cast<int>(utils::ErrorCode::TokenExpired)) {
+                    if (m_coordinator && !retried) {
+                        retried = true;
+                        m_coordinator->HandleIfTokenExpired(envelope, [this, oldPassword, newPassword, ctx, cb, envelope](bool success) {
+                            if (success) {
+                                m_user_api->ChangePassword(oldPassword, newPassword, ctx, [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
+                                    if (!retryNetworkError.isEmpty()) {
+                                        cb(std::nullopt, MapTransportError(retryNetworkError));
+                                        return;
+                                    }
+                                    if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                                        cb(std::nullopt, MapEnvelopeError(retryEnvelope));
+                                        return;
+                                    }
+                                    auto parsed = models::ParseChangePasswordResult(retryEnvelope.data);
+                                    if (!parsed) {
+                                        cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                                        return;
+                                    }
+                                    cb(std::move(parsed), QString{});
+                                });
+                            } else {
+                                cb(std::nullopt, MapEnvelopeError(envelope));
+                            }
+                        });
+                        return;
+                    }
                 }
 
                 if (envelope.code != static_cast<int>(utils::ErrorCode::Success)) {

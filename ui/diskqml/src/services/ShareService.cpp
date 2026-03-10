@@ -9,12 +9,13 @@
 #include "ShareService.hpp"
 
 #include <api/ShareApi.hpp>
+#include <services/TokenRefreshCoordinator.hpp>
 #include <utils/ErrorCode.hpp>
 
 namespace disk::qml::services {
 
-    ShareService::ShareService(api::ShareApi* shareApi)
-        : m_share_api(shareApi) {
+    ShareService::ShareService(api::ShareApi* shareApi, TokenRefreshCoordinator* coordinator)
+        : m_share_api(shareApi), m_coordinator(coordinator) {
     }
 
     auto ShareService::CreateShare(
@@ -39,10 +40,39 @@ namespace disk::qml::services {
             password,
             permission,
             ctx,
-            [this, cb = std::move(cb)](models::ApiEnvelope envelope, QString networkError) {
+            [this, fileIds, expireDays, password, permission, ctx, cb, retried = false](models::ApiEnvelope envelope, QString networkError) mutable {
                 if (!networkError.isEmpty()) {
                     cb(std::nullopt, MapTransportError(networkError));
                     return;
+                }
+
+                if (envelope.code == static_cast<int>(utils::ErrorCode::TokenExpired)) {
+                    if (m_coordinator && !retried) {
+                        retried = true;
+                        m_coordinator->HandleIfTokenExpired(envelope, [this, fileIds, expireDays, password, permission, ctx, cb, envelope](bool success) {
+                            if (success) {
+                                m_share_api->Create(fileIds, expireDays, password, permission, ctx, [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
+                                    if (!retryNetworkError.isEmpty()) {
+                                        cb(std::nullopt, MapTransportError(retryNetworkError));
+                                        return;
+                                    }
+                                    if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                                        cb(std::nullopt, MapEnvelopeError(retryEnvelope));
+                                        return;
+                                    }
+                                    auto parsed = models::ParseCreateShareResult(retryEnvelope.data);
+                                    if (!parsed) {
+                                        cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                                        return;
+                                    }
+                                    cb(std::move(parsed), QString{});
+                                });
+                            } else {
+                                cb(std::nullopt, MapEnvelopeError(envelope));
+                            }
+                        });
+                        return;
+                    }
                 }
 
                 if (envelope.code != static_cast<int>(utils::ErrorCode::Success)) {
@@ -73,10 +103,39 @@ namespace disk::qml::services {
             page,
             pageSize,
             ctx,
-            [this, cb = std::move(cb)](models::ApiEnvelope envelope, QString networkError) {
+            [this, status, page, pageSize, ctx, cb, retried = false](models::ApiEnvelope envelope, QString networkError) mutable {
                 if (!networkError.isEmpty()) {
                     cb(std::nullopt, MapTransportError(networkError));
                     return;
+                }
+
+                if (envelope.code == static_cast<int>(utils::ErrorCode::TokenExpired)) {
+                    if (m_coordinator && !retried) {
+                        retried = true;
+                        m_coordinator->HandleIfTokenExpired(envelope, [this, status, page, pageSize, ctx, cb, envelope](bool success) {
+                            if (success) {
+                                m_share_api->List(status, page, pageSize, ctx, [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
+                                    if (!retryNetworkError.isEmpty()) {
+                                        cb(std::nullopt, MapTransportError(retryNetworkError));
+                                        return;
+                                    }
+                                    if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                                        cb(std::nullopt, MapEnvelopeError(retryEnvelope));
+                                        return;
+                                    }
+                                    auto parsed = models::ParseShareListResult(retryEnvelope.data);
+                                    if (!parsed) {
+                                        cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                                        return;
+                                    }
+                                    cb(std::move(parsed), QString{});
+                                });
+                            } else {
+                                cb(std::nullopt, MapEnvelopeError(envelope));
+                            }
+                        });
+                        return;
+                    }
                 }
 
                 if (envelope.code != static_cast<int>(utils::ErrorCode::Success)) {
@@ -111,10 +170,39 @@ namespace disk::qml::services {
         m_share_api->Cancel(
             shareIds,
             ctx,
-            [this, cb = std::move(cb)](models::ApiEnvelope envelope, QString networkError) {
+            [this, shareIds, ctx, cb, retried = false](models::ApiEnvelope envelope, QString networkError) mutable {
                 if (!networkError.isEmpty()) {
                     cb(std::nullopt, MapTransportError(networkError));
                     return;
+                }
+
+                if (envelope.code == static_cast<int>(utils::ErrorCode::TokenExpired)) {
+                    if (m_coordinator && !retried) {
+                        retried = true;
+                        m_coordinator->HandleIfTokenExpired(envelope, [this, shareIds, ctx, cb, envelope](bool success) {
+                            if (success) {
+                                m_share_api->Cancel(shareIds, ctx, [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
+                                    if (!retryNetworkError.isEmpty()) {
+                                        cb(std::nullopt, MapTransportError(retryNetworkError));
+                                        return;
+                                    }
+                                    if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                                        cb(std::nullopt, MapEnvelopeError(retryEnvelope));
+                                        return;
+                                    }
+                                    auto parsed = models::ParseCancelShareResult(retryEnvelope.data);
+                                    if (!parsed) {
+                                        cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                                        return;
+                                    }
+                                    cb(std::move(parsed), QString{});
+                                });
+                            } else {
+                                cb(std::nullopt, MapEnvelopeError(envelope));
+                            }
+                        });
+                        return;
+                    }
                 }
 
                 if (envelope.code != static_cast<int>(utils::ErrorCode::Success)) {
@@ -132,7 +220,6 @@ namespace disk::qml::services {
             }
         );
     }
-
 
     auto ShareService::UpdateShare(
         const QString& shareId,
@@ -156,10 +243,39 @@ namespace disk::qml::services {
             password,
             permission,
             ctx,
-            [this, cb = std::move(cb)](models::ApiEnvelope envelope, QString networkError) {
+            [this, shareId, expireDays, password, permission, ctx, cb, retried = false](models::ApiEnvelope envelope, QString networkError) mutable {
                 if (!networkError.isEmpty()) {
                     cb(std::nullopt, MapTransportError(networkError));
                     return;
+                }
+
+                if (envelope.code == static_cast<int>(utils::ErrorCode::TokenExpired)) {
+                    if (m_coordinator && !retried) {
+                        retried = true;
+                        m_coordinator->HandleIfTokenExpired(envelope, [this, shareId, expireDays, password, permission, ctx, cb, envelope](bool success) {
+                            if (success) {
+                                m_share_api->Update(shareId, expireDays, password, permission, ctx, [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
+                                    if (!retryNetworkError.isEmpty()) {
+                                        cb(std::nullopt, MapTransportError(retryNetworkError));
+                                        return;
+                                    }
+                                    if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                                        cb(std::nullopt, MapEnvelopeError(retryEnvelope));
+                                        return;
+                                    }
+                                    auto parsed = models::ParseUpdateShareResult(retryEnvelope.data);
+                                    if (!parsed) {
+                                        cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                                        return;
+                                    }
+                                    cb(std::move(parsed), QString{});
+                                });
+                            } else {
+                                cb(std::nullopt, MapEnvelopeError(envelope));
+                            }
+                        });
+                        return;
+                    }
                 }
 
                 if (envelope.code != static_cast<int>(utils::ErrorCode::Success)) {
