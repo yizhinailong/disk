@@ -126,6 +126,15 @@ Item {
                 }
 
 
+                // --- 上传文件 ---
+                ToolButton {
+                    text: "⬆"
+                    font.pixelSize: 14
+                    ToolTip.visible: hovered
+                    ToolTip.text: "上传文件"
+                    onClicked: uploadDialog.openUpload()
+                }
+
                 // --- 新建文件夹 ---
                 ToolButton {
                     text: "📁+"
@@ -678,6 +687,10 @@ Item {
     FolderPickerDialog {
         id: folderPickerDialog
         folderTreeModel: FileListViewModel.folderTreeModel
+    }
+
+    UploadDialog {
+        id: uploadDialog
     }
 
     // ==================== 操作结果提示 ====================

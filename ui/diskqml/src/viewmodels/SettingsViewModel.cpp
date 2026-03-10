@@ -17,6 +17,7 @@
 #include <QUrl>
 
 #include <api/ApiClient.hpp>
+#include <platform/PlatformIntegration.hpp>
 #include <utils/ConfigStore.hpp>
 
 namespace disk::qml::viewmodels {
@@ -26,10 +27,12 @@ namespace disk::qml::viewmodels {
     SettingsViewModel::SettingsViewModel(
         utils::ConfigStore* configStore,
         api::ApiClient* apiClient,
+        platform::PlatformIntegration* platformIntegration,
         QObject* parent
     ) : QObject(parent),
         m_config_store(configStore),
-        m_api_client(apiClient) {
+        m_api_client(apiClient),
+        m_platform_integration(platformIntegration) {
         LoadFromStore();
     }
 
@@ -206,6 +209,15 @@ namespace disk::qml::viewmodels {
         m_config_store->SetShowNotifications(m_show_notifications);
         m_config_store->SetConfirmDelete(m_confirm_delete);
 
+        // Apply platform-specific runtime integration
+        if (m_platform_integration) {
+            // Apply auto-start setting
+            if (m_platform_integration->IsAutoStartSupported()) {
+                m_platform_integration->SetAutoStart(m_auto_start);
+            }
+            // Note: minimizeToTray requires QWindow* which is not available here
+            // Will be handled by MainWindow integration (Task 10)
+        }
         // Update ApiClient base URL if changed
         if (serverUrlChanged) {
             m_api_client->SetBaseUrl(QUrl(m_server_url));

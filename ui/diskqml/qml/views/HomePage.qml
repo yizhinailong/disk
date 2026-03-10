@@ -24,7 +24,8 @@ Item {
     signal navigateToDownload()
     /// 切换到文件模式 - 我的文件
     signal navigateToFiles()
-
+    /// 打开上传对话框（选择文件 + 目标文件夹）
+    signal openUploadDialog()
     // ==================== 内容 ====================
 
     ScrollView {
@@ -80,7 +81,7 @@ Item {
                 Button {
                     width: 120
                     height: 80
-                    onClicked: root.navigateToUpload()
+                    onClicked: root.openUploadDialog()
 
                     contentItem: ColumnLayout {
                         spacing: 4

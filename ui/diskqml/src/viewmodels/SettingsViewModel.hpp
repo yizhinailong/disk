@@ -27,6 +27,10 @@ namespace disk::qml::utils {
     class ConfigStore;
 } // namespace disk::qml::utils
 
+namespace disk::qml::platform {
+    class PlatformIntegration;
+} // namespace disk::qml::platform
+
 namespace disk::qml::viewmodels {
 
     /**
@@ -81,6 +85,7 @@ namespace disk::qml::viewmodels {
         explicit SettingsViewModel(
             utils::ConfigStore* configStore,
             api::ApiClient* apiClient,
+            platform::PlatformIntegration* platformIntegration,
             QObject* parent = nullptr
         );
 
@@ -184,7 +189,7 @@ namespace disk::qml::viewmodels {
 
         utils::ConfigStore* m_config_store;
         api::ApiClient* m_api_client;
-
+        platform::PlatformIntegration* m_platform_integration;
         // Current (editable) values
         QString m_server_url;
         QString m_download_dir;

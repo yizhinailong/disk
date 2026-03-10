@@ -5,7 +5,7 @@ project(diskqml VERSION 0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 Network)
+find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 Network Widgets)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -29,7 +29,7 @@ add_library(diskqml_core STATIC
     src/services/FolderService.cpp
     src/services/ShareService.cpp
     src/services/TrashService.cpp
-    # src/services/UserService.cpp
+    src/services/UserService.cpp
     src/utils/ConfigStore.cpp
     # --- Future: models (FileListModel, BreadcrumbModel, TransferQueueModel) ---
     # src/models/FileListModel.cpp
@@ -42,12 +42,13 @@ add_library(diskqml_core STATIC
     # src/transfers/DownloadTask.cpp
     src/transfers/DownloadEngine.cpp
     src/transfers/UploadEngine.cpp
+    src/platform/PlatformIntegration.cpp
 )
 
 target_include_directories(diskqml_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 target_link_libraries(diskqml_core
-    PUBLIC Qt6::Core Qt6::Network
+    PUBLIC Qt6::Core Qt6::Network Qt6::Widgets
 )
 
 # --- Main executable ---
