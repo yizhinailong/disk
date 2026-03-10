@@ -28,24 +28,28 @@ namespace disk::file {
             "/api/file/upload/init",
             drogon::Post,
             "disk::filters::JwtAuthFilter",
+            "disk::filters::UploadRateLimitFilter"
         );
         ADD_METHOD_TO(
             FileController::UploadChunk,
             "/api/file/upload/chunk",
             drogon::Post,
             "disk::filters::JwtAuthFilter",
+            "disk::filters::UploadRateLimitFilter"
         );
         ADD_METHOD_TO(
             FileController::CompleteUpload,
             "/api/file/upload/complete",
             drogon::Post,
             "disk::filters::JwtAuthFilter",
+            "disk::filters::UploadRateLimitFilter"
         );
         ADD_METHOD_TO(
             FileController::CancelUpload,
             "/api/file/upload/{upload_id}",
             drogon::Delete,
             "disk::filters::JwtAuthFilter",
+            "disk::filters::UploadRateLimitFilter"
         );
         ADD_METHOD_TO(
             FileController::List,

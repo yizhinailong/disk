@@ -41,6 +41,22 @@ namespace disk::file {
     using drogon_model::disk::UploadTasks;
     using drogon_model::disk::Users;
 
+    auto RemovePathSafely(const std::filesystem::path& file_path) -> bool {
+        std::error_code ec;
+        auto removed = std::filesystem::remove(file_path, ec);
+        return !ec && removed;
+    }
+
+    auto CompensateStorageArtifactOnAbort(
+        const std::filesystem::path& final_storage_path,
+        bool should_compensate_storage_file
+    ) -> bool {
+        if (!should_compensate_storage_file) {
+            return false;
+        }
+        return RemovePathSafely(final_storage_path);
+    }
+
     // ==================== 构造函数 ====================
 
     FileService::FileService(drogon::orm::DbClientPtr db_client)
@@ -400,83 +416,89 @@ namespace disk::file {
 
         LOG_DEBUG << "File hash verification passed: " << final_hash;
 
-        // 5. 检查去重
-        auto existing_content = co_await FindExistingContent(final_hash);
-        uint64_t content_id = 0;
+        if (co_await IsFilenameExists(task.getValueOfFolderId(), task.getValueOfFilename(), user_id)) {
+            LOG_WARN << "File with same name already exists: " << task.getValueOfFilename();
+            RemovePathSafely(assemble_path);
+            co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
+        }
 
+        auto existing_content = co_await FindExistingContent(final_hash);
+        std::filesystem::path final_storage_path;
+        std::string final_sha256;
+        bool should_compensate_storage_file = false;
+
+        if (existing_content.has_value()) {
+            RemovePathSafely(assemble_path);
+            LOG_DEBUG << "File dedup successful: content_id=" << existing_content.value();
+        } else {
+            final_storage_path = GetFinalStoragePath(final_hash);
+            auto final_dir = final_storage_path.parent_path();
+
+            std::error_code ec;
+            if (!std::filesystem::exists(final_dir)) {
+                std::filesystem::create_directories(final_dir, ec);
+                if (ec) {
+                    LOG_ERROR << "Failed to create storage directory: " << ec.message();
+                    RemovePathSafely(assemble_path);
+                    co_return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Failed to create storage directory")
+                    );
+                }
+            }
+
+            std::filesystem::rename(assemble_path, final_storage_path, ec);
+            if (ec) {
+                LOG_ERROR << "Failed to move file: " << ec.message();
+                RemovePathSafely(assemble_path);
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to move file")
+                );
+            }
+
+            auto sha256_result = FileHashUtil::HashFileSha256(final_storage_path);
+            if (!sha256_result) {
+                LOG_ERROR << "Failed to compute SHA256";
+                RemovePathSafely(final_storage_path);
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to compute SHA256")
+                );
+            }
+
+            final_sha256 = sha256_result.value();
+            should_compensate_storage_file = true;
+        }
+
+        std::shared_ptr<drogon::orm::Transaction> transaction;
+        Files file;
         try {
+            transaction = co_await m_db_client->newTransactionCoro();
+
+            CoroMapper<FileContents> content_mapper(transaction);
+            CoroMapper<Files> file_mapper(transaction);
+            CoroMapper<Users> user_mapper(transaction);
+
+            uint64_t content_id = 0;
             if (existing_content.has_value()) {
-                // 已存在，增加引用计数
                 content_id = existing_content.value();
-                CoroMapper<FileContents> content_mapper(m_db_client);
                 auto content = co_await content_mapper.findOne(
                     Criteria(FileContents::Cols::_id, CompareOperator::EQ, content_id)
                 );
                 content.setRefCount(content.getValueOfRefCount() + 1);
                 co_await content_mapper.update(content);
-
-                // 删除临时组装文件
-                std::filesystem::remove(assemble_path);
-
-                LOG_DEBUG << "File dedup successful: content_id=" << content_id;
-
             } else {
-                // 创建新的 FileContents 记录
-                auto final_storage_path = GetFinalStoragePath(final_hash);
-                auto final_dir = final_storage_path.parent_path();
-
-                std::error_code ec;
-                if (!std::filesystem::exists(final_dir)) {
-                    std::filesystem::create_directories(final_dir, ec);
-                }
-
-                // 移动临时文件到最终存储位置
-                std::filesystem::rename(assemble_path, final_storage_path, ec);
-                if (ec) {
-                    LOG_ERROR << "Failed to move file: " << ec.message();
-                    co_return std::unexpected(
-                        ErrorInfo(ErrorCode::InternalError, "Failed to move file")
-                    );
-                }
-
-                // 计算 SHA256
-                auto sha256_result = FileHashUtil::HashFileSha256(final_storage_path);
-                if (!sha256_result) {
-                    LOG_ERROR << "Failed to compute SHA256";
-                    co_return std::unexpected(
-                        ErrorInfo(ErrorCode::InternalError, "Failed to compute SHA256")
-                    );
-                }
-
-                // 创建 FileContents 记录
                 FileContents content;
                 content.setHashMd5(final_hash);
-                content.setHashSha256(sha256_result.value());
+                content.setHashSha256(final_sha256);
                 content.setSize(task.getValueOfFileSize());
                 content.setStoragePath(final_storage_path.string());
-                content.setMimeType(""); // MIME 类型可由控制器层推断
+                content.setMimeType("");
                 content.setRefCount(1);
 
-                CoroMapper<FileContents> content_mapper(m_db_client);
                 content = co_await content_mapper.insert(content);
                 content_id = content.getValueOfId();
-
                 LOG_DEBUG << "FileContents created successfully: content_id=" << content_id;
             }
 
-            // 6. 检查同名文件
-            if (co_await IsFilenameExists(
-                    task.getValueOfFolderId(),
-                    task.getValueOfFilename(),
-                    user_id
-                )) {
-                LOG_WARN << "File with same name already exists: " << task.getValueOfFilename();
-                // 回滚：减少引用计数或删除内容
-                co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
-            }
-
-            // 7. 创建 Files 记录
-            Files file;
             file.setUserId(user_id);
             file.setContentId(content_id);
             file.setFolderId(task.getValueOfFolderId());
@@ -488,48 +510,61 @@ namespace disk::file {
             file.setIsFavorite(0);
             file.setDownloadCount(0);
 
-            CoroMapper<Files> file_mapper(m_db_client);
             file = co_await file_mapper.insert(file);
 
-            LOG_INFO << "Files record created successfully: file_id=" << file.getValueOfId();
-
-            // 8. 更新用户存储使用量
-            co_await UpdateStorageUsed(user_id, static_cast<int64_t>(task.getValueOfFileSize()));
-
-            // 9. 删除上传任务和临时目录
-            try {
-                CoroMapper<UploadTasks> task_mapper(m_db_client);
-                co_await task_mapper.deleteByPrimaryKey(task.getValueOfId());
-
-                auto temp_dir = GetTempDirPath(upload_id);
-                std::filesystem::remove_all(temp_dir);
-
-                LOG_DEBUG << "Upload task cleanup completed: " << upload_id;
-            } catch (const std::exception& e) {
-                LOG_WARN << "Failed to cleanup upload task (non-critical): " << e.what();
-            }
-
-            // 10. 返回响应
-            CompleteUploadResponse response;
-            response.file = FileItem{ .id = file.getValueOfId(),
-                                      .name = file.getValueOfName(),
-                                      .size = file.getValueOfSize(),
-                                      .hash = final_hash,
-                                      .mime_type = file.getValueOfMimeType(),
-                                      .parent_id = file.getValueOfFolderId(),
-                                      .created_at = file.getValueOfCreatedAt().toDbStringLocal() };
-
-            LOG_INFO << "File upload completed: file_id=" << file.getValueOfId()
-                     << ", filename=" << task.getValueOfFilename();
-
-            co_return response;
+            auto user =
+                co_await user_mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
+            user.setStorageUsed(user.getValueOfStorageUsed() + task.getValueOfFileSize());
+            co_await user_mapper.update(user);
 
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "Database operation failed: " << e.base().what();
+            if (transaction) {
+                try {
+                    transaction->rollback();
+                } catch (const std::exception& rollback_e) {
+                    LOG_ERROR << "Transaction rollback failed: " << rollback_e.what();
+                }
+            }
+
+            if (should_compensate_storage_file &&
+                !CompensateStorageArtifactOnAbort(final_storage_path, should_compensate_storage_file)) {
+                LOG_ERROR << "Compensation failed, orphan storage file may remain: "
+                          << final_storage_path;
+            }
+
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Database operation failed")
             );
         }
+
+        LOG_INFO << "Files record created successfully: file_id=" << file.getValueOfId();
+
+        try {
+            CoroMapper<UploadTasks> task_mapper(m_db_client);
+            co_await task_mapper.deleteByPrimaryKey(task.getValueOfId());
+
+            auto temp_dir = GetTempDirPath(upload_id);
+            std::filesystem::remove_all(temp_dir);
+
+            LOG_DEBUG << "Upload task cleanup completed: " << upload_id;
+        } catch (const std::exception& e) {
+            LOG_WARN << "Failed to cleanup upload task (non-critical): " << e.what();
+        }
+
+        CompleteUploadResponse response;
+        response.file = FileItem{ .id = file.getValueOfId(),
+                                  .name = file.getValueOfName(),
+                                  .size = file.getValueOfSize(),
+                                  .hash = final_hash,
+                                  .mime_type = file.getValueOfMimeType(),
+                                  .parent_id = file.getValueOfFolderId(),
+                                  .created_at = file.getValueOfCreatedAt().toDbStringLocal() };
+
+        LOG_INFO << "File upload completed: file_id=" << file.getValueOfId()
+                 << ", filename=" << task.getValueOfFilename();
+
+        co_return response;
     }
 
     // ==================== CancelUpload ====================
