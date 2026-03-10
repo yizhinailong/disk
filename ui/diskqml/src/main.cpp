@@ -30,6 +30,7 @@
 #include <viewmodels/TransfersViewModel.hpp>
 #include <viewmodels/TrashViewModel.hpp>
 #include <viewmodels/ShareViewModel.hpp>
+#include <viewmodels/UserViewModel.hpp>
 #include <platform/PlatformIntegration.hpp>
 
 int main(int argc, char* argv[]) {
@@ -101,6 +102,7 @@ int main(int argc, char* argv[]) {
 
     disk::qml::viewmodels::TrashViewModel trashViewModel(&trashService);
     disk::qml::viewmodels::ShareViewModel shareViewModel(&shareService);
+    disk::qml::viewmodels::UserViewModel userViewModel(&userService);
 
     disk::qml::transfers::TransferStore transferStore;
 
@@ -117,6 +119,9 @@ int main(int argc, char* argv[]) {
     disk::qml::viewmodels::FileListViewModel::SetInstance(&fileListViewModel);
     disk::qml::viewmodels::SettingsViewModel::SetInstance(&settingsViewModel);
     disk::qml::viewmodels::TrashViewModel::SetInstance(&trashViewModel);
+    disk::qml::viewmodels::ShareViewModel::SetInstance(&shareViewModel);
+    disk::qml::viewmodels::TransfersViewModel::SetInstance(&transfersViewModel);
+    disk::qml::viewmodels::UserViewModel::SetInstance(&userViewModel);
     disk::qml::viewmodels::ShareViewModel::SetInstance(&shareViewModel);
     disk::qml::viewmodels::TransfersViewModel::SetInstance(&transfersViewModel);
 

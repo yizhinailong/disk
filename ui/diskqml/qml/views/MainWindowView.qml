@@ -70,6 +70,7 @@ Item {
         case "download": return "DownloadPage.qml"
         case "share":    return "SharePage.qml"
         case "settings": return "SettingsPage.qml"
+        case "user":     return "UserPage.qml"
         default:         return "HomePage.qml"
         }
     }
@@ -143,6 +144,43 @@ Item {
 
                 // 弹簧
                 Item { Layout.fillHeight: true }
+
+                // 个人设置按钮
+                ItemDelegate {
+                    id: userProfileBtn
+                    Layout.fillWidth: true
+                    height: 40
+                    highlighted: root.currentNav === "user"
+
+                    contentItem: RowLayout {
+                        spacing: 8
+
+                        Label {
+                            text: "👤"
+                            font.pixelSize: 16
+                            Layout.preferredWidth: 24
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+
+                        Label {
+                            text: "个人设置"
+                            font.pixelSize: 14
+                            color: userProfileBtn.highlighted
+                                   ? palette.highlightedText
+                                   : palette.windowText
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    background: Rectangle {
+                        radius: 6
+                        color: userProfileBtn.highlighted
+                               ? palette.highlight
+                               : userProfileBtn.hovered ? palette.midlight : "transparent"
+                    }
+
+                    onClicked: root.currentNav = "user"
+                }
 
                 // 模式切换按钮
                 ItemDelegate {

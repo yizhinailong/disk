@@ -135,6 +135,56 @@ namespace disk::qml::viewmodels {
         );
     }
 
+    void ShareViewModel::updateShare(
+        const QString& shareId,
+        int expireDays,
+        const QString& password,
+        const QString& permission
+    ) {
+        if (shareId.isEmpty()) {
+            emit updateFailed(QStringLiteral("无效的分享ID"));
+            return;
+        }
+
+        SetLoading(true);
+
+        auto* ctx = new QObject(this);
+
+        // Convert empty password to nullopt (no change)
+        std::optional<QString> passwordOpt;
+        if (!password.isEmpty()) {
+            passwordOpt = password;
+        }
+
+        m_share_service->UpdateShare(
+            shareId,
+            expireDays,
+            passwordOpt,
+            permission,
+            ctx,
+            [this, ctx, shareId](std::optional<models::UpdateShareResultDto> result, QString errorMessage) {
+                ctx->deleteLater();
+                SetLoading(false);
+
+                if (!errorMessage.isEmpty()) {
+                    SetErrorMessage(errorMessage);
+                    emit updateFailed(errorMessage);
+                    return;
+                }
+
+                if (result) {
+                    emit shareUpdated(
+                        result->shareId,
+                        result->expiresAt,
+                        result->hasPassword,
+                        result->permission
+                    );
+                    FetchShareList();
+                }
+            }
+        );
+    }
+
     void ShareViewModel::cancelSelected() {
         if (m_selected_ids.isEmpty()) {
             return;

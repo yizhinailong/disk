@@ -94,6 +94,8 @@ qt_add_qml_module(appdiskqml
         src/models/ShareListModel.hpp
         src/viewmodels/SettingsViewModel.cpp
         src/viewmodels/SettingsViewModel.hpp
+        src/viewmodels/UserViewModel.cpp
+        src/viewmodels/UserViewModel.hpp
     QML_FILES
         qml/Main.qml
         qml/App.qml
@@ -109,7 +111,7 @@ qt_add_qml_module(appdiskqml
         qml/views/DownloadPage.qml
         qml/views/SharePage.qml
         qml/views/SettingsPage.qml
-        # qml/components/FileCard.qml
+        qml/views/UserPage.qml
         # qml/components/BreadcrumbBar.qml
         # qml/components/TransferPanel.qml
         qml/dialogs/NewFolderDialog.qml

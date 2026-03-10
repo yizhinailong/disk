@@ -115,6 +115,14 @@ namespace disk::qml::viewmodels {
             const QString& permission
         );
 
+        /// Update an existing share's settings.
+        Q_INVOKABLE void updateShare(
+            const QString& shareId,
+            int expireDays,
+            const QString& password,
+            const QString& permission
+        );
+
         /// Cancel the currently selected shares.
         Q_INVOKABLE void cancelSelected();
 
@@ -154,6 +162,15 @@ namespace disk::qml::viewmodels {
             const QString& password,
             const QString& expiresAt
         );
+        /// Emitted when a share is updated successfully.
+        void shareUpdated(
+            const QString& shareId,
+            const QString& expiresAt,
+            bool hasPassword,
+            const QString& permission
+        );
+        /// Emitted when share update fails.
+        void updateFailed(const QString& message);
 
     private:
         // ==================== Private Helpers ====================

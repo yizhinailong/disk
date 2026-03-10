@@ -39,6 +39,7 @@ namespace disk::qml::services {
         using CreateCallback = std::function<void(std::optional<models::CreateShareResultDto> result, QString errorMessage)>;
         using ListCallback = std::function<void(std::optional<models::ShareListResultDto> result, QString errorMessage)>;
         using CancelCallback = std::function<void(std::optional<models::CancelShareResultDto> result, QString errorMessage)>;
+        using UpdateCallback = std::function<void(std::optional<models::UpdateShareResultDto> result, QString errorMessage)>;
 
         explicit ShareService(api::ShareApi* shareApi);
 
@@ -87,6 +88,24 @@ namespace disk::qml::services {
             const QStringList& shareIds,
             QObject* ctx,
             CancelCallback cb
+        ) -> void;
+
+        /**
+         * @brief Updates share settings.
+         * @param shareId      Share ID string.
+         * @param expireDays   New expiration in days (-1 = no change, 0 = permanent).
+         * @param password     New password (empty = remove password, nullopt = no change).
+         * @param permission   New permission ("view"/"download", empty = no change).
+         * @param ctx          QObject lifetime guard.
+         * @param cb           Receives (result, errorMessage). errorMessage is empty on success.
+         */
+        auto UpdateShare(
+            const QString& shareId,
+            int expireDays,
+            const std::optional<QString>& password,
+            const QString& permission,
+            QObject* ctx,
+            UpdateCallback cb
         ) -> void;
 
     private:

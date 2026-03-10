@@ -135,6 +135,51 @@ namespace disk::qml::services {
         );
     }
 
+
+    auto ShareService::UpdateShare(
+        const QString& shareId,
+        int expireDays,
+        const std::optional<QString>& password,
+        const QString& permission,
+        QObject* ctx,
+        UpdateCallback cb
+    ) -> void {
+        if (shareId.isEmpty()) {
+            cb(
+                std::nullopt,
+                utils::ToUserMessage(static_cast<int>(utils::ErrorCode::InvalidParameter), QString{})
+            );
+            return;
+        }
+
+        m_share_api->Update(
+            shareId,
+            expireDays,
+            password,
+            permission,
+            ctx,
+            [this, cb = std::move(cb)](models::ApiEnvelope envelope, QString networkError) {
+                if (!networkError.isEmpty()) {
+                    cb(std::nullopt, MapTransportError(networkError));
+                    return;
+                }
+
+                if (envelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                    cb(std::nullopt, MapEnvelopeError(envelope));
+                    return;
+                }
+
+                auto parsed = models::ParseUpdateShareResult(envelope.data);
+                if (!parsed) {
+                    cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                    return;
+                }
+
+                cb(std::move(parsed), QString{});
+            }
+        );
+    }
+
     auto ShareService::MapTransportError(const QString& networkError) const -> QString {
         if (!networkError.isEmpty()) {
             return networkError;
