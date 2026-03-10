@@ -101,10 +101,6 @@ int main(int argc, char* argv[]) {
         &platformIntegration
     );
 
-    disk::qml::viewmodels::TrashViewModel trashViewModel(&trashService);
-    disk::qml::viewmodels::ShareViewModel shareViewModel(&shareService);
-    disk::qml::viewmodels::UserViewModel userViewModel(&userService);
-
     disk::qml::transfers::TransferStore transferStore;
 
     disk::qml::viewmodels::TransfersViewModel transfersViewModel(
@@ -112,6 +108,10 @@ int main(int argc, char* argv[]) {
         &transferStore,
         &configStore
     );
+
+    disk::qml::viewmodels::TrashViewModel trashViewModel(&trashService);
+    disk::qml::viewmodels::ShareViewModel shareViewModel(&shareService, &transfersViewModel);
+    disk::qml::viewmodels::UserViewModel userViewModel(&userService);
 
     // --- QML engine setup ---
     disk::qml::viewmodels::LoginViewModel::SetInstance(&loginViewModel);

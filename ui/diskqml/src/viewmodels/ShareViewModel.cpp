@@ -10,6 +10,7 @@
 
 #include <models/ShareListModel.hpp>
 #include <services/ShareService.hpp>
+
 #include "TransfersViewModel.hpp"
 
 namespace disk::qml::viewmodels {
@@ -18,9 +19,11 @@ namespace disk::qml::viewmodels {
 
     ShareViewModel::ShareViewModel(
         services::ShareService* shareService,
+        TransfersViewModel* transfersViewModel,
         QObject* parent
     ) : QObject(parent),
         m_share_service(shareService),
+        m_transfers_view_model(transfersViewModel),
         m_share_list_model(new models::ShareListModel(this)) {
     }
 
@@ -102,13 +105,12 @@ namespace disk::qml::viewmodels {
         const QString& shareToken,
         const QString& destPath
     ) {
-        auto* transfers = TransfersViewModel::Instance();
-        if (!transfers) {
+        if (!m_transfers_view_model) {
             emit downloadFailed(QStringLiteral("传输管理器未初始化"));
             return;
         }
 
-        transfers->startShareDownload(shareId, fileId, shareToken, destPath);
+        m_transfers_view_model->startShareDownload(shareId, fileId, shareToken, destPath);
         emit downloadStarted(fileId, QString{});
     }
 

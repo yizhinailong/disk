@@ -9,19 +9,19 @@
 #include "TransfersViewModel.hpp"
 
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QUrl>
 
 #include <api/ApiClient.hpp>
+#include <dtos/ApiEnvelope.hpp>
 #include <transfers/DownloadEngine.hpp>
 #include <transfers/TransferItem.hpp>
 #include <transfers/TransferQueueModel.hpp>
 #include <transfers/TransferStore.hpp>
 #include <transfers/UploadEngine.hpp>
 #include <utils/ConfigStore.hpp>
-#include <dtos/ApiEnvelope.hpp>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
 
 namespace disk::qml::viewmodels {
 
@@ -44,7 +44,6 @@ namespace disk::qml::viewmodels {
     TransfersViewModel::~TransfersViewModel() {
         SaveState();
 
-
         qDeleteAll(m_upload_engines);
         m_upload_engines.clear();
         qDeleteAll(m_download_engines);
@@ -57,7 +56,7 @@ namespace disk::qml::viewmodels {
         s_instance = instance;
     }
 
-    auto TransfersViewModel::Instance() -> TransfersViewModel* {
+    auto TransfersViewModel::Instance(void) -> TransfersViewModel* {
         return s_instance;
     }
 
@@ -132,7 +131,6 @@ namespace disk::qml::viewmodels {
     void TransfersViewModel::startDownload(qint64 fileId, const QString& destPath) {
         auto* engine = new transfers::DownloadEngine(m_api_client, this);
 
-
         engine->FetchInfo(fileId, [this, engine, destPath](std::optional<transfers::DownloadInfo> info, QString error) {
             if (!info) {
                 engine->deleteLater();
@@ -187,52 +185,66 @@ namespace disk::qml::viewmodels {
             auto* ctx = new QObject(this);
             QJsonObject reqObj;
             reqObj.insert(QStringLiteral("password"), QStringLiteral(""));
-            
-            m_api_client->PostJson(QStringLiteral("/api/share/access/%1").arg(shareId), reqObj, ctx,
-                [this, shareId, fileId, destPath, ctx](bool hasError, QString err, int, QByteArray body) {
-                    ctx->deleteLater();
-                    if (hasError) return;
-                    auto env = disk::qml::models::ParseEnvelope(body);
-                    if (!env || !env->IsSuccess()) return;
-                    auto data = disk::qml::models::EnvelopeDataObject(*env);
-                    if (!data) return;
-                    QString token = data->value(QStringLiteral("share_token")).toString();
-                    if (token.isEmpty()) return;
 
-                    if (fileId <= 0) {
-                        auto* ctx2 = new QObject(this);
-                        auto reqObj2 = m_api_client->CreateStreamingRequest(QStringLiteral("/api/share/browse/%1").arg(shareId));
-                        reqObj2.setRawHeader(QByteArrayLiteral("X-Share-Token"), token.toUtf8());
-                        
-                        auto* reply = m_api_client->NetworkAccessManager()->get(reqObj2);
-                        connect(reply, &QNetworkReply::finished, ctx2, [this, shareId, token, destPath, ctx2, reply]() mutable {
-                            ctx2->deleteLater();
-                            reply->deleteLater();
-                            if (reply->error() != QNetworkReply::NoError) return;
-                            auto env2 = disk::qml::models::ParseEnvelope(reply->readAll());
-                            if (!env2 || !env2->IsSuccess()) return;
-                            auto data2 = disk::qml::models::EnvelopeDataObject(*env2);
-                            if (!data2) return;
-                            auto items = data2->value(QStringLiteral("items")).toArray();
-                            for (const auto& val : items) {
-                                auto obj = val.toObject();
-                                qint64 id = static_cast<qint64>(obj.value(QStringLiteral("id")).toDouble(0));
-                                if (id > 0 && obj.value(QStringLiteral("type")).toString() == QStringLiteral("file")) {
-                                    startShareDownload(shareId, id, token, destPath);
-                                }
-                            }
-                        });
-                    } else {
-                        startShareDownload(shareId, fileId, token, destPath);
-                    }
+            m_api_client->PostJson(QStringLiteral("/api/share/access/%1").arg(shareId), reqObj, ctx, [this, shareId, fileId, destPath, ctx](bool hasError, QString err, int, QByteArray body) {
+                ctx->deleteLater();
+                if (hasError) {
+                    return;
                 }
-            );
+                auto env = disk::qml::models::ParseEnvelope(body);
+                if (!env || !env->IsSuccess()) {
+                    return;
+                }
+                auto data = disk::qml::models::EnvelopeDataObject(*env);
+                if (!data) {
+                    return;
+                }
+                QString token = data->value(QStringLiteral("share_token")).toString();
+                if (token.isEmpty()) {
+                    return;
+                }
+
+                if (fileId <= 0) {
+                    auto* ctx2 = new QObject(this);
+                    auto reqObj2 = m_api_client->CreateStreamingRequest(QStringLiteral("/api/share/browse/%1").arg(shareId));
+                    reqObj2.setRawHeader(QByteArrayLiteral("X-Share-Token"), token.toUtf8());
+
+                    auto* reply = m_api_client->NetworkAccessManager()->get(reqObj2);
+                    connect(reply, &QNetworkReply::finished, ctx2, [this, shareId, token, destPath, ctx2, reply]() mutable {
+                        ctx2->deleteLater();
+                        reply->deleteLater();
+                        if (reply->error() != QNetworkReply::NoError) {
+                            return;
+                        }
+                        auto env2 = disk::qml::models::ParseEnvelope(reply->readAll());
+                        if (!env2 || !env2->IsSuccess()) {
+                            return;
+                        }
+                        auto data2 = disk::qml::models::EnvelopeDataObject(*env2);
+                        if (!data2) {
+                            return;
+                        }
+                        auto items = data2->value(QStringLiteral("items")).toArray();
+                        for (const auto& val : items) {
+                            auto obj = val.toObject();
+                            qint64 id = static_cast<qint64>(obj.value(QStringLiteral("id")).toDouble(0));
+                            if (id > 0 && obj.value(QStringLiteral("type")).toString() == QStringLiteral("file")) {
+                                startShareDownload(shareId, id, token, destPath);
+                            }
+                        }
+                    });
+                } else {
+                    startShareDownload(shareId, fileId, token, destPath);
+                }
+            });
             return;
         }
 
         auto* engine = new transfers::DownloadEngine(m_api_client, this);
         engine->FetchShareInfo(
-            shareId, fileId, shareToken,
+            shareId,
+            fileId,
+            shareToken,
             [this, engine, shareId, shareToken, destPath](std::optional<transfers::DownloadInfo> info, QString error) {
                 if (!info) {
                     engine->deleteLater();
@@ -247,7 +259,10 @@ namespace disk::qml::viewmodels {
                     [this, engine](const transfers::TransferItem& itemState) {
                         const QString transferId = engine->Item().id;
                         m_download_model->UpdateProgress(
-                            transferId, itemState.doneBytes, itemState.speed, itemState.eta
+                            transferId,
+                            itemState.doneBytes,
+                            itemState.speed,
+                            itemState.eta
                         );
                         m_download_model->UpdateStatus(transferId, itemState.status, itemState.error);
                         UpdateCounts();
@@ -437,7 +452,6 @@ namespace disk::qml::viewmodels {
         m_upload_model->PauseAll();
         m_download_model->PauseAll();
 
-
         for (auto* engine : m_upload_engines) {
             engine->Pause();
         }
@@ -526,7 +540,6 @@ namespace disk::qml::viewmodels {
         UpdateCounts();
         SaveState();
 
-
         DrainUploadQueue();
     }
 
@@ -538,7 +551,6 @@ namespace disk::qml::viewmodels {
 
         UpdateCounts();
         SaveState();
-
 
         DrainDownloadQueue();
     }

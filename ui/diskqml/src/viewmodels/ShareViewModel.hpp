@@ -31,6 +31,8 @@ namespace disk::qml::services {
 
 namespace disk::qml::viewmodels {
 
+    class TransfersViewModel;
+
     /**
      * @brief QML ViewModel that drives the share page.
      *
@@ -95,6 +97,7 @@ namespace disk::qml::viewmodels {
     public:
         explicit ShareViewModel(
             services::ShareService* shareService,
+            TransfersViewModel* transfersViewModel,
             QObject* parent = nullptr
         );
 
@@ -222,6 +225,7 @@ namespace disk::qml::viewmodels {
         // ==================== State ====================
 
         services::ShareService* m_share_service;
+        TransfersViewModel* m_transfers_view_model;
 
         models::ShareListModel* m_share_list_model;
 
