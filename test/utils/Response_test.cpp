@@ -7,12 +7,13 @@
  *
  */
 
+#include "utils/Response.hpp"
+
 #include <drogon/HttpResponse.h>
 #include <drogon/HttpTypes.h>
 #include <gtest/gtest.h>
 
 #include "utils/ErrorCode.hpp"
-#include "utils/Response.hpp"
 
 using disk::Response;
 

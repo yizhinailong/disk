@@ -7,8 +7,6 @@
  *
  */
 
-
-
 #include <gtest/gtest.h>
 
 #include "dtos/ShareDto.hpp"

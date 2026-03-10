@@ -18,7 +18,7 @@ namespace disk::log {
     OperationLogService::OperationLogService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
         LOG_DEBUG << "OperationLogService initialization completed";
-        }
+    }
 
     auto OperationLogService::Log(const OperationLogEntry& entry) -> drogon::Task<Result<void>> {
         try {
@@ -72,15 +72,7 @@ namespace disk::log {
             }
 
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, action, target_type, target_id, " "target_name, " "       " "d"
-                                                                                                 "e"
-                                                                                                 "t"
-                                                                                                 "a"
-                                                                                                 "i"
-                                                                                                 "l"
-                                                                                                 "s"
-                                                                                                 ","
-                                                                                                 " " "ip_" "address, " "created_" "at " "FROM" " ope" "rati" "on_" "logs" " " "WHERE user_id = ? " "ORDER BY created_at DESC " "LIMIT ? OFFSET ?",
+                "SELECT id, user_id, action, target_type, target_id, " "target_name, " "       " "d" "e" "t" "a" "i" "l" "s" "," " " "ip_" "address, " "created_" "at " "FROM" " ope" "rati" "on_" "logs" " " "WHERE user_id = ? " "ORDER BY created_at DESC " "LIMIT ? OFFSET ?",
                 user_id,
                 page_size,
                 offset

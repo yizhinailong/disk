@@ -21,7 +21,6 @@ namespace disk::filters {
         : m_redis_service(disk::services::RedisService::GetInstance()) {
         // Initialize RedisService singleton if not already initialized
         disk::services::RedisService::Initialize(drogon::app().getRedisClient());
-
     }
 
     auto UploadRateLimitFilter::doFilter(const drogon::HttpRequestPtr& request)

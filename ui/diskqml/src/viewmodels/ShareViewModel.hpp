@@ -179,6 +179,16 @@ namespace disk::qml::viewmodels {
 
         /// Navigate to a specific page.
         Q_INVOKABLE void goToPage(int page);
+        /// Parse comma-separated file IDs string into a list of integers.
+        /// Returns empty list if parsing fails or input is invalid.
+        /// Sets parseError property with error message if parsing fails.
+        Q_INVOKABLE QList<qint64> parseFileIds(const QString& fileIdsText);
+        
+        /// Last parsing error message (empty on success).
+        Q_PROPERTY(QString parseError READ ParseError NOTIFY parseErrorChanged)
+        
+        // Parse error getter
+        [[nodiscard]] auto ParseError() const -> const QString&;
 
     signals:
         void loadingChanged();
@@ -212,12 +222,15 @@ namespace disk::qml::viewmodels {
         );
         /// Emitted when share update fails.
         void updateFailed(const QString& message);
+        /// Emitted when parse error changes.
+        void parseErrorChanged();
 
     private:
         // ==================== Private Helpers ====================
 
         auto SetLoading(bool loading) -> void;
         auto SetErrorMessage(const QString& message) -> void;
+        auto SetParseError(const QString& error) -> void;
 
         /// Fetch the share list for the current page.
         auto FetchShareList() -> void;
@@ -231,6 +244,7 @@ namespace disk::qml::viewmodels {
 
         bool m_loading{ false };
         QString m_error_message;
+        QString m_parse_error;
 
         // Pagination
         int m_current_page{ 1 };

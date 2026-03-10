@@ -17,12 +17,12 @@
 
 namespace disk::filters {
 
-    using disk::utils::ConfigMgr;
     using disk::services::TokenService;
+    using disk::utils::ConfigMgr;
+
     JwtAuthFilter::JwtAuthFilter() {
         // Initialize TokenService singleton
         disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
-
     }
 
     auto JwtAuthFilter::doFilter(const drogon::HttpRequestPtr& request)

@@ -112,8 +112,7 @@ namespace disk::folder {
                 LOG_WARN << "Folder name contains forbidden characters: " << request.name;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
-                    "Folder name contains forbidden characters: / \\ : * ? \" < > | or control "
-                    "characters"
+                    "Folder name contains forbidden characters: / \\ : * ? \" < > | or control " "characters"
                 ));
             }
 

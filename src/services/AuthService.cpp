@@ -9,18 +9,19 @@
 
 #include "AuthService.hpp"
 
+#include <json/writer.h>
+
 #include "dtos/AuthDto.hpp"
 #include "models/OperationLogs.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/HashUtil.hpp"
 #include "utils/RedisKeyPrefix.hpp"
-#include <json/writer.h>
 
 namespace disk::auth {
 
+    using disk::services::TokenService;
     using disk::utils::ConfigMgr;
     using disk::utils::HashUtil;
-    using disk::services::TokenService;
     using drogon::orm::CompareOperator;
     using drogon::orm::CoroMapper;
     using drogon::orm::Criteria;

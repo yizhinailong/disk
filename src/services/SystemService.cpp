@@ -72,8 +72,7 @@ namespace disk::system {
             // 获取文件总数和总大小
             auto files_result =
                 co_await m_db_client->execSqlCoro(
-                    "SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as total_size FROM files "
-                    "WHERE " "deleted_at IS NULL"
+                    "SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as total_size FROM files " "WHERE " "deleted_at IS NULL"
                 );
             if (!files_result.empty()) {
                 stats.total_files = files_result[0]["count"].as<int64_t>();

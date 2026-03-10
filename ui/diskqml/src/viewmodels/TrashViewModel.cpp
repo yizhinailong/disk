@@ -10,6 +10,8 @@
 
 #include <models/TrashListModel.hpp>
 #include <services/TrashService.hpp>
+#include <QDateTime>
+#include <QtMath>
 
 namespace disk::qml::viewmodels {
 
@@ -302,4 +304,39 @@ namespace disk::qml::viewmodels {
         );
     }
 
+
+    // ==================== Date Helpers ====================
+
+    bool TrashViewModel::isExpiringSoon(const QString& expiresAt) const {
+        if (expiresAt.isEmpty()) {
+            return false;
+        }
+
+        const QDateTime expiry = QDateTime::fromString(expiresAt, Qt::ISODate);
+        if (!expiry.isValid()) {
+            return false;
+        }
+
+        const QDateTime now = QDateTime::currentDateTime();
+        const qint64 diffMs = expiry.toMSecsSinceEpoch() - now.toMSecsSinceEpoch();
+        const double diffDays = static_cast<double>(diffMs) / (1000.0 * 60.0 * 60.0 * 24.0);
+
+        return diffDays >= 0.0 && diffDays <= 7.0;
+    }
+
+    int TrashViewModel::daysUntilExpiry(const QString& expiresAt) const {
+        if (expiresAt.isEmpty()) {
+            return -1;
+        }
+
+        const QDateTime expiry = QDateTime::fromString(expiresAt, Qt::ISODate);
+        if (!expiry.isValid()) {
+            return -1;
+        }
+
+        const QDateTime now = QDateTime::currentDateTime();
+        const qint64 diffMs = expiry.toMSecsSinceEpoch() - now.toMSecsSinceEpoch();
+
+        return static_cast<int>(qCeil(static_cast<double>(diffMs) / (1000.0 * 60.0 * 60.0 * 24.0)));
+    }
 } // namespace disk::qml::viewmodels

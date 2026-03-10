@@ -128,6 +128,14 @@ namespace disk::qml::viewmodels {
         return m_can_change_password;
     }
 
+    auto UserViewModel::PasswordStrengthMessage() const -> const QString& {
+        return m_password_strength_message;
+    }
+
+    auto UserViewModel::IsPasswordValid() const -> bool {
+        return m_is_password_valid;
+    }
+
     auto UserViewModel::SetOldPassword(const QString& value) -> void {
         if (m_old_password == value) {
             return;
@@ -144,6 +152,7 @@ namespace disk::qml::viewmodels {
         m_new_password = value;
         emit newPasswordChanged();
         UpdateCanChangePassword();
+        validatePasswordStrength(value);
     }
 
     auto UserViewModel::SetConfirmPassword(const QString& value) -> void {
@@ -393,4 +402,51 @@ namespace disk::qml::viewmodels {
         emit canChangePasswordChanged();
     }
 
+
+    void UserViewModel::validatePasswordStrength(const QString& password) {
+        QString message;
+        bool isValid = false;
+
+        if (password.isEmpty()) {
+            message = QString{};
+            isValid = false;
+        } else if (password.length() < 8) {
+            message = tr("⚠ 密码长度至少8位");
+            isValid = false;
+        } else if (password.length() > 64) {
+            message = tr("⚠ 密码长度不能超过64位");
+            isValid = false;
+        } else {
+            bool hasLower = false;
+            bool hasUpper = false;
+            bool hasDigit = false;
+
+            for (const QChar& c : password) {
+                if (c.isLower()) hasLower = true;
+                else if (c.isUpper()) hasUpper = true;
+                else if (c.isDigit()) hasDigit = true;
+            }
+
+            if (!hasLower) {
+                message = tr("⚠ 需包含小写字母");
+            } else if (!hasUpper) {
+                message = tr("⚠ 需包含大写字母");
+            } else if (!hasDigit) {
+                message = tr("⚠ 需包含数字");
+            } else {
+                message = tr("✓ 密码格式正确");
+                isValid = true;
+            }
+        }
+
+        if (m_password_strength_message != message) {
+            m_password_strength_message = message;
+            emit passwordStrengthMessageChanged();
+        }
+
+        if (m_is_password_valid != isValid) {
+            m_is_password_valid = isValid;
+            emit passwordStrengthMessageChanged();
+        }
+    }
 } // namespace disk::qml::viewmodels

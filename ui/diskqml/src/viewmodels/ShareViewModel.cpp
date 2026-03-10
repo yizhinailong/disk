@@ -10,6 +10,7 @@
 
 #include <models/ShareListModel.hpp>
 #include <services/ShareService.hpp>
+#include <QStringList>
 
 #include "TransfersViewModel.hpp"
 
@@ -53,6 +54,14 @@ namespace disk::qml::viewmodels {
         return m_error_message;
     }
 
+    auto ShareViewModel::ParseError() const -> const QString& {
+        return m_parse_error;
+    }
+
+    auto ShareViewModel::ParseError() const -> const QString& {
+        return m_parse_error;
+    }
+
     auto ShareViewModel::CurrentPage() const -> int {
         return m_current_page;
     }
@@ -90,6 +99,13 @@ namespace disk::qml::viewmodels {
         if (m_error_message != message) {
             m_error_message = message;
             emit errorMessageChanged();
+        }
+    }
+
+    auto ShareViewModel::SetParseError(const QString& error) -> void {
+        if (m_parse_error != error) {
+            m_parse_error = error;
+            emit parseErrorChanged();
         }
     }
 
@@ -366,4 +382,33 @@ namespace disk::qml::viewmodels {
         );
     }
 
+
+    // ==================== Parsing Helpers ====================
+
+    QList<qint64> ShareViewModel::parseFileIds(const QString& fileIdsText) {
+        QList<qint64> result;
+
+        const QString trimmed = fileIdsText.trimmed();
+        if (trimmed.isEmpty()) {
+            SetParseError(QStringLiteral("请输入文件ID"));
+            return result;
+        }
+
+        const QStringList parts = trimmed.split(u',', Qt::SkipEmptyParts);
+        for (const QString& part : parts) {
+            bool ok = false;
+            const qint64 id = part.trimmed().toLongLong(&ok);
+            if (ok && id > 0) {
+                result.append(id);
+            }
+        }
+
+        if (result.isEmpty()) {
+            SetParseError(QStringLiteral("请输入有效的文件ID"));
+        } else {
+            SetParseError(QString{});
+        }
+
+        return result;
+    }
 } // namespace disk::qml::viewmodels

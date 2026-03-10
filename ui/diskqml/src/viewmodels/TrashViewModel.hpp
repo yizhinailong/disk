@@ -135,6 +135,10 @@ namespace disk::qml::viewmodels {
 
         /// Navigate to a specific page.
         Q_INVOKABLE void goToPage(int page);
+        /// Check if an item is expiring soon (within 7 days).
+        Q_INVOKABLE bool isExpiringSoon(const QString& expiresAt) const;
+        /// Calculate days until expiry (-1 if invalid/empty).
+        Q_INVOKABLE int daysUntilExpiry(const QString& expiresAt) const;
 
     signals:
         void loadingChanged();

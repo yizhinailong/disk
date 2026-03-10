@@ -90,6 +90,10 @@ namespace disk::qml::viewmodels {
         Q_PROPERTY(QString passwordError READ PasswordError NOTIFY passwordErrorChanged)
         /// True when password form is valid and can be submitted.
         Q_PROPERTY(bool canChangePassword READ CanChangePassword NOTIFY canChangePasswordChanged)
+        /// Password strength validation message (for real-time UI feedback).
+        Q_PROPERTY(QString passwordStrengthMessage READ PasswordStrengthMessage NOTIFY passwordStrengthMessageChanged)
+        /// True when password passes all validation rules.
+        Q_PROPERTY(bool isPasswordValid READ IsPasswordValid NOTIFY passwordStrengthMessageChanged)
 
         // ==================== State ====================
 
@@ -141,6 +145,8 @@ namespace disk::qml::viewmodels {
         [[nodiscard]] auto NewPassword() const -> const QString&;
         [[nodiscard]] auto ConfirmPassword() const -> const QString&;
         [[nodiscard]] auto PasswordError() const -> const QString&;
+        [[nodiscard]] auto PasswordStrengthMessage() const -> const QString&;
+        [[nodiscard]] auto IsPasswordValid() const -> bool;
         [[nodiscard]] auto CanChangePassword() const -> bool;
 
         auto SetOldPassword(const QString& value) -> void;
@@ -202,6 +208,20 @@ namespace disk::qml::viewmodels {
          * @brief Reset password form to empty state.
          */
         Q_INVOKABLE void clearPasswordForm();
+        /**
+         * @brief Validate password strength and update passwordStrengthMessage.
+         *
+         * @details
+         * Checks password against rules:
+         * - Length 8-64 characters
+         * - Contains at least one lowercase letter
+         * - Contains at least one uppercase letter
+         * - Contains at least one digit
+         *
+         * Updates passwordStrengthMessage property with validation result.
+         * Call this from QML when newPassword changes.
+         */
+        Q_INVOKABLE void validatePasswordStrength(const QString& password);
 
         // ==================== Signals ====================
 
@@ -215,6 +235,7 @@ namespace disk::qml::viewmodels {
         void confirmPasswordChanged();
         void passwordErrorChanged();
         void canChangePasswordChanged();
+        void passwordStrengthMessageChanged();
         void loadingChanged();
         void errorMessageChanged();
 
@@ -262,6 +283,8 @@ namespace disk::qml::viewmodels {
         QString m_new_password;
         QString m_confirm_password;
         QString m_password_error;
+        QString m_password_strength_message;
+        bool m_is_password_valid{ false };
         bool m_can_change_password{ false };
 
         // ==================== Loading/Error State ====================

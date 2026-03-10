@@ -14,12 +14,12 @@
 
 namespace disk::filters {
 
-    using disk::utils::ConfigMgr;
     using disk::services::TokenService;
+    using disk::utils::ConfigMgr;
+
     ShareAuthFilter::ShareAuthFilter() {
         // Initialize TokenService singleton
         disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
-
     }
 
     auto ShareAuthFilter::doFilter(const drogon::HttpRequestPtr& request)

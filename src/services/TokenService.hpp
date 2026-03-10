@@ -16,8 +16,8 @@
 #include <drogon/nosql/RedisClient.h>
 
 #include "services/RedisService.hpp"
-#include "utils/Singleton.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/Singleton.hpp"
 
 namespace disk::services {
 
