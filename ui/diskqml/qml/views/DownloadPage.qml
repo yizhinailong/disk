@@ -10,51 +10,6 @@ import Disk 1.0
 Item {
     id: root
 
-    function formatSpeed(bytesPerSec) {
-        if (bytesPerSec <= 0) return ""
-        if (bytesPerSec < 1024) return bytesPerSec + " B/s"
-        if (bytesPerSec < 1048576) return (bytesPerSec / 1024).toFixed(1) + " KB/s"
-        if (bytesPerSec < 1073741824) return (bytesPerSec / 1048576).toFixed(1) + " MB/s"
-        return (bytesPerSec / 1073741824).toFixed(1) + " GB/s"
-    }
-
-    function formatEta(seconds) {
-        if (seconds <= 0) return ""
-        if (seconds < 60) return seconds + "秒"
-        if (seconds < 3600) return Math.floor(seconds / 60) + "分" + (seconds % 60) + "秒"
-        var h = Math.floor(seconds / 3600)
-        var m = Math.floor((seconds % 3600) / 60)
-        return h + "时" + m + "分"
-    }
-
-    function formatSize(bytes) {
-        if (bytes <= 0) return "0 B"
-        if (bytes < 1024) return bytes + " B"
-        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"
-        if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + " MB"
-        return (bytes / 1073741824).toFixed(1) + " GB"
-    }
-
-    function statusColor(status) {
-        switch (status) {
-        case 1: return palette.highlight       // Running
-        case 2: return palette.mid             // Paused
-        case 3: return "#4CAF50"               // Completed (green)
-        case 4: return "#F44336"               // Failed (red)
-        default: return palette.mid            // Queued
-        }
-    }
-
-    function statusText(status) {
-        switch (status) {
-        case 0: return "等待中"
-        case 1: return "下载中"
-        case 2: return "已暂停"
-        case 3: return "已完成"
-        case 4: return "失败"
-        default: return ""
-        }
-    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -173,9 +128,9 @@ Item {
                                 }
 
                                 Label {
-                                    text: statusText(model.status)
+                                    text: TransferHelpers.statusText(model.status, false)
                                     font.pixelSize: 11
-                                    color: statusColor(model.status)
+                                    color: TransferHelpers.statusColor(model.status, palette)
                                 }
                             }
 
@@ -202,7 +157,7 @@ Item {
                                             width: parent.width * model.progress / 100
                                             height: parent.height
                                             radius: 3
-                                            color: statusColor(model.status)
+                                            color: TransferHelpers.statusColor(model.status, palette)
                                         }
                                     }
                                 }
@@ -220,20 +175,20 @@ Item {
                                 spacing: 8
 
                                 Label {
-                                    text: formatSize(model.doneBytes) + " / " + formatSize(model.totalBytes)
+                                    text: TransferHelpers.formatSize(model.doneBytes) + " / " + TransferHelpers.formatSize(model.totalBytes)
                                     font.pixelSize: 11
                                     color: palette.placeholderText
                                 }
 
                                 Label {
-                                    text: model.status === 1 ? formatSpeed(model.speed) : ""
+                                    text: model.status === 1 ? TransferHelpers.formatSpeed(model.speed) : ""
                                     font.pixelSize: 11
                                     color: palette.placeholderText
                                     visible: text !== ""
                                 }
 
                                 Label {
-                                    text: model.status === 1 && model.eta > 0 ? "剩余 " + formatEta(model.eta) : ""
+                                    text: model.status === 1 && model.eta > 0 ? "剩余 " + TransferHelpers.formatEta(model.eta) : ""
                                     font.pixelSize: 11
                                     color: palette.placeholderText
                                     visible: text !== ""

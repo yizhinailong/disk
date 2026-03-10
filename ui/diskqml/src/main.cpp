@@ -24,6 +24,7 @@
 #include <services/UserService.hpp>
 #include <transfers/TransferStore.hpp>
 #include <utils/ConfigStore.hpp>
+#include <utils/FormatUtils.hpp>
 #include <viewmodels/FileListViewModel.hpp>
 #include <viewmodels/LoginViewModel.hpp>
 #include <viewmodels/RegisterViewModel.hpp>
@@ -109,6 +110,7 @@ int main(int argc, char* argv[]) {
         &configStore
     );
 
+    disk::qml::utils::FormatUtils formatUtils;
     disk::qml::viewmodels::TrashViewModel trashViewModel(&trashService);
     disk::qml::viewmodels::ShareViewModel shareViewModel(&shareService, &transfersViewModel);
     disk::qml::viewmodels::UserViewModel userViewModel(&userService);
@@ -123,6 +125,7 @@ int main(int argc, char* argv[]) {
     disk::qml::viewmodels::ShareViewModel::SetInstance(&shareViewModel);
     disk::qml::viewmodels::TransfersViewModel::SetInstance(&transfersViewModel);
     disk::qml::viewmodels::UserViewModel::SetInstance(&userViewModel);
+    disk::qml::utils::FormatUtils::SetInstance(&formatUtils);
 
     QQmlApplicationEngine engine;
     QObject::connect(

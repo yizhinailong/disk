@@ -18,23 +18,7 @@ Item {
 
     // ==================== 辅助函数 ====================
 
-    function fileIcon(fileType: string) : string {
-        if (fileType === "folder") return "📁"
-        return "📄"
-    }
-
-    function formatSize(bytes: int) : string {
-        if (bytes <= 0) return "-"
-        if (bytes < 1024) return bytes + " B"
-        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"
-        if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + " MB"
-        return (bytes / 1073741824).toFixed(1) + " GB"
-    }
-
-    function formatDate(dateStr: string) : string {
-        if (!dateStr) return "-"
-        return dateStr.substring(0, 10)
-    }
+    // Formatter functions are now centralized in FormatUtils singleton
 
     function isExpiringSoon(expiresAt: string) : bool {
         if (!expiresAt) return false
@@ -320,7 +304,7 @@ Item {
 
                         // 图标 + 文件名
                         Label {
-                            text: root.fileIcon(model.trashType)
+                            text: FormatUtils.fileIcon(model.trashType, "")
                             font.pixelSize: 16
                             Layout.preferredWidth: 24
                         }
@@ -355,7 +339,7 @@ Item {
 
                         // 大小
                         Label {
-                            text: model.trashIsFolder ? "文件夹" : root.formatSize(model.trashSize)
+                            text: model.trashIsFolder ? "文件夹" : FormatUtils.formatSize(model.trashSize)
                             font.pixelSize: 12
                             color: palette.placeholderText
                             Layout.preferredWidth: 80
@@ -374,7 +358,7 @@ Item {
 
                         // 删除时间
                         Label {
-                            text: root.formatDate(model.trashDeletedAt)
+                            text: FormatUtils.formatDate(model.trashDeletedAt)
                             font.pixelSize: 12
                             color: palette.placeholderText
                             Layout.preferredWidth: 100
@@ -383,7 +367,7 @@ Item {
 
                         // 到期时间
                         Label {
-                            text: root.formatDate(model.trashExpiresAt)
+                            text: FormatUtils.formatDate(model.trashExpiresAt)
                             font.pixelSize: 12
                             color: root.isExpiringSoon(model.trashExpiresAt) ? "#e74c3c" : palette.placeholderText
                             Layout.preferredWidth: 80

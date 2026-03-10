@@ -96,6 +96,8 @@ qt_add_qml_module(appdiskqml
         src/viewmodels/SettingsViewModel.hpp
         src/viewmodels/UserViewModel.cpp
         src/viewmodels/UserViewModel.hpp
+        src/utils/FormatUtils.cpp
+        src/utils/FormatUtils.hpp
     QML_FILES
         qml/Main.qml
         qml/App.qml
@@ -114,6 +116,7 @@ qt_add_qml_module(appdiskqml
         qml/views/UserPage.qml
         # qml/components/BreadcrumbBar.qml
         # qml/components/TransferPanel.qml
+        qml/components/TransferHelpers.qml
         qml/dialogs/NewFolderDialog.qml
         qml/dialogs/RenameDialog.qml
         qml/dialogs/DeleteConfirmDialog.qml
@@ -123,6 +126,7 @@ qt_add_qml_module(appdiskqml
 target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/viewmodels)
 target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/models)
 target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/transfers)
+target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/utils)
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an
 # explicit, fixed bundle identifier manually though.

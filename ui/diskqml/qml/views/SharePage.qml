@@ -18,24 +18,7 @@ Item {
 
     // ==================== 辅助函数 ====================
 
-    function formatDate(dateStr: string) : string {
-        if (!dateStr) return "-"
-        // Truncate to first 10 chars: "2026-02-15"
-        return dateStr.substring(0, 10)
-    }
-
-    function permissionLabel(permission: string) : string {
-        if (permission === "view") return "仅查看"
-        if (permission === "download") return "可下载"
-        return permission
-    }
-
-    function statusLabel(status: string) : string {
-        if (status === "active") return "有效"
-        if (status === "expired") return "已过期"
-        if (status === "cancelled") return "已取消"
-        return status
-    }
+    // Formatter functions are now centralized in FormatUtils singleton
 
     function statusColor(status: string) : color {
         if (status === "active") return "#4CAF50"
@@ -326,7 +309,7 @@ Item {
 
                         // 权限
                         Label {
-                            text: root.permissionLabel(model.sharePermission)
+                            text: FormatUtils.permissionLabel(model.sharePermission)
                             font.pixelSize: 12
                             color: palette.placeholderText
                             Layout.preferredWidth: 70
@@ -362,7 +345,7 @@ Item {
 
                         // 创建时间
                         Label {
-                            text: root.formatDate(model.shareCreatedAt)
+                            text: FormatUtils.formatDate(model.shareCreatedAt)
                             font.pixelSize: 12
                             color: palette.placeholderText
                             Layout.preferredWidth: 90
@@ -371,7 +354,7 @@ Item {
 
                         // 过期时间
                         Label {
-                            text: root.formatDate(model.shareExpiresAt)
+                            text: FormatUtils.formatDate(model.shareExpiresAt)
                             font.pixelSize: 12
                             color: palette.placeholderText
                             Layout.preferredWidth: 90
@@ -380,7 +363,7 @@ Item {
 
                         // 状态
                         Label {
-                            text: root.statusLabel(model.shareStatus)
+                            text: FormatUtils.statusLabel(model.shareStatus)
                             font.pixelSize: 12
                             color: root.statusColor(model.shareStatus)
                             Layout.preferredWidth: 60

@@ -25,47 +25,7 @@ Item {
     }
 
     // ==================== 辅助函数 ====================
-
-    function fileIcon(fileType: string, mimeType: string) : string {
-        if (fileType === "folder") return "📁"
-        if (mimeType.startsWith("image/")) return "🖼️"
-        if (mimeType.startsWith("video/")) return "🎦"
-        if (mimeType.startsWith("audio/")) return "🎵"
-        if (mimeType === "application/pdf") return "📕"
-        if (mimeType.indexOf("spreadsheet") >= 0 || mimeType.indexOf("excel") >= 0 || mimeType.indexOf("csv") >= 0) return "📊"
-        if (mimeType.indexOf("presentation") >= 0 || mimeType.indexOf("powerpoint") >= 0) return "🎥️"
-        if (mimeType.indexOf("word") >= 0 || mimeType.indexOf("document") >= 0 || mimeType.startsWith("text/")) return "📄"
-        if (mimeType.indexOf("zip") >= 0 || mimeType.indexOf("rar") >= 0 || mimeType.indexOf("tar") >= 0 || mimeType.indexOf("compress") >= 0 || mimeType.indexOf("7z") >= 0) return "📦"
-        if (mimeType.indexOf("javascript") >= 0 || mimeType.indexOf("json") >= 0 || mimeType.indexOf("xml") >= 0 || mimeType.indexOf("x-c") >= 0 || mimeType.indexOf("python") >= 0) return "💻"
-        return "📎"
-    }
-
-    function formatSize(bytes: int) : string {
-        if (bytes < 1024) return bytes + " B"
-        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"
-        if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + " MB"
-        return (bytes / 1073741824).toFixed(1) + " GB"
-    }
-
-    function formatDate(dateStr: string) : string {
-        if (!dateStr) return "-"
-        // Truncate to first 10 chars: "2026-02-15"
-        return dateStr.substring(0, 10)
-    }
-
-    function fileTypeLabel(fileType: string, mimeType: string) : string {
-        if (fileType === "folder") return "文件夹"
-        if (mimeType.startsWith("image/")) return "图片"
-        if (mimeType.startsWith("video/")) return "视频"
-        if (mimeType.startsWith("audio/")) return "音频"
-        if (mimeType === "application/pdf") return "PDF"
-        if (mimeType.indexOf("spreadsheet") >= 0 || mimeType.indexOf("excel") >= 0) return "表格"
-        if (mimeType.indexOf("presentation") >= 0 || mimeType.indexOf("powerpoint") >= 0) return "演示"
-        if (mimeType.indexOf("word") >= 0 || mimeType.indexOf("document") >= 0) return "文档"
-        if (mimeType.startsWith("text/")) return "文本"
-        if (mimeType.indexOf("zip") >= 0 || mimeType.indexOf("rar") >= 0 || mimeType.indexOf("compress") >= 0) return "压缩包"
-        return "文件"
-    }
+    // Formatter functions are now centralized in FormatUtils singleton
 
     // ==================== 主布局 ====================
 
@@ -340,7 +300,7 @@ Item {
                             Item { Layout.fillHeight: true }
 
                             Label {
-                                text: root.fileIcon(model.fileType, model.fileMimeType)
+                                text: FormatUtils.fileIcon(model.fileType, model.fileMimeType)
                                 font.pixelSize: 36
                                 Layout.alignment: Qt.AlignHCenter
                             }
@@ -484,7 +444,7 @@ Item {
 
                         // 图标 + 文件名
                         Label {
-                            text: root.fileIcon(model.fileType, model.fileMimeType)
+                            text: FormatUtils.fileIcon(model.fileType, model.fileMimeType)
                             font.pixelSize: 16
                             Layout.preferredWidth: 24
                         }
@@ -500,7 +460,7 @@ Item {
 
                         // 大小
                         Label {
-                            text: model.fileIsFolder ? (model.fileItemCount + " 项") : root.formatSize(model.fileSize)
+                            text: model.fileIsFolder ? (model.fileItemCount + " 项") : FormatUtils.formatSize(model.fileSize)
                             font.pixelSize: 12
                             color: palette.placeholderText
                             Layout.preferredWidth: 80
@@ -509,7 +469,7 @@ Item {
 
                         // 修改时间
                         Label {
-                            text: root.formatDate(model.fileUpdatedAt)
+                            text: FormatUtils.formatDate(model.fileUpdatedAt)
                             font.pixelSize: 12
                             color: palette.placeholderText
                             Layout.preferredWidth: 100
@@ -518,7 +478,7 @@ Item {
 
                         // 类型
                         Label {
-                            text: root.fileTypeLabel(model.fileType, model.fileMimeType)
+                            text: FormatUtils.fileTypeLabel(model.fileType, model.fileMimeType)
                             font.pixelSize: 12
                             color: palette.placeholderText
                             Layout.preferredWidth: 60

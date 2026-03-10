@@ -444,32 +444,7 @@ Item {
                         ScrollBar.vertical: ScrollBar {}
                         spacing: 1
 
-                        // Helper functions (same as FilesPage)
-                        function fileIcon(fileType, mimeType) {
-                            if (fileType === "folder") return "📁"
-                            if (mimeType.startsWith("image/")) return "🖼️"
-                            if (mimeType.startsWith("video/")) return "🎦"
-                            if (mimeType.startsWith("audio/")) return "🎵"
-                            if (mimeType === "application/pdf") return "📕"
-                            if (mimeType.indexOf("spreadsheet") >= 0 || mimeType.indexOf("excel") >= 0 || mimeType.indexOf("csv") >= 0) return "📊"
-                            if (mimeType.indexOf("presentation") >= 0 || mimeType.indexOf("powerpoint") >= 0) return "🎥️"
-                            if (mimeType.indexOf("word") >= 0 || mimeType.indexOf("document") >= 0 || mimeType.startsWith("text/")) return "📄"
-                            if (mimeType.indexOf("zip") >= 0 || mimeType.indexOf("rar") >= 0 || mimeType.indexOf("tar") >= 0 || mimeType.indexOf("compress") >= 0 || mimeType.indexOf("7z") >= 0) return "📦"
-                            if (mimeType.indexOf("javascript") >= 0 || mimeType.indexOf("json") >= 0 || mimeType.indexOf("xml") >= 0 || mimeType.indexOf("x-c") >= 0 || mimeType.indexOf("python") >= 0) return "💻"
-                            return "📎"
-                        }
-
-                        function formatSize(bytes) {
-                            if (bytes < 1024) return bytes + " B"
-                            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"
-                            if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + " MB"
-                            return (bytes / 1073741824).toFixed(1) + " GB"
-                        }
-
-                        function formatDate(dateStr) {
-                            if (!dateStr) return "-"
-                            return dateStr.substring(0, 10)
-                        }
+                        // Formatter functions are now centralized in FormatUtils singleton
 
                         delegate: Rectangle {
                             width: recentListView.width
@@ -493,7 +468,7 @@ Item {
 
                                 // Icon
                                 Label {
-                                    text: recentListView.fileIcon(model.fileType, model.fileMimeType)
+                                    text: FormatUtils.fileIcon(model.fileType, model.fileMimeType)
                                     font.pixelSize: 18
                                     Layout.preferredWidth: 24
                                 }
@@ -511,7 +486,7 @@ Item {
                                 Label {
                                     text: model.fileIsFolder 
                                           ? (model.fileItemCount + " 项")
-                                          : recentListView.formatSize(model.fileSize)
+                                          : FormatUtils.formatSize(model.fileSize)
                                     font.pixelSize: 11
                                     color: palette.placeholderText
                                     Layout.preferredWidth: 70
@@ -520,7 +495,7 @@ Item {
 
                                 // Modified date
                                 Label {
-                                    text: recentListView.formatDate(model.fileUpdatedAt)
+                                    text: FormatUtils.formatDate(model.fileUpdatedAt)
                                     font.pixelSize: 11
                                     color: palette.placeholderText
                                     Layout.preferredWidth: 80
