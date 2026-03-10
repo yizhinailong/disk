@@ -19,6 +19,17 @@ Item {
 
     // ==================== 状态 ====================
 
+    /// 响应式布局模式: "compact" | "medium" | "expanded"
+    readonly property string layoutMode: root.width < 800 ? "compact" : (root.width < 1200 ? "medium" : "expanded")
+
+    /// 侧边栏宽度根据模式动态调整
+    readonly property int sidebarWidth: layoutMode === "compact" ? 56 : (layoutMode === "medium" ? 200 : 240)
+
+    /// 是否显示侧边栏文字标签
+    readonly property bool showSidebarLabels: layoutMode !== "compact"
+
+    /// 文件模式 vs 传输模式
+
     /// 文件模式 vs 传输模式
     property bool isTransferMode: false
 
@@ -81,10 +92,10 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        // ==================== 侧边栏 (200px) ====================
+        // ==================== 侧边栏 (响应式) ====================
         Rectangle {
             id: sidebar
-            Layout.preferredWidth: 200
+            Layout.preferredWidth: root.sidebarWidth
             Layout.fillHeight: true
             color: palette.window
 
@@ -97,6 +108,10 @@ Item {
                 color: palette.mid
             }
 
+            // 宽度变化动画
+            Behavior on Layout.preferredWidth {
+                NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+            }
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 8
@@ -114,12 +129,13 @@ Item {
                         onClicked: root.currentNav = modelData.key
 
                         contentItem: RowLayout {
-                            spacing: 8
+                            spacing: root.showSidebarLabels ? 8 : 0
 
                             Label {
                                 text: modelData.icon
                                 font.pixelSize: 16
                                 Layout.preferredWidth: 24
+                                Layout.alignment: Qt.AlignHCenter
                                 horizontalAlignment: Text.AlignHCenter
                             }
 
@@ -129,9 +145,15 @@ Item {
                                 color: navDelegate.highlighted
                                        ? palette.highlightedText
                                        : palette.windowText
+                                visible: root.showSidebarLabels
                                 Layout.fillWidth: true
+                                elide: Text.ElideRight
                             }
                         }
+
+                        ToolTip.visible: !root.showSidebarLabels && navDelegate.hovered
+                        ToolTip.text: modelData.label
+                        ToolTip.delay: 500
 
                         background: Rectangle {
                             radius: 6
@@ -153,12 +175,13 @@ Item {
                     highlighted: root.currentNav === "user"
 
                     contentItem: RowLayout {
-                        spacing: 8
+                        spacing: root.showSidebarLabels ? 8 : 0
 
                         Label {
                             text: "👤"
                             font.pixelSize: 16
                             Layout.preferredWidth: 24
+                            Layout.alignment: Qt.AlignHCenter
                             horizontalAlignment: Text.AlignHCenter
                         }
 
@@ -168,9 +191,15 @@ Item {
                             color: userProfileBtn.highlighted
                                    ? palette.highlightedText
                                    : palette.windowText
+                            visible: root.showSidebarLabels
                             Layout.fillWidth: true
+                            elide: Text.ElideRight
                         }
                     }
+
+                    ToolTip.visible: !root.showSidebarLabels && userProfileBtn.hovered
+                    ToolTip.text: qsTr("个人设置")
+                    ToolTip.delay: 500
 
                     background: Rectangle {
                         radius: 6
@@ -189,12 +218,13 @@ Item {
                     height: 40
 
                     contentItem: RowLayout {
-                        spacing: 8
+                        spacing: root.showSidebarLabels ? 8 : 0
 
                         Label {
                             text: root.isTransferMode ? "📁" : "📤"
                             font.pixelSize: 16
                             Layout.preferredWidth: 24
+                            Layout.alignment: Qt.AlignHCenter
                             horizontalAlignment: Text.AlignHCenter
                         }
 
@@ -202,9 +232,15 @@ Item {
                             text: root.isTransferMode ? "文件" : "传输"
                             font.pixelSize: 14
                             color: palette.windowText
+                            visible: root.showSidebarLabels
                             Layout.fillWidth: true
+                            elide: Text.ElideRight
                         }
                     }
+
+                    ToolTip.visible: !root.showSidebarLabels && modeSwitchBtn.hovered
+                    ToolTip.text: root.isTransferMode ? qsTr("切换到文件模式") : qsTr("切换到传输模式")
+                    ToolTip.delay: 500
 
                     background: Rectangle {
                         radius: 6

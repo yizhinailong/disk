@@ -19,7 +19,7 @@ ApplicationWindow {
     visible: true
     width: 960
     height: 600
-    minimumWidth: 900
+    minimumWidth: 600
     title: qsTr("Disk - 云盘客户端")
     flags: Qt.Window | Qt.FramelessWindowHint
     color: palette.window

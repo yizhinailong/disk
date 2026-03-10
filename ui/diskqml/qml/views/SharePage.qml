@@ -413,6 +413,8 @@ Item {
             }
         }
 
+        }
+
         // ==================== 分页栏 ====================
 
         Rectangle {
@@ -533,18 +535,26 @@ Item {
                 color: palette.windowText
             }
 
-            // 文件ID输入（临时方案，后续应从文件列表选择）
+            // 文件ID输入（高级选项，建议从文件列表右键创建分享）
             Label {
-                text: "文件ID（多个用逗号分隔）："
-                font.pixelSize: 12
-                color: palette.windowText
+                text: "文件ID（高级选项）："
+                font.pixelSize: 11
+                color: palette.placeholderText
             }
 
             TextField {
                 id: fileIdsField
                 Layout.fillWidth: true
-                placeholderText: "例如: 1,2,3"
+                placeholderText: "建议从文件列表右键分享"
                 font.pixelSize: 13
+            }
+
+            Label {
+                text: "💡 提示：在文件列表中右键点击文件即可快速创建分享"
+                font.pixelSize: 11
+                color: palette.placeholderText
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
             }
 
             Label {
@@ -934,6 +944,4 @@ Item {
         interval: 5000
         onTriggered: failTooltip.visible = false
     }
-}
-
 }

@@ -14,9 +14,11 @@
 #include <QDebug>
 #include <QDir>
 #include <QFile>
+#include <QIcon>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QSystemTrayIcon>
+#include <QWindow>
 
 #ifdef Q_OS_WIN
     #include <QCoreApplication>
@@ -174,6 +176,42 @@ namespace disk::qml::platform {
         if (m_impl->m_tray_icon) {
             m_impl->m_tray_icon->setVisible(visible);
         }
+    }
+
+    auto PlatformIntegration::RestoreWindow() -> void {
+        if (!m_impl->m_main_window) {
+            qWarning() << "[PlatformIntegration] No main window set for restore";
+            return;
+        }
+
+        m_impl->m_main_window->show();
+        m_impl->m_main_window->raise();
+        m_impl->m_main_window->requestActivate();
+        qInfo() << "[PlatformIntegration] Window restored from tray";
+    }
+
+    auto PlatformIntegration::HandleCloseRequest() -> bool {
+        if (!m_impl->m_minimize_to_tray_enabled) {
+            return false; // Should close normally
+        }
+
+        if (!m_impl->m_main_window) {
+            return false; // No window to hide
+        }
+
+        // Ensure tray icon is visible when hiding to tray
+        if (m_impl->m_tray_icon) {
+            m_impl->m_tray_icon->show();
+        }
+
+        m_impl->m_main_window->hide();
+        qInfo() << "[PlatformIntegration] Window hidden to tray";
+        return true; // Handled - don't close
+    }
+
+    auto PlatformIntegration::SetMainWindow(QWindow* window) -> void {
+        m_impl->m_main_window = window;
+        qInfo() << "[PlatformIntegration] Main window set";
     }
 
     auto PlatformIntegration::ShowNotification(const QString& title, const QString& message) -> bool {

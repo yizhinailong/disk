@@ -93,6 +93,25 @@ namespace disk::qml::platform {
          */
         auto SetTrayIconVisible(bool visible) -> void;
 
+        /**
+         * @brief Restore the main window from minimized/hidden state.
+         *
+         * Shows, raises, and activates the window. Used when clicking tray icon.
+         */
+        auto RestoreWindow() -> void;
+
+        /**
+         * @brief Handle window close request - hide to tray if enabled.
+         * @return true if window was hidden to tray, false if should close normally
+         */
+        auto HandleCloseRequest() -> bool;
+
+        /**
+         * @brief Set the main window for tray operations.
+         * @param window the main application window
+         */
+        auto SetMainWindow(QWindow* window) -> void;
+
         // ==================== Notifications ====================
 
         /**
@@ -109,6 +128,11 @@ namespace disk::qml::platform {
          * @param reason the activation reason
          */
         void trayIconActivated(QSystemTrayIcon::ActivationReason reason);
+
+        /**
+         * @brief Emitted when the window should be restored from tray.
+         */
+        void restoreWindowRequested();
 
     private:
         class Impl;
