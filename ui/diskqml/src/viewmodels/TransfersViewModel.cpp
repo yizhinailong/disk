@@ -367,20 +367,17 @@ namespace disk::qml::viewmodels {
         // --- Download retry ---
         if (auto* oldEngine = m_download_engines.value(id, nullptr)) {
             if (oldEngine->Item().status == transfers::TransferStatus::Failed) {
-                // Extract original params before deleting
+                // Extract original params before creating new engine
                 const qint64 fileId = oldEngine->FileId();
                 const QString destPath = oldEngine->DestPath();
 
-                // Remove old engine
-                m_download_model->RemoveTransfer(id);
-                m_download_engines.remove(id);
-                oldEngine->deleteLater();
-
-                // Create new engine and re-fetch info
+                // Create new engine and fetch info (async)
+                // Keep old item/engine until new one is ready to preserve Failed state on error
                 auto* newEngine = new transfers::DownloadEngine(m_api_client, this);
 
-                newEngine->FetchInfo(fileId, [this, newEngine, destPath](std::optional<transfers::DownloadInfo> info, QString error) {
+                newEngine->FetchInfo(fileId, [this, oldEngine, newEngine, destPath, id](std::optional<transfers::DownloadInfo> info, QString error) {
                     if (!info) {
+                        // FetchInfo failed - keep old Failed item, delete new engine
                         newEngine->deleteLater();
                         return;
                     }
@@ -408,7 +405,12 @@ namespace disk::qml::viewmodels {
                         }
                     );
 
-                    // Add the engine's item (with Queued status) to the model
+                    // Now swap: remove old item/engine, add new one
+                    m_download_model->RemoveTransfer(id);
+                    m_download_engines.remove(id);
+                    oldEngine->deleteLater();
+
+                    // Add the new engine's item (with Queued status) to the model
                     const auto& item = newEngine->Item();
                     m_download_model->AddTransfer(item);
 
