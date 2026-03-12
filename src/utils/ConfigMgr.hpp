@@ -21,8 +21,8 @@ namespace disk::utils {
      *
      * 配置来源：
      * - JWT密钥: 环境变量 JWT_SECRET (最小32字符) 或默认值
-     * - 令牌过期时间: config.json 中的 app.* 字段或默认值
-     * - 存储路径: config.json 中的 app.* 字段或默认值
+     * - 令牌过期时间: 默认值
+     * - 存储路径: config.json 中的 custom_config.disk.* 字段或默认值
      *
      * 使用方式：
      * @code
@@ -41,7 +41,7 @@ namespace disk::utils {
         ConfigMgr();
 
         /**
-         * @brief Load configuration from Drogon app config
+         * @brief Load project configuration from Drogon custom config
          * This must be called after drogon::app().loadConfigFile()
          */
         auto LoadConfig() -> void;

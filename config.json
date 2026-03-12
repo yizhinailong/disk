@@ -7,12 +7,16 @@
   ],
   "app": {
     "upload_path": "build/uploaded",
-    "storage_base_path": "build/uploaded",
-    "temp_upload_path": "build/temp_uploads",
-    "chunk_size": 5242880,
-    "max_file_size": 10737418240,
-    "upload_task_expiry_seconds": 86400,
     "threads_num": 0
+  },
+  "custom_config": {
+    "disk": {
+      "storage_base_path": "build/uploaded",
+      "temp_upload_path": "build/temp_uploads",
+      "chunk_size": 5242880,
+      "max_file_size": 10737418240,
+      "upload_task_expiry_seconds": 86400
+    }
   },
   "db_clients": [
     {

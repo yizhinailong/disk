@@ -18,9 +18,8 @@ namespace disk::utils {
     auto ConfigMgr::LoadConfig() -> void {
         const auto& custom_config = drogon::app().getCustomConfig();
 
-        // Try to get the 'app' section from config
-        if (custom_config.isMember("app")) {
-            const auto& app_config = custom_config["app"];
+        if (custom_config.isMember("disk")) {
+            const auto& app_config = custom_config["disk"];
 
             // Read storage_base_path from config
             if (app_config.isMember("storage_base_path")) {
@@ -56,7 +55,7 @@ namespace disk::utils {
                 LOG_INFO << "Loaded upload_task_expiry_seconds from config: " << m_upload_task_expiry_seconds;
             }
         } else {
-            LOG_WARN << "'app' section not found in config, using default values";
+            LOG_WARN << "'disk' section not found in custom config, using default values";
         }
     }
 
