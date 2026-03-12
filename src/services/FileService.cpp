@@ -11,8 +11,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <filesystem>
-#include <fstream>
 
 #include <drogon/utils/Utilities.h>
 #include <json/writer.h>
@@ -22,6 +20,7 @@
 #include "models/Folders.hpp"
 #include "models/Trash.hpp"
 #include "models/Users.hpp"
+#include "storage/IFileStorage.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
 
@@ -38,22 +37,6 @@ namespace disk::file {
     using drogon_model::disk::Trash;
     using drogon_model::disk::UploadTasks;
     using drogon_model::disk::Users;
-
-    auto RemovePathSafely(const std::filesystem::path& file_path) -> bool {
-        std::error_code ec;
-        auto removed = std::filesystem::remove(file_path, ec);
-        return !ec && removed;
-    }
-
-    auto CompensateStorageArtifactOnAbort(
-        const std::filesystem::path& final_storage_path,
-        bool should_compensate_storage_file
-    ) -> bool {
-        if (!should_compensate_storage_file) {
-            return false;
-        }
-        return RemovePathSafely(final_storage_path);
-    }
 
     // ==================== 构造函数 ====================
 
@@ -172,7 +155,6 @@ namespace disk::file {
             std::ceil(static_cast<double>(request.file_size) / static_cast<double>(chunk_size))
         );
         auto expiry_seconds = config->GetUploadTaskExpirySeconds();
-        auto temp_path = GetTempDirPath(drogon::utils::getUuid()).string();
 
         // 生成上传 ID
         auto upload_id = drogon::utils::getUuid();
@@ -187,7 +169,7 @@ namespace disk::file {
         task.setChunkSize(chunk_size);
         task.setTotalChunks(total_chunks);
         task.setUploadedChunks("[]");
-        task.setTempPath(GetTempDirPath(upload_id).string());
+        task.setTempPath(upload_id);
         task.setStatus(0); // 进行中
         task.setExpiresAt(trantor::Date::now().after(expiry_seconds));
 
@@ -266,36 +248,12 @@ namespace disk::file {
         }
 
         // 5. 创建临时目录并写入分片
-        auto temp_dir = GetTempDirPath(upload_id);
-        std::error_code ec;
-
-        if (!std::filesystem::exists(temp_dir)) {
-            if (!std::filesystem::create_directories(temp_dir, ec)) {
-                LOG_ERROR << "Failed to create temp directory: " << temp_dir << " - "
-                          << ec.message();
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::InternalError, "Failed to create temp directory")
-                );
-            }
-        }
-
-        auto chunk_file_path = GetChunkFilePath(upload_id, chunk_index);
-        std::ofstream chunk_file(chunk_file_path, std::ios::binary);
-        if (!chunk_file) {
-            LOG_ERROR << "Failed to open chunk file: " << chunk_file_path;
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to open chunk file")
-            );
-        }
-
-        chunk_file.write(chunk_data.data(), chunk_data.size());
-        chunk_file.close();
-
-        if (!chunk_file) {
-            LOG_ERROR << "Failed to write chunk file: " << chunk_file_path;
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to write chunk file")
-            );
+        auto write_result = co_await m_storage->WriteChunk(upload_id, chunk_index, chunk_data);
+        if (!write_result) {
+            LOG_ERROR << "Failed to write chunk file: upload_id=" << upload_id
+                      << ", chunk_index=" << chunk_index << ", error="
+                      << static_cast<int>(write_result.error().code);
+            co_return std::unexpected(write_result.error());
         }
 
         // 6. 更新已上传分片列表
@@ -352,51 +310,23 @@ namespace disk::file {
         }
 
         // 3. 组装分片
-        auto assemble_path = GetAssembleFilePath(upload_id);
-        std::ofstream assemble_file(assemble_path, std::ios::binary);
-        if (!assemble_file) {
-            LOG_ERROR << "Failed to create assemble file: " << assemble_path;
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to create assemble file")
-            );
+        auto assemble_result = co_await m_storage->AssembleChunks(upload_id, task.getValueOfTotalChunks());
+        if (!assemble_result) {
+            LOG_ERROR << "Failed to assemble chunks: upload_id=" << upload_id
+                      << ", error=" << static_cast<int>(assemble_result.error().code);
+            co_return std::unexpected(assemble_result.error());
         }
-
-        std::array<char, 8192> buffer{};
-        for (uint32_t i = 0; i < task.getValueOfTotalChunks(); ++i) {
-            auto chunk_path = GetChunkFilePath(upload_id, i);
-            std::ifstream chunk_file(chunk_path, std::ios::binary);
-            if (!chunk_file) {
-                LOG_ERROR << "Failed to open chunk file: " << chunk_path;
-                assemble_file.close();
-                std::filesystem::remove(assemble_path);
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::InternalError, "Failed to open chunk file")
-                );
-            }
-
-            while (chunk_file.read(buffer.data(), buffer.size())) {
-                assemble_file.write(buffer.data(), chunk_file.gcount());
-            }
-            if (chunk_file.gcount() > 0) {
-                assemble_file.write(buffer.data(), chunk_file.gcount());
-            }
-            chunk_file.close();
-        }
-        assemble_file.close();
-
-        if (!assemble_file) {
-            LOG_ERROR << "Failed to write assemble file: " << assemble_path;
-            std::filesystem::remove(assemble_path);
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to write assemble file")
-            );
-        }
+        const auto& assemble_path = assemble_result.value();
 
         // 4. 计算并验证最终 MD5
         auto hash_result = FileHashUtil::HashFileMd5(assemble_path);
         if (!hash_result) {
             LOG_ERROR << "Failed to compute file MD5";
-            std::filesystem::remove(assemble_path);
+            auto delete_result = co_await m_storage->DeletePath(assemble_path);
+            if (!delete_result) {
+                LOG_WARN << "Failed to cleanup assemble file after md5 failure: "
+                         << static_cast<int>(delete_result.error().code);
+            }
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to compute file hash")
             );
@@ -406,7 +336,11 @@ namespace disk::file {
         if (final_hash != task.getValueOfFileHash()) {
             LOG_ERROR << "File hash mismatch: expected=" << task.getValueOfFileHash()
                       << ", actual=" << final_hash;
-            std::filesystem::remove(assemble_path);
+            auto delete_result = co_await m_storage->DeletePath(assemble_path);
+            if (!delete_result) {
+                LOG_WARN << "Failed to cleanup assemble file after hash mismatch: "
+                         << static_cast<int>(delete_result.error().code);
+            }
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ChunkVerifyFailed, "File hash verification failed")
             );
@@ -416,7 +350,11 @@ namespace disk::file {
 
         if (co_await IsFilenameExists(task.getValueOfFolderId(), task.getValueOfFilename(), user_id)) {
             LOG_WARN << "File with same name already exists: " << task.getValueOfFilename();
-            RemovePathSafely(assemble_path);
+            auto delete_result = co_await m_storage->DeletePath(assemble_path);
+            if (!delete_result) {
+                LOG_WARN << "Failed to cleanup assemble file on duplicate name: "
+                         << static_cast<int>(delete_result.error().code);
+            }
             co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
         }
 
@@ -426,37 +364,35 @@ namespace disk::file {
         bool should_compensate_storage_file = false;
 
         if (existing_content.has_value()) {
-            RemovePathSafely(assemble_path);
+            auto delete_result = co_await m_storage->DeletePath(assemble_path);
+            if (!delete_result) {
+                LOG_WARN << "Failed to cleanup assemble file after dedup: "
+                         << static_cast<int>(delete_result.error().code);
+            }
             LOG_DEBUG << "File dedup successful: content_id=" << existing_content.value();
         } else {
-            final_storage_path = GetFinalStoragePath(final_hash);
-            auto final_dir = final_storage_path.parent_path();
-
-            std::error_code ec;
-            if (!std::filesystem::exists(final_dir)) {
-                std::filesystem::create_directories(final_dir, ec);
-                if (ec) {
-                    LOG_ERROR << "Failed to create storage directory: " << ec.message();
-                    RemovePathSafely(assemble_path);
-                    co_return std::unexpected(
-                        ErrorInfo(ErrorCode::InternalError, "Failed to create storage directory")
-                    );
+            auto promote_result = co_await m_storage->PromoteToFinal(assemble_path, final_hash);
+            if (!promote_result) {
+                LOG_ERROR << "Failed to move file to final storage: error="
+                          << static_cast<int>(promote_result.error().code);
+                auto cleanup_result = co_await m_storage->DeletePath(assemble_path);
+                if (!cleanup_result) {
+                    LOG_WARN << "Failed to cleanup assemble file after promote failure: "
+                             << static_cast<int>(cleanup_result.error().code);
                 }
+                co_return std::unexpected(promote_result.error());
             }
 
-            std::filesystem::rename(assemble_path, final_storage_path, ec);
-            if (ec) {
-                LOG_ERROR << "Failed to move file: " << ec.message();
-                RemovePathSafely(assemble_path);
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::InternalError, "Failed to move file")
-                );
-            }
+            final_storage_path = promote_result.value();
 
             auto sha256_result = FileHashUtil::HashFileSha256(final_storage_path);
             if (!sha256_result) {
                 LOG_ERROR << "Failed to compute SHA256";
-                RemovePathSafely(final_storage_path);
+                auto delete_result = co_await m_storage->DeletePath(final_storage_path);
+                if (!delete_result) {
+                    LOG_WARN << "Failed to cleanup final file after sha256 failure: "
+                             << static_cast<int>(delete_result.error().code);
+                }
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Failed to compute SHA256")
                 );
@@ -468,6 +404,7 @@ namespace disk::file {
 
         std::shared_ptr<drogon::orm::Transaction> transaction;
         Files file;
+        bool db_operation_failed = false;
         try {
             transaction = co_await m_db_client->newTransactionCoro();
 
@@ -524,13 +461,17 @@ namespace disk::file {
                     LOG_ERROR << "Transaction rollback failed: " << rollback_e.what();
                 }
             }
+            db_operation_failed = true;
+        }
 
-            if (should_compensate_storage_file &&
-                !CompensateStorageArtifactOnAbort(final_storage_path, should_compensate_storage_file)) {
-                LOG_ERROR << "Compensation failed, orphan storage file may remain: "
-                          << final_storage_path;
+        if (db_operation_failed) {
+            if (should_compensate_storage_file) {
+                auto cleanup_result = co_await m_storage->DeletePath(final_storage_path);
+                if (!cleanup_result) {
+                    LOG_ERROR << "Compensation failed, orphan storage file may remain: "
+                              << final_storage_path;
+                }
             }
-
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Database operation failed")
             );
@@ -542,8 +483,11 @@ namespace disk::file {
             CoroMapper<UploadTasks> task_mapper(m_db_client);
             co_await task_mapper.deleteByPrimaryKey(task.getValueOfId());
 
-            auto temp_dir = GetTempDirPath(upload_id);
-            std::filesystem::remove_all(temp_dir);
+            auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
+            if (!cleanup_result) {
+                LOG_WARN << "Failed to cleanup temp artifacts: "
+                         << static_cast<int>(cleanup_result.error().code);
+            }
 
             LOG_DEBUG << "Upload task cleanup completed: " << upload_id;
         } catch (const std::exception& e) {
@@ -579,19 +523,13 @@ namespace disk::file {
             co_return std::unexpected(task_result.error());
         }
 
-        const auto& task = task_result.value();
-
         // 2. 删除临时目录
-        auto temp_dir = GetTempDirPath(upload_id);
-        std::error_code ec;
-
-        if (std::filesystem::exists(temp_dir)) {
-            if (std::filesystem::remove_all(temp_dir, ec) == 0U) {
-                LOG_WARN << "Failed to delete temp directory: " << temp_dir << " - "
-                         << ec.message();
-            } else {
-                LOG_DEBUG << "Temp directory deleted: " << temp_dir;
-            }
+        auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
+        if (!cleanup_result) {
+            LOG_WARN << "Failed to delete temp directory: upload_id=" << upload_id
+                     << ", error=" << static_cast<int>(cleanup_result.error().code);
+        } else {
+            LOG_DEBUG << "Temp directory deleted: upload_id=" << upload_id;
         }
 
         // 3. 删除上传任务记录
@@ -1422,32 +1360,6 @@ namespace disk::file {
         Json::StreamWriterBuilder builder;
         builder["indentation"] = "";
         return Json::writeString(builder, root);
-    }
-
-    auto FileService::GetChunkFilePath(const std::string& upload_id, uint32_t chunk_index) const
-        -> std::filesystem::path {
-
-        return GetTempDirPath(upload_id) / (std::to_string(chunk_index) + ".chunk");
-    }
-
-    auto FileService::GetTempDirPath(const std::string& upload_id) const -> std::filesystem::path {
-        auto config = ConfigMgr::GetInstance();
-        return std::filesystem::path(config->GetTempUploadPath()) / upload_id;
-    }
-
-    auto FileService::GetAssembleFilePath(const std::string& upload_id) const
-        -> std::filesystem::path {
-        auto config = ConfigMgr::GetInstance();
-        return std::filesystem::path(config->GetTempUploadPath()) / (upload_id + ".tmp");
-    }
-
-    auto FileService::GetFinalStoragePath(const std::string& file_hash) const
-        -> std::filesystem::path {
-        auto config = ConfigMgr::GetInstance();
-        // 使用 hash 的前 2 个字符作为子目录，避免单个目录文件过多
-        auto hash_prefix = file_hash.substr(0, 2);
-        return std::filesystem::path(config->GetStorageBasePath()) / hash_prefix /
-               (file_hash + ".bin");
     }
 
     auto FileService::IsFilenameExists(

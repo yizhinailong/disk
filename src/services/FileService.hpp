@@ -10,7 +10,6 @@
 #pragma once
 
 #include <cstdint>
-#include <filesystem>
 #include <optional>
 #include <set>
 #include <string>
@@ -24,7 +23,6 @@
 namespace disk::storage {
     class IFileStorage;
 }
-
 
 namespace disk::file {
 
@@ -343,44 +341,6 @@ namespace disk::file {
         static auto SerializeUploadedChunks(const std::set<uint32_t>& chunks) -> std::string;
 
         /**
-         * @brief 获取分片临时文件路径
-         *
-         * @param upload_id 上传会话 ID
-         * @param chunk_index 分片索引
-         * @return std::filesystem::path 分片文件路径
-         */
-        [[nodiscard]]
-        auto GetChunkFilePath(const std::string& upload_id, uint32_t chunk_index) const
-            -> std::filesystem::path;
-
-        /**
-         * @brief 获取临时目录路径
-         *
-         * @param upload_id 上传会话 ID
-         * @return std::filesystem::path 临时目录路径
-         */
-        [[nodiscard]]
-        auto GetTempDirPath(const std::string& upload_id) const -> std::filesystem::path;
-
-        /**
-         * @brief 获取组装临时文件路径
-         *
-         * @param upload_id 上传会话 ID
-         * @return std::filesystem::path 组装文件路径
-         */
-        [[nodiscard]]
-        auto GetAssembleFilePath(const std::string& upload_id) const -> std::filesystem::path;
-
-        /**
-         * @brief 获取最终存储路径
-         *
-         * @param file_hash 文件 MD5 哈希
-         * @return std::filesystem::path 最终存储路径
-         */
-        [[nodiscard]]
-        auto GetFinalStoragePath(const std::string& file_hash) const -> std::filesystem::path;
-
-        /**
          * @brief 检查文件夹中是否存在同名文件
          *
          * @param folder_id 文件夹 ID
@@ -412,7 +372,7 @@ namespace disk::file {
         static auto IsImageMimeType(const std::string& mime_type) -> bool;
 
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
-        storage::IFileStorage* m_storage; ///< 文件存储接口
+        storage::IFileStorage* m_storage;     ///< 文件存储接口
     };
 
 } // namespace disk::file
