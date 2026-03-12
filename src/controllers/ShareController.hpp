@@ -11,6 +11,7 @@
 #pragma once
 
 #include "services/ShareService.hpp"
+#include "storage/IFileStorage.hpp"
 
 namespace disk::share {
 
@@ -164,6 +165,7 @@ namespace disk::share {
 
     private:
         std::unique_ptr<ShareService> m_share_service;
+        disk::storage::IFileStorage* m_storage;
     };
 
 } // namespace disk::share

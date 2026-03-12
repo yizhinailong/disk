@@ -11,18 +11,18 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <fstream>
 #include <limits>
 #include <memory>
 
 #include "dtos/ShareDto.hpp"
+#include "storage/StorageMgr.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::share {
 
     namespace {
-        constexpr std::size_t DOWNLOAD_STREAM_CHUNK_BYTES = 64 * 1024;
+        constexpr std::size_t DOWNLOAD_STREAM_CHUNK_BYTES = 64ULL * 1024ULL;
     }
 
     using disk::utils::ConfigMgr;
@@ -34,7 +34,8 @@ namespace disk::share {
                   drogon::app().getRedisClient(),
                   ConfigMgr::GetInstance()->GetJwtSecret()
               )
-          ) {
+          ),
+          m_storage(disk::storage::StorageMgr::GetStorage()) {
     }
 
     // ==================== 所有者端点（JWT 保护） ====================
@@ -381,12 +382,17 @@ namespace disk::share {
         uint64_t end = range_request.has_range ? range_request.end : download_info.file_size - 1;
         uint64_t content_length = end - start + 1;
 
-        auto file = std::make_shared<std::ifstream>(download_info.storage_path, std::ios::binary);
-        if (!file->is_open()) {
+        auto open_result = co_await m_storage->OpenForRead(download_info.storage_path);
+        if (!open_result) {
             LOG_ERROR << "Failed to open file: " << download_info.storage_path;
             co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "Failed to open file"));
         }
-        file->seekg(static_cast<std::streampos>(start));
+        auto file = std::move(*open_result);
+        if (start > static_cast<uint64_t>(std::numeric_limits<std::streamoff>::max())) {
+            LOG_ERROR << "Range start exceeds stream offset limit: " << start;
+            co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "Invalid request range"));
+        }
+        file->seekg(static_cast<std::streamoff>(start));
 
         auto remaining = std::make_shared<uint64_t>(content_length);
         auto resp = drogon::HttpResponse::newStreamResponse(

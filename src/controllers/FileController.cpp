@@ -10,25 +10,22 @@
 #include "FileController.hpp"
 
 #include <algorithm>
-#include <fstream>
 #include <limits>
 #include <memory>
 
 #include "dtos/FileDto.hpp"
-#include "utils/Response.hpp"
 #include "storage/StorageMgr.hpp"
+#include "utils/Response.hpp"
 
 namespace disk::file {
 
     namespace {
-        constexpr std::size_t DOWNLOAD_STREAM_CHUNK_BYTES = 64 * 1024;
+        constexpr std::size_t DOWNLOAD_STREAM_CHUNK_BYTES = 64ULL * 1024ULL;
     }
 
     FileController::FileController()
-        : m_file_service(std::make_unique<FileService>(
-            drogon::app().getDbClient(),
-            storage::StorageMgr::GetStorage()
-        )) {
+        : m_file_service(std::make_unique<FileService>(drogon::app().getDbClient(), storage::StorageMgr::GetStorage())),
+          m_storage(storage::StorageMgr::GetStorage()) {
     }
 
     auto FileController::InitUpload(drogon::HttpRequestPtr request)
@@ -388,12 +385,17 @@ namespace disk::file {
         uint64_t end = range_request.has_range ? range_request.end : download_info.file_size - 1;
         uint64_t content_length = end - start + 1;
 
-        auto file = std::make_shared<std::ifstream>(download_info.storage_path, std::ios::binary);
-        if (!file->is_open()) {
+        auto open_result = co_await m_storage->OpenForRead(download_info.storage_path);
+        if (!open_result) {
             LOG_ERROR << "Cannot open file: " << download_info.storage_path;
             co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "Cannot open file"));
         }
-        file->seekg(static_cast<std::streampos>(start));
+        auto file = std::move(*open_result);
+        if (start > static_cast<uint64_t>(std::numeric_limits<std::streamoff>::max())) {
+            LOG_ERROR << "Range start exceeds stream offset limit: " << start;
+            co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "Invalid request range"));
+        }
+        file->seekg(static_cast<std::streamoff>(start));
 
         auto remaining = std::make_shared<uint64_t>(content_length);
         auto resp = drogon::HttpResponse::newStreamResponse(

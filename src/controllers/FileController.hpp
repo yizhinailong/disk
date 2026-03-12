@@ -11,6 +11,7 @@
 #pragma once
 
 #include "services/FileService.hpp"
+#include "storage/IFileStorage.hpp"
 
 namespace disk::file {
 
@@ -222,6 +223,7 @@ namespace disk::file {
 
     private:
         std::unique_ptr<FileService> m_file_service;
+        disk::storage::IFileStorage* m_storage;
     };
 
 } // namespace disk::file
