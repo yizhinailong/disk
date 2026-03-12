@@ -778,6 +778,224 @@ Authorization: Bearer <access_token>
 
 ---
 
+### 4.2 上传分片
+
+**POST** `/api/file/upload/chunk`
+
+#### 实现状态
+**已实现**
+
+上传文件分片数据。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+Content-Type: multipart/form-data
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+| Content-Type | 是 | multipart/form-data |
+
+#### 表单参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| upload_id | string | 是 | 上传会话 ID（从初始化上传获取） |
+| chunk_index | integer | 是 | 分片索引（从 0 开始） |
+| chunk_hash | string | 是 | 分片 MD5 哈希（32 字符小写十六进制） |
+| chunk_data | binary | 是 | 分片二进制数据 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误、缺少必填参数 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | chunk_hash 格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 400 | 50008 | `UploadTaskNotFound` | 上传任务不存在 | upload_id 不存在或已过期 |
+| 400 | 50009 | `ChunkVerifyFailed` | 分片校验失败 | 分片哈希与实际数据不匹配 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "chunk_index": 0,
+    "uploaded": true
+  }
+}
+```
+
+---
+
+### 4.3 完成上传
+
+**POST** `/api/file/upload/complete`
+
+#### 实现状态
+**已实现**
+
+完成文件上传，合并所有分片。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+
+#### 请求参数
+
+```json
+{
+  "upload_id": "abc123def456"
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| upload_id | string | 是 | 上传会话 ID |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | upload_id 为空或格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 400 | 50008 | `UploadTaskNotFound` | 上传任务不存在 | upload_id 不存在或已过期 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 分片不完整、哈希校验失败 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "file": {
+      "id": 123,
+      "name": "document.pdf",
+      "size": 104857600,
+      "hash": "d41d8cd98f00b204e9800998ecf8427e",
+      "mime_type": "application/pdf",
+      "parent_id": 0,
+      "created_at": "2026-02-18T12:30:00Z"
+    }
+  }
+}
+```
+
+---
+
+### 4.4 取消上传
+
+**DELETE** `/api/file/upload/{upload_id}`
+
+#### 实现状态
+**已实现**
+
+取消上传任务，清理临时数据。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| upload_id | string | 上传会话 ID |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | upload_id 为空 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 400 | 50008 | `UploadTaskNotFound` | 上传任务不存在 | upload_id 不存在或不属于当前用户 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": null
+}
+```
+
+---
+
+### 4.5 获取下载信息
+
+**GET** `/api/file/download/{file_id}/info`
+
+#### 实现状态
+**已实现**
+
+获取文件下载元数据（不包含文件内容），用于下载前预检。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| file_id | integer | 文件 ID |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | file_id 格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 404 | 50005 | `FileNotFound` | 文件不存在 | file_id 不存在或不属于当前用户 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "file_id": 123,
+    "filename": "document.pdf",
+    "file_size": 104857600,
+    "file_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "mime_type": "application/pdf",
+    "supports_range": true
+  }
+}
+```
+
+---
+
 ### 4.6 下载文件
 
 **GET** `/api/file/download/{file_id}`
@@ -3378,6 +3596,93 @@ Authorization: Bearer <access_token>
       "total_folders": 200,
       "total_size": 549755813888
     }
+  }
+}
+```
+
+---
+
+### 8.3 获取操作日志
+
+**GET** `/api/logs`
+
+#### 实现状态
+**已实现**
+
+获取当前用户的操作日志列表。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌 |
+
+#### 查询参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| page | integer | 否 | 页码，默认 1 |
+| page_size | integer | 否 | 每页数量，默认 20，最大 100 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | page 或 page_size 格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+
+#### 响应字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| items | array | 日志条目数组 |
+| items[].id | integer | 日志 ID |
+| items[].action | string | 操作类型（login, logout, upload, download, delete, rename, move, copy, share, restore） |
+| items[].target_type | string | 目标类型（file, folder, share, user） |
+| items[].target_id | integer | 目标 ID（可选） |
+| items[].target_name | string | 目标名称（可选） |
+| items[].details | string | 操作详情 JSON（可选） |
+| items[].ip_address | string | 客户端 IP 地址 |
+| items[].created_at | string | 操作时间 |
+| total | integer | 总记录数 |
+| page | integer | 当前页码 |
+| page_size | integer | 每页数量 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "action": "upload",
+        "target_type": "file",
+        "target_id": 123,
+        "target_name": "document.pdf",
+        "ip_address": "192.168.1.100",
+        "created_at": "2026-02-18T12:30:00Z"
+      },
+      {
+        "id": 2,
+        "action": "download",
+        "target_type": "file",
+        "target_id": 456,
+        "target_name": "report.docx",
+        "ip_address": "192.168.1.100",
+        "created_at": "2026-02-18T12:25:00Z"
+      }
+    ],
+    "total": 50,
+    "page": 1,
+    "page_size": 20
   }
 }
 ```
