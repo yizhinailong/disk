@@ -15,6 +15,23 @@ auto main() -> int {
     }
     LOG_INFO << "libsodium initialized successfully";
 
+    // Load configuration file
+    drogon::app().loadConfigFile("config.json");
+    LOG_INFO << "Configuration file loaded successfully";
+
+    // Initialize ConfigMgr with values from config.json
+    disk::utils::ConfigMgr::GetInstance()->LoadConfig();
+
+    // Log effective storage paths
+    LOG_INFO << "Effective storage configuration:";
+    LOG_INFO << "  storage_base_path: "
+              << disk::utils::ConfigMgr::GetInstance()->GetStorageBasePath();
+    LOG_INFO << "  temp_upload_path: " << disk::utils::ConfigMgr::GetInstance()->GetTempUploadPath();
+    LOG_INFO << "  chunk_size: " << disk::utils::ConfigMgr::GetInstance()->GetChunkSize();
+    LOG_INFO << "  max_file_size: " << disk::utils::ConfigMgr::GetInstance()->GetMaxFileSize();
+    LOG_INFO << "  upload_task_expiry_seconds: "
+              << disk::utils::ConfigMgr::GetInstance()->GetUploadTaskExpirySeconds();
+
     // 初始化文件存储
     auto storage = std::make_shared<disk::storage::LocalFileStorage>(disk::utils::ConfigMgr::GetInstance());
     disk::storage::StorageMgr::SetInstance(storage);
@@ -29,7 +46,7 @@ auto main() -> int {
         disk::services::ScheduledTasks::Register();
     });
 
-    drogon::app().loadConfigFile("config.json").run();
+    drogon::app().run();
 
     return 0;
 }
