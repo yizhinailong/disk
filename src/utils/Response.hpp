@@ -9,6 +9,12 @@
 
 #pragma once
 
+#include <string>
+#include <utility>
+
+#include <drogon/HttpResponse.h>
+#include <json/json.h>
+
 #include "ErrorCode.hpp"
 
 namespace disk {
