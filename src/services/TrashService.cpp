@@ -17,6 +17,7 @@
 #include "models/Folders.hpp"
 #include "models/Trash.hpp"
 #include "models/Users.hpp"
+#include "storage/StorageMgr.hpp"
 
 namespace disk::trash {
 
@@ -505,10 +506,35 @@ namespace disk::trash {
                     );
                     auto current_ref_count = content.getValueOfRefCount();
                     if (current_ref_count > 0) {
-                        content.setRefCount(current_ref_count - 1);
+                        const auto new_ref_count = current_ref_count - 1;
+                        content.setRefCount(new_ref_count);
                         co_await content_mapper.update(content);
                         LOG_DEBUG << "Updated file content ref count: content_id=" << content_id
-                                  << ", ref_count=" << (current_ref_count - 1);
+                                  << ", ref_count=" << new_ref_count;
+
+                        if (new_ref_count == 0) {
+                            auto* storage = disk::storage::StorageMgr::GetStorage();
+                            if (storage == nullptr) {
+                                LOG_WARN << "Storage manager is not initialized, skip blob cleanup: content_id="
+                                         << content_id << ", storage_path=" << content.getValueOfStoragePath();
+                            } else {
+                                auto delete_result =
+                                    co_await storage->DeletePath(content.getValueOfStoragePath());
+                                if (!delete_result.has_value()) {
+                                    LOG_WARN << "Failed to cleanup blob after ref_count reached zero: content_id="
+                                             << content_id
+                                             << ", storage_path=" << content.getValueOfStoragePath()
+                                             << ", error_code="
+                                             << static_cast<uint32_t>(delete_result.error().code)
+                                             << ", error_message=" << delete_result.error().message;
+                                } else {
+                                    LOG_INFO
+                                        << "Blob cleanup completed after ref_count reached zero: content_id="
+                                        << content_id
+                                        << ", storage_path=" << content.getValueOfStoragePath();
+                                }
+                            }
+                        }
                     } else {
                         LOG_DEBUG
                             << "File content ref count already 0, not decrementing: content_id="
