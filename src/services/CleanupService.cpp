@@ -15,6 +15,7 @@
 #include "models/FileContents.hpp"
 #include "models/Trash.hpp"
 #include "models/Users.hpp"
+#include "storage/StorageMgr.hpp"
 
 namespace disk::services {
 
@@ -122,10 +123,36 @@ namespace disk::services {
 
             auto current_ref_count = content.getValueOfRefCount();
             if (current_ref_count > 0) {
-                content.setRefCount(current_ref_count - 1);
+                const auto new_ref_count = current_ref_count - 1;
+                content.setRefCount(new_ref_count);
                 co_await mapper.update(content);
                 LOG_DEBUG << "File content reference count decremented: content_id=" << content_id
-                          << ", ref_count=" << (current_ref_count - 1);
+                          << ", ref_count=" << new_ref_count;
+
+                if (new_ref_count == 0) {
+                    auto* storage = disk::storage::StorageMgr::GetStorage();
+                    if (storage == nullptr) {
+                        LOG_WARN
+                            << "Storage manager is not initialized, skip expired-trash blob cleanup: content_id="
+                            << content_id << ", storage_path=" << content.getValueOfStoragePath();
+                    } else {
+                        auto delete_result = co_await storage->DeletePath(content.getValueOfStoragePath());
+                        if (!delete_result.has_value()) {
+                            LOG_WARN
+                                << "Failed to cleanup expired-trash blob after ref_count reached zero: content_id="
+                                << content_id << ", storage_path=" << content.getValueOfStoragePath()
+                                << ", error_code=" << static_cast<uint32_t>(delete_result.error().code)
+                                << ", error_message=" << delete_result.error().message;
+                        } else {
+                            LOG_INFO
+                                << "Expired-trash blob cleanup completed after ref_count reached zero: content_id="
+                                << content_id << ", storage_path=" << content.getValueOfStoragePath();
+                        }
+                    }
+                }
+            } else {
+                LOG_DEBUG << "File content reference count already 0, skip decrement: content_id="
+                          << content_id;
             }
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_WARN << "Failed to update file content reference count: content_id=" << content_id
