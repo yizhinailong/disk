@@ -104,6 +104,15 @@ set(Services_SOURCES
     services/UserService.cpp
 )
 
+# Storage
+set(Storage_HEADERS
+    storage/IFileStorage.hpp
+    storage/LocalFileStorage.hpp
+)
+set(Storage_SOURCES
+    storage/LocalFileStorage.cpp
+)
+
 # Utils
 set(Utils_HEADERS
     utils/ConfigMgr.hpp
@@ -125,6 +134,7 @@ target_sources(${PROJECT_NAME}
     ${Filters_SOURCES}
     ${Models_SOURCES}
     ${Services_SOURCES}
+    ${Storage_SOURCES}
     ${Utils_SOURCES}
     PUBLIC
     FILE_SET HEADERS
@@ -135,6 +145,7 @@ target_sources(${PROJECT_NAME}
     ${Filters_HEADERS}
     ${Models_HEADERS}
     ${Services_HEADERS}
+    ${Storage_HEADERS}
     ${Utils_HEADERS}
 )
 
