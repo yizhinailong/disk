@@ -1,0 +1,60 @@
+/**
+ * @file StorageMgr.hpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 文件存储管理器（单例）
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
+#pragma once
+
+#include <memory>
+
+#include "storage/IFileStorage.hpp"
+
+namespace disk::storage {
+
+    /**
+     * @brief 文件存储管理器（单例）
+     *
+     * 职责：
+     * - 管理文件存储实例的生命周期
+     * - 提供全局访问点
+     *
+     * 使用方式：
+     * @code
+     * // 在 main.cpp 初始化
+     * StorageMgr::SetInstance(std::make_shared<LocalFileStorage>(config));
+     *
+     * // 在控制器中获取
+     * auto storage = StorageMgr::GetStorage();
+     * @endcode
+     */
+    class StorageMgr {
+    public:
+        /**
+         * @brief 设置存储实例（在应用启动时调用）
+         * @param storage 存储实例
+         */
+        static void SetInstance(std::shared_ptr<IFileStorage> storage);
+
+        /**
+         * @brief 获取存储实例
+         * @return IFileStorage* 存储实例指针
+         */
+        [[nodiscard]]
+        static auto GetStorage() -> IFileStorage*;
+
+        /**
+         * @brief 检查存储实例是否已初始化
+         * @return bool 是否已初始化
+         */
+        [[nodiscard]]
+        static auto IsInitialized() -> bool;
+
+    private:
+        static std::shared_ptr<IFileStorage> s_storage;
+    };
+
+} // namespace disk::storage

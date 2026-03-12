@@ -16,6 +16,7 @@
 
 #include "dtos/FileDto.hpp"
 #include "utils/Response.hpp"
+#include "storage/StorageMgr.hpp"
 
 namespace disk::file {
 
@@ -24,7 +25,10 @@ namespace disk::file {
     }
 
     FileController::FileController()
-        : m_file_service(std::make_unique<FileService>(drogon::app().getDbClient())) {
+        : m_file_service(std::make_unique<FileService>(
+            drogon::app().getDbClient(),
+            storage::StorageMgr::GetStorage()
+        )) {
     }
 
     auto FileController::InitUpload(drogon::HttpRequestPtr request)

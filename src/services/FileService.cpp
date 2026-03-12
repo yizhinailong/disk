@@ -57,8 +57,8 @@ namespace disk::file {
 
     // ==================== 构造函数 ====================
 
-    FileService::FileService(drogon::orm::DbClientPtr db_client)
-        : m_db_client(std::move(db_client)) {
+    FileService::FileService(drogon::orm::DbClientPtr db_client, storage::IFileStorage* storage)
+        : m_db_client(std::move(db_client)), m_storage(storage) {
         LOG_DEBUG << "FileService initialization completed";
     }
 

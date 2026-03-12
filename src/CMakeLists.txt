@@ -108,9 +108,11 @@ set(Services_SOURCES
 set(Storage_HEADERS
     storage/IFileStorage.hpp
     storage/LocalFileStorage.hpp
+    storage/StorageMgr.hpp
 )
 set(Storage_SOURCES
     storage/LocalFileStorage.cpp
+    storage/StorageMgr.cpp
 )
 
 # Utils

@@ -21,6 +21,11 @@
 #include "models/UploadTasks.hpp"
 #include "utils/ErrorCode.hpp"
 
+namespace disk::storage {
+    class IFileStorage;
+}
+
+
 namespace disk::file {
 
     /**
@@ -37,8 +42,9 @@ namespace disk::file {
         /**
          * @brief 构造函数
          * @param db_client 数据库客户端
+         * @param storage 文件存储接口
          */
-        explicit FileService(drogon::orm::DbClientPtr db_client);
+        explicit FileService(drogon::orm::DbClientPtr db_client, storage::IFileStorage* storage);
         ~FileService() = default;
         FileService(const FileService&) = delete;
         auto operator=(const FileService&) -> FileService& = delete;
@@ -406,6 +412,7 @@ namespace disk::file {
         static auto IsImageMimeType(const std::string& mime_type) -> bool;
 
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
+        storage::IFileStorage* m_storage; ///< 文件存储接口
     };
 
 } // namespace disk::file
