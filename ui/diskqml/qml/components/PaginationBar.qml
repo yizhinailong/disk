@@ -1,3 +1,9 @@
+/**
+ * @file PaginationBar.qml
+ * @brief 分页栏组件
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @copyright Copyright (c) 2026
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

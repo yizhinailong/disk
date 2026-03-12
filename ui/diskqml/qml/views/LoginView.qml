@@ -1,3 +1,9 @@
+/**
+ * @file LoginView.qml
+ * @brief 用户登录视图
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @copyright Copyright (c) 2026
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

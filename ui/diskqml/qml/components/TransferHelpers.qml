@@ -1,3 +1,9 @@
+/**
+ * @file TransferHelpers.qml
+ * @brief 传输辅助工具组件
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @copyright Copyright (c) 2026
+ */
 pragma Singleton
 import QtQuick
 

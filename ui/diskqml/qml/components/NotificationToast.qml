@@ -1,3 +1,9 @@
+/**
+ * @file NotificationToast.qml
+ * @brief 通知提示组件
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @copyright Copyright (c) 2026
+ */
 import QtQuick
 import QtQuick.Controls
 
