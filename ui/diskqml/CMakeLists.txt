@@ -117,10 +117,13 @@ qt_add_qml_module(appdiskqml
         # qml/components/BreadcrumbBar.qml
         # qml/components/TransferPanel.qml
         qml/components/TransferHelpers.qml
+        qml/components/NotificationToast.qml
+        qml/components/PaginationBar.qml
         qml/dialogs/NewFolderDialog.qml
         qml/dialogs/RenameDialog.qml
         qml/dialogs/DeleteConfirmDialog.qml
         qml/dialogs/FolderPickerDialog.qml
+        qml/dialogs/UploadDialog.qml
 )
 
 target_include_directories(appdiskqml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/viewmodels)
