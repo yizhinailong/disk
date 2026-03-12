@@ -1,7 +1,7 @@
 /**
  * @file LoginViewModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QML singleton ViewModel for login form state
+ * @brief 登录视图模型，管理登录表单状态
  *
  * @copyright Copyright (c) 2026
  *
@@ -23,65 +23,54 @@ namespace disk::qml::services {
 namespace disk::qml::viewmodels {
 
     /**
-     * @brief QML singleton ViewModel for the login form.
+     * @brief 登录表单的 QML 单例视图模型。
      *
      * @details
-     * Exposes login form state (account, password, loading, error) to QML via
-     * Q_PROPERTY bindings. Business logic and API calls are handled entirely in C++;
-     * QML only drives the UI.
+     * 通过 Q_PROPERTY 绑定向 QML 暴露登录表单状态（账号、密码、加载中、错误）。
+     * 业务逻辑和 API 调用完全在 C++ 中处理；QML 仅驱动 UI。
      *
-     * Singleton boundary audit (Task 7): Page-scoped (login form state).
-     * Kept as QML_SINGLETON for now to preserve typed registration and current
-     * imports; planned migration target is explicit page-level instantiation.
+     * 单例边界审计（任务 7）：页面作用域（登录表单状态）。
+     * 暂时保留 QML_SINGLETON 以保持类型注册和当前导入；
+     * 计划迁移目标为显式页面级实例化。
      *
-     * Singleton lifecycle: an application-owned instance must be created and
-     * registered with SetInstance() before the QML engine calls create().
+     * 单例生命周期：应用拥有的实例必须先通过 SetInstance() 创建并注册，
+     * 然后 QML 引擎才能调用 create()。
      */
     class LoginViewModel : public QObject {
         Q_OBJECT
         QML_ELEMENT
         QML_SINGLETON
 
-        // ==================== Properties ====================
+        // ==================== 属性 ====================
 
-        /// User account input for login (username or email).
-        Q_PROPERTY(QString account READ Account WRITE SetAccount NOTIFY accountChanged)
-        /// User password input for login.
-        Q_PROPERTY(QString password READ Password WRITE SetPassword NOTIFY passwordChanged)
-        /// True while the login API call is in flight.
-        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged)
-        /// Non-empty when login failed; cleared by clearError() or a new submit().
-        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged)
-        /// True when account and password are non-empty and no request is in flight.
-        Q_PROPERTY(bool canSubmit READ CanSubmit NOTIFY canSubmitChanged)
-
+        Q_PROPERTY(QString account READ Account WRITE SetAccount NOTIFY accountChanged) ///< 登录账号（用户名或邮箱）
+        Q_PROPERTY(QString password READ Password WRITE SetPassword NOTIFY passwordChanged) ///< 登录密码
+        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged) ///< 登录 API 请求进行中时为 true
+        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged) ///< 登录失败时的错误消息；clearError() 或新的 submit() 会清除
+        Q_PROPERTY(bool canSubmit READ CanSubmit NOTIFY canSubmitChanged) ///< 账号和密码非空且无请求进行中时为 true
     public:
         explicit LoginViewModel(services::AuthService* authService, QObject* parent = nullptr);
 
         // ==================== Public API ====================
 
         /**
-         * @brief Register the pre-created instance for use by the QML engine.
+         * @brief 注册预创建的实例供 QML 引擎使用。
          *
          * @details
-         * Must be called before the QML engine requests the singleton via create().
-         * Ownership of @p instance remains with the caller (C++ side).
+         * 必须在 QML 引擎通过 create() 请求单例之前调用。
+         * @p instance 的所有权保留在调用者（C++ 端）。
          */
-        static auto SetInstance(LoginViewModel* instance) -> void;
 
         /**
-         * @brief QML singleton factory — called once by the QML engine.
+         * @brief QML 单例工厂——由 QML 引擎调用一次。
          *
          * @details
-         * Constraints enforced at runtime:
-         * - s_instance must have been set via SetInstance() beforehand.
-         * - @p qmlEngine must share thread affinity with the instance.
-         * - Only a single QJSEngine may access this singleton; a second engine
-         *   triggers a Q_ASSERT failure.
-         * - Ownership is set to CppOwnership to prevent the engine from deleting
-         *   the instance when the engine is torn down.
+         * 运行时强制约束：
+         * - s_instance 必须事先通过 SetInstance() 设置。
+         * - @p qmlEngine 必须与实例共享线程亲和性。
+         * - 只有一个 QJSEngine 可以访问此单例；第二个引擎会触发 Q_ASSERT 失败。
+         * - 所有权设置为 CppOwnership，防止引擎销毁时删除实例。
          */
-        static auto create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> LoginViewModel*;
 
         [[nodiscard]] auto Account() const -> const QString&;
         [[nodiscard]] auto Password() const -> const QString&;
@@ -93,27 +82,25 @@ namespace disk::qml::viewmodels {
         auto SetPassword(const QString& password) -> void;
 
         /**
-         * @brief Submit the login form.
+         * @brief 提交登录表单。
          *
          * @details
-         * No-op if canSubmit is false or a request is already in flight.
-         * Sets loading=true and clears any previous error, then calls
-         * AuthService::Login(). On success, emits loginSucceeded(username, storageUsed, storageQuota).
-         * On failure, sets errorMessage and clears loading.
+         * 如果 canSubmit 为 false 或请求正在进行中则无操作。
+         * 设置 loading=true 并清除之前的错误，然后调用 AuthService::Login()。
+         * 成功时发射 loginSucceeded(username, storageUsed, storageQuota)。
+         * 失败时设置 errorMessage 并清除 loading。
          *
-         * A child context QObject is used so that the callback is automatically
-         * discarded if this ViewModel is destroyed before the response arrives.
+         * 使用子上下文 QObject，以便在此 ViewModel 在响应到达前被销毁时
+         * 自动丢弃回调。
          */
-        Q_INVOKABLE void submit();
 
         /**
-         * @brief Clear the current error message.
+         * @brief 清除当前错误消息。
          *
          * @details
-         * Resets errorMessage to an empty string. Useful when the user edits a
-         * field after a failed attempt and the UI wants to hide the error banner.
+         * 将 errorMessage 重置为空字符串。当用户在失败尝试后编辑字段
+         * 且 UI 想要隐藏错误横幅时很有用。
          */
-        Q_INVOKABLE void clearError();
 
         // ==================== Signals ====================
 
@@ -126,23 +113,22 @@ namespace disk::qml::viewmodels {
         void loginSucceeded(const QString& username, quint64 storageUsed, quint64 storageQuota);
 
     private:
-        // ==================== Private Helpers ====================
+        // ==================== 私有辅助方法 ====================
 
         auto UpdateCanSubmit() -> void;
         auto SetLoading(bool loading) -> void;
         auto SetErrorMessage(const QString& message) -> void;
 
-        // ==================== State ====================
+        // ==================== 状态 ====================
 
-        services::AuthService* m_auth_service;
-        QString m_account;
-        QString m_password;
-        bool m_loading{ false };
-        QString m_error_message;
-        bool m_can_submit{ false };
+        services::AuthService* m_auth_service; ///< 认证服务
+        QString m_account; ///< 账号
+        QString m_password; ///< 密码
+        bool m_loading{ false }; ///< 是否正在加载
+        QString m_error_message; ///< 错误消息
+        bool m_can_submit{ false }; ///< 是否可提交
 
-        inline static LoginViewModel* s_instance = nullptr;
-        inline static QJSEngine* s_engine = nullptr;
-    };
+        inline static LoginViewModel* s_instance = nullptr; ///< 单例实例
+        inline static QJSEngine* s_engine = nullptr; ///< JS 引擎实例
 
 } // namespace disk::qml::viewmodels

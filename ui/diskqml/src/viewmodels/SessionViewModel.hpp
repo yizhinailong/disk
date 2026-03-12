@@ -1,7 +1,7 @@
 /**
  * @file SessionViewModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QML singleton session state, storage metrics, and logout action
+ * @brief 会话视图模型，管理全局会话状态、存储指标和登出操作
  *
  * @copyright Copyright (c) 2026
  *
@@ -30,49 +30,37 @@ namespace disk::qml::viewmodels {
     class LoginViewModel;
 
     /**
-     * @brief QML singleton that tracks global session state and provides logout.
+     * @brief 跟踪全局会话状态并提供登出功能的 QML 单例。
      *
      * @details
-     * Exposes whether the user is logged in, their username, storage quota/usage
-     * metrics, and the configured server URL to QML, reacting to login events
-     * from LoginViewModel and token state from TokenStore.
-     * The logout() action calls the server API and then unconditionally clears
-     * local token state regardless of the server response.
+     * 向 QML 暴露用户登录状态、用户名、存储配额/使用量指标和配置的服务器 URL。
+     * 响应来自 LoginViewModel 的登录事件和来自 TokenStore 的令牌状态。
+     * logout() 操作调用服务器 API，然后无论服务器响应如何都清除本地令牌状态。
      *
-     * Singleton boundary audit (Task 7): App-global. This ViewModel is the
-     * shared authentication/session source of truth consumed across screens,
-     * so it remains a typed QML singleton.
+     * 单例边界审计（任务 7）：应用全局。此 ViewModel 是跨屏幕消费的
+     * 共享认证/会话真实来源，因此保持为类型化 QML 单例。
      *
-     * Singleton lifecycle: an application-owned instance must be created and
-     * registered with SetInstance() before the QML engine calls create().
+     * 单例生命周期：应用拥有的实例必须先通过 SetInstance() 创建并注册，
+     * 然后 QML 引擎才能调用 create()。
      */
     class SessionViewModel : public QObject {
         Q_OBJECT
         QML_ELEMENT
         QML_SINGLETON
 
-        // ==================== Properties ====================
+        // ==================== 属性 ====================
 
-        /// True when a valid access token exists in the local token store.
-        Q_PROPERTY(bool isLoggedIn READ IsLoggedIn NOTIFY isLoggedInChanged)
-        /// Username of the currently logged-in user; empty when not logged in.
-        Q_PROPERTY(QString loggedInUserName READ LoggedInUserName NOTIFY loggedInUserNameChanged)
+        Q_PROPERTY(bool isLoggedIn READ IsLoggedIn NOTIFY isLoggedInChanged) ///< 本地令牌存储中存在有效访问令牌时为 true
+        Q_PROPERTY(QString loggedInUserName READ LoggedInUserName NOTIFY loggedInUserNameChanged) ///< 当前登录用户的用户名；未登录时为空
 
-        /// Storage consumed by the current user (bytes); 0 when not logged in.
-        Q_PROPERTY(qint64 storageUsed READ StorageUsed NOTIFY storageUsedChanged)
-        /// Storage quota allocated to the current user (bytes); 0 when not logged in.
-        Q_PROPERTY(qint64 storageQuota READ StorageQuota NOTIFY storageQuotaChanged)
+        Q_PROPERTY(qint64 storageUsed READ StorageUsed NOTIFY storageUsedChanged) ///< 当前用户已使用的存储空间（字节）；未登录时为 0
+        Q_PROPERTY(qint64 storageQuota READ StorageQuota NOTIFY storageQuotaChanged) ///< 当前用户分配的存储配额（字节）；未登录时为 0
 
-        /// Human-readable formatted storage used (e.g. "1.23 GB").
-        Q_PROPERTY(QString storageUsedFormatted READ StorageUsedFormatted NOTIFY storageUsedChanged)
-        /// Human-readable formatted storage quota (e.g. "10.00 GB").
-        Q_PROPERTY(QString storageQuotaFormatted READ StorageQuotaFormatted NOTIFY storageQuotaChanged)
-        /// Storage usage as a percentage (0.0–100.0); 0.0 when quota is 0.
-        Q_PROPERTY(double storagePercentage READ StoragePercentage NOTIFY storagePercentageChanged)
+        Q_PROPERTY(QString storageUsedFormatted READ StorageUsedFormatted NOTIFY storageUsedChanged) ///< 格式化的已用存储（如 "1.23 GB"）
+        Q_PROPERTY(QString storageQuotaFormatted READ StorageQuotaFormatted NOTIFY storageQuotaChanged) ///< 格式化的存储配额（如 "10.00 GB"）
+        Q_PROPERTY(double storagePercentage READ StoragePercentage NOTIFY storagePercentageChanged) ///< 存储使用百分比（0.0–100.0）；配额为 0 时为 0.0
 
-        /// Configured server URL (read-only, set once at construction).
-        Q_PROPERTY(QString serverUrl READ ServerUrl CONSTANT)
-
+        Q_PROPERTY(QString serverUrl READ ServerUrl CONSTANT) ///< 配置的服务器 URL（只读，构造时设置）
     public:
         explicit SessionViewModel(
             LoginViewModel* loginViewModel,
@@ -85,27 +73,23 @@ namespace disk::qml::viewmodels {
         // ==================== Public API ====================
 
         /**
-         * @brief Register the pre-created instance for use by the QML engine.
+         * @brief 注册预创建的实例供 QML 引擎使用。
          *
          * @details
-         * Must be called before the QML engine requests the singleton via create().
-         * Ownership of @p instance remains with the caller (C++ side).
+         * 必须在 QML 引擎通过 create() 请求单例之前调用。
+         * @p instance 的所有权保留在调用者（C++ 端）。
          */
-        static auto SetInstance(SessionViewModel* instance) -> void;
 
         /**
-         * @brief QML singleton factory — called once by the QML engine.
+         * @brief QML 单例工厂——由 QML 引擎调用一次。
          *
          * @details
-         * Constraints enforced at runtime:
-         * - s_instance must have been set via SetInstance() beforehand.
-         * - @p qmlEngine must share thread affinity with the instance.
-         * - Only a single QJSEngine may access this singleton; a second engine
-         *   triggers a Q_ASSERT failure.
-         * - Ownership is set to CppOwnership to prevent the engine from deleting
-         *   the instance when the engine is torn down.
+         * 运行时强制约束：
+         * - s_instance 必须事先通过 SetInstance() 设置。
+         * - @p qmlEngine 必须与实例共享线程亲和性。
+         * - 只有一个 QJSEngine 可以访问此单例；第二个引擎会触发 Q_ASSERT 失败。
+         * - 所有权设置为 CppOwnership，防止引擎销毁时删除实例。
          */
-        static auto create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> SessionViewModel*;
 
         [[nodiscard]] auto IsLoggedIn() const -> bool;
         [[nodiscard]] auto LoggedInUserName() const -> const QString&;
@@ -117,17 +101,16 @@ namespace disk::qml::viewmodels {
         [[nodiscard]] auto ServerUrl() const -> const QString&;
 
         /**
-         * @brief Send a logout request and clear local session state.
+         * @brief 发送登出请求并清除本地会话状态。
          *
          * @details
-         * Sends the current access token to the server via AuthService::Logout().
-         * Regardless of server response, clears the TokenStore, resets the
-         * logged-in username, and re-evaluates isLoggedIn.
+         * 通过 AuthService::Logout() 将当前访问令牌发送到服务器。
+         * 无论服务器响应如何，都清除 TokenStore、重置登录用户名
+         * 并重新评估 isLoggedIn。
          *
-         * A child context QObject is used so that the callback is automatically
-         * discarded if this ViewModel is destroyed before the response arrives.
+         * 使用子上下文 QObject，以便在此 ViewModel 在响应到达前被销毁时
+         * 自动丢弃回调。
          */
-        Q_INVOKABLE void logout();
 
         // ==================== Signals ====================
 
@@ -139,7 +122,7 @@ namespace disk::qml::viewmodels {
         void storagePercentageChanged();
 
     private:
-        // ==================== Private Helpers ====================
+        // ==================== 私有辅助方法 ====================
 
         auto SetLoggedInUserName(const QString& name) -> void;
         auto UpdateIsLoggedIn() -> void;
@@ -147,20 +130,19 @@ namespace disk::qml::viewmodels {
         auto SetStorageQuota(qint64 bytes) -> void;
         static auto FormatBytes(qint64 bytes) -> QString;
 
-        // ==================== State ====================
+        // ==================== 状态 ====================
 
-        LoginViewModel* m_login_view_model;
-        services::TokenStore* m_token_store;
-        services::AuthService* m_auth_service;
+        LoginViewModel* m_login_view_model; ///< 登录视图模型
+        services::TokenStore* m_token_store; ///< 令牌存储
+        services::AuthService* m_auth_service; ///< 认证服务
 
-        bool m_is_logged_in{ false };
-        QString m_logged_in_user_name;
-        qint64 m_storage_used{ 0 };
-        qint64 m_storage_quota{ 0 };
-        QString m_server_url;
+        bool m_is_logged_in{ false }; ///< 是否已登录
+        QString m_logged_in_user_name; ///< 已登录用户名
+        qint64 m_storage_used{ 0 }; ///< 已使用存储空间
+        qint64 m_storage_quota{ 0 }; ///< 存储配额
+        QString m_server_url; ///< 服务器 URL
 
-        inline static SessionViewModel* s_instance = nullptr;
-        inline static QJSEngine* s_engine = nullptr;
-    };
+        inline static SessionViewModel* s_instance = nullptr; ///< 单例实例
+        inline static QJSEngine* s_engine = nullptr; ///< JS 引擎实例
 
 } // namespace disk::qml::viewmodels

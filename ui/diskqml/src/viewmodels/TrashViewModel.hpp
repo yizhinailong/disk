@@ -1,15 +1,14 @@
 /**
  * @file TrashViewModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QML ViewModel for trash management: list, restore, delete, clear
+ * @brief 回收站视图模型，管理回收站列表、恢复、删除和清空
  *
  * @copyright Copyright (c) 2026
  *
  * @details
- * Owns the trash list state: loading/error, pagination, selection set.
- * Uses TrashService for all API interactions.
- * QML layer binds to properties and invokes Q_INVOKABLE methods.
- */
+ * 管理回收站列表状态：加载/错误、分页、选择集。
+ * 使用 TrashService 处理所有 API 交互。
+ * QML 层绑定属性并调用 Q_INVOKABLE 方法。
 
 #pragma once
 
@@ -32,49 +31,40 @@ namespace disk::qml::services {
 namespace disk::qml::viewmodels {
 
     /**
-     * @brief QML ViewModel that drives the trash page.
+     * @brief 驱动回收站页面的 QML 视图模型。
      *
      * @details
-     * Coordinates listing, restore, permanent delete, and clear-all operations.
-     * Delegates all network I/O to TrashService.
+     * 协调列表、恢复、永久删除和清空操作。
+     * 将所有网络 I/O 委托给 TrashService。
      *
-     * Singleton boundary audit (Task 7): Page-scoped (trash page state).
-     * Kept as QML_SINGLETON for now to preserve typed registration and imports;
-     * planned migration target is explicit page-level instantiation/injection.
+     * 单例边界审计（任务 7）：页面作用域（回收站页面状态）。
+     * 暂时保留 QML_SINGLETON 以保持类型注册和导入；
+     * 计划迁移目标为显式页面级实例化/注入。
      */
     class TrashViewModel : public QObject {
         Q_OBJECT
         QML_ELEMENT
         QML_SINGLETON
 
-        // ==================== Loading / Error ====================
+        // ==================== 加载/错误 ====================
 
-        /// True while an API call is in flight.
-        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged)
-        /// Last error message; empty on success.
-        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged)
+        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged) ///< API 请求进行中时为 true
+        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged) ///< 最后的错误消息；成功时为空
 
-        // ==================== Pagination ====================
+        // ==================== 分页 ====================
 
-        /// Current page number (1-based).
-        Q_PROPERTY(int currentPage READ CurrentPage NOTIFY currentPageChanged)
-        /// Total number of pages from the last response.
-        Q_PROPERTY(int totalPages READ TotalPages NOTIFY totalPagesChanged)
-        /// Total item count from the last response.
-        Q_PROPERTY(int totalItems READ TotalItems NOTIFY totalItemsChanged)
+        Q_PROPERTY(int currentPage READ CurrentPage NOTIFY currentPageChanged) ///< 当前页码（从 1 开始）
+        Q_PROPERTY(int totalPages READ TotalPages NOTIFY totalPagesChanged) ///< 上次响应的总页数
+        Q_PROPERTY(int totalItems READ TotalItems NOTIFY totalItemsChanged) ///< 上次响应的总条目数
 
-        // ==================== Selection ====================
+        // ==================== 选择 ====================
 
-        /// Number of currently selected items.
-        Q_PROPERTY(int selectionCount READ SelectionCount NOTIFY selectionChanged)
-        /// True when at least one item is selected.
-        Q_PROPERTY(bool hasSelection READ HasSelection NOTIFY selectionChanged)
+        Q_PROPERTY(int selectionCount READ SelectionCount NOTIFY selectionChanged) ///< 当前选中的条目数
+        Q_PROPERTY(bool hasSelection READ HasSelection NOTIFY selectionChanged) ///< 至少选中一个条目时为 true
 
-        // ==================== Model ====================
+        // ==================== 模型 ====================
 
-        /// The trash list model for QML binding.
-        Q_PROPERTY(disk::qml::models::TrashListModel* trashListModel READ TrashListModelPtr CONSTANT)
-
+        Q_PROPERTY(disk::qml::models::TrashListModel* trashListModel READ TrashListModelPtr CONSTANT) ///< QML 绑定用的回收站列表模型
     public:
         explicit TrashViewModel(
             services::TrashService* trashService,
@@ -84,12 +74,12 @@ namespace disk::qml::viewmodels {
         // ==================== Singleton ====================
 
         /**
-         * @brief Register the pre-created instance for use by the QML engine.
+         * @brief 注册预创建的实例供 QML 引擎使用。
          */
         static auto SetInstance(TrashViewModel* instance) -> void;
 
         /**
-         * @brief QML singleton factory — called once by the QML engine.
+         * @brief QML 单例工厂——由 QML 引擎调用一次。
          */
         static auto create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> TrashViewModel*;
 
@@ -104,41 +94,29 @@ namespace disk::qml::viewmodels {
         [[nodiscard]] auto HasSelection() const -> bool;
         [[nodiscard]] auto TrashListModelPtr() const -> models::TrashListModel*;
 
-        // ==================== Actions ====================
+        // ==================== 操作 ====================
 
-        /// Reload the current page of trash items.
-        Q_INVOKABLE void refresh();
+        Q_INVOKABLE void refresh(); ///< 刷新当前页的回收站条目
 
-        /// Restore the currently selected items from trash.
-        Q_INVOKABLE void restoreSelected();
+        Q_INVOKABLE void restoreSelected(); ///< 恢复当前选中的条目
 
-        /// Permanently delete the currently selected items.
-        Q_INVOKABLE void deleteSelected();
+        Q_INVOKABLE void deleteSelected(); ///< 永久删除当前选中的条目
 
-        /// Clear all items from trash (empty trash).
-        Q_INVOKABLE void clearAll();
+        Q_INVOKABLE void clearAll(); ///< 清空回收站
 
-        // ==================== Selection ====================
+        // ==================== 选择 ====================
 
-        /// Toggle selection of a single item by trash ID.
-        Q_INVOKABLE void toggleSelection(qint64 trashId);
-        /// Select all items in the current list.
-        Q_INVOKABLE void selectAll();
-        /// Deselect all items.
-        Q_INVOKABLE void clearSelection();
-        /// Check if a specific item is selected.
-        Q_INVOKABLE bool isSelected(qint64 trashId) const;
-        /// Get list of all selected trash IDs.
-        Q_INVOKABLE QList<qint64> selectedIds() const;
+        Q_INVOKABLE void toggleSelection(qint64 trashId); ///< 切换单个条目的选中状态
+        Q_INVOKABLE void selectAll(); ///< 选中当前列表中的所有条目
+        Q_INVOKABLE void clearSelection(); ///< 取消所有选中
+        Q_INVOKABLE bool isSelected(qint64 trashId) const; ///< 检查指定条目是否被选中
+        Q_INVOKABLE QList<qint64> selectedIds() const; ///< 获取所有选中的回收站 ID 列表
 
-        // ==================== Pagination ====================
+        // ==================== 分页 ====================
 
-        /// Navigate to a specific page.
-        Q_INVOKABLE void goToPage(int page);
-        /// Check if an item is expiring soon (within 7 days).
-        Q_INVOKABLE bool isExpiringSoon(const QString& expiresAt) const;
-        /// Calculate days until expiry (-1 if invalid/empty).
-        Q_INVOKABLE int daysUntilExpiry(const QString& expiresAt) const;
+        Q_INVOKABLE void goToPage(int page); ///< 跳转到指定页
+        Q_INVOKABLE bool isExpiringSoon(const QString& expiresAt) const; ///< 检查条目是否即将过期（7 天内）
+        Q_INVOKABLE int daysUntilExpiry(const QString& expiresAt) const; ///< 计算距离过期的天数（无效/空则返回 -1）
 
     signals:
         void loadingChanged();
@@ -147,40 +125,37 @@ namespace disk::qml::viewmodels {
         void totalPagesChanged();
         void totalItemsChanged();
         void selectionChanged();
-        /// Emitted when a trash operation (restore/delete/clear) succeeds.
+        /// 回收站操作（恢复/删除/清空）成功时发射
         void trashOperationSucceeded(const QString& message);
-        /// Emitted when a trash operation (restore/delete/clear) fails.
+        /// 回收站操作（恢复/删除/清空）失败时发射
         void trashOperationFailed(const QString& message);
 
-    private:
-        // ==================== Private Helpers ====================
+        // ==================== 私有辅助方法 ====================
 
         auto SetLoading(bool loading) -> void;
         auto SetErrorMessage(const QString& message) -> void;
 
-        /// Fetch the trash list for the current page.
-        auto FetchTrashList() -> void;
+        auto FetchTrashList() -> void; ///< 获取当前页的回收站列表
 
-        // ==================== State ====================
+        // ==================== 状态 ====================
 
-        services::TrashService* m_trash_service;
+        services::TrashService* m_trash_service; ///< 回收站服务
 
-        models::TrashListModel* m_trash_list_model;
+        models::TrashListModel* m_trash_list_model; ///< 回收站列表模型
 
-        bool m_loading{ false };
-        QString m_error_message;
+        bool m_loading{ false }; ///< 是否正在加载
+        QString m_error_message; ///< 错误消息
 
-        // Pagination
-        int m_current_page{ 1 };
-        int m_total_pages{ 0 };
-        int m_total_items{ 0 };
-        static constexpr int kPageSize = 100;
+        // 分页
+        int m_current_page{ 1 }; ///< 当前页码
+        int m_total_pages{ 0 }; ///< 总页数
+        int m_total_items{ 0 }; ///< 总条目数
+        static constexpr int kPageSize = 100; ///< 每页条目数
 
-        // Selection
-        QSet<qint64> m_selected_ids;
+        // 选择
+        QSet<qint64> m_selected_ids; ///< 选中的回收站 ID 集合
 
-        inline static TrashViewModel* s_instance = nullptr;
-        inline static QJSEngine* s_engine = nullptr;
-    };
+        inline static TrashViewModel* s_instance = nullptr; ///< 单例实例
+        inline static QJSEngine* s_engine = nullptr; ///< JS 引擎实例
 
 } // namespace disk::qml::viewmodels

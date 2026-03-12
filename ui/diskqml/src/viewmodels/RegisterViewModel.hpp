@@ -1,7 +1,7 @@
 /**
  * @file RegisterViewModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QML singleton ViewModel for register form state
+ * @brief 注册视图模型，管理注册表单状态
  *
  * @copyright Copyright (c) 2026
  *
@@ -23,78 +23,61 @@ namespace disk::qml::services {
 namespace disk::qml::viewmodels {
 
     /**
-     * @brief QML singleton ViewModel for the registration form.
+     * @brief 注册表单的 QML 单例视图模型。
      *
      * @details
-     * Exposes registration form state (username, email, password, confirmPassword,
-     * loading, errorMessage, per-field validation errors) to QML via Q_PROPERTY
-     * bindings. Inline field validation runs as the user types; a final submit()
-     * call triggers the API request. All business logic stays in C++.
+     * 通过 Q_PROPERTY 绑定向 QML 暴露注册表单状态（用户名、邮箱、密码、确认密码、
+     * 加载中、错误消息、各字段验证错误）。用户输入时运行内联字段验证；
+     * 最终的 submit() 调用触发 API 请求。所有业务逻辑都在 C++ 中。
      *
-     * Singleton boundary audit (Task 7): Page-scoped (registration form state).
-     * Kept as QML_SINGLETON for now to preserve typed registration and current
-     * imports; planned migration target is explicit page-level instantiation.
+     * 单例边界审计（任务 7）：页面作用域（注册表单状态）。
+     * 暂时保留 QML_SINGLETON 以保持类型注册和当前导入；
+     * 计划迁移目标为显式页面级实例化。
      *
-     * Singleton lifecycle: an application-owned instance must be created and
-     * registered with SetInstance() before the QML engine calls create().
+     * 单例生命周期：应用拥有的实例必须先通过 SetInstance() 创建并注册，
+     * 然后 QML 引擎才能调用 create()。
      */
     class RegisterViewModel : public QObject {
         Q_OBJECT
         QML_ELEMENT
         QML_SINGLETON
 
-        // ==================== Properties ====================
+        // ==================== 属性 ====================
 
-        /// Desired username for the new account (4-32 chars, alphanumeric + underscore).
-        Q_PROPERTY(QString username READ Username WRITE SetUsername NOTIFY usernameChanged)
-        /// Email address for the new account.
-        Q_PROPERTY(QString email READ Email WRITE SetEmail NOTIFY emailChanged)
-        /// Password for the new account (8-64 chars, mixed case + digits).
-        Q_PROPERTY(QString password READ Password WRITE SetPassword NOTIFY passwordChanged)
-        /// Confirmation password — must match password before submit is enabled.
-        Q_PROPERTY(QString confirmPassword READ ConfirmPassword WRITE SetConfirmPassword NOTIFY confirmPasswordChanged)
-        /// True while the registration API call is in flight.
-        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged)
-        /// Non-empty when registration failed at the API level; cleared by clearError().
-        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged)
-        /// True when all fields are valid, non-empty, and no request is in flight.
-        Q_PROPERTY(bool canSubmit READ CanSubmit NOTIFY canSubmitChanged)
-        /// Inline validation error for the username field; empty when valid or untouched.
-        Q_PROPERTY(QString usernameError READ UsernameError NOTIFY usernameErrorChanged)
-        /// Inline validation error for the email field; empty when valid or untouched.
-        Q_PROPERTY(QString emailError READ EmailError NOTIFY emailErrorChanged)
-        /// Inline validation error for the password field; empty when valid or untouched.
-        Q_PROPERTY(QString passwordError READ PasswordError NOTIFY passwordErrorChanged)
-        /// Inline validation error for the confirm-password field; empty when it matches password.
-        Q_PROPERTY(QString confirmPasswordError READ ConfirmPasswordError NOTIFY confirmPasswordErrorChanged)
-
+        Q_PROPERTY(QString username READ Username WRITE SetUsername NOTIFY usernameChanged) ///< 新账户的用户名（4-32 字符，字母数字+下划线）
+        Q_PROPERTY(QString email READ Email WRITE SetEmail NOTIFY emailChanged) ///< 新账户的邮箱地址
+        Q_PROPERTY(QString password READ Password WRITE SetPassword NOTIFY passwordChanged) ///< 新账户的密码（8-64 字符，大小写+数字）
+        Q_PROPERTY(QString confirmPassword READ ConfirmPassword WRITE SetConfirmPassword NOTIFY confirmPasswordChanged) ///< 确认密码——提交前必须与密码匹配
+        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged) ///< 注册 API 请求进行中时为 true
+        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged) ///< API 级别的注册失败错误消息；clearError() 清除
+        Q_PROPERTY(bool canSubmit READ CanSubmit NOTIFY canSubmitChanged) ///< 所有字段有效、非空且无请求进行中时为 true
+        Q_PROPERTY(QString usernameError READ UsernameError NOTIFY usernameErrorChanged) ///< 用户名字段的内联验证错误；有效或未触碰时为空
+        Q_PROPERTY(QString emailError READ EmailError NOTIFY emailErrorChanged) ///< 邮箱字段的内联验证错误；有效或未触碰时为空
+        Q_PROPERTY(QString passwordError READ PasswordError NOTIFY passwordErrorChanged) ///< 密码字段的内联验证错误；有效或未触碰时为空
+        Q_PROPERTY(QString confirmPasswordError READ ConfirmPasswordError NOTIFY confirmPasswordErrorChanged) ///< 确认密码字段的内联验证错误；与密码匹配时为空
     public:
         explicit RegisterViewModel(services::AuthService* authService, QObject* parent = nullptr);
 
         // ==================== Public API ====================
 
         /**
-         * @brief Register the pre-created instance for use by the QML engine.
+         * @brief 注册预创建的实例供 QML 引擎使用。
          *
          * @details
-         * Must be called before the QML engine requests the singleton via create().
-         * Ownership of @p instance remains with the caller (C++ side).
+         * 必须在 QML 引擎通过 create() 请求单例之前调用。
+         * @p instance 的所有权保留在调用者（C++ 端）。
          */
-        static auto SetInstance(RegisterViewModel* instance) -> void;
 
         /**
-         * @brief QML singleton factory — called once by the QML engine.
+         * @brief QML 单例工厂——由 QML 引擎调用一次。
          *
          * @details
-         * Constraints enforced at runtime:
-         * - s_instance must have been set via SetInstance() beforehand.
-         * - @p qmlEngine must share thread affinity with the instance.
-         * - Only a single QJSEngine may access this singleton; a second engine
-         *   triggers a Q_ASSERT failure.
-         * - Ownership is set to CppOwnership to prevent the engine from deleting
-         *   the instance when the engine is torn down.
+         * 运行时强制约束：
+         * - s_instance 必须事先通过 SetInstance() 设置。
+         * - @p qmlEngine 必须与实例共享线程亲和性。
+         * - 只有一个 QJSEngine 可以访问此单例；第二个引擎会触发 Q_ASSERT 失败。
+         * - 所有权设置为 CppOwnership，防止引擎销毁时删除实例。
          */
-        static auto create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> RegisterViewModel*;
 
         [[nodiscard]] auto Username() const -> const QString&;
         [[nodiscard]] auto Email() const -> const QString&;
@@ -114,28 +97,26 @@ namespace disk::qml::viewmodels {
         auto SetConfirmPassword(const QString& confirmPassword) -> void;
 
         /**
-         * @brief Submit the registration form.
+         * @brief 提交注册表单。
          *
          * @details
-         * No-op if canSubmit is false or a request is already in flight.
-         * Clears errorMessage, sets loading=true, then calls
-         * AuthService::Register(). On success, emits registerSucceeded(username, email).
-         * On failure, sets errorMessage and clears loading.
+         * 如果 canSubmit 为 false 或请求正在进行中则无操作。
+         * 清除 errorMessage，设置 loading=true，然后调用 AuthService::Register()。
+         * 成功时发射 registerSucceeded(username, email)。
+         * 失败时设置 errorMessage 并清除 loading。
          *
-         * A child context QObject is used so that the callback is automatically
-         * discarded if this ViewModel is destroyed before the response arrives.
+         * 使用子上下文 QObject，以便在此 ViewModel 在响应到达前被销毁时
+         * 自动丢弃回调。
          */
-        Q_INVOKABLE void submit();
 
         /**
-         * @brief Clear all error messages (global and per-field).
+         * @brief 清除所有错误消息（全局和各字段）。
          *
          * @details
-         * Resets errorMessage, usernameError, emailError, passwordError, and
-         * confirmPasswordError to empty strings. Useful when the user navigates
-         * away and returns to a clean form state.
+         * 将 errorMessage、usernameError、emailError、passwordError 和
+         * confirmPasswordError 重置为空字符串。当用户导航离开
+         * 并返回到干净的表单状态时很有用。
          */
-        Q_INVOKABLE void clearError();
 
         // ==================== Signals ====================
 
@@ -154,7 +135,7 @@ namespace disk::qml::viewmodels {
         void registerSucceeded(const QString& username, const QString& email);
 
     private:
-        // ==================== Private Helpers ====================
+        // ==================== 私有辅助方法 ====================
 
         auto ValidateUsername() -> void;
         auto ValidateEmail() -> void;
@@ -168,23 +149,22 @@ namespace disk::qml::viewmodels {
         auto SetPasswordError(const QString& error) -> void;
         auto SetConfirmPasswordError(const QString& error) -> void;
 
-        // ==================== State ====================
+        // ==================== 状态 ====================
 
-        services::AuthService* m_auth_service;
-        QString m_username;
-        QString m_email;
-        QString m_password;
-        QString m_confirm_password;
-        bool m_loading{ false };
-        QString m_error_message;
-        bool m_can_submit{ false };
-        QString m_username_error;
-        QString m_email_error;
-        QString m_password_error;
-        QString m_confirm_password_error;
+        services::AuthService* m_auth_service; ///< 认证服务
+        QString m_username; ///< 用户名
+        QString m_email; ///< 邮箱
+        QString m_password; ///< 密码
+        QString m_confirm_password; ///< 确认密码
+        bool m_loading{ false }; ///< 是否正在加载
+        QString m_error_message; ///< 错误消息
+        bool m_can_submit{ false }; ///< 是否可提交
+        QString m_username_error; ///< 用户名错误
+        QString m_email_error; ///< 邮箱错误
+        QString m_password_error; ///< 密码错误
+        QString m_confirm_password_error; ///< 确认密码错误
 
-        inline static RegisterViewModel* s_instance = nullptr;
-        inline static QJSEngine* s_engine = nullptr;
-    };
+        inline static RegisterViewModel* s_instance = nullptr; ///< 单例实例
+        inline static QJSEngine* s_engine = nullptr; ///< JS 引擎实例
 
 } // namespace disk::qml::viewmodels

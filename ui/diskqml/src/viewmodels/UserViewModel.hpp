@@ -1,7 +1,7 @@
 /**
  * @file UserViewModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QML singleton ViewModel for user profile, storage, and password workflows
+ * @brief 用户视图模型，管理用户资料、存储和密码
  *
  * @copyright Copyright (c) 2026
  *
@@ -23,84 +23,62 @@ namespace disk::qml::services {
 namespace disk::qml::viewmodels {
 
     /**
-     * @brief QML singleton ViewModel for user profile, storage, and password management.
+     * @brief 用户资料、存储和密码管理的 QML 单例视图模型。
      *
      * @details
-     * Exposes user profile data, storage statistics, and password change functionality
-     * to QML via Q_PROPERTY bindings. All business logic is handled in C++ via UserService;
-     * QML only drives the UI.
+     * 通过 Q_PROPERTY 绑定向 QML 暴露用户资料数据、存储统计和密码更改功能。
+     * 所有业务逻辑通过 UserService 在 C++ 中处理；QML 仅驱动 UI。
      *
-     * Password validation is performed locally before making API calls:
-     * - New password minimum length: 8 characters
-     * - New password and confirm password must match
+     * 密码验证在调用 API 前本地进行：
+     * - 新密码最小长度：8 字符
+     * - 新密码和确认密码必须匹配
      *
-     * Singleton boundary audit (Task 7): Page-scoped (profile/settings page
-     * workflow state). Kept as QML_SINGLETON for now to preserve typed
-     * registration and imports; planned migration target is explicit
-     * instantiation/injection.
+     * 单例边界审计（任务 7）：页面作用域（资料/设置页面工作流状态）。
+     * 暂时保留 QML_SINGLETON 以保持类型注册和导入；
+     * 计划迁移目标为显式实例化/注入。
      *
-     * Singleton lifecycle: an application-owned instance must be created and
-     * registered with SetInstance() before the QML engine calls create().
+     * 单例生命周期：应用拥有的实例必须先通过 SetInstance() 创建并注册，
+     * 然后 QML 引擎才能调用 create()。
      */
     class UserViewModel : public QObject {
         Q_OBJECT
         QML_ELEMENT
         QML_SINGLETON
 
-        // ==================== Profile Properties (Read-Only from API) ====================
+        // ==================== 资料属性（从 API 只读） ====================
 
-        /// User's login name (read-only).
-        Q_PROPERTY(QString username READ Username NOTIFY profileChanged)
-        /// User's email address (read-only).
-        Q_PROPERTY(QString email READ Email NOTIFY profileChanged)
-        /// User's display nickname.
-        Q_PROPERTY(QString nickname READ Nickname NOTIFY profileChanged)
-        /// User's avatar URL.
-        Q_PROPERTY(QString avatar READ Avatar NOTIFY profileChanged)
+        Q_PROPERTY(QString username READ Username NOTIFY profileChanged) ///< 用户登录名（只读）
+        Q_PROPERTY(QString email READ Email NOTIFY profileChanged) ///< 用户邮箱地址（只读）
+        Q_PROPERTY(QString nickname READ Nickname NOTIFY profileChanged) ///< 用户显示昵称
+        Q_PROPERTY(QString avatar READ Avatar NOTIFY profileChanged) ///< 用户头像 URL
 
-        // ==================== Storage Properties (Read-Only from API) ====================
+        // ==================== 存储属性（从 API 只读） ====================
 
-        /// Bytes used.
-        Q_PROPERTY(quint64 storageUsed READ StorageUsed NOTIFY storageChanged)
-        /// Bytes quota.
-        Q_PROPERTY(quint64 storageQuota READ StorageQuota NOTIFY storageChanged)
-        /// Usage percentage (0-100).
-        Q_PROPERTY(double storagePercentage READ StoragePercentage NOTIFY storageChanged)
-        /// Total file count.
-        Q_PROPERTY(int fileCount READ FileCount NOTIFY storageChanged)
-        /// Total folder count.
-        Q_PROPERTY(int folderCount READ FolderCount NOTIFY storageChanged)
+        Q_PROPERTY(quint64 storageUsed READ StorageUsed NOTIFY storageChanged) ///< 已用字节
+        Q_PROPERTY(quint64 storageQuota READ StorageQuota NOTIFY storageChanged) ///< 配额字节
+        Q_PROPERTY(double storagePercentage READ StoragePercentage NOTIFY storageChanged) ///< 使用百分比（0-100）
+        Q_PROPERTY(int fileCount READ FileCount NOTIFY storageChanged) ///< 总文件数
+        Q_PROPERTY(int folderCount READ FolderCount NOTIFY storageChanged) ///< 总文件夹数
 
-        // ==================== Profile Edit Form ====================
+        // ==================== 资料编辑表单 ====================
 
-        /// Editable nickname for updateProfile().
-        Q_PROPERTY(QString editNickname READ EditNickname WRITE SetEditNickname NOTIFY editNicknameChanged)
-        /// Editable avatar URL for updateProfile().
-        Q_PROPERTY(QString editAvatar READ EditAvatar WRITE SetEditAvatar NOTIFY editAvatarChanged)
+        Q_PROPERTY(QString editNickname READ EditNickname WRITE SetEditNickname NOTIFY editNicknameChanged) ///< 可编辑的昵称（用于 updateProfile）
+        Q_PROPERTY(QString editAvatar READ EditAvatar WRITE SetEditAvatar NOTIFY editAvatarChanged) ///< 可编辑的头像 URL（用于 updateProfile）
 
-        // ==================== Password Change Form ====================
+        // ==================== 密码更改表单 ====================
 
-        /// Current password input for changePassword().
-        Q_PROPERTY(QString oldPassword READ OldPassword WRITE SetOldPassword NOTIFY oldPasswordChanged)
-        /// New password input for changePassword().
-        Q_PROPERTY(QString newPassword READ NewPassword WRITE SetNewPassword NOTIFY newPasswordChanged)
-        /// Confirm password input for changePassword().
-        Q_PROPERTY(QString confirmPassword READ ConfirmPassword WRITE SetConfirmPassword NOTIFY confirmPasswordChanged)
-        /// Validation error for password form (empty if valid).
-        Q_PROPERTY(QString passwordError READ PasswordError NOTIFY passwordErrorChanged)
-        /// True when password form is valid and can be submitted.
-        Q_PROPERTY(bool canChangePassword READ CanChangePassword NOTIFY canChangePasswordChanged)
-        /// Password strength validation message (for real-time UI feedback).
-        Q_PROPERTY(QString passwordStrengthMessage READ PasswordStrengthMessage NOTIFY passwordStrengthMessageChanged)
-        /// True when password passes all validation rules.
-        Q_PROPERTY(bool isPasswordValid READ IsPasswordValid NOTIFY passwordStrengthMessageChanged)
+        Q_PROPERTY(QString oldPassword READ OldPassword WRITE SetOldPassword NOTIFY oldPasswordChanged) ///< 当前密码输入（用于 changePassword）
+        Q_PROPERTY(QString newPassword READ NewPassword WRITE SetNewPassword NOTIFY newPasswordChanged) ///< 新密码输入（用于 changePassword）
+        Q_PROPERTY(QString confirmPassword READ ConfirmPassword WRITE SetConfirmPassword NOTIFY confirmPasswordChanged) ///< 确认密码输入（用于 changePassword）
+        Q_PROPERTY(QString passwordError READ PasswordError NOTIFY passwordErrorChanged) ///< 密码表单验证错误（有效时为空）
+        Q_PROPERTY(bool canChangePassword READ CanChangePassword NOTIFY canChangePasswordChanged) ///< 密码表单有效且可提交时为 true
+        Q_PROPERTY(QString passwordStrengthMessage READ PasswordStrengthMessage NOTIFY passwordStrengthMessageChanged) ///< 密码强度验证消息（用于实时 UI 反馈）
+        Q_PROPERTY(bool isPasswordValid READ IsPasswordValid NOTIFY passwordStrengthMessageChanged) ///< 密码通过所有验证规则时为 true
 
-        // ==================== State ====================
+        // ==================== 状态 ====================
 
-        /// True while any API call is in flight.
-        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged)
-        /// Non-empty when an operation failed.
-        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged)
+        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged) ///< 任何 API 请求进行中时为 true
+        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged) ///< 操作失败时的错误消息
 
     public:
         explicit UserViewModel(services::UserService* userService, QObject* parent = nullptr);
@@ -108,12 +86,12 @@ namespace disk::qml::viewmodels {
         // ==================== Singleton API ====================
 
         /**
-         * @brief Register the pre-created instance for use by the QML engine.
+         * @brief 注册预创建的实例供 QML 引擎使用。
          */
         static auto SetInstance(UserViewModel* instance) -> void;
 
         /**
-         * @brief QML singleton factory — called once by the QML engine.
+         * @brief QML 单例工厂——由 QML 引擎调用一次。
          */
         static auto create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> UserViewModel*;
 
@@ -161,65 +139,65 @@ namespace disk::qml::viewmodels {
         // ==================== Actions ====================
 
         /**
-         * @brief Fetch user profile from the server.
+         * @brief 从服务器获取用户资料。
          *
          * @details
-         * Calls UserService::GetProfile(). Updates profile properties on success.
-         * Also updates editNickname and editAvatar to current values.
+         * 调用 UserService::GetProfile()。成功时更新资料属性。
+         * 同时将 editNickname 和 editAvatar 更新为当前值。
          */
         Q_INVOKABLE void loadProfile();
 
         /**
-         * @brief Fetch storage statistics from the server.
+         * @brief 从服务器获取存储统计。
          *
          * @details
-         * Calls UserService::GetStorage(). Updates storage properties on success.
+         * 调用 UserService::GetStorage()。成功时更新存储属性。
          */
         Q_INVOKABLE void loadStorage();
 
         /**
-         * @brief Update user profile with edited nickname/avatar.
+         * @brief 使用编辑的昵称/头像更新用户资料。
          *
          * @details
-         * Calls UserService::UpdateProfile() with editNickname and editAvatar.
-         * At least one field must be non-empty. Updates profile properties on success.
+         * 使用 editNickname 和 editAvatar 调用 UserService::UpdateProfile()。
+         * 至少一个字段必须非空。成功时更新资料属性。
          */
         Q_INVOKABLE void updateProfile();
 
         /**
-         * @brief Change user password.
+         * @brief 更改用户密码。
          *
          * @details
-         * Validates password form locally before calling UserService::ChangePassword():
-         * - newPassword length >= 8
+         * 在调用 UserService::ChangePassword() 前本地验证密码表单：
+         * - newPassword 长度 >= 8
          * - newPassword == confirmPassword
-         * - oldPassword non-empty
-         * If validation fails, sets passwordError and returns without API call.
-         * On success, clears password form fields.
+         * - oldPassword 非空
+         * 如果验证失败，设置 passwordError 并返回，不调用 API。
+         * 成功时清空密码表单字段。
          */
         Q_INVOKABLE void changePassword();
 
         /**
-         * @brief Clear the current error message.
+         * @brief 清除当前错误消息。
          */
         Q_INVOKABLE void clearError();
 
         /**
-         * @brief Reset password form to empty state.
+         * @brief 将密码表单重置为空状态。
          */
         Q_INVOKABLE void clearPasswordForm();
         /**
-         * @brief Validate password strength and update passwordStrengthMessage.
+         * @brief 验证密码强度并更新 passwordStrengthMessage。
          *
          * @details
-         * Checks password against rules:
-         * - Length 8-64 characters
-         * - Contains at least one lowercase letter
-         * - Contains at least one uppercase letter
-         * - Contains at least one digit
+         * 检查密码是否符合规则：
+         * - 长度 8-64 字符
+         * - 至少包含一个小写字母
+         * - 至少包含一个大写字母
+         * - 至少包含一个数字
          *
-         * Updates passwordStrengthMessage property with validation result.
-         * Call this from QML when newPassword changes.
+         * 更新 passwordStrengthMessage 属性为验证结果。
+         * 当 newPassword 变化时从 QML 调用此方法。
          */
         Q_INVOKABLE void validatePasswordStrength(const QString& password);
 
@@ -239,13 +217,12 @@ namespace disk::qml::viewmodels {
         void loadingChanged();
         void errorMessageChanged();
 
-        /// Emitted when profile update succeeds.
+        /// 资料更新成功时发射
         void profileUpdated();
-        /// Emitted when password change succeeds.
+        /// 密码更改成功时发射
         void passwordChanged();
 
-    private:
-        // ==================== Private Helpers ====================
+        // ==================== 私有辅助方法 ====================
 
         auto SetLoading(bool loading) -> void;
         auto SetErrorMessage(const QString& message) -> void;
@@ -253,49 +230,48 @@ namespace disk::qml::viewmodels {
         auto ValidatePasswordForm() -> bool;
         auto UpdateCanChangePassword() -> void;
 
-        // ==================== Dependencies ====================
+        // ==================== 依赖 ====================
 
-        services::UserService* m_user_service;
+        services::UserService* m_user_service; ///< 用户服务
 
-        // ==================== Profile State ====================
+        // ==================== 资料状态 ====================
 
-        QString m_username;
-        QString m_email;
-        QString m_nickname;
-        QString m_avatar;
+        QString m_username; ///< 用户名
+        QString m_email; ///< 邮箱
+        QString m_nickname; ///< 昵称
+        QString m_avatar; ///< 头像
 
-        // ==================== Storage State ====================
+        // ==================== 存储状态 ====================
 
-        quint64 m_storage_used{ 0 };
-        quint64 m_storage_quota{ 0 };
-        double m_storage_percentage{ 0.0 };
-        int m_file_count{ 0 };
-        int m_folder_count{ 0 };
+        quint64 m_storage_used{ 0 }; ///< 已用存储
+        quint64 m_storage_quota{ 0 }; ///< 存储配额
+        double m_storage_percentage{ 0.0 }; ///< 存储百分比
+        int m_file_count{ 0 }; ///< 文件数
+        int m_folder_count{ 0 }; ///< 文件夹数
 
-        // ==================== Edit Form State ====================
+        // ==================== 编辑表单状态 ====================
 
-        QString m_edit_nickname;
-        QString m_edit_avatar;
+        QString m_edit_nickname; ///< 编辑昵称
+        QString m_edit_avatar; ///< 编辑头像
 
-        // ==================== Password Form State ====================
+        // ==================== 密码表单状态 ====================
 
-        QString m_old_password;
-        QString m_new_password;
-        QString m_confirm_password;
-        QString m_password_error;
-        QString m_password_strength_message;
-        bool m_is_password_valid{ false };
-        bool m_can_change_password{ false };
+        QString m_old_password; ///< 旧密码
+        QString m_new_password; ///< 新密码
+        QString m_confirm_password; ///< 确认密码
+        QString m_password_error; ///< 密码错误
+        QString m_password_strength_message; ///< 密码强度消息
+        bool m_is_password_valid{ false }; ///< 密码是否有效
+        bool m_can_change_password{ false }; ///< 是否可更改密码
 
-        // ==================== Loading/Error State ====================
+        // ==================== 加载/错误状态 ====================
 
-        bool m_loading{ false };
-        QString m_error_message;
+        bool m_loading{ false }; ///< 是否正在加载
+        QString m_error_message; ///< 错误消息
 
-        // ==================== Singleton Instance ====================
+        // ==================== 单例实例 ====================
 
-        inline static UserViewModel* s_instance = nullptr;
-        inline static QJSEngine* s_engine = nullptr;
-    };
+        inline static UserViewModel* s_instance = nullptr; ///< 单例实例
+        inline static QJSEngine* s_engine = nullptr; ///< JS 引擎实例
 
 } // namespace disk::qml::viewmodels
