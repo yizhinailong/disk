@@ -6,3 +6,4 @@ CMakeUserPresets.json
 .cache
 .sisyphus
 .qtcreator
+output
