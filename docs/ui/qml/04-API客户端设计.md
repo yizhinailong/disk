@@ -1229,7 +1229,7 @@ request.setRawHeader("Authorization", "Bearer " + shareToken.toUtf8());
 | 版本 | 日期 | 变更说明 |
 |------|------|----------|
 | 1.0 | 2026-03-08 | 初始版本，整合 Wave 1 任务输出 |
-
+| 1.1 | 2026-03-13 | 同步架构文档，验证 endpoint checker 差异为 0 |
 ---
 
 ## 10. 参考文档
