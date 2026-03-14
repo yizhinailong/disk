@@ -216,13 +216,14 @@ ctest --preset linux-debug-clang -R PasswdHash -V
 ```
 disk/
 ├── docs/                    # 项目文档
-│   ├── 00-系统概述.md      # 架构、技术栈、性能指标
-│   ├── 01-功能需求规格.md  # 详细功能需求
-│   ├── 02-API接口设计.md   # RESTful API 规范
-│   ├── 03-数据库设计.md    # ER图、表结构、索引
-│   ├── 04-系统测试计划.md  # 测试策略
-│   ├── 05-部署运维指南.md  # 部署配置
-│   └── 06-单元测试用例.md # 测试用例文档
+│   └── design/             # 设计文档
+│       ├── 00-系统概述.md      # 架构、技术栈、性能指标
+│       ├── 01-功能需求规格.md  # 详细功能需求
+│       ├── 02-API接口设计.md   # RESTful API 规范
+│       ├── 03-数据库设计.md    # ER图、表结构、索引
+│       ├── 04-系统测试计划.md  # 测试策略
+│       ├── 05-部署运维指南.md  # 部署配置
+│       └── 06-单元测试用例.md # 测试用例文档
 │
 ├── src/                     # 源代码
 │   ├── controllers/         # HTTP 控制器
@@ -265,11 +266,11 @@ disk/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/user/profile` | 获取用户信息 (Bearer, 已实现) |
-| PATCH | `/api/user/profile` | 更新用户信息 (Bearer, 未实现) |
-| PUT | `/api/user/password` | 修改密码 (Bearer, 未实现) |
-| GET | `/api/user/storage` | 获取存储空间统计 (Bearer, 未实现) |
+| PATCH | `/api/user/profile` | 更新用户信息 (Bearer, 已实现) |
+| PUT | `/api/user/password` | 修改密码 (Bearer, 已实现) |
+| GET | `/api/user/storage` | 获取存储空间统计 (Bearer, 已实现) |
 
-详细的 API 文档请参考 [docs/02-API接口设计.md](docs/02-API接口设计.md)
+详细的 API 文档请参考 [docs/design/02-API接口设计.md](docs/design/02-API接口设计.md)
 
 ## 🧪 测试
 
@@ -367,13 +368,13 @@ clang-format -i src/controllers/AuthController.cpp
 
 ## 📚 文档
 
-- [系统概述](docs/00-系统概述.md) - 架构、技术栈、性能指标
-- [功能需求规格](docs/01-功能需求规格.md) - 详细功能需求
-- [API接口设计](docs/02-API接口设计.md) - RESTful API 规范
-- [数据库设计](docs/03-数据库设计.md) - ER图、表结构、索引
-- [系统测试计划](docs/04-系统测试计划.md) - 测试策略
-- [部署运维指南](docs/05-部署运维指南.md) - 部署配置
-- [单元测试用例](docs/06-单元测试用例.md) - 测试用例文档
+- [系统概述](docs/design/00-系统概述.md) - 架构、技术栈、性能指标
+- [功能需求规格](docs/design/01-功能需求规格.md) - 详细功能需求
+- [API接口设计](docs/design/02-API接口设计.md) - RESTful API 规范
+- [数据库设计](docs/design/03-数据库设计.md) - ER图、表结构、索引
+- [系统测试计划](docs/design/04-系统测试计划.md) - 测试策略
+- [部署运维指南](docs/design/05-部署运维指南.md) - 部署配置
+- [单元测试用例](docs/design/06-单元测试用例.md) - 测试用例文档
 - [开发规范](AGENTS.md) - 代码规范和开发指南
 
 ## 🌟 项目进度

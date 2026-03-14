@@ -16,7 +16,7 @@
 
 | Header | 必填 | 说明 |
 |--------|------|------|
-| Content-Type | 是 | `application/json`（文件上传时为 `multipart/form-data`） |
+| Content-Type | 是 | `application/json`（分片上传时为 `application/octet-stream`，详见上传分片接口） |
 | Authorization | 是* | `Bearer <access_token>`（需认证的接口） |
 | X-Request-ID | 否 | 请求追踪 ID，用于日志关联 |
 
@@ -791,22 +791,25 @@ Authorization: Bearer <access_token>
 
 ```
 Authorization: Bearer <access_token>
-Content-Type: multipart/form-data
+Content-Type: application/octet-stream
 ```
 
 | Header | 必填 | 说明 |
 |--------|------|------|
 | Authorization | 是 | Bearer 访问令牌 |
-| Content-Type | 是 | multipart/form-data |
+| Content-Type | 是 | application/octet-stream |
 
-#### 表单参数
+#### 查询参数
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | upload_id | string | 是 | 上传会话 ID（从初始化上传获取） |
 | chunk_index | integer | 是 | 分片索引（从 0 开始） |
 | chunk_hash | string | 是 | 分片 MD5 哈希（32 字符小写十六进制） |
-| chunk_data | binary | 是 | 分片二进制数据 |
+
+#### 请求体
+
+二进制数据（原始分片内容）
 
 #### 错误响应矩阵
 

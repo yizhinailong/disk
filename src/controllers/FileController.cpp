@@ -69,8 +69,8 @@ namespace disk::file {
         // 1. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 2. 从 multipart/form-data 提取参数
-        // 注意：UploadChunk 使用 multipart/form-data，而非 JSON
+        // 2. 从查询参数提取元数据
+        // 注意：UploadChunk 使用查询参数 (upload_id, chunk_index, chunk_hash) + 原始二进制请求体 (application/octet-stream)
         const auto upload_id = std::string(request->getParameter("upload_id"));
         const auto chunk_index_str = std::string(request->getParameter("chunk_index"));
         const auto chunk_hash = std::string(request->getParameter("chunk_hash"));

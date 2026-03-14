@@ -369,8 +369,8 @@ namespace disk::file {
      * - chunk_index: 非负整数
      * - chunk_hash: 32字符的十六进制字符串（MD5）
      *
-     * 注意：实际分片数据通过 multipart/form-data 上传，
-     * 此 DTO 仅包含元数据验证。
+     * 注意：实际请求使用查询参数 (upload_id, chunk_index, chunk_hash) + 原始二进制请求体 (application/octet-stream)，
+     * 此 DTO 已废弃，仅供遗留代码参考。
      */
     struct UploadChunkRequest {
         std::string upload_id;
