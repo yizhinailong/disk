@@ -43,11 +43,12 @@ namespace disk::qml::viewmodels {
 
         // ==================== 属性 ====================
 
-        Q_PROPERTY(QString account READ Account WRITE SetAccount NOTIFY accountChanged) ///< 登录账号（用户名或邮箱）
+        Q_PROPERTY(QString account READ Account WRITE SetAccount NOTIFY accountChanged)     ///< 登录账号（用户名或邮箱）
         Q_PROPERTY(QString password READ Password WRITE SetPassword NOTIFY passwordChanged) ///< 登录密码
-        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged) ///< 登录 API 请求进行中时为 true
-        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged) ///< 登录失败时的错误消息；clearError() 或新的 submit() 会清除
-        Q_PROPERTY(bool canSubmit READ CanSubmit NOTIFY canSubmitChanged) ///< 账号和密码非空且无请求进行中时为 true
+        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged)                         ///< 登录 API 请求进行中时为 true
+        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged)       ///< 登录失败时的错误消息；clearError() 或新的 submit() 会清除
+        Q_PROPERTY(bool canSubmit READ CanSubmit NOTIFY canSubmitChanged)                   ///< 账号和密码非空且无请求进行中时为 true
+
     public:
         explicit LoginViewModel(services::AuthService* authService, QObject* parent = nullptr);
 
@@ -60,6 +61,7 @@ namespace disk::qml::viewmodels {
          * 必须在 QML 引擎通过 create() 请求单例之前调用。
          * @p instance 的所有权保留在调用者（C++ 端）。
          */
+        static auto SetInstance(LoginViewModel* instance) -> void;
 
         /**
          * @brief QML 单例工厂——由 QML 引擎调用一次。
@@ -71,6 +73,7 @@ namespace disk::qml::viewmodels {
          * - 只有一个 QJSEngine 可以访问此单例；第二个引擎会触发 Q_ASSERT 失败。
          * - 所有权设置为 CppOwnership，防止引擎销毁时删除实例。
          */
+        static auto create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> LoginViewModel*;
 
         [[nodiscard]] auto Account() const -> const QString&;
         [[nodiscard]] auto Password() const -> const QString&;
@@ -101,6 +104,18 @@ namespace disk::qml::viewmodels {
          * 将 errorMessage 重置为空字符串。当用户在失败尝试后编辑字段
          * 且 UI 想要隐藏错误横幅时很有用。
          */
+        Q_INVOKABLE void clearError();
+
+        /**
+         * @brief 提交登录表单。
+         *
+         * @details
+         * 如果 canSubmit 为 false 或请求正在进行中则无操作。
+         * 设置 loading=true 并清除之前的错误，然后调用 AuthService::Login()。
+         * 成功时发射 loginSucceeded(username, storageUsed, storageQuota)。
+         * 失败时设置 errorMessage 并清除 loading。
+         */
+        Q_INVOKABLE void submit();
 
         // ==================== Signals ====================
 
@@ -121,14 +136,15 @@ namespace disk::qml::viewmodels {
 
         // ==================== 状态 ====================
 
-        services::AuthService* m_auth_service; ///< 认证服务
-        QString m_account; ///< 账号
-        QString m_password; ///< 密码
-        bool m_loading{ false }; ///< 是否正在加载
-        QString m_error_message; ///< 错误消息
-        bool m_can_submit{ false }; ///< 是否可提交
+        services::AuthService* m_auth_service;              ///< 认证服务
+        QString m_account;                                  ///< 账号
+        QString m_password;                                 ///< 密码
+        bool m_loading{ false };                            ///< 是否正在加载
+        QString m_error_message;                            ///< 错误消息
+        bool m_can_submit{ false };                         ///< 是否可提交
 
         inline static LoginViewModel* s_instance = nullptr; ///< 单例实例
-        inline static QJSEngine* s_engine = nullptr; ///< JS 引擎实例
+        inline static QJSEngine* s_engine = nullptr;        ///< JS 引擎实例
+    };
 
 } // namespace disk::qml::viewmodels

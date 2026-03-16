@@ -48,36 +48,36 @@ namespace disk::qml::viewmodels {
         // ==================== 资料属性（从 API 只读） ====================
 
         Q_PROPERTY(QString username READ Username NOTIFY profileChanged) ///< 用户登录名（只读）
-        Q_PROPERTY(QString email READ Email NOTIFY profileChanged) ///< 用户邮箱地址（只读）
+        Q_PROPERTY(QString email READ Email NOTIFY profileChanged)       ///< 用户邮箱地址（只读）
         Q_PROPERTY(QString nickname READ Nickname NOTIFY profileChanged) ///< 用户显示昵称
-        Q_PROPERTY(QString avatar READ Avatar NOTIFY profileChanged) ///< 用户头像 URL
+        Q_PROPERTY(QString avatar READ Avatar NOTIFY profileChanged)     ///< 用户头像 URL
 
         // ==================== 存储属性（从 API 只读） ====================
 
-        Q_PROPERTY(quint64 storageUsed READ StorageUsed NOTIFY storageChanged) ///< 已用字节
-        Q_PROPERTY(quint64 storageQuota READ StorageQuota NOTIFY storageChanged) ///< 配额字节
+        Q_PROPERTY(quint64 storageUsed READ StorageUsed NOTIFY storageChanged)            ///< 已用字节
+        Q_PROPERTY(quint64 storageQuota READ StorageQuota NOTIFY storageChanged)          ///< 配额字节
         Q_PROPERTY(double storagePercentage READ StoragePercentage NOTIFY storageChanged) ///< 使用百分比（0-100）
-        Q_PROPERTY(int fileCount READ FileCount NOTIFY storageChanged) ///< 总文件数
-        Q_PROPERTY(int folderCount READ FolderCount NOTIFY storageChanged) ///< 总文件夹数
+        Q_PROPERTY(int fileCount READ FileCount NOTIFY storageChanged)                    ///< 总文件数
+        Q_PROPERTY(int folderCount READ FolderCount NOTIFY storageChanged)                ///< 总文件夹数
 
         // ==================== 资料编辑表单 ====================
 
         Q_PROPERTY(QString editNickname READ EditNickname WRITE SetEditNickname NOTIFY editNicknameChanged) ///< 可编辑的昵称（用于 updateProfile）
-        Q_PROPERTY(QString editAvatar READ EditAvatar WRITE SetEditAvatar NOTIFY editAvatarChanged) ///< 可编辑的头像 URL（用于 updateProfile）
+        Q_PROPERTY(QString editAvatar READ EditAvatar WRITE SetEditAvatar NOTIFY editAvatarChanged)         ///< 可编辑的头像 URL（用于 updateProfile）
 
         // ==================== 密码更改表单 ====================
 
-        Q_PROPERTY(QString oldPassword READ OldPassword WRITE SetOldPassword NOTIFY oldPasswordChanged) ///< 当前密码输入（用于 changePassword）
-        Q_PROPERTY(QString newPassword READ NewPassword WRITE SetNewPassword NOTIFY newPasswordChanged) ///< 新密码输入（用于 changePassword）
+        Q_PROPERTY(QString oldPassword READ OldPassword WRITE SetOldPassword NOTIFY oldPasswordChanged)                 ///< 当前密码输入（用于 changePassword）
+        Q_PROPERTY(QString newPassword READ NewPassword WRITE SetNewPassword NOTIFY newPasswordChanged)                 ///< 新密码输入（用于 changePassword）
         Q_PROPERTY(QString confirmPassword READ ConfirmPassword WRITE SetConfirmPassword NOTIFY confirmPasswordChanged) ///< 确认密码输入（用于 changePassword）
-        Q_PROPERTY(QString passwordError READ PasswordError NOTIFY passwordErrorChanged) ///< 密码表单验证错误（有效时为空）
-        Q_PROPERTY(bool canChangePassword READ CanChangePassword NOTIFY canChangePasswordChanged) ///< 密码表单有效且可提交时为 true
-        Q_PROPERTY(QString passwordStrengthMessage READ PasswordStrengthMessage NOTIFY passwordStrengthMessageChanged) ///< 密码强度验证消息（用于实时 UI 反馈）
-        Q_PROPERTY(bool isPasswordValid READ IsPasswordValid NOTIFY passwordStrengthMessageChanged) ///< 密码通过所有验证规则时为 true
+        Q_PROPERTY(QString passwordError READ PasswordError NOTIFY passwordErrorChanged)                                ///< 密码表单验证错误（有效时为空）
+        Q_PROPERTY(bool canChangePassword READ CanChangePassword NOTIFY canChangePasswordChanged)                       ///< 密码表单有效且可提交时为 true
+        Q_PROPERTY(QString passwordStrengthMessage READ PasswordStrengthMessage NOTIFY passwordStrengthMessageChanged)  ///< 密码强度验证消息（用于实时 UI 反馈）
+        Q_PROPERTY(bool isPasswordValid READ IsPasswordValid NOTIFY passwordStrengthMessageChanged)                     ///< 密码通过所有验证规则时为 true
 
         // ==================== 状态 ====================
 
-        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged) ///< 任何 API 请求进行中时为 true
+        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged)                   ///< 任何 API 请求进行中时为 true
         Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged) ///< 操作失败时的错误消息
 
     public:
@@ -222,6 +222,7 @@ namespace disk::qml::viewmodels {
         /// 密码更改成功时发射
         void passwordChanged();
 
+    private:
         // ==================== 私有辅助方法 ====================
 
         auto SetLoading(bool loading) -> void;
@@ -237,31 +238,31 @@ namespace disk::qml::viewmodels {
         // ==================== 资料状态 ====================
 
         QString m_username; ///< 用户名
-        QString m_email; ///< 邮箱
+        QString m_email;    ///< 邮箱
         QString m_nickname; ///< 昵称
-        QString m_avatar; ///< 头像
+        QString m_avatar;   ///< 头像
 
         // ==================== 存储状态 ====================
 
-        quint64 m_storage_used{ 0 }; ///< 已用存储
-        quint64 m_storage_quota{ 0 }; ///< 存储配额
+        quint64 m_storage_used{ 0 };        ///< 已用存储
+        quint64 m_storage_quota{ 0 };       ///< 存储配额
         double m_storage_percentage{ 0.0 }; ///< 存储百分比
-        int m_file_count{ 0 }; ///< 文件数
-        int m_folder_count{ 0 }; ///< 文件夹数
+        int m_file_count{ 0 };              ///< 文件数
+        int m_folder_count{ 0 };            ///< 文件夹数
 
         // ==================== 编辑表单状态 ====================
 
         QString m_edit_nickname; ///< 编辑昵称
-        QString m_edit_avatar; ///< 编辑头像
+        QString m_edit_avatar;   ///< 编辑头像
 
         // ==================== 密码表单状态 ====================
 
-        QString m_old_password; ///< 旧密码
-        QString m_new_password; ///< 新密码
-        QString m_confirm_password; ///< 确认密码
-        QString m_password_error; ///< 密码错误
+        QString m_old_password;              ///< 旧密码
+        QString m_new_password;              ///< 新密码
+        QString m_confirm_password;          ///< 确认密码
+        QString m_password_error;            ///< 密码错误
         QString m_password_strength_message; ///< 密码强度消息
-        bool m_is_password_valid{ false }; ///< 密码是否有效
+        bool m_is_password_valid{ false };   ///< 密码是否有效
         bool m_can_change_password{ false }; ///< 是否可更改密码
 
         // ==================== 加载/错误状态 ====================
@@ -272,6 +273,7 @@ namespace disk::qml::viewmodels {
         // ==================== 单例实例 ====================
 
         inline static UserViewModel* s_instance = nullptr; ///< 单例实例
-        inline static QJSEngine* s_engine = nullptr; ///< JS 引擎实例
+        inline static QJSEngine* s_engine = nullptr;       ///< JS 引擎实例
+    };
 
 } // namespace disk::qml::viewmodels

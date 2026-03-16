@@ -50,17 +50,18 @@ namespace disk::qml::viewmodels {
 
         // ==================== 属性 ====================
 
-        Q_PROPERTY(bool isLoggedIn READ IsLoggedIn NOTIFY isLoggedInChanged) ///< 本地令牌存储中存在有效访问令牌时为 true
-        Q_PROPERTY(QString loggedInUserName READ LoggedInUserName NOTIFY loggedInUserNameChanged) ///< 当前登录用户的用户名；未登录时为空
+        Q_PROPERTY(bool isLoggedIn READ IsLoggedIn NOTIFY isLoggedInChanged)                            ///< 本地令牌存储中存在有效访问令牌时为 true
+        Q_PROPERTY(QString loggedInUserName READ LoggedInUserName NOTIFY loggedInUserNameChanged)       ///< 当前登录用户的用户名；未登录时为空
 
-        Q_PROPERTY(qint64 storageUsed READ StorageUsed NOTIFY storageUsedChanged) ///< 当前用户已使用的存储空间（字节）；未登录时为 0
-        Q_PROPERTY(qint64 storageQuota READ StorageQuota NOTIFY storageQuotaChanged) ///< 当前用户分配的存储配额（字节）；未登录时为 0
+        Q_PROPERTY(qint64 storageUsed READ StorageUsed NOTIFY storageUsedChanged)                       ///< 当前用户已使用的存储空间（字节）；未登录时为 0
+        Q_PROPERTY(qint64 storageQuota READ StorageQuota NOTIFY storageQuotaChanged)                    ///< 当前用户分配的存储配额（字节）；未登录时为 0
 
-        Q_PROPERTY(QString storageUsedFormatted READ StorageUsedFormatted NOTIFY storageUsedChanged) ///< 格式化的已用存储（如 "1.23 GB"）
+        Q_PROPERTY(QString storageUsedFormatted READ StorageUsedFormatted NOTIFY storageUsedChanged)    ///< 格式化的已用存储（如 "1.23 GB"）
         Q_PROPERTY(QString storageQuotaFormatted READ StorageQuotaFormatted NOTIFY storageQuotaChanged) ///< 格式化的存储配额（如 "10.00 GB"）
-        Q_PROPERTY(double storagePercentage READ StoragePercentage NOTIFY storagePercentageChanged) ///< 存储使用百分比（0.0–100.0）；配额为 0 时为 0.0
+        Q_PROPERTY(double storagePercentage READ StoragePercentage NOTIFY storagePercentageChanged)     ///< 存储使用百分比（0.0–100.0）；配额为 0 时为 0.0
 
-        Q_PROPERTY(QString serverUrl READ ServerUrl CONSTANT) ///< 配置的服务器 URL（只读，构造时设置）
+        Q_PROPERTY(QString serverUrl READ ServerUrl CONSTANT)                                           ///< 配置的服务器 URL（只读，构造时设置）
+
     public:
         explicit SessionViewModel(
             LoginViewModel* loginViewModel,
@@ -79,6 +80,7 @@ namespace disk::qml::viewmodels {
          * 必须在 QML 引擎通过 create() 请求单例之前调用。
          * @p instance 的所有权保留在调用者（C++ 端）。
          */
+        static auto SetInstance(SessionViewModel* instance) -> void;
 
         /**
          * @brief QML 单例工厂——由 QML 引擎调用一次。
@@ -90,6 +92,7 @@ namespace disk::qml::viewmodels {
          * - 只有一个 QJSEngine 可以访问此单例；第二个引擎会触发 Q_ASSERT 失败。
          * - 所有权设置为 CppOwnership，防止引擎销毁时删除实例。
          */
+        static auto create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> SessionViewModel*;
 
         [[nodiscard]] auto IsLoggedIn() const -> bool;
         [[nodiscard]] auto LoggedInUserName() const -> const QString&;
@@ -111,6 +114,7 @@ namespace disk::qml::viewmodels {
          * 使用子上下文 QObject，以便在此 ViewModel 在响应到达前被销毁时
          * 自动丢弃回调。
          */
+        Q_INVOKABLE void logout();
 
         // ==================== Signals ====================
 
@@ -132,17 +136,18 @@ namespace disk::qml::viewmodels {
 
         // ==================== 状态 ====================
 
-        LoginViewModel* m_login_view_model; ///< 登录视图模型
-        services::TokenStore* m_token_store; ///< 令牌存储
-        services::AuthService* m_auth_service; ///< 认证服务
+        LoginViewModel* m_login_view_model;                   ///< 登录视图模型
+        services::TokenStore* m_token_store;                  ///< 令牌存储
+        services::AuthService* m_auth_service;                ///< 认证服务
 
-        bool m_is_logged_in{ false }; ///< 是否已登录
-        QString m_logged_in_user_name; ///< 已登录用户名
-        qint64 m_storage_used{ 0 }; ///< 已使用存储空间
-        qint64 m_storage_quota{ 0 }; ///< 存储配额
-        QString m_server_url; ///< 服务器 URL
+        bool m_is_logged_in{ false };                         ///< 是否已登录
+        QString m_logged_in_user_name;                        ///< 已登录用户名
+        qint64 m_storage_used{ 0 };                           ///< 已使用存储空间
+        qint64 m_storage_quota{ 0 };                          ///< 存储配额
+        QString m_server_url;                                 ///< 服务器 URL
 
         inline static SessionViewModel* s_instance = nullptr; ///< 单例实例
-        inline static QJSEngine* s_engine = nullptr; ///< JS 引擎实例
+        inline static QJSEngine* s_engine = nullptr;          ///< JS 引擎实例
+    };
 
 } // namespace disk::qml::viewmodels

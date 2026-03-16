@@ -12,6 +12,7 @@
  *
  * 使用 FileService 和 FolderService 处理所有 API 交互。
  * QML 层绑定属性并调用 Q_INVOKABLE 方法。
+ */
 
 #pragma once
 
@@ -25,9 +26,11 @@
 #include <QtQml/qqmlengine.h>
 #include <QtQml/qqmlregistration.h>
 
-#include <models/BreadcrumbModel.hpp>
-#include <models/FileListModel.hpp>
-#include <models/FolderTreeModel.hpp>
+namespace disk::qml::models {
+    class FileListModel;
+    class BreadcrumbModel;
+    class FolderTreeModel;
+} // namespace disk::qml::models
 
 namespace disk::qml::services {
     class FileService;
@@ -61,45 +64,46 @@ namespace disk::qml::viewmodels {
         // ==================== 导航状态 ====================
 
         Q_PROPERTY(qint64 currentFolderId READ CurrentFolderId NOTIFY currentFolderIdChanged) ///< 当前显示的文件夹 ID（0 = 根目录）
-        Q_PROPERTY(QString currentPath READ CurrentPath NOTIFY currentPathChanged) ///< 面包屑组装的可读路径（如 "/ 文档 / 工作"）
+        Q_PROPERTY(QString currentPath READ CurrentPath NOTIFY currentPathChanged)            ///< 面包屑组装的可读路径（如 "/ 文档 / 工作"）
         // ==================== 加载/错误 ====================
 
-        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged) ///< 列表或搜索 API 请求进行中时为 true
+        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged)                   ///< 列表或搜索 API 请求进行中时为 true
         Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged) ///< 最后的错误消息；成功时为空
         // ==================== 视图模式 ====================
 
         Q_PROPERTY(QString viewMode READ ViewMode WRITE SetViewMode NOTIFY viewModeChanged) ///< 显示模式："grid" 或 "list"
         // ==================== 排序 ====================
 
-        Q_PROPERTY(QString sortBy READ SortBy WRITE SetSortBy NOTIFY sortByChanged) ///< 排序字段："name"、"size"、"created_at"、"updated_at"
+        Q_PROPERTY(QString sortBy READ SortBy WRITE SetSortBy NOTIFY sortByChanged)             ///< 排序字段："name"、"size"、"created_at"、"updated_at"
         Q_PROPERTY(QString sortOrder READ SortOrder WRITE SetSortOrder NOTIFY sortOrderChanged) ///< 排序方向："asc" 或 "desc"
         // ==================== 搜索 ====================
 
         Q_PROPERTY(QString searchKeyword READ SearchKeyword WRITE SetSearchKeyword NOTIFY searchKeywordChanged) ///< 当前搜索关键词；未搜索时为空
-        Q_PROPERTY(bool isSearching READ IsSearching NOTIFY isSearchingChanged) ///< 搜索模式激活时为 true（非空关键词且有结果）
+        Q_PROPERTY(bool isSearching READ IsSearching NOTIFY isSearchingChanged)                                 ///< 搜索模式激活时为 true（非空关键词且有结果）
         // ==================== 分页 ====================
 
         Q_PROPERTY(int currentPage READ CurrentPage NOTIFY currentPageChanged) ///< 当前页码（从 1 开始）
-        Q_PROPERTY(int totalPages READ TotalPages NOTIFY totalPagesChanged) ///< 上次响应的总页数
-        Q_PROPERTY(int totalItems READ TotalItems NOTIFY totalItemsChanged) ///< 上次响应的总条目数
+        Q_PROPERTY(int totalPages READ TotalPages NOTIFY totalPagesChanged)    ///< 上次响应的总页数
+        Q_PROPERTY(int totalItems READ TotalItems NOTIFY totalItemsChanged)    ///< 上次响应的总条目数
         // ==================== 选择 ====================
 
         Q_PROPERTY(int selectionCount READ SelectionCount NOTIFY selectionChanged) ///< 当前选中的条目数
-        Q_PROPERTY(bool hasSelection READ HasSelection NOTIFY selectionChanged) ///< 至少选中一个条目时为 true
+        Q_PROPERTY(bool hasSelection READ HasSelection NOTIFY selectionChanged)    ///< 至少选中一个条目时为 true
         // ==================== 模型 ====================
 
-        Q_PROPERTY(disk::qml::models::FileListModel* fileListModel READ FileListModelPtr CONSTANT) ///< QML 绑定用的文件列表模型
+        Q_PROPERTY(disk::qml::models::FileListModel* fileListModel READ FileListModelPtr CONSTANT)       ///< QML 绑定用的文件列表模型
         Q_PROPERTY(disk::qml::models::BreadcrumbModel* breadcrumbModel READ BreadcrumbModelPtr CONSTANT) ///< QML 绑定用的面包屑模型
         Q_PROPERTY(disk::qml::models::FolderTreeModel* folderTreeModel READ FolderTreeModelPtr CONSTANT) ///< QML 文件夹选择对话框绑定的文件夹树模型
         // ==================== 最近文件 ====================
 
         Q_PROPERTY(disk::qml::models::FileListModel* recentFilesModel READ RecentFilesModelPtr CONSTANT) ///< QML 绑定用的最近文件模型（最多 10 条，按更新时间倒序）
-        Q_PROPERTY(bool recentFilesLoading READ RecentFilesLoading NOTIFY recentFilesLoadingChanged) ///< 正在加载最近文件时为 true
-        Q_PROPERTY(QString recentFilesError READ RecentFilesError NOTIFY recentFilesErrorChanged) ///< 最近文件加载失败时的错误消息
+        Q_PROPERTY(bool recentFilesLoading READ RecentFilesLoading NOTIFY recentFilesLoadingChanged)     ///< 正在加载最近文件时为 true
+        Q_PROPERTY(QString recentFilesError READ RecentFilesError NOTIFY recentFilesErrorChanged)        ///< 最近文件加载失败时的错误消息
         // ==================== 导航历史 ====================
 
-        Q_PROPERTY(bool canGoBack READ CanGoBack NOTIFY navigationHistoryChanged) ///< 可以后退导航时为 true
+        Q_PROPERTY(bool canGoBack READ CanGoBack NOTIFY navigationHistoryChanged)       ///< 可以后退导航时为 true
         Q_PROPERTY(bool canGoForward READ CanGoForward NOTIFY navigationHistoryChanged) ///< 可以前进导航时为 true
+
     public:
         explicit FileListViewModel(
             services::FileService* fileService,
@@ -154,36 +158,36 @@ namespace disk::qml::viewmodels {
         // ==================== 导航 ====================
 
         Q_INVOKABLE void navigateToFolder(qint64 folderId); ///< 进入指定 ID 的子文件夹
-        Q_INVOKABLE void navigateUp(); ///< 进入父文件夹（上一级）
-        Q_INVOKABLE void goBack(); ///< 后退导航
-        Q_INVOKABLE void goForward(); ///< 前进导航
-        Q_INVOKABLE void refresh(); ///< 刷新当前文件夹内容
+        Q_INVOKABLE void navigateUp();                      ///< 进入父文件夹（上一级）
+        Q_INVOKABLE void goBack();                          ///< 后退导航
+        Q_INVOKABLE void goForward();                       ///< 前进导航
+        Q_INVOKABLE void refresh();                         ///< 刷新当前文件夹内容
         // ==================== 搜索 ====================
 
         Q_INVOKABLE void search(const QString& keyword); ///< 使用指定关键词触发搜索（防抖）
-        Q_INVOKABLE void clearSearch(); ///< 清除搜索并返回普通文件夹视图
+        Q_INVOKABLE void clearSearch();                  ///< 清除搜索并返回普通文件夹视图
         // ==================== 排序 ====================
 
         Q_INVOKABLE void setSortField(const QString& field); ///< 设置排序字段并重新加载
-        Q_INVOKABLE void toggleSortOrder(); ///< 切换排序方向（升序 ↔ 降序）并重新加载
+        Q_INVOKABLE void toggleSortOrder();                  ///< 切换排序方向（升序 ↔ 降序）并重新加载
         // ==================== 选择 ====================
 
-        Q_INVOKABLE void toggleSelection(qint64 fileId); ///< 切换单个条目的选中状态
-        Q_INVOKABLE void selectAll(); ///< 选中当前列表中的所有条目
-        Q_INVOKABLE void clearSelection(); ///< 取消所有选中
+        Q_INVOKABLE void toggleSelection(qint64 fileId);  ///< 切换单个条目的选中状态
+        Q_INVOKABLE void selectAll();                     ///< 选中当前列表中的所有条目
+        Q_INVOKABLE void clearSelection();                ///< 取消所有选中
         Q_INVOKABLE bool isSelected(qint64 fileId) const; ///< 检查指定条目是否被选中
-        Q_INVOKABLE QList<qint64> selectedIds() const; ///< 获取所有选中的文件 ID 列表
+        Q_INVOKABLE QList<qint64> selectedIds() const;    ///< 获取所有选中的文件 ID 列表
         // ==================== 分页 ====================
 
         Q_INVOKABLE void goToPage(int page); ///< 跳转到指定页
         // ==================== 文件操作 ====================
 
-        Q_INVOKABLE void createFolder(const QString& name); ///< 在当前目录创建新文件夹
-        Q_INVOKABLE void renameFile(qint64 fileId, const QString& newName); ///< 重命名文件或文件夹
-        Q_INVOKABLE void deleteFiles(const QList<qint64>& fileIds); ///< 软删除文件/文件夹（移入回收站）。如果 fileIds 为空，使用当前选择
+        Q_INVOKABLE void createFolder(const QString& name);                              ///< 在当前目录创建新文件夹
+        Q_INVOKABLE void renameFile(qint64 fileId, const QString& newName);              ///< 重命名文件或文件夹
+        Q_INVOKABLE void deleteFiles(const QList<qint64>& fileIds);                      ///< 软删除文件/文件夹（移入回收站）。如果 fileIds 为空，使用当前选择
         Q_INVOKABLE void moveFiles(const QList<qint64>& fileIds, qint64 targetFolderId); ///< 将文件/文件夹移动到目标文件夹
         Q_INVOKABLE void copyFiles(const QList<qint64>& fileIds, qint64 targetFolderId); ///< 将文件/文件夹复制到目标文件夹
-        Q_INVOKABLE void loadFolderTree(); ///< 加载文件夹树（用于文件夹选择对话框）
+        Q_INVOKABLE void loadFolderTree();                                               ///< 加载文件夹树（用于文件夹选择对话框）
         // ==================== 最近文件 ====================
 
         Q_INVOKABLE void loadRecentFiles(); ///< 加载最近文件（最多 10 条，按更新时间倒序）
@@ -210,9 +214,6 @@ namespace disk::qml::viewmodels {
         // ==================== 最近文件 ====================
         void recentFilesLoadingChanged();
         void recentFilesErrorChanged();
-        // ==================== Recent Files ====================
-        void recentFilesLoadingChanged();
-        void recentFilesErrorChanged();
 
     private:
         // ==================== 私有辅助方法 ====================
@@ -222,53 +223,54 @@ namespace disk::qml::viewmodels {
         auto SetCurrentFolderId(qint64 id) -> void;
         auto SetCurrentPath(const QString& path) -> void;
 
-        auto FetchFileList() -> void; ///< 获取当前文件夹、页码和排序设置的文件列表
-        auto FetchBreadcrumb() -> void; ///< 获取当前文件夹的面包屑路径
-        auto ExecuteSearch() -> void; ///< 执行防抖搜索查询
+        auto FetchFileList() -> void;                    ///< 获取当前文件夹、页码和排序设置的文件列表
+        auto FetchBreadcrumb() -> void;                  ///< 获取当前文件夹的面包屑路径
+        auto ExecuteSearch() -> void;                    ///< 执行防抖搜索查询
 
-        auto BuildPathFromBreadcrumb() -> QString; ///< 从面包屑模型构建可读路径字符串
+        auto BuildPathFromBreadcrumb() -> QString;       ///< 从面包屑模型构建可读路径字符串
         auto PushToBackHistory(qint64 folderId) -> void; ///< 将当前文件夹压入后退历史（导航前调用）
         // ==================== 状态 ====================
 
-        services::FileService* m_file_service; ///< 文件服务
-        services::FolderService* m_folder_service; ///< 文件夹服务
+        services::FileService* m_file_service;         ///< 文件服务
+        services::FolderService* m_folder_service;     ///< 文件夹服务
 
-        models::FileListModel* m_file_list_model; ///< 文件列表模型
-        models::BreadcrumbModel* m_breadcrumb_model; ///< 面包屑模型
-        models::FolderTreeModel* m_folder_tree_model; ///< 文件夹树模型
+        models::FileListModel* m_file_list_model;      ///< 文件列表模型
+        models::BreadcrumbModel* m_breadcrumb_model;   ///< 面包屑模型
+        models::FolderTreeModel* m_folder_tree_model;  ///< 文件夹树模型
 
-        qint64 m_current_folder_id{ 0 }; ///< 当前文件夹 ID
-        QString m_current_path; ///< 当前路径
-        bool m_loading{ false }; ///< 是否正在加载
-        QString m_error_message; ///< 错误消息
+        qint64 m_current_folder_id{ 0 };               ///< 当前文件夹 ID
+        QString m_current_path;                        ///< 当前路径
+        bool m_loading{ false };                       ///< 是否正在加载
+        QString m_error_message;                       ///< 错误消息
         QString m_view_mode{ QStringLiteral("list") }; ///< 视图模式
-        QString m_sort_by{ QStringLiteral("name") }; ///< 排序字段
+        QString m_sort_by{ QStringLiteral("name") };   ///< 排序字段
         QString m_sort_order{ QStringLiteral("asc") }; ///< 排序方向
 
         // 搜索
-        QString m_search_keyword; ///< 搜索关键词
-        bool m_is_searching{ false }; ///< 是否正在搜索
+        QString m_search_keyword;       ///< 搜索关键词
+        bool m_is_searching{ false };   ///< 是否正在搜索
         QTimer m_search_debounce_timer; ///< 搜索防抖定时器
 
         // 分页
-        int m_current_page{ 1 }; ///< 当前页码
-        int m_total_pages{ 0 }; ///< 总页数
-        int m_total_items{ 0 }; ///< 总条目数
+        int m_current_page{ 1 };             ///< 当前页码
+        int m_total_pages{ 0 };              ///< 总页数
+        int m_total_items{ 0 };              ///< 总条目数
         static constexpr int kPageSize = 50; ///< 每页条目数
         // 选择
         QSet<qint64> m_selected_ids; ///< 选中的文件 ID 集合
 
         // 导航历史
-        QVector<qint64> m_back_history; ///< 后退历史栈
+        QVector<qint64> m_back_history;    ///< 后退历史栈
         QVector<qint64> m_forward_history; ///< 前进历史栈
 
         // 最近文件
-        models::FileListModel* m_recent_files_model; ///< 最近文件模型
-        bool m_recent_files_loading{ false }; ///< 是否正在加载最近文件
-        QString m_recent_files_error; ///< 最近文件错误消息
-        static constexpr int kRecentFilesLimit = 10; ///< 最近文件数量上限
+        models::FileListModel* m_recent_files_model;           ///< 最近文件模型
+        bool m_recent_files_loading{ false };                  ///< 是否正在加载最近文件
+        QString m_recent_files_error;                          ///< 最近文件错误消息
+        static constexpr int kRecentFilesLimit = 10;           ///< 最近文件数量上限
 
         inline static FileListViewModel* s_instance = nullptr; ///< 单例实例
-        inline static QJSEngine* s_engine = nullptr; ///< JS 引擎实例
+        inline static QJSEngine* s_engine = nullptr;           ///< JS 引擎实例
+    };
 
 } // namespace disk::qml::viewmodels

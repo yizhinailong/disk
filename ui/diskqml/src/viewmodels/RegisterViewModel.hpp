@@ -44,17 +44,18 @@ namespace disk::qml::viewmodels {
 
         // ==================== 属性 ====================
 
-        Q_PROPERTY(QString username READ Username WRITE SetUsername NOTIFY usernameChanged) ///< 新账户的用户名（4-32 字符，字母数字+下划线）
-        Q_PROPERTY(QString email READ Email WRITE SetEmail NOTIFY emailChanged) ///< 新账户的邮箱地址
-        Q_PROPERTY(QString password READ Password WRITE SetPassword NOTIFY passwordChanged) ///< 新账户的密码（8-64 字符，大小写+数字）
+        Q_PROPERTY(QString username READ Username WRITE SetUsername NOTIFY usernameChanged)                             ///< 新账户的用户名（4-32 字符，字母数字+下划线）
+        Q_PROPERTY(QString email READ Email WRITE SetEmail NOTIFY emailChanged)                                         ///< 新账户的邮箱地址
+        Q_PROPERTY(QString password READ Password WRITE SetPassword NOTIFY passwordChanged)                             ///< 新账户的密码（8-64 字符，大小写+数字）
         Q_PROPERTY(QString confirmPassword READ ConfirmPassword WRITE SetConfirmPassword NOTIFY confirmPasswordChanged) ///< 确认密码——提交前必须与密码匹配
-        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged) ///< 注册 API 请求进行中时为 true
-        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged) ///< API 级别的注册失败错误消息；clearError() 清除
-        Q_PROPERTY(bool canSubmit READ CanSubmit NOTIFY canSubmitChanged) ///< 所有字段有效、非空且无请求进行中时为 true
-        Q_PROPERTY(QString usernameError READ UsernameError NOTIFY usernameErrorChanged) ///< 用户名字段的内联验证错误；有效或未触碰时为空
-        Q_PROPERTY(QString emailError READ EmailError NOTIFY emailErrorChanged) ///< 邮箱字段的内联验证错误；有效或未触碰时为空
-        Q_PROPERTY(QString passwordError READ PasswordError NOTIFY passwordErrorChanged) ///< 密码字段的内联验证错误；有效或未触碰时为空
-        Q_PROPERTY(QString confirmPasswordError READ ConfirmPasswordError NOTIFY confirmPasswordErrorChanged) ///< 确认密码字段的内联验证错误；与密码匹配时为空
+        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged)                                                     ///< 注册 API 请求进行中时为 true
+        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged)                                   ///< API 级别的注册失败错误消息；clearError() 清除
+        Q_PROPERTY(bool canSubmit READ CanSubmit NOTIFY canSubmitChanged)                                               ///< 所有字段有效、非空且无请求进行中时为 true
+        Q_PROPERTY(QString usernameError READ UsernameError NOTIFY usernameErrorChanged)                                ///< 用户名字段的内联验证错误；有效或未触碰时为空
+        Q_PROPERTY(QString emailError READ EmailError NOTIFY emailErrorChanged)                                         ///< 邮箱字段的内联验证错误；有效或未触碰时为空
+        Q_PROPERTY(QString passwordError READ PasswordError NOTIFY passwordErrorChanged)                                ///< 密码字段的内联验证错误；有效或未触碰时为空
+        Q_PROPERTY(QString confirmPasswordError READ ConfirmPasswordError NOTIFY confirmPasswordErrorChanged)           ///< 确认密码字段的内联验证错误；与密码匹配时为空
+
     public:
         explicit RegisterViewModel(services::AuthService* authService, QObject* parent = nullptr);
 
@@ -67,6 +68,7 @@ namespace disk::qml::viewmodels {
          * 必须在 QML 引擎通过 create() 请求单例之前调用。
          * @p instance 的所有权保留在调用者（C++ 端）。
          */
+        static auto SetInstance(RegisterViewModel* instance) -> void;
 
         /**
          * @brief QML 单例工厂——由 QML 引擎调用一次。
@@ -78,6 +80,7 @@ namespace disk::qml::viewmodels {
          * - 只有一个 QJSEngine 可以访问此单例；第二个引擎会触发 Q_ASSERT 失败。
          * - 所有权设置为 CppOwnership，防止引擎销毁时删除实例。
          */
+        static auto create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> RegisterViewModel*;
 
         [[nodiscard]] auto Username() const -> const QString&;
         [[nodiscard]] auto Email() const -> const QString&;
@@ -108,6 +111,7 @@ namespace disk::qml::viewmodels {
          * 使用子上下文 QObject，以便在此 ViewModel 在响应到达前被销毁时
          * 自动丢弃回调。
          */
+        Q_INVOKABLE void submit();
 
         /**
          * @brief 清除所有错误消息（全局和各字段）。
@@ -117,6 +121,7 @@ namespace disk::qml::viewmodels {
          * confirmPasswordError 重置为空字符串。当用户导航离开
          * 并返回到干净的表单状态时很有用。
          */
+        Q_INVOKABLE void clearError();
 
         // ==================== Signals ====================
 
@@ -151,20 +156,21 @@ namespace disk::qml::viewmodels {
 
         // ==================== 状态 ====================
 
-        services::AuthService* m_auth_service; ///< 认证服务
-        QString m_username; ///< 用户名
-        QString m_email; ///< 邮箱
-        QString m_password; ///< 密码
-        QString m_confirm_password; ///< 确认密码
-        bool m_loading{ false }; ///< 是否正在加载
-        QString m_error_message; ///< 错误消息
-        bool m_can_submit{ false }; ///< 是否可提交
-        QString m_username_error; ///< 用户名错误
-        QString m_email_error; ///< 邮箱错误
-        QString m_password_error; ///< 密码错误
-        QString m_confirm_password_error; ///< 确认密码错误
+        services::AuthService* m_auth_service;                 ///< 认证服务
+        QString m_username;                                    ///< 用户名
+        QString m_email;                                       ///< 邮箱
+        QString m_password;                                    ///< 密码
+        QString m_confirm_password;                            ///< 确认密码
+        bool m_loading{ false };                               ///< 是否正在加载
+        QString m_error_message;                               ///< 错误消息
+        bool m_can_submit{ false };                            ///< 是否可提交
+        QString m_username_error;                              ///< 用户名错误
+        QString m_email_error;                                 ///< 邮箱错误
+        QString m_password_error;                              ///< 密码错误
+        QString m_confirm_password_error;                      ///< 确认密码错误
 
         inline static RegisterViewModel* s_instance = nullptr; ///< 单例实例
-        inline static QJSEngine* s_engine = nullptr; ///< JS 引擎实例
+        inline static QJSEngine* s_engine = nullptr;           ///< JS 引擎实例
+    };
 
 } // namespace disk::qml::viewmodels

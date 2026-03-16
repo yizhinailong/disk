@@ -57,21 +57,21 @@ namespace disk::qml::viewmodels {
 
         // ==================== 传输设置 ====================
 
-        Q_PROPERTY(QString downloadDir READ DownloadDir WRITE SetDownloadDir NOTIFY downloadDirChanged) ///< 可编辑的下载目录路径
-        Q_PROPERTY(int concurrentUploads READ ConcurrentUploads WRITE SetConcurrentUploads NOTIFY concurrentUploadsChanged) ///< 可编辑的并发上传数 [1, 10]
+        Q_PROPERTY(QString downloadDir READ DownloadDir WRITE SetDownloadDir NOTIFY downloadDirChanged)                             ///< 可编辑的下载目录路径
+        Q_PROPERTY(int concurrentUploads READ ConcurrentUploads WRITE SetConcurrentUploads NOTIFY concurrentUploadsChanged)         ///< 可编辑的并发上传数 [1, 10]
         Q_PROPERTY(int concurrentDownloads READ ConcurrentDownloads WRITE SetConcurrentDownloads NOTIFY concurrentDownloadsChanged) ///< 可编辑的并发下载数 [1, 10]
 
         // ==================== UI 偏好 ====================
 
-        Q_PROPERTY(bool autoStart READ AutoStart WRITE SetAutoStart NOTIFY autoStartChanged) ///< 系统启动时启动
-        Q_PROPERTY(bool minimizeToTray READ MinimizeToTray WRITE SetMinimizeToTray NOTIFY minimizeToTrayChanged) ///< 最小化到系统托盘而非关闭
+        Q_PROPERTY(bool autoStart READ AutoStart WRITE SetAutoStart NOTIFY autoStartChanged)                                 ///< 系统启动时启动
+        Q_PROPERTY(bool minimizeToTray READ MinimizeToTray WRITE SetMinimizeToTray NOTIFY minimizeToTrayChanged)             ///< 最小化到系统托盘而非关闭
         Q_PROPERTY(bool showNotifications READ ShowNotifications WRITE SetShowNotifications NOTIFY showNotificationsChanged) ///< 显示桌面通知
-        Q_PROPERTY(bool confirmDelete READ ConfirmDelete WRITE SetConfirmDelete NOTIFY confirmDeleteChanged) ///< 删除文件前确认
+        Q_PROPERTY(bool confirmDelete READ ConfirmDelete WRITE SetConfirmDelete NOTIFY confirmDeleteChanged)                 ///< 删除文件前确认
 
         // ==================== 派生状态 ====================
 
         Q_PROPERTY(bool hasUnsavedChanges READ HasUnsavedChanges NOTIFY hasUnsavedChangesChanged) ///< 任何设置与持久化值不同时为 true
-        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged) ///< 验证失败时的错误消息（如无效 URL 或超出范围的值）
+        Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged)             ///< 验证失败时的错误消息（如无效 URL 或超出范围的值）
 
     public:
         explicit SettingsViewModel(
@@ -156,6 +156,7 @@ namespace disk::qml::viewmodels {
         void errorMessageChanged();
         void settingsSaved();
 
+    private:
         // ==================== 私有辅助方法 ====================
 
         auto LoadFromStore() -> void;
@@ -166,38 +167,39 @@ namespace disk::qml::viewmodels {
         // ==================== 已保存（持久化）快照 ====================
 
         struct SettingsSnapshot {
-            QString serverUrl; ///< 服务器 URL
-            QString downloadDir; ///< 下载目录
-            int concurrentUploads; ///< 并发上传数
+            QString serverUrl;       ///< 服务器 URL
+            QString downloadDir;     ///< 下载目录
+            int concurrentUploads;   ///< 并发上传数
             int concurrentDownloads; ///< 并发下载数
-            bool autoStart; ///< 自动启动
-            bool minimizeToTray; ///< 最小化到托盘
-            bool showNotifications; ///< 显示通知
-            bool confirmDelete; ///< 确认删除
+            bool autoStart;          ///< 自动启动
+            bool minimizeToTray;     ///< 最小化到托盘
+            bool showNotifications;  ///< 显示通知
+            bool confirmDelete;      ///< 确认删除
         };
 
         // ==================== 状态 ====================
 
-        utils::ConfigStore* m_config_store; ///< 配置存储
-        api::ApiClient* m_api_client; ///< API 客户端
+        utils::ConfigStore* m_config_store;                    ///< 配置存储
+        api::ApiClient* m_api_client;                          ///< API 客户端
         platform::PlatformIntegration* m_platform_integration; ///< 平台集成
         // 当前（可编辑）值
-        QString m_server_url; ///< 服务器 URL
-        QString m_download_dir; ///< 下载目录
-        int m_concurrent_uploads{ 3 }; ///< 并发上传数
-        int m_concurrent_downloads{ 3 }; ///< 并发下载数
-        bool m_auto_start{ false }; ///< 自动启动
-        bool m_minimize_to_tray{ false }; ///< 最小化到托盘
+        QString m_server_url;              ///< 服务器 URL
+        QString m_download_dir;            ///< 下载目录
+        int m_concurrent_uploads{ 3 };     ///< 并发上传数
+        int m_concurrent_downloads{ 3 };   ///< 并发下载数
+        bool m_auto_start{ false };        ///< 自动启动
+        bool m_minimize_to_tray{ false };  ///< 最小化到托盘
         bool m_show_notifications{ true }; ///< 显示通知
-        bool m_confirm_delete{ true }; ///< 确认删除
+        bool m_confirm_delete{ true };     ///< 确认删除
 
         // 上次保存的快照（用于脏检查）
         SettingsSnapshot m_saved;
 
-        bool m_has_unsaved_changes{ false }; ///< 是否有未保存的更改
-        QString m_error_message; ///< 错误消息
+        bool m_has_unsaved_changes{ false };                   ///< 是否有未保存的更改
+        QString m_error_message;                               ///< 错误消息
 
         inline static SettingsViewModel* s_instance = nullptr; ///< 单例实例
-        inline static QJSEngine* s_engine = nullptr; ///< JS 引擎实例
+        inline static QJSEngine* s_engine = nullptr;           ///< JS 引擎实例
+    };
 
 } // namespace disk::qml::viewmodels
