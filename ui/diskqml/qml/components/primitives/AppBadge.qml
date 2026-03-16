@@ -13,9 +13,9 @@ Rectangle {
     radius: StyleTokens.radiusFull
 
     color: {
-        if (status === "success") return "#E6F6E6"; // Success Light
-        if (status === "warning") return "#FFF7E6"; // Warning Light
-        if (status === "error") return "#FFF0F0"; // Error Light
+        if (status === "success") return StyleTokens.colorSuccessLight; // Success Light
+        if (status === "warning") return StyleTokens.colorWarningLight; // Warning Light
+        if (status === "error") return StyleTokens.colorErrorLight; // Error Light
         if (status === "info") return StyleTokens.colorPrimaryLight;
         return StyleTokens.colorBackground;
     }

@@ -12,8 +12,13 @@ QtObject {
 
     // Functional
     readonly property color colorSuccess: "#52C41A"
+    readonly property color colorSuccessLight: "#E8F5E9"
+    readonly property color colorSuccessDark: "#2E7D32"
     readonly property color colorWarning: "#FAAD14"
+    readonly property color colorWarningLight: "#FFF7E6"
     readonly property color colorError: "#F5222D"
+    readonly property color colorErrorLight: "#FFEBEE"
+    readonly property color colorErrorDark: "#C62828"
     readonly property color colorInfo: "#06A7FF"
 
     // Neutral

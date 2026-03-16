@@ -106,7 +106,7 @@ Dialog {
                 contentItem: Text {
                     text: parent.text
                     font.pixelSize: StyleTokens.fontSizeBody
-                    color: "#FFFFFF"
+                    color: StyleTokens.colorSurface
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }

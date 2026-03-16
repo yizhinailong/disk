@@ -74,7 +74,7 @@ Item {
                     text: "加入我们吧！"
                     font.pixelSize: 36
                     font.bold: true
-                    color: "#FFFFFF"
+                    color: StyleTokens.colorSurface
                     Layout.alignment: Qt.AlignHCenter
                 }
                 Label {

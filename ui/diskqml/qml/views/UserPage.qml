@@ -56,7 +56,7 @@ Item {
                 Layout.rightMargin: StyleTokens.spacingLg
                 Layout.preferredHeight: 36
                 radius: StyleTokens.radiusMedium
-                color: "#E8F5E9"
+                color: StyleTokens.colorSuccessLight
                 border.color: StyleTokens.colorSuccess
                 border.width: 1
 
@@ -73,7 +73,7 @@ Item {
                     anchors.centerIn: parent
                     text: root.profileSaved ? "✓ 个人信息已保存" : "✓ 密码已修改"
                     font.pixelSize: StyleTokens.fontSizeBody
-                    color: "#2E7D32"
+                    color: StyleTokens.colorSuccessDark
                 }
             }
 
@@ -87,7 +87,7 @@ Item {
                 Layout.rightMargin: StyleTokens.spacingLg
                 Layout.preferredHeight: 36
                 radius: StyleTokens.radiusMedium
-                color: "#FFEBEE"
+                color: StyleTokens.colorErrorLight
                 border.color: StyleTokens.colorError
                 border.width: 1
 
@@ -95,7 +95,7 @@ Item {
                     anchors.centerIn: parent
                     text: root.lastError
                     font.pixelSize: StyleTokens.fontSizeBody
-                    color: "#C62828"
+                    color: StyleTokens.colorErrorDark
                 }
             }
 
