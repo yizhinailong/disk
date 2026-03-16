@@ -6,6 +6,9 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Disk 1.0
+import "../tokens"
+import "../components/primitives"
+import "../components"
 
 Item {
     id: root
@@ -17,8 +20,6 @@ Item {
     }
 
     // ==================== 辅助函数 ====================
-
-    // 格式化函数现在集中在 FormatUtils 单例中
 
     function isExpiringSoon(expiresAt: string) : bool {
         if (!expiresAt) return false
@@ -47,41 +48,41 @@ Item {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 52
-            color: "transparent"
+            Layout.preferredHeight: StyleTokens.titleBarHeight
+            color: StyleTokens.colorSurface
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 8
+                anchors.leftMargin: StyleTokens.spacingLg
+                anchors.rightMargin: StyleTokens.spacingLg
+                spacing: StyleTokens.spacingMd
 
                 Label {
                     text: "🗑️ 回收站"
-                    font.pixelSize: 20
-                    font.bold: true
-                    color: palette.windowText
+                    font.pixelSize: StyleTokens.fontSizeH1
+                    font.weight: StyleTokens.fontWeightH1
+                    color: StyleTokens.colorTextPrimary
                 }
 
                 Label {
                     text: TrashViewModel.totalItems > 0
                           ? "（共 " + TrashViewModel.totalItems + " 项）"
                           : ""
-                    font.pixelSize: 13
-                    color: palette.placeholderText
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorTextSecondary
                 }
 
                 Item { Layout.fillWidth: true }
 
-                Button {
+                AppButton {
                     text: "🔄 刷新"
-                    font.pixelSize: 12
+                    variant: "secondary"
                     onClicked: TrashViewModel.refresh()
                 }
 
-                Button {
+                AppButton {
                     text: "🗑 清空回收站"
-                    font.pixelSize: 12
+                    variant: "secondary"
                     enabled: TrashViewModel.trashListModel.count > 0 && !TrashViewModel.loading
                     onClicked: clearAllConfirmDialog.open()
                 }
@@ -92,53 +93,52 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             height: 1
-            color: palette.mid
+            color: StyleTokens.colorBorder
         }
 
         // ==================== 多选操作栏 ====================
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 40
-            color: palette.highlight
-            opacity: 0.15
+            Layout.preferredHeight: StyleTokens.toolBarHeight
+            color: StyleTokens.colorPrimaryLight
             visible: TrashViewModel.hasSelection
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 8
+                anchors.leftMargin: StyleTokens.spacingLg
+                anchors.rightMargin: StyleTokens.spacingLg
+                spacing: StyleTokens.spacingSm
 
                 Label {
                     text: "已选择 " + TrashViewModel.selectionCount + " 项"
-                    font.pixelSize: 13
-                    color: palette.windowText
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorPrimary
                 }
 
                 Item { Layout.fillWidth: true }
 
-                Button {
+                AppButton {
                     text: "♻️ 恢复"
-                    font.pixelSize: 12
+                    variant: "secondary"
                     onClicked: TrashViewModel.restoreSelected()
                 }
 
-                Button {
+                AppButton {
                     text: "🔥 彻底删除"
-                    font.pixelSize: 12
+                    variant: "secondary"
                     onClicked: deleteSelectedConfirmDialog.open()
                 }
 
-                ToolButton {
+                AppButton {
                     text: "全选"
-                    font.pixelSize: 12
+                    variant: "secondary"
                     onClicked: TrashViewModel.selectAll()
                 }
 
-                ToolButton {
+                AppButton {
                     text: "取消选择"
-                    font.pixelSize: 12
+                    variant: "secondary"
                     onClicked: TrashViewModel.clearSelection()
                 }
             }
@@ -160,20 +160,21 @@ Item {
             // --- 错误状态 ---
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 12
+                spacing: StyleTokens.spacingMd
                 visible: !TrashViewModel.loading && TrashViewModel.errorMessage !== ""
 
                 Label {
                     text: "⚠️ " + TrashViewModel.errorMessage
-                    font.pixelSize: 14
-                    color: palette.placeholderText
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorError
                     Layout.alignment: Qt.AlignHCenter
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
                 }
 
-                Button {
+                AppButton {
                     text: "重试"
+                    variant: "secondary"
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: TrashViewModel.refresh()
                 }
@@ -182,22 +183,22 @@ Item {
             // --- 空回收站状态 ---
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 8
+                spacing: StyleTokens.spacingSm
                 visible: !TrashViewModel.loading
                          && TrashViewModel.errorMessage === ""
                          && TrashViewModel.trashListModel.count === 0
 
                 Label {
                     text: "🗑️ 回收站为空"
-                    font.pixelSize: 18
-                    color: palette.placeholderText
+                    font.pixelSize: StyleTokens.fontSizeH1
+                    color: StyleTokens.colorTextTertiary
                     Layout.alignment: Qt.AlignHCenter
                 }
 
                 Label {
                     text: "删除的文件会在此处保留 30 天"
-                    font.pixelSize: 13
-                    color: palette.placeholderText
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorTextTertiary
                     Layout.alignment: Qt.AlignHCenter
                 }
             }
@@ -206,6 +207,7 @@ Item {
             ListView {
                 id: trashListView
                 anchors.fill: parent
+                anchors.margins: StyleTokens.spacingMd
                 visible: !TrashViewModel.loading
                          && TrashViewModel.errorMessage === ""
                          && TrashViewModel.trashListModel.count > 0
@@ -216,64 +218,64 @@ Item {
                 // 列表头
                 header: Rectangle {
                     width: trashListView.width
-                    height: 36
-                    color: palette.window
+                    height: 40
+                    color: StyleTokens.colorSurface
 
                     Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
                         height: 1
-                        color: palette.mid
+                        color: StyleTokens.colorBorder
                     }
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 8
+                        anchors.leftMargin: StyleTokens.spacingMd
+                        anchors.rightMargin: StyleTokens.spacingMd
+                        spacing: StyleTokens.spacingSm
 
                         Label {
                             text: "名称"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextSecondary
                             Layout.fillWidth: true
                         }
 
                         Label {
                             text: "大小"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextSecondary
                             Layout.preferredWidth: 80
                             horizontalAlignment: Text.AlignRight
                         }
 
                         Label {
                             text: "原始路径"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextSecondary
                             Layout.preferredWidth: 160
                             horizontalAlignment: Text.AlignRight
                         }
 
                         Label {
                             text: "删除时间"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: palette.placeholderText
-                            Layout.preferredWidth: 100
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextSecondary
+                            Layout.preferredWidth: 120
                             horizontalAlignment: Text.AlignRight
                         }
 
                         Label {
                             text: "到期"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: palette.placeholderText
-                            Layout.preferredWidth: 80
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextSecondary
+                            Layout.preferredWidth: 100
                             horizontalAlignment: Text.AlignRight
                         }
                     }
@@ -282,25 +284,25 @@ Item {
                 delegate: Rectangle {
                     id: trashRow
                     width: trashListView.width
-                    height: 44
+                    height: 48
                     color: TrashViewModel.isSelected(model.trashId)
-                           ? palette.highlight
-                           : trashRowMa.containsMouse ? palette.midlight : "transparent"
+                           ? StyleTokens.colorPrimaryLight
+                           : trashRowMa.containsMouse ? StyleTokens.colorHover : "transparent"
 
                     Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
                         height: 1
-                        color: palette.mid
-                        opacity: 0.3
+                        color: StyleTokens.colorBorder
+                        opacity: 0.5
                     }
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 8
+                        anchors.leftMargin: StyleTokens.spacingMd
+                        anchors.rightMargin: StyleTokens.spacingMd
+                        spacing: StyleTokens.spacingSm
 
                         // 图标 + 文件名
                         Label {
@@ -315,11 +317,11 @@ Item {
 
                             Label {
                                 text: model.trashName
-                                font.pixelSize: 13
+                                font.pixelSize: StyleTokens.fontSizeBody
                                 elide: Text.ElideMiddle
                                 Layout.fillWidth: true
                                 color: TrashViewModel.isSelected(model.trashId)
-                                       ? palette.highlightedText : palette.windowText
+                                       ? StyleTokens.colorPrimary : StyleTokens.colorTextPrimary
                             }
 
                             // 即将过期警告
@@ -330,8 +332,8 @@ Item {
                                     if (days <= 7) return "⚠️ " + days + " 天后自动删除"
                                     return ""
                                 }
-                                font.pixelSize: 10
-                                color: "#e74c3c"
+                                font.pixelSize: StyleTokens.fontSizeSmall
+                                color: StyleTokens.colorError
                                 visible: root.isExpiringSoon(model.trashExpiresAt)
                                 Layout.fillWidth: true
                             }
@@ -340,8 +342,8 @@ Item {
                         // 大小
                         Label {
                             text: model.trashIsFolder ? "文件夹" : FormatUtils.formatSize(model.trashSize)
-                            font.pixelSize: 12
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            color: StyleTokens.colorTextSecondary
                             Layout.preferredWidth: 80
                             horizontalAlignment: Text.AlignRight
                         }
@@ -349,8 +351,8 @@ Item {
                         // 原始路径
                         Label {
                             text: model.trashOriginalPath || "-"
-                            font.pixelSize: 12
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            color: StyleTokens.colorTextSecondary
                             Layout.preferredWidth: 160
                             horizontalAlignment: Text.AlignRight
                             elide: Text.ElideMiddle
@@ -359,18 +361,18 @@ Item {
                         // 删除时间
                         Label {
                             text: FormatUtils.formatDate(model.trashDeletedAt)
-                            font.pixelSize: 12
-                            color: palette.placeholderText
-                            Layout.preferredWidth: 100
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            color: StyleTokens.colorTextSecondary
+                            Layout.preferredWidth: 120
                             horizontalAlignment: Text.AlignRight
                         }
 
                         // 到期时间
                         Label {
                             text: FormatUtils.formatDate(model.trashExpiresAt)
-                            font.pixelSize: 12
-                            color: root.isExpiringSoon(model.trashExpiresAt) ? "#e74c3c" : palette.placeholderText
-                            Layout.preferredWidth: 80
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            color: root.isExpiringSoon(model.trashExpiresAt) ? StyleTokens.colorError : StyleTokens.colorTextSecondary
+                            Layout.preferredWidth: 100
                             horizontalAlignment: Text.AlignRight
                         }
                     }
@@ -448,6 +450,8 @@ Item {
 
         Label {
             text: "确定要清空回收站吗？\n此操作不可恢复。"
+            font.pixelSize: StyleTokens.fontSizeBody
+            color: StyleTokens.colorTextPrimary
             wrapMode: Text.Wrap
         }
 
@@ -463,6 +467,8 @@ Item {
 
         Label {
             text: "确定要彻底删除选中的 " + TrashViewModel.selectionCount + " 项吗？\n此操作不可恢复。"
+            font.pixelSize: StyleTokens.fontSizeBody
+            color: StyleTokens.colorTextPrimary
             wrapMode: Text.Wrap
         }
 

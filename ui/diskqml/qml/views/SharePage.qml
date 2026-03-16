@@ -6,6 +6,9 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtCore
+import "../tokens"
+import "../components/primitives"
+import "../components"
 
 Item {
     id: root
@@ -18,13 +21,18 @@ Item {
 
     // ==================== 辅助函数 ====================
 
-    // 格式化函数现在集中在 FormatUtils 单例中
-
     function statusColor(status: string) : color {
-        if (status === "active") return "#4CAF50"
-        if (status === "expired") return palette.placeholderText
-        if (status === "cancelled") return palette.placeholderText
-        return palette.windowText
+        if (status === "active") return StyleTokens.colorSuccess
+        if (status === "expired") return StyleTokens.colorTextTertiary
+        if (status === "cancelled") return StyleTokens.colorTextTertiary
+        return StyleTokens.colorTextPrimary
+    }
+
+    function statusBadgeType(status: string) : string {
+        if (status === "active") return "success"
+        if (status === "expired") return "warning"
+        if (status === "cancelled") return "error"
+        return "info"
     }
 
     // ==================== 主布局 ====================
@@ -37,27 +45,27 @@ Item {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 56
-            color: "transparent"
+            Layout.preferredHeight: StyleTokens.titleBarHeight
+            color: StyleTokens.colorSurface
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 24
-                anchors.rightMargin: 24
-                spacing: 16
+                anchors.leftMargin: StyleTokens.spacingLg
+                anchors.rightMargin: StyleTokens.spacingLg
+                spacing: StyleTokens.spacingMd
 
                 Label {
                     text: "分享"
-                    font.pixelSize: 20
-                    font.bold: true
-                    color: palette.windowText
+                    font.pixelSize: StyleTokens.fontSizeH1
+                    font.weight: StyleTokens.fontWeightH1
+                    color: StyleTokens.colorTextPrimary
                 }
 
                 Item { Layout.fillWidth: true }
 
-                Button {
+                AppButton {
                     text: "➕ 创建分享"
-                    font.pixelSize: 13
+                    variant: "primary"
                     enabled: !ShareViewModel.loading
                     onClicked: createShareDialog.open()
                 }
@@ -68,42 +76,41 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             height: 1
-            color: palette.mid
+            color: StyleTokens.colorBorder
         }
 
         // ==================== 多选操作栏 ====================
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 40
-            color: palette.highlight
-            opacity: 0.15
+            Layout.preferredHeight: StyleTokens.toolBarHeight
+            color: StyleTokens.colorPrimaryLight
             visible: ShareViewModel.hasSelection
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 24
-                anchors.rightMargin: 24
-                spacing: 8
+                anchors.leftMargin: StyleTokens.spacingLg
+                anchors.rightMargin: StyleTokens.spacingLg
+                spacing: StyleTokens.spacingSm
 
                 Label {
                     text: "已选择 " + ShareViewModel.selectionCount + " 项"
-                    font.pixelSize: 13
-                    color: palette.windowText
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorPrimary
                 }
 
                 Item { Layout.fillWidth: true }
 
-                Button {
+                AppButton {
                     text: "取消分享"
-                    font.pixelSize: 12
+                    variant: "secondary"
                     enabled: !ShareViewModel.loading && ShareViewModel.hasSelection
                     onClicked: cancelConfirmDialog.open()
                 }
 
-                ToolButton {
+                AppButton {
                     text: "取消选择"
-                    font.pixelSize: 12
+                    variant: "secondary"
                     onClicked: ShareViewModel.clearSelection()
                 }
             }
@@ -125,20 +132,21 @@ Item {
             // --- 错误状态 ---
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 12
+                spacing: StyleTokens.spacingMd
                 visible: !ShareViewModel.loading && ShareViewModel.errorMessage !== ""
 
                 Label {
                     text: "⚠️ " + ShareViewModel.errorMessage
-                    font.pixelSize: 14
-                    color: palette.placeholderText
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorError
                     Layout.alignment: Qt.AlignHCenter
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
                 }
 
-                Button {
+                AppButton {
                     text: "重试"
+                    variant: "secondary"
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: ShareViewModel.refresh()
                 }
@@ -147,22 +155,22 @@ Item {
             // --- 空状态 ---
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 8
+                spacing: StyleTokens.spacingSm
                 visible: !ShareViewModel.loading
                          && ShareViewModel.errorMessage === ""
                          && ShareViewModel.shareListModel.count === 0
 
                 Label {
                     text: "📭 暂无分享"
-                    font.pixelSize: 18
-                    color: palette.placeholderText
+                    font.pixelSize: StyleTokens.fontSizeH1
+                    color: StyleTokens.colorTextTertiary
                     Layout.alignment: Qt.AlignHCenter
                 }
 
                 Label {
                     text: "点击「创建分享」按钮分享您的文件"
-                    font.pixelSize: 13
-                    color: palette.placeholderText
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorTextTertiary
                     Layout.alignment: Qt.AlignHCenter
                 }
             }
@@ -171,7 +179,7 @@ Item {
             ListView {
                 id: listView
                 anchors.fill: parent
-                anchors.margins: 16
+                anchors.margins: StyleTokens.spacingMd
                 visible: !ShareViewModel.loading
                          && ShareViewModel.errorMessage === ""
                          && ShareViewModel.shareListModel.count > 0
@@ -182,91 +190,91 @@ Item {
                 // 列表头
                 header: Rectangle {
                     width: listView.width
-                    height: 36
-                    color: palette.window
+                    height: 40
+                    color: StyleTokens.colorSurface
 
                     Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
                         height: 1
-                        color: palette.mid
+                        color: StyleTokens.colorBorder
                     }
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 8
+                        anchors.leftMargin: StyleTokens.spacingMd
+                        anchors.rightMargin: StyleTokens.spacingMd
+                        spacing: StyleTokens.spacingSm
 
                         Label {
                             text: "文件名"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextSecondary
                             Layout.fillWidth: true
                         }
 
                         Label {
                             text: "权限"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextSecondary
                             Layout.preferredWidth: 70
                             horizontalAlignment: Text.AlignHCenter
                         }
 
                         Label {
                             text: "密码"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextSecondary
                             Layout.preferredWidth: 50
                             horizontalAlignment: Text.AlignHCenter
                         }
 
                         Label {
                             text: "访问"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextSecondary
                             Layout.preferredWidth: 50
                             horizontalAlignment: Text.AlignHCenter
                         }
 
                         Label {
                             text: "下载"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextSecondary
                             Layout.preferredWidth: 50
                             horizontalAlignment: Text.AlignHCenter
                         }
 
                         Label {
                             text: "创建时间"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: palette.placeholderText
-                            Layout.preferredWidth: 90
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextSecondary
+                            Layout.preferredWidth: 120
                             horizontalAlignment: Text.AlignHCenter
                         }
 
                         Label {
                             text: "过期时间"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: palette.placeholderText
-                            Layout.preferredWidth: 90
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextSecondary
+                            Layout.preferredWidth: 120
                             horizontalAlignment: Text.AlignHCenter
                         }
 
                         Label {
                             text: "状态"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: palette.placeholderText
-                            Layout.preferredWidth: 60
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextSecondary
+                            Layout.preferredWidth: 80
                             horizontalAlignment: Text.AlignHCenter
                         }
                     }
@@ -275,43 +283,43 @@ Item {
                 delegate: Rectangle {
                     id: listRow
                     width: listView.width
-                    height: 44
+                    height: 48
                     color: ShareViewModel.isSelected(model.shareId)
-                           ? palette.highlight
-                           : listRowMa.containsMouse ? palette.midlight : "transparent"
+                           ? StyleTokens.colorPrimaryLight
+                           : listRowMa.containsMouse ? StyleTokens.colorHover : "transparent"
 
                     Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
                         height: 1
-                        color: palette.mid
-                        opacity: 0.3
+                        color: StyleTokens.colorBorder
+                        opacity: 0.5
                     }
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 8
+                        anchors.leftMargin: StyleTokens.spacingMd
+                        anchors.rightMargin: StyleTokens.spacingMd
+                        spacing: StyleTokens.spacingSm
 
                         // 文件名
                         Label {
                             text: model.shareFileCount > 1
                                   ? model.shareFileName + " (+" + (model.shareFileCount - 1) + ")"
                                   : model.shareFileName
-                            font.pixelSize: 13
+                            font.pixelSize: StyleTokens.fontSizeBody
                             elide: Text.ElideMiddle
                             Layout.fillWidth: true
                             color: ShareViewModel.isSelected(model.shareId)
-                                   ? palette.highlightedText : palette.windowText
+                                   ? StyleTokens.colorPrimary : StyleTokens.colorTextPrimary
                         }
 
                         // 权限
                         Label {
                             text: FormatUtils.permissionLabel(model.sharePermission)
-                            font.pixelSize: 12
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            color: StyleTokens.colorTextSecondary
                             Layout.preferredWidth: 70
                             horizontalAlignment: Text.AlignHCenter
                         }
@@ -319,8 +327,8 @@ Item {
                         // 密码
                         Label {
                             text: model.shareHasPassword ? "🔒" : "-"
-                            font.pixelSize: 12
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            color: StyleTokens.colorTextSecondary
                             Layout.preferredWidth: 50
                             horizontalAlignment: Text.AlignHCenter
                         }
@@ -328,8 +336,8 @@ Item {
                         // 访问次数
                         Label {
                             text: model.shareViewCount
-                            font.pixelSize: 12
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            color: StyleTokens.colorTextSecondary
                             Layout.preferredWidth: 50
                             horizontalAlignment: Text.AlignHCenter
                         }
@@ -337,8 +345,8 @@ Item {
                         // 下载次数
                         Label {
                             text: model.shareDownloadCount
-                            font.pixelSize: 12
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            color: StyleTokens.colorTextSecondary
                             Layout.preferredWidth: 50
                             horizontalAlignment: Text.AlignHCenter
                         }
@@ -346,28 +354,30 @@ Item {
                         // 创建时间
                         Label {
                             text: FormatUtils.formatDate(model.shareCreatedAt)
-                            font.pixelSize: 12
-                            color: palette.placeholderText
-                            Layout.preferredWidth: 90
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            color: StyleTokens.colorTextSecondary
+                            Layout.preferredWidth: 120
                             horizontalAlignment: Text.AlignHCenter
                         }
 
                         // 过期时间
                         Label {
                             text: FormatUtils.formatDate(model.shareExpiresAt)
-                            font.pixelSize: 12
-                            color: palette.placeholderText
-                            Layout.preferredWidth: 90
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            color: StyleTokens.colorTextSecondary
+                            Layout.preferredWidth: 120
                             horizontalAlignment: Text.AlignHCenter
                         }
 
                         // 状态
-                        Label {
-                            text: FormatUtils.statusLabel(model.shareStatus)
-                            font.pixelSize: 12
-                            color: root.statusColor(model.shareStatus)
-                            Layout.preferredWidth: 60
-                            horizontalAlignment: Text.AlignHCenter
+                        Item {
+                            Layout.preferredWidth: 80
+                            Layout.fillHeight: true
+                            AppBadge {
+                                anchors.centerIn: parent
+                                text: FormatUtils.statusLabel(model.shareStatus)
+                                status: root.statusBadgeType(model.shareStatus)
+                            }
                         }
                     }
 
@@ -395,10 +405,9 @@ Item {
                                 ShareViewModel.toggleSelection(model.shareId)
                             }
                         }
+                    }
                 }
             }
-        }
-
         }
 
         // ==================== 分页栏 ====================
@@ -486,41 +495,40 @@ Item {
         // 表单内容
         ColumnLayout {
             anchors.fill: parent
-            spacing: 12
+            spacing: StyleTokens.spacingMd
 
             Label {
                 text: "分享设置"
-                font.pixelSize: 14
-                font.bold: true
-                color: palette.windowText
+                font.pixelSize: StyleTokens.fontSizeH3
+                font.weight: StyleTokens.fontWeightH3
+                color: StyleTokens.colorTextPrimary
             }
 
             // 文件ID输入（高级选项，建议从文件列表右键创建分享）
             Label {
                 text: "文件ID（高级选项）："
-                font.pixelSize: 11
-                color: palette.placeholderText
+                font.pixelSize: StyleTokens.fontSizeSmall
+                color: StyleTokens.colorTextSecondary
             }
 
-            TextField {
+            AppTextInput {
                 id: fileIdsField
                 Layout.fillWidth: true
                 placeholderText: "建议从文件列表右键分享"
-                font.pixelSize: 13
             }
 
             Label {
                 text: "💡 提示：在文件列表中右键点击文件即可快速创建分享"
-                font.pixelSize: 11
-                color: palette.placeholderText
+                font.pixelSize: StyleTokens.fontSizeSmall
+                color: StyleTokens.colorTextTertiary
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }
 
             Label {
                 text: "有效期："
-                font.pixelSize: 12
-                color: palette.windowText
+                font.pixelSize: StyleTokens.fontSizeBody
+                color: StyleTokens.colorTextPrimary
             }
 
             ComboBox {
@@ -539,23 +547,22 @@ Item {
 
             Label {
                 text: "访问密码（可选，4-8字符）："
-                font.pixelSize: 12
-                color: palette.windowText
+                font.pixelSize: StyleTokens.fontSizeBody
+                color: StyleTokens.colorTextPrimary
             }
 
-            TextField {
+            AppTextInput {
                 id: passwordField
                 Layout.fillWidth: true
                 placeholderText: "留空表示无密码"
-                font.pixelSize: 13
                 echoMode: TextInput.Password
                 maximumLength: 8
             }
 
             Label {
                 text: "权限："
-                font.pixelSize: 12
-                color: palette.windowText
+                font.pixelSize: StyleTokens.fontSizeBody
+                color: StyleTokens.colorTextPrimary
             }
 
             ComboBox {
@@ -575,9 +582,7 @@ Item {
             // 解析文件ID
             var fileIdsText = fileIdsField.text.trim()
             if (!fileIdsText) {
-                failTooltip.text = "请输入文件ID"
-                failTooltip.visible = true
-                failTooltipTimer.restart()
+                notificationToast.showError("请输入文件ID")
                 return
             }
 
@@ -588,9 +593,7 @@ Item {
             })
 
             if (fileIdsArray.length === 0) {
-                failTooltip.text = "请输入有效的文件ID"
-                failTooltip.visible = true
-                failTooltipTimer.restart()
+                notificationToast.showError("请输入有效的文件ID")
                 return
             }
 
@@ -629,8 +632,8 @@ Item {
 
         Label {
             text: "确定要取消选中的 " + ShareViewModel.selectionCount + " 个分享吗？\n取消后，分享链接将立即失效。"
-            font.pixelSize: 13
-            color: palette.windowText
+            font.pixelSize: StyleTokens.fontSizeBody
+            color: StyleTokens.colorTextPrimary
             wrapMode: Text.Wrap
         }
 
@@ -678,12 +681,12 @@ Item {
 
         ColumnLayout {
             anchors.fill: parent
-            spacing: 12
+            spacing: StyleTokens.spacingMd
 
             Label {
                 text: "有效期："
-                font.pixelSize: 12
-                color: palette.windowText
+                font.pixelSize: StyleTokens.fontSizeBody
+                color: StyleTokens.colorTextPrimary
             }
 
             ComboBox {
@@ -702,19 +705,18 @@ Item {
 
             Label {
                 text: "访问密码（留空保持不变，勾选清除）："
-                font.pixelSize: 12
-                color: palette.windowText
+                font.pixelSize: StyleTokens.fontSizeBody
+                color: StyleTokens.colorTextPrimary
             }
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 8
+                spacing: StyleTokens.spacingSm
 
-                TextField {
+                AppTextInput {
                     id: editPasswordField
                     Layout.fillWidth: true
                     placeholderText: editShareDialog.originalHasPassword ? "当前已设置密码" : "当前无密码"
-                    font.pixelSize: 13
                     echoMode: TextInput.Password
                     maximumLength: 8
                     enabled: !editPasswordClearCheckbox.checked
@@ -729,8 +731,8 @@ Item {
 
             Label {
                 text: "权限："
-                font.pixelSize: 12
-                color: palette.windowText
+                font.pixelSize: StyleTokens.fontSizeBody
+                color: StyleTokens.colorTextPrimary
             }
 
             ComboBox {
@@ -787,37 +789,35 @@ Item {
 
         ColumnLayout {
             anchors.fill: parent
-            spacing: 12
+            spacing: StyleTokens.spacingMd
 
             Label {
                 text: "分享链接："
-                font.pixelSize: 12
-                font.bold: true
-                color: palette.windowText
+                font.pixelSize: StyleTokens.fontSizeBody
+                font.weight: StyleTokens.fontWeightH3
+                color: StyleTokens.colorTextPrimary
             }
 
-            TextField {
+            AppTextInput {
                 id: shareLinkField
                 Layout.fillWidth: true
                 text: shareDetailsDialog.shareLink
-                font.pixelSize: 12
                 readOnly: true
                 selectByMouse: true
             }
 
             Label {
                 text: "访问密码："
-                font.pixelSize: 12
-                font.bold: true
-                color: palette.windowText
+                font.pixelSize: StyleTokens.fontSizeBody
+                font.weight: StyleTokens.fontWeightH3
+                color: StyleTokens.colorTextPrimary
                 visible: shareDetailsDialog.sharePassword !== ""
             }
 
-            TextField {
+            AppTextInput {
                 id: sharePasswordField
                 Layout.fillWidth: true
                 text: shareDetailsDialog.sharePassword
-                font.pixelSize: 12
                 readOnly: true
                 selectByMouse: true
                 visible: shareDetailsDialog.sharePassword !== ""
@@ -825,12 +825,13 @@ Item {
 
             Label {
                 text: "过期时间：" + shareDetailsDialog.shareExpiresAt
-                font.pixelSize: 12
-                color: palette.placeholderText
+                font.pixelSize: StyleTokens.fontSizeBody
+                color: StyleTokens.colorTextSecondary
             }
 
-            Button {
+            AppButton {
                 text: "复制链接" + (shareDetailsDialog.sharePassword ? "和密码" : "")
+                variant: "primary"
                 Layout.alignment: Qt.AlignHCenter
                 onClicked: {
                     var copyText = shareDetailsDialog.shareLink

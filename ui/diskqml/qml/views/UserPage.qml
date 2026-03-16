@@ -10,6 +10,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Disk 1.0
+import "../tokens"
+import "../components/primitives"
 
 Item {
     id: root
@@ -35,12 +37,12 @@ Item {
 
             Label {
                 text: "👤 个人设置"
-                font.pixelSize: 22
-                font.bold: true
-                color: palette.windowText
-                Layout.topMargin: 24
-                Layout.leftMargin: 24
-                Layout.rightMargin: 24
+                font.pixelSize: StyleTokens.fontSizeH1
+                font.weight: StyleTokens.fontWeightH1
+                color: StyleTokens.colorTextPrimary
+                Layout.topMargin: StyleTokens.spacingLg
+                Layout.leftMargin: StyleTokens.spacingLg
+                Layout.rightMargin: StyleTokens.spacingLg
             }
 
             // ==================== 成功提示横幅 ====================
@@ -49,13 +51,13 @@ Item {
                 id: successBanner
                 visible: root.profileSaved || root.passwordSaved
                 Layout.fillWidth: true
-                Layout.topMargin: 12
-                Layout.leftMargin: 24
-                Layout.rightMargin: 24
+                Layout.topMargin: StyleTokens.spacingMd
+                Layout.leftMargin: StyleTokens.spacingLg
+                Layout.rightMargin: StyleTokens.spacingLg
                 Layout.preferredHeight: 36
-                radius: 6
+                radius: StyleTokens.radiusMedium
                 color: "#E8F5E9"
-                border.color: "#4CAF50"
+                border.color: StyleTokens.colorSuccess
                 border.width: 1
 
                 Timer {
@@ -70,7 +72,7 @@ Item {
                 Label {
                     anchors.centerIn: parent
                     text: root.profileSaved ? "✓ 个人信息已保存" : "✓ 密码已修改"
-                    font.pixelSize: 13
+                    font.pixelSize: StyleTokens.fontSizeBody
                     color: "#2E7D32"
                 }
             }
@@ -80,19 +82,19 @@ Item {
             Rectangle {
                 visible: root.lastError !== ""
                 Layout.fillWidth: true
-                Layout.topMargin: 12
-                Layout.leftMargin: 24
-                Layout.rightMargin: 24
+                Layout.topMargin: StyleTokens.spacingMd
+                Layout.leftMargin: StyleTokens.spacingLg
+                Layout.rightMargin: StyleTokens.spacingLg
                 Layout.preferredHeight: 36
-                radius: 6
+                radius: StyleTokens.radiusMedium
                 color: "#FFEBEE"
-                border.color: "#EF5350"
+                border.color: StyleTokens.colorError
                 border.width: 1
 
                 Label {
                     anchors.centerIn: parent
                     text: root.lastError
-                    font.pixelSize: 13
+                    font.pixelSize: StyleTokens.fontSizeBody
                     color: "#C62828"
                 }
             }
@@ -101,51 +103,51 @@ Item {
 
             Label {
                 text: "个人信息"
-                font.pixelSize: 16
-                font.bold: true
-                color: palette.windowText
-                Layout.topMargin: 24
-                Layout.leftMargin: 24
+                font.pixelSize: StyleTokens.fontSizeH2
+                font.weight: StyleTokens.fontWeightH2
+                color: StyleTokens.colorTextPrimary
+                Layout.topMargin: StyleTokens.spacingLg
+                Layout.leftMargin: StyleTokens.spacingLg
             }
 
             Rectangle {
-                Layout.topMargin: 8
-                Layout.leftMargin: 24
-                Layout.rightMargin: 24
+                Layout.topMargin: StyleTokens.spacingSm
+                Layout.leftMargin: StyleTokens.spacingLg
+                Layout.rightMargin: StyleTokens.spacingLg
                 Layout.fillWidth: true
-                Layout.preferredHeight: profileCol.implicitHeight + 24
-                color: palette.base
-                radius: 8
-                border.color: palette.mid
+                Layout.preferredHeight: profileCol.implicitHeight + StyleTokens.spacingLg
+                color: StyleTokens.colorSurface
+                radius: StyleTokens.radiusLarge
+                border.color: StyleTokens.colorBorder
                 border.width: 1
 
                 ColumnLayout {
                     id: profileCol
                     anchors.fill: parent
-                    anchors.margins: 12
-                    spacing: 12
+                    anchors.margins: StyleTokens.spacingMd
+                    spacing: StyleTokens.spacingMd
 
                     // 用户名（只读显示）
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 4
+                        spacing: StyleTokens.spacingXs
 
                         Label {
                             text: "用户名"
-                            font.pixelSize: 13
-                            color: palette.windowText
+                            font.pixelSize: StyleTokens.fontSizeBody
+                            color: StyleTokens.colorTextSecondary
                         }
 
-                        TextField {
+                        AppTextInput {
                             id: usernameField
                             Layout.fillWidth: true
                             text: typeof UserViewModel !== 'undefined' ? UserViewModel.username : ""
-                            font.pixelSize: 13
                             readOnly: true
-                            color: palette.placeholderText
+                            color: StyleTokens.colorTextTertiary
                             background: Rectangle {
-                                color: palette.midlight
-                                radius: 4
+                                color: StyleTokens.colorBackground
+                                radius: StyleTokens.radiusMedium
+                                border.color: "transparent"
                             }
                         }
                     }
@@ -153,24 +155,24 @@ Item {
                     // 邮箱（只读显示）
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 4
+                        spacing: StyleTokens.spacingXs
 
                         Label {
                             text: "邮箱"
-                            font.pixelSize: 13
-                            color: palette.windowText
+                            font.pixelSize: StyleTokens.fontSizeBody
+                            color: StyleTokens.colorTextSecondary
                         }
 
-                        TextField {
+                        AppTextInput {
                             id: emailField
                             Layout.fillWidth: true
                             text: typeof UserViewModel !== 'undefined' ? UserViewModel.email : ""
-                            font.pixelSize: 13
                             readOnly: true
-                            color: palette.placeholderText
+                            color: StyleTokens.colorTextTertiary
                             background: Rectangle {
-                                color: palette.midlight
-                                radius: 4
+                                color: StyleTokens.colorBackground
+                                radius: StyleTokens.radiusMedium
+                                border.color: "transparent"
                             }
                         }
                     }
@@ -178,20 +180,19 @@ Item {
                     // 昵称（可编辑）
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 4
+                        spacing: StyleTokens.spacingXs
 
                         Label {
                             text: "昵称"
-                            font.pixelSize: 13
-                            color: palette.windowText
+                            font.pixelSize: StyleTokens.fontSizeBody
+                            color: StyleTokens.colorTextSecondary
                         }
 
-                        TextField {
+                        AppTextInput {
                             id: nicknameField
                             Layout.fillWidth: true
                             text: typeof UserViewModel !== 'undefined' ? UserViewModel.nickname : ""
                             placeholderText: "设置您的昵称"
-                            font.pixelSize: 13
                             onTextEdited: {
                                 if (typeof UserViewModel !== 'undefined') {
                                     UserViewModel.nickname = text
@@ -203,14 +204,13 @@ Item {
                     // 保存按钮
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 12
+                        spacing: StyleTokens.spacingMd
 
                         Item { Layout.fillWidth: true }
 
-                        Button {
+                        AppButton {
                             text: "保存个人信息"
-                            font.pixelSize: 13
-                            highlighted: true
+                            variant: "primary"
                             enabled: typeof UserViewModel !== 'undefined' && UserViewModel.hasProfileChanges
                             onClicked: {
                                 if (typeof UserViewModel !== 'undefined') {
@@ -226,29 +226,29 @@ Item {
 
             Label {
                 text: "存储空间"
-                font.pixelSize: 16
-                font.bold: true
-                color: palette.windowText
-                Layout.topMargin: 24
-                Layout.leftMargin: 24
+                font.pixelSize: StyleTokens.fontSizeH2
+                font.weight: StyleTokens.fontWeightH2
+                color: StyleTokens.colorTextPrimary
+                Layout.topMargin: StyleTokens.spacingLg
+                Layout.leftMargin: StyleTokens.spacingLg
             }
 
             Rectangle {
-                Layout.topMargin: 8
-                Layout.leftMargin: 24
-                Layout.rightMargin: 24
+                Layout.topMargin: StyleTokens.spacingSm
+                Layout.leftMargin: StyleTokens.spacingLg
+                Layout.rightMargin: StyleTokens.spacingLg
                 Layout.fillWidth: true
-                Layout.preferredHeight: storageCol.implicitHeight + 24
-                color: palette.base
-                radius: 8
-                border.color: palette.mid
+                Layout.preferredHeight: storageCol.implicitHeight + StyleTokens.spacingLg
+                color: StyleTokens.colorSurface
+                radius: StyleTokens.radiusLarge
+                border.color: StyleTokens.colorBorder
                 border.width: 1
 
                 ColumnLayout {
                     id: storageCol
                     anchors.fill: parent
-                    anchors.margins: 12
-                    spacing: 8
+                    anchors.margins: StyleTokens.spacingMd
+                    spacing: StyleTokens.spacingSm
 
                     // 使用量文本
                     RowLayout {
@@ -262,8 +262,8 @@ Item {
                                 }
                                 return "正在加载..."
                             }
-                            font.pixelSize: 13
-                            color: palette.windowText
+                            font.pixelSize: StyleTokens.fontSizeBody
+                            color: StyleTokens.colorTextSecondary
                         }
 
                         Item { Layout.fillWidth: true }
@@ -277,13 +277,13 @@ Item {
                                 }
                                 return ""
                             }
-                            font.pixelSize: 13
+                            font.pixelSize: StyleTokens.fontSizeBody
                             color: {
-                                if (typeof UserViewModel === 'undefined') return palette.placeholderText
+                                if (typeof UserViewModel === 'undefined') return StyleTokens.colorTextTertiary
                                 var pct = UserViewModel.storagePercentage;
-                                if (pct >= 100) return "#D32F2F";
-                                if (pct >= 80) return "#F57C00";
-                                return palette.placeholderText;
+                                if (pct >= 100) return StyleTokens.colorError;
+                                if (pct >= 80) return StyleTokens.colorWarning;
+                                return StyleTokens.colorTextTertiary;
                             }
                         }
                     }
@@ -299,8 +299,8 @@ Item {
                         background: Rectangle {
                             implicitWidth: 200
                             implicitHeight: 8
-                            radius: 4
-                            color: palette.midlight
+                            radius: StyleTokens.radiusSmall
+                            color: StyleTokens.colorBackground
                         }
 
                         contentItem: Item {
@@ -310,13 +310,13 @@ Item {
                             Rectangle {
                                 width: parent.parent.visualPosition * parent.width
                                 height: parent.height
-                                radius: 4
+                                radius: StyleTokens.radiusSmall
                                 color: {
-                                    if (typeof UserViewModel === 'undefined') return "#1976D2"
+                                    if (typeof UserViewModel === 'undefined') return StyleTokens.colorPrimary
                                     var pct = UserViewModel.storagePercentage;
-                                    if (pct >= 100) return "#D32F2F";
-                                    if (pct >= 80) return "#F57C00";
-                                    return "#1976D2";
+                                    if (pct >= 100) return StyleTokens.colorError;
+                                    if (pct >= 80) return StyleTokens.colorWarning;
+                                    return StyleTokens.colorPrimary;
                                 }
                             }
                         }
@@ -329,8 +329,8 @@ Item {
                                  && UserViewModel.storagePercentage >= 80
                                  && UserViewModel.storagePercentage < 100
                         text: "⚠ 存储空间即将用尽，请清理文件"
-                        font.pixelSize: 12
-                        color: "#F57C00"
+                        font.pixelSize: StyleTokens.fontSizeSmall
+                        color: StyleTokens.colorWarning
                     }
 
                     Label {
@@ -338,21 +338,20 @@ Item {
                                  && UserViewModel.storageLoaded
                                  && UserViewModel.storagePercentage >= 100
                         text: "❌ 存储空间已满，无法上传新文件"
-                        font.pixelSize: 12
-                        color: "#D32F2F"
+                        font.pixelSize: StyleTokens.fontSizeSmall
+                        color: StyleTokens.colorError
                     }
 
                     // 刷新按钮
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: StyleTokens.spacingSm
 
                         Item { Layout.fillWidth: true }
 
-                        Button {
+                        AppButton {
                             text: "刷新"
-                            font.pixelSize: 12
-                            flat: true
+                            variant: "secondary"
                             enabled: typeof UserViewModel !== 'undefined' && !UserViewModel.loading
                             onClicked: {
                                 if (typeof UserViewModel !== 'undefined') {
@@ -368,46 +367,45 @@ Item {
 
             Label {
                 text: "修改密码"
-                font.pixelSize: 16
-                font.bold: true
-                color: palette.windowText
-                Layout.topMargin: 24
-                Layout.leftMargin: 24
+                font.pixelSize: StyleTokens.fontSizeH2
+                font.weight: StyleTokens.fontWeightH2
+                color: StyleTokens.colorTextPrimary
+                Layout.topMargin: StyleTokens.spacingLg
+                Layout.leftMargin: StyleTokens.spacingLg
             }
 
             Rectangle {
-                Layout.topMargin: 8
-                Layout.leftMargin: 24
-                Layout.rightMargin: 24
+                Layout.topMargin: StyleTokens.spacingSm
+                Layout.leftMargin: StyleTokens.spacingLg
+                Layout.rightMargin: StyleTokens.spacingLg
                 Layout.fillWidth: true
-                Layout.preferredHeight: passwordCol.implicitHeight + 24
-                color: palette.base
-                radius: 8
-                border.color: palette.mid
+                Layout.preferredHeight: passwordCol.implicitHeight + StyleTokens.spacingLg
+                color: StyleTokens.colorSurface
+                radius: StyleTokens.radiusLarge
+                border.color: StyleTokens.colorBorder
                 border.width: 1
 
                 ColumnLayout {
                     id: passwordCol
                     anchors.fill: parent
-                    anchors.margins: 12
-                    spacing: 12
+                    anchors.margins: StyleTokens.spacingMd
+                    spacing: StyleTokens.spacingMd
 
                     // 当前密码
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 4
+                        spacing: StyleTokens.spacingXs
 
                         Label {
                             text: "当前密码"
-                            font.pixelSize: 13
-                            color: palette.windowText
+                            font.pixelSize: StyleTokens.fontSizeBody
+                            color: StyleTokens.colorTextSecondary
                         }
 
-                        TextField {
+                        AppTextInput {
                             id: currentPasswordField
                             Layout.fillWidth: true
                             placeholderText: "请输入当前密码"
-                            font.pixelSize: 13
                             echoMode: TextInput.Password
                         }
                     }
@@ -415,19 +413,18 @@ Item {
                     // 新密码
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 4
+                        spacing: StyleTokens.spacingXs
 
                         Label {
                             text: "新密码"
-                            font.pixelSize: 13
-                            color: palette.windowText
+                            font.pixelSize: StyleTokens.fontSizeBody
+                            color: StyleTokens.colorTextSecondary
                         }
 
-                        TextField {
+                        AppTextInput {
                             id: newPasswordField
                             Layout.fillWidth: true
                             placeholderText: "8-64位，需包含大小写字母和数字"
-                            font.pixelSize: 13
                             echoMode: TextInput.Password
                         }
                     }
@@ -435,19 +432,18 @@ Item {
                     // 确认新密码
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 4
+                        spacing: StyleTokens.spacingXs
 
                         Label {
                             text: "确认新密码"
-                            font.pixelSize: 13
-                            color: palette.windowText
+                            font.pixelSize: StyleTokens.fontSizeBody
+                            color: StyleTokens.colorTextSecondary
                         }
 
-                        TextField {
+                        AppTextInput {
                             id: confirmPasswordField
                             Layout.fillWidth: true
                             placeholderText: "请再次输入新密码"
-                            font.pixelSize: 13
                             echoMode: TextInput.Password
                         }
                     }
@@ -464,13 +460,13 @@ Item {
                             if (pwd.length > 64) return "⚠ 密码长度不能超过64位"
                             return "✓ 密码格式正确"
                         }
-                        font.pixelSize: 12
+                        font.pixelSize: StyleTokens.fontSizeSmall
                         color: {
                             var pwd = newPasswordField.text
                             if (pwd.length < 8 || !/[a-z]/.test(pwd) || !/[A-Z]/.test(pwd) || !/\d/.test(pwd) || pwd.length > 64) {
-                                return "#F57C00"
+                                return StyleTokens.colorWarning
                             }
-                            return "#4CAF50"
+                            return StyleTokens.colorSuccess
                         }
                     }
 
@@ -478,21 +474,20 @@ Item {
                     Label {
                         visible: confirmPasswordField.text.length > 0
                         text: confirmPasswordField.text === newPasswordField.text ? "✓ 两次密码一致" : "⚠ 两次密码不一致"
-                        font.pixelSize: 12
-                        color: confirmPasswordField.text === newPasswordField.text ? "#4CAF50" : "#F57C00"
+                        font.pixelSize: StyleTokens.fontSizeSmall
+                        color: confirmPasswordField.text === newPasswordField.text ? StyleTokens.colorSuccess : StyleTokens.colorWarning
                     }
 
                     // 修改密码按钮
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 12
+                        spacing: StyleTokens.spacingMd
 
                         Item { Layout.fillWidth: true }
 
-                        Button {
+                        AppButton {
                             text: "修改密码"
-                            font.pixelSize: 13
-                            highlighted: true
+                            variant: "primary"
                             enabled: {
                                 if (typeof UserViewModel !== 'undefined' && UserViewModel.loading) return false
                                 if (currentPasswordField.text.length === 0) return false
@@ -528,7 +523,7 @@ Item {
             }
 
             // 底部留白
-            Item { Layout.preferredHeight: 24 }
+            Item { Layout.preferredHeight: StyleTokens.spacingLg }
         }
     }
 

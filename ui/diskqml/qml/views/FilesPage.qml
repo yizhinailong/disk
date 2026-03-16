@@ -6,6 +6,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Disk 1.0
+import "../components/primitives"
+import "../tokens"
 
 Item {
     id: root
@@ -42,9 +44,9 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 4
+                anchors.leftMargin: StyleTokens.spacingMd
+                anchors.rightMargin: StyleTokens.spacingMd
+                spacing: StyleTokens.spacingXs
 
                 // --- 面包屑 ---
                 Repeater {
@@ -57,19 +59,19 @@ Item {
                         Label {
                             text: " / "
                             visible: index > 0
-                            font.pixelSize: 13
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeBody
+                            color: StyleTokens.colorTextTertiary
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
                         // 可点击面包屑
                         Label {
                             text: model.folderName
-                            font.pixelSize: 13
+                            font.pixelSize: StyleTokens.fontSizeBody
                             font.bold: index === FileListViewModel.breadcrumbModel.count - 1
                             color: index === FileListViewModel.breadcrumbModel.count - 1
-                                   ? palette.windowText
-                                   : palette.link
+                                   ? StyleTokens.colorTextPrimary
+                                   : StyleTokens.colorPrimary
                             anchors.verticalCenter: parent.verticalCenter
 
                             MouseArea {
@@ -87,18 +89,20 @@ Item {
 
 
                 // --- 上传文件 ---
-                ToolButton {
+                AppButton {
+                    variant: "icon"
                     text: "⬆"
-                    font.pixelSize: 14
+                    font.pixelSize: StyleTokens.fontSizeBody
                     ToolTip.visible: hovered
                     ToolTip.text: "上传文件"
                     onClicked: uploadDialog.openUpload()
                 }
 
                 // --- 新建文件夹 ---
-                ToolButton {
+                AppButton {
+                    variant: "icon"
                     text: "📁+"
-                    font.pixelSize: 14
+                    font.pixelSize: StyleTokens.fontSizeBody
                     ToolTip.visible: hovered
                     ToolTip.text: "新建文件夹"
                     onClicked: newFolderDialog.open()
@@ -110,7 +114,7 @@ Item {
                 ComboBox {
                     id: sortCombo
                     Layout.preferredWidth: 120
-                    font.pixelSize: 12
+                    font.pixelSize: StyleTokens.fontSizeSmall
                     model: [
                         { text: "名称", value: "name" },
                         { text: "大小", value: "size" },
@@ -129,9 +133,10 @@ Item {
                     onActivated: FileListViewModel.setSortField(currentValue)
                 }
 
-                ToolButton {
+                AppButton {
+                    variant: "icon"
                     text: FileListViewModel.sortOrder === "asc" ? "↑" : "↓"
-                    font.pixelSize: 14
+                    font.pixelSize: StyleTokens.fontSizeBody
                     ToolTip.visible: hovered
                     ToolTip.text: FileListViewModel.sortOrder === "asc" ? "升序" : "降序"
                     onClicked: FileListViewModel.toggleSortOrder()
@@ -139,23 +144,25 @@ Item {
 
                 // --- 分隔线 ---
                 Rectangle {
-                    width: 1; height: 20; color: palette.mid
+                    width: 1; height: 20; color: StyleTokens.colorBorder
                     Layout.alignment: Qt.AlignVCenter
                 }
 
                 // --- 视图切换 ---
-                ToolButton {
+                AppButton {
+                    variant: "icon"
                     text: "⊞"
-                    font.pixelSize: 16
+                    font.pixelSize: StyleTokens.fontSizeH2
                     ToolTip.visible: hovered
                     ToolTip.text: "网格视图"
                     highlighted: FileListViewModel.viewMode === "grid"
                     onClicked: FileListViewModel.viewMode = "grid"
                 }
 
-                ToolButton {
+                AppButton {
+                    variant: "icon"
                     text: "☰"
-                    font.pixelSize: 16
+                    font.pixelSize: StyleTokens.fontSizeH2
                     ToolTip.visible: hovered
                     ToolTip.text: "列表视图"
                     highlighted: FileListViewModel.viewMode === "list"
@@ -168,7 +175,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             height: 1
-            color: palette.mid
+            color: StyleTokens.colorBorder
         }
 
         // ==================== 多选操作栏 ====================
@@ -176,27 +183,33 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 40
-            color: palette.highlight
+            color: StyleTokens.colorPrimaryLight
             opacity: 0.15
             visible: FileListViewModel.hasSelection
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 8
+                anchors.leftMargin: StyleTokens.spacingMd
+                anchors.rightMargin: StyleTokens.spacingMd
+                spacing: StyleTokens.spacingSm
 
                 Label {
-                    text: "已选择 " + FileListViewModel.selectionCount + " 项"
-                    font.pixelSize: 13
-                    color: palette.windowText
+                    text: "已选择"
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorTextPrimary
+                }
+
+                AppBadge {
+                    text: FileListViewModel.selectionCount.toString()
+                    status: "info"
                 }
 
                 Item { Layout.fillWidth: true }
 
-                ToolButton {
+                AppButton {
+                    variant: "icon"
                     text: "取消选择"
-                    font.pixelSize: 12
+                    font.pixelSize: StyleTokens.fontSizeSmall
                     onClicked: FileListViewModel.clearSelection()
                 }
             }
@@ -218,19 +231,20 @@ Item {
             // --- 错误状态 ---
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 12
+                spacing: StyleTokens.spacingMd
                 visible: !FileListViewModel.loading && FileListViewModel.errorMessage !== ""
 
                 Label {
                     text: "⚠️ " + FileListViewModel.errorMessage
-                    font.pixelSize: 14
-                    color: palette.placeholderText
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorTextTertiary
                     Layout.alignment: Qt.AlignHCenter
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
                 }
 
-                Button {
+                AppButton {
+                    variant: "secondary"
                     text: "重试"
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: FileListViewModel.refresh()
@@ -240,15 +254,15 @@ Item {
             // --- 空目录状态 ---
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 8
+                spacing: StyleTokens.spacingSm
                 visible: !FileListViewModel.loading
                          && FileListViewModel.errorMessage === ""
                          && FileListViewModel.fileListModel.count === 0
 
                 Label {
                     text: "📭 此文件夹为空"
-                    font.pixelSize: 18
-                    color: palette.placeholderText
+                    font.pixelSize: StyleTokens.fontSizeH1
+                    color: StyleTokens.colorTextTertiary
                     Layout.alignment: Qt.AlignHCenter
                 }
 
@@ -256,8 +270,8 @@ Item {
                     text: FileListViewModel.isSearching
                           ? "没有找到匹配的文件"
                           : "点击上传按钮添加文件，或创建新文件夹"
-                    font.pixelSize: 13
-                    color: palette.placeholderText
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorTextTertiary
                     Layout.alignment: Qt.AlignHCenter
                 }
             }
@@ -266,7 +280,7 @@ Item {
             GridView {
                 id: gridView
                 anchors.fill: parent
-                anchors.margins: 16
+                anchors.margins: StyleTokens.spacingMd
                 visible: !FileListViewModel.loading
                          && FileListViewModel.errorMessage === ""
                          && FileListViewModel.fileListModel.count > 0
@@ -281,21 +295,17 @@ Item {
                     width: gridView.cellWidth
                     height: gridView.cellHeight
 
-                    Rectangle {
+                    AppCard {
                         id: gridCard
                         anchors.fill: parent
-                        anchors.margins: 8
-                        radius: 8
-                        color: FileListViewModel.isSelected(model.fileId)
-                               ? palette.highlight
-                               : gridCardMa.containsMouse ? palette.midlight : palette.base
-                        border.color: FileListViewModel.isSelected(model.fileId) ? palette.highlight : palette.mid
-                        border.width: 1
-
+                        anchors.margins: StyleTokens.spacingSm
+                        selected: FileListViewModel.isSelected(model.fileId)
+                        isHovered: gridCardMa.containsMouse
+                        
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 4
+                            anchors.margins: StyleTokens.spacingSm
+                            spacing: StyleTokens.spacingXs
 
                             Item { Layout.fillHeight: true }
 
@@ -307,14 +317,14 @@ Item {
 
                             Label {
                                 text: model.fileName
-                                font.pixelSize: 11
+                                font.pixelSize: StyleTokens.fontSizeSmall
                                 elide: Text.ElideMiddle
                                 Layout.fillWidth: true
                                 horizontalAlignment: Text.AlignHCenter
                                 maximumLineCount: 2
                                 wrapMode: Text.Wrap
                                 color: FileListViewModel.isSelected(model.fileId)
-                                       ? palette.highlightedText : palette.windowText
+                                       ? StyleTokens.colorPrimary : StyleTokens.colorTextPrimary
                             }
 
                             Item { Layout.fillHeight: true }
@@ -366,53 +376,53 @@ Item {
                 header: Rectangle {
                     width: listView.width
                     height: 36
-                    color: palette.window
+                    color: StyleTokens.colorBackground
 
                     Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
                         height: 1
-                        color: palette.mid
+                        color: StyleTokens.colorBorder
                     }
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 8
+                        anchors.leftMargin: StyleTokens.spacingMd
+                        anchors.rightMargin: StyleTokens.spacingMd
+                        spacing: StyleTokens.spacingSm
 
                         Label {
                             text: "名称"
-                            font.pixelSize: 12
+                            font.pixelSize: StyleTokens.fontSizeSmall
                             font.bold: true
-                            color: palette.placeholderText
+                            color: StyleTokens.colorTextTertiary
                             Layout.fillWidth: true
                         }
 
                         Label {
                             text: "大小"
-                            font.pixelSize: 12
+                            font.pixelSize: StyleTokens.fontSizeSmall
                             font.bold: true
-                            color: palette.placeholderText
+                            color: StyleTokens.colorTextTertiary
                             Layout.preferredWidth: 80
                             horizontalAlignment: Text.AlignRight
                         }
 
                         Label {
                             text: "修改时间"
-                            font.pixelSize: 12
+                            font.pixelSize: StyleTokens.fontSizeSmall
                             font.bold: true
-                            color: palette.placeholderText
+                            color: StyleTokens.colorTextTertiary
                             Layout.preferredWidth: 100
                             horizontalAlignment: Text.AlignRight
                         }
 
                         Label {
                             text: "类型"
-                            font.pixelSize: 12
+                            font.pixelSize: StyleTokens.fontSizeSmall
                             font.bold: true
-                            color: palette.placeholderText
+                            color: StyleTokens.colorTextTertiary
                             Layout.preferredWidth: 60
                             horizontalAlignment: Text.AlignRight
                         }
@@ -424,45 +434,45 @@ Item {
                     width: listView.width
                     height: 40
                     color: FileListViewModel.isSelected(model.fileId)
-                           ? palette.highlight
-                           : listRowMa.containsMouse ? palette.midlight : "transparent"
+                           ? StyleTokens.colorPrimaryLight
+                           : listRowMa.containsMouse ? StyleTokens.colorHover : "transparent"
 
                     Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
                         height: 1
-                        color: palette.mid
+                        color: StyleTokens.colorBorder
                         opacity: 0.3
                     }
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 8
+                        anchors.leftMargin: StyleTokens.spacingMd
+                        anchors.rightMargin: StyleTokens.spacingMd
+                        spacing: StyleTokens.spacingSm
 
                         // 图标 + 文件名
                         Label {
                             text: FormatUtils.fileIcon(model.fileType, model.fileMimeType)
-                            font.pixelSize: 16
+                            font.pixelSize: StyleTokens.fontSizeH2
                             Layout.preferredWidth: 24
                         }
 
                         Label {
                             text: model.fileName
-                            font.pixelSize: 13
+                            font.pixelSize: StyleTokens.fontSizeBody
                             elide: Text.ElideMiddle
                             Layout.fillWidth: true
                             color: FileListViewModel.isSelected(model.fileId)
-                                   ? palette.highlightedText : palette.windowText
+                                   ? StyleTokens.colorPrimary : StyleTokens.colorTextPrimary
                         }
 
                         // 大小
                         Label {
                             text: model.fileIsFolder ? (model.fileItemCount + " 项") : FormatUtils.formatSize(model.fileSize)
-                            font.pixelSize: 12
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            color: StyleTokens.colorTextTertiary
                             Layout.preferredWidth: 80
                             horizontalAlignment: Text.AlignRight
                         }
@@ -470,8 +480,8 @@ Item {
                         // 修改时间
                         Label {
                             text: FormatUtils.formatDate(model.fileUpdatedAt)
-                            font.pixelSize: 12
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            color: StyleTokens.colorTextTertiary
                             Layout.preferredWidth: 100
                             horizontalAlignment: Text.AlignRight
                         }
@@ -479,8 +489,8 @@ Item {
                         // 类型
                         Label {
                             text: FormatUtils.fileTypeLabel(model.fileType, model.fileMimeType)
-                            font.pixelSize: 12
-                            color: palette.placeholderText
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            color: StyleTokens.colorTextTertiary
                             Layout.preferredWidth: 60
                             horizontalAlignment: Text.AlignRight
                         }

@@ -6,10 +6,12 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Disk 1.0
+import "../tokens"
+import "../components/primitives"
+import "../components"
 
 Item {
     id: root
-
 
     ColumnLayout {
         anchors.fill: parent
@@ -17,52 +19,52 @@ Item {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 44
-            color: "transparent"
+            Layout.preferredHeight: StyleTokens.titleBarHeight
+            color: StyleTokens.colorSurface
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 8
+                anchors.leftMargin: StyleTokens.spacingLg
+                anchors.rightMargin: StyleTokens.spacingLg
+                spacing: StyleTokens.spacingSm
 
                 Label {
                     text: "下载"
-                    font.pixelSize: 20
-                    font.bold: true
-                    color: palette.windowText
+                    font.pixelSize: StyleTokens.fontSizeH1
+                    font.weight: StyleTokens.fontWeightH1
+                    color: StyleTokens.colorTextPrimary
                 }
 
                 Label {
                     text: TransfersViewModel.activeDownloadCount > 0
                           ? "(" + TransfersViewModel.activeDownloadCount + " 进行中)"
                           : ""
-                    font.pixelSize: 13
-                    color: palette.placeholderText
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorTextTertiary
                 }
 
                 Item { Layout.fillWidth: true }
 
-                ToolButton {
+                AppButton {
                     text: "⏸"
-                    font.pixelSize: 14
+                    variant: "icon"
                     ToolTip.visible: hovered
                     ToolTip.text: "全部暂停"
                     enabled: TransfersViewModel.activeDownloadCount > 0
                     onClicked: TransfersViewModel.pauseAll()
                 }
 
-                ToolButton {
+                AppButton {
                     text: "▶"
-                    font.pixelSize: 14
+                    variant: "icon"
                     ToolTip.visible: hovered
                     ToolTip.text: "全部恢复"
                     onClicked: TransfersViewModel.resumeAll()
                 }
 
-                ToolButton {
+                AppButton {
                     text: "🧹"
-                    font.pixelSize: 14
+                    variant: "icon"
                     ToolTip.visible: hovered
                     ToolTip.text: "清除已完成"
                     onClicked: TransfersViewModel.clearCompleted()
@@ -73,7 +75,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             height: 1
-            color: palette.mid
+            color: StyleTokens.colorBorder
         }
 
         Item {
@@ -82,13 +84,13 @@ Item {
 
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 8
+                spacing: StyleTokens.spacingMd
                 visible: TransfersViewModel.downloadModel.count === 0
 
                 Label {
                     text: "暂无传输任务"
-                    font.pixelSize: 16
-                    color: palette.placeholderText
+                    font.pixelSize: StyleTokens.fontSizeH2
+                    color: StyleTokens.colorTextTertiary
                     Layout.alignment: Qt.AlignHCenter
                 }
             }
@@ -100,42 +102,55 @@ Item {
                 clip: true
                 model: TransfersViewModel.downloadModel
                 ScrollBar.vertical: ScrollBar {}
+                spacing: StyleTokens.spacingXs
+                
+                topMargin: StyleTokens.spacingMd
+                bottomMargin: StyleTokens.spacingMd
+                leftMargin: StyleTokens.spacingMd
+                rightMargin: StyleTokens.spacingMd
 
-                delegate: Rectangle {
-                    width: downloadListView.width
-                    height: 64
-                    color: delegateMa.containsMouse ? palette.midlight : "transparent"
+                delegate: AppCard {
+                    width: downloadListView.width - downloadListView.leftMargin - downloadListView.rightMargin
+                    implicitHeight: 80
+                    hoverEnabled: true
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
+                        anchors.margins: StyleTokens.spacingMd
+                        spacing: StyleTokens.spacingLg
 
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 4
+                            spacing: StyleTokens.spacingXs
 
                             RowLayout {
-                                spacing: 8
+                                spacing: StyleTokens.spacingSm
 
                                 Label {
                                     text: model.fileName
-                                    font.pixelSize: 13
+                                    font.pixelSize: StyleTokens.fontSizeBody
+                                    font.weight: StyleTokens.fontWeightBody
                                     elide: Text.ElideMiddle
                                     Layout.fillWidth: true
-                                    color: palette.windowText
+                                    color: StyleTokens.colorTextPrimary
                                 }
 
-                                Label {
+                                AppBadge {
                                     text: TransferHelpers.statusText(model.status, false)
-                                    font.pixelSize: 11
-                                    color: TransferHelpers.statusColor(model.status, palette)
+                                    status: {
+                                        switch (model.status) {
+                                        case 1: return "info"
+                                        case 2: return "warning"
+                                        case 3: return "success"
+                                        case 4: return "error"
+                                        default: return "info"
+                                        }
+                                    }
                                 }
                             }
 
                             RowLayout {
-                                spacing: 8
+                                spacing: StyleTokens.spacingSm
 
                                 ProgressBar {
                                     Layout.fillWidth: true
@@ -147,8 +162,7 @@ Item {
                                     background: Rectangle {
                                         implicitHeight: 6
                                         radius: 3
-                                        color: palette.mid
-                                        opacity: 0.3
+                                        color: StyleTokens.colorBorder
                                     }
 
                                     contentItem: Item {
@@ -157,47 +171,47 @@ Item {
                                             width: parent.width * model.progress / 100
                                             height: parent.height
                                             radius: 3
-                                            color: TransferHelpers.statusColor(model.status, palette)
+                                            color: TransferHelpers.statusColor(model.status, null)
                                         }
                                     }
                                 }
 
                                 Label {
                                     text: model.progress + "%"
-                                    font.pixelSize: 11
-                                    color: palette.placeholderText
-                                    Layout.preferredWidth: 36
+                                    font.pixelSize: StyleTokens.fontSizeSmall
+                                    color: StyleTokens.colorTextSecondary
+                                    Layout.preferredWidth: 40
                                     horizontalAlignment: Text.AlignRight
                                 }
                             }
 
                             RowLayout {
-                                spacing: 8
+                                spacing: StyleTokens.spacingMd
 
                                 Label {
                                     text: TransferHelpers.formatSize(model.doneBytes) + " / " + TransferHelpers.formatSize(model.totalBytes)
-                                    font.pixelSize: 11
-                                    color: palette.placeholderText
+                                    font.pixelSize: StyleTokens.fontSizeSmall
+                                    color: StyleTokens.colorTextTertiary
                                 }
 
                                 Label {
                                     text: model.status === 1 ? TransferHelpers.formatSpeed(model.speed) : ""
-                                    font.pixelSize: 11
-                                    color: palette.placeholderText
+                                    font.pixelSize: StyleTokens.fontSizeSmall
+                                    color: StyleTokens.colorTextTertiary
                                     visible: text !== ""
                                 }
 
                                 Label {
                                     text: model.status === 1 && model.eta > 0 ? "剩余 " + TransferHelpers.formatEta(model.eta) : ""
-                                    font.pixelSize: 11
-                                    color: palette.placeholderText
+                                    font.pixelSize: StyleTokens.fontSizeSmall
+                                    color: StyleTokens.colorTextTertiary
                                     visible: text !== ""
                                 }
 
                                 Label {
                                     text: model.error || ""
-                                    font.pixelSize: 11
-                                    color: "#F44336"
+                                    font.pixelSize: StyleTokens.fontSizeSmall
+                                    color: StyleTokens.colorError
                                     visible: model.status === 4 && (model.error || "") !== ""
                                     elide: Text.ElideRight
                                     Layout.fillWidth: true
@@ -208,60 +222,44 @@ Item {
                         }
 
                         RowLayout {
-                            spacing: 4
+                            spacing: StyleTokens.spacingXs
 
-                            ToolButton {
+                            AppButton {
                                 text: "⏸"
-                                font.pixelSize: 12
+                                variant: "icon"
                                 visible: model.status === 1
                                 ToolTip.visible: hovered
                                 ToolTip.text: "暂停"
                                 onClicked: TransfersViewModel.pauseTransfer(model.transferId)
                             }
 
-                            ToolButton {
+                            AppButton {
                                 text: "▶"
-                                font.pixelSize: 12
+                                variant: "icon"
                                 visible: model.status === 2
                                 ToolTip.visible: hovered
                                 ToolTip.text: "恢复"
                                 onClicked: TransfersViewModel.resumeTransfer(model.transferId)
                             }
 
-                            ToolButton {
+                            AppButton {
                                 text: "🔄"
-                                font.pixelSize: 12
+                                variant: "icon"
                                 visible: model.status === 4
                                 ToolTip.visible: hovered
                                 ToolTip.text: "重试"
                                 onClicked: TransfersViewModel.retryTransfer(model.transferId)
                             }
 
-                            ToolButton {
+                            AppButton {
                                 text: "✕"
-                                font.pixelSize: 12
+                                variant: "icon"
                                 visible: model.status !== 3
                                 ToolTip.visible: hovered
                                 ToolTip.text: "取消"
                                 onClicked: TransfersViewModel.cancelTransfer(model.transferId)
                             }
                         }
-                    }
-
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: 1
-                        color: palette.mid
-                        opacity: 0.3
-                    }
-
-                    MouseArea {
-                        id: delegateMa
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.NoButton
                     }
                 }
             }
