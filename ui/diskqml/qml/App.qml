@@ -11,6 +11,7 @@ import QtQuick.Controls
 import QtQuick.Window
 import Disk 1.0
 import "views"
+import "components/shell"
 
 ApplicationWindow {
     id: root
@@ -31,130 +32,12 @@ ApplicationWindow {
     }
 
     // ==================== 自定义标题栏 ====================
-    Rectangle {
+    AppTitleBar {
         id: titleBar
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        height: 40
-        color: palette.window
-
-        // 底部分隔线
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: 1
-            color: palette.mid
-        }
-
-        // 拖拽区域：整个标题栏
-        DragHandler {
-            target: null
-            onActiveChanged: {
-                if (active) {
-                    root.startSystemMove()
-                }
-            }
-        }
-
-        // 双击最大化/还原
-        TapHandler {
-            onDoubleTapped: {
-                if (root.visibility === Window.Maximized) {
-                    root.showNormal()
-                } else {
-                    root.showMaximized()
-                }
-            }
-        }
-
-        // 左侧：标志
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 12
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Disk"
-            font.pixelSize: 14
-            font.bold: true
-            color: palette.windowText
-        }
-
-        // 右侧：窗口控制按钮 (Windows/Linux 风格)
-        Row {
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-
-            // 最小化按钮
-            Rectangle {
-                width: 46
-                height: parent.height
-                color: minimizeArea.containsMouse ? palette.midlight : "transparent"
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "\u2013"  // 短划线作为最小化图标
-                    font.pixelSize: 14
-                    color: palette.windowText
-                }
-
-                MouseArea {
-                    id: minimizeArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: root.showMinimized()
-                }
-            }
-
-            // 最大化/还原按钮
-            Rectangle {
-                width: 46
-                height: parent.height
-                color: maximizeArea.containsMouse ? palette.midlight : "transparent"
-
-                Text {
-                    anchors.centerIn: parent
-                    text: root.visibility === Window.Maximized ? "\u2752" : "\u25A1"  // 还原 / 最大化
-                    font.pixelSize: 14
-                    color: palette.windowText
-                }
-
-                MouseArea {
-                    id: maximizeArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: {
-                        if (root.visibility === Window.Maximized) {
-                            root.showNormal()
-                        } else {
-                            root.showMaximized()
-                        }
-                    }
-                }
-            }
-
-            // 关闭按钮
-            Rectangle {
-                width: 46
-                height: parent.height
-                color: closeArea.containsMouse ? "#E81123" : "transparent"
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "\u2715"  // × 关闭图标
-                    font.pixelSize: 14
-                    color: closeArea.containsMouse ? "white" : palette.windowText
-                }
-
-                MouseArea {
-                    id: closeArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: root.close()
-                }
-            }
-        }
+        onSystemMoveRequested: root.startSystemMove()
     }
 
     // ==================== 窗口缩放手柄 ====================

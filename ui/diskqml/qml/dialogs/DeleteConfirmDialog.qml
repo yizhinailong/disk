@@ -15,7 +15,18 @@ Dialog {
     width: 400
     anchors.centerIn: parent
     standardButtons: Dialog.NoButton
-    padding: 24
+    padding: StyleTokens.spacingLg
+
+    background: Rectangle {
+        color: StyleTokens.colorSurface
+        radius: StyleTokens.radiusXl
+        border.color: StyleTokens.colorBorder
+        border.width: 1
+    }
+
+    Overlay.modal: Rectangle {
+        color: Qt.rgba(0, 0, 0, 0.45)
+    }
 
     ///< 待删除的文件ID列表
     property var targetFileIds: []
@@ -30,7 +41,7 @@ Dialog {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 16
+        spacing: StyleTokens.spacingMd
 
         Label {
             text: {
@@ -39,34 +50,66 @@ Dialog {
                 }
                 return "确定要删除选中的 " + dlg.targetFileIds.length + " 个项目吗？"
             }
-            font.pixelSize: 14
+            font.pixelSize: StyleTokens.fontSizeBody
+            font.weight: StyleTokens.fontWeightBody
+            color: StyleTokens.colorTextPrimary
             wrapMode: Text.Wrap
             Layout.fillWidth: true
         }
 
         Label {
             text: "此操作将移入回收站，可在 30 天内恢复。"
-            font.pixelSize: 12
-            color: palette.placeholderText
+            font.pixelSize: StyleTokens.fontSizeSmall
+            font.weight: StyleTokens.fontWeightSmall
+            color: StyleTokens.colorTextSecondary
             Layout.fillWidth: true
         }
 
         // --- 按钮行 ---
         RowLayout {
             Layout.fillWidth: true
-            spacing: 12
+            spacing: StyleTokens.spacingSm
 
             Item { Layout.fillWidth: true }
 
             Button {
                 text: "取消"
                 onClicked: dlg.reject()
+                
+                background: Rectangle {
+                    implicitHeight: 36
+                    implicitWidth: 80
+                    color: parent.down ? StyleTokens.colorHover : "transparent"
+                    border.color: StyleTokens.colorBorder
+                    border.width: 1
+                    radius: StyleTokens.radiusSmall
+                }
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorTextPrimary
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
 
             Button {
                 text: "确认删除"
-                highlighted: true
                 onClicked: dlg.accept()
+                
+                background: Rectangle {
+                    implicitHeight: 36
+                    implicitWidth: 80
+                    color: parent.down ? Qt.darker(StyleTokens.colorError, 1.1) : (parent.hovered ? Qt.lighter(StyleTokens.colorError, 1.1) : StyleTokens.colorError)
+                    radius: StyleTokens.radiusSmall
+                }
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: "#FFFFFF"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
         }
     }

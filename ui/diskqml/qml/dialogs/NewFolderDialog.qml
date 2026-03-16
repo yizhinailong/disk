@@ -15,7 +15,18 @@ Dialog {
     width: 450
     anchors.centerIn: parent
     standardButtons: Dialog.NoButton
-    padding: 24
+    padding: StyleTokens.spacingLg
+
+    background: Rectangle {
+        color: StyleTokens.colorSurface
+        radius: StyleTokens.radiusXl
+        border.color: StyleTokens.colorBorder
+        border.width: 1
+    }
+
+    Overlay.modal: Rectangle {
+        color: Qt.rgba(0, 0, 0, 0.45)
+    }
 
     onOpened: {
         nameField.text = ""
@@ -24,19 +35,30 @@ Dialog {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 16
+        spacing: StyleTokens.spacingMd
 
         Label {
             text: "文件夹名称"
-            font.pixelSize: 13
+            font.pixelSize: StyleTokens.fontSizeBody
+            font.weight: StyleTokens.fontWeightBody
+            color: StyleTokens.colorTextPrimary
         }
 
         TextField {
             id: nameField
             Layout.fillWidth: true
             placeholderText: "请输入文件夹名称"
-            font.pixelSize: 14
+            font.pixelSize: StyleTokens.fontSizeBody
+            color: StyleTokens.colorTextPrimary
             selectByMouse: true
+            
+            background: Rectangle {
+                implicitHeight: 40
+                color: nameField.activeFocus ? StyleTokens.colorSurface : StyleTokens.colorBackground
+                border.color: nameField.activeFocus ? StyleTokens.colorPrimary : "transparent"
+                border.width: 1
+                radius: StyleTokens.radiusMedium
+            }
 
             Keys.onReturnPressed: {
                 if (nameField.text.trim().length > 0)
@@ -47,20 +69,49 @@ Dialog {
         // --- 按钮行 ---
         RowLayout {
             Layout.fillWidth: true
-            spacing: 12
+            spacing: StyleTokens.spacingSm
 
             Item { Layout.fillWidth: true }
 
             Button {
                 text: "取消"
                 onClicked: dlg.reject()
+                
+                background: Rectangle {
+                    implicitHeight: 36
+                    implicitWidth: 80
+                    color: parent.down ? StyleTokens.colorHover : "transparent"
+                    border.color: StyleTokens.colorBorder
+                    border.width: 1
+                    radius: StyleTokens.radiusSmall
+                }
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorTextPrimary
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
 
             Button {
                 text: "确认"
-                highlighted: true
                 enabled: nameField.text.trim().length > 0
                 onClicked: dlg.accept()
+                
+                background: Rectangle {
+                    implicitHeight: 36
+                    implicitWidth: 80
+                    color: !parent.enabled ? StyleTokens.colorBackground : (parent.down ? StyleTokens.colorPrimaryHover : (parent.hovered ? Qt.lighter(StyleTokens.colorPrimary, 1.1) : StyleTokens.colorPrimary))
+                    radius: StyleTokens.radiusSmall
+                }
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: !parent.enabled ? StyleTokens.colorTextTertiary : "#FFFFFF"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
         }
     }

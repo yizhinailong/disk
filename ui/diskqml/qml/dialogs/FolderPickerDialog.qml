@@ -20,9 +20,20 @@ Dialog {
     height: 450
     anchors.centerIn: parent
     standardButtons: Dialog.NoButton
-    padding: 24
+    padding: StyleTokens.spacingLg
 
-    ///< 操作模式（"移动" 或 "复制"）
+    background: Rectangle {
+        color: StyleTokens.colorSurface
+        radius: StyleTokens.radiusXl
+        border.color: StyleTokens.colorBorder
+        border.width: 1
+    }
+
+    Overlay.modal: Rectangle {
+        color: Qt.rgba(0, 0, 0, 0.45)
+    }
+
+    ///< 操作模式（"移动" 或 "复制" 或 "custom"）
     property string mode: "move"
     ///< 待移动/复制的文件ID列表
     property var fileIds: []
@@ -55,18 +66,23 @@ Dialog {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 12
+        spacing: StyleTokens.spacingMd
 
         // --- 标题 ---
         Label {
             text: {
+                if (dlg.mode === "custom") {
+                    return "请选择目标文件夹："
+                }
                 var op = dlg.mode === "move" ? "移动" : "复制"
                 if (dlg.fileIds.length === 1) {
                     return op + " \"" + dlg.displayName + "\" 到："
                 }
                 return op + " " + dlg.fileIds.length + " 个项目到："
             }
-            font.pixelSize: 14
+            font.pixelSize: StyleTokens.fontSizeBody
+            font.weight: StyleTokens.fontWeightBody
+            color: StyleTokens.colorTextPrimary
             wrapMode: Text.Wrap
             Layout.fillWidth: true
         }
@@ -78,15 +94,16 @@ Dialog {
             highlighted: dlg.selectedFolderId === 0
 
             contentItem: RowLayout {
-                spacing: 6
+                spacing: StyleTokens.spacingSm
                 Label {
                     text: "📁"
-                    font.pixelSize: 14
+                    font.pixelSize: StyleTokens.fontSizeBody
                 }
                 Label {
                     text: "根目录"
-                    font.pixelSize: 13
-                    font.bold: dlg.selectedFolderId === 0
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    font.weight: dlg.selectedFolderId === 0 ? StyleTokens.fontWeightH3 : StyleTokens.fontWeightBody
+                    color: dlg.selectedFolderId === 0 ? StyleTokens.colorPrimary : StyleTokens.colorTextPrimary
                     Layout.fillWidth: true
                 }
             }
@@ -94,10 +111,10 @@ Dialog {
             onClicked: dlg.selectedFolderId = 0
 
             background: Rectangle {
-                radius: 4
+                radius: StyleTokens.radiusSmall
                 color: dlg.selectedFolderId === 0
-                       ? palette.highlight
-                       : parent.hovered ? palette.midlight : "transparent"
+                       ? StyleTokens.colorPrimaryLight
+                       : parent.hovered ? StyleTokens.colorHover : "transparent"
             }
         }
 
@@ -126,30 +143,31 @@ Dialog {
                     implicitWidth: treeView.width
 
                     contentItem: RowLayout {
-                        spacing: 6
+                        spacing: StyleTokens.spacingSm
 
                         // 缩进由 TreeViewDelegate 自动处理
 
                         Label {
                             text: treeView.isExpanded(row) ? "📂" : "📁"
-                            font.pixelSize: 14
+                            font.pixelSize: StyleTokens.fontSizeBody
                         }
 
                         Label {
                             text: model.folderName ?? model.display ?? ""
-                            font.pixelSize: 13
-                            font.bold: dlg.selectedFolderId === (model.folderId ?? -1)
+                            font.pixelSize: StyleTokens.fontSizeBody
+                            font.weight: dlg.selectedFolderId === (model.folderId ?? -1) ? StyleTokens.fontWeightH3 : StyleTokens.fontWeightBody
+                            color: dlg.selectedFolderId === (model.folderId ?? -1) ? StyleTokens.colorPrimary : StyleTokens.colorTextPrimary
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                         }
                     }
 
                     background: Rectangle {
-                        radius: 4
+                        radius: StyleTokens.radiusSmall
                         color: {
                             var fid = model.folderId ?? -1
-                            if (dlg.selectedFolderId === fid) return palette.highlight
-                            if (treeDelegate.hovered) return palette.midlight
+                            if (dlg.selectedFolderId === fid) return StyleTokens.colorPrimaryLight
+                            if (treeDelegate.hovered) return StyleTokens.colorHover
                             return "transparent"
                         }
                     }
@@ -165,20 +183,49 @@ Dialog {
         // --- 按钮行 ---
         RowLayout {
             Layout.fillWidth: true
-            spacing: 12
+            spacing: StyleTokens.spacingSm
 
             Item { Layout.fillWidth: true }
 
             Button {
                 text: "取消"
                 onClicked: dlg.reject()
+                
+                background: Rectangle {
+                    implicitHeight: 36
+                    implicitWidth: 80
+                    color: parent.down ? StyleTokens.colorHover : "transparent"
+                    border.color: StyleTokens.colorBorder
+                    border.width: 1
+                    radius: StyleTokens.radiusSmall
+                }
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorTextPrimary
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
 
             Button {
-                text: dlg.mode === "move" ? "移动到此" : "复制到此"
-                highlighted: true
+                text: dlg.mode === "move" ? "移动到此" : (dlg.mode === "copy" ? "复制到此" : "选择")
                 enabled: dlg.selectedFolderId >= 0
                 onClicked: dlg.accept()
+                
+                background: Rectangle {
+                    implicitHeight: 36
+                    implicitWidth: 80
+                    color: !parent.enabled ? StyleTokens.colorBackground : (parent.down ? StyleTokens.colorPrimaryHover : (parent.hovered ? Qt.lighter(StyleTokens.colorPrimary, 1.1) : StyleTokens.colorPrimary))
+                    radius: StyleTokens.radiusSmall
+                }
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: !parent.enabled ? StyleTokens.colorTextTertiary : "#FFFFFF"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
         }
     }
@@ -188,7 +235,7 @@ Dialog {
 
         if (dlg.mode === "move") {
             FileListViewModel.moveFiles(dlg.fileIds, dlg.selectedFolderId)
-        } else {
+        } else if (dlg.mode === "copy") {
             FileListViewModel.copyFiles(dlg.fileIds, dlg.selectedFolderId)
         }
     }

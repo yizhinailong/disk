@@ -11,6 +11,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
 import Disk 1.0
+import "../components/shell"
 
 Item {
     id: root
@@ -91,165 +92,31 @@ Item {
         spacing: 0
 
         // ==================== 侧边栏 (响应式) ====================
-        Rectangle {
+        AppSidebarNav {
             id: sidebar
             Layout.preferredWidth: root.sidebarWidth
             Layout.fillHeight: true
-            color: palette.window
 
-            // 右侧分隔线
-            Rectangle {
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                width: 1
-                color: palette.mid
+            layoutMode: root.layoutMode
+            showSidebarLabels: root.showSidebarLabels
+            isTransferMode: root.isTransferMode
+            currentNav: root.currentNav
+            activeNavItems: root.activeNavItems
+
+            onNavClicked: function(key) {
+                root.currentNav = key
+            }
+            onUserProfileClicked: {
+                root.currentNav = "user"
+            }
+            onModeSwitchClicked: {
+                root.isTransferMode = !root.isTransferMode
+                root.currentNav = "home"
             }
 
             // 宽度变化动画
             Behavior on Layout.preferredWidth {
                 NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
-            }
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 4
-
-                // 导航项
-                Repeater {
-                    model: root.activeNavItems
-
-                    delegate: ItemDelegate {
-                        id: navDelegate
-                        Layout.fillWidth: true
-                        height: 40
-                        highlighted: root.currentNav === modelData.key
-                        onClicked: root.currentNav = modelData.key
-
-                        contentItem: RowLayout {
-                            spacing: root.showSidebarLabels ? 8 : 0
-
-                            Label {
-                                text: modelData.icon
-                                font.pixelSize: 16
-                                Layout.preferredWidth: 24
-                                Layout.alignment: Qt.AlignHCenter
-                                horizontalAlignment: Text.AlignHCenter
-                            }
-
-                            Label {
-                                text: modelData.label
-                                font.pixelSize: 14
-                                color: navDelegate.highlighted
-                                       ? palette.highlightedText
-                                       : palette.windowText
-                                visible: root.showSidebarLabels
-                                Layout.fillWidth: true
-                                elide: Text.ElideRight
-                            }
-                        }
-
-                        ToolTip.visible: !root.showSidebarLabels && navDelegate.hovered
-                        ToolTip.text: modelData.label
-                        ToolTip.delay: 500
-
-                        background: Rectangle {
-                            radius: 6
-                            color: navDelegate.highlighted
-                                   ? palette.highlight
-                                   : navDelegate.hovered ? palette.midlight : "transparent"
-                        }
-                    }
-                }
-
-                // 弹簧
-                Item { Layout.fillHeight: true }
-
-                // 个人设置按钮
-                ItemDelegate {
-                    id: userProfileBtn
-                    Layout.fillWidth: true
-                    height: 40
-                    highlighted: root.currentNav === "user"
-
-                    contentItem: RowLayout {
-                        spacing: root.showSidebarLabels ? 8 : 0
-
-                        Label {
-                            text: "👤"
-                            font.pixelSize: 16
-                            Layout.preferredWidth: 24
-                            Layout.alignment: Qt.AlignHCenter
-                            horizontalAlignment: Text.AlignHCenter
-                        }
-
-                        Label {
-                            text: "个人设置"
-                            font.pixelSize: 14
-                            color: userProfileBtn.highlighted
-                                   ? palette.highlightedText
-                                   : palette.windowText
-                            visible: root.showSidebarLabels
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
-                        }
-                    }
-
-                    ToolTip.visible: !root.showSidebarLabels && userProfileBtn.hovered
-                    ToolTip.text: qsTr("个人设置")
-                    ToolTip.delay: 500
-
-                    background: Rectangle {
-                        radius: 6
-                        color: userProfileBtn.highlighted
-                               ? palette.highlight
-                               : userProfileBtn.hovered ? palette.midlight : "transparent"
-                    }
-
-                    onClicked: root.currentNav = "user"
-                }
-
-                // 模式切换按钮
-                ItemDelegate {
-                    id: modeSwitchBtn
-                    Layout.fillWidth: true
-                    height: 40
-
-                    contentItem: RowLayout {
-                        spacing: root.showSidebarLabels ? 8 : 0
-
-                        Label {
-                            text: root.isTransferMode ? "📁" : "📤"
-                            font.pixelSize: 16
-                            Layout.preferredWidth: 24
-                            Layout.alignment: Qt.AlignHCenter
-                            horizontalAlignment: Text.AlignHCenter
-                        }
-
-                        Label {
-                            text: root.isTransferMode ? "文件" : "传输"
-                            font.pixelSize: 14
-                            color: palette.windowText
-                            visible: root.showSidebarLabels
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
-                        }
-                    }
-
-                    ToolTip.visible: !root.showSidebarLabels && modeSwitchBtn.hovered
-                    ToolTip.text: root.isTransferMode ? qsTr("切换到文件模式") : qsTr("切换到传输模式")
-                    ToolTip.delay: 500
-
-                    background: Rectangle {
-                        radius: 6
-                        color: modeSwitchBtn.hovered ? palette.midlight : "transparent"
-                    }
-
-                    onClicked: {
-                        root.isTransferMode = !root.isTransferMode
-                        root.currentNav = "home"
-                    }
-                }
             }
         }
 
@@ -260,128 +127,21 @@ Item {
             spacing: 0
 
             // ==================== 工具栏 (48px) ====================
-            Rectangle {
+            AppToolbarStrip {
                 id: toolbar
                 Layout.fillWidth: true
-                Layout.preferredHeight: 48
-                color: palette.window
+                currentNav: root.currentNav
 
-                // 底部分隔线
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    height: 1
-                    color: palette.mid
+                onUploadClicked: {
+                    uploadFileDialog.open()
                 }
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 12
-                    anchors.rightMargin: 12
-                    spacing: 4
-
-                    // 左侧：主要操作
-                    ToolButton {
-                        text: "⬆ 上传"
-                        font.pixelSize: 13
-                        ToolTip.visible: hovered
-                        ToolTip.text: "上传文件"
-                        visible: root.currentNav === "files"
-                        onClicked: {
-                            uploadFileDialog.open()
-                        }
+                onNewFolderClicked: {
+                    if (pageLoader.item && pageLoader.item.newFolderDialog) {
+                        pageLoader.item.newFolderDialog.open()
                     }
-
-                    ToolButton {
-                        text: "📁 新建"
-                        font.pixelSize: 13
-                        ToolTip.visible: hovered
-                        ToolTip.text: "新建文件夹"
-                        visible: root.currentNav === "files"
-                        onClicked: {
-                            if (pageLoader.item && pageLoader.item.newFolderDialog) {
-                                pageLoader.item.newFolderDialog.open()
-                            }
-                        }
-                    }
-
-                    // 分隔线
-                    Rectangle {
-                        width: 1
-                        height: 24
-                        color: palette.mid
-                        Layout.alignment: Qt.AlignVCenter
-                    }
-
-                    // 导航控制
-                    ToolButton {
-                        text: "◀"
-                        font.pixelSize: 14
-                        ToolTip.visible: hovered
-                        ToolTip.text: "返回"
-                        visible: root.currentNav === "files"
-                        enabled: FileListViewModel.canGoBack
-                        onClicked: FileListViewModel.goBack()
-                    }
-
-                    ToolButton {
-                        text: "▶"
-                        font.pixelSize: 14
-                        ToolTip.visible: hovered
-                        ToolTip.text: "前进"
-                        visible: root.currentNav === "files"
-                        enabled: FileListViewModel.canGoForward
-                        onClicked: FileListViewModel.goForward()
-                    }
-
-                    ToolButton {
-                        text: "🔄"
-                        font.pixelSize: 14
-                        ToolTip.visible: hovered
-                        ToolTip.text: "刷新"
-                        visible: root.currentNav === "files"
-                        onClicked: FileListViewModel.refresh()
-                    }
-
-                    // 弹簧
-                    Item { Layout.fillWidth: true }
-
-                    // 搜索框
-                    TextField {
-                        id: searchField
-                        placeholderText: "搜索..."
-                        Layout.preferredWidth: 200
-                        font.pixelSize: 13
-                        visible: root.currentNav === "files"
-                        onTextChanged: FileListViewModel.search(text)
-                    }
-
-                    // 分隔线
-                    Rectangle {
-                        width: 1
-                        height: 24
-                        color: palette.mid
-                        Layout.alignment: Qt.AlignVCenter
-                    }
-
-                    // 设置
-                    ToolButton {
-                        text: "⚙"
-                        font.pixelSize: 16
-                        ToolTip.visible: hovered
-                        ToolTip.text: "设置"
-                        onClicked: root.currentNav = "settings"
-                    }
-
-                    // 退出登录
-                    ToolButton {
-                        text: "退出"
-                        font.pixelSize: 13
-                        ToolTip.visible: hovered
-                        ToolTip.text: "退出登录"
-                        onClicked: SessionViewModel.logout()
-                    }
+                }
+                onSettingsClicked: {
+                    root.currentNav = "settings"
                 }
             }
 
@@ -420,48 +180,10 @@ Item {
             }
 
             // ==================== 状态栏 (32px) ====================
-            Rectangle {
+            AppStatusBarStrip {
                 id: statusBar
                 Layout.fillWidth: true
-                Layout.preferredHeight: 32
-                color: palette.window
-
-                // 顶部分隔线
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    height: 1
-                    color: palette.mid
-                }
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
-
-                    // 左侧：项目数量（后续由 FileListViewModel 绑定）
-                    Label {
-                        id: itemCountLabel
-                        text: root.currentNav === "files" && FileListViewModel.totalItems > 0
-                              ? FileListViewModel.totalItems + " 个项目"
-                              : ""
-                        color: palette.placeholderText
-                        font.pixelSize: 12
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    // 右侧：存储使用情况
-                    Label {
-                        text: SessionViewModel.isLoggedIn
-                              ? "已用 " + SessionViewModel.storageUsedFormatted
-                                + " / " + SessionViewModel.storageQuotaFormatted
-                              : ""
-                        color: palette.placeholderText
-                        font.pixelSize: 12
-                    }
-                }
+                currentNav: root.currentNav
             }
         }
     }

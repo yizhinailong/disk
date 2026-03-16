@@ -121,7 +121,19 @@ Item {
         modal: true
         width: 400
         anchors.centerIn: parent
-        standardButtons: Dialog.Cancel
+        standardButtons: Dialog.NoButton
+        padding: StyleTokens.spacingLg
+
+        background: Rectangle {
+            color: StyleTokens.colorSurface
+            radius: StyleTokens.radiusXl
+            border.color: StyleTokens.colorBorder
+            border.width: 1
+        }
+
+        Overlay.modal: Rectangle {
+            color: Qt.rgba(0, 0, 0, 0.45)
+        }
 
         property var pendingFileUrls: []
 
@@ -133,11 +145,13 @@ Item {
 
         ColumnLayout {
             anchors.fill: parent
-            spacing: 16
+            spacing: StyleTokens.spacingMd
 
             Label {
                 text: qsTr("请选择上传目标文件夹：")
-                font.pixelSize: 14
+                font.pixelSize: StyleTokens.fontSizeBody
+                font.weight: StyleTokens.fontWeightBody
+                color: StyleTokens.colorTextPrimary
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
             }
@@ -148,15 +162,15 @@ Item {
                 text: qsTr("当前文件夹")
                 checked: destinationDialog.destinationMode === "current"
                 onCheckedChanged: if (checked) destinationDialog.destinationMode = "current"
-
+                font.pixelSize: StyleTokens.fontSizeBody
                 Layout.fillWidth: true
             }
 
             Label {
                 text: qsTr("上传到: ") + (FileListViewModel.currentPath || "/")
-                font.pixelSize: 11
-                color: palette.placeholderText
-                Layout.leftMargin: 32
+                font.pixelSize: StyleTokens.fontSizeSmall
+                color: StyleTokens.colorTextSecondary
+                Layout.leftMargin: StyleTokens.spacingXl
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 visible: currentFolderRadio.checked
@@ -168,7 +182,7 @@ Item {
                 text: qsTr("根目录")
                 checked: destinationDialog.destinationMode === "root"
                 onCheckedChanged: if (checked) destinationDialog.destinationMode = "root"
-
+                font.pixelSize: StyleTokens.fontSizeBody
                 Layout.fillWidth: true
             }
 
@@ -178,7 +192,7 @@ Item {
                 text: qsTr("选择其他文件夹...")
                 checked: destinationDialog.destinationMode === "custom"
                 onCheckedChanged: if (checked) destinationDialog.destinationMode = "custom"
-
+                font.pixelSize: StyleTokens.fontSizeBody
                 Layout.fillWidth: true
             }
 
@@ -187,9 +201,9 @@ Item {
                 text: root.selectedFolderId >= 0
                       ? qsTr("已选择文件夹 ID: ") + root.selectedFolderId
                       : qsTr("点击下方按钮选择文件夹")
-                font.pixelSize: 11
-                color: palette.placeholderText
-                Layout.leftMargin: 32
+                font.pixelSize: StyleTokens.fontSizeSmall
+                color: StyleTokens.colorTextSecondary
+                Layout.leftMargin: StyleTokens.spacingXl
                 Layout.fillWidth: true
                 visible: customFolderRadio.checked
             }
@@ -197,11 +211,27 @@ Item {
             Button {
                 text: qsTr("浏览...")
                 visible: customFolderRadio.checked
-                Layout.leftMargin: 32
+                Layout.leftMargin: StyleTokens.spacingXl
                 onClicked: {
                     // 内联打开文件夹选择器
                     FileListViewModel.loadFolderTree()
                     inlineFolderPicker.visible = true
+                }
+                
+                background: Rectangle {
+                    implicitHeight: 32
+                    implicitWidth: 80
+                    color: parent.down ? StyleTokens.colorHover : "transparent"
+                    border.color: StyleTokens.colorBorder
+                    border.width: 1
+                    radius: StyleTokens.radiusSmall
+                }
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: StyleTokens.fontSizeBody
+                    color: StyleTokens.colorTextPrimary
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
             }
 
@@ -211,24 +241,25 @@ Item {
                 visible: false
                 Layout.fillWidth: true
                 Layout.preferredHeight: 200
-                color: palette.base
-                border.color: palette.mid
-                radius: 4
+                color: StyleTokens.colorBackground
+                border.color: StyleTokens.colorBorder
+                radius: StyleTokens.radiusMedium
 
                 property int pickedFolderId: -1
 
                 ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 8
+                    anchors.margins: StyleTokens.spacingSm
+                    spacing: StyleTokens.spacingSm
 
                     RowLayout {
                         Layout.fillWidth: true
 
                         Label {
                             text: qsTr("选择目标文件夹:")
-                            font.pixelSize: 12
-                            font.bold: true
+                            font.pixelSize: StyleTokens.fontSizeSmall
+                            font.weight: StyleTokens.fontWeightH3
+                            color: StyleTokens.colorTextPrimary
                         }
 
                         Item { Layout.fillWidth: true }
@@ -237,6 +268,14 @@ Item {
                             text: qsTr("关闭")
                             flat: true
                             onClicked: inlineFolderPicker.visible = false
+                            
+                            contentItem: Text {
+                                text: parent.text
+                                font.pixelSize: StyleTokens.fontSizeSmall
+                                color: StyleTokens.colorPrimary
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
                         }
                     }
 
@@ -247,9 +286,15 @@ Item {
                         highlighted: inlineFolderPicker.pickedFolderId === 0
 
                         contentItem: RowLayout {
-                            spacing: 6
-                            Label { text: "📁"; font.pixelSize: 14 }
-                            Label { text: qsTr("根目录"); font.pixelSize: 12; Layout.fillWidth: true }
+                            spacing: StyleTokens.spacingSm
+                            Label { text: "📁"; font.pixelSize: StyleTokens.fontSizeBody }
+                            Label { 
+                                text: qsTr("根目录")
+                                font.pixelSize: StyleTokens.fontSizeSmall
+                                font.weight: inlineFolderPicker.pickedFolderId === 0 ? StyleTokens.fontWeightH3 : StyleTokens.fontWeightBody
+                                color: inlineFolderPicker.pickedFolderId === 0 ? StyleTokens.colorPrimary : StyleTokens.colorTextPrimary
+                                Layout.fillWidth: true 
+                            }
                         }
 
                         onClicked: {
@@ -260,10 +305,10 @@ Item {
                         }
 
                         background: Rectangle {
-                            radius: 4
+                            radius: StyleTokens.radiusSmall
                             color: inlineFolderPicker.pickedFolderId === 0
-                                   ? palette.highlight
-                                   : parent.hovered ? palette.midlight : "transparent"
+                                   ? StyleTokens.colorPrimaryLight
+                                   : parent.hovered ? StyleTokens.colorHover : "transparent"
                         }
                     }
 
@@ -284,26 +329,27 @@ Item {
                                 implicitWidth: folderTreeView.width
 
                                 contentItem: RowLayout {
-                                    spacing: 6
+                                    spacing: StyleTokens.spacingSm
                                     Label {
                                         text: folderTreeView.isExpanded(row) ? "📂" : "📁"
-                                        font.pixelSize: 12
+                                        font.pixelSize: StyleTokens.fontSizeSmall
                                     }
                                     Label {
                                         text: model.folderName ?? model.display ?? ""
-                                        font.pixelSize: 12
-                                        font.bold: inlineFolderPicker.pickedFolderId === (model.folderId ?? -1)
+                                        font.pixelSize: StyleTokens.fontSizeSmall
+                                        font.weight: inlineFolderPicker.pickedFolderId === (model.folderId ?? -1) ? StyleTokens.fontWeightH3 : StyleTokens.fontWeightBody
+                                        color: inlineFolderPicker.pickedFolderId === (model.folderId ?? -1) ? StyleTokens.colorPrimary : StyleTokens.colorTextPrimary
                                         Layout.fillWidth: true
                                         elide: Text.ElideRight
                                     }
                                 }
 
                                 background: Rectangle {
-                                    radius: 4
+                                    radius: StyleTokens.radiusSmall
                                     color: {
                                         var fid = model.folderId ?? -1
-                                        if (inlineFolderPicker.pickedFolderId === fid) return palette.highlight
-                                        if (hovered) return palette.midlight
+                                        if (inlineFolderPicker.pickedFolderId === fid) return StyleTokens.colorPrimaryLight
+                                        if (hovered) return StyleTokens.colorHover
                                         return "transparent"
                                     }
                                 }
@@ -327,40 +373,80 @@ Item {
                 }
             }
 
-            Item { Layout.preferredHeight: 8 }
+            Item { Layout.preferredHeight: StyleTokens.spacingSm }
 
-            // 上传按钮
-            Button {
-                text: qsTr("开始上传")
-                highlighted: true
-                enabled: destinationDialog.pendingFileUrls.length > 0
-                          && (destinationDialog.destinationMode !== "custom" || root.selectedFolderId >= 0)
-                Layout.alignment: Qt.AlignRight
+            // --- 按钮行 ---
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: StyleTokens.spacingSm
 
-                onClicked: {
-                    var targetFolderId = 0
+                Item { Layout.fillWidth: true }
 
-                    if (destinationDialog.destinationMode === "current") {
-                        targetFolderId = FileListViewModel.currentFolderId
-                    } else if (destinationDialog.destinationMode === "root") {
-                        targetFolderId = 0
-                    } else if (destinationDialog.destinationMode === "custom") {
-                        targetFolderId = root.selectedFolderId
+                Button {
+                    text: "取消"
+                    onClicked: destinationDialog.reject()
+                    
+                    background: Rectangle {
+                        implicitHeight: 36
+                        implicitWidth: 80
+                        color: parent.down ? StyleTokens.colorHover : "transparent"
+                        border.color: StyleTokens.colorBorder
+                        border.width: 1
+                        radius: StyleTokens.radiusSmall
                     }
-
-                    // 无效目标保护
-                    if (targetFolderId < 0) {
-                        console.warn("[UploadDialog] Invalid targetFolderId:", targetFolderId, "- falling back to root")
-                        targetFolderId = 0
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: StyleTokens.fontSizeBody
+                        color: StyleTokens.colorTextPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
+                }
 
-                    if (destinationDialog.pendingFileUrls.length > 0) {
-                        TransfersViewModel.startUpload(destinationDialog.pendingFileUrls, targetFolderId)
-                        console.log("[UploadDialog] Started upload of", destinationDialog.pendingFileUrls.length, "file(s) to folder", targetFolderId)
+                Button {
+                    text: qsTr("开始上传")
+                    enabled: destinationDialog.pendingFileUrls.length > 0
+                              && (destinationDialog.destinationMode !== "custom" || root.selectedFolderId >= 0)
+                    
+                    onClicked: {
+                        var targetFolderId = 0
+
+                        if (destinationDialog.destinationMode === "current") {
+                            targetFolderId = FileListViewModel.currentFolderId
+                        } else if (destinationDialog.destinationMode === "root") {
+                            targetFolderId = 0
+                        } else if (destinationDialog.destinationMode === "custom") {
+                            targetFolderId = root.selectedFolderId
+                        }
+
+                        // 无效目标保护
+                        if (targetFolderId < 0) {
+                            console.warn("[UploadDialog] Invalid targetFolderId:", targetFolderId, "- falling back to root")
+                            targetFolderId = 0
+                        }
+
+                        if (destinationDialog.pendingFileUrls.length > 0) {
+                            TransfersViewModel.startUpload(destinationDialog.pendingFileUrls, targetFolderId)
+                            console.log("[UploadDialog] Started upload of", destinationDialog.pendingFileUrls.length, "file(s) to folder", targetFolderId)
+                        }
+
+                        destinationDialog.pendingFileUrls = []
+                        destinationDialog.accept()
                     }
-
-                    destinationDialog.pendingFileUrls = []
-                    destinationDialog.close()
+                    
+                    background: Rectangle {
+                        implicitHeight: 36
+                        implicitWidth: 80
+                        color: !parent.enabled ? StyleTokens.colorBackground : (parent.down ? StyleTokens.colorPrimaryHover : (parent.hovered ? Qt.lighter(StyleTokens.colorPrimary, 1.1) : StyleTokens.colorPrimary))
+                        radius: StyleTokens.radiusSmall
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: StyleTokens.fontSizeBody
+                        color: !parent.enabled ? StyleTokens.colorTextTertiary : "#FFFFFF"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                 }
             }
         }
