@@ -6,6 +6,7 @@
  */
 pragma Singleton
 import QtQuick
+import "../tokens"
 
 QtObject {
     id: root
@@ -33,11 +34,11 @@ QtObject {
 
     function statusColor(status, palette) {
         switch (status) {
-        case 1: return palette.highlight       // 运行中
-        case 2: return palette.mid             // 已暂停
-        case 3: return "#4CAF50"               // 已完成 (绿色)
-        case 4: return "#F44336"               // 失败 (红色)
-        default: return palette.mid            // 排队中
+        case 1: return StyleTokens.colorPrimary       // 运行中
+        case 2: return StyleTokens.colorTextTertiary  // 已暂停
+        case 3: return StyleTokens.colorSuccess       // 已完成 (绿色)
+        case 4: return StyleTokens.colorError         // 失败 (红色)
+        default: return StyleTokens.colorTextTertiary // 排队中
         }
     }
 

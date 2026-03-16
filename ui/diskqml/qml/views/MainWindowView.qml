@@ -12,6 +12,7 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 import Disk 1.0
 import "../components/shell"
+import "../tokens"
 
 Item {
     id: root
@@ -22,7 +23,7 @@ Item {
     readonly property string layoutMode: root.width < 800 ? "compact" : (root.width < 1200 ? "medium" : "expanded")
 
     /// 侧边栏宽度根据模式动态调整
-    readonly property int sidebarWidth: layoutMode === "compact" ? 56 : (layoutMode === "medium" ? 200 : 240)
+    readonly property int sidebarWidth: layoutMode === "compact" ? StyleTokens.navBarCollapsedWidth : (layoutMode === "medium" ? 200 : StyleTokens.navBarWidth)
 
     /// 是否显示侧边栏文字标签
     readonly property bool showSidebarLabels: layoutMode !== "compact"
@@ -238,7 +239,7 @@ Item {
 
             Label {
                 text: qsTr("请选择上传目标文件夹：")
-                font.pixelSize: 14
+                font.pixelSize: StyleTokens.fontSizeBody
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
             }
@@ -258,8 +259,8 @@ Item {
 
             Label {
                 text: qsTr("上传到: ") + (FileListViewModel.currentPath || "/")
-                font.pixelSize: 11
-                color: palette.placeholderText
+                font.pixelSize: StyleTokens.fontSizeSmall
+                color: StyleTokens.colorTextTertiary
                 Layout.leftMargin: 28
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
@@ -307,23 +308,23 @@ Item {
                         visible: false
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        color: palette.base
-                        border.color: palette.mid
-                        radius: 4
+                        color: StyleTokens.colorSurface
+                        border.color: StyleTokens.colorBorder
+                        radius: StyleTokens.radiusSmall
 
                         property int pickedFolderId: -1
 
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 4
+                            anchors.margins: StyleTokens.spacingSm
+                            spacing: StyleTokens.spacingXs
 
                             RowLayout {
                                 Layout.fillWidth: true
 
                                 Label {
                                     text: qsTr("选择目标文件夹:")
-                                    font.pixelSize: 11
+                                    font.pixelSize: StyleTokens.fontSizeSmall
                                     font.bold: true
                                 }
 
@@ -332,7 +333,7 @@ Item {
                                 Button {
                                     text: qsTr("关闭")
                                     flat: true
-                                    font.pixelSize: 11
+                                    font.pixelSize: StyleTokens.fontSizeSmall
                                     onClicked: customFolderPicker.visible = false
                                 }
                             }
@@ -345,8 +346,8 @@ Item {
 
                                 contentItem: RowLayout {
                                     spacing: 6
-                                    Label { text: "📁"; font.pixelSize: 12 }
-                                    Label { text: qsTr("根目录"); font.pixelSize: 11; Layout.fillWidth: true }
+                                    Label { text: "📁"; font.pixelSize: StyleTokens.fontSizeSmall }
+                                    Label { text: qsTr("根目录"); font.pixelSize: StyleTokens.fontSizeSmall; Layout.fillWidth: true }
                                 }
 
                                 onClicked: {
@@ -356,10 +357,10 @@ Item {
                                 }
 
                                 background: Rectangle {
-                                    radius: 4
+                                    radius: StyleTokens.radiusSmall
                                     color: customFolderPicker.pickedFolderId === 0
-                                           ? palette.highlight
-                                           : parent.hovered ? palette.midlight : "transparent"
+                                           ? StyleTokens.colorPrimaryLight
+                                           : parent.hovered ? StyleTokens.colorHover : "transparent"
                                 }
                             }
 
@@ -382,11 +383,11 @@ Item {
                                             spacing: 6
                                             Label {
                                                 text: uploadFolderTreeView.isExpanded(row) ? "📂" : "📁"
-                                                font.pixelSize: 11
+                                                font.pixelSize: StyleTokens.fontSizeSmall
                                             }
                                             Label {
                                                 text: model.folderName ?? model.display ?? ""
-                                                font.pixelSize: 11
+                                                font.pixelSize: StyleTokens.fontSizeSmall
                                                 font.bold: customFolderPicker.pickedFolderId === (model.folderId ?? -1)
                                                 Layout.fillWidth: true
                                                 elide: Text.ElideRight
@@ -394,11 +395,11 @@ Item {
                                         }
 
                                         background: Rectangle {
-                                            radius: 4
+                                            radius: StyleTokens.radiusSmall
                                             color: {
                                                 var fid = model.folderId ?? -1
-                                                if (customFolderPicker.pickedFolderId === fid) return palette.highlight
-                                                if (hovered) return palette.midlight
+                                                if (customFolderPicker.pickedFolderId === fid) return StyleTokens.colorPrimaryLight
+                                                if (hovered) return StyleTokens.colorHover
                                                 return "transparent"
                                             }
                                         }

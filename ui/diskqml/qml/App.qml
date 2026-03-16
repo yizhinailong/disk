@@ -12,16 +12,18 @@ import QtQuick.Window
 import Disk 1.0
 import "views"
 import "components/shell"
+import "tokens"
 
 ApplicationWindow {
     id: root
     visible: true
-    width: 960
-    height: 600
-    minimumWidth: 600
+    width: 1024
+    height: 768
+    minimumWidth: 800
+    minimumHeight: 600
     title: qsTr("Disk - 云盘客户端")
     flags: Qt.Window | Qt.FramelessWindowHint
-    color: palette.window
+    color: StyleTokens.colorBackground
 
     property string prefillAccount: ""
 

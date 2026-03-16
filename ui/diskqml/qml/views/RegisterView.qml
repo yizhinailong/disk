@@ -8,6 +8,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Disk 1.0
+import "../tokens"
+import "../components/primitives"
 
 Item {
     id: root
@@ -46,8 +48,8 @@ Item {
             Layout.preferredWidth: parent.width * 0.45
             
             gradient: Gradient {
-                GradientStop { position: 0.0; color: palette.highlight }
-                GradientStop { position: 1.0; color: Qt.darker(palette.highlight, 1.3) }
+                GradientStop { position: 0.0; color: StyleTokens.colorPrimary }
+                GradientStop { position: 1.0; color: Qt.darker(StyleTokens.colorPrimary, 1.3) }
             }
             
             // 装饰圆
@@ -67,7 +69,7 @@ Item {
 
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 16
+                spacing: StyleTokens.spacingMd
                 Label {
                     text: "加入我们吧！"
                     font.pixelSize: 36
@@ -77,7 +79,7 @@ Item {
                 }
                 Label {
                     text: "30秒快速注册✨"
-                    font.pixelSize: 20
+                    font.pixelSize: StyleTokens.fontSizeH1
                     color: Qt.rgba(1, 1, 1, 0.8)
                     Layout.alignment: Qt.AlignHCenter
                 }
@@ -89,7 +91,7 @@ Item {
             Layout.fillHeight: true
             Layout.fillWidth: true
             Layout.preferredWidth: parent.width * 0.55
-            color: palette.window
+            color: StyleTokens.colorBackground
 
             ScrollView {
                 anchors.fill: parent
@@ -107,11 +109,11 @@ Item {
                         width: 420
                         height: formLayout.implicitHeight + 64
                         anchors.centerIn: parent
-                        color: palette.base
-                        radius: 16
+                        color: StyleTokens.colorSurface
+                        radius: StyleTokens.radiusXl
                         
                         // 简单阴影效果
-                        border.color: Qt.rgba(0, 0, 0, 0.08)
+                        border.color: StyleTokens.colorBorder
                         border.width: 1
                         
                         // 模拟更柔和的阴影可以在底层加一个带位移的深色矩形
@@ -120,53 +122,54 @@ Item {
                             anchors.fill: parent
                             anchors.margins: -1
                             anchors.horizontalCenterOffset: 0
-                            anchors.verticalCenterOffset: 4
-                            radius: 16
-                            color: Qt.rgba(0, 0, 0, 0.04)
+                            anchors.verticalCenterOffset: StyleTokens.shadowOffsetYLg
+                            radius: StyleTokens.radiusXl
+                            color: StyleTokens.shadowColorLg
                         }
 
                         ColumnLayout {
                             id: formLayout
                             anchors.fill: parent
-                            anchors.margins: 32
-                            spacing: 16
+                            anchors.margins: StyleTokens.spacingXl
+                            spacing: StyleTokens.spacingMd
 
                             // 标志
                             Label {
                                 text: "Disk"
                                 font.pixelSize: 28
                                 font.bold: true
-                                color: palette.text
+                                color: StyleTokens.colorPrimary
                                 Layout.alignment: Qt.AlignHCenter
                             }
 
                             // 切换标签
                             Rectangle {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 40
-                                radius: 20
-                                color: palette.alternateBase
+                                Layout.preferredHeight: 44
+                                radius: 22
+                                color: StyleTokens.colorBackground
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    spacing: 4
-                                    anchors.margins: 4
+                                    spacing: StyleTokens.spacingXs
+                                    anchors.margins: StyleTokens.spacingXs
 
                                     Rectangle {
                                         Layout.fillWidth: true
                                         Layout.fillHeight: true
-                                        radius: 16
+                                        radius: 18
                                         color: "transparent"
                                         
                                         Text {
                                             anchors.centerIn: parent
                                             text: "登录"
-                                            color: palette.text
-                                            font.pixelSize: 14
+                                            color: StyleTokens.colorTextPrimary
+                                            font.pixelSize: StyleTokens.fontSizeBody
                                         }
                                         MouseArea {
                                             objectName: "tabLogin"
                                             anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
                                             onClicked: root.backRequested()
                                         }
                                     }
@@ -174,15 +177,14 @@ Item {
                                     Rectangle {
                                         Layout.fillWidth: true
                                         Layout.fillHeight: true
-                                        radius: 16
-                                        color: palette.base
-                                        border.color: Qt.rgba(0, 0, 0, 0.05)
+                                        radius: 18
+                                        color: StyleTokens.colorPrimary
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: "注册"
-                                            color: palette.text
-                                            font.pixelSize: 14
+                                            color: StyleTokens.colorSurface
+                                            font.pixelSize: StyleTokens.fontSizeBody
                                             font.bold: true
                                         }
                                         MouseArea {
@@ -199,8 +201,8 @@ Item {
                                 objectName: "globalErrorLabel"
                                 visible: RegisterViewModel.errorMessage !== ""
                                 text: RegisterViewModel.errorMessage
-                                color: "#F44336"
-                                font.pixelSize: 14
+                                color: StyleTokens.colorError
+                                font.pixelSize: StyleTokens.fontSizeBody
                                 Layout.fillWidth: true
                                 horizontalAlignment: Text.AlignHCenter
                                 wrapMode: Text.Wrap
@@ -209,8 +211,8 @@ Item {
                             // 1. 邮箱
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                spacing: 4
-                                TextField {
+                                spacing: StyleTokens.spacingXs
+                                AppTextInput {
                                     id: emailInput
                                     objectName: "emailInput"
                                     Layout.fillWidth: true
@@ -223,15 +225,16 @@ Item {
                                         RegisterViewModel.email = text
                                     }
                                     background: Rectangle {
-                                        radius: 12
-                                        color: palette.alternateBase
-                                        border.color: RegisterViewModel.emailError !== "" ? "#F44336" : (emailInput.activeFocus ? palette.highlight : "transparent")
+                                        radius: StyleTokens.radiusMedium
+                                        color: emailInput.activeFocus ? StyleTokens.colorSurface : StyleTokens.colorBackground
+                                        border.color: RegisterViewModel.emailError !== "" ? StyleTokens.colorError : (emailInput.activeFocus ? StyleTokens.colorPrimary : "transparent")
+                                        border.width: 1
                                     }
                                 }
                                 Label {
                                     text: RegisterViewModel.emailError
-                                    color: "#F44336"
-                                    font.pixelSize: 12
+                                    color: StyleTokens.colorError
+                                    font.pixelSize: StyleTokens.fontSizeSmall
                                     visible: RegisterViewModel.emailError !== ""
                                 }
                             }
@@ -239,8 +242,8 @@ Item {
                             // 2. 用户名
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                spacing: 4
-                                TextField {
+                                spacing: StyleTokens.spacingXs
+                                AppTextInput {
                                     id: usernameInput
                                     objectName: "usernameInput"
                                     Layout.fillWidth: true
@@ -253,15 +256,16 @@ Item {
                                         RegisterViewModel.username = text
                                     }
                                     background: Rectangle {
-                                        radius: 12
-                                        color: palette.alternateBase
-                                        border.color: RegisterViewModel.usernameError !== "" ? "#F44336" : (usernameInput.activeFocus ? palette.highlight : "transparent")
+                                        radius: StyleTokens.radiusMedium
+                                        color: usernameInput.activeFocus ? StyleTokens.colorSurface : StyleTokens.colorBackground
+                                        border.color: RegisterViewModel.usernameError !== "" ? StyleTokens.colorError : (usernameInput.activeFocus ? StyleTokens.colorPrimary : "transparent")
+                                        border.width: 1
                                     }
                                 }
                                 Label {
                                     text: RegisterViewModel.usernameError
-                                    color: "#F44336"
-                                    font.pixelSize: 12
+                                    color: StyleTokens.colorError
+                                    font.pixelSize: StyleTokens.fontSizeSmall
                                     visible: RegisterViewModel.usernameError !== ""
                                 }
                             }
@@ -269,8 +273,8 @@ Item {
                             // 3. 密码
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                spacing: 4
-                                TextField {
+                                spacing: StyleTokens.spacingXs
+                                AppTextInput {
                                     id: passwordInput
                                     objectName: "passwordInput"
                                     Layout.fillWidth: true
@@ -285,30 +289,35 @@ Item {
                                     }
                                     rightPadding: 40
                                     background: Rectangle {
-                                        radius: 12
-                                        color: palette.alternateBase
-                                        border.color: RegisterViewModel.passwordError !== "" ? "#F44336" : (passwordInput.activeFocus ? palette.highlight : "transparent")
+                                        radius: StyleTokens.radiusMedium
+                                        color: passwordInput.activeFocus ? StyleTokens.colorSurface : StyleTokens.colorBackground
+                                        border.color: RegisterViewModel.passwordError !== "" ? StyleTokens.colorError : (passwordInput.activeFocus ? StyleTokens.colorPrimary : "transparent")
+                                        border.width: 1
                                     }
 
                                     // 眼睛图标
-                                    Text {
-                                        text: root.showPassword ? "👁" : "👁‍🗨"
+                                    AppButton {
+                                        variant: "icon"
                                         anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
-                                        anchors.rightMargin: 16
-                                        font.pixelSize: 16
-                                        color: palette.placeholderText
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            anchors.margins: -8
-                                            onClicked: root.showPassword = !root.showPassword
+                                        anchors.rightMargin: StyleTokens.spacingSm
+                                        width: 36
+                                        height: 36
+                                        text: root.showPassword ? "👁" : "👁‍🗨"
+                                        onClicked: root.showPassword = !root.showPassword
+                                        
+                                        contentItem: Text {
+                                            anchors.centerIn: parent
+                                            text: root.showPassword ? "👁" : "👁‍🗨"
+                                            font.pixelSize: StyleTokens.fontSizeH2
+                                            color: root.showPassword ? StyleTokens.colorPrimary : StyleTokens.colorTextTertiary
                                         }
                                     }
                                 }
                                 Label {
                                     text: RegisterViewModel.passwordError
-                                    color: "#F44336"
-                                    font.pixelSize: 12
+                                    color: StyleTokens.colorError
+                                    font.pixelSize: StyleTokens.fontSizeSmall
                                     visible: RegisterViewModel.passwordError !== ""
                                 }
                             }
@@ -316,8 +325,8 @@ Item {
                             // 4. 确认密码
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                spacing: 4
-                                TextField {
+                                spacing: StyleTokens.spacingXs
+                                AppTextInput {
                                     id: confirmPasswordInput
                                     objectName: "confirmPasswordInput"
                                     Layout.fillWidth: true
@@ -332,50 +341,46 @@ Item {
                                     }
                                     rightPadding: 40
                                     background: Rectangle {
-                                        radius: 12
-                                        color: palette.alternateBase
-                                        border.color: RegisterViewModel.confirmPasswordError !== "" ? "#F44336" : (confirmPasswordInput.activeFocus ? palette.highlight : "transparent")
+                                        radius: StyleTokens.radiusMedium
+                                        color: confirmPasswordInput.activeFocus ? StyleTokens.colorSurface : StyleTokens.colorBackground
+                                        border.color: RegisterViewModel.confirmPasswordError !== "" ? StyleTokens.colorError : (confirmPasswordInput.activeFocus ? StyleTokens.colorPrimary : "transparent")
+                                        border.width: 1
                                     }
 
                                     Text {
                                         text: "✓"
-                                        color: "#4CAF50"
-                                        font.pixelSize: 18
+                                        color: StyleTokens.colorSuccess
+                                        font.pixelSize: StyleTokens.fontSizeH1
                                         font.bold: true
                                         anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
-                                        anchors.rightMargin: 16
+                                        anchors.rightMargin: StyleTokens.spacingMd
                                         visible: confirmPasswordInput.text !== "" && confirmPasswordInput.text === passwordInput.text
                                     }
                                 }
                                 Label {
                                     text: RegisterViewModel.confirmPasswordError
-                                    color: "#F44336"
-                                    font.pixelSize: 12
+                                    color: StyleTokens.colorError
+                                    font.pixelSize: StyleTokens.fontSizeSmall
                                     visible: RegisterViewModel.confirmPasswordError !== ""
                                 }
                             }
 
-                            Item { Layout.preferredHeight: 8 }
+                            Item { Layout.preferredHeight: StyleTokens.spacingSm }
 
                             // 注册按钮
-                            Button {
+                            AppButton {
                                 id: submitButton
                                 objectName: "submitButton"
+                                variant: "primary"
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 52
                                 enabled: RegisterViewModel.canSubmit && !RegisterViewModel.loading
 
-                                background: Rectangle {
-                                    color: submitButton.enabled ? palette.highlight : palette.alternateBase
-                                    radius: 12
-                                    opacity: RegisterViewModel.loading ? 0.7 : 1.0
-                                }
-                                
                                 contentItem: Item {
                                     RowLayout {
                                         anchors.centerIn: parent
-                                        spacing: 8
+                                        spacing: StyleTokens.spacingSm
                                         BusyIndicator {
                                             running: RegisterViewModel.loading
                                             visible: RegisterViewModel.loading
@@ -384,8 +389,8 @@ Item {
                                         }
                                         Text {
                                             text: RegisterViewModel.loading ? "注册中..." : "注 册"
-                                            color: submitButton.enabled || RegisterViewModel.loading ? palette.highlightedText : palette.placeholderText
-                                            font.pixelSize: 16
+                                            color: submitButton.enabled || RegisterViewModel.loading ? StyleTokens.colorSurface : StyleTokens.colorTextTertiary
+                                            font.pixelSize: StyleTokens.fontSizeH2
                                             font.bold: true
                                         }
                                     }
@@ -397,24 +402,24 @@ Item {
                             // 协议
                             Label {
                                 text: "注册即表示同意《用户协议》和《隐私政策》"
-                                font.pixelSize: 12
-                                color: palette.placeholderText
+                                font.pixelSize: StyleTokens.fontSizeSmall
+                                color: StyleTokens.colorTextTertiary
                                 Layout.alignment: Qt.AlignHCenter
                             }
                             
                             // 底部提示
                             RowLayout {
                                 Layout.alignment: Qt.AlignHCenter
-                                spacing: 4
+                                spacing: StyleTokens.spacingXs
                                 Label {
                                     text: "已有账号？"
-                                    font.pixelSize: 14
-                                    color: palette.text
+                                    font.pixelSize: StyleTokens.fontSizeBody
+                                    color: StyleTokens.colorTextPrimary
                                 }
                                 Label {
                                     text: "直接登录"
-                                    font.pixelSize: 14
-                                    color: palette.highlight
+                                    font.pixelSize: StyleTokens.fontSizeBody
+                                    color: StyleTokens.colorPrimary
                                     font.bold: true
                                     MouseArea {
                                         anchors.fill: parent
