@@ -101,6 +101,7 @@ qt_add_qml_module(appdiskqml
     QML_FILES
         qml/Main.qml
         qml/App.qml
+        qml/tokens/StyleTokens.qml
         qml/views/LoginView.qml
         qml/views/RegisterView.qml
         qml/views/HomePlaceholder.qml
@@ -119,6 +120,15 @@ qt_add_qml_module(appdiskqml
         qml/components/TransferHelpers.qml
         qml/components/NotificationToast.qml
         qml/components/PaginationBar.qml
+        qml/components/primitives/AppButton.qml
+        qml/components/primitives/AppTextInput.qml
+        qml/components/primitives/AppCard.qml
+        qml/components/primitives/AppBadge.qml
+        qml/components/primitives/AppMenuRow.qml
+        qml/components/shell/AppTitleBar.qml
+        qml/components/shell/AppSidebarNav.qml
+        qml/components/shell/AppToolbarStrip.qml
+        qml/components/shell/AppStatusBarStrip.qml
         qml/dialogs/NewFolderDialog.qml
         qml/dialogs/RenameDialog.qml
         qml/dialogs/DeleteConfirmDialog.qml
