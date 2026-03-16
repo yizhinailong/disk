@@ -9,6 +9,7 @@
  * 管理分享列表状态：加载/错误、分页、选择集。
  * 使用 ShareService 处理所有 API 交互。
  * QML 层绑定属性并调用 Q_INVOKABLE 方法。
+ */
 
 #pragma once
 
@@ -50,23 +51,24 @@ namespace disk::qml::viewmodels {
 
         // ==================== 加载/错误 ====================
 
-        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged) ///< API 请求进行中时为 true
+        Q_PROPERTY(bool loading READ Loading NOTIFY loadingChanged)                   ///< API 请求进行中时为 true
         Q_PROPERTY(QString errorMessage READ ErrorMessage NOTIFY errorMessageChanged) ///< 最后的错误消息；成功时为空
 
         // ==================== 分页 ====================
 
         Q_PROPERTY(int currentPage READ CurrentPage NOTIFY currentPageChanged) ///< 当前页码（从 1 开始）
-        Q_PROPERTY(int totalPages READ TotalPages NOTIFY totalPagesChanged) ///< 上次响应的总页数
-        Q_PROPERTY(int totalItems READ TotalItems NOTIFY totalItemsChanged) ///< 上次响应的总条目数
+        Q_PROPERTY(int totalPages READ TotalPages NOTIFY totalPagesChanged)    ///< 上次响应的总页数
+        Q_PROPERTY(int totalItems READ TotalItems NOTIFY totalItemsChanged)    ///< 上次响应的总条目数
 
         // ==================== 选择 ====================
 
         Q_PROPERTY(int selectionCount READ SelectionCount NOTIFY selectionChanged) ///< 当前选中的条目数
-        Q_PROPERTY(bool hasSelection READ HasSelection NOTIFY selectionChanged) ///< 至少选中一个条目时为 true
+        Q_PROPERTY(bool hasSelection READ HasSelection NOTIFY selectionChanged)    ///< 至少选中一个条目时为 true
 
         // ==================== 模型 ====================
 
         Q_PROPERTY(disk::qml::models::ShareListModel* shareListModel READ ShareListModelPtr CONSTANT) ///< QML 绑定用的分享列表模型
+
     public:
         /**
          * @brief 分享更新操作的密码处理方式。
@@ -149,11 +151,11 @@ namespace disk::qml::viewmodels {
 
         // ==================== 选择 ====================
 
-        Q_INVOKABLE void toggleSelection(const QString& shareId); ///< 切换单个条目的选中状态
-        Q_INVOKABLE void selectAll(); ///< 选中当前列表中的所有条目
-        Q_INVOKABLE void clearSelection(); ///< 取消所有选中
+        Q_INVOKABLE void toggleSelection(const QString& shareId);  ///< 切换单个条目的选中状态
+        Q_INVOKABLE void selectAll();                              ///< 选中当前列表中的所有条目
+        Q_INVOKABLE void clearSelection();                         ///< 取消所有选中
         Q_INVOKABLE bool isSelected(const QString& shareId) const; ///< 检查指定条目是否被选中
-        Q_INVOKABLE QStringList selectedIds() const; ///< 获取所有选中的分享 ID 列表
+        Q_INVOKABLE QStringList selectedIds() const;               ///< 获取所有选中的分享 ID 列表
 
         // ==================== 分页 ====================
 
@@ -162,9 +164,9 @@ namespace disk::qml::viewmodels {
         /// 如果解析失败或输入无效则返回空列表。
         /// 如果解析失败则设置 parseError 属性为错误消息。
         Q_INVOKABLE QList<qint64> parseFileIds(const QString& fileIdsText);
-        
+
         Q_PROPERTY(QString parseError READ ParseError NOTIFY parseErrorChanged) ///< 最后的解析错误消息（成功时为空）
-        
+
         // 解析错误获取器
         [[nodiscard]] auto ParseError() const -> const QString&;
 
@@ -203,6 +205,7 @@ namespace disk::qml::viewmodels {
         /// 解析错误变化时发射
         void parseErrorChanged();
 
+    private:
         // ==================== 私有辅助方法 ====================
 
         auto SetLoading(bool loading) -> void;
@@ -213,25 +216,26 @@ namespace disk::qml::viewmodels {
 
         // ==================== 状态 ====================
 
-        services::ShareService* m_share_service; ///< 分享服务
+        services::ShareService* m_share_service;    ///< 分享服务
         TransfersViewModel* m_transfers_view_model; ///< 传输视图模型
 
         models::ShareListModel* m_share_list_model; ///< 分享列表模型
 
-        bool m_loading{ false }; ///< 是否正在加载
-        QString m_error_message; ///< 错误消息
-        QString m_parse_error; ///< 解析错误
+        bool m_loading{ false };                    ///< 是否正在加载
+        QString m_error_message;                    ///< 错误消息
+        QString m_parse_error;                      ///< 解析错误
 
         // 分页
-        int m_current_page{ 1 }; ///< 当前页码
-        int m_total_pages{ 0 }; ///< 总页数
-        int m_total_items{ 0 }; ///< 总条目数
+        int m_current_page{ 1 };              ///< 当前页码
+        int m_total_pages{ 0 };               ///< 总页数
+        int m_total_items{ 0 };               ///< 总条目数
         static constexpr int kPageSize = 100; ///< 每页条目数
 
         // 选择（分享 ID 为字符串）
-        QSet<QString> m_selected_ids; ///< 选中的分享 ID 集合
+        QSet<QString> m_selected_ids;                       ///< 选中的分享 ID 集合
 
         inline static ShareViewModel* s_instance = nullptr; ///< 单例实例
-        inline static QJSEngine* s_engine = nullptr; ///< JS 引擎实例
+        inline static QJSEngine* s_engine = nullptr;        ///< JS 引擎实例
+    };
 
 } // namespace disk::qml::viewmodels
