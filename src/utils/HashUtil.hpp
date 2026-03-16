@@ -112,7 +112,7 @@ namespace disk::utils {
 
             TokenHash hash{};
 
-            // NOLINTNEXTLINE: Required by libsodium crypto_hash_sha256 API
+            // NOLINTNEXTLINE：libsodium crypto_hash_sha256 API 要求
             const auto* data = reinterpret_cast<const unsigned char*>(token.c_str());
 
             if (crypto_hash_sha256(hash.data(), data, token.length()) != 0) {

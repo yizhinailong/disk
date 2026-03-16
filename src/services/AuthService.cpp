@@ -30,9 +30,9 @@ namespace disk::auth {
     AuthService::AuthService(const drogon::nosql::RedisClientPtr& redis_client)
         : m_db_client(drogon::app().getDbClient()),
           m_redis_service(disk::services::RedisService::GetInstance()) {
-        // Initialize RedisService singleton if not already initialized
+        // 如果尚未初始化，则初始化 RedisService 单例
         disk::services::RedisService::Initialize(redis_client);
-        // Initialize TokenService singleton
+        // 初始化 TokenService 单例
         disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
 
         LOG_DEBUG << "AuthService initialization completed";
@@ -125,7 +125,7 @@ namespace disk::auth {
                 ));
             }
         } else {
-            // Fail-open: Redis 失败时只记录警告，不阻止登录
+            // 失败开放策略：Redis 失败时只记录警告，不阻止登录
             LOG_WARN << "Redis rate limit check failed: " << incr_result.error().message;
         }
 

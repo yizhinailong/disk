@@ -15,7 +15,7 @@ Item {
     signal navigateToUpload
     signal navigateToDownload
 
-    // Expose newFolderDialog so MainWindowView toolbar can trigger it
+    // 暴露 newFolderDialog 以便 MainWindowView 工具栏可以触发它
     property alias newFolderDialog: newFolderDialog
 
     // ==================== 初始化 ====================
@@ -25,7 +25,7 @@ Item {
     }
 
     // ==================== 辅助函数 ====================
-    // Formatter functions are now centralized in FormatUtils singleton
+    // 格式化函数现在集中在 FormatUtils 单例中
 
     // ==================== 主布局 ====================
 

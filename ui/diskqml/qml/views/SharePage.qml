@@ -18,7 +18,7 @@ Item {
 
     // ==================== 辅助函数 ====================
 
-    // Formatter functions are now centralized in FormatUtils singleton
+    // 格式化函数现在集中在 FormatUtils 单例中
 
     function statusColor(status: string) : color {
         if (status === "active") return "#4CAF50"
@@ -385,8 +385,8 @@ Item {
                                 contextMenu.targetSharePermission = model.sharePermission
                                 contextMenu.targetShareHasPassword = model.shareHasPassword
                                 contextMenu.targetShareExpiresAt = model.shareExpiresAt
-                                // Note: shareFileId and shareToken are not available from list
-                                // Download via share access requires separate flow
+                                // 注意：shareFileId 和 shareToken 无法从列表中获取
+                                // 通过分享访问下载需要单独的流程
 
                             } else if (mouse.modifiers & Qt.ControlModifier) {
                                 ShareViewModel.toggleSelection(model.shareId)
@@ -423,16 +423,16 @@ Item {
         property string targetSharePermission: ""
         property bool targetShareHasPassword: false
         property string targetShareExpiresAt: ""
-        // Note: targetFileId and targetShareToken removed - not available from share list
-        // To download shared files, use the share access flow (not implemented in list view)
+        // 注意：移除了 targetFileId 和 targetShareToken - 无法从分享列表中获取
+        // 要下载分享的文件，请使用分享访问流程（未在列表视图中实现）
 
         MenuItem {
             id: downloadShareMenuItem
             text: "📥 下载"
-            enabled: false  // Disabled: share token not available from list; use file list to download
+            enabled: false  // 禁用：无法从列表中获取分享令牌；使用文件列表下载
             onTriggered: {
-                // This feature requires share access token which is not available
-                // from the share list. Use the file list to download files.
+                // 此功能需要分享访问令牌，而该令牌无法从分享列表中获取。
+                // 请使用文件列表下载文件。
             }
         }
 
@@ -659,18 +659,18 @@ Item {
             originalHasPassword = hasPassword
             originalExpiresAt = expiresAt
 
-            // Set permission combo
+            // 设置权限下拉框
             if (permission === "view") {
                 editPermissionCombo.currentIndex = 0
             } else {
                 editPermissionCombo.currentIndex = 1
             }
 
-            // Clear password field (user can set new password)
+            // 清空密码字段（用户可以设置新密码）
             editPasswordField.text = ""
             editPasswordClearCheckbox.checked = false
 
-            // Default to 7 days if editing
+            // 编辑时默认为7天
             editExpireDaysCombo.currentIndex = 1
 
             editShareDialog.open()
@@ -749,10 +749,10 @@ Item {
             var expireDays = editExpireDaysCombo.currentValue
             var permission = editPermissionCombo.currentValue
 
-            // Determine password action based on UI state:
-            // - Clear checkbox checked -> Clear (remove password)
-            // - Password field has text -> Set (new password)
-            // - Otherwise -> Keep (no change)
+            // 根据 UI 状态确定密码操作：
+            // - 勾选清除复选框 -> 清除（移除密码）
+            // - 密码字段有文本 -> 设置（新密码）
+            // - 否则 -> 保持（无变化）
             var passwordAction = ShareViewModel.PasswordAction.Keep
             var password = ""
 

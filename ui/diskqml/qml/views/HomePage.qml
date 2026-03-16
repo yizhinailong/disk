@@ -318,12 +318,12 @@ Item {
                     return Math.min(10, FileListViewModel.recentFilesModel.count) * 48 + 44
                 }
 
-                // Load recent files on first show
+                // 首次显示时加载最近文件
                 Component.onCompleted: {
                     FileListViewModel.loadRecentFiles()
                 }
 
-                // Header with refresh button
+                // 带有刷新按钮的标题栏
                 Rectangle {
                     id: recentHeader
                     anchors.top: parent.top
@@ -366,21 +366,21 @@ Item {
                     }
                 }
 
-                // Content area
+                // 内容区域
                 Item {
                     anchors.top: recentHeader.bottom
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
 
-                    // Loading state
+                    // 加载状态
                     BusyIndicator {
                         anchors.centerIn: parent
                         running: FileListViewModel.recentFilesLoading
                         visible: FileListViewModel.recentFilesLoading
                     }
 
-                    // Error state
+                    // 错误状态
                     ColumnLayout {
                         anchors.centerIn: parent
                         spacing: 8
@@ -402,7 +402,7 @@ Item {
                         }
                     }
 
-                    // Empty state
+                    // 空状态
                     ColumnLayout {
                         anchors.centerIn: parent
                         spacing: 8
@@ -432,7 +432,7 @@ Item {
                         }
                     }
 
-                    // Recent files list
+                    // 最近文件列表
                     ListView {
                         id: recentListView
                         anchors.fill: parent
@@ -444,7 +444,7 @@ Item {
                         ScrollBar.vertical: ScrollBar {}
                         spacing: 1
 
-                        // Formatter functions are now centralized in FormatUtils singleton
+                        // 格式化函数现在集中在 FormatUtils 单例中
 
                         delegate: Rectangle {
                             width: recentListView.width
@@ -466,14 +466,14 @@ Item {
                                 anchors.rightMargin: 12
                                 spacing: 8
 
-                                // Icon
+                                // 图标
                                 Label {
                                     text: FormatUtils.fileIcon(model.fileType, model.fileMimeType)
                                     font.pixelSize: 18
                                     Layout.preferredWidth: 24
                                 }
 
-                                // File name
+                                // 文件名
                                 Label {
                                     text: model.fileName
                                     font.pixelSize: 13
@@ -482,7 +482,7 @@ Item {
                                     color: palette.windowText
                                 }
 
-                                // Size
+                                // 大小
                                 Label {
                                     text: model.fileIsFolder 
                                           ? (model.fileItemCount + " 项")
@@ -493,7 +493,7 @@ Item {
                                     horizontalAlignment: Text.AlignRight
                                 }
 
-                                // Modified date
+                                // 修改日期
                                 Label {
                                     text: FormatUtils.formatDate(model.fileUpdatedAt)
                                     font.pixelSize: 11
@@ -511,11 +511,11 @@ Item {
 
                                 onClicked: {
                                     if (model.fileIsFolder) {
-                                        // Navigate to folder in Files page
+                                        // 在文件页面导航到文件夹
                                         FileListViewModel.navigateToFolder(model.fileId)
                                         root.navigateToFiles()
                                     } else {
-                                        // Trigger download for file
+                                        // 触发文件下载
                                         TransfersViewModel.startDownload(model.fileId, SettingsViewModel.downloadDir)
                                     }
                                 }

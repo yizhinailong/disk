@@ -9,7 +9,6 @@
 #include "UploadEngine.hpp"
 
 #include <QCryptographicHash>
-#include <QJsonArray>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -50,17 +49,17 @@ namespace disk::qml::transfers {
 
     void UploadEngine::Start() {
         if (m_in_flight) {
-            return; // Already running
+            return; // 已在运行中
         }
 
         m_paused = false;
         m_cancelled = false;
 
         if (m_upload_id.isEmpty()) {
-            // First start: compute file hash, then init
+            // 首次启动：计算文件哈希，然后初始化
             ComputeFileHash();
         } else {
-            // Resume: continue from next chunk
+            // 断点续传：从下一个分片继续
             m_speed_timer.restart();
             m_bytes_at_speed_start = m_transfer_item.doneBytes;
             SendNextChunk();
@@ -72,7 +71,7 @@ namespace disk::qml::transfers {
         if (!m_in_flight) {
             SetPaused();
         }
-        // If in_flight, will pause after current chunk completes
+        // 如果有请求进行中，将在当前分片完成后暂停
     }
 
     void UploadEngine::Cancel() {
@@ -80,7 +79,7 @@ namespace disk::qml::transfers {
         if (!m_in_flight && !m_upload_id.isEmpty()) {
             SendCancel();
         } else if (!m_in_flight) {
-            // Never started init — just mark failed
+            // 从未启动初始化 — 直接标记为失败
             if (m_queue_model) {
                 m_queue_model->UpdateStatus(
                     m_transfer_item.id,
@@ -90,7 +89,7 @@ namespace disk::qml::transfers {
             }
             emit finished(m_transfer_item.id, false, QStringLiteral("Cancelled"));
         }
-        // If in_flight, will cancel after current request completes
+        // 如果有请求进行中，将在当前请求完成后取消
     }
 
     auto UploadEngine::TransferId() const -> const QString& {
@@ -119,7 +118,7 @@ namespace disk::qml::transfers {
         m_file_hash = QString::fromLatin1(hasher.result().toHex());
         m_file.close();
 
-        // Start the upload flow
+        // 启动上传流程
         SendInit();
     }
 
@@ -165,7 +164,7 @@ namespace disk::qml::transfers {
         const QByteArray& body
     ) {
         if (m_cancelled) {
-            // Cancelled while init was in flight
+            // 初始化请求进行中被取消
             if (!m_upload_id.isEmpty()) {
                 SendCancel();
             } else {
@@ -205,7 +204,7 @@ namespace disk::qml::transfers {
 
         const auto& data = *dataObj;
 
-        // Check for instant upload (秒传)
+        // 检查秒传
         if (data.value(QLatin1String("instant_upload")).toBool(false)) {
             SetCompleted();
             return;
@@ -220,14 +219,14 @@ namespace disk::qml::transfers {
             return;
         }
 
-        // Parse already-uploaded chunks (for resume)
+        // 解析已上传的分片（用于断点续传）
         m_uploaded_chunks.clear();
         const auto chunksArray = data.value(QLatin1String("uploaded_chunks")).toArray();
         for (const auto& v : chunksArray) {
             m_uploaded_chunks.append(static_cast<quint32>(v.toInt()));
         }
 
-        // Find the first chunk not yet uploaded
+        // 找到第一个尚未上传的分片
         m_next_chunk = 0;
         for (quint32 i = 0; i < m_total_chunks; ++i) {
             if (!m_uploaded_chunks.contains(i)) {
@@ -236,7 +235,7 @@ namespace disk::qml::transfers {
             }
         }
 
-        // Calculate already-done bytes from uploaded chunks
+        // 计算已上传分片的已完成字节数
         qint64 alreadyDone = static_cast<qint64>(m_uploaded_chunks.size()) * m_chunk_size;
         if (alreadyDone > m_transfer_item.totalBytes) {
             alreadyDone = m_transfer_item.totalBytes;
@@ -244,11 +243,11 @@ namespace disk::qml::transfers {
         m_transfer_item.doneBytes = alreadyDone;
         UpdateProgress(alreadyDone);
 
-        // Start speed tracking
+        // 启动速度追踪
         m_speed_timer.start();
         m_bytes_at_speed_start = alreadyDone;
 
-        // Begin uploading chunks
+        // 开始上传分片
         SendNextChunk();
     }
 
@@ -265,20 +264,20 @@ namespace disk::qml::transfers {
             return;
         }
 
-        // Find next chunk that hasn't been uploaded
+        // 找到下一个尚未上传的分片
         while (m_next_chunk < m_total_chunks && m_uploaded_chunks.contains(m_next_chunk)) {
             ++m_next_chunk;
         }
 
         if (m_next_chunk >= m_total_chunks) {
-            // All chunks uploaded — send complete
+            // 所有分片已上传 — 发送完成请求
             SendComplete();
             return;
         }
 
         auto [chunkData, chunkHash] = ReadChunk(m_next_chunk);
         if (chunkData.isEmpty() && chunkHash.isEmpty()) {
-            // ReadChunk already called SetFailed
+            // ReadChunk 已调用 SetFailed
             return;
         }
 
@@ -323,7 +322,7 @@ namespace disk::qml::transfers {
             return {};
         }
 
-        // Compute chunk MD5 hash
+        // 计算分片 MD5 哈希
         const QString hash = QString::fromLatin1(
             QCryptographicHash::hash(data, QCryptographicHash::Md5).toHex()
         );
@@ -359,11 +358,11 @@ namespace disk::qml::transfers {
             return;
         }
 
-        // Mark chunk as uploaded
+        // 标记分片为已上传
         m_uploaded_chunks.append(chunkIndex);
         ++m_next_chunk;
 
-        // Update progress
+        // 更新进度
         qint64 doneBytes = static_cast<qint64>(m_uploaded_chunks.size()) * m_chunk_size;
         if (doneBytes > m_transfer_item.totalBytes) {
             doneBytes = m_transfer_item.totalBytes;
@@ -376,7 +375,7 @@ namespace disk::qml::transfers {
             return;
         }
 
-        // Send next chunk
+        // 发送下一个分片
         SendNextChunk();
     }
 
@@ -434,7 +433,7 @@ namespace disk::qml::transfers {
 
     void UploadEngine::SendCancel() {
         if (m_upload_id.isEmpty()) {
-            // No upload ID — nothing to cancel on backend
+            // 没有上传 ID — 后端无需取消
             if (m_queue_model) {
                 m_queue_model->UpdateStatus(
                     m_transfer_item.id,
@@ -454,7 +453,7 @@ namespace disk::qml::transfers {
             [this, ctx](bool netErr, QString errStr, int status, QByteArray body) {
                 ctx->deleteLater();
                 m_in_flight = false;
-                // Regardless of cancel result, mark as failed/cancelled
+                // 无论取消结果如何，都标记为失败/已取消
                 if (m_queue_model) {
                     m_queue_model->UpdateStatus(
                         m_transfer_item.id,
@@ -481,10 +480,10 @@ namespace disk::qml::transfers {
             const qint64 elapsedMs = m_speed_timer.elapsed();
             if (elapsedMs > 0) {
                 const qint64 bytesDelta = doneBytes - m_bytes_at_speed_start;
-                speed = bytesDelta * 1000 / elapsedMs; // bytes/sec
+                speed = bytesDelta * 1000 / elapsedMs; // 字节/秒
                 if (speed > 0) {
                     const qint64 remaining = m_transfer_item.totalBytes - doneBytes;
-                    eta = remaining / speed; // seconds
+                    eta = remaining / speed; // 秒
                 }
             }
         }

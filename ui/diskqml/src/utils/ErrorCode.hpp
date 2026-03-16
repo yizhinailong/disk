@@ -1,7 +1,7 @@
 /**
  * @file ErrorCode.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QML client error codes and user-facing message mapping
+ * @brief QML 客户端错误码和面向用户的错误消息映射
  *
  * @copyright Copyright (c) 2026
  *
@@ -14,17 +14,17 @@
 namespace disk::qml::utils {
 
     /**
-     * @brief Strongly-typed error codes mirroring backend HTTP/business error codes.
-     * @details Code ranges:
-     *   - 0       : Success
-     *   - 10xxx   : Common errors (e.g., invalid parameter, rate limit, internal error)
-     *   - 40xxx   : Auth errors (e.g., user not found, invalid credentials, token issues)
-     *   - 50xxx   : File errors (e.g., file not found, upload failed, quota exceeded)
-     *   - 60xxx   : Share errors (e.g., share not found, expired, wrong password)
-     *   - 70xxx   : Redis errors (server-side, shown as fallback messages)
+     * @brief 强类型错误码，镜像后端 HTTP/业务错误码
+     * @details 错误码范围：
+     *   - 0       : 成功
+     *   - 10xxx   : 通用错误（如参数无效、限流、内部错误）
+     *   - 40xxx   : 认证错误（如用户不存在、凭证无效、令牌问题）
+     *   - 50xxx   : 文件错误（如文件不存在、上传失败、配额超限）
+     *   - 60xxx   : 分享错误（如分享不存在、已过期、密码错误）
+     *   - 70xxx   : Redis 错误（服务端错误，显示为备用消息）
      */
     enum class ErrorCode : int {
-        // Common
+        // 通用
         Success = 0,
         InvalidParameter = 10001,
         ValidationFailed = 10002,
@@ -33,7 +33,7 @@ namespace disk::qml::utils {
         TooManyRequests = 10005,
         InternalError = 10006,
 
-        // Auth
+        // 认证
         UsernameExists = 40001,
         EmailExists = 40002,
         InvalidFormat = 40003,
@@ -50,7 +50,7 @@ namespace disk::qml::utils {
         RefreshTokenAlreadyUsed = 40110,
         TokenRevoked = 40111,
 
-        // File
+        // 文件
         InvalidFilename = 50001,
         FileTypeNotAllowed = 50002,
         FileSizeExceeded = 50003,
@@ -63,22 +63,22 @@ namespace disk::qml::utils {
         FolderAlreadyExists = 50010,
         FileReadError = 50011,
 
-        // Share
+        // 分享
         ShareNotFound = 60001,
         ShareExpired = 60002,
         SharePasswordError = 60003,
         ShareAccessDenied = 60004,
 
-        // Redis (server-side, user-facing fallback)
+        // Redis（服务端错误，面向用户的备用消息）
         RedisConnectionFailed = 70001,
         RedisOperationFailed = 70002,
         RedisKeyNotFound = 70003,
     };
 
     /**
-     * @brief Convert a raw integer error code into the corresponding ErrorCode enum value.
-     * @param code  The integer error code received from the server response.
-     * @return An optional ErrorCode if the code is recognised; std::nullopt otherwise.
+     * @brief 将原始整数错误码转换为对应的 ErrorCode 枚举值
+     * @param code  从服务器响应接收的整数错误码
+     * @return 若错误码被识别则返回对应的 ErrorCode；否则返回 std::nullopt
      */
     inline auto ErrorCodeFromInt(int code) -> std::optional<ErrorCode> {
         switch (code) {
@@ -104,7 +104,7 @@ namespace disk::qml::utils {
             case 40109: return ErrorCode::TokenWrongType;
             case 40110: return ErrorCode::RefreshTokenAlreadyUsed;
             case 40111: return ErrorCode::TokenRevoked;
-            // File
+            // 文件
             case 50001: return ErrorCode::InvalidFilename;
             case 50002: return ErrorCode::FileTypeNotAllowed;
             case 50003: return ErrorCode::FileSizeExceeded;
@@ -116,7 +116,7 @@ namespace disk::qml::utils {
             case 50009: return ErrorCode::ChunkVerifyFailed;
             case 50010: return ErrorCode::FolderAlreadyExists;
             case 50011: return ErrorCode::FileReadError;
-            // Share
+            // 分享
             case 60001: return ErrorCode::ShareNotFound;
             case 60002: return ErrorCode::ShareExpired;
             case 60003: return ErrorCode::SharePasswordError;
@@ -130,13 +130,13 @@ namespace disk::qml::utils {
     }
 
     /**
-     * @brief Map an error code to a localised user-facing message string.
-     * @details For well-known codes a fixed Chinese message is returned.  For
-     *          unrecognised codes the function falls back to @p fallbackServerMessage
-     *          when it is non-empty, and returns "未知错误" otherwise.
-     * @param code                  The integer error code received from the server.
-     * @param fallbackServerMessage Optional server-provided message used as fallback.
-     * @return A QString suitable for display in the UI.
+     * @brief 将错误码映射为本地化的面向用户的消息字符串
+     * @details 对于已知错误码返回固定的中文消息。对于未识别的错误码，
+     *          当 @p fallbackServerMessage 非空时使用其作为备用消息，
+     *          否则返回"未知错误"。
+     * @param code                  从服务器接收的整数错误码
+     * @param fallbackServerMessage 可选的服务器提供的备用消息
+     * @return 适合在 UI 中显示的 QString
      */
     inline auto ToUserMessage(int code, const QString& fallbackServerMessage) -> QString {
         switch (code) {
@@ -150,7 +150,7 @@ namespace disk::qml::utils {
             case 40102: return QStringLiteral("账户已锁定，请15分钟后重试");
             case 40103: return QStringLiteral("账户已被禁用");
             case 40108: return QStringLiteral("令牌已过期");
-            // File errors
+            // 文件错误
             case 50001: return QStringLiteral("文件名无效");
             case 50002: return QStringLiteral("不支持该文件类型");
             case 50003: return QStringLiteral("文件大小超出限制");
@@ -162,12 +162,12 @@ namespace disk::qml::utils {
             case 50009: return QStringLiteral("分片校验失败，请重新上传");
             case 50010: return QStringLiteral("同名文件夹已存在");
             case 50011: return QStringLiteral("文件读取失败");
-            // Share errors
+            // 分享错误
             case 60001: return QStringLiteral("分享不存在");
             case 60002: return QStringLiteral("分享链接已过期");
             case 60003: return QStringLiteral("分享密码错误");
             case 60004: return QStringLiteral("无权限访问该分享");
-            // Redis errors (server-side, user-facing fallback)
+            // Redis 错误（服务端错误，面向用户的备用消息）
             case 70001:
             case 70002: return QStringLiteral("服务器错误，请稍后重试");
             case 70003: return QStringLiteral("资源不存在");

@@ -1,7 +1,7 @@
 /**
  * @file TokenRefreshCoordinator.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief TokenRefreshCoordinator implementation
+ * @brief TokenRefreshCoordinator 实现
  *
  * @copyright Copyright (c) 2026
  *
@@ -80,9 +80,9 @@ namespace disk::qml::services {
             return;
         }
 
-        // Token expires within the proactive window — refresh silently
+        // Token 在主动刷新窗口内即将过期 — 静默刷新
         RequestRefresh([](bool /*success*/) {
-            // Proactive refresh: no caller to notify beyond the waiter mechanism
+            // 主动刷新: 除了等待者机制外无需通知调用者
         });
     }
 
@@ -113,7 +113,7 @@ namespace disk::qml::services {
                     return;
                 }
 
-                // Update the shared ApiClient bearer token for subsequent requests
+                // 更新共享 ApiClient 的 bearer token 用于后续请求
                 m_api_client->SetBearerToken(result->accessToken);
 
                 ResolveWaiters(true);

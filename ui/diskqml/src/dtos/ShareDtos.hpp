@@ -1,15 +1,15 @@
 /**
  * @file ShareDtos.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief Share response DTOs and JSON parsing helpers for the QML client
+ * @brief 分享响应数据传输对象及 JSON 解析辅助函数
  *
  * @copyright Copyright (c) 2026
  *
  * @details
- * DTOs mirror the backend definitions in src/dtos/ShareDto.hpp.
- * All types are plain structs (no QObject) with inline Parse functions.
+ * DTO 映射后端 src/dtos/ShareDto.hpp 中的定义。
+ * 所有类型均为纯结构体（无 QObject），带有内联解析函数。
  *
- * Covered endpoints:
+ * 覆盖的接口：
  * - POST   /api/share              → CreateShareResultDto
  * - GET    /api/share              → ShareListResultDto
  * - GET    /api/share/{id}         → ShareDetailResultDto
@@ -32,25 +32,25 @@
 
 namespace disk::qml::models {
 
-    // ==================== Shared Components ====================
+    // ==================== 共享组件 ====================
 
     /**
-     * @brief A file entry inside a share (used in detail + access responses).
+     * @brief 分享中的文件条目（用于详情和访问响应）
      *
      * @details
-     * Mirrors backend ShareFile: { id, name, type, size }
+     * 映射后端 ShareFile: { id, name, type, size }
      */
     struct ShareFileDto {
         quint64 id{};
         QString name;
-        QString type; ///< "file" or "folder"
+        QString type; ///< "file"（文件）或 "folder"（文件夹）
         quint64 size{};
     };
 
-    // ==================== Create Share ====================
+    // ==================== 创建分享 ====================
 
     /**
-     * @brief Result of POST /api/share.
+     * @brief POST /api/share 的结果
      */
     struct CreateShareResultDto {
         QString shareId;
@@ -61,15 +61,14 @@ namespace disk::qml::models {
         QString createdAt;
     };
 
-    // ==================== Share List ====================
+    // ==================== 分享列表 ====================
 
     /**
-     * @brief Pagination metadata (reused from FileDtos pattern).
+     * @brief 分页元数据（复用 FileDtos 模式）
      *
      * @details
-     * The share list response has its own pagination object identical to
-     * the file list one. We reuse the same shape but define it locally
-     * to avoid a header dependency on FileDtos.hpp.
+     * 分享列表响应有自己的分页对象，与文件列表的分页对象相同。
+     * 我们复用相同的结构但在本地定义，以避免对 FileDtos.hpp 的头文件依赖。
      */
     struct SharePaginationDto {
         int page{};
@@ -79,10 +78,10 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief A single item in the share list.
+     * @brief 分享列表中的单个条目
      *
      * @details
-     * Mirrors backend ShareItem.
+     * 映射后端 ShareItem。
      */
     struct ShareListItemDto {
         QString shareId;
@@ -99,20 +98,20 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief Result of GET /api/share (share list with pagination).
+     * @brief GET /api/share 的结果（带分页的分享列表）
      */
     struct ShareListResultDto {
         QVector<ShareListItemDto> items;
         SharePaginationDto pagination;
     };
 
-    // ==================== Share Detail ====================
+    // ==================== 分享详情 ====================
 
     /**
-     * @brief Result of GET /api/share/{share_id} (owner detail view).
+     * @brief GET /api/share/{share_id} 的结果（所有者详情视图）
      *
      * @details
-     * Mirrors backend ShareDetailResponse, includes file list.
+     * 映射后端 ShareDetailResponse，包含文件列表。
      */
     struct ShareDetailResultDto {
         QString shareId;
@@ -127,10 +126,10 @@ namespace disk::qml::models {
         QString status;
     };
 
-    // ==================== Update Share ====================
+    // ==================== 更新分享 ====================
 
     /**
-     * @brief Result of PUT /api/share/{share_id}.
+     * @brief PUT /api/share/{share_id} 的结果
      */
     struct UpdateShareResultDto {
         QString shareId;
@@ -140,10 +139,10 @@ namespace disk::qml::models {
         QString updatedAt;
     };
 
-    // ==================== Cancel Share ====================
+    // ==================== 取消分享 ====================
 
     /**
-     * @brief Error info for a single cancel operation.
+     * @brief 单个取消操作的错误信息
      */
     struct CancelShareErrorDto {
         int code{};
@@ -152,16 +151,16 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief Result for a single share_id in the cancel response.
+     * @brief 取消响应中单个 share_id 的结果
      */
     struct CancelShareItemResultDto {
         QString shareId;
-        QString status; ///< "success" or "failed"
+        QString status; ///< "success"（成功）或 "failed"（失败）
         std::optional<CancelShareErrorDto> error;
     };
 
     /**
-     * @brief Summary counts from the cancel response.
+     * @brief 取消响应的汇总统计
      */
     struct CancelShareSummaryDto {
         int total{};
@@ -170,20 +169,20 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief Result of DELETE /api/share (batch cancel).
+     * @brief DELETE /api/share 的结果（批量取消）
      */
     struct CancelShareResultDto {
         CancelShareSummaryDto summary;
         QVector<CancelShareItemResultDto> results;
     };
 
-    // ==================== Access Share ====================
+    // ==================== 访问分享 ====================
 
     /**
-     * @brief Result of POST /api/share/access/{share_id}.
+     * @brief POST /api/share/access/{share_id} 的结果
      *
      * @details
-     * Returns a share_token used for subsequent browse/download requests.
+     * 返回用于后续浏览/下载请求的 share_token。
      */
     struct ShareAccessResultDto {
         QString shareToken;
@@ -192,23 +191,23 @@ namespace disk::qml::models {
         QVector<ShareFileDto> files;
     };
 
-    // ==================== Browse Share ====================
+    // ==================== 浏览分享 ====================
 
     /**
-     * @brief A single item when browsing share content.
+     * @brief 浏览分享内容时的单个条目
      *
      * @details
-     * Mirrors backend BrowseItem: { id, name, type, size }
+     * 映射后端 BrowseItem: { id, name, type, size }
      */
     struct ShareBrowseItemDto {
         quint64 id{};
         QString name;
-        QString type; ///< "file" or "folder"
+        QString type; ///< "file"（文件）或 "folder"（文件夹）
         quint64 size{};
     };
 
     /**
-     * @brief A breadcrumb entry when browsing share content.
+     * @brief 浏览分享内容时的面包屑条目
      */
     struct ShareBrowseBreadcrumbDto {
         quint64 id{};
@@ -216,17 +215,17 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief Result of GET /api/share/browse/{share_id}.
+     * @brief GET /api/share/browse/{share_id} 的结果
      */
     struct ShareBrowseResultDto {
         QVector<ShareBrowseItemDto> items;
         QVector<ShareBrowseBreadcrumbDto> breadcrumb;
     };
 
-    // ==================== JSON Parsing Helpers ====================
+    // ==================== JSON 解析辅助函数 ====================
 
     /**
-     * @brief Parse a ShareFile from a JSON object.
+     * @brief 从 JSON 对象解析 ShareFile
      */
     inline auto ParseShareFile(const QJsonObject& obj) -> ShareFileDto {
         ShareFileDto f;
@@ -238,7 +237,7 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse an array of ShareFile objects.
+     * @brief 解析 ShareFile 对象数组
      */
     inline auto ParseShareFileArray(const QJsonValue& val) -> QVector<ShareFileDto> {
         QVector<ShareFileDto> result;
@@ -412,7 +411,7 @@ namespace disk::qml::models {
 
         CancelShareResultDto dto;
 
-        // Parse summary
+        // 解析摘要
         const QJsonValue sumVal = obj.value(QLatin1String("summary"));
         if (sumVal.isObject()) {
             const QJsonObject sumObj = sumVal.toObject();
@@ -421,7 +420,7 @@ namespace disk::qml::models {
             dto.summary.failed = sumObj.value(QLatin1String("failed")).toInt();
         }
 
-        // Parse results
+        // 解析结果列表
         const QJsonValue resultsVal = obj.value(QLatin1String("results"));
         if (resultsVal.isArray()) {
             const QJsonArray resultsArr = resultsVal.toArray();

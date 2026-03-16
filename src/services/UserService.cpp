@@ -35,45 +35,45 @@ namespace disk::user {
         LOG_INFO << "Get user profile request: user_id=" << user_id;
 
         try {
-            // Step 1: 查询用户信息
+            // 步骤 1: 查询用户信息
             CoroMapper<Users> user_mapper(m_db_client);
             const auto user = co_await user_mapper.findOne(
                 Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
             );
             LOG_DEBUG << "Found user: " << user.getValueOfUsername() << " (ID: " << user_id << ")";
 
-            // Step 2: 检查用户是否存在（findOne 会抛出异常如果不存在）
+            // 步骤 2: 检查用户是否存在（findOne 会抛出异常如果不存在）
             // 不需要额外检查，因为 findOne 会抛出 DrogonDbException
 
-            // Step 3: 查询文件数量
+            // 步骤 3: 查询文件数量
             CoroMapper<Files> file_mapper(m_db_client);
             const auto file_count = co_await file_mapper.count(
                 Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
             );
             LOG_DEBUG << "User file count: user_id=" << user_id << ", count=" << file_count;
 
-            // Step 4: 查询文件夹数量
+            // 步骤 4: 查询文件夹数量
             CoroMapper<Folders> folder_mapper(m_db_client);
             const auto folder_count = co_await folder_mapper.count(
                 Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id)
             );
             LOG_DEBUG << "User folder count: user_id=" << user_id << ", count=" << folder_count;
 
-            // Step 5: 构建 UserProfileResponse
+            // 步骤 5: 构建 UserProfileResponse
             UserProfileResponse response;
 
-            // Copy 基本字段
+            // 复制基本字段
             response.id = user.getValueOfId();
             response.username = user.getValueOfUsername();
             response.email = user.getValueOfEmail();
 
-            // Handle nullable nickname
+            // 处理可空 nickname
             response.nickname = user.getNickname() ? *user.getNickname() : "";
 
-            // Handle nullable avatar
+            // 处理可空 avatar
             response.avatar = user.getAvatar() ? *user.getAvatar() : "";
 
-            // Copy 存储信息
+            // 复制存储信息
             response.storage_quota = user.getValueOfStorageQuota();
             response.storage_used = user.getValueOfStorageUsed();
 
@@ -81,11 +81,11 @@ namespace disk::user {
             response.file_count = static_cast<uint32_t>(file_count);
             response.folder_count = static_cast<uint32_t>(folder_count);
 
-            // Format 时间戳
+            // 格式化时间戳
             response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
             response.updated_at = user.getValueOfUpdatedAt().toDbStringLocal();
 
-            // Step 6: 返回响应
+            // 步骤 6: 返回响应
             LOG_INFO << "Get user profile successful: user_id=" << user_id;
             co_return response;
 
@@ -122,19 +122,19 @@ namespace disk::user {
         try {
             CoroMapper<Users> mapper(m_db_client);
 
-            // Step 1: 查找用户
+            // 步骤 1: 查找用户
             auto user =
                 co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
             LOG_DEBUG << "Found user: " << user.getValueOfUsername() << " (ID: " << user_id << ")";
 
-            // Step 2: 验证旧密码
+            // 步骤 2: 验证旧密码
             if (!HashUtil::VerifyPassword(request.old_password, user.getValueOfPasswordHash())) {
                 LOG_WARN << "Old password is incorrect: user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::InvalidCredentials));
             }
             LOG_DEBUG << "Old password verified successfully: user_id=" << user_id;
 
-            // Step 3: 拒绝与当前密码相同的密码
+            // 步骤 3: 拒绝与当前密码相同的密码
             if (request.old_password == request.new_password) {
                 LOG_WARN << "New password cannot be the same as old password: user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(
@@ -143,7 +143,7 @@ namespace disk::user {
                 ));
             }
 
-            // Step 4: 加密新密码
+            // 步骤 4: 加密新密码
             LOG_DEBUG << "Starting password hash computation: user_id=" << user_id;
             auto hash_result = HashUtil::HashPassword(request.new_password);
             if (!hash_result) {
@@ -155,7 +155,7 @@ namespace disk::user {
             }
             LOG_DEBUG << "Password hash completed: user_id=" << user_id;
 
-            // Step 5: 更新数据库
+            // 步骤 5: 更新数据库
             user.setPasswordHash(hash_result.value());
             co_await mapper.update(user);
 
@@ -193,12 +193,12 @@ namespace disk::user {
         try {
             CoroMapper<Users> mapper(m_db_client);
 
-            // Step 1: 查找用户
+            // 步骤 1: 查找用户
             auto user =
                 co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
             LOG_DEBUG << "Found user: " << user.getValueOfUsername();
 
-            // Step 2: 更新提供的字段
+            // 步骤 2: 更新提供的字段
             if (request.nickname.has_value()) {
                 user.setNickname(*request.nickname);
                 LOG_DEBUG << "Updating nickname: " << *request.nickname;
@@ -208,11 +208,11 @@ namespace disk::user {
                 LOG_DEBUG << "Updating avatar: " << *request.avatar;
             }
 
-            // Step 3: 保存到数据库
+            // 步骤 3: 保存到数据库
             co_await mapper.update(user);
             LOG_INFO << "User profile updated successfully: user_id=" << user_id;
 
-            // Step 4: 构建响应
+            // 步骤 4: 构建响应
             UserProfileResponse response;
             response.id = user.getValueOfId();
             response.username = user.getValueOfUsername();

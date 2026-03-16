@@ -33,11 +33,11 @@ QtObject {
 
     function statusColor(status, palette) {
         switch (status) {
-        case 1: return palette.highlight       // Running
-        case 2: return palette.mid             // Paused
-        case 3: return "#4CAF50"               // Completed (green)
-        case 4: return "#F44336"               // Failed (red)
-        default: return palette.mid            // Queued
+        case 1: return palette.highlight       // 运行中
+        case 2: return palette.mid             // 已暂停
+        case 3: return "#4CAF50"               // 已完成 (绿色)
+        case 4: return "#F44336"               // 失败 (红色)
+        default: return palette.mid            // 排队中
         }
     }
 

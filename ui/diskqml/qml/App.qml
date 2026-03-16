@@ -24,7 +24,7 @@ ApplicationWindow {
 
     property string prefillAccount: ""
 
-    // Center window on first show
+    // 首次显示时居中窗口
     Component.onCompleted: {
         root.x = (Screen.width - root.width) / 2
         root.y = (Screen.height - root.height) / 2
@@ -69,7 +69,7 @@ ApplicationWindow {
             }
         }
 
-        // 左侧：Logo
+        // 左侧：标志
         Text {
             anchors.left: parent.left
             anchors.leftMargin: 12
@@ -94,7 +94,7 @@ ApplicationWindow {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "\u2013"  // en-dash as minimize icon
+                    text: "\u2013"  // 短划线作为最小化图标
                     font.pixelSize: 14
                     color: palette.windowText
                 }
@@ -115,7 +115,7 @@ ApplicationWindow {
 
                 Text {
                     anchors.centerIn: parent
-                    text: root.visibility === Window.Maximized ? "\u2752" : "\u25A1"  // restore / maximize
+                    text: root.visibility === Window.Maximized ? "\u2752" : "\u25A1"  // 还原 / 最大化
                     font.pixelSize: 14
                     color: palette.windowText
                 }
@@ -142,7 +142,7 @@ ApplicationWindow {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "\u2715"  // × close icon
+                    text: "\u2715"  // × 关闭图标
                     font.pixelSize: 14
                     color: closeArea.containsMouse ? "white" : palette.windowText
                 }

@@ -18,7 +18,7 @@ namespace disk::filters {
     using disk::utils::ConfigMgr;
 
     ShareAuthFilter::ShareAuthFilter() {
-        // Initialize TokenService singleton
+        // 初始化 TokenService 单例
         disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
     }
 

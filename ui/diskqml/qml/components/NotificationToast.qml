@@ -10,7 +10,7 @@ import QtQuick.Controls
 Item {
     id: root
 
-    // Optional: allow customizing the margins/offsets
+    // 可选：允许自定义边距/偏移量
     property int bottomMargin: 60
 
     function showSuccess(message) {

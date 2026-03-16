@@ -1,7 +1,7 @@
 /**
  * @file FormatUtils.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QML singleton providing centralized formatting utilities
+ * @brief 提供集中格式化工具的 QML 单例
  *
  * @copyright Copyright (c) 2026
  *
@@ -19,18 +19,18 @@
 namespace disk::qml::utils {
 
     /**
-     * @brief QML singleton that provides centralized formatting utilities.
+     * @brief 提供集中格式化工具的 QML 单例。
      *
      * @details
-     * This utility class centralizes common formatting operations used across
-     * multiple QML views, including file size formatting, date formatting,
-     * file icon/label mapping, and permission/status label mapping.
+     * 此工具类集中了跨多个 QML 视图使用的常见格式化操作，
+     * 包括文件大小格式化、日期格式化、文件图标/标签映射，
+     * 以及权限/状态标签映射。
      *
-     * Following project convention: "QML/JavaScript ONLY handles UI rendering.
-     * All business logic, API calls, and data processing MUST be in C++"
+     * 遵循项目约定："QML/JavaScript 仅处理 UI 渲染。
+     * 所有业务逻辑、API 调用和数据处理必须在 C++ 中"
      *
-     * Singleton lifecycle: an application-owned instance must be created and
-     * registered with SetInstance() before the QML engine calls create().
+     * 单例生命周期：必须在 QML 引擎调用 create() 之前创建应用程序拥有的实例，
+     * 并通过 SetInstance() 注册。
      */
     class FormatUtils : public QObject {
         Q_OBJECT
@@ -40,7 +40,7 @@ namespace disk::qml::utils {
     public:
         explicit FormatUtils(QObject* parent = nullptr);
 
-        // ==================== Public API ====================
+        // ==================== 公共 API ====================
 
         /**
          * @brief Register the pre-created instance for use by the QML engine.

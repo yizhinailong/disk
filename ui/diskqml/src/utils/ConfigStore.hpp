@@ -1,7 +1,7 @@
 /**
  * @file ConfigStore.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief Client configuration persistence via QSettings
+ * @brief 通过 QSettings 持久化客户端配置
  *
  * @copyright Copyright (c) 2026
  *
@@ -16,35 +16,35 @@
 namespace disk::qml::utils {
 
     /**
-     * @brief Persists and retrieves client configuration using QSettings.
-     * @details Settings are stored under the groups @c config, @c transfers, and @c ui.
-     *          Managed keys:
-     *   - @c config/serverUrl        (default: @c http://127.0.0.1:8080)
-     *   - @c transfers/downloadDir   (default: QStandardPaths::DownloadLocation)
-     *   - @c transfers/concurrentUploads   (default: 3, range [1, 10])
-     *   - @c transfers/concurrentDownloads (default: 3, range [1, 10])
-     *   - @c ui/autoStart            (default: false)
-     *   - @c ui/minimizeToTray       (default: false)
-     *   - @c ui/showNotifications    (default: true)
-     *   - @c ui/confirmDelete        (default: true)
+     * @brief 使用 QSettings 持久化和检索客户端配置。
+     * @details 配置存储在 @c config、@c transfers 和 @c ui 组下。
+     *          管理的键：
+     *   - @c config/serverUrl        （默认值：@c http://127.0.0.1:8080）
+     *   - @c transfers/downloadDir   （默认值：QStandardPaths::DownloadLocation）
+     *   - @c transfers/concurrentUploads   （默认值：3，范围 [1, 10]）
+     *   - @c transfers/concurrentDownloads （默认值：3，范围 [1, 10]）
+     *   - @c ui/autoStart            （默认值：false）
+     *   - @c ui/minimizeToTray       （默认值：false）
+     *   - @c ui/showNotifications    （默认值：true）
+     *   - @c ui/confirmDelete        （默认值：true）
      */
     class ConfigStore {
     public:
         ConfigStore();
 
         /**
-         * @brief Return the configured server base URL.
-         * @return A QUrl read from QSettings key @c config/serverUrl,
-         *         defaulting to @c http://127.0.0.1:8080 when not set.
+         * @brief 返回配置的服务器基础 URL。
+         * @return 从 QSettings 键 @c config/serverUrl 读取的 QUrl，
+         *         未设置时默认为 @c http://127.0.0.1:8080。
          */
         auto ServerUrl() const -> QUrl;
         /**
-         * @brief Persist a new server base URL.
-         * @param url  The URL to store under QSettings key @c config/serverUrl.
+         * @brief 持久化新的服务器基础 URL。
+         * @param url  要存储到 QSettings 键 @c config/serverUrl 的 URL。
          */
         auto SetServerUrl(const QUrl& url) -> void;
 
-        static constexpr int kDefaultConcurrentUploads   = 3;
+        static constexpr int kDefaultConcurrentUploads = 3;
         static constexpr int kDefaultConcurrentDownloads = 3;
 
         [[nodiscard]] auto ConcurrentUploads() const -> int;

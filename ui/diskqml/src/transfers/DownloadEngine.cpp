@@ -1,7 +1,7 @@
 /**
  * @file DownloadEngine.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief DownloadEngine implementation — stream-to-disk with Range support
+ * @brief DownloadEngine 实现 — 支持 Range 请求的流式下载
  *
  * @copyright Copyright (c) 2026
  *
@@ -10,11 +10,11 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkRequest>
 #include <QUrlQuery>
-#include <QJsonArray>
 
 #include <api/ApiClient.hpp>
 #include <dtos/ApiEnvelope.hpp>
@@ -23,7 +23,7 @@ namespace disk::qml::transfers {
 
     namespace {
 
-        /// Parse DownloadInfo from the envelope data object.
+        /// 从 envelope data 对象解析 DownloadInfo。
         auto ParseDownloadInfo(const QJsonObject& data) -> std::optional<DownloadInfo> {
             if (data.isEmpty()) {
                 return std::nullopt;
@@ -47,7 +47,7 @@ namespace disk::qml::transfers {
 
     } // anonymous namespace
 
-    // ==================== Construction ====================
+    // ==================== 构造函数 ====================
 
     DownloadEngine::DownloadEngine(api::ApiClient* client, QObject* parent)
         : QObject(parent), m_client(client) {
@@ -56,7 +56,7 @@ namespace disk::qml::transfers {
     }
 
     DownloadEngine::~DownloadEngine() {
-        // Abort any in-flight reply
+        // 中止任何进行中的 reply
         if (m_reply) {
             m_reply->abort();
             m_reply->deleteLater();
@@ -179,6 +179,7 @@ namespace disk::qml::transfers {
         m_share_token = shareToken;
         Prepare(info, destDir, std::move(progressCb), std::move(finishedCb));
     }
+
     // ==================== Prepare ====================
 
     auto DownloadEngine::Prepare(
@@ -194,7 +195,7 @@ namespace disk::qml::transfers {
 
         InitializeFromInfo();
 
-        // Keep status as Queued - don't start yet
+        // 保持状态为 Queued — 尚未启动
         EmitProgress();
     }
 
@@ -213,7 +214,7 @@ namespace disk::qml::transfers {
 
         InitializeFromInfo();
 
-        // Legacy behavior: start immediately
+        // 旧行为：立即启动
         Begin();
     }
 
@@ -255,13 +256,13 @@ namespace disk::qml::transfers {
     // ==================== Resume ====================
 
     auto DownloadEngine::Resume() -> void {
-        // Handle Queued (prepared but not started) - begin fresh transfer
+        // 处理 Queued（已准备但未启动）— 开始新传输
         if (m_item.status == TransferStatus::Queued) {
             Begin();
             return;
         }
 
-        // Handle Paused (mid-transfer) - resume from last position
+        // 处理 Paused（传输中途暂停）— 从上次位置继续
         if (m_item.status != TransferStatus::Paused) {
             return;
         }
@@ -285,7 +286,7 @@ namespace disk::qml::transfers {
 
         m_file.close();
 
-        // Remove .part file
+        // 移除 .part 文件
         QFile::remove(m_part_path);
 
         m_item.status = TransferStatus::Failed;
@@ -308,28 +309,29 @@ namespace disk::qml::transfers {
     // ==================== Private: InitializeFromInfo ====================
 
     auto DownloadEngine::InitializeFromInfo() -> void {
-        // Build paths
+        // 构建路径
         m_final_path = QDir(m_dest_dir).filePath(m_info.filename);
         m_part_path = m_final_path + QStringLiteral(".part");
 
-        // Initialise the TransferItem
+        // 初始化 TransferItem
         m_item = TransferItem::Create(TransferDirection::Download, m_info.filename, m_info.fileSize);
 
-        // Check if .part file exists (resume scenario)
+        // 检查 .part 文件是否存在（断点续传场景）
         QFileInfo partInfo(m_part_path);
         if (partInfo.exists() && partInfo.size() > 0 && m_info.supportsRange) {
             m_item.doneBytes = partInfo.size();
         }
 
-        // Status remains Queued until Begin() is called
+        // 状态保持 Queued 直到调用 Begin()
     }
+
     // ==================== Private: StartRequest ====================
 
     auto DownloadEngine::StartRequest() -> void {
-        // Ensure dest directory exists
+        // 确保目标目录存在
         QDir().mkpath(m_dest_dir);
 
-        // Open .part file for append
+        // 以追加模式打开 .part 文件
         m_file.setFileName(m_part_path);
         QIODevice::OpenMode mode = QIODevice::WriteOnly;
         if (m_item.doneBytes > 0) {
@@ -341,18 +343,16 @@ namespace disk::qml::transfers {
             return;
         }
 
-        // Build raw network request using ApiClient's streaming helper
-        QString endpoint = m_is_share 
-            ? QStringLiteral("/api/share/download/%1/%2").arg(m_share_id).arg(m_info.fileId)
-            : QStringLiteral("/api/file/download/%1").arg(m_info.fileId);
-            
+        // 使用 ApiClient 的流式辅助函数构建原始网络请求
+        QString endpoint = m_is_share ? QStringLiteral("/api/share/download/%1/%2").arg(m_share_id).arg(m_info.fileId) : QStringLiteral("/api/file/download/%1").arg(m_info.fileId);
+
         auto req = m_client->CreateStreamingRequest(endpoint);
 
         if (m_is_share && !m_share_token.isEmpty()) {
             req.setRawHeader(QByteArrayLiteral("X-Share-Token"), m_share_token.toUtf8());
         }
 
-        // Set Range header for resume
+        // 设置 Range 头用于断点续传
         if (m_item.doneBytes > 0 && m_info.supportsRange) {
             req.setRawHeader(
                 QByteArrayLiteral("Range"),
@@ -360,10 +360,10 @@ namespace disk::qml::transfers {
             );
         }
 
-        // Issue the GET via the raw NAM
+        // 通过原始 NAM 发起 GET 请求
         m_reply = m_client->NetworkAccessManager()->get(req);
 
-        // Stream data as it arrives — do NOT buffer in memory
+        // 数据到达时流式写入 — 不在内存中缓冲
         connect(m_reply, &QNetworkReply::readyRead, this, [this]() {
             if (!m_reply || m_item.status != TransferStatus::Running) {
                 return;
@@ -376,7 +376,7 @@ namespace disk::qml::transfers {
             m_item.doneBytes += chunk.size();
         });
 
-        // Finished (success or error)
+        // 完成（成功或错误）
         connect(m_reply, &QNetworkReply::finished, this, [this]() {
             m_speed_timer.stop();
 
@@ -384,7 +384,7 @@ namespace disk::qml::transfers {
                 return;
             }
 
-            // Paused or cancelled — reply was aborted, don't treat as error
+            // 已暂停或已取消 — reply 已中止，不视为错误
             if (m_item.status == TransferStatus::Paused || m_item.status == TransferStatus::Failed) {
                 m_reply->deleteLater();
                 m_reply = nullptr;
@@ -404,15 +404,15 @@ namespace disk::qml::transfers {
                 return;
             }
 
-            // HTTP 200 (full) or 206 (partial content) are success
+            // HTTP 200（完整）或 206（部分内容）为成功
             if (httpStatus != 200 && httpStatus != 206 && httpStatus != 0) {
                 Fail(QStringLiteral("服务器返回错误: HTTP %1").arg(httpStatus));
                 return;
             }
 
-            // Verify size match (if total known)
+            // 验证大小匹配（如果总数已知）
             if (m_item.totalBytes > 0 && m_item.doneBytes < m_item.totalBytes) {
-                // Incomplete — but could be a connectivity issue
+                // 不完整 — 但可能是连接问题
                 Fail(QStringLiteral("下载不完整: %1/%2 字节").arg(m_item.doneBytes).arg(m_item.totalBytes));
                 return;
             }
@@ -420,7 +420,7 @@ namespace disk::qml::transfers {
             Finalize();
         });
 
-        // Start timers
+        // 启动计时器
         m_elapsed.start();
         m_speed_timer.start();
         EmitProgress();
@@ -429,12 +429,12 @@ namespace disk::qml::transfers {
     // ==================== Private: Finalize ====================
 
     auto DownloadEngine::Finalize() -> void {
-        // If final file already exists, remove it first
+        // 如果最终文件已存在，先移除它
         if (QFile::exists(m_final_path)) {
             QFile::remove(m_final_path);
         }
 
-        // Rename .part → final
+        // 重命名 .part → 最终文件
         if (!QFile::rename(m_part_path, m_final_path)) {
             Fail(QStringLiteral("无法重命名下载文件"));
             return;
@@ -443,7 +443,7 @@ namespace disk::qml::transfers {
         m_item.status = TransferStatus::Completed;
         m_item.speed = 0;
         m_item.eta = 0;
-        m_item.doneBytes = m_item.totalBytes; // ensure 100%
+        m_item.doneBytes = m_item.totalBytes; // 确保 100%
 
         EmitProgress();
         if (m_finished_cb) {
@@ -478,11 +478,11 @@ namespace disk::qml::transfers {
         }
 
         const qint64 bytesThisSession = m_item.doneBytes - m_bytes_at_resume;
-        m_item.speed = bytesThisSession * 1000 / elapsedMs; // bytes per second
+        m_item.speed = bytesThisSession * 1000 / elapsedMs; // 字节/秒
 
         if (m_item.speed > 0 && m_item.totalBytes > 0) {
             const qint64 remaining = m_item.totalBytes - m_item.doneBytes;
-            m_item.eta = remaining / m_item.speed; // seconds
+            m_item.eta = remaining / m_item.speed; // 秒
         } else {
             m_item.eta = 0;
         }

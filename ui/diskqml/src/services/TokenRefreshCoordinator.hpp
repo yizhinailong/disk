@@ -1,7 +1,7 @@
 /**
  * @file TokenRefreshCoordinator.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief Single-flight token refresh coordinator with proactive refresh timer
+ * @brief 单次飞行令牌刷新协调器，带主动刷新定时器
  *
  * @copyright Copyright (c) 2026
  *
@@ -26,51 +26,50 @@ namespace disk::qml::services {
     class TokenStore;
 
     /**
-     * @brief Coordinates token refresh across all API callers with single-flight guarantee.
+     * @brief 跨所有 API 调用方协调令牌刷新，具有单次飞行保证。
      *
      * @details
-     * Responsibilities:
-     *   - Detects error code 40108 (TokenExpired) in API envelopes
-     *   - Performs refresh via AuthService using the stored refresh token
-     *   - Ensures only ONE refresh request is in flight at any time; concurrent
-     *     callers wait and share the result of the in-flight refresh
-     *   - Supports retry-once: after a successful refresh, the original request
-     *     callback is re-invoked with `refreshed=true` so the caller can retry
-     *   - Runs a proactive QTimer that refreshes the access token when it is
-     *     within 5 minutes of expiry, avoiding 40108 errors in the first place
-     *   - On refresh failure (40110, 40111, or network error), clears tokens and
-     *     emits forceLogout() so the UI can redirect to the login screen
+     * 职责：
+     *   - 检测 API 封装中的错误码 40108（TokenExpired）
+     *   - 通过 AuthService 使用存储的刷新令牌执行刷新
+     *   - 确保任何时刻只有一个刷新请求在进行中；并发
+     *     调用方等待并共享进行中刷新的结果
+     *   - 支持重试一次：刷新成功后，原始请求
+     *     回调会被重新调用并设置 `refreshed=true`，以便调用方可以重试
+     *   - 运行一个主动 QTimer，在访问令牌即将过期
+     *     （5 分钟内）时刷新，避免首先发生 40108 错误
+     *   - 刷新失败时（40110、40111 或网络错误），清除令牌并
+     *     发出 forceLogout() 信号，以便 UI 可以重定向到登录屏幕
      *
-     * Thread safety:
-     *   All public methods must be called from the main (GUI) thread.
-     *   The internal QMutex guards the in-flight flag and waiter list against
-     *   reentrancy from nested event-loop dispatches.
+     * 线程安全：
+     *   所有公共方法必须从主（GUI）线程调用。
+     *   内部 QMutex 保护进行中标志和等待者列表，防止
+     *   嵌套事件循环调度导致的重入。
      *
-     * Ownership:
-     *   Does not own any of its dependencies. The caller must ensure that
-     *   AuthService, TokenStore, and ApiClient outlive this coordinator.
+     * 所有权：
+     *   不拥有任何依赖项。调用方必须确保 AuthService、TokenStore
+     *   和 ApiClient 的生命周期长于此协调器。
      */
     class TokenRefreshCoordinator : public QObject {
         Q_OBJECT
 
     public:
         /**
-         * @brief Callback type for refresh waiters.
-         * @param success  True if tokens were successfully refreshed.
+         * @brief 刷新等待者的回调类型。
+         * @param success  令牌是否成功刷新。
          *
-         * On success the caller should retry the original request with the new
-         * access token from TokenStore. On failure the caller should propagate
-         * the error to the user (a forceLogout signal will also have been emitted).
+         * 成功时调用方应使用 TokenStore 中的新访问令牌重试原始请求。
+         * 失败时调用方应向用户传播错误（同时会发出 forceLogout 信号）。
          */
         using RefreshDoneCallback = std::function<void(bool success)>;
 
         /**
-         * @brief Construct the coordinator and start the proactive refresh timer.
+         * @brief 构造协调器并启动主动刷新定时器。
          *
-         * @param authService  Service used to call POST /api/auth/refresh.
-         * @param tokenStore   Persistent token storage.
-         * @param apiClient    Shared API client (bearer token is updated on refresh).
-         * @param parent       QObject parent for lifetime management.
+         * @param authService  用于调用 POST /api/auth/refresh 的服务。
+         * @param tokenStore   持久化令牌存储。
+         * @param apiClient    共享 API 客户端（刷新时更新 bearer 令牌）。
+         * @param parent       QObject 父对象，用于生命周期管理。
          */
         explicit TokenRefreshCoordinator(
             AuthService* authService,
@@ -80,98 +79,96 @@ namespace disk::qml::services {
         );
 
         /**
-         * @brief Check whether an API envelope contains a TokenExpired error.
+         * @brief 检查 API 封装是否包含 TokenExpired 错误。
          *
-         * @param envelope  The envelope from an API response.
-         * @return True if envelope.code == 40108 (TokenExpired).
+         * @param envelope  API 响应封装。
+         * @return 如果 envelope.code == 40108（TokenExpired）则返回 true。
          */
         [[nodiscard]] static auto IsTokenExpired(const models::ApiEnvelope& envelope) -> bool;
 
         /**
-         * @brief Request a token refresh (single-flight).
+         * @brief 请求令牌刷新（单次飞行）。
          *
          * @details
-         * If no refresh is currently in flight, initiates one immediately.
-         * If a refresh IS in flight, the callback is queued and will be invoked
-         * when the in-flight refresh completes (with the same success/failure result).
+         * 如果当前没有刷新在进行中，立即发起一个。
+         * 如果有刷新在进行中，回调会被排队，在进行中的刷新完成时被调用
+         * （使用相同的成功/失败结果）。
          *
-         * @param cb  Called when the refresh attempt completes.
+         * @param cb  刷新尝试完成时调用。
          */
         auto RequestRefresh(RefreshDoneCallback cb) -> void;
 
         /**
-         * @brief Convenience: check an envelope and trigger refresh if 40108.
+         * @brief 便捷方法：检查封装并在 40108 时触发刷新。
          *
          * @details
-         * If the envelope is NOT a 40108 error, returns false immediately.
-         * If it IS 40108, queues a refresh and invokes @p cb when done.
+         * 如果封装不是 40108 错误，立即返回 false。
+         * 如果是 40108，排队一个刷新并在完成时调用 @p cb。
          *
-         * @param envelope  The API response envelope to inspect.
-         * @param cb        Called when the refresh attempt completes.
-         * @return True if a refresh was triggered (caller should NOT process the envelope).
+         * @param envelope  要检查的 API 响应封装。
+         * @param cb        刷新尝试完成时调用。
+         * @return 如果触发了刷新则返回 true（调用方不应处理该封装）。
          */
         auto HandleIfTokenExpired(const models::ApiEnvelope& envelope, RefreshDoneCallback cb) -> bool;
 
     signals:
         /**
-         * @brief Emitted when token refresh fails irrecoverably.
+         * @brief 令牌刷新不可恢复地失败时发出。
          *
          * @details
-         * Connected by SessionViewModel to trigger a full logout + redirect to login.
-         * Emitted after tokens have already been cleared from TokenStore.
+         * 由 SessionViewModel 连接触发完整登出 + 重定向到登录。
+         * 在令牌已从 TokenStore 清除后发出。
          */
         void forceLogout();
 
     private:
-        // ==================== Proactive Refresh ====================
+        // ==================== 主动刷新 ====================
 
         /**
-         * @brief Timer callback: check if the access token expires within 5 minutes.
+         * @brief 定时器回调：检查访问令牌是否在 5 分钟内过期。
          *
          * @details
-         * Runs every 60 seconds. If the token expires within kProactiveRefreshWindowSecs,
-         * triggers a silent refresh. Does nothing if no token is stored or if a refresh
-         * is already in flight.
+         * 每 60 秒运行一次。如果令牌在 kProactiveRefreshWindowSecs 秒内过期，
+         * 触发静默刷新。如果没有存储令牌或已有刷新在进行中，则不做任何操作。
          */
         auto OnProactiveTimerTick() -> void;
 
         /**
-         * @brief Start the proactive refresh timer.
-         * @details Schedules OnProactiveTimerTick() every kTimerIntervalMs.
+         * @brief 启动主动刷新定时器。
+         * @details 每 kTimerIntervalMs 毫秒调度一次 OnProactiveTimerTick()。
          */
         auto StartProactiveTimer() -> void;
 
-        // ==================== Core Refresh Logic ====================
+        // ==================== 核心刷新逻辑 ====================
 
         /**
-         * @brief Execute the actual refresh network call.
+         * @brief 执行实际的刷新网络调用。
          *
          * @details
-         * Called only when m_refresh_in_flight is false. Sets the flag to true,
-         * issues the AuthService::Refresh call, and on completion resolves all
-         * queued waiters.
+         * 仅在 m_refresh_in_flight 为 false 时调用。将标志设置为 true，
+         * 发起 AuthService::Refresh 调用，完成后解析所有排队的等待者。
          */
         auto DoRefresh() -> void;
 
         /**
-         * @brief Resolve all waiting callbacks with the given result.
+         * @brief 使用给定结果解析所有等待中的回调。
          *
-         * @param success  Whether the refresh succeeded.
+         * @param success  刷新是否成功。
          */
         auto ResolveWaiters(bool success) -> void;
 
         /**
-         * @brief Handle a failed refresh: clear tokens, emit forceLogout.
+         * @brief 处理刷新失败：清除令牌，发出 forceLogout。
          */
         auto OnRefreshFailed() -> void;
 
-        // ==================== Constants ====================
+        // ==================== 常量 ====================
 
-        /// Proactive refresh window: refresh when token expires within this many seconds.
-        static constexpr int kProactiveRefreshWindowSecs = 5 * 60; // 5 minutes
+        /// 主动刷新窗口：当令牌在此秒数内过期时刷新。
+        static constexpr int kProactiveRefreshWindowSecs = 5 * 60; // 5 分钟
 
-        /// Timer interval for proactive expiry checks.
-        static constexpr int kTimerIntervalMs = 60 * 1000; // 60 seconds
+        /// 主动过期检查的定时器间隔。
+        static constexpr int kTimerIntervalMs = 60 * 1000; // 60 秒
 
         // ==================== Dependencies ====================
 

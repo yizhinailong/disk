@@ -1,7 +1,7 @@
 /**
  * @file FolderTreeModel.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QAbstractItemModel implementation for folder tree hierarchy
+ * @brief 文件夹树层次结构的 QAbstractItemModel 实现
  *
  * @copyright Copyright (c) 2026
  */
@@ -13,7 +13,7 @@ namespace disk::qml::models {
     FolderTreeModel::FolderTreeModel(QObject* parent)
         : QAbstractItemModel(parent) {}
 
-    // ==================== QAbstractItemModel interface ====================
+    // ==================== QAbstractItemModel 接口 ====================
 
     auto FolderTreeModel::index(int row, int column, const QModelIndex& parent) const -> QModelIndex {
         if (column != 0) {
@@ -21,7 +21,7 @@ namespace disk::qml::models {
         }
 
         if (!parent.isValid()) {
-            // Root-level: row indexes into m_root_indices
+            // 根级：row 索引到 m_root_indices
             if (row < 0 || row >= m_root_indices.size()) {
                 return {};
             }
@@ -29,7 +29,7 @@ namespace disk::qml::models {
             return createIndex(row, 0, quintptr(nodeIdx));
         }
 
-        // Child of an existing node
+        // 现有节点的子节点
         const auto parentNodeIdx = static_cast<int>(parent.internalId());
         if (parentNodeIdx < 0 || parentNodeIdx >= m_nodes.size()) {
             return {};
@@ -56,15 +56,15 @@ namespace disk::qml::models {
 
         const auto& node = m_nodes.at(nodeIdx);
         if (node.parentIndex < 0) {
-            // Root-level node — no parent
+            // 根级节点 —— 无父节点
             return {};
         }
 
         const auto& parentNode = m_nodes.at(node.parentIndex);
 
-        // Find which row the parent is in its own parent's child list
+        // 查找父节点在其自身父节点子列表中的行号
         if (parentNode.parentIndex < 0) {
-            // Parent is root-level
+            // 父节点是根级
             const int row = m_root_indices.indexOf(node.parentIndex);
             return createIndex(row, 0, quintptr(node.parentIndex));
         }
@@ -88,7 +88,7 @@ namespace disk::qml::models {
     }
 
     auto FolderTreeModel::columnCount(const QModelIndex& /*parent*/) const -> int {
-        return 1; // single-column tree
+        return 1; // 单列树
     }
 
     auto FolderTreeModel::data(const QModelIndex& index, int role) const -> QVariant {
@@ -119,7 +119,7 @@ namespace disk::qml::models {
         return roles;
     }
 
-    // ==================== Public API ====================
+    // ==================== 公共 API ====================
 
     auto FolderTreeModel::Loading() const -> bool {
         return m_loading;
@@ -155,7 +155,7 @@ namespace disk::qml::models {
         endResetModel();
     }
 
-    // ==================== Private ====================
+    // ==================== 私有 ====================
 
     void FolderTreeModel::FlattenNode(const FolderTreeNodeDto& dto, int parentIndex) {
         const int myIndex = static_cast<int>(m_nodes.size());
@@ -164,7 +164,7 @@ namespace disk::qml::models {
         node.id = dto.id;
         node.name = dto.name;
         node.parentIndex = parentIndex;
-        // childIndices populated below after children are added
+        // childIndices 在添加子节点后填充
         m_nodes.append(node);
 
         if (parentIndex < 0) {
@@ -173,7 +173,7 @@ namespace disk::qml::models {
             m_nodes[parentIndex].childIndices.append(myIndex);
         }
 
-        // Recursively add children
+        // 递归添加子节点
         for (const auto& child : dto.children) {
             FlattenNode(child, myIndex);
         }

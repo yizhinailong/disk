@@ -24,7 +24,7 @@ namespace disk::trash {
         };
 
         // ==================== TrashService Response DTO Tests ====================
-        // These tests verify the DTO structures used by TrashService methods
+        // 这些测试验证 TrashService 方法使用的 DTO 结构
 
         class TrashServiceResponseDtoTest : public ::testing::Test {};
 
@@ -67,7 +67,7 @@ namespace disk::trash {
         }
 
         // ==================== TrashService Batch Result Tests ====================
-        // Tests for per-item results returned by Restore/Delete operations
+        // 测试 Restore/Delete 操作返回的单项结果
 
         class TrashServiceBatchResultTest : public ::testing::Test {};
 
@@ -301,7 +301,7 @@ namespace disk::trash {
         }
 
         // ==================== TrashService Path Computation Tests ====================
-        // Tests verifying expected path format for restored items
+        // 测试验证恢复项的预期路径格式
 
         class TrashServicePathTest : public ::testing::Test {};
 

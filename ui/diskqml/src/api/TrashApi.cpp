@@ -1,7 +1,7 @@
 /**
  * @file TrashApi.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief TrashApi implementation
+ * @brief TrashApi 实现
  *
  * @copyright Copyright (c) 2026
  *

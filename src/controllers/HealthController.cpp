@@ -50,7 +50,7 @@ namespace disk::health {
             co_return Response::Success(data);
         }
 
-        // degraded 或 unhealthy 返回 503
+        // degraded 或 unhealthy 状态返回 503
         auto response = drogon::HttpResponse::newHttpJsonResponse(
             Response::Success(data)->getJsonObject()->operator[]("data")
         );

@@ -92,13 +92,13 @@ namespace disk::folder {
                 request.parent_id = json["parent_id"].asUInt64();
             }
 
-            // Rule 6: 去除首尾空格
+            // 规则 6：去除首尾空格
             request.TrimName();
 
             LOG_DEBUG << "Parsed create folder request: name=\"" << request.name
                       << "\", parent_id=" << request.parent_id;
 
-            // Rule 1: 长度验证 (1-255)
+            // 规则 1：长度验证 (1-255)
             if (!request.ValidateLength()) {
                 LOG_WARN << "Invalid folder name length: " << request.name.length();
                 return std::unexpected(ErrorInfo(
@@ -107,7 +107,7 @@ namespace disk::folder {
                 ));
             }
 
-            // Rule 2: 禁止字符验证
+            // 规则 2：禁止字符验证
             if (!request.ValidateForbiddenChars()) {
                 LOG_WARN << "Folder name contains forbidden characters: " << request.name;
                 return std::unexpected(ErrorInfo(
@@ -116,7 +116,7 @@ namespace disk::folder {
                 ));
             }
 
-            // Rule 3: 保留名称验证
+            // 规则 3：保留名称验证
             if (!request.ValidateReservedNames()) {
                 LOG_WARN << "Folder name is a reserved name: " << request.name;
                 return std::unexpected(ErrorInfo(
@@ -125,7 +125,7 @@ namespace disk::folder {
                 ));
             }
 
-            // Rule 4: 隐藏文件夹验证
+            // 规则 4：隐藏文件夹验证
             if (!request.ValidateNotHidden()) {
                 LOG_WARN << "Folder name starts with a dot (hidden folder): " << request.name;
                 return std::unexpected(
@@ -133,7 +133,7 @@ namespace disk::folder {
                 );
             }
 
-            // Rule 5: 字符集验证 (仅 ASCII 可打印字符)
+            // 规则 5：字符集验证（仅 ASCII 可打印字符）
             if (!request.ValidateCharset()) {
                 LOG_WARN << "Folder name contains non-ASCII characters: " << request.name;
                 return std::unexpected(ErrorInfo(

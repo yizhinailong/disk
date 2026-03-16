@@ -1,18 +1,18 @@
 /**
  * @file FolderTreeModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QAbstractItemModel for folder tree hierarchy (used by FolderPickerDialog)
+ * @brief 文件夹树层次结构的 QAbstractItemModel（用于 FolderPickerDialog）
  *
  * @copyright Copyright (c) 2026
  *
  * @details
- * Tree model backed by a flat vector of TreeNode structs with parent pointers.
- * Populated from FolderTreeNodeDto (recursive) via PopulateFromDto().
- * Exposes "folderId" and "folderName" roles for QML TreeView delegates.
+ * 由带有父指针的扁平 TreeNode 结构向量支持的树模型。
+ * 通过 FolderTreeNodeDto（递归）经由 PopulateFromDto() 填充。
+ * 为 QML TreeView 代理暴露 "folderId" 和 "folderName" 角色。
  *
- * Pure data model — no business logic, no API calls.
- * A ViewModel is responsible for calling FolderService::GetFolderTree()
- * and then calling PopulateFromDto() on this model.
+ * 纯数据模型 —— 无业务逻辑，无 API 调用。
+ * ViewModel 负责调用 FolderService::GetFolderTree()
+ * 然后调用此模型的 PopulateFromDto()。
  */
 
 #pragma once
@@ -29,35 +29,35 @@
 namespace disk::qml::models {
 
     /**
-     * @brief Internal tree node stored by value in a flat vector.
+     * @brief 在扁平向量中按值存储的内部树节点。
      *
      * @details
-     * Each node holds its parent index and child indices into the same vector.
-     * Index -1 means "no parent" (root-level node).
+     * 每个节点持有其父索引和子索引到同一个向量中。
+     * 索引 -1 表示"无父节点"（根级节点）。
      */
     struct TreeNode {
         quint64 id{ 0 };
         QString name;
-        int parentIndex{ -1 };     ///< index in m_nodes (-1 = root-level)
-        QVector<int> childIndices; ///< indices of children in m_nodes
+        int parentIndex{ -1 };     ///< m_nodes 中的索引（-1 = 根级）
+        QVector<int> childIndices; ///< m_nodes 中子项的索引
     };
 
     /**
-     * @brief QAbstractItemModel exposing a folder tree to QML TreeView.
+     * @brief 向 QML TreeView 暴露文件夹树的 QAbstractItemModel。
      *
      * @details
-     * Provides the following roles for QML delegates:
-     *   - folderId   : quint64 folder ID
-     *   - folderName : QString folder display name
+     * 为 QML 代理提供以下角色：
+     *   - folderId（文件夹ID）   : quint64 文件夹 ID
+     *   - folderName（文件夹名称） : QString 文件夹显示名称
      *
-     * Populate via PopulateFromDto(). The model does NOT call any APIs;
-     * a ViewModel is responsible for fetching data and calling PopulateFromDto().
+     * 通过 PopulateFromDto() 填充。模型不调用任何 API；
+     * ViewModel 负责获取数据并调用 PopulateFromDto()。
      */
     class FolderTreeModel : public QAbstractItemModel {
         Q_OBJECT
         QML_ELEMENT
 
-        /// True while the tree data is being loaded.
+        /// 树数据正在加载时为 true。
         Q_PROPERTY(bool loading READ Loading WRITE SetLoading NOTIFY loadingChanged)
 
     public:
@@ -70,7 +70,7 @@ namespace disk::qml::models {
         explicit FolderTreeModel(QObject* parent = nullptr);
         ~FolderTreeModel() override = default;
 
-        // ==================== QAbstractItemModel interface ====================
+        // ==================== QAbstractItemModel 接口 ====================
 
         [[nodiscard]] auto index(int row, int column, const QModelIndex& parent = QModelIndex()) const
             -> QModelIndex override;
@@ -81,22 +81,22 @@ namespace disk::qml::models {
             -> QVariant override;
         [[nodiscard]] auto roleNames() const -> QHash<int, QByteArray> override;
 
-        // ==================== Public API ====================
+        // ==================== 公共 API ====================
 
         [[nodiscard]] auto Loading() const -> bool;
         auto SetLoading(bool loading) -> void;
 
         /**
-         * @brief Replace the entire tree with data from DTO nodes.
+         * @brief 用 DTO 节点数据替换整个树。
          *
          * @details
-         * Recursively flattens the FolderTreeNodeDto hierarchy into the
-         * internal m_nodes vector, then emits modelReset.
+         * 递归地将 FolderTreeNodeDto 层次结构扁平化到
+         * 内部 m_nodes 向量中，然后发射 modelReset 信号。
          */
         void PopulateFromDto(const QVector<FolderTreeNodeDto>& roots);
 
         /**
-         * @brief Remove all nodes from the model.
+         * @brief 从模型中移除所有节点。
          */
         void Clear();
 
@@ -104,11 +104,11 @@ namespace disk::qml::models {
         void loadingChanged();
 
     private:
-        /// Recursively flatten a DTO node into m_nodes.
+        /// 递归地将 DTO 节点扁平化到 m_nodes 中。
         void FlattenNode(const FolderTreeNodeDto& dto, int parentIndex);
 
         QVector<TreeNode> m_nodes;
-        QVector<int> m_root_indices; ///< indices of top-level nodes
+        QVector<int> m_root_indices; ///< 顶层节点的索引
         bool m_loading{ false };
     };
 

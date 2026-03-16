@@ -1,7 +1,7 @@
 /**
  * @file ApiEnvelope.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief Shared API response envelope for the QML client
+ * @brief QML 客户端共享 API 响应信封
  *
  * @copyright Copyright (c) 2026
  *
@@ -19,45 +19,44 @@
 
 namespace disk::qml::models {
 
-    // ==================== API Envelope ====================
+    // ==================== API 信封 ====================
 
     /**
-     * @brief Uniform JSON envelope: { "code": 0, "message": "success", "data": ... }
+     * @brief 统一 JSON 信封格式：{ "code": 0, "message": "success", "data": ... }
      *
      * @details
-     * All API responses are wrapped in this envelope.
-     * The `data` field holds QJsonValue::Null when absent or explicitly null.
+     * 所有 API 响应都使用此信封格式包装。
+     * 当 `data` 字段缺失或显式为 null 时，其值为 QJsonValue::Null。
      *
-     * Mirrors the backend structure defined in src/utils/Response.hpp:
-     * - code 0 = success
-     * - code 10xxx = generic errors
-     * - code 40xxx = auth errors
-     * - code 50xxx = file errors
-     * - code 60xxx = share errors
+     * 镜像后端 src/utils/Response.hpp 中定义的结构：
+     * - code 0 = 成功
+     * - code 10xxx = 通用错误
+     * - code 40xxx = 认证错误
+     * - code 50xxx = 文件错误
+     * - code 60xxx = 分享错误
      */
     struct ApiEnvelope {
         int code{};
         QString message;
-        QJsonValue data; ///< Payload; QJsonValue::Null when absent / null
+        QJsonValue data; ///< 数据负载；缺失或为 null 时值为 QJsonValue::Null
 
-        /// @brief Check whether the envelope represents a successful response (code == 0).
+        /// @brief 检查信封是否表示成功响应（code == 0）
         [[nodiscard]] auto IsSuccess() const noexcept -> bool { return code == 0; }
 
-        /// @brief Check whether the envelope represents an error response (code != 0).
+        /// @brief 检查信封是否表示错误响应（code != 0）
         [[nodiscard]] auto IsError() const noexcept -> bool { return code != 0; }
     };
 
-    // ==================== Envelope Parsing ====================
+    // ==================== 信封解析 ====================
 
     /**
-     * @brief Parse a raw JSON document into an ApiEnvelope.
+     * @brief 将原始 JSON 文档解析为 ApiEnvelope
      *
      * @details
-     * Expected shape: { "code": <int>, "message": "<string>", "data": <any> }
+     * 预期格式：{ "code": <int>, "message": "<string>", "data": <any> }
      *
-     * @param doc  Parsed QJsonDocument from the HTTP response body.
-     * @return     Populated ApiEnvelope, or std::nullopt if the document is not
-     *             an object or if "code" / "message" fields are absent.
+     * @param doc  从 HTTP 响应体解析的 QJsonDocument
+     * @return     填充后的 ApiEnvelope；若文档不是对象或缺少 "code" / "message" 字段则返回 std::nullopt
      */
     inline auto ParseEnvelope(const QJsonDocument& doc) -> std::optional<ApiEnvelope> {
         if (!doc.isObject()) {
@@ -73,19 +72,18 @@ namespace disk::qml::models {
         ApiEnvelope env;
         env.code = obj.value(QLatin1String("code")).toInt();
         env.message = obj.value(QLatin1String("message")).toString();
-        env.data = obj.value(QLatin1String("data")); // QJsonValue::Undefined → Null
+        env.data = obj.value(QLatin1String("data")); // QJsonValue::Undefined 转换为 Null
         return env;
     }
 
     /**
-     * @brief Parse a raw byte array into an ApiEnvelope.
+     * @brief 将原始字节数组解析为 ApiEnvelope
      *
      * @details
-     * Convenience overload that handles JSON deserialization from raw bytes.
+     * 便捷重载，处理从原始字节进行 JSON 反序列化。
      *
-     * @param body  Raw response body bytes from HTTP reply.
-     * @return      Populated ApiEnvelope, or std::nullopt if the body is empty,
-     *              cannot be parsed as JSON, or lacks envelope fields.
+     * @param body  HTTP 响应的原始字节数组
+     * @return      填充后的 ApiEnvelope；若 body 为空、无法解析为 JSON 或缺少信封字段则返回 std::nullopt
      */
     inline auto ParseEnvelope(const QByteArray& body) -> std::optional<ApiEnvelope> {
         if (body.isEmpty()) {
@@ -101,13 +99,13 @@ namespace disk::qml::models {
         return ParseEnvelope(json);
     }
 
-    // ==================== Typed Data Extraction ====================
+    // ==================== 类型化数据提取 ====================
 
     /**
-     * @brief Extract the `data` field from an envelope as a QJsonObject.
+     * @brief 从信封中提取 `data` 字段作为 QJsonObject
      *
-     * @param env  The API envelope to extract from.
-     * @return     The data object, or std::nullopt if `data` is not a JSON object.
+     * @param env  要提取数据的 API 信封
+     * @return     数据对象；若 `data` 不是 JSON 对象则返回 std::nullopt
      */
     inline auto EnvelopeDataObject(const ApiEnvelope& env) -> std::optional<QJsonObject> {
         if (!env.data.isObject()) {
@@ -116,33 +114,33 @@ namespace disk::qml::models {
         return env.data.toObject();
     }
 
-    // ==================== Generic Callback Type ====================
+    // ==================== 通用回调类型 ====================
 
     /**
-     * @brief Generic callback type for API endpoints.
+     * @brief API 端点的通用回调类型
      *
      * @details
-     * - On success: `envelope` is populated, `networkError` is empty.
-     * - On network error: `envelope` is default-constructed, `networkError` describes the issue.
+     * - 成功时：`envelope` 已填充，`networkError` 为空
+     * - 网络错误时：`envelope` 为默认构造，`networkError` 描述问题
      *
-     * All API modules (AuthApi, FileApi, FolderApi, etc.) should use this callback type.
+     * 所有 API 模块（AuthApi、FileApi、FolderApi 等）应使用此回调类型
      */
     using ApiCallback = std::function<void(ApiEnvelope envelope, QString networkError)>;
 
-    // ==================== Reply → Envelope Helper ====================
+    // ==================== 响应 → 信封辅助函数 ====================
 
     /**
-     * @brief Parse a raw HTTP reply into an ApiEnvelope and invoke the callback.
+     * @brief 将原始 HTTP 响应解析为 ApiEnvelope 并调用回调
      *
      * @details
-     * Shared helper that centralises the byte-array → envelope parsing pipeline.
-     * Handles network errors, empty bodies, JSON parse failures, and invalid envelopes.
-     * Suitable for use inside any API module's reply lambda.
+     * 共享辅助函数，集中处理字节数组 → 信封的解析流程。
+     * 处理网络错误、空响应体、JSON 解析失败和无效信封。
+     * 适用于任何 API 模块的响应 lambda 内部使用。
      *
-     * @param hasNetworkError      True if a network-level error occurred.
-     * @param networkErrorString   Human-readable description of the network error.
-     * @param body                 Raw response body bytes.
-     * @param cb                   Callback to invoke with the result.
+     * @param hasNetworkError      是否发生网络层错误
+     * @param networkErrorString   网络错误的可读描述
+     * @param body                 原始响应体字节
+     * @param cb                   结果回调
      */
     inline auto ParseEnvelopeFromReply(
         bool hasNetworkError,

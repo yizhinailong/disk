@@ -174,8 +174,8 @@ TEST(CreateShareRequest, ValidParametersMinimal) {
     EXPECT_EQ(result->file_ids.size(), 2);
     EXPECT_EQ(result->file_ids[0], 1);
     EXPECT_EQ(result->file_ids[1], 2);
-    EXPECT_EQ(result->expire_days, 7);                        // default
-    EXPECT_EQ(result->permission, SharePermission::Download); // default
+    EXPECT_EQ(result->expire_days, 7);                        // 默认值
+    EXPECT_EQ(result->permission, SharePermission::Download); // 默认值
     EXPECT_FALSE(result->password.has_value());
 }
 
@@ -199,7 +199,7 @@ TEST(CreateShareRequest, ValidParametersAllFields) {
 TEST(CreateShareRequest, ValidExpireDaysZero) {
     Json::Value json;
     json["file_ids"].append(1);
-    json["expire_days"] = 0; // permanent
+    json["expire_days"] = 0; // 永久
 
     auto req = CreateJsonRequest(json);
     auto result = CreateShareRequest::FromRequest(req);
@@ -249,7 +249,7 @@ TEST(CreateShareRequest, FileIdsNotArray) {
 
 TEST(CreateShareRequest, FileIdZero) {
     Json::Value json;
-    json["file_ids"].append(0); // Invalid: must be positive
+    json["file_ids"].append(0); // 无效：必须为正数
 
     auto req = CreateJsonRequest(json);
     auto result = CreateShareRequest::FromRequest(req);
@@ -623,7 +623,7 @@ TEST(UpdateShareRequest, ValidUpdatePassword) {
 
 TEST(UpdateShareRequest, ValidRemovePassword) {
     Json::Value json;
-    json["password"] = ""; // Empty string removes password
+    json["password"] = ""; // 空字符串移除密码
 
     auto req = CreateJsonRequest(json);
     auto result = UpdateShareRequest::FromRequest(req, "sh_abc123");
@@ -673,7 +673,7 @@ TEST(UpdateShareRequest, InvalidExpireDays) {
 
 TEST(UpdateShareRequest, InvalidPasswordLength) {
     Json::Value json;
-    json["password"] = "abc"; // Too short
+    json["password"] = "abc"; // 过短
 
     auto req = CreateJsonRequest(json);
     auto result = UpdateShareRequest::FromRequest(req, "sh_abc123");

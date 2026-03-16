@@ -547,7 +547,7 @@ Item {
         function onPasswordChanged() {
             root.passwordSaved = true
             root.lastError = ""
-            // Clear password fields
+            // 清空密码字段
             currentPasswordField.text = ""
             newPasswordField.text = ""
             confirmPasswordField.text = ""

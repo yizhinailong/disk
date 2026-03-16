@@ -186,7 +186,7 @@ TEST(InitUploadRequest, InvalidFileHashLength) {
     auto req = CreateInitUploadRequest(
         "test.txt",
         1024,
-        "abc123", // Too short
+        "abc123", // 过短
         0
     );
     auto result = InitUploadRequest::FromRequest(req);
@@ -201,7 +201,7 @@ TEST(InitUploadRequest, InvalidFileHashNonHex) {
     auto req = CreateInitUploadRequest(
         "test.txt",
         1024,
-        "ghijklmnopqrstuvwxijklmnopqrstuv", // Non-hex chars
+        "ghijklmnopqrstuvwxijklmnopqrstuv", // 非十六进制字符
         0
     );
     auto result = InitUploadRequest::FromRequest(req);
@@ -216,7 +216,7 @@ TEST(InitUploadRequest, InvalidFileHashUppercase) {
     auto req = CreateInitUploadRequest(
         "test.txt",
         1024,
-        "ABCDEF1234567890ABCDEF1234567890", // Uppercase (should fail)
+        "ABCDEF1234567890ABCDEF1234567890", // 大写（应失败）
         0
     );
     auto result = InitUploadRequest::FromRequest(req);
@@ -320,7 +320,7 @@ TEST(InitUploadRequest, FilenameForbiddenCharColon) {
 TEST(InitUploadRequest, FileSizeZero) {
     auto req = CreateInitUploadRequest(
         "test.txt",
-        0, // Zero size
+        0, // 零大小
         "d41d8cd98f00b204e9800998ecf8427e",
         0
     );
@@ -407,7 +407,7 @@ TEST(InitUploadResponse, ToJsonResumeUpload) {
     response.upload_id = "up_resume_123";
     response.chunk_size = 5242880;
     response.total_chunks = 10;
-    response.uploaded_chunks = { 0, 1, 2, 3, 4 }; // First 5 chunks uploaded
+    response.uploaded_chunks = { 0, 1, 2, 3, 4 }; // 前5个分片已上传
     response.instant_upload = false;
 
     auto json = response.ToJson();
@@ -465,7 +465,7 @@ TEST(UploadChunkRequest, InvalidChunkHashLength) {
     auto req = CreateUploadChunkRequest(
         "up_abc123",
         0,
-        "abc123" // Too short
+        "abc123" // 过短
     );
     auto result = UploadChunkRequest::FromRequest(req);
 
@@ -479,7 +479,7 @@ TEST(UploadChunkRequest, InvalidChunkHashNonHex) {
     auto req = CreateUploadChunkRequest(
         "up_abc123",
         0,
-        "ghijklmnopqrstuvwxijklmnopqrstuv" // Non-hex
+        "ghijklmnopqrstuvwxijklmnopqrstuv" // 非十六进制
     );
     auto result = UploadChunkRequest::FromRequest(req);
 
@@ -491,7 +491,7 @@ TEST(UploadChunkRequest, InvalidChunkHashNonHex) {
 
 TEST(UploadChunkRequest, EmptyUploadId) {
     auto req = CreateUploadChunkRequest(
-        "", // Empty
+        "", // 空
         0,
         "d41d8cd98f00b204e9800998ecf8427e"
     );

@@ -1,7 +1,7 @@
 /**
  * @file FileService.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief FileService implementation
+ * @brief FileService 实现
  *
  * @copyright Copyright (c) 2026
  *
@@ -15,8 +15,7 @@
 namespace disk::qml::services {
 
     FileService::FileService(api::FileApi* fileApi, TokenRefreshCoordinator* coordinator)
-        : m_file_api(fileApi)
-        , m_coordinator(coordinator) {
+        : m_file_api(fileApi), m_coordinator(coordinator) {
     }
 
     auto FileService::ListFiles(
@@ -44,47 +43,39 @@ namespace disk::qml::services {
                         return;
                     }
 
-                    // Check for 40108 TokenExpired - retry once if coordinator available
+                    // 检查 40108 TokenExpired - 如果协调器可用则重试一次
                     if (envelope.code == static_cast<int>(utils::ErrorCode::TokenExpired)) {
                         if (m_coordinator && !retried) {
                             retried = true;
-                            m_coordinator->HandleIfTokenExpired(envelope,
-                                [this, parentId, page, pageSize, sortBy, sortOrder, type, ctx, cb, retried, envelope](bool success) {
-                                    if (success) {
-                                        // Retry the request with original parameters
-                                        m_file_api->List(parentId, page, pageSize, sortBy, sortOrder, type, ctx,
-                                            [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
-                                                if (!retryNetworkError.isEmpty()) {
-                                                    cb(std::nullopt, MapTransportError(retryNetworkError));
-                                                    return;
-                                                }
-                                                if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
-                                                    cb(std::nullopt, MapEnvelopeError(retryEnvelope));
-                                                    return;
-                                                }
-                                                auto parsed = models::ParseFileListResult(retryEnvelope.data);
-                                                if (!parsed) {
-                                                    cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
-                                                    return;
-                                                }
-                                                cb(std::move(parsed), QString{});
-                                            }
-                                        );
-                                    } else {
-                                        // Refresh failed, return error
-                                        cb(std::nullopt, MapEnvelopeError(envelope));
-                                    }
+                            m_coordinator->HandleIfTokenExpired(envelope, [this, parentId, page, pageSize, sortBy, sortOrder, type, ctx, cb, retried, envelope](bool success) {
+                                if (success) {
+                                    // 使用原始参数重试请求
+                                    m_file_api->List(parentId, page, pageSize, sortBy, sortOrder, type, ctx, [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
+                                        if (!retryNetworkError.isEmpty()) {
+                                            cb(std::nullopt, MapTransportError(retryNetworkError));
+                                            return;
+                                        }
+                                        if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                                            cb(std::nullopt, MapEnvelopeError(retryEnvelope));
+                                            return;
+                                        }
+                                        auto parsed = models::ParseFileListResult(retryEnvelope.data);
+                                        if (!parsed) {
+                                            cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                                            return;
+                                        }
+                                        cb(std::move(parsed), QString{});
+                                    });
+                                } else {
+                                    // 刷新失败，返回错误
+                                    cb(std::nullopt, MapEnvelopeError(envelope));
                                 }
-                            );
+                            });
                             return;
                         }
                     }
 
-                    // Non-40108 or retry exhausted
-                    if (envelope.code != static_cast<int>(utils::ErrorCode::Success)) {
-                        cb(std::nullopt, MapEnvelopeError(envelope));
-                        return;
-                    }
+                    // 检查 40108 TokenExpired - 如果协调器是否可用，则重试该请求
 
                     auto parsed = models::ParseFileListResult(envelope.data);
                     if (!parsed) {
@@ -308,22 +299,21 @@ namespace disk::qml::services {
         QObject* ctx,
         ListCallback cb
     ) -> void {
-        // Clamp limit to valid range [1, 100]
+        // 将限制限制在有效范围 [1, 100]
         const int clampedLimit = qBound(1, limit, 100);
-        
-        // Call ListFiles with root folder (0), sort by updated_at desc
+
+        // 使用根文件夹 (0) 调用 ListFiles，按 updated_at 降序排序
         ListFiles(
-            0,                              // parent_id (root)
-            1,                              // page
-            clampedLimit,                   // page_size
-            QStringLiteral("updated_at"),  // sort_by
-            QStringLiteral("desc"),        // sort_order
-            QStringLiteral("all"),         // type
+            0,                            // parent_id（根目录）
+            1,                            // page
+            clampedLimit,                 // page_size
+            QStringLiteral("updated_at"), // sort_by
+            QStringLiteral("desc"),       // sort_order
+            QStringLiteral("all"),        // type
             ctx,
             cb
         );
     }
-
 
     auto FileService::MapTransportError(const QString& networkError) const -> QString {
         if (!networkError.isEmpty()) {

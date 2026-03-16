@@ -3,13 +3,13 @@
  * @brief 上传对话框 — 文件选择 + 目标文件夹选择
  *
  * @details
- * Provides a streamlined upload entry point with destination folder selection.
- * Supports uploading to:
- *   - Current folder (default)
- *   - Root folder
- *   - Custom selected folder (via FolderPickerDialog)
+ * 提供简化的上传入口，支持选择目标文件夹。
+ * 支持上传到：
+ *   - 当前文件夹（默认）
+ *   - 根目录
+ *   - 自定义选择的文件夹（通过 FolderPickerDialog）
  *
- * Calls TransfersViewModel.startUpload(fileUrls, targetFolderId)
+ * 调用 TransfersViewModel.startUpload(fileUrls, targetFolderId)
  */
 import QtQuick
 import QtQuick.Controls
@@ -20,30 +20,30 @@ import Disk 1.0
 Item {
     id: root
 
-    // ==================== Public API ====================
-
-    /// Open upload dialog starting from current folder
+    // ==================== 公共 API ====================
+    
+    /// 从当前文件夹打开上传对话框
     function openUpload() {
         destinationMode = "current"
         selectedFolderId = -1
         fileDialog.open()
     }
 
-    /// Open upload dialog for root folder
+    /// 打开上传到根目录的对话框
     function openUploadToRoot() {
         destinationMode = "root"
         selectedFolderId = 0
         fileDialog.open()
     }
 
-    // ==================== Internal State ====================
+    // ==================== 内部状态 ====================
 
-    /// Destination mode: "current", "root", or "custom"
+    /// 目标模式："当前"、"根目录" 或 "自定义"
     property string destinationMode: "current"
-    /// Custom selected folder ID (when mode is "custom")
+    /// 自定义选择的文件夹 ID（当模式为 "自定义" 时）
     property int selectedFolderId: -1
 
-    // ==================== File Dialog ====================
+    // ==================== 文件对话框 ====================
 
     FileDialog {
         id: fileDialog
@@ -53,8 +53,8 @@ Item {
 
 
         onAccepted: {
-            // Determine target folder ID based on mode
-            var targetFolderId = 0  // Default to root
+            // 根据模式确定目标文件夹 ID
+            var targetFolderId = 0  // 默认为根目录
 
             if (destinationMode === "current") {
                 targetFolderId = FileListViewModel.currentFolderId
@@ -64,19 +64,19 @@ Item {
                 targetFolderId = selectedFolderId
             }
 
-            // Invalid destination guard: fallback to root
+            // 无效目标保护：回退到根目录
             if (targetFolderId < 0) {
                 console.warn("[UploadDialog] Invalid targetFolderId:", targetFolderId, "- falling back to root")
                 targetFolderId = 0
             }
 
-            // Convert selected files to list
+            // 将选中的文件转换为列表
             var fileUrls = []
             for (var i = 0; i < selectedFiles.length; i++) {
                 fileUrls.push(selectedFiles[i])
             }
 
-            // Start upload via ViewModel
+            // 通过 ViewModel 开始上传
             if (fileUrls.length > 0) {
                 TransfersViewModel.startUpload(fileUrls, targetFolderId)
                 console.log("[UploadDialog] Started upload of", fileUrls.length, "file(s) to folder", targetFolderId)
@@ -84,7 +84,7 @@ Item {
         }
     }
 
-    // ==================== Folder Picker for Custom Destination ====================
+    // ==================== 自定义目标的文件夹选择器 ====================
 
     FolderPickerDialog {
         id: folderPickerDialog
@@ -113,7 +113,7 @@ Item {
         }
     }
 
-    // ==================== Destination Selection Dialog ====================
+    // ==================== 目标选择对话框 ====================
 
     Dialog {
         id: destinationDialog
@@ -142,7 +142,7 @@ Item {
                 wrapMode: Text.Wrap
             }
 
-            // Current folder option
+            // 当前文件夹选项
             RadioButton {
                 id: currentFolderRadio
                 text: qsTr("当前文件夹")
@@ -162,7 +162,7 @@ Item {
                 visible: currentFolderRadio.checked
             }
 
-            // Root folder option
+            // 根目录选项
             RadioButton {
                 id: rootFolderRadio
                 text: qsTr("根目录")
@@ -172,7 +172,7 @@ Item {
                 Layout.fillWidth: true
             }
 
-            // Custom folder option
+            // 自定义文件夹选项
             RadioButton {
                 id: customFolderRadio
                 text: qsTr("选择其他文件夹...")
@@ -199,13 +199,13 @@ Item {
                 visible: customFolderRadio.checked
                 Layout.leftMargin: 32
                 onClicked: {
-                    // Open folder picker inline
+                    // 内联打开文件夹选择器
                     FileListViewModel.loadFolderTree()
                     inlineFolderPicker.visible = true
                 }
             }
 
-            // Inline folder picker (simplified TreeView)
+            // 内联文件夹选择器（简化的 TreeView）
             Rectangle {
                 id: inlineFolderPicker
                 visible: false
@@ -240,7 +240,7 @@ Item {
                         }
                     }
 
-                    // Root folder option
+                    // 根目录选项
                     ItemDelegate {
                         Layout.fillWidth: true
                         height: 32
@@ -267,7 +267,7 @@ Item {
                         }
                     }
 
-                    // TreeView for folder hierarchy
+                    // 用于文件夹层级的 TreeView
                     ScrollView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -329,7 +329,7 @@ Item {
 
             Item { Layout.preferredHeight: 8 }
 
-            // Upload button
+            // 上传按钮
             Button {
                 text: qsTr("开始上传")
                 highlighted: true
@@ -348,7 +348,7 @@ Item {
                         targetFolderId = root.selectedFolderId
                     }
 
-                    // Invalid destination guard
+                    // 无效目标保护
                     if (targetFolderId < 0) {
                         console.warn("[UploadDialog] Invalid targetFolderId:", targetFolderId, "- falling back to root")
                         targetFolderId = 0

@@ -25,8 +25,8 @@ namespace disk::services {
     auto ScheduledTasks::Register() -> void {
         auto instance = GetInstance();
 
-        // async_func wraps the coroutine lambda in std::function<void()> that keeps
-        // captures alive. runEvery stores the function for program lifetime.
+        // async_func 将协程 lambda 包装为 std::function<void()>，保持捕获变量存活
+        // runEvery 将函数存储在程序生命周期内
         drogon::app().getLoop()->runEvery(
             3600.0,
             drogon::async_func([cleanup_service = instance->m_cleanup_service]() -> drogon::Task<void> {

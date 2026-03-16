@@ -85,7 +85,7 @@ namespace disk::qml::transfers {
         m_items.removeAt(row);
         m_id_index.remove(id);
 
-        // Rebuild index for items after the removed row
+        // 重建已移除行之后的项目索引
         for (int i = row; i < m_items.size(); ++i) {
             m_id_index[m_items.at(i).id] = i;
         }
@@ -200,7 +200,7 @@ namespace disk::qml::transfers {
     }
 
     void TransferQueueModel::RemoveByStatus(TransferStatus status) {
-        // Remove from end to front to avoid index invalidation
+        // 从后往前移除以避免索引失效
         for (int i = m_items.size() - 1; i >= 0; --i) {
             if (m_items.at(i).status == status) {
                 beginRemoveRows(QModelIndex(), i, i);
@@ -210,7 +210,7 @@ namespace disk::qml::transfers {
             }
         }
 
-        // Rebuild index after removals
+        // 移除后重建索引
         m_id_index.clear();
         for (int i = 0; i < m_items.size(); ++i) {
             m_id_index.insert(m_items.at(i).id, i);

@@ -1,7 +1,7 @@
 /**
  * @file ShareListModel.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QAbstractListModel implementation for share items
+ * @brief 分享项的 QAbstractListModel 实现
  *
  * @copyright Copyright (c) 2026
  */
@@ -13,11 +13,11 @@ namespace disk::qml::models {
     ShareListModel::ShareListModel(QObject* parent)
         : QAbstractListModel(parent) {}
 
-    // ==================== QAbstractListModel interface ====================
+    // ==================== QAbstractListModel 接口 ====================
 
     auto ShareListModel::rowCount(const QModelIndex& parent) const -> int {
         if (parent.isValid()) {
-            return 0; // flat list — no children
+            return 0; // 扁平列表 —— 无子项
         }
         return static_cast<int>(m_items.size());
     }
@@ -62,7 +62,7 @@ namespace disk::qml::models {
         return roles;
     }
 
-    // ==================== Public API ====================
+    // ==================== 公共 API ====================
 
     auto ShareListModel::Count() const -> int {
         return static_cast<int>(m_items.size());

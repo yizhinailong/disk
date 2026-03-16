@@ -1,7 +1,7 @@
 /**
  * @file UserService.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief UserService implementation
+ * @brief UserService 实现
  *
  * @copyright Copyright (c) 2026
  *
@@ -141,7 +141,7 @@ namespace disk::qml::services {
         QObject* ctx,
         UpdateProfileCallback cb
     ) -> void {
-        // Validate: at least one field must be provided
+        // 验证：至少提供一个字段
         if (nickname.trimmed().isEmpty() && avatar.trimmed().isEmpty()) {
             cb(
                 std::nullopt,
@@ -211,7 +211,7 @@ namespace disk::qml::services {
         QObject* ctx,
         ChangePasswordCallback cb
     ) -> void {
-        // Validate inputs
+        // 验证输入
         if (oldPassword.isEmpty()) {
             cb(
                 std::nullopt,

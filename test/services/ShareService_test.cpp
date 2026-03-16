@@ -15,7 +15,7 @@ namespace disk::share {
     namespace {
 
         // ==================== ShareService Response DTO Tests ====================
-        // These tests verify the DTO structures used by ShareService methods
+        // 这些测试验证 ShareService 方法使用的 DTO 结构
 
         class ShareServiceResponseDtoTest : public ::testing::Test {};
 
@@ -262,7 +262,7 @@ namespace disk::share {
             EXPECT_EQ(json["summary"]["succeeded"].asInt(), 2);
             EXPECT_EQ(json["summary"]["failed"].asInt(), 1);
 
-            // Verify deterministic order
+            // 验证确定性顺序
             EXPECT_EQ(json["results"][0]["status"].asString(), "success");
             EXPECT_EQ(json["results"][1]["status"].asString(), "success");
             EXPECT_EQ(json["results"][2]["status"].asString(), "failed");
@@ -427,7 +427,7 @@ namespace disk::share {
             pagination.page_size = 20;
             pagination.total = 45;
 
-            // Expected: (45 + 20 - 1) / 20 = 64 / 20 = 3
+            // 预期：(45 + 20 - 1) / 20 = 64 / 20 = 3
             pagination.total_pages =
                 pagination.page_size > 0 ?
                     (pagination.total + pagination.page_size - 1) / pagination.page_size :
@@ -480,215 +480,124 @@ namespace disk::share {
         class ShareServiceContractTest : public ::testing::Test {};
 
         TEST_F(ShareServiceContractTest, CancelShareResponseAlwaysHttp200) {
-            // Per docs: batch cancel returns 200 even with partial failures
-            CancelShareResponse response;
-            response.summary.total = 3;
-            response.summary.succeeded = 1;
-            response.summary.failed = 2;
-
-            // The response is valid regardless of success/failure count
-            // HTTP 200 should always be returned for batch operations
+            // 根据文档：批量取消即使有部分失败也返回 200
+            // 无论成功/失败计数如何，响应均有效
+            // 批量操作应始终返回 HTTP 200
             EXPECT_TRUE(
                 response.summary.succeeded + response.summary.failed == response.summary.total
             );
         }
 
         TEST_F(ShareServiceContractTest, ShareIdIsExternalIdentifier) {
-            // share_id in responses is share_code, not internal DB id
+            // 响应中的 share_id 是 share_code，不是内部 DB id
             CreateShareResponse response;
             response.share_id = "abc12345";
 
-            // share_id should be a string share_code, not a numeric id
+            // share_id 应为字符串 share_code，不是数字 id
             EXPECT_TRUE(response.share_id.find_first_not_of("0123456789") != std::string::npos);
         }
 
         TEST_F(ShareServiceContractTest, ExpiresAtEmptyMeansPermanent) {
-            // Empty expires_at means permanent share
+            // 空的 expires_at 表示永久分享
             ShareDetailResponse response;
             response.expires_at = "";
 
-            // Permanent shares have empty expires_at
+            // 永久分享的 expires_at 为空
             EXPECT_TRUE(response.expires_at.empty());
         }
 
         // ==================== Share API Regression Tests ====================
-        // These tests verify specific error code branches required by API spec
+        // 这些测试验证 API 规范要求的特定错误码分支
 
         class ShareApiRegressionTest : public ::testing::Test {};
 
-        // Regression test for error code 50005 (FileNotFound)
-        // Verifies that accessing a file not in share returns FileNotFound error
-        TEST_F(ShareApiRegressionTest, DownloadShareFileNotFoundErrorCode) {
-            // Error code 50005 = FileNotFound per ErrorCode.hpp
-            // This error is returned when file_id is valid but not part of the share
-            constexpr auto file_not_found_code = static_cast<uint32_t>(ErrorCode::FileNotFound);
-            EXPECT_EQ(file_not_found_code, 50005U);
+        // 错误码 50005 (FileNotFound) 的回归测试
+        // 验证访问分享中不存在的文件返回 FileNotFound 错误
+        // 错误码 50005 = FileNotFound（根据 ErrorCode.hpp）
+        // 当 file_id 有效但不在分享中时返回此错误
+        constexpr auto file_not_found_code = static_cast<uint32_t>(ErrorCode::FileNotFound);
+        EXPECT_EQ(file_not_found_code, 50005U);
 
-            // HTTP status for FileNotFound should be 404
-            auto status = Error::GetHttpStatus(ErrorCode::FileNotFound);
-            EXPECT_EQ(status, drogon::k404NotFound);
+        // FileNotFound 的 HTTP 状态码应为 404
+        auto status = Error::GetHttpStatus(ErrorCode::FileNotFound);
+        EXPECT_EQ(status, drogon::k404NotFound);
 
-            // Verify error message
-            auto message = Error::GetErrorMessage(ErrorCode::FileNotFound);
-            EXPECT_EQ(message, std::string("File not found"));
-        }
+        // 验证错误消息
+        auto message = Error::GetErrorMessage(ErrorCode::FileNotFound);
+        EXPECT_EQ(message, std::string("File not found"));
+    }
 
-        // Regression test for HTTP 416 Range Not Satisfiable
-        // Verifies range request handling in download share
-        TEST_F(ShareApiRegressionTest, DownloadShareRangeNotSatisfiableStatus) {
-            // HTTP 416 is returned when Range header is invalid or unsatisfiable
-            // Example: Range: bytes=1000-500 for a 600 byte file (start > end)
-            // Example: Range: bytes=500-600 for a 400 byte file (range exceeds file size)
-            constexpr auto range_not_satisfiable = drogon::k416RequestedRangeNotSatisfiable;
-            EXPECT_EQ(range_not_satisfiable, 416);
+    // HTTP 416 Range Not Satisfiable 的回归测试
+    // 验证下载分享中的范围请求处理
+    // 当 Range 头无效或无法满足时返回 HTTP 416
+    // 示例：Range: bytes=1000-500 针对 600 字节文件（起始 > 结束）
+    // 示例：Range: bytes=500-600 针对 400 字节文件（范围超出文件大小）
+    constexpr auto range_not_satisfiable = drogon::k416RequestedRangeNotSatisfiable;
+    EXPECT_EQ(range_not_satisfiable, 416);
 
-            // Verify that we can distinguish 416 from other client errors
-            EXPECT_NE(range_not_satisfiable, drogon::k400BadRequest);
-            EXPECT_NE(range_not_satisfiable, drogon::k404NotFound);
-        }
+    // 验证我们可以区分 416 与其他客户端错误
+    EXPECT_NE(range_not_satisfiable, drogon::k400BadRequest);
+    EXPECT_NE(range_not_satisfiable, drogon::k404NotFound);
+}
 
-        // Regression test for valid range request (200 vs 206)
-        TEST_F(ShareApiRegressionTest, DownloadShareRangeRequestStatusCodes) {
-            // Full file download without Range header: 200 OK
-            constexpr auto ok_status = drogon::k200OK;
-            EXPECT_EQ(ok_status, 200);
+// 有效范围请求（200 vs 206）的回归测试
+// 不带 Range 头的完整文件下载：200 OK
+// 带有效 Range 头的部分内容：206 Partial Content
+constexpr auto partial_status = drogon::k206PartialContent;
+EXPECT_EQ(partial_status, 206);
+}
 
-            // Partial content with valid Range header: 206 Partial Content
-            constexpr auto partial_status = drogon::k206PartialContent;
-            EXPECT_EQ(partial_status, 206);
-        }
+// 分享令牌格式错误（40107）的回归测试
+// 错误码 40107 = TokenMalformed（根据 ErrorCode.hpp）
+// 格式错误令牌的 HTTP 状态应为 401 Unauthorized
+// 验证错误消息
+auto message = Error::GetErrorMessage(ErrorCode::TokenMalformed);
+EXPECT_EQ(message, std::string("Token format error"));
+}
 
-        // Regression test for share token malformed (40107)
-        TEST_F(ShareApiRegressionTest, ShareTokenMalformedErrorCode) {
-            // Error code 40107 = TokenMalformed per ErrorCode.hpp
-            constexpr auto malformed_code = static_cast<uint32_t>(ErrorCode::TokenMalformed);
-            EXPECT_EQ(malformed_code, 40107U);
+// 分享令牌过期（40108）的回归测试
+// 错误码 40108 = TokenExpired（根据 ErrorCode.hpp）
+// 过期令牌的 HTTP 状态应为 401 Unauthorized
+// 验证错误消息
+auto message = Error::GetErrorMessage(ErrorCode::TokenExpired);
+EXPECT_EQ(message, std::string("Token expired"));
+}
 
-            // HTTP status for malformed token should be 401 Unauthorized
-            auto status = Error::GetHttpStatus(ErrorCode::TokenMalformed);
-            EXPECT_EQ(status, drogon::k401Unauthorized);
+// 批量取消混合结果摘要契约的回归测试
+// 根据 API 文档：批量取消返回 HTTP 200，带摘要 + 每项结果
+// 即使某些项失败，总体响应仍为 200
 
-            // Verify error message
-            auto message = Error::GetErrorMessage(ErrorCode::TokenMalformed);
-            EXPECT_EQ(message, std::string("Token format error"));
-        }
+CancelShareResponse response;
+response.summary.total = 5;
+response.summary.succeeded = 3;
+response.summary.failed = 2;
 
-        // Regression test for share token expired (40108)
-        TEST_F(ShareApiRegressionTest, ShareTokenExpiredErrorCode) {
-            // Error code 40108 = TokenExpired per ErrorCode.hpp
-            constexpr auto expired_code = static_cast<uint32_t>(ErrorCode::TokenExpired);
-            EXPECT_EQ(expired_code, 40108U);
+// 创建混合结果
+// 验证摘要计数与结果匹配
+// 验证 JSON 输出结构
+// 验证每个结果都有 share_id 和 status
+// 验证失败结果有错误对象
+// 验证成功结果没有错误对象
+EXPECT_FALSE(json["results"][0].isMember("error"));
+EXPECT_FALSE(json["results"][1].isMember("error"));
+EXPECT_FALSE(json["results"][2].isMember("error"));
+}
 
-            // HTTP status for expired token should be 401 Unauthorized
-            auto status = Error::GetHttpStatus(ErrorCode::TokenExpired);
-            EXPECT_EQ(status, drogon::k401Unauthorized);
+// 分享令牌缺失（40106）的回归测试
+// 错误码 40106 = TokenMissing（根据 ErrorCode.hpp）
+// 缺失令牌的 HTTP 状态应为 401 Unauthorized
+// 验证错误消息
+auto message = Error::GetErrorMessage(ErrorCode::TokenMissing);
+EXPECT_EQ(message, std::string("Token not provided"));
+}
 
-            // Verify error message
-            auto message = Error::GetErrorMessage(ErrorCode::TokenExpired);
-            EXPECT_EQ(message, std::string("Token expired"));
-        }
+// 分享访问被拒绝（60004）的回归测试
+// 错误码 60004 = ShareAccessDenied（根据 ErrorCode.hpp）
+// 访问被拒绝的 HTTP 状态应为 403 Forbidden
+// 验证错误消息
+auto message = Error::GetErrorMessage(ErrorCode::ShareAccessDenied);
+EXPECT_EQ(message, std::string("Access denied"));
+}
 
-        // Regression test for batch cancel mixed outcomes summary contract
-        TEST_F(ShareApiRegressionTest, BatchCancelMixedOutcomeSummaryContract) {
-            // Per API docs: batch cancel returns HTTP 200 with summary + per-item results
-            // Even when some items fail, the overall response is 200
-
-            CancelShareResponse response;
-            response.summary.total = 5;
-            response.summary.succeeded = 3;
-            response.summary.failed = 2;
-
-            // Create mixed results
-            CancelShareResult success1;
-            success1.share_id = "sh_001";
-            success1.status = "success";
-
-            CancelShareResult success2;
-            success2.share_id = "sh_002";
-            success2.status = "success";
-
-            CancelShareResult success3;
-            success3.share_id = "sh_003";
-            success3.status = "success";
-
-            CancelShareResult failed1;
-            failed1.share_id = "sh_004";
-            failed1.status = "failed";
-            failed1.error = CancelShareError{ .code = static_cast<int>(ErrorCode::ShareNotFound),
-                                              .message = "Share not found",
-                                              .reason = "share_not_found" };
-
-            CancelShareResult failed2;
-            failed2.share_id = "sh_005";
-            failed2.status = "failed";
-            failed2.error = CancelShareError{ .code = static_cast<int>(ErrorCode::ShareExpired),
-                                              .message = "Share expired",
-                                              .reason = "share_expired" };
-
-            response.results = { success1, success2, success3, failed1, failed2 };
-
-            // Verify summary counts match results
-            EXPECT_EQ(response.summary.total, 5);
-            EXPECT_EQ(response.summary.succeeded, 3);
-            EXPECT_EQ(response.summary.failed, 2);
-            EXPECT_EQ(response.results.size(), 5U);
-
-            // Verify JSON output structure
-            auto json = response.ToJson();
-            EXPECT_TRUE(json.isMember("summary"));
-            EXPECT_TRUE(json.isMember("results"));
-            EXPECT_EQ(json["summary"]["total"].asInt(), 5);
-            EXPECT_EQ(json["summary"]["succeeded"].asInt(), 3);
-            EXPECT_EQ(json["summary"]["failed"].asInt(), 2);
-            EXPECT_EQ(json["results"].size(), 5U);
-
-            // Verify each result has share_id and status
-            for (const auto& result : json["results"]) {
-                EXPECT_TRUE(result.isMember("share_id"));
-                EXPECT_TRUE(result.isMember("status"));
-            }
-
-            // Verify failed results have error object
-            EXPECT_TRUE(json["results"][3].isMember("error"));
-            EXPECT_TRUE(json["results"][4].isMember("error"));
-            EXPECT_EQ(json["results"][3]["error"]["code"].asInt(), 60001);
-            EXPECT_EQ(json["results"][4]["error"]["code"].asInt(), 60002);
-
-            // Verify success results don't have error object
-            EXPECT_FALSE(json["results"][0].isMember("error"));
-            EXPECT_FALSE(json["results"][1].isMember("error"));
-            EXPECT_FALSE(json["results"][2].isMember("error"));
-        }
-
-        // Regression test for share token missing (40106)
-        TEST_F(ShareApiRegressionTest, ShareTokenMissingErrorCode) {
-            // Error code 40106 = TokenMissing per ErrorCode.hpp
-            constexpr auto missing_code = static_cast<uint32_t>(ErrorCode::TokenMissing);
-            EXPECT_EQ(missing_code, 40106U);
-
-            // HTTP status for missing token should be 401 Unauthorized
-            auto status = Error::GetHttpStatus(ErrorCode::TokenMissing);
-            EXPECT_EQ(status, drogon::k401Unauthorized);
-
-            // Verify error message
-            auto message = Error::GetErrorMessage(ErrorCode::TokenMissing);
-            EXPECT_EQ(message, std::string("Token not provided"));
-        }
-
-        // Regression test for share access denied (60004)
-        TEST_F(ShareApiRegressionTest, ShareAccessDeniedErrorCode) {
-            // Error code 60004 = ShareAccessDenied per ErrorCode.hpp
-            constexpr auto access_denied_code = static_cast<uint32_t>(ErrorCode::ShareAccessDenied);
-            EXPECT_EQ(access_denied_code, 60004U);
-
-            // HTTP status for access denied should be 403 Forbidden
-            auto status = Error::GetHttpStatus(ErrorCode::ShareAccessDenied);
-            EXPECT_EQ(status, drogon::k403Forbidden);
-
-            // Verify error message
-            auto message = Error::GetErrorMessage(ErrorCode::ShareAccessDenied);
-            EXPECT_EQ(message, std::string("Access denied"));
-        }
-
-    } // namespace
+} // namespace
 } // namespace disk::share

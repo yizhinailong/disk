@@ -1,7 +1,7 @@
 /**
  * @file TrashDtos.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief Trash response DTOs and JSON parsing helpers for the QML client
+ * @brief QML 客户端回收站响应数据传输对象及 JSON 解析辅助函数
  *
  * @copyright Copyright (c) 2026
  *
@@ -20,18 +20,18 @@
 
 namespace disk::qml::models {
 
-    // ==================== Trash Item ====================
+    // ==================== 回收站条目 ====================
 
     /**
-     * @brief A single trash item returned by GET /api/trash.
+     * @brief GET /api/trash 返回的单个回收站条目
      *
      * @details
-     * Mirrors backend TrashItemResponse:
+     * 镜像后端 TrashItemResponse：
      * { "id", "type", "original_id", "name", "size", "original_path", "deleted_at", "expires_at" }
      */
     struct TrashItemDto {
         quint64 id{};
-        QString type; ///< "file" or "folder"
+        QString type; ///< "file"（文件）或 "folder"（文件夹）
         quint64 originalId{};
         QString name;
         quint64 size{};
@@ -41,17 +41,17 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief Result of a trash list query (paginated).
+     * @brief 回收站列表查询结果（分页）
      */
     struct TrashListResultDto {
         QVector<TrashItemDto> items;
         PaginationDto pagination;
     };
 
-    // ==================== Batch Operation Result ====================
+    // ==================== 批量操作结果 ====================
 
     /**
-     * @brief Per-item result in a batch restore/delete response.
+     * @brief 批量恢复/删除响应中的单项结果
      */
     struct TrashBatchItemResultDto {
         quint64 trashId{};
@@ -60,7 +60,7 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief Summary of a batch restore/delete operation.
+     * @brief 批量恢复/删除操作的汇总
      */
     struct TrashBatchSummaryDto {
         int total{};
@@ -69,27 +69,27 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief Result of POST /api/trash/restore or DELETE /api/trash.
+     * @brief POST /api/trash/restore 或 DELETE /api/trash 的结果
      */
     struct TrashBatchResultDto {
         TrashBatchSummaryDto summary;
         QVector<TrashBatchItemResultDto> results;
     };
 
-    // ==================== Clear All Result ====================
+    // ==================== 清空回收站结果 ====================
 
     /**
-     * @brief Result of DELETE /api/trash/all.
+     * @brief DELETE /api/trash/all 的结果
      */
     struct TrashClearResultDto {
         int deletedCount{};
         quint64 freedSpace{};
     };
 
-    // ==================== Parse Functions ====================
+    // ==================== 解析函数 ====================
 
     /**
-     * @brief Parse a single trash item from a JSON object.
+     * @brief 从 JSON 对象解析单个回收站条目
      */
     inline auto ParseTrashItem(const QJsonObject& obj) -> TrashItemDto {
         TrashItemDto item;
@@ -105,10 +105,10 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse trash list result from envelope data.
+     * @brief 从信封数据解析回收站列表结果
      *
      * @details
-     * Expected shape: data = { "items": [...], "pagination": { ... } }
+     * 预期格式：data = { "items": [...], "pagination": { ... } }
      */
     inline auto ParseTrashListResult(const QJsonValue& dataVal) -> std::optional<TrashListResultDto> {
         if (!dataVal.isObject()) {
@@ -140,10 +140,10 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse batch result from envelope data (restore or delete).
+     * @brief 从信封数据解析批量结果（恢复或删除）
      *
      * @details
-     * Expected shape: data = {
+     * 预期格式：data = {
      *   "summary": { "total": N, "success_count": N, "failure_count": N },
      *   "results": [ { "trash_id": N, "success": bool, "message": "..." }, ... ]
      * }
@@ -185,10 +185,10 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse clear-all result from envelope data.
+     * @brief 从信封数据解析清空回收站结果
      *
      * @details
-     * Expected shape: data = { "deleted_count": N, "freed_space": N }
+     * 预期格式：data = { "deleted_count": N, "freed_space": N }
      */
     inline auto ParseTrashClearResult(const QJsonValue& dataVal) -> std::optional<TrashClearResultDto> {
         if (!dataVal.isObject()) {

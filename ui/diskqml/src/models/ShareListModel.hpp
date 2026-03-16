@@ -1,16 +1,15 @@
 /**
  * @file ShareListModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QAbstractListModel for share items
+ * @brief 分享项的 QAbstractListModel
  *
  * @copyright Copyright (c) 2026
  *
  * @details
- * Pure data model — no business logic, no API calls.
- * ViewModels populate this model via ResetItems().
+ * 纯数据模型 —— 无业务逻辑，无 API 调用。
+ * ViewModel 通过 ResetItems() 填充此模型。
  *
- * Roles are aligned to the backend ShareListItemDto and the
- * share design spec (docs/ui/design/share.md).
+ * 角色与后端 ShareListItemDto 和分享设计规范 (docs/ui/design/share.md) 对齐。
  */
 
 #pragma once
@@ -24,11 +23,11 @@
 namespace disk::qml::models {
 
     /**
-     * @brief Data struct for a single share list entry.
+     * @brief 单个分享列表项的数据结构。
      *
      * @details
-     * Maps 1:1 to the ShareListItemDto.
-     * Stored by value in a QVector inside the model.
+     * 与 ShareListItemDto 一一映射。
+     * 在模型内部的 QVector 中按值存储。
      */
     struct ShareListItemData {
         QString shareId;
@@ -45,27 +44,28 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief QAbstractListModel exposing share items to QML ListView.
+     * @brief 向 QML ListView 暴露分享项的 QAbstractListModel。
      *
      * @details
-     * Provides the following roles for QML delegates:
-     *   - shareId, shareFileName, shareFileCount, shareLink, shareHasPassword,
-     *     sharePermission, shareViewCount, shareDownloadCount,
-     *     shareCreatedAt, shareExpiresAt, shareStatus
+     * 为 QML 代理提供以下角色：
+     *   - shareId（分享ID）, shareFileName（文件名）, shareFileCount（文件数）,
+     *     shareLink（分享链接）, shareHasPassword（是否有密码）, sharePermission（权限）,
+     *     shareViewCount（浏览次数）, shareDownloadCount（下载次数）,
+     *     shareCreatedAt（创建时间）, shareExpiresAt（过期时间）, shareStatus（状态）
      *
-     * Populate via ResetItems(). The model does NOT call any APIs;
-     * a ViewModel is responsible for fetching data and calling ResetItems().
+     * 通过 ResetItems() 填充。模型不调用任何 API；
+     * ViewModel 负责获取数据并调用 ResetItems()。
      */
     class ShareListModel : public QAbstractListModel {
         Q_OBJECT
         QML_ELEMENT
 
-        /// Number of items currently in the model (convenience for QML).
+        /// 当前模型中的项数量（QML 便捷属性）。
         Q_PROPERTY(int count READ Count NOTIFY countChanged)
 
     public:
         /**
-         * @brief Custom data roles exposed to QML via roleNames().
+         * @brief 通过 roleNames() 向 QML 暴露的自定义数据角色。
          */
         enum Roles {
             ShareIdRole = Qt::UserRole + 1,
@@ -85,36 +85,35 @@ namespace disk::qml::models {
         explicit ShareListModel(QObject* parent = nullptr);
         ~ShareListModel() override = default;
 
-        // ==================== QAbstractListModel interface ====================
+        // ==================== QAbstractListModel 接口 ====================
 
         [[nodiscard]] auto rowCount(const QModelIndex& parent = QModelIndex()) const -> int override;
         [[nodiscard]] auto data(const QModelIndex& index, int role = Qt::DisplayRole) const
             -> QVariant override;
         [[nodiscard]] auto roleNames() const -> QHash<int, QByteArray> override;
 
-        // ==================== Public API ====================
+        // ==================== 公共 API ====================
 
         [[nodiscard]] auto Count() const -> int;
 
         /**
-         * @brief Replace the entire model contents with @p items.
+         * @brief 用 @p items 替换整个模型内容。
          *
          * @details
-         * Emits beginResetModel / endResetModel so that bound QML views
-         * refresh completely. Intended to be called by a ViewModel after
-         * a successful API response.
+         * 发射 beginResetModel / endResetModel 信号，使绑定的 QML 视图完全刷新。
+         * 旨在由 ViewModel 在 API 响应成功后调用。
          */
         Q_INVOKABLE void ResetItems(const QVector<ShareListItemData>& items);
 
         /**
-         * @brief Remove all items from the model.
+         * @brief 从模型中移除所有项。
          */
         Q_INVOKABLE void Clear();
 
         /**
-         * @brief Retrieve the item at @p row (bounds-checked).
+         * @brief 获取 @p row 处的项（带边界检查）。
          *
-         * @return std::nullopt when @p row is out of range.
+         * @return 当 @p row 超出范围时返回 std::nullopt。
          */
         [[nodiscard]] auto ItemAt(int row) const -> std::optional<ShareListItemData>;
 

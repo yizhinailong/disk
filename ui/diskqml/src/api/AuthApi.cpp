@@ -1,7 +1,7 @@
 /**
  * @file AuthApi.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief AuthApi implementation
+ * @brief AuthApi 实现
  *
  * @copyright Copyright (c) 2026
  *
@@ -85,7 +85,7 @@ namespace disk::qml::api {
         QObject* ctx,
         AuthApiCallback cb
     ) -> void {
-        QJsonObject body; // empty body {}
+        QJsonObject body; // 空请求体 {}
 
         m_client->PostJsonWithBearerToken(
             QStringLiteral("/api/auth/logout"),

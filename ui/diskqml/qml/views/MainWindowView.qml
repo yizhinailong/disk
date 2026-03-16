@@ -17,7 +17,7 @@ Item {
 
     // ==================== 状态 ====================
 
-    /// 响应式布局模式: "compact" | "medium" | "expanded"
+    /// 响应式布局模式: "紧凑" | "中等" | "展开"
     readonly property string layoutMode: root.width < 800 ? "compact" : (root.width < 1200 ? "medium" : "expanded")
 
     /// 侧边栏宽度根据模式动态调整
@@ -26,9 +26,9 @@ Item {
     /// 是否显示侧边栏文字标签
     readonly property bool showSidebarLabels: layoutMode !== "compact"
 
-    /// 文件模式 vs 传输模式
+    /// 文件模式与传输模式
 
-    /// 文件模式 vs 传输模式
+    /// 文件模式与传输模式
     property bool isTransferMode: false
 
     /// 当前选中的导航 key（与 pageMap 对应）
@@ -480,13 +480,13 @@ Item {
                 return
             }
             
-            // Store selected files and show destination picker
+            // 存储选中的文件并显示目标选择器
             pendingUploadFiles = selectedFiles
             uploadDestinationDialog.open()
         }
         
         onRejected: {
-            // User cancelled - no action needed
+            // 用户取消 - 无需操作
         }
     }
 
@@ -505,7 +505,7 @@ Item {
         padding: 24
 
         onOpened: {
-            // Default to current folder
+            // 默认为当前文件夹
             destinationModeGroup.checkedButton = currentFolderRadio
             uploadTargetFolderId = -1
         }
@@ -525,7 +525,7 @@ Item {
                 id: destinationModeGroup
             }
 
-            // Current folder option
+            // 当前文件夹选项
             RadioButton {
                 id: currentFolderRadio
                 ButtonGroup.group: destinationModeGroup
@@ -544,7 +544,7 @@ Item {
                 visible: currentFolderRadio.checked
             }
 
-            // Root folder option
+            // 根目录选项
             RadioButton {
                 id: rootFolderRadio
                 ButtonGroup.group: destinationModeGroup
@@ -552,7 +552,7 @@ Item {
                 Layout.fillWidth: true
             }
 
-            // Custom folder option
+            // 自定义文件夹选项
             RadioButton {
                 id: customFolderRadio
                 ButtonGroup.group: destinationModeGroup
@@ -560,7 +560,7 @@ Item {
                 Layout.fillWidth: true
             }
 
-            // Custom folder selector
+            // 自定义文件夹选择器
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: customFolderPicker.visible ? 180 : 40
@@ -615,7 +615,7 @@ Item {
                                 }
                             }
 
-                            // Root option in picker
+                            // 选择器中的根目录选项
                             ItemDelegate {
                                 Layout.fillWidth: true
                                 height: 28
@@ -703,7 +703,7 @@ Item {
 
             Item { Layout.preferredHeight: 8 }
 
-            // Button row
+            // 按钮行
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 12
@@ -735,23 +735,23 @@ Item {
                             targetFolderId = uploadTargetFolderId
                         }
 
-                        // Invalid destination guard: fallback to root
+                        // 无效目标保护：回退到根目录
                         if (targetFolderId < 0) {
                             console.warn("[UploadDialog] Invalid targetFolderId:", targetFolderId, "- falling back to root")
                             targetFolderId = 0
                         }
 
-                        // Start upload via TransfersViewModel
+                        // 通过 TransfersViewModel 开始上传
                         TransfersViewModel.startUpload(pendingUploadFiles, targetFolderId)
 
-                        // Show success feedback
+                        // 显示成功反馈
                         notificationToast.showSuccess("已添加 " + pendingUploadFiles.length + " 个文件到上传队列")
 
-                        // Navigate to upload page to show progress
+                        // 导航到上传页面以显示进度
                         root.isTransferMode = true
                         root.currentNav = "upload"
 
-                        // Reset state
+                        // 重置状态
                         pendingUploadFiles = []
                         uploadDestinationDialog.close()
                     }

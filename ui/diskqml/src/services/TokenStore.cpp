@@ -1,7 +1,7 @@
 /**
  * @file TokenStore.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief TokenStore implementation
+ * @brief TokenStore 实现
  *
  * @copyright Copyright (c) 2026
  *
@@ -23,28 +23,28 @@ namespace disk::qml::services {
     static const QString kFileName = QStringLiteral("token.json");
 
     TokenStore::TokenStore(const QString& baseDir) {
-        // Resolve base directory
+        // 解析基础目录
         if (!baseDir.isEmpty()) {
             m_base_dir = baseDir;
         } else {
-            // Primary: ~/.cache/disk-ui
+            // 主路径：~/.cache/disk-ui
             const QString home = QDir::homePath();
             if (!home.isEmpty()) {
                 m_base_dir = home + QStringLiteral("/.cache/disk-ui");
             } else {
-                // Fallback: QStandardPaths home
+                // 备用：QStandardPaths 主目录
                 const QString spHome =
                     QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
                 if (!spHome.isEmpty()) {
                     m_base_dir = spHome + QStringLiteral("/.cache/disk-ui");
                 } else {
-                    // Last resort: current directory
+                    // 最后手段：当前目录
                     m_base_dir = QDir::currentPath() + QStringLiteral("/.cache/disk-ui");
                 }
             }
         }
 
-        // One-time migration from legacy QSettings
+        // 从旧版 QSettings 执行一次性迁移
         MigrateFromQSettings();
     }
 
@@ -62,18 +62,18 @@ namespace disk::qml::services {
 
         settings.endGroup();
 
-        // Nothing to migrate
-        // Already have a JSON file — skip migration entirely
+        // 无需迁移
+        // 已有 JSON 文件 —— 完全跳过迁移
         if (QFile::exists(FilePath())) {
             return;
         }
 
-        // Only migrate if access token is non-empty AND expiresAt is valid
+        // 仅当访问令牌非空且 expiresAt 有效时才迁移
         if (access.isEmpty() || !expiresAt.isValid()) {
             return;
         }
 
-        // Write migrated data to JSON
+        // 将迁移的数据写入 JSON
         QDir().mkpath(m_base_dir);
 
         QJsonObject obj;
@@ -86,9 +86,9 @@ namespace disk::qml::services {
         if (file.open(QIODevice::WriteOnly)) {
             file.write(QJsonDocument(obj).toJson(QJsonDocument::Compact));
             if (file.commit()) {
-                // Best-effort permissions
+                // 尽力设置权限
                 QFile::setPermissions(FilePath(), QFile::ReadOwner | QFile::WriteOwner);
-                // Clear legacy keys only after successful write
+                // 仅在成功写入后清除旧版密钥
                 settings.beginGroup(QStringLiteral("auth"));
                 settings.remove(QString{});
                 settings.endGroup();
@@ -111,7 +111,7 @@ namespace disk::qml::services {
         if (file.open(QIODevice::WriteOnly)) {
             file.write(QJsonDocument(obj).toJson(QJsonDocument::Compact));
             file.commit();
-            // Best-effort permissions
+            // 尽力设置权限
             QFile::setPermissions(FilePath(), QFile::ReadOwner | QFile::WriteOwner);
         }
     }
@@ -131,7 +131,7 @@ namespace disk::qml::services {
         file.close();
 
         if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-            // Corruption: delete and treat as logged-out
+            // 损坏：删除并视为已登出
             QFile::remove(FilePath());
             return {};
         }

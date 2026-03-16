@@ -1,16 +1,15 @@
 /**
  * @file FileListModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QAbstractListModel for file/folder items in the current directory
+ * @brief 当前目录中文件/文件夹项的 QAbstractListModel
  *
  * @copyright Copyright (c) 2026
  *
  * @details
- * Pure data model — no business logic, no API calls.
- * ViewModels populate this model via ResetItems().
+ * 纯数据模型 —— 无业务逻辑，无 API 调用。
+ * ViewModel 通过 ResetItems() 填充此模型。
  *
- * Roles are aligned to the backend FileListItem DTO and the
- * file-list design spec (docs/ui/design/file-list.md).
+ * 角色与后端 FileListItem DTO 和文件列表设计规范 (docs/ui/design/file-list.md) 对齐。
  */
 
 #pragma once
@@ -24,45 +23,46 @@
 namespace disk::qml::models {
 
     /**
-     * @brief Data struct for a single file/folder list entry.
+     * @brief 单个文件/文件夹列表项的数据结构。
      *
      * @details
-     * Maps 1:1 to the backend FileListItem DTO.
-     * Stored by value in a QVector inside the model.
+     * 与后端 FileListItem DTO 一一映射。
+     * 在模型内部的 QVector 中按值存储。
      */
     struct FileListItemData {
         quint64 id{ 0 };
         QString name;
-        QString type;     ///< "file" or "folder"
-        qint64 size{ 0 }; ///< File size in bytes (0 for folders)
+        QString type;     ///< "file"（文件）或 "folder"（文件夹）
+        qint64 size{ 0 }; ///< 文件大小（字节），文件夹为 0
         QString mimeType;
         QString hash;
-        int itemCount{ 0 }; ///< Child item count (folders only)
+        int itemCount{ 0 }; ///< 子项数量（仅文件夹）
         QString createdAt;
         QString updatedAt;
     };
 
     /**
-     * @brief QAbstractListModel exposing file/folder items to QML ListView/GridView.
+     * @brief 向 QML ListView/GridView 暴露文件/文件夹项的 QAbstractListModel。
      *
      * @details
-     * Provides the following roles for QML delegates:
-     *   - fileId, fileName, fileType, fileSize, fileMimeType,
-     *     fileHash, fileItemCount, fileCreatedAt, fileUpdatedAt, fileIsFolder
+     * 为 QML 代理提供以下角色：
+     *   - fileId（文件ID）, fileName（文件名）, fileType（文件类型）, fileSize（文件大小）,
+     *     fileMimeType（MIME类型）, fileHash（文件哈希）, fileItemCount（子项数量）,
+     *     fileCreatedAt（创建时间）, fileUpdatedAt（更新时间）, fileIsFolder（是否文件夹）
      *
-     * Populate via ResetItems(). The model does NOT call any APIs;
-     * a ViewModel is responsible for fetching data and calling ResetItems().
+     * 通过 ResetItems() 填充。模型不调用任何 API；
+     * ViewModel 负责获取数据并调用 ResetItems()。
      */
     class FileListModel : public QAbstractListModel {
         Q_OBJECT
         QML_ELEMENT
 
-        /// Number of items currently in the model (convenience for QML).
+        /// 当前模型中的项数量（QML 便捷属性）。
         Q_PROPERTY(int count READ Count NOTIFY countChanged)
 
     public:
         /**
-         * @brief Custom data roles exposed to QML via roleNames().
+         * @brief 通过 roleNames() 向 QML 暴露的自定义数据角色。
          */
         enum Roles {
             FileIdRole = Qt::UserRole + 1,
@@ -81,36 +81,35 @@ namespace disk::qml::models {
         explicit FileListModel(QObject* parent = nullptr);
         ~FileListModel() override = default;
 
-        // ==================== QAbstractListModel interface ====================
+        // ==================== QAbstractListModel 接口 ====================
 
         [[nodiscard]] auto rowCount(const QModelIndex& parent = QModelIndex()) const -> int override;
         [[nodiscard]] auto data(const QModelIndex& index, int role = Qt::DisplayRole) const
             -> QVariant override;
         [[nodiscard]] auto roleNames() const -> QHash<int, QByteArray> override;
 
-        // ==================== Public API ====================
+        // ==================== 公共 API ====================
 
         [[nodiscard]] auto Count() const -> int;
 
         /**
-         * @brief Replace the entire model contents with @p items.
+         * @brief 用 @p items 替换整个模型内容。
          *
          * @details
-         * Emits beginResetModel / endResetModel so that bound QML views
-         * refresh completely. Intended to be called by a ViewModel after
-         * a successful API response.
+         * 发射 beginResetModel / endResetModel 信号，使绑定的 QML 视图完全刷新。
+         * 旨在由 ViewModel 在 API 响应成功后调用。
          */
         Q_INVOKABLE void ResetItems(const QVector<FileListItemData>& items);
 
         /**
-         * @brief Remove all items from the model.
+         * @brief 从模型中移除所有项。
          */
         Q_INVOKABLE void Clear();
 
         /**
-         * @brief Retrieve the item at @p row (bounds-checked).
+         * @brief 获取 @p row 处的项（带边界检查）。
          *
-         * @return std::nullopt when @p row is out of range.
+         * @return 当 @p row 超出范围时返回 std::nullopt。
          */
         [[nodiscard]] auto ItemAt(int row) const -> std::optional<FileListItemData>;
 

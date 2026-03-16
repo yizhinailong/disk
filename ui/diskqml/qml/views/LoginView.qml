@@ -20,13 +20,13 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        // Left decoration region
+        // 左侧装饰区域
         Rectangle {
             Layout.fillHeight: true
             Layout.preferredWidth: root.width * 0.45
             color: palette.window
 
-            // Background gradient
+            // 背景渐变
             Rectangle {
                 anchors.fill: parent
                 gradient: Gradient {
@@ -47,7 +47,7 @@ Item {
                 }
             }
 
-            // Ellipse 1
+            // 椭圆 1
             Rectangle {
                 width: 300
                 height: 300
@@ -56,7 +56,7 @@ Item {
                 x: -50
                 y: -50
             }
-            // Ellipse 2
+            // 椭圆 2
             Rectangle {
                 width: 200
                 height: 200
@@ -67,7 +67,7 @@ Item {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: 100
             }
-            // Ellipse 3
+            // 椭圆 3
             Rectangle {
                 width: 150
                 height: 150
@@ -100,7 +100,7 @@ Item {
             }
         }
 
-        // Right form region
+        // 右侧表单区域
         Item {
             Layout.fillHeight: true
             Layout.fillWidth: true
@@ -112,7 +112,7 @@ Item {
                 color: palette.window
                 implicitHeight: formLayout.implicitHeight + 64
 
-                // Fake shadow
+                // 假阴影
                 Rectangle {
                     z: -1
                     anchors.fill: parent
@@ -132,7 +132,7 @@ Item {
                     anchors.margins: 32
                     spacing: 24
 
-                    // Logo and Title
+                    // 标志和标题
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 8
@@ -163,7 +163,7 @@ Item {
                         }
                     }
 
-                    // Pill tabs: 登录 | 注册
+                    // 胶囊标签页: 登录 | 注册
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 44
@@ -218,7 +218,7 @@ Item {
                         }
                     }
 
-                    // Input fields
+                    // 输入字段
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 16
@@ -324,12 +324,12 @@ Item {
                         }
                     }
 
-                    // Error text
+                    // 错误文本
                     Label {
                         id: errorLabel
                         visible: LoginViewModel.errorMessage !== ""
                         text: LoginViewModel.errorMessage
-                        color: "#F44336" // Red
+                        color: "#F44336" // 红色
                         font.pixelSize: 12
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
@@ -339,7 +339,7 @@ Item {
                         Layout.bottomMargin: visible ? 0 : -16
                     }
 
-                    // Login Button
+                    // 登录按钮
                     Button {
                         id: loginButton
                         objectName: "loginButton"

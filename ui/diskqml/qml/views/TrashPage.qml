@@ -18,7 +18,7 @@ Item {
 
     // ==================== 辅助函数 ====================
 
-    // Formatter functions are now centralized in FormatUtils singleton
+    // 格式化函数现在集中在 FormatUtils 单例中
 
     function isExpiringSoon(expiresAt: string) : bool {
         if (!expiresAt) return false

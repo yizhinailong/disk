@@ -32,7 +32,7 @@ namespace disk::test {
         MockRedisClient(MockRedisClient&&) = delete;
         MockRedisClient& operator=(MockRedisClient&&) = delete;
 
-        // Mock execCommand for different return types
+        // Mock 不同返回类型的 execCommand
         MOCK_METHOD(
             drogon::nosql::RedisResult,
             execCommandSync,

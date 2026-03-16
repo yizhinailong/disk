@@ -1,7 +1,7 @@
 /**
  * @file FileDtos.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief File & folder response DTOs and JSON parsing helpers for the QML client
+ * @brief QML 客户端文件/文件夹响应数据传输对象及 JSON 解析辅助函数
  *
  * @copyright Copyright (c) 2026
  *
@@ -20,13 +20,13 @@
 
 namespace disk::qml::models {
 
-    // ==================== Shared Structs ====================
+    // ==================== 共享结构体 ====================
 
     /**
-     * @brief Pagination metadata from list responses.
+     * @brief 列表响应的分页元数据
      *
      * @details
-     * Mirrors backend Pagination: { "page", "page_size", "total", "total_pages" }
+     * 镜像后端 Pagination: { "page", "page_size", "total", "total_pages" }
      */
     struct PaginationDto {
         int page{};
@@ -35,43 +35,43 @@ namespace disk::qml::models {
         int totalPages{};
     };
 
-    // ==================== File List ====================
+    // ==================== 文件列表 ====================
 
     /**
-     * @brief A single item (file or folder) in a file list.
+     * @brief 文件列表中的单个条目（文件或文件夹）
      *
      * @details
-     * Mirrors backend FileListItem. type is "file" or "folder".
-     * For files: size, mimeType, hash are populated.
-     * For folders: itemCount is populated.
+     * 镜像后端 FileListItem。type 为 "file" 或 "folder"。
+     * 文件：填充 size、mimeType、hash。
+     * 文件夹：填充 itemCount。
      */
     struct FileListItemDto {
         quint64 id{};
         QString name;
-        QString type; ///< "file" or "folder"
-        // File fields:
+        QString type; ///< "file"（文件）或 "folder"（文件夹）
+        // 文件字段：
         quint64 size{};
         QString mimeType;
         QString hash;
-        // Folder fields:
+        // 文件夹字段：
         int itemCount{};
-        // Common:
+        // 公共字段：
         QString createdAt;
         QString updatedAt;
     };
 
     /**
-     * @brief Result of a file list query.
+     * @brief 文件列表查询结果
      */
     struct FileListResultDto {
         QVector<FileListItemDto> items;
         PaginationDto pagination;
     };
 
-    // ==================== Breadcrumb ====================
+    // ==================== 面包屑 ====================
 
     /**
-     * @brief A single breadcrumb entry.
+     * @brief 单个面包屑条目
      */
     struct BreadcrumbItemDto {
         quint64 id{};
@@ -79,16 +79,16 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief Breadcrumb path from root to current folder.
+     * @brief 从根目录到当前文件夹的面包屑路径
      */
     struct BreadcrumbResultDto {
         QVector<BreadcrumbItemDto> path;
     };
 
-    // ==================== Folder Tree ====================
+    // ==================== 文件夹树 ====================
 
     /**
-     * @brief A node in the folder tree.
+     * @brief 文件夹树中的节点
      */
     struct FolderTreeNodeDto {
         quint64 id{};
@@ -97,16 +97,16 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief Result of a folder tree query.
+     * @brief 文件夹树查询结果
      */
     struct FolderTreeResultDto {
         QVector<FolderTreeNodeDto> tree;
     };
 
-    // ==================== Create Folder ====================
+    // ==================== 创建文件夹 ====================
 
     /**
-     * @brief Result of creating a folder.
+     * @brief 创建文件夹的结果
      */
     struct CreateFolderResultDto {
         quint64 id{};
@@ -116,10 +116,10 @@ namespace disk::qml::models {
         QString createdAt;
     };
 
-    // ==================== Rename ====================
+    // ==================== 重命名 ====================
 
     /**
-     * @brief Result of renaming a file or folder.
+     * @brief 重命名文件或文件夹的结果
      */
     struct RenameResultDto {
         quint64 id{};
@@ -127,19 +127,19 @@ namespace disk::qml::models {
         QString updatedAt;
     };
 
-    // ==================== Move ====================
+    // ==================== 移动 ====================
 
     /**
-     * @brief Result of a move operation.
+     * @brief 移动操作的结果
      */
     struct MoveResultDto {
         int movedCount{};
     };
 
-    // ==================== Copy ====================
+    // ==================== 复制 ====================
 
     /**
-     * @brief ID mapping for a copied file.
+     * @brief 复制文件的 ID 映射
      */
     struct FileIdMappingDto {
         quint64 oldId{};
@@ -147,29 +147,29 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief Result of a copy operation.
+     * @brief 复制操作的结果
      */
     struct CopyResultDto {
         int copiedCount{};
         QVector<FileIdMappingDto> newFiles;
     };
 
-    // ==================== Delete ====================
+    // ==================== 删除 ====================
 
     /**
-     * @brief Result of a delete operation (soft-delete to trash).
+     * @brief 删除操作的结果（软删除到回收站）
      */
     struct DeleteResultDto {
         int deletedCount{};
     };
 
-    // ==================== Search ====================
+    // ==================== 搜索 ====================
 
     /**
-     * @brief A single search result item.
+     * @brief 单个搜索结果条目
      *
      * @details
-     * Extends FileListItemDto with a path field for display.
+     * 扩展 FileListItemDto，添加路径字段用于显示。
      */
     struct SearchResultItemDto {
         quint64 id{};
@@ -181,21 +181,21 @@ namespace disk::qml::models {
         int itemCount{};
         QString createdAt;
         QString updatedAt;
-        QString path; ///< Breadcrumb path string
+        QString path; ///< 面包屑路径字符串
     };
 
     /**
-     * @brief Result of a file search query.
+     * @brief 文件搜索查询结果
      */
     struct SearchResultDto {
         QVector<SearchResultItemDto> items;
         PaginationDto pagination;
     };
 
-    // ==================== JSON Parsing Helpers ====================
+    // ==================== JSON 解析辅助函数 ====================
 
     /**
-     * @brief Parse pagination from a JSON object.
+     * @brief 从 JSON 对象解析分页信息
      */
     inline auto ParsePagination(const QJsonObject& obj) -> PaginationDto {
         PaginationDto p;
@@ -207,7 +207,7 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse a single FileListItem from a JSON object.
+     * @brief 从 JSON 对象解析单个 FileListItem
      */
     inline auto ParseFileListItem(const QJsonObject& obj) -> FileListItemDto {
         FileListItemDto item;
@@ -224,10 +224,10 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse a file list result from envelope data.
+     * @brief 从信封数据解析文件列表结果
      *
      * @details
-     * Expected shape: data = { "items": [...], "pagination": { ... } }
+     * 预期格式：data = { "items": [...], "pagination": { ... } }
      */
     inline auto ParseFileListResult(const QJsonValue& dataVal) -> std::optional<FileListResultDto> {
         if (!dataVal.isObject()) {
@@ -259,10 +259,10 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse breadcrumb result from envelope data.
+     * @brief 从信封数据解析面包屑结果
      *
      * @details
-     * Expected shape: data = { "path": [ { "id": N, "name": "..." }, ... ] }
+     * 预期格式：data = { "path": [ { "id": N, "name": "..." }, ... ] }
      */
     inline auto ParseBreadcrumbResult(const QJsonValue& dataVal) -> std::optional<BreadcrumbResultDto> {
         if (!dataVal.isObject()) {
@@ -292,7 +292,7 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse a single folder tree node recursively.
+     * @brief 递归解析单个文件夹树节点
      */
     inline auto ParseFolderTreeNode(const QJsonObject& obj) -> FolderTreeNodeDto {
         FolderTreeNodeDto node;
@@ -314,16 +314,16 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse folder tree result from envelope data.
+     * @brief 从信封数据解析文件夹树结果
      *
      * @details
-     * Expected shape: data = { "tree": [ { "id": N, "name": "...", "children": [...] }, ... ] }
-     * Note: the backend may return the tree directly as an array in data, or wrapped in "tree" key.
+     * 预期格式：data = { "tree": [ { "id": N, "name": "...", "children": [...] }, ... ] }
+     * 注意：后端可能直接返回数组作为 data，或包装在 "tree" 键中。
      */
     inline auto ParseFolderTreeResult(const QJsonValue& dataVal) -> std::optional<FolderTreeResultDto> {
         FolderTreeResultDto result;
 
-        // Try data as array directly (backend returns array at top level)
+        // 尝试将 data 作为数组直接解析（后端在顶层返回数组）
         if (dataVal.isArray()) {
             const QJsonArray arr = dataVal.toArray();
             result.tree.reserve(arr.size());
@@ -335,7 +335,7 @@ namespace disk::qml::models {
             return result;
         }
 
-        // Try data as object with "tree" key
+        // 尝试将 data 作为带 "tree" 键的对象解析
         if (dataVal.isObject()) {
             const QJsonObject obj = dataVal.toObject();
             const QJsonValue treeVal = obj.value(QLatin1String("tree"));
@@ -355,10 +355,10 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse create folder result from envelope data.
+     * @brief 从信封数据解析创建文件夹结果
      *
      * @details
-     * Expected shape: data = { "id": N, "name": "...", "parent_id": N, "path": "...", "created_at": "..." }
+     * 预期格式：data = { "id": N, "name": "...", "parent_id": N, "path": "...", "created_at": "..." }
      */
     inline auto ParseCreateFolderResult(const QJsonValue& dataVal) -> std::optional<CreateFolderResultDto> {
         if (!dataVal.isObject()) {
@@ -380,10 +380,10 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse rename result from envelope data.
+     * @brief 从信封数据解析重命名结果
      *
      * @details
-     * Expected shape: data = { "id": N, "name": "...", "updated_at": "..." }
+     * 预期格式：data = { "id": N, "name": "...", "updated_at": "..." }
      */
     inline auto ParseRenameResult(const QJsonValue& dataVal) -> std::optional<RenameResultDto> {
         if (!dataVal.isObject()) {
@@ -403,10 +403,10 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse move result from envelope data.
+     * @brief 从信封数据解析移动结果
      *
      * @details
-     * Expected shape: data = { "moved_count": N }
+     * 预期格式：data = { "moved_count": N }
      */
     inline auto ParseMoveResult(const QJsonValue& dataVal) -> std::optional<MoveResultDto> {
         if (!dataVal.isObject()) {
@@ -421,10 +421,10 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse copy result from envelope data.
+     * @brief 从信封数据解析复制结果
      *
      * @details
-     * Expected shape: data = { "copied_count": N, "new_files": [ { "old_id": N, "new_id": N }, ... ] }
+     * 预期格式：data = { "copied_count": N, "new_files": [ { "old_id": N, "new_id": N }, ... ] }
      */
     inline auto ParseCopyResult(const QJsonValue& dataVal) -> std::optional<CopyResultDto> {
         if (!dataVal.isObject()) {
@@ -455,10 +455,10 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse delete result from envelope data.
+     * @brief 从信封数据解析删除结果
      *
      * @details
-     * Expected shape: data = { "deleted_count": N }
+     * 预期格式：data = { "deleted_count": N }
      */
     inline auto ParseDeleteResult(const QJsonValue& dataVal) -> std::optional<DeleteResultDto> {
         if (!dataVal.isObject()) {
@@ -473,7 +473,7 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse a single search result item from a JSON object.
+     * @brief 从 JSON 对象解析单个搜索结果条目
      */
     inline auto ParseSearchResultItem(const QJsonObject& obj) -> SearchResultItemDto {
         SearchResultItemDto item;
@@ -491,10 +491,10 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse search result from envelope data.
+     * @brief 从信封数据解析搜索结果
      *
      * @details
-     * Expected shape: data = { "items": [...], "pagination": { ... } }
+     * 预期格式：data = { "items": [...], "pagination": { ... } }
      */
     inline auto ParseSearchResult(const QJsonValue& dataVal) -> std::optional<SearchResultDto> {
         if (!dataVal.isObject()) {

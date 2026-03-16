@@ -48,7 +48,7 @@ namespace disk::services {
          */
         static void Initialize(std::string jwt_secret);
 
-        // Delete copy and move operations
+        // 禁用拷贝和移动操作
         TokenService(const TokenService&) = delete;
         TokenService& operator=(const TokenService&) = delete;
         TokenService(TokenService&&) = delete;

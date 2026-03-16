@@ -1,7 +1,7 @@
 /**
  * @file TrashService.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief High-level trash orchestration for the QML client
+ * @brief QML 客户端高级回收站编排服务
  *
  * @copyright Copyright (c) 2026
  *
@@ -24,14 +24,14 @@ namespace disk::qml::services {
     class TokenRefreshCoordinator;
 
     /**
-     * @brief Trash service for the QML client.
-     * @details Orchestrates trash-related business workflows:
-     *   - Listing trashed items with pagination
-     *   - Restoring trashed items in batch
-     *   - Permanently deleting trashed items in batch
-     *   - Clearing all trash
-     *   - Delegating network requests to api::TrashApi
-     *   - Mapping transport-level and envelope-level errors to user-friendly messages
+     * @brief QML 客户端回收站服务。
+     * @details 编排回收站相关业务流程：
+     *   - 分页列出回收站项目
+     *   - 批量恢复回收站项目
+     *   - 批量彻底删除回收站项目
+     *   - 清空回收站
+     *   - 委托 api::TrashApi 执行网络请求
+     *   - 将传输层和响应封装层错误映射为用户友好消息
      */
     class TrashService final {
     public:
@@ -43,11 +43,11 @@ namespace disk::qml::services {
         explicit TrashService(api::TrashApi* trashApi, TokenRefreshCoordinator* coordinator = nullptr);
 
         /**
-         * @brief Lists trashed items with pagination.
-         * @param page      Page number (1-based).
-         * @param pageSize  Items per page (1-100).
-         * @param ctx       QObject lifetime guard.
-         * @param cb        Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 分页列出回收站项目。
+         * @param page      页码（从 1 开始）。
+         * @param pageSize  每页条数（1-100）。
+         * @param ctx       QObject 生命周期守护。
+         * @param cb        接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto ListTrash(
             int page,
@@ -57,27 +57,27 @@ namespace disk::qml::services {
         ) -> void;
 
         /**
-         * @brief Restores trashed items.
-         * @details Validates that trashIds is non-empty before calling api::TrashApi::Restore.
-         * @param trashIds  List of trash item IDs to restore.
-         * @param ctx       QObject lifetime guard.
-         * @param cb        Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 恢复回收站项目。
+         * @details 调用 api::TrashApi::Restore 前验证 trashIds 非空。
+         * @param trashIds  要恢复的回收站项目 ID 列表。
+         * @param ctx       QObject 生命周期守护。
+         * @param cb        接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto RestoreItems(const QList<qint64>& trashIds, QObject* ctx, RestoreCallback cb) -> void;
 
         /**
-         * @brief Permanently deletes trashed items.
-         * @details Validates that trashIds is non-empty before calling api::TrashApi::Delete.
-         * @param trashIds  List of trash item IDs to permanently delete.
-         * @param ctx       QObject lifetime guard.
-         * @param cb        Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 彻底删除回收站项目。
+         * @details 调用 api::TrashApi::Delete 前验证 trashIds 非空。
+         * @param trashIds  要彻底删除的回收站项目 ID 列表。
+         * @param ctx       QObject 生命周期守护。
+         * @param cb        接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto DeleteItems(const QList<qint64>& trashIds, QObject* ctx, DeleteCallback cb) -> void;
 
         /**
-         * @brief Clears all trash (empties the trash).
-         * @param ctx  QObject lifetime guard.
-         * @param cb   Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 清空回收站（删除所有项目）。
+         * @param ctx  QObject 生命周期守护。
+         * @param cb   接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto ClearAll(QObject* ctx, ClearAllCallback cb) -> void;
 
@@ -86,7 +86,7 @@ namespace disk::qml::services {
         auto MapEnvelopeError(const models::ApiEnvelope& envelope) const -> QString;
 
         api::TrashApi* m_trash_api;
-        TokenRefreshCoordinator* m_coordinator{nullptr};
+        TokenRefreshCoordinator* m_coordinator{ nullptr };
     };
 
 } // namespace disk::qml::services

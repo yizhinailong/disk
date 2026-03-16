@@ -8,10 +8,11 @@
  */
 #include "TrashViewModel.hpp"
 
-#include <models/TrashListModel.hpp>
-#include <services/TrashService.hpp>
 #include <QDateTime>
 #include <QtMath>
+
+#include <models/TrashListModel.hpp>
+#include <services/TrashService.hpp>
 
 namespace disk::qml::viewmodels {
 
@@ -36,7 +37,7 @@ namespace disk::qml::viewmodels {
         Q_ASSERT(!s_engine || s_engine == jsEngine);
         s_engine = jsEngine;
 
-        // C++ side owns the instance; prevent engine from deleting it.
+        // C++ 端拥有实例所有权；防止引擎删除它。
         QJSEngine::setObjectOwnership(s_instance, QJSEngine::CppOwnership);
         return s_instance;
     }
@@ -268,7 +269,7 @@ namespace disk::qml::viewmodels {
                     return;
                 }
 
-                // Map DTOs to model data
+                // 将 DTO 映射到模型数据
                 QVector<models::TrashListItemData> items;
                 items.reserve(result->items.size());
                 for (const auto& dto : result->items) {
@@ -286,7 +287,7 @@ namespace disk::qml::viewmodels {
 
                 m_trash_list_model->ResetItems(items);
 
-                // Update pagination
+                // 更新分页
                 const auto& pag = result->pagination;
                 if (m_current_page != pag.page) {
                     m_current_page = pag.page;
@@ -303,7 +304,6 @@ namespace disk::qml::viewmodels {
             }
         );
     }
-
 
     // ==================== Date Helpers ====================
 

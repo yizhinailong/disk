@@ -1,7 +1,7 @@
 /**
  * @file ApiClient.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief ApiClient implementation
+ * @brief ApiClient 实现
  *
  * @copyright Copyright (c) 2026
  *
@@ -17,11 +17,11 @@
 
 namespace disk::qml::api {
 
-    // ==================== Helpers ====================
+    // ==================== 辅助函数 ====================
 
     namespace {
 
-        /// Common reply handler shared by all request methods.
+        /// 所有请求方法共享的通用响应处理器。
         auto MakeReplyHandler(ApiReplyCallback cb) {
             return [cb = std::move(cb)](QRestReply& reply) {
                 cb(reply.hasError(), reply.errorString(), reply.httpStatus(), reply.readBody());
@@ -30,7 +30,7 @@ namespace disk::qml::api {
 
     } // anonymous namespace
 
-    // ==================== Ctor / Config ====================
+    // ==================== 构造函数 / 配置 ====================
 
     ApiClient::ApiClient(QObject* parent)
         : QObject(parent), m_nam(this), m_rest(&m_nam, this) {
@@ -46,7 +46,7 @@ namespace disk::qml::api {
         m_factory.setBearerToken(token.toUtf8());
     }
 
-    // ==================== POST ====================
+    // ==================== POST 请求 ====================
 
     auto ApiClient::PostJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void {
         auto req = m_factory.createRequest(path);
@@ -66,7 +66,7 @@ namespace disk::qml::api {
         m_rest.post(req, QJsonDocument(body), ctx, MakeReplyHandler(std::move(cb)));
     }
 
-    // ==================== POST Raw Bytes ====================
+    // ==================== POST 原始字节 ====================
 
     auto ApiClient::PostRaw(const QString& path, const QUrlQuery& query, const QByteArray& body, QObject* ctx, ApiReplyCallback cb) -> void {
         auto req = m_factory.createRequest(path, query);
@@ -74,7 +74,7 @@ namespace disk::qml::api {
         m_rest.sendCustomRequest(req, "POST", body, ctx, MakeReplyHandler(std::move(cb)));
     }
 
-    // ==================== GET ====================
+    // ==================== GET 请求 ====================
 
     auto ApiClient::Get(const QString& path, QObject* ctx, ApiReplyCallback cb) -> void {
         auto req = m_factory.createRequest(path);
@@ -99,7 +99,7 @@ namespace disk::qml::api {
         m_rest.get(req, ctx, MakeReplyHandler(std::move(cb)));
     }
 
-    // ==================== PUT ====================
+    // ==================== PUT 请求 ====================
 
     auto ApiClient::PutJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void {
         auto req = m_factory.createRequest(path);
@@ -119,7 +119,7 @@ namespace disk::qml::api {
         m_rest.put(req, QJsonDocument(body), ctx, MakeReplyHandler(std::move(cb)));
     }
 
-    // ==================== PATCH ====================
+    // ==================== PATCH 请求 ====================
 
     auto ApiClient::PatchJson(const QString& path, const QJsonObject& body, QObject* ctx, ApiReplyCallback cb) -> void {
         auto req = m_factory.createRequest(path);
@@ -139,7 +139,7 @@ namespace disk::qml::api {
         m_rest.patch(req, QJsonDocument(body), ctx, MakeReplyHandler(std::move(cb)));
     }
 
-    // ==================== DELETE ====================
+    // ==================== DELETE 请求 ====================
 
     auto ApiClient::Delete(const QString& path, QObject* ctx, ApiReplyCallback cb) -> void {
         auto req = m_factory.createRequest(path);
@@ -180,7 +180,7 @@ namespace disk::qml::api {
         m_rest.sendCustomRequest(req, "DELETE", jsonBody, ctx, MakeReplyHandler(std::move(cb)));
     }
 
-    // ==================== Streaming ====================
+    // ==================== 流式传输 ====================
 
     auto ApiClient::NetworkAccessManager() -> QNetworkAccessManager* {
         return &m_nam;

@@ -131,7 +131,7 @@ Item {
                             anchors.margins: 32
                             spacing: 16
 
-                            // Logo
+                            // 标志
                             Label {
                                 text: "Disk"
                                 font.pixelSize: 28

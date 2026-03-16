@@ -1,7 +1,7 @@
 /**
  * @file AuthService.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief AuthService implementation
+ * @brief AuthService 实现
  *
  * @copyright Copyright (c) 2026
  *
@@ -189,11 +189,11 @@ namespace disk::qml::services {
     }
 
     auto AuthService::MapTransportError(const QString& networkError) const -> QString {
-        // If we have a network error, treat it as already user-friendly and return as-is
+        // 如果有网络错误，视为已用户友好，原样返回
         if (!networkError.isEmpty()) {
             return networkError;
         }
-        // Generic fallback (shouldn't normally reach here)
+        // 通用后备（通常不应到达此处）
         return QStringLiteral("网络连接失败，请检查网络");
     }
 

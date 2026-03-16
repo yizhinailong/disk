@@ -19,7 +19,7 @@ namespace disk::filters {
 
     RateLimitFilter::RateLimitFilter()
         : m_redis_service(disk::services::RedisService::GetInstance()) {
-        // Initialize RedisService singleton if not already initialized
+        // 初始化 RedisService 单例（如果尚未初始化）
         disk::services::RedisService::Initialize(drogon::app().getRedisClient());
     }
 

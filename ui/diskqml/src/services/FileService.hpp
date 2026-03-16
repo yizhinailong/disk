@@ -1,7 +1,7 @@
 /**
  * @file FileService.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief High-level file orchestration for the QML client
+ * @brief QML 客户端高级文件编排服务
  *
  * @copyright Copyright (c) 2026
  *
@@ -24,14 +24,14 @@ namespace disk::qml::services {
     class TokenRefreshCoordinator;
 
     /**
-     * @brief File service for the QML client.
-     * @details Orchestrates file-related business workflows:
-     *   - Listing files/folders with pagination and filters
-     *   - Renaming files/folders with input validation
-     *   - Moving, copying, and deleting files/folders in batch
-     *   - Searching files with keyword and filters
-     *   - Delegating network requests to api::FileApi
-     *   - Mapping transport-level and envelope-level errors to user-friendly messages
+     * @brief QML 客户端文件服务。
+     * @details 编排文件相关业务流程：
+     *   - 分页和过滤列出文件/文件夹
+     *   - 带输入验证的文件/文件夹重命名
+     *   - 批量移动、复制和删除文件/文件夹
+     *   - 按关键词和过滤条件搜索文件
+     *   - 委托 api::FileApi 执行网络请求
+     *   - 将传输层和响应封装层错误映射为用户友好消息
      */
     class FileService final {
     public:
@@ -45,15 +45,15 @@ namespace disk::qml::services {
         explicit FileService(api::FileApi* fileApi, TokenRefreshCoordinator* coordinator = nullptr);
 
         /**
-         * @brief Lists files and folders in a given parent folder.
-         * @param parentId   Parent folder ID (0 = root).
-         * @param page       Page number (1-based).
-         * @param pageSize   Items per page (1-100).
-         * @param sortBy     Sort field (name|size|created_at|updated_at).
-         * @param sortOrder  Sort direction (asc|desc).
-         * @param type       Filter type (all|file|folder).
-         * @param ctx        QObject lifetime guard.
-         * @param cb         Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 列出指定父文件夹中的文件和文件夹。
+         * @param parentId   父文件夹 ID（0 = 根目录）。
+         * @param page       页码（从 1 开始）。
+         * @param pageSize   每页条数（1-100）。
+         * @param sortBy     排序字段（name|size|created_at|updated_at）。
+         * @param sortOrder  排序方向（asc|desc）。
+         * @param type       过滤类型（all|file|folder）。
+         * @param ctx        QObject 生命周期守护。
+         * @param cb         接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto ListFiles(
             qint64 parentId,
@@ -67,54 +67,54 @@ namespace disk::qml::services {
         ) -> void;
 
         /**
-         * @brief Renames a file or folder.
-         * @details Validates the new name locally before calling api::FileApi::Rename.
-         * @param fileId   File/folder ID (positive integer).
-         * @param newName  New name (must not be empty or whitespace-only).
-         * @param ctx      QObject lifetime guard.
-         * @param cb       Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 重命名文件或文件夹。
+         * @details 调用 api::FileApi::Rename 前本地验证新名称。
+         * @param fileId   文件/文件夹 ID（正整数）。
+         * @param newName  新名称（不能为空或纯空白）。
+         * @param ctx      QObject 生命周期守护。
+         * @param cb       接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto RenameFile(qint64 fileId, const QString& newName, QObject* ctx, RenameCallback cb) -> void;
 
         /**
-         * @brief Moves files/folders to a target folder.
-         * @details Validates that fileIds is non-empty before calling api::FileApi::Move.
-         * @param fileIds         List of file/folder IDs to move.
-         * @param targetFolderId  Destination folder ID (0 = root).
-         * @param ctx             QObject lifetime guard.
-         * @param cb              Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 移动文件/文件夹到目标文件夹。
+         * @details 调用 api::FileApi::Move 前验证 fileIds 非空。
+         * @param fileIds         要移动的文件/文件夹 ID 列表。
+         * @param targetFolderId  目标文件夹 ID（0 = 根目录）。
+         * @param ctx             QObject 生命周期守护。
+         * @param cb              接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto MoveFiles(const QList<qint64>& fileIds, qint64 targetFolderId, QObject* ctx, MoveCallback cb) -> void;
 
         /**
-         * @brief Copies files/folders to a target folder.
-         * @details Validates that fileIds is non-empty before calling api::FileApi::Copy.
-         * @param fileIds         List of file/folder IDs to copy.
-         * @param targetFolderId  Destination folder ID (0 = root).
-         * @param ctx             QObject lifetime guard.
-         * @param cb              Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 复制文件/文件夹到目标文件夹。
+         * @details 调用 api::FileApi::Copy 前验证 fileIds 非空。
+         * @param fileIds         要复制的文件/文件夹 ID 列表。
+         * @param targetFolderId  目标文件夹 ID（0 = 根目录）。
+         * @param ctx             QObject 生命周期守护。
+         * @param cb              接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto CopyFiles(const QList<qint64>& fileIds, qint64 targetFolderId, QObject* ctx, CopyCallback cb) -> void;
 
         /**
-         * @brief Soft-deletes files/folders (moves to trash).
-         * @details Validates that fileIds is non-empty before calling api::FileApi::Delete.
-         * @param fileIds  List of file/folder IDs to delete.
-         * @param ctx      QObject lifetime guard.
-         * @param cb       Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 软删除文件/文件夹（移至回收站）。
+         * @details 调用 api::FileApi::Delete 前验证 fileIds 非空。
+         * @param fileIds  要删除的文件/文件夹 ID 列表。
+         * @param ctx      QObject 生命周期守护。
+         * @param cb       接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto DeleteFiles(const QList<qint64>& fileIds, QObject* ctx, DeleteCallback cb) -> void;
 
         /**
-         * @brief Searches files by keyword.
-         * @details Validates the keyword locally before calling api::FileApi::Search.
-         * @param keyword   Search keyword (required, must not be empty).
-         * @param type      Filter type (all|file|folder).
-         * @param folderId  Scope to folder (-1 = global search).
-         * @param page      Page number (1-based).
-         * @param pageSize  Items per page (1-100).
-         * @param ctx       QObject lifetime guard.
-         * @param cb        Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 按关键词搜索文件。
+         * @details 调用 api::FileApi::Search 前本地验证关键词。
+         * @param keyword   搜索关键词（必填，不能为空）。
+         * @param type      过滤类型（all|file|folder）。
+         * @param folderId  搜索范围（-1 = 全局搜索）。
+         * @param page      页码（从 1 开始）。
+         * @param pageSize  每页条数（1-100）。
+         * @param ctx       QObject 生命周期守护。
+         * @param cb        接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto SearchFiles(
             const QString& keyword,
@@ -127,11 +127,11 @@ namespace disk::qml::services {
         ) -> void;
 
         /**
-         * @brief Gets recent files (sorted by updated_at desc).
-         * @details Calls ListFiles with sort_by=updated_at, sort_order=desc.
-         * @param limit    Maximum number of files to return (1-100, default 10).
-         * @param ctx      QObject lifetime guard.
-         * @param cb       Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 获取最近文件（按 updated_at 降序）。
+         * @details 调用 ListFiles，sort_by=updated_at，sort_order=desc。
+         * @param limit    返回的最大文件数（1-100，默认 10）。
+         * @param ctx      QObject 生命周期守护。
+         * @param cb       接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto GetRecentFiles(
             int limit,
@@ -144,7 +144,7 @@ namespace disk::qml::services {
         auto MapEnvelopeError(const models::ApiEnvelope& envelope) const -> QString;
 
         api::FileApi* m_file_api;
-        TokenRefreshCoordinator* m_coordinator{nullptr};
+        TokenRefreshCoordinator* m_coordinator{ nullptr };
     };
 
 } // namespace disk::qml::services

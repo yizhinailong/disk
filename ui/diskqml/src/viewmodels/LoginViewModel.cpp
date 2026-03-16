@@ -66,7 +66,7 @@ namespace disk::qml::viewmodels {
         SetLoading(true);
         SetErrorMessage(QString{});
 
-        // Context object prevents callback invocation if LoginViewModel is destroyed
+        // 上下文对象防止 LoginViewModel 销毁时回调被调用
         auto* ctx = new QObject(this);
 
         m_auth_service->Login(
@@ -74,7 +74,7 @@ namespace disk::qml::viewmodels {
             m_password,
             ctx,
             [this, ctx](std::optional<models::LoginResultDto> result, QString errorMessage) {
-                // Clean up context object
+                // 清理上下文对象
                 ctx->deleteLater();
 
                 SetLoading(false);

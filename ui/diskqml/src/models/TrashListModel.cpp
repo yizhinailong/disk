@@ -1,7 +1,7 @@
 /**
  * @file TrashListModel.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QAbstractListModel implementation for trash items
+ * @brief 回收站项的 QAbstractListModel 实现
  *
  * @copyright Copyright (c) 2026
  */
@@ -13,11 +13,11 @@ namespace disk::qml::models {
     TrashListModel::TrashListModel(QObject* parent)
         : QAbstractListModel(parent) {}
 
-    // ==================== QAbstractListModel interface ====================
+    // ==================== QAbstractListModel 接口 ====================
 
     auto TrashListModel::rowCount(const QModelIndex& parent) const -> int {
         if (parent.isValid()) {
-            return 0; // flat list — no children
+            return 0; // 扁平列表 —— 无子项
         }
         return static_cast<int>(m_items.size());
     }
@@ -58,7 +58,7 @@ namespace disk::qml::models {
         return roles;
     }
 
-    // ==================== Public API ====================
+    // ==================== 公共 API ====================
 
     auto TrashListModel::Count() const -> int {
         return static_cast<int>(m_items.size());

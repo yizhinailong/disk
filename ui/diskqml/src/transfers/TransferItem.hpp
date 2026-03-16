@@ -101,7 +101,7 @@ namespace disk::qml::transfers {
             item.fileName = obj.value("fileName").toString();
             item.totalBytes = static_cast<qint64>(obj.value("totalBytes").toDouble(0));
             item.doneBytes = static_cast<qint64>(obj.value("doneBytes").toDouble(0));
-            item.status = TransferStatus::Paused; // Always rehydrate as Paused
+            item.status = TransferStatus::Paused; // 始终恢复为 Paused 状态
             item.speed = 0;
             item.eta = 0;
             item.error = obj.value("error").toString();

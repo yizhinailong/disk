@@ -1,7 +1,7 @@
 /**
  * @file ConfigStore.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief ConfigStore implementation
+ * @brief ConfigStore 实现
  *
  * @copyright Copyright (c) 2026
  *
@@ -53,14 +53,15 @@ namespace disk::qml::utils {
         m_settings.endGroup();
     }
 
-    // ==================== Downloads ====================
+    // ==================== 下载 ====================
 
     auto ConfigStore::DownloadDir() const -> QString {
         m_settings.beginGroup("transfers");
         const QString dir = m_settings.value(
-            "downloadDir",
-            QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)
-        ).toString();
+                                          "downloadDir",
+                                          QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)
+        )
+                                .toString();
         m_settings.endGroup();
         return dir;
     }
@@ -71,7 +72,7 @@ namespace disk::qml::utils {
         m_settings.endGroup();
     }
 
-    // ==================== UI Preferences ====================
+    // ==================== UI 偏好设置 ====================
 
     auto ConfigStore::AutoStart() const -> bool {
         m_settings.beginGroup("ui");

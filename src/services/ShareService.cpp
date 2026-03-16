@@ -45,7 +45,7 @@ namespace disk::share {
           m_redis_client(std::move(redis_client)),
           m_redis_service(disk::services::RedisService::GetInstance()),
           m_jwt_secret(std::move(jwt_secret)) {
-        // Initialize RedisService singleton if not already initialized
+        // 初始化 RedisService 单例（如果尚未初始化）
         disk::services::RedisService::Initialize(m_redis_client);
         LOG_DEBUG << "ShareService initialization completed";
     }

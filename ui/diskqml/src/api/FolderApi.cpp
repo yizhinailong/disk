@@ -1,7 +1,7 @@
 /**
  * @file FolderApi.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief FolderApi implementation
+ * @brief FolderApi 实现
  *
  * @copyright Copyright (c) 2026
  *

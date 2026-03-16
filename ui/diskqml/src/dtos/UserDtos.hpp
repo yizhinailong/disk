@@ -1,7 +1,7 @@
 /**
  * @file UserDtos.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief User profile & storage response DTOs and JSON parsing helpers for the QML client
+ * @brief 用户资料与存储响应数据传输对象及 JSON 解析辅助函数
  *
  * @copyright Copyright (c) 2026
  *
@@ -20,14 +20,14 @@
 
 namespace disk::qml::models {
 
-    // ==================== User Profile ====================
+    // ==================== 用户资料 ====================
 
     /**
-     * @brief User profile data.
+     * @brief 用户资料数据
      *
      * @details
-     * Mirrors backend UserProfileResponse.
-     * Contains user identity and basic storage statistics.
+     * 映射后端 UserProfileResponse。
+     * 包含用户身份信息和基本存储统计。
      */
     struct UserProfileDto {
         quint64 id{};
@@ -43,23 +43,23 @@ namespace disk::qml::models {
         QString updatedAt;
     };
 
-    // ==================== Storage Statistics ====================
+    // ==================== 存储统计 ====================
 
     /**
-     * @brief A single storage category entry.
+     * @brief 单个存储分类条目
      */
     struct StorageCategoryDto {
-        QString type; ///< "document", "image", "video", "audio", "other"
+        QString type; ///< "document"（文档）、"image"（图片）、"video"（视频）、"audio"（音频）、"other"（其他）
         quint64 size{};
         int count{};
     };
 
     /**
-     * @brief Storage usage statistics.
+     * @brief 存储使用统计
      *
      * @details
-     * Mirrors backend StorageResponse.
-     * Contains detailed storage usage breakdown by category.
+     * 映射后端 StorageResponse。
+     * 包含按分类的详细存储使用明细。
      */
     struct StorageDto {
         quint64 used{};
@@ -70,13 +70,13 @@ namespace disk::qml::models {
         QVector<StorageCategoryDto> categories;
     };
 
-    // ==================== Update Profile ====================
+    // ==================== 更新资料 ====================
 
     /**
-     * @brief Result of updating user profile.
+     * @brief 更新用户资料结果
      *
      * @details
-     * Returns the updated profile data on success.
+     * 成功时返回更新后的资料数据。
      */
     struct UpdateProfileResultDto {
         QString nickname;
@@ -84,25 +84,25 @@ namespace disk::qml::models {
         QString updatedAt;
     };
 
-    // ==================== Change Password ====================
+    // ==================== 修改密码 ====================
 
     /**
-     * @brief Result of changing password.
+     * @brief 修改密码结果
      *
      * @details
-     * Simple success indicator; no data returned on success.
+     * 简单的成功指示器；成功时不返回数据。
      */
     struct ChangePasswordResultDto {
         bool success{ false };
     };
 
-    // ==================== JSON Parsing Helpers ====================
+    // ==================== JSON 解析辅助函数 ====================
 
     /**
-     * @brief Parse user profile from envelope data.
+     * @brief 从信封数据解析用户资料
      *
      * @details
-     * Expected shape: data = { "user": { "id": N, "username": "...", ... } }
+     * 预期格式：data = { "user": { "id": N, "username": "...", ... } }
      */
     inline auto ParseUserProfile(const QJsonValue& dataVal) -> std::optional<UserProfileDto> {
         if (!dataVal.isObject()) {
@@ -137,7 +137,7 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse a single storage category from JSON object.
+     * @brief 从 JSON 对象解析单个存储分类
      */
     inline auto ParseStorageCategory(const QJsonObject& obj) -> StorageCategoryDto {
         StorageCategoryDto cat;
@@ -148,10 +148,10 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse storage statistics from envelope data.
+     * @brief 从信封数据解析存储统计
      *
      * @details
-     * Expected shape: data = { "storage": { "used": N, "quota": N, "percentage": F, ... } }
+     * 预期格式：data = { "storage": { "used": N, "quota": N, "percentage": F, ... } }
      */
     inline auto ParseStorage(const QJsonValue& dataVal) -> std::optional<StorageDto> {
         if (!dataVal.isObject()) {
@@ -188,11 +188,11 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse update profile result from envelope data.
+     * @brief 从信封数据解析更新资料结果
      *
      * @details
-     * Expected shape: data = { "nickname": "...", "avatar": "...", "updated_at": "..." }
-     * Or: data = { "user": { "nickname": "...", "avatar": "...", "updated_at": "..." } }
+     * 预期格式：data = { "nickname": "...", "avatar": "...", "updated_at": "..." }
+     * 或：data = { "user": { "nickname": "...", "avatar": "...", "updated_at": "..." } }
      */
     inline auto ParseUpdateProfileResult(const QJsonValue& dataVal) -> std::optional<UpdateProfileResultDto> {
         if (!dataVal.isObject()) {
@@ -201,7 +201,7 @@ namespace disk::qml::models {
 
         const QJsonObject obj = dataVal.toObject();
 
-        // Try direct fields first
+        // 优先尝试直接字段
         if (obj.contains(QLatin1String("nickname")) || obj.contains(QLatin1String("updated_at"))) {
             UpdateProfileResultDto result;
             result.nickname = obj.value(QLatin1String("nickname")).toString();
@@ -210,7 +210,7 @@ namespace disk::qml::models {
             return result;
         }
 
-        // Try nested "user" object
+        // 尝试嵌套的 "user" 对象
         const QJsonValue userVal = obj.value(QLatin1String("user"));
         if (userVal.isObject()) {
             const QJsonObject userObj = userVal.toObject();
@@ -221,18 +221,18 @@ namespace disk::qml::models {
             return result;
         }
 
-        // Success without specific data
+        // 成功但无具体数据
         return UpdateProfileResultDto{};
     }
 
     /**
-     * @brief Parse change password result from envelope data.
+     * @brief 从信封数据解析修改密码结果
      *
      * @details
-     * Expected shape: data = {} (empty object on success)
+     * 预期格式：data = {}（成功时为空对象）
      */
     inline auto ParseChangePasswordResult(const QJsonValue& dataVal) -> std::optional<ChangePasswordResultDto> {
-        // Any non-null data indicates success
+        // 任何非空数据表示成功
         ChangePasswordResultDto result;
         result.success = true;
         return result;

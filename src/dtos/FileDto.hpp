@@ -50,7 +50,7 @@
 
 namespace disk::file {
 
-    // ==================== FileItem (shared response component) ====================
+    // ==================== FileItem（共享响应组件）====================
 
     /**
      * @brief 文件项数据
@@ -302,7 +302,7 @@ namespace disk::file {
             return file_size > 0;
         }
 
-        /// 验证文件哈希 (32-char lowercase hex MD5)
+        /// 验证文件哈希（32字符小写十六进制 MD5）
         [[nodiscard]]
         auto ValidateFileHash() const -> bool {
             if (file_hash.length() != 32) {
@@ -464,7 +464,7 @@ namespace disk::file {
         }
 
     private:
-        /// 验证分片哈希 (32-char lowercase hex MD5)
+        /// 验证分片哈希（32字符小写十六进制 MD5）
         [[nodiscard]]
         auto ValidateChunkHash() const -> bool {
             if (chunk_hash.length() != 32) {
@@ -750,13 +750,13 @@ namespace disk::file {
         uint64_t id;
         std::string name;
         std::string type; ///< "file" 或 "folder"
-        // For files:
+        // 对于文件：文件特有字段
         uint64_t size{ 0 };
         std::string mime_type;
         std::string hash;
-        // For folders:
+        // 对于文件夹：文件夹特有字段
         int item_count{ 0 };
-        // Common:
+        // 公共：公共字段
         std::string created_at;
         std::string updated_at;
 
@@ -1613,7 +1613,7 @@ namespace disk::file {
         }
     };
 
-    // ==================== DownloadInfo (Internal Service Use) ====================
+    // ==================== DownloadInfo（内部服务使用）====================
 
     /**
      * @brief 下载信息结构（内部服务使用）
@@ -1626,7 +1626,7 @@ namespace disk::file {
         uint64_t file_id{ 0 };
         std::string filename;
         uint64_t file_size{ 0 };
-        std::string file_hash;    ///< MD5 hash
+        std::string file_hash;    ///< MD5 哈希
         std::string mime_type;
         std::string storage_path; ///< 文件物理存储路径
         bool supports_range{ true };

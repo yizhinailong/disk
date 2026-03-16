@@ -1,7 +1,7 @@
 /**
  * @file PlatformIntegration.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief Platform-specific integration implementation
+ * @brief 平台特定集成实现
  *
  * @copyright Copyright (c) 2026
  *
@@ -190,21 +190,21 @@ namespace disk::qml::platform {
 
     auto PlatformIntegration::HandleCloseRequest() -> bool {
         if (!m_impl->m_minimize_to_tray_enabled) {
-            return false; // Should close normally
+            return false; // 应正常关闭
         }
 
         if (!m_impl->m_main_window) {
-            return false; // No window to hide
+            return false; // 没有可隐藏的窗口
         }
 
-        // Ensure tray icon is visible when hiding to tray
+        // 隐藏到托盘时确保托盘图标可见
         if (m_impl->m_tray_icon) {
             m_impl->m_tray_icon->show();
         }
 
         m_impl->m_main_window->hide();
         qInfo() << "[PlatformIntegration] Window hidden to tray";
-        return true; // Handled - don't close
+        return true; // 已处理，不关闭窗口
     }
 
     auto PlatformIntegration::SetMainWindow(QWindow* window) -> void {

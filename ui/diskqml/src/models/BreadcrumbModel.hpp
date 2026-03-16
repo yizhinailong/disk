@@ -1,16 +1,15 @@
 /**
  * @file BreadcrumbModel.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief QAbstractListModel for breadcrumb navigation path
+ * @brief 面包屑导航路径的 QAbstractListModel
  *
  * @copyright Copyright (c) 2026
  *
  * @details
- * Pure data model — no business logic, no API calls.
- * ViewModels populate this model via ResetPath().
+ * 纯数据模型 —— 无业务逻辑，无 API 调用。
+ * ViewModel 通过 ResetPath() 填充此模型。
  *
- * Roles are aligned to the backend BreadcrumbItem DTO
- * (src/dtos/FolderDto.hpp).
+ * 角色与后端 BreadcrumbItem DTO (src/dtos/FolderDto.hpp) 对齐。
  */
 
 #pragma once
@@ -24,11 +23,11 @@
 namespace disk::qml::models {
 
     /**
-     * @brief Data struct for a single breadcrumb path segment.
+     * @brief 单个面包屑路径段的数据结构。
      *
      * @details
-     * Maps 1:1 to the backend BreadcrumbItem DTO.
-     * id == 0 represents the root directory.
+     * 与后端 BreadcrumbItem DTO 一一映射。
+     * id == 0 表示根目录。
      */
     struct BreadcrumbItemData {
         quint64 id{ 0 };
@@ -36,28 +35,27 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief QAbstractListModel exposing breadcrumb path items to QML.
+     * @brief 向 QML 暴露面包屑路径项的 QAbstractListModel。
      *
      * @details
-     * Provides the following roles for QML delegates:
-     *   - folderId, folderName
+     * 为 QML 代理提供以下角色：
+     *   - folderId（文件夹ID）, folderName（文件夹名称）
      *
-     * Populate via ResetPath(). The model does NOT call any APIs;
-     * a ViewModel is responsible for fetching data and calling ResetPath().
+     * 通过 ResetPath() 填充。模型不调用任何 API；
+     * ViewModel 负责获取数据并调用 ResetPath()。
      *
-     * The path always starts with the root folder and ends with the
-     * currently viewed folder.
+     * 路径始终从根文件夹开始，以当前查看的文件夹结束。
      */
     class BreadcrumbModel : public QAbstractListModel {
         Q_OBJECT
         QML_ELEMENT
 
-        /// Number of path segments currently in the model.
+        /// 当前模型中的路径段数量。
         Q_PROPERTY(int count READ Count NOTIFY countChanged)
 
     public:
         /**
-         * @brief Custom data roles exposed to QML via roleNames().
+         * @brief 通过 roleNames() 向 QML 暴露的自定义数据角色。
          */
         enum Roles {
             FolderIdRole = Qt::UserRole + 1,
@@ -68,42 +66,41 @@ namespace disk::qml::models {
         explicit BreadcrumbModel(QObject* parent = nullptr);
         ~BreadcrumbModel() override = default;
 
-        // ==================== QAbstractListModel interface ====================
+        // ==================== QAbstractListModel 接口 ====================
 
         [[nodiscard]] auto rowCount(const QModelIndex& parent = QModelIndex()) const -> int override;
         [[nodiscard]] auto data(const QModelIndex& index, int role = Qt::DisplayRole) const
             -> QVariant override;
         [[nodiscard]] auto roleNames() const -> QHash<int, QByteArray> override;
 
-        // ==================== Public API ====================
+        // ==================== 公共 API ====================
 
         [[nodiscard]] auto Count() const -> int;
 
         /**
-         * @brief Replace the entire breadcrumb path with @p path.
+         * @brief 用 @p path 替换整个面包屑路径。
          *
          * @details
-         * Emits beginResetModel / endResetModel so that bound QML views
-         * refresh completely.
+         * 发射 beginResetModel / endResetModel 信号，使绑定的 QML 视图完全刷新。
          */
         Q_INVOKABLE void ResetPath(const QVector<BreadcrumbItemData>& path);
 
         /**
-         * @brief Remove all path segments from the model.
+         * @brief 从模型中移除所有路径段。
          */
         Q_INVOKABLE void Clear();
 
         /**
-         * @brief Get the folder ID of the last (current) breadcrumb item.
+         * @brief 获取最后一个（当前）面包屑项的文件夹 ID。
          *
-         * @return 0 if the model is empty (root directory).
+         * @return 如果模型为空（根目录），返回 0。
          */
         [[nodiscard]] auto CurrentFolderId() const -> quint64;
 
         /**
-         * @brief Retrieve the item at @p row (bounds-checked).
+         * @brief 获取 @p row 处的项（带边界检查）。
          *
-         * @return std::nullopt when @p row is out of range.
+         * @return 当 @p row 超出范围时返回 std::nullopt。
          */
         [[nodiscard]] auto ItemAt(int row) const -> std::optional<BreadcrumbItemData>;
 

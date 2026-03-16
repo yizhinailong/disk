@@ -96,65 +96,65 @@ namespace disk::qml::transfers {
         void finished(const QString& transferId, bool success, const QString& error);
 
     private:
-        // ----- Upload flow steps -----
+        // ----- 上传流程步骤 -----
 
-        /// Compute MD5 hash of the entire file (async-friendly: called from Start).
+        /// 计算整个文件的 MD5 哈希（异步友好：从 Start 调用）。
         void ComputeFileHash();
 
         /// POST /api/file/upload/init
         void SendInit();
 
-        /// Process the init response (may be instant upload or normal).
+        /// 处理初始化响应（可能是秒传或正常上传）。
         void HandleInitResponse(bool netErr, const QString& errStr, int status, const QByteArray& body);
 
-        /// Send the next queued chunk.
+        /// 发送下一个排队的分片。
         void SendNextChunk();
 
-        /// Read a chunk from the file and compute its MD5 hash.
+        /// 从文件读取分片并计算其 MD5 哈希。
         auto ReadChunk(quint32 chunkIndex) -> QPair<QByteArray, QString>;
 
-        /// Process a chunk upload response.
+        /// 处理分片上传响应。
         void HandleChunkResponse(quint32 chunkIndex, bool netErr, const QString& errStr, int status, const QByteArray& body);
 
         /// POST /api/file/upload/complete
         void SendComplete();
 
-        /// Process the complete response.
+        /// 处理完成响应。
         void HandleCompleteResponse(bool netErr, const QString& errStr, int status, const QByteArray& body);
 
         /// DELETE /api/file/upload/{upload_id}
         void SendCancel();
 
-        // ----- Progress / state helpers -----
+        // ----- 进度/状态辅助函数 -----
 
         void UpdateProgress(qint64 doneBytes);
         void SetFailed(const QString& error);
         void SetCompleted();
         void SetPaused();
 
-        // ----- Data -----
+        // ----- 数据 -----
 
         QString m_file_path;
         quint64 m_parent_id{ 0 };
         api::ApiClient* m_api_client{ nullptr };
         TransferQueueModel* m_queue_model{ nullptr };
 
-        // Transfer state
+        // 传输状态
         TransferItem m_transfer_item;
         QFile m_file;
-        QString m_file_hash; ///< MD5 hex digest of entire file
-        QString m_upload_id; ///< Backend-assigned upload ID
+        QString m_file_hash; ///< 整个文件的 MD5 十六进制摘要
+        QString m_upload_id; ///< 后端分配的上传 ID
         quint32 m_chunk_size{ 0 };
         quint32 m_total_chunks{ 0 };
         quint32 m_next_chunk{ 0 };
-        QVector<quint32> m_uploaded_chunks; ///< Already-uploaded indices (for resume)
+        QVector<quint32> m_uploaded_chunks; ///< 已上传的分片索引（用于断点续传）
 
-        // Control flags
+        // 控制标志
         bool m_paused{ false };
         bool m_cancelled{ false };
-        bool m_in_flight{ false }; ///< True when a network request is pending
+        bool m_in_flight{ false }; ///< 当网络请求待处理时为 true
 
-        // Speed/ETA tracking
+        // 速度/ETA 追踪
         QElapsedTimer m_speed_timer;
         qint64 m_bytes_at_speed_start{ 0 };
 

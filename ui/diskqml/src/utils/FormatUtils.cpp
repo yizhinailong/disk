@@ -1,7 +1,7 @@
 /**
  * @file FormatUtils.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief Implementation of centralized formatting utilities
+ * @brief 集中格式化工具实现
  *
  * @copyright Copyright (c) 2026
  *
@@ -26,28 +26,28 @@ namespace disk::qml::utils {
     auto FormatUtils::create(QQmlEngine* qmlEngine, QJSEngine* jsEngine) -> FormatUtils* {
         Q_UNUSED(jsEngine)
 
-        // Ensure instance was set via SetInstance() before QML engine access
+        // 确保 QML 引擎访问前已通过 SetInstance() 设置实例
         Q_ASSERT(s_instance != nullptr);
 
-        // Ensure only one QML engine accesses this singleton
+        // 确保只有一个 QML 引擎访问此单例
         if (s_engine != nullptr && s_engine != jsEngine) {
             Q_ASSERT_X(false, "FormatUtils::create", "Only one QJSEngine may access this singleton");
         }
         s_engine = jsEngine;
 
-        // Set ownership to C++ side to prevent QML from deleting it
+        // 设置所有权为 C++ 端，防止 QML 删除它
         QQmlEngine::setObjectOwnership(s_instance, QQmlEngine::CppOwnership);
 
         return s_instance;
     }
 
     auto FormatUtils::formatSize(qint64 bytes) -> QString {
-        // Handle edge cases
+        // 处理边界情况
         if (bytes <= 0) {
             return QStringLiteral("0 B");
         }
 
-        // Use the same logic as SessionViewModel::FormatBytes
+        // 使用与 SessionViewModel::FormatBytes 相同的逻辑
         constexpr double kKB = 1024.0;
         constexpr double kMB = kKB * 1024.0;
         constexpr double kGB = kMB * 1024.0;
@@ -75,18 +75,18 @@ namespace disk::qml::utils {
             return QStringLiteral("-");
         }
 
-        // Truncate to first 10 chars: "2026-02-15"
-        // Input format: "2026-02-15T10:30:00Z" or "2026-02-15 10:30:00"
+        // 截取前 10 个字符："2026-02-15"
+        // 输入格式："2026-02-15T10:30:00Z" 或 "2026-02-15 10:30:00"
         return dateStr.left(10);
     }
 
     auto FormatUtils::fileIcon(const QString& fileType, const QString& mimeType) -> QString {
-        // Check folder first
+        // 优先检查文件夹
         if (fileType == QStringLiteral("folder")) {
             return QStringLiteral(u"\U0001F4C1"); // 📁
         }
 
-        // Check by MIME type
+        // 根据 MIME 类型检查
         if (mimeType.startsWith(QStringLiteral("image/"))) {
             return QStringLiteral(u"\U0001F5BC"); // 🖼️
         }
@@ -128,17 +128,17 @@ namespace disk::qml::utils {
             return QStringLiteral(u"\U0001F4BB"); // 💻
         }
 
-        // Default icon for unknown types
+        // 未知类型的默认图标
         return QStringLiteral(u"\U0001F4CE"); // 📎
     }
 
     auto FormatUtils::fileTypeLabel(const QString& fileType, const QString& mimeType) -> QString {
-        // Check folder first
+        // 优先检查文件夹
         if (fileType == QStringLiteral("folder")) {
             return QStringLiteral("文件夹");
         }
 
-        // Check by MIME type
+        // 根据 MIME 类型检查
         if (mimeType.startsWith(QStringLiteral("image/"))) {
             return QStringLiteral("图片");
         }
@@ -172,7 +172,7 @@ namespace disk::qml::utils {
             return QStringLiteral("压缩包");
         }
 
-        // Default label
+        // 默认标签
         return QStringLiteral("文件");
     }
 
@@ -183,7 +183,7 @@ namespace disk::qml::utils {
         if (permission == QStringLiteral("download")) {
             return QStringLiteral("可下载");
         }
-        // Return as-is for unknown permissions
+        // 未知权限原样返回
         return permission;
     }
 
@@ -197,7 +197,7 @@ namespace disk::qml::utils {
         if (status == QStringLiteral("cancelled")) {
             return QStringLiteral("已取消");
         }
-        // Return as-is for unknown statuses
+        // 未知状态原样返回
         return status;
     }
 

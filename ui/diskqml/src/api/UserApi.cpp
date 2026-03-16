@@ -1,7 +1,7 @@
 /**
  * @file UserApi.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief UserApi implementation
+ * @brief UserApi 实现
  *
  * @copyright Copyright (c) 2026
  *

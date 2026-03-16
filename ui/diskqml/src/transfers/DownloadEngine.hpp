@@ -1,22 +1,22 @@
 /**
  * @file DownloadEngine.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief Download engine: stream-to-disk via Range requests with pause/cancel/resume
+ * @brief 下载引擎: 通过 Range 请求流式下载到磁盘，支持暂停/取消/恢复
  *
  * @copyright Copyright (c) 2026
  *
  * @details
- * Drives a single file download:
- *  1. GET /api/file/download/{file_id}/info  → filename, size, hash, mime_type, supports_range
- *  2. GET /api/file/download/{file_id}       → stream QNetworkReply to a .part file
+ * 驱动单个文件下载:
+ *  1. GET /api/file/download/{file_id}/info  → 获取 filename, size, hash, mime_type, supports_range
+ *  2. GET /api/file/download/{file_id}       → 将 QNetworkReply 流式写入 .part 文件
  *
- * Supports:
- *  - Resume via Range: bytes=<offset>- header
- *  - Progress / speed / ETA reporting (via TransferItem fields)
- *  - Pause / Cancel operations
- *  - Finalise by renaming .part → final file on success
+ * 支持:
+ *  - 通过 Range: bytes=<offset>- 请求头恢复下载
+ *  - 进度/速度/ETA 报告（通过 TransferItem 字段）
+ *  - 暂停/取消操作
+ *  - 成功后通过重命名 .part → 最终文件完成下载
  *
- * Does NOT load the entire file into memory — data is streamed to disk as it arrives.
+ * 不会将整个文件加载到内存 — 数据在到达时直接流式写入磁盘。
  */
 
 #pragma once
@@ -37,7 +37,7 @@ namespace disk::qml::api {
 namespace disk::qml::transfers {
 
     /**
-     * @brief Info returned by the download-info endpoint.
+     * @brief 下载信息端点返回的元数据。
      */
     struct DownloadInfo {
         qint64 fileId{};
@@ -49,62 +49,62 @@ namespace disk::qml::transfers {
     };
 
     /**
-     * @brief Callback for DownloadInfo fetch.
-     * @param info  Present on success; std::nullopt on failure.
-     * @param error Human-readable error message (empty on success).
+     * @brief 下载信息获取回调。
+     * @param info  成功时包含信息；失败时为 std::nullopt。
+     * @param error 人类可读的错误消息（成功时为空）。
      */
     using DownloadInfoCallback = std::function<void(std::optional<DownloadInfo> info, QString error)>;
 
     /**
-     * @brief Callback for progress updates during download.
-     * @param item  Snapshot of the current TransferItem state (doneBytes, speed, eta, status).
+     * @brief 下载进度更新回调。
+     * @param item  当前 TransferItem 状态快照（doneBytes, speed, eta, status）。
      */
     using DownloadProgressCallback = std::function<void(const TransferItem& item)>;
 
     /**
-     * @brief Callback invoked when a download finishes (success, failure, or cancel).
-     * @param item  Final TransferItem state.
+     * @brief 下载完成时调用的回调（成功、失败或取消）。
+     * @param item  最终 TransferItem 状态。
      */
     using DownloadFinishedCallback = std::function<void(const TransferItem& item)>;
 
     /**
-     * @brief Engine for downloading a single file to disk with streaming, Range support, and pause/cancel.
+     * @brief 下载引擎: 单文件流式下载到磁盘，支持 Range 请求和暂停/取消。
      *
      * @details
-     * Workflow:
-     *  1. Call FetchInfo() to query download metadata.
-     *  2. Call Start() to begin streaming.
-     *  3. Optionally call Pause() / Resume() / Cancel() while running.
-     *  4. On success the .part file is renamed to the final name.
+     * 工作流程:
+     *  1. 调用 FetchInfo() 查询下载元数据。
+     *  2. 调用 Start() 开始流式下载。
+     *  3. 运行中可选调用 Pause() / Resume() / Cancel()。
+     *  4. 成功后 .part 文件被重命名为最终文件名。
      *
-     * The engine writes to `<destDir>/<filename>.part` during transfer.
-     * On successful completion, it renames to `<destDir>/<filename>`.
+     * 引擎在传输过程中写入 `<destDir>/<filename>.part`。
+     * 成功完成后重命名为 `<destDir>/<filename>`。
      *
-     * One DownloadEngine instance handles exactly one download. Create a new instance per file.
+     * 一个 DownloadEngine 实例只处理一个下载。每个文件创建一个新实例。
      */
     class DownloadEngine : public QObject {
         Q_OBJECT
 
     public:
         /**
-         * @brief Construct a DownloadEngine.
+         * @brief 构造 DownloadEngine。
          *
-         * @param client   Shared ApiClient (must outlive this engine). Used for auth headers and NAM.
-         * @param parent   QObject parent.
+         * @param client   共享的 ApiClient（必须比此引擎生命周期更长）。用于认证头和 NAM。
+         * @param parent   QObject 父对象。
          */
         explicit DownloadEngine(api::ApiClient* client, QObject* parent = nullptr);
         ~DownloadEngine() override;
 
         /**
-         * @brief Fetch download metadata from GET /api/file/download/{file_id}/info.
+         * @brief 从 GET /api/file/download/{file_id}/info 获取下载元数据。
          *
-         * @param fileId  Backend file ID.
-         * @param cb      Invoked once with the parsed info or an error.
+         * @param fileId  后端文件 ID。
+         * @param cb      获取完成后调用，传入解析后的信息或错误。
          */
         auto FetchInfo(qint64 fileId, DownloadInfoCallback cb) -> void;
 
         /**
-         * @brief Fetch download metadata for a shared file.
+         * @brief 获取分享文件的下载元数据。
          */
         auto FetchShareInfo(
             const QString& shareId,
@@ -114,7 +114,7 @@ namespace disk::qml::transfers {
         ) -> void;
 
         /**
-         * @brief Prepare the download with metadata for a shared file.
+         * @brief 为分享文件准备下载。
          */
         auto PrepareForShare(
             const DownloadInfo& info,
@@ -125,14 +125,14 @@ namespace disk::qml::transfers {
             DownloadFinishedCallback finishedCb
         ) -> void;
         /**
-         * @brief Prepare the download with metadata without starting the transfer.
+         * @brief 准备下载（使用元数据），但不立即开始传输。
          *
-         * @param info     Download metadata previously obtained via FetchInfo().
-         * @param destDir  Local directory where the file will be saved.
-         * @param progressCb  Called periodically with updated TransferItem state.
-         * @param finishedCb  Called once when the download completes, fails, or is cancelled.
+         * @param info     之前通过 FetchInfo() 获取的下载元数据。
+         * @param destDir  文件保存的本地目录。
+         * @param progressCb  周期性调用，传入更新后的 TransferItem 状态。
+         * @param finishedCb  下载完成、失败或取消时调用一次。
          *
-         * The item is created with Queued status. Call Begin() or Resume() to start.
+         * 项目以 Queued 状态创建。调用 Begin() 或 Resume() 开始下载。
          */
         auto Prepare(
             const DownloadInfo& info,
@@ -142,14 +142,14 @@ namespace disk::qml::transfers {
         ) -> void;
 
         /**
-         * @brief Start (or resume) downloading the file.
+         * @brief 开始（或恢复）下载文件。
          *
-         * @deprecated Use Prepare() + Begin() for queue-aware flow.
+         * @deprecated 请使用 Prepare() + Begin() 以支持队列感知流程。
          *
-         * @param info     Download metadata previously obtained via FetchInfo().
-         * @param destDir  Local directory where the file will be saved.
-         * @param progressCb  Called periodically with updated TransferItem state.
-         * @param finishedCb  Called once when the download completes, fails, or is cancelled.
+         * @param info     之前通过 FetchInfo() 获取的下载元数据。
+         * @param destDir  文件保存的本地目录。
+         * @param progressCb  周期性调用，传入更新后的 TransferItem 状态。
+         * @param finishedCb  下载完成、失败或取消时调用一次。
          */
         auto Start(
             const DownloadInfo& info,
@@ -159,63 +159,63 @@ namespace disk::qml::transfers {
         ) -> void;
 
         /**
-         * @brief Pause the current download. Can be resumed later via Resume().
+         * @brief 暂停当前下载。可通过 Resume() 恢复。
          */
         auto Pause() -> void;
 
         /**
-         * @brief Begin the actual network transfer.
+         * @brief 开始实际的网络传输。
          *
-         * Must be called after Prepare(). Sets status to Running and starts the request.
+         * 必须在 Prepare() 之后调用。将状态设为 Running 并开始请求。
          */
         auto Begin() -> void;
 
         /**
-         * @brief Resume a paused or queued download.
+         * @brief 恢复暂停或排队的下载。
          *
-         * Handles both Paused (mid-transfer) and Queued (prepared but not started) states.
+         * 同时处理 Paused（传输中暂停）和 Queued（已准备但未开始）状态。
          */
         auto Resume() -> void;
 
         /**
-         * @brief Cancel the current download. Deletes the .part file.
+         * @brief 取消当前下载。删除 .part 文件。
          */
         auto Cancel() -> void;
 
         /**
-         * @brief Get a read-only snapshot of the current transfer item state.
+         * @brief 获取当前传输项状态的只读快照。
          */
         [[nodiscard]] auto Item() const -> const TransferItem&;
 
-        /// @brief Get the backend file ID being downloaded.
+        /// @brief 获取正在下载的后端文件 ID。
         [[nodiscard]] auto FileId() const -> qint64 { return m_info.fileId; }
 
-        /// @brief Get the destination directory path.
+        /// @brief 获取目标目录路径。
         [[nodiscard]] auto DestPath() const -> const QString& { return m_dest_dir; }
 
     signals:
         /**
-         * @brief Emitted when the TransferItem state changes (progress, status, speed, eta).
+         * @brief 当 TransferItem 状态变化时发出（进度、状态、速度、ETA）。
          */
         void itemChanged(const TransferItem& item);
 
     private:
-        /// Initialize paths and item from stored info (called by Prepare)
+        /// 从存储的信息初始化路径和项目（由 Prepare 调用）
         auto InitializeFromInfo() -> void;
 
-        /// Start the network request (with optional Range header for resume)
+        /// 启动网络请求（恢复时可选使用 Range 请求头）
         auto StartRequest() -> void;
 
-        /// Finalize: rename .part → final, set status=Completed
+        /// 完成: 重命名 .part → 最终文件，设置 status=Completed
         auto Finalize() -> void;
 
-        /// Mark failure with error message
+        /// 标记失败并设置错误消息
         auto Fail(const QString& error) -> void;
 
-        /// Recalculate speed/eta from elapsed timer
+        /// 从计时器重新计算速度/ETA
         auto UpdateSpeedAndEta() -> void;
 
-        /// Emit progress update
+        /// 发出进度更新
         auto EmitProgress() -> void;
 
         // ----- Members -----
@@ -228,8 +228,8 @@ namespace disk::qml::transfers {
         QString m_share_id;
         QString m_share_token;
         bool m_is_share{ false };
-        QString m_part_path;  ///< Full path to the .part file
-        QString m_final_path; ///< Full path to the final file
+        QString m_part_path;  ///< .part 文件的完整路径
+        QString m_final_path; ///< 最终文件的完整路径
 
         QFile m_file;
         QNetworkReply* m_reply{ nullptr };
@@ -237,9 +237,9 @@ namespace disk::qml::transfers {
         DownloadProgressCallback m_progress_cb;
         DownloadFinishedCallback m_finished_cb;
 
-        QTimer m_speed_timer;       ///< Periodic speed/eta update (every 500ms)
-        QElapsedTimer m_elapsed;    ///< Tracks time since download started (for speed calc)
-        qint64 m_bytes_at_resume{}; ///< doneBytes at the start of current session (for speed calc)
+        QTimer m_speed_timer;       ///< 周期性速度/ETA 更新（每 500ms）
+        QElapsedTimer m_elapsed;    ///< 跟踪下载开始以来的时间（用于速度计算）
+        qint64 m_bytes_at_resume{}; ///< 当前会话开始时的 doneBytes（用于速度计算）
     };
 
 } // namespace disk::qml::transfers

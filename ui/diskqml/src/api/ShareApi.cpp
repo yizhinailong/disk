@@ -1,7 +1,7 @@
 /**
  * @file ShareApi.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief ShareApi implementation
+ * @brief ShareApi 实现
  *
  * @copyright Copyright (c) 2026
  *
@@ -23,7 +23,7 @@ namespace disk::qml::api {
         : m_client(client) {
     }
 
-    // ==================== Owner endpoints (JWT) ====================
+    // ==================== 所有者端点（JWT 认证） ====================
 
     auto ShareApi::Create(
         const QList<qint64>& fileIds,
@@ -145,7 +145,7 @@ namespace disk::qml::api {
         );
     }
 
-    // ==================== Public endpoint (no auth) ====================
+    // ==================== 公开端点（无需认证） ====================
 
     auto ShareApi::Access(
         const QString& shareId,
@@ -168,7 +168,7 @@ namespace disk::qml::api {
         );
     }
 
-    // ==================== Share-token endpoints (X-Share-Token) ====================
+    // ==================== 分享令牌端点（X-Share-Token） ====================
 
     auto ShareApi::Browse(
         const QString& shareId,

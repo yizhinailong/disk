@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setOrganizationName("Disk");
     QCoreApplication::setApplicationName("diskqml");
 
-    // --- Dependency construction (order matters) ---
+    // --- 依赖构造（顺序很重要） ---
     disk::qml::utils::ConfigStore configStore;
     disk::qml::services::TokenStore tokenStore;
     disk::qml::platform::PlatformIntegration platformIntegration;
@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
     disk::qml::api::ApiClient apiClient;
     apiClient.SetBaseUrl(configStore.ServerUrl());
 
-    // Inject stored JWT token into ApiClient on startup
+    // 启动时将存储的 JWT 令牌注入 ApiClient
     if (tokenStore.HasValidAccessToken()) {
         apiClient.SetBearerToken(tokenStore.AccessToken());
     }
@@ -115,7 +115,7 @@ int main(int argc, char* argv[]) {
     disk::qml::viewmodels::ShareViewModel shareViewModel(&shareService, &transfersViewModel);
     disk::qml::viewmodels::UserViewModel userViewModel(&userService);
 
-    // --- QML engine setup ---
+    // --- QML 引擎设置 ---
     disk::qml::viewmodels::LoginViewModel::SetInstance(&loginViewModel);
     disk::qml::viewmodels::RegisterViewModel::SetInstance(&registerViewModel);
     disk::qml::viewmodels::SessionViewModel::SetInstance(&sessionViewModel);

@@ -1,7 +1,7 @@
 /**
  * @file FolderService.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief FolderService implementation
+ * @brief FolderService 实现
  *
  * @copyright Copyright (c) 2026
  *
@@ -15,8 +15,7 @@
 namespace disk::qml::services {
 
     FolderService::FolderService(api::FolderApi* folderApi, TokenRefreshCoordinator* coordinator)
-        : m_folder_api(folderApi)
-        , m_coordinator(coordinator) {
+        : m_folder_api(folderApi), m_coordinator(coordinator) {
     }
 
     auto FolderService::CreateFolder(
@@ -69,37 +68,33 @@ namespace disk::qml::services {
                     return;
                 }
 
-                // Check for 40108 TokenExpired - retry once if coordinator available
+                // 检查 40108 TokenExpired - 如果协调器可用则重试一次
                 if (envelope.code == static_cast<int>(utils::ErrorCode::TokenExpired)) {
                     if (m_coordinator && !retried) {
                         retried = true;
-                        m_coordinator->HandleIfTokenExpired(envelope,
-                            [this, folderId, ctx, cb, envelope](bool success) {
-                                if (success) {
-                                    // Retry the request
-                                    m_folder_api->GetBreadcrumb(folderId, ctx,
-                                        [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
-                                            if (!retryNetworkError.isEmpty()) {
-                                                cb(std::nullopt, MapTransportError(retryNetworkError));
-                                                return;
-                                            }
-                                            if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
-                                                cb(std::nullopt, MapEnvelopeError(retryEnvelope));
-                                                return;
-                                            }
-                                            auto parsed = models::ParseBreadcrumbResult(retryEnvelope.data);
-                                            if (!parsed) {
-                                                cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
-                                                return;
-                                            }
-                                            cb(std::move(parsed), QString{});
-                                        }
-                                    );
-                                } else {
-                                    cb(std::nullopt, MapEnvelopeError(envelope));
-                                }
+                        m_coordinator->HandleIfTokenExpired(envelope, [this, folderId, ctx, cb, envelope](bool success) {
+                            if (success) {
+                                // 重试请求
+                                m_folder_api->GetBreadcrumb(folderId, ctx, [this, cb](models::ApiEnvelope retryEnvelope, QString retryNetworkError) {
+                                    if (!retryNetworkError.isEmpty()) {
+                                        cb(std::nullopt, MapTransportError(retryNetworkError));
+                                        return;
+                                    }
+                                    if (retryEnvelope.code != static_cast<int>(utils::ErrorCode::Success)) {
+                                        cb(std::nullopt, MapEnvelopeError(retryEnvelope));
+                                        return;
+                                    }
+                                    auto parsed = models::ParseBreadcrumbResult(retryEnvelope.data);
+                                    if (!parsed) {
+                                        cb(std::nullopt, QStringLiteral("服务器响应解析失败"));
+                                        return;
+                                    }
+                                    cb(std::move(parsed), QString{});
+                                });
+                            } else {
+                                cb(std::nullopt, MapEnvelopeError(envelope));
                             }
-                        );
+                        });
                         return;
                     }
                 }

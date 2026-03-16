@@ -1,7 +1,7 @@
 /**
  * @file ShareService.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief ShareService implementation
+ * @brief ShareService 实现
  *
  * @copyright Copyright (c) 2026
  *

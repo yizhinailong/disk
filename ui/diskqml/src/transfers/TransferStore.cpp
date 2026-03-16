@@ -58,7 +58,7 @@ namespace disk::qml::transfers {
     auto TransferStore::Load(QVector<TransferItem>& uploads, QVector<TransferItem>& downloads) -> bool {
         QFile file(m_file_path);
         if (!file.exists()) {
-            return true; // No persisted state is a valid (empty) state
+            return true; // 没有持久化状态是有效的（空）状态
         }
         if (!file.open(QIODevice::ReadOnly)) {
             return false;

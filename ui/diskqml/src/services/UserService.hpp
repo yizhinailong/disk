@@ -1,7 +1,7 @@
 /**
  * @file UserService.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief High-level user domain orchestration for the QML client
+ * @brief QML 客户端高级用户编排服务
  *
  * @copyright Copyright (c) 2026
  *
@@ -25,14 +25,14 @@ namespace disk::qml::services {
     class TokenRefreshCoordinator;
 
     /**
-     * @brief User service for the QML client.
-     * @details Orchestrates user-related business workflows:
-     *   - Fetching user profile data
-     *   - Fetching storage usage statistics
-     *   - Updating user profile (nickname, avatar)
-     *   - Changing password
-     *   - Delegating network requests to api::UserApi
-     *   - Mapping transport-level and envelope-level errors to user-friendly messages
+     * @brief QML 客户端用户服务。
+     * @details 编排用户相关业务流程：
+     *   - 获取已认证用户的资料
+     *   - 更新用户资料（昵称、头像）
+     *   - 修改用户密码
+     *   - 获取存储使用量统计
+     *   - 委托 api::UserApi 执行网络请求
+     *   - 将传输层和响应封装层错误映射为用户友好消息
      */
     class UserService final {
     public:
@@ -44,40 +44,38 @@ namespace disk::qml::services {
         explicit UserService(api::UserApi* userApi, TokenRefreshCoordinator* coordinator = nullptr);
 
         /**
-         * @brief Fetches the authenticated user's profile.
-         * @details Calls GET /api/user/profile.
-         * @param ctx  QObject lifetime guard; the callback is not invoked after ctx is destroyed.
-         * @param cb   Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 获取存储使用量统计。
+         * @details 返回已用空间、配额、文件/文件夹数量及分类细分。
+         * @param ctx       QObject 生命周期守护。
+         * @param cb        接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto GetProfile(QObject* ctx, ProfileCallback cb) -> void;
 
         /**
-         * @brief Fetches storage usage statistics.
-         * @details Calls GET /api/user/storage.
-         * @param ctx  QObject lifetime guard.
-         * @param cb   Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 获取已认证用户的资料。
+         * @details 在成功登录后调用以填充用户信息。
+         * @param ctx       QObject 生命周期守护。
+         * @param cb        接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto GetStorage(QObject* ctx, StorageCallback cb) -> void;
 
         /**
-         * @brief Updates the authenticated user's profile.
-         * @details Calls PATCH /api/user/profile.
-         *   At least one of nickname or avatar must be non-empty.
-         * @param nickname  New nickname (empty string → omit from request).
-         * @param avatar    New avatar URL (empty string → omit from request).
-         * @param ctx       QObject lifetime guard.
-         * @param cb        Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 更新已认证用户的资料。
+         * @details @p nickname 和 @p avatar 至少有一个非空。
+         *   空字符串会从请求体中省略。
+         * @param nickname  新昵称（空字符串 → 省略）
+         * @param avatar    新头像 URL（空字符串 → 省略）
+         * @param ctx       QObject 生命周期守护。
+         * @param cb        接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto UpdateProfile(const QString& nickname, const QString& avatar, QObject* ctx, UpdateProfileCallback cb) -> void;
 
         /**
-         * @brief Changes the authenticated user's password.
-         * @details Calls PUT /api/user/password.
-         *   Validates password format locally before making the API call.
-         * @param oldPassword  Current password (for verification).
-         * @param newPassword  New password (8-64 chars, must contain uppercase, lowercase, digit).
-         * @param ctx          QObject lifetime guard.
-         * @param cb           Receives (result, errorMessage). errorMessage is empty on success.
+         * @brief 修改已认证用户的密码。
+         * @param oldPassword  当前密码（用于验证）
+         * @param newPassword  新密码（8-64 字符，需包含大小写字母和数字）
+         * @param ctx          QObject 生命周期守护。
+         * @param cb           接收 (result, errorMessage)。成功时 errorMessage 为空。
          */
         auto ChangePassword(const QString& oldPassword, const QString& newPassword, QObject* ctx, ChangePasswordCallback cb) -> void;
 

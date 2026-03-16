@@ -42,7 +42,7 @@ TEST(FileHashUtil, HashMd5OutputLength) {
 
 TEST(FileHashUtil, HashMd5LowerCase) {
     auto result = FileHashUtil::HashMd5("hello");
-    // Verify all characters are lowercase hex
+    // 验证所有字符均为小写十六进制
     for (char c : result) {
         EXPECT_TRUE((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'));
     }
@@ -73,7 +73,7 @@ TEST(FileHashUtil, HashSha256OutputLength) {
 
 TEST(FileHashUtil, HashSha256LowerCase) {
     auto result = FileHashUtil::HashSha256("hello");
-    // Verify all characters are lowercase hex
+    // 验证所有字符均为小写十六进制
     for (char c : result) {
         EXPECT_TRUE((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'));
     }
@@ -94,7 +94,7 @@ TEST(FileHashUtil, VerifyHashEmptyString) {
 }
 
 TEST(FileHashUtil, VerifyHashWrongCase) {
-    // MD5 hash should be case-insensitive for comparison or always lowercase
+    // MD5 哈希比较应不区分大小写或始终为小写
     EXPECT_FALSE(FileHashUtil::VerifyHash("hello", "5D41402ABC4B2A76B9719D911017C592"));
 }
 
@@ -105,13 +105,13 @@ protected:
     std::filesystem::path temp_dir_;
 
     void SetUp() override {
-        // Create temp directory
+        // 创建临时目录
         temp_dir_ = std::filesystem::temp_directory_path() / "disk_test_filehash";
         std::filesystem::create_directories(temp_dir_);
     }
 
     void TearDown() override {
-        // Clean up temp directory
+        // 清理临时目录
         if (std::filesystem::exists(temp_dir_)) {
             std::filesystem::remove_all(temp_dir_);
         }
@@ -169,7 +169,7 @@ TEST_F(FileHashUtilFileTest, HashFileSha256NotFound) {
 }
 
 TEST_F(FileHashUtilFileTest, HashFileMd5LargerFile) {
-    // Create a 1KB file with repeating pattern
+    // 创建一个 1KB 重复模式的文件
     std::string content(1024, 'A');
     auto file_path = CreateTempFile(content);
     auto result = FileHashUtil::HashFileMd5(file_path);
@@ -179,7 +179,7 @@ TEST_F(FileHashUtilFileTest, HashFileMd5LargerFile) {
 }
 
 TEST_F(FileHashUtilFileTest, HashFileSha256LargerFile) {
-    // Create a 1KB file with repeating pattern
+    // 创建一个 1KB 重复模式的文件
     std::string content(1024, 'A');
     auto file_path = CreateTempFile(content);
     auto result = FileHashUtil::HashFileSha256(file_path);

@@ -1,7 +1,7 @@
 /**
  * @file PlatformIntegration.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief Platform-specific integration for system tray, autostart, and notifications
+ * @brief 平台特定集成：系统托盘、自启动和通知
  *
  * @copyright Copyright (c) 2026
  *
@@ -17,21 +17,21 @@ class QWindow;
 namespace disk::qml::platform {
 
     /**
-     * @brief Platform integration for OS-specific features.
+     * @brief 操作系统特定功能的平台集成。
      *
-     * Provides runtime integration for:
-     * - Auto-start: Register/unregister application in OS startup
-     * - System tray: Minimize to tray and tray icon management
-     * - Notifications: Desktop notifications via native APIs
+     * 提供以下运行时集成：
+     * - 自启动：在操作系统启动项中注册/注销应用程序
+     * - 系统托盘：最小化到托盘和托盘图标管理
+     * - 通知：通过原生 API 显示桌面通知
      *
-     * Platform support matrix:
-     * | Feature       | Windows | Linux (XDG) | macOS |
-     * |---------------|---------|-------------|-------|
-     * | Auto-start    | ✓       | ✓           | TBD   |
-     * | System tray   | ✓       | ✓           | TBD   |
-     * | Notifications | ✓       | ✓           | TBD   |
+     * 平台支持矩阵：
+     * | 功能       | Windows | Linux (XDG) | macOS |
+     * |-----------|---------|-------------|-------|
+     * | 自启动     | ✓       | ✓           | 待定   |
+     * | 系统托盘   | ✓       | ✓           | 待定   |
+     * | 通知       | ✓       | ✓           | 待定   |
      *
-     * Unsupported platforms yield explicit warning logs and no-op behavior.
+     * 不支持的平台会产生明确的警告日志并无操作。
      */
     class PlatformIntegration : public QObject {
         Q_OBJECT
@@ -40,95 +40,95 @@ namespace disk::qml::platform {
         explicit PlatformIntegration(QObject* parent = nullptr);
         ~PlatformIntegration() override;
 
-        // Prevent copying
+        // 禁止复制
         PlatformIntegration(const PlatformIntegration&) = delete;
         auto operator=(const PlatformIntegration&) -> PlatformIntegration& = delete;
         PlatformIntegration(PlatformIntegration&&) = delete;
         auto operator=(PlatformIntegration&&) -> PlatformIntegration& = delete;
 
-        // ==================== Feature Availability ====================
+        // ==================== 功能可用性 ====================
 
         /**
-         * @brief Check if auto-start is supported on current platform.
-         * @return true if auto-start can be configured
+         * @brief 检查当前平台是否支持自启动。
+         * @return 如果可以配置自启动则返回 true
          */
         [[nodiscard]] auto IsAutoStartSupported() const -> bool;
 
         /**
-         * @brief Check if system tray is available on current platform.
-         * @return true if system tray integration is available
+         * @brief 检查当前平台是否支持系统托盘。
+         * @return 如果系统托盘集成可用则返回 true
          */
         [[nodiscard]] auto IsSystemTraySupported() const -> bool;
 
         /**
-         * @brief Check if desktop notifications are supported.
-         * @return true if notifications can be shown
+         * @brief 检查是否支持桌面通知。
+         * @return 如果可以显示通知则返回 true
          */
         [[nodiscard]] auto AreNotificationsSupported() const -> bool;
 
-        // ==================== Auto-start ====================
+        // ==================== 自启动 ====================
 
         /**
-         * @brief Enable or disable auto-start on system boot.
-         * @param enabled true to enable auto-start, false to disable
-         * @return true if operation succeeded, false if failed or unsupported
+         * @brief 启用或禁用系统启动时的自启动。
+         * @param enabled true 启用自启动，false 禁用
+         * @return 操作成功返回 true，失败或不支持返回 false
          */
         auto SetAutoStart(bool enabled) -> bool;
 
-        // ==================== System Tray ====================
+        // ==================== 系统托盘 ====================
 
         /**
-         * @brief Enable or disable minimize-to-tray behavior.
-         * @param enabled true to minimize to tray, false for normal minimize
-         * @param window the main application window (for event filtering)
-         * @return true if operation succeeded, false if failed or unsupported
+         * @brief 启用或禁用最小化到托盘行为。
+         * @param enabled true 最小化到托盘，false 正常最小化
+         * @param window 主应用窗口（用于事件过滤）
+         * @return 操作成功返回 true，失败或不支持返回 false
          */
         auto SetMinimizeToTray(bool enabled, QWindow* window) -> bool;
 
         /**
-         * @brief Show or hide the tray icon.
-         * @param visible true to show tray icon, false to hide
+         * @brief 显示或隐藏托盘图标。
+         * @param visible true 显示托盘图标，false 隐藏
          */
         auto SetTrayIconVisible(bool visible) -> void;
 
         /**
-         * @brief Restore the main window from minimized/hidden state.
+         * @brief 从最小化/隐藏状态恢复主窗口。
          *
-         * Shows, raises, and activates the window. Used when clicking tray icon.
+         * 显示、置顶并激活窗口。点击托盘图标时使用。
          */
         auto RestoreWindow() -> void;
 
         /**
-         * @brief Handle window close request - hide to tray if enabled.
-         * @return true if window was hidden to tray, false if should close normally
+         * @brief 处理窗口关闭请求 - 如果启用则隐藏到托盘。
+         * @return 如果窗口已隐藏到托盘返回 true，应正常关闭返回 false
          */
         auto HandleCloseRequest() -> bool;
 
         /**
-         * @brief Set the main window for tray operations.
-         * @param window the main application window
+         * @brief 设置托盘操作的主窗口。
+         * @param window 主应用窗口
          */
         auto SetMainWindow(QWindow* window) -> void;
 
-        // ==================== Notifications ====================
+        // ==================== 通知 ====================
 
         /**
-         * @brief Show a desktop notification.
-         * @param title notification title
-         * @param message notification body text
-         * @return true if notification was shown, false if failed or unsupported
+         * @brief 显示桌面通知。
+         * @param title 通知标题
+         * @param message 通知正文
+         * @return 通知已显示返回 true，失败或不支持返回 false
          */
         auto ShowNotification(const QString& title, const QString& message) -> bool;
 
     signals:
         /**
-         * @brief Emitted when the tray icon is activated (e.g., clicked).
-         * @param reason the activation reason
+         * @brief 托盘图标被激活（如点击）时发射。
+         * @param reason 激活原因
          */
         void trayIconActivated(QSystemTrayIcon::ActivationReason reason);
 
         /**
-         * @brief Emitted when the window should be restored from tray.
+         * @brief 当窗口应从托盘恢复时发射。
          */
         void restoreWindowRequested();
 

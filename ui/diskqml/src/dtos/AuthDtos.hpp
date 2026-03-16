@@ -1,7 +1,7 @@
 /**
  * @file AuthDtos.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief Auth request/response DTOs and JSON parsing helpers for the QML client
+ * @brief QML 客户端认证请求/响应数据传输对象及 JSON 解析辅助函数
  *
  * @copyright Copyright (c) 2026
  *
@@ -18,16 +18,16 @@
 
 namespace disk::qml::models {
 
-    // ==================== Request DTOs ====================
+    // ==================== 请求数据传输对象 ====================
 
     /**
-     * @brief Registration request DTO
+     * @brief 注册请求数据传输对象
      *
      * @details
-     * JSON keys produced by ToJsonObject():
-     * - "username": display name for the new account
-     * - "email":    account e-mail address
-     * - "password": plain-text password (transmitted over TLS)
+     * ToJsonObject() 生成的 JSON 键：
+     * - "username": 新账户的显示名称
+     * - "email":    账户邮箱地址
+     * - "password": 明文密码（通过 TLS 传输）
      */
     struct RegisterRequest {
         QString username;
@@ -44,12 +44,12 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief Login request DTO
+     * @brief 登录请求数据传输对象
      *
      * @details
-     * JSON keys produced by ToJsonObject():
-     * - "account":  username or e-mail accepted by the server
-     * - "password": plain-text password (transmitted over TLS)
+     * ToJsonObject() 生成的 JSON 键：
+     * - "account":  服务器接受的用户名或邮箱
+     * - "password": 明文密码（通过 TLS 传输）
      */
     struct LoginRequest {
         QString account;
@@ -64,11 +64,11 @@ namespace disk::qml::models {
     };
 
     /**
-     * @brief Token-refresh request DTO
+     * @brief 令牌刷新请求数据传输对象
      *
      * @details
-     * JSON keys produced by ToJsonObject():
-     * - "refresh_token": single-use refresh token obtained at login
+     * ToJsonObject() 生成的 JSON 键：
+     * - "refresh_token": 登录时获取的单次使用刷新令牌
      */
     struct RefreshTokenRequest {
         QString refreshToken;
@@ -80,81 +80,80 @@ namespace disk::qml::models {
         }
     };
 
-    // ==================== Response DTOs ====================
+    // ==================== 响应数据传输对象 ====================
     // ---------------------------------------------------------------------------
-    // Plain data structs (no Q_OBJECT / Q_PROPERTY)
+    // 纯数据结构体（无 Q_OBJECT / Q_PROPERTY）
     // ---------------------------------------------------------------------------
 
     /**
-     * @brief User information DTO
+     * @brief 用户信息数据传输对象
      *
      * @details
-     * Populated from the "user" object inside register/login responses.
-     * Storage values are in bytes; createdAt is an ISO-8601 string.
+     * 从注册/登录响应中的 "user" 对象填充。
+     * 存储值以字节为单位；createdAt 为 ISO-8601 字符串。
      */
     struct UserDto {
         quint64 id{};
         QString username;
         QString email;
         QString nickname;
-        quint64 storageQuota{}; ///< Total allocated storage in bytes
-        quint64 storageUsed{};  ///< Currently consumed storage in bytes
-        QString createdAt;      ///< Account creation timestamp (ISO-8601)
+        quint64 storageQuota{}; ///< 总分配存储空间（字节）
+        quint64 storageUsed{};  ///< 当前已用存储空间（字节）
+        QString createdAt;      ///< 账户创建时间戳（ISO-8601）
     };
 
     /**
-     * @brief Register endpoint result DTO
+     * @brief 注册端点结果数据传输对象
      *
      * @details
-     * Wraps the UserDto returned after a successful registration.
+     * 包装注册成功后返回的 UserDto。
      */
     struct RegisterResultDto {
         UserDto user;
     };
 
     /**
-     * @brief Login endpoint result DTO
+     * @brief 登录端点结果数据传输对象
      *
      * @details
-     * Contains the token pair and the authenticated user's profile.
+     * 包含令牌对和已认证用户的资料。
      */
     struct LoginResultDto {
         QString accessToken;
         QString refreshToken;
         QString tokenType;
-        int expiresIn{}; ///< Access-token lifetime in seconds (e.g. 7200)
+        int expiresIn{}; ///< 访问令牌有效期（秒），例如 7200
         UserDto user;
     };
 
     /**
-     * @brief Token-refresh endpoint result DTO
+     * @brief 令牌刷新端点结果数据传输对象
      *
      * @details
-     * Contains a new token pair issued in exchange for the consumed refresh token.
+     * 包含用已消费的刷新令牌换取的新令牌对。
      */
     struct RefreshResultDto {
         QString accessToken;
         QString refreshToken;
-        int expiresIn{}; ///< New access-token lifetime in seconds
+        int expiresIn{}; ///< 新访问令牌有效期（秒）
     };
 
-    // NOTE: ApiEnvelope, ParseEnvelope, ParseEnvelopeFromReply, and ApiCallback
-    //       are defined in <dtos/ApiEnvelope.hpp> and shared across all API modules.
+    // 注意：ApiEnvelope、ParseEnvelope、ParseEnvelopeFromReply 和 ApiCallback
+    //       定义在 <dtos/ApiEnvelope.hpp> 中，所有 API 模块共享。
 
     /**
-     * @brief Parse a JSON object into a UserDto.
+     * @brief 将 JSON 对象解析为 UserDto
      *
      * @details
-     * Expected shape:
+     * 预期格式：
      * {
      *   "id": <number>, "username": "<string>", "email": "<string>",
      *   "nickname": "<string>", "storage_quota": <number>,
      *   "storage_used": <number>, "created_at": "<string>"
      * }
      *
-     * @param obj  JSON object containing the user fields.
-     * @return     Populated UserDto, or std::nullopt if the object is empty or
-     *             "username" is missing.
+     * @param obj  包含用户字段的 JSON 对象
+     * @return     填充后的 UserDto；若对象为空或缺少 "username" 则返回 std::nullopt
      */
     inline auto ParseUserDto(const QJsonObject& obj) -> std::optional<UserDto> {
         if (obj.isEmpty()) {
@@ -178,14 +177,13 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse register result from envelope data value.
+     * @brief 从信封数据值解析注册结果
      *
      * @details
-     * Expected shape: data = { "user": { ... } }
+     * 预期格式：data = { "user": { ... } }
      *
-     * @param dataVal  The `data` field extracted from ApiEnvelope.
-     * @return         Populated RegisterResultDto, or std::nullopt on missing /
-     *                 wrong-type fields.
+     * @param dataVal  从 ApiEnvelope 提取的 `data` 字段
+     * @return         填充后的 RegisterResultDto；若字段缺失或类型错误则返回 std::nullopt
      */
     inline auto ParseRegisterResult(const QJsonValue& dataVal) -> std::optional<RegisterResultDto> {
         if (!dataVal.isObject()) {
@@ -209,16 +207,15 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse login result from envelope data value.
+     * @brief 从信封数据值解析登录结果
      *
      * @details
-     * Expected shape: data = { "access_token": "...", "refresh_token": "...",
+     * 预期格式：data = { "access_token": "...", "refresh_token": "...",
      *                          "token_type": "Bearer", "expires_in": 7200,
      *                          "user": { ... } }
      *
-     * @param dataVal  The `data` field extracted from ApiEnvelope.
-     * @return         Populated LoginResultDto, or std::nullopt on missing /
-     *                 wrong-type fields.
+     * @param dataVal  从 ApiEnvelope 提取的 `data` 字段
+     * @return         填充后的 LoginResultDto；若字段缺失或类型错误则返回 std::nullopt
      */
     inline auto ParseLoginResult(const QJsonValue& dataVal) -> std::optional<LoginResultDto> {
         if (!dataVal.isObject()) {
@@ -252,15 +249,14 @@ namespace disk::qml::models {
     }
 
     /**
-     * @brief Parse refresh result from envelope data value.
+     * @brief 从信封数据值解析刷新结果
      *
      * @details
-     * Expected shape: data = { "access_token": "...", "refresh_token": "...",
+     * 预期格式：data = { "access_token": "...", "refresh_token": "...",
      *                          "expires_in": 7200 }
      *
-     * @param dataVal  The `data` field extracted from ApiEnvelope.
-     * @return         Populated RefreshResultDto, or std::nullopt on missing /
-     *                 wrong-type fields.
+     * @param dataVal  从 ApiEnvelope 提取的 `data` 字段
+     * @return         填充后的 RefreshResultDto；若字段缺失或类型错误则返回 std::nullopt
      */
     inline auto ParseRefreshResult(const QJsonValue& dataVal) -> std::optional<RefreshResultDto> {
         if (!dataVal.isObject()) {

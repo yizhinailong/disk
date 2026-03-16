@@ -21,7 +21,7 @@ namespace disk::utils {
         if (custom_config.isMember("disk")) {
             const auto& app_config = custom_config["disk"];
 
-            // Read storage_base_path from config
+            // 从配置读取 storage_base_path
             if (app_config.isMember("storage_base_path")) {
                 m_storage_base_path = app_config["storage_base_path"].asString();
                 LOG_INFO << "Loaded storage_base_path from config: " << m_storage_base_path;
@@ -29,7 +29,7 @@ namespace disk::utils {
                 LOG_WARN << "storage_base_path not found in config, using default: " << m_storage_base_path;
             }
 
-            // Read temp_upload_path from config
+            // 从配置读取 temp_upload_path
             if (app_config.isMember("temp_upload_path")) {
                 m_temp_upload_path = app_config["temp_upload_path"].asString();
                 LOG_INFO << "Loaded temp_upload_path from config: " << m_temp_upload_path;
@@ -37,19 +37,19 @@ namespace disk::utils {
                 LOG_WARN << "temp_upload_path not found in config, using default: " << m_temp_upload_path;
             }
 
-            // Read chunk_size from config
+            // 从配置读取 chunk_size
             if (app_config.isMember("chunk_size")) {
                 m_chunk_size = static_cast<uint32_t>(app_config["chunk_size"].asUInt());
                 LOG_INFO << "Loaded chunk_size from config: " << m_chunk_size;
             }
 
-            // Read max_file_size from config
+            // 从配置读取 max_file_size
             if (app_config.isMember("max_file_size")) {
                 m_max_file_size = static_cast<uint64_t>(app_config["max_file_size"].asUInt64());
                 LOG_INFO << "Loaded max_file_size from config: " << m_max_file_size;
             }
 
-            // Read upload_task_expiry_seconds from config
+            // 从配置读取 upload_task_expiry_seconds
             if (app_config.isMember("upload_task_expiry_seconds")) {
                 m_upload_task_expiry_seconds = app_config["upload_task_expiry_seconds"].asInt();
                 LOG_INFO << "Loaded upload_task_expiry_seconds from config: " << m_upload_task_expiry_seconds;

@@ -88,7 +88,7 @@ TEST(CreateFolderRequest, CreateFolderRequestDefaultParent) {
     EXPECT_EQ(result->parent_id, 0);
 }
 
-// Rule 1: Length validation (1-255 chars) -> ValidationFailed
+// 规则 1：长度验证（1-255字符）-> ValidationFailed
 
 TEST(CreateFolderRequest, CreateFolderRequestNameTooLong) {
     std::string name(256, 'a');
@@ -120,7 +120,7 @@ TEST(CreateFolderRequest, CreateFolderRequestNameEmpty) {
     }
 }
 
-// Rule 2: Forbidden characters -> InvalidFilename
+// 规则 2：禁止字符 -> InvalidFilename
 
 TEST(CreateFolderRequest, CreateFolderRequestForbiddenCharSlash) {
     auto req = CreateCreateFolderRequest("My/Folder");
@@ -212,7 +212,7 @@ TEST(CreateFolderRequest, CreateFolderRequestForbiddenCharPipe) {
     }
 }
 
-// Rule 3: Reserved names (. and ..) -> InvalidFilename
+// 规则 3：保留名称（. 和 ..）-> InvalidFilename
 
 TEST(CreateFolderRequest, CreateFolderRequestReservedNameDot) {
     auto req = CreateCreateFolderRequest(".");
@@ -234,7 +234,7 @@ TEST(CreateFolderRequest, CreateFolderRequestReservedNameDoubleDot) {
     }
 }
 
-// Rule 4: Hidden folders (starts with .) -> InvalidFilename
+// 规则 4：隐藏文件夹（以 . 开头）-> InvalidFilename
 
 TEST(CreateFolderRequest, CreateFolderRequestHiddenFolder) {
     auto req = CreateCreateFolderRequest(".hidden");
@@ -246,7 +246,7 @@ TEST(CreateFolderRequest, CreateFolderRequestHiddenFolder) {
     }
 }
 
-// Rule 5: Charset (ASCII printable only) -> InvalidFilename
+// 规则 5：字符集（仅可打印 ASCII）-> InvalidFilename
 
 TEST(CreateFolderRequest, CreateFolderRequestNonAscii) {
     auto req = CreateCreateFolderRequest("Folder\xF0\x9F\x93\x81");
@@ -268,7 +268,7 @@ TEST(CreateFolderRequest, CreateFolderRequestControlChar) {
     }
 }
 
-// Rule 6: Whitespace trimming
+// 规则 6：空白字符修剪
 
 TEST(CreateFolderRequest, CreateFolderRequestWhitespaceTrim) {
     auto req = CreateCreateFolderRequest("  test  ");
@@ -288,7 +288,7 @@ TEST(CreateFolderRequest, CreateFolderRequestWhitespaceOnly) {
     }
 }
 
-// Additional edge cases
+// 其他边界情况
 
 TEST(CreateFolderRequest, CreateFolderRequestMissingName) {
     Json::Value json;
@@ -352,7 +352,7 @@ TEST(CreateFolderRequest, CreateFolderRequestParentIdWrongType) {
     EXPECT_FALSE(result.has_value()) << "parent_id with wrong type should fail";
 }
 
-// Valid names with special allowed characters
+// 允许特殊字符的有效名称
 
 TEST(CreateFolderRequest, CreateFolderRequestValidNameWithUnderscore) {
     auto req = CreateCreateFolderRequest("Project_Alpha");

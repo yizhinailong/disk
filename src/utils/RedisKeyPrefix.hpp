@@ -30,7 +30,7 @@ namespace disk::redis {
      */
     class RedisKeyPrefix {
     public:
-        // ==================== Constants ====================
+        // ==================== 常量 ====================
         static constexpr std::string_view REFRESH_TOKEN_PREFIX = "refresh_token";
         static constexpr std::string_view ACCESS_TOKEN_BLACKLIST_PREFIX = "access_token_blacklist";
         static constexpr std::string_view LOGIN_RATE_LIMIT_PREFIX = "rate:login";
@@ -40,7 +40,7 @@ namespace disk::redis {
         static constexpr std::string_view API_RATE_LIMIT_PREFIX = "rate:api";
         static constexpr std::string_view UPLOAD_RATE_LIMIT_PREFIX = "rate:upload";
 
-        // ==================== Key Construction Methods ====================
+        // ==================== 键构造方法 ====================
 
         /**
          * @brief Build refresh token key
@@ -156,7 +156,7 @@ namespace disk::redis {
          */
         [[nodiscard]]
         static auto ExtractIPOnly(const std::string& ip_address) -> std::string {
-            // Handle IPv6 with brackets: "[2001:db8::1]:8080"
+            // 处理带方括号的 IPv6 地址："[2001:db8::1]:8080"
             if (!ip_address.empty() && ip_address.front() == '[') {
                 auto closing_bracket = ip_address.find(']');
                 if (closing_bracket != std::string::npos) {
@@ -164,20 +164,20 @@ namespace disk::redis {
                 }
             }
 
-            // Check if this is likely an IPv6 address (contains multiple colons)
+            // 检查是否可能是 IPv6 地址（包含多个冒号）
             auto colon_count = std::count(ip_address.begin(), ip_address.end(), ':');
             if (colon_count > 1) {
-                // This is likely an IPv6 address, return as-is (no port removal)
+                // 这可能是 IPv6 地址，原样返回（不移除端口）
                 return ip_address;
             }
 
-            // Handle IPv4 and simple IPv6 without brackets: "192.168.1.1:8080"
+            // 处理 IPv4 和不带方括号的简单 IPv6：如 "192.168.1.1:8080"
             auto colon_pos = ip_address.find(':');
             if (colon_pos != std::string::npos) {
                 return ip_address.substr(0, colon_pos);
             }
 
-            // No port found, return as-is
+            // 未找到端口，原样返回
             return ip_address;
         }
     };

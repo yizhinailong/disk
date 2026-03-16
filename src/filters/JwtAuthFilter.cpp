@@ -21,7 +21,7 @@ namespace disk::filters {
     using disk::utils::ConfigMgr;
 
     JwtAuthFilter::JwtAuthFilter() {
-        // Initialize TokenService singleton
+        // 初始化 TokenService 单例
         disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
     }
 
@@ -47,7 +47,7 @@ namespace disk::filters {
 
         auto [user_id, username] = verify_result.value();
 
-        // NEW: 检查令牌是否被撤销（access 和 refresh token 现在都有 JTI）
+        // 检查令牌是否被撤销（access 和 refresh token 现在都有 JTI）
         using traits = jwt::traits::open_source_parsers_jsoncpp;
         auto decoded = jwt::decode<traits>(token);
 

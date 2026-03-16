@@ -30,10 +30,10 @@ namespace disk::qml::viewmodels {
         m_token_store(tokenStore),
         m_auth_service(authService),
         m_server_url(configStore->ServerUrl().toString()) {
-        // Initialize logged-in state from existing token
+        // 从现有令牌初始化登录状态
         m_is_logged_in = m_token_store->HasValidAccessToken();
 
-        // Connect login success → update session state including storage metrics
+        // 连接登录成功 → 更新会话状态包括存储指标
         connect(
             m_login_view_model,
             &LoginViewModel::loginSucceeded,
@@ -85,7 +85,7 @@ namespace disk::qml::viewmodels {
     void SessionViewModel::logout() {
         const QString accessToken = m_token_store->AccessToken();
 
-        // Context object prevents callback invocation if SessionViewModel is destroyed
+        // 上下文对象防止 SessionViewModel 销毁时回调被调用
         auto* ctx = new QObject(this);
 
         m_auth_service->Logout(
@@ -94,7 +94,7 @@ namespace disk::qml::viewmodels {
             [this, ctx](bool /*ok*/, QString /*errorMessage*/) {
                 ctx->deleteLater();
 
-                // Clear local state regardless of server response
+                // 无论服务器响应如何都清除本地状态
                 m_token_store->Clear();
                 SetLoggedInUserName(QString{});
                 SetStorageUsed(0);

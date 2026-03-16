@@ -1,11 +1,11 @@
 /**
  * @file FolderPickerDialog.qml
- * @brief 文件夹选择对话框 — TreeView for selecting move/copy destination
+ * @brief 文件夹选择对话框 — 用于选择移动/复制目标的 TreeView
  *
  * @details
- * Uses a TreeView to display the full folder hierarchy.
- * The dialog receives a FolderTreeModel from C++ (populated by FileListViewModel).
- * Returns the selected folder ID on accept.
+ * 使用 TreeView 显示完整的文件夹层级。
+ * 对话框从 C++ 接收 FolderTreeModel（由 FileListViewModel 填充）。
+ * 接受时返回选中的文件夹 ID。
  */
 import QtQuick
 import QtQuick.Controls
@@ -22,7 +22,7 @@ Dialog {
     standardButtons: Dialog.NoButton
     padding: 24
 
-    ///< 操作模式（"move" 或 "copy"）
+    ///< 操作模式（"移动" 或 "复制"）
     property string mode: "move"
     ///< 待移动/复制的文件ID列表
     property var fileIds: []
