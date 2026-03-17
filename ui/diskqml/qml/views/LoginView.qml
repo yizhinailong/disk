@@ -8,8 +8,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Disk 1.0
-import "../tokens"
-import "../components/primitives"
 
 Item {
     id: root
@@ -26,7 +24,7 @@ Item {
         Rectangle {
             Layout.fillHeight: true
             Layout.preferredWidth: root.width * 0.45
-            color: StyleTokens.colorBackground
+            color: palette.window
 
             // 背景渐变
             Rectangle {
@@ -34,17 +32,17 @@ Item {
                 gradient: Gradient {
                     GradientStop {
                         position: 0.0
-                        color: Qt.tint(StyleTokens.colorBackground,
-                                       Qt.rgba(StyleTokens.colorPrimary.r,
-                                               StyleTokens.colorPrimary.g,
-                                               StyleTokens.colorPrimary.b, 0.15))
+                        color: Qt.tint(palette.window,
+                                       Qt.rgba(palette.highlight.r,
+                                               palette.highlight.g,
+                                               palette.highlight.b, 0.15))
                     }
                     GradientStop {
                         position: 1.0
-                        color: Qt.tint(StyleTokens.colorBackground,
-                                       Qt.rgba(StyleTokens.colorPrimary.r,
-                                               StyleTokens.colorPrimary.g,
-                                               StyleTokens.colorPrimary.b, 0.05))
+                        color: Qt.tint(palette.window,
+                                       Qt.rgba(palette.highlight.r,
+                                               palette.highlight.g,
+                                               palette.highlight.b, 0.05))
                     }
                 }
             }
@@ -82,20 +80,21 @@ Item {
 
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: StyleTokens.spacingMd
+                spacing: 16
 
                 Label {
                     text: qsTr("欢迎回来！")
                     font.pixelSize: 32
                     font.bold: true
-                    color: StyleTokens.colorTextPrimary
+                    color: palette.windowText
                     Layout.alignment: Qt.AlignHCenter
                 }
 
                 Label {
                     text: qsTr("今天也要元气满满哦✨")
-                    font.pixelSize: StyleTokens.fontSizeH1
-                    color: StyleTokens.colorTextSecondary
+                    font.pixelSize: 18
+                    color: palette.windowText
+                    opacity: 0.8
                     Layout.alignment: Qt.AlignHCenter
                 }
             }
@@ -109,8 +108,8 @@ Item {
             Rectangle {
                 anchors.centerIn: parent
                 width: 420
-                radius: StyleTokens.radiusXl
-                color: StyleTokens.colorSurface
+                radius: 16
+                color: palette.window
                 implicitHeight: formLayout.implicitHeight + 64
 
                 // 假阴影
@@ -118,46 +117,48 @@ Item {
                     z: -1
                     anchors.fill: parent
                     anchors.margins: -1
-                    anchors.topMargin: StyleTokens.shadowOffsetYLg
-                    anchors.bottomMargin: -StyleTokens.shadowOffsetYLg
-                    radius: StyleTokens.radiusXl
-                    color: StyleTokens.shadowColorLg
+                    anchors.topMargin: 4
+                    anchors.bottomMargin: -4
+                    radius: 16
+                    color: Qt.rgba(0, 0, 0, 0.05)
                 }
 
-                border.color: StyleTokens.colorBorder
+                border.color: Qt.rgba(0, 0, 0, 0.08)
                 border.width: 1
 
                 ColumnLayout {
                     id: formLayout
                     anchors.fill: parent
-                    anchors.margins: StyleTokens.spacingXl
-                    spacing: StyleTokens.spacingLg
+                    anchors.margins: 32
+                    spacing: 24
 
                     // 标志和标题
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: StyleTokens.spacingSm
+                        spacing: 8
 
                         Label {
                             text: qsTr("Disk")
                             font.pixelSize: 64
                             font.bold: true
-                            color: StyleTokens.colorPrimary
+                            color: palette.highlight
                             Layout.alignment: Qt.AlignHCenter
                         }
 
                         Label {
                             text: qsTr("欢迎回来")
-                            font.pixelSize: StyleTokens.fontSizeH1
+                            font.pixelSize: 24
                             font.bold: true
-                            color: StyleTokens.colorTextPrimary
+                            color: palette.windowText
                             Layout.alignment: Qt.AlignHCenter
                         }
 
                         Label {
                             text: qsTr("登录你的账号")
-                            font.pixelSize: StyleTokens.fontSizeBody
-                            color: StyleTokens.colorTextSecondary
+                            font.pixelSize: 14
+                            color: Qt.rgba(palette.windowText.r,
+                                           palette.windowText.g,
+                                           palette.windowText.b, 0.6)
                             Layout.alignment: Qt.AlignHCenter
                         }
                     }
@@ -167,24 +168,26 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 44
                         radius: 22
-                        color: StyleTokens.colorBackground
+                        color: Qt.rgba(palette.windowText.r,
+                                       palette.windowText.g,
+                                       palette.windowText.b, 0.05)
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.margins: StyleTokens.spacingXs
-                            spacing: StyleTokens.spacingXs
+                            anchors.margins: 4
+                            spacing: 4
 
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 radius: 18
-                                color: StyleTokens.colorPrimary
+                                color: palette.highlight
 
                                 Text {
                                     anchors.centerIn: parent
                                     text: qsTr("登录")
-                                    color: StyleTokens.colorSurface
-                                    font.pixelSize: StyleTokens.fontSizeBody
+                                    color: palette.highlightedText
+                                    font.pixelSize: 14
                                     font.bold: true
                                 }
                                 MouseArea {
@@ -202,8 +205,8 @@ Item {
                                 Text {
                                     anchors.centerIn: parent
                                     text: qsTr("注册")
-                                    color: StyleTokens.colorTextPrimary
-                                    font.pixelSize: StyleTokens.fontSizeBody
+                                    color: palette.windowText
+                                    font.pixelSize: 14
                                 }
                                 MouseArea {
                                     objectName: "tabRegister"
@@ -218,16 +221,34 @@ Item {
                     // 输入字段
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: StyleTokens.spacingMd
+                        spacing: 16
 
-                        AppTextInput {
+                        TextField {
                             id: accountField
                             objectName: "accountField"
                             Layout.fillWidth: true
                             Layout.preferredHeight: 52
                             placeholderText: qsTr("账号（用户名/邮箱）")
                             text: LoginViewModel.account
+                            font.pixelSize: 14
                             enabled: !LoginViewModel.loading
+
+                            background: Rectangle {
+                                radius: 12
+                                color: accountField.activeFocus ? palette.base : Qt.rgba(
+                                                                      palette.windowText.r,
+                                                                      palette.windowText.g,
+                                                                      palette.windowText.b,
+                                                                      0.03)
+                                border.color: accountField.activeFocus ? palette.highlight : Qt.rgba(
+                                                                             palette.windowText.r,
+                                                                             palette.windowText.g,
+                                                                             palette.windowText.b,
+                                                                             0.1)
+                                border.width: accountField.activeFocus ? 2 : 1
+                            }
+                            leftPadding: 16
+                            rightPadding: 16
 
                             onTextChanged: {
                                 LoginViewModel.account = text
@@ -242,7 +263,7 @@ Item {
                             }
                         }
 
-                        AppTextInput {
+                        TextField {
                             id: passwordField
                             objectName: "passwordField"
                             Layout.fillWidth: true
@@ -250,7 +271,20 @@ Item {
                             placeholderText: qsTr("密码")
                             echoMode: showPasswordBtn.checked ? TextInput.Normal : TextInput.Password
                             text: LoginViewModel.password
+                            font.pixelSize: 14
                             enabled: !LoginViewModel.loading
+
+                            background: Rectangle {
+                                radius: 12
+                                color: passwordField.activeFocus ? palette.base : Qt.rgba(
+                                                                       palette.windowText.r,
+                                                                       palette.windowText.g,
+                                                                       palette.windowText.b,
+                                                                       0.03)
+                                border.color: passwordField.activeFocus ? palette.highlight : Qt.rgba(palette.windowText.r, palette.windowText.g, palette.windowText.b, 0.1)
+                                border.width: passwordField.activeFocus ? 2 : 1
+                            }
+                            leftPadding: 16
                             rightPadding: 48
 
                             onTextChanged: {
@@ -263,22 +297,28 @@ Item {
                                 }
                             }
 
-                            AppButton {
+                            Button {
                                 id: showPasswordBtn
-                                variant: "icon"
                                 checkable: true
+                                flat: true
                                 anchors.right: parent.right
-                                anchors.rightMargin: StyleTokens.spacingSm
+                                anchors.rightMargin: 8
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: 36
                                 height: 36
                                 enabled: !LoginViewModel.loading
-                                
+
+                                background: Item {}
+
                                 contentItem: Text {
                                     anchors.centerIn: parent
                                     text: "👁"
-                                    font.pixelSize: StyleTokens.fontSizeH2
-                                    color: showPasswordBtn.checked ? StyleTokens.colorPrimary : StyleTokens.colorTextTertiary
+                                    font.pixelSize: 16
+                                    color: showPasswordBtn.checked ? palette.highlight : Qt.rgba(
+                                                                         palette.windowText.r,
+                                                                         palette.windowText.g,
+                                                                         palette.windowText.b,
+                                                                         0.4)
                                 }
                             }
                         }
@@ -289,32 +329,41 @@ Item {
                         id: errorLabel
                         visible: LoginViewModel.errorMessage !== ""
                         text: LoginViewModel.errorMessage
-                        color: StyleTokens.colorError
-                        font.pixelSize: StyleTokens.fontSizeSmall
+                        color: "#F44336" // 红色
+                        font.pixelSize: 12
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.Wrap
                         Layout.preferredHeight: visible ? implicitHeight : 0
-                        Layout.topMargin: visible ? -StyleTokens.spacingSm : -StyleTokens.spacingMd
-                        Layout.bottomMargin: visible ? 0 : -StyleTokens.spacingMd
+                        Layout.topMargin: visible ? -8 : -16
+                        Layout.bottomMargin: visible ? 0 : -16
                     }
 
                     // 登录按钮
-                    AppButton {
+                    Button {
                         id: loginButton
                         objectName: "loginButton"
-                        variant: "primary"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 52
-                        Layout.topMargin: StyleTokens.spacingSm
-                        enabled: LoginViewModel.canSubmit && !LoginViewModel.loading
+                        Layout.topMargin: 8
+                        enabled: LoginViewModel.canSubmit
+                                 && !LoginViewModel.loading
+
+                        background: Rectangle {
+                            radius: 12
+                            color: loginButton.enabled ? palette.highlight : Qt.rgba(
+                                                             palette.highlight.r,
+                                                             palette.highlight.g,
+                                                             palette.highlight.b,
+                                                             0.5)
+                        }
 
                         contentItem: Item {
                             anchors.fill: parent
 
                             RowLayout {
                                 anchors.centerIn: parent
-                                spacing: StyleTokens.spacingSm
+                                spacing: 8
 
                                 BusyIndicator {
                                     running: LoginViewModel.loading
@@ -324,9 +373,10 @@ Item {
                                 }
 
                                 Text {
-                                    text: LoginViewModel.loading ? qsTr("登录中...") : qsTr("登 录")
-                                    color: loginButton.enabled ? StyleTokens.colorSurface : StyleTokens.colorTextTertiary
-                                    font.pixelSize: StyleTokens.fontSizeH2
+                                    text: LoginViewModel.loading ? qsTr("登录中...") : qsTr(
+                                                                       "登 录")
+                                    color: palette.highlightedText
+                                    font.pixelSize: 16
                                     font.bold: true
                                 }
                             }
