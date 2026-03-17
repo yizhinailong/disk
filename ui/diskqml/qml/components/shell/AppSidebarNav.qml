@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "../tokens"
+import "../../tokens"
 
 Rectangle {
     id: root

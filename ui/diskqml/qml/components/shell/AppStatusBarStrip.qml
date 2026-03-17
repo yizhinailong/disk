@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Disk 1.0
-import "../tokens"
+import "../../tokens"
 
 Rectangle {
     id: root

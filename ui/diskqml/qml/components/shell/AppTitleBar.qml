@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
-import "../tokens"
+import "../../tokens"
 import "../primitives"
 
 Rectangle {
