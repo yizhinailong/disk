@@ -125,7 +125,6 @@ qt_add_qml_module(appdiskqml
         qml/components/primitives/AppCard.qml
         qml/components/primitives/AppBadge.qml
         qml/components/primitives/AppMenuRow.qml
-        qml/components/shell/AppTitleBar.qml
         qml/components/shell/AppSidebarNav.qml
         qml/components/shell/AppToolbarStrip.qml
         qml/components/shell/AppStatusBarStrip.qml
