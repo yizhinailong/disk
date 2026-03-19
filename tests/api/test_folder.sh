@@ -28,22 +28,14 @@ cleanup_test_folders() {
     
     if [ ${#TEST_FOLDERS[@]} -gt 0 ]; then
         echo "Moving ${#TEST_FOLDERS[@]} folders to trash..."
-        local folder_ids_json=$(printf '%s\n' "${TEST_FOLDERS[@]}" | python3 -c "import json, sys;44; data = json.loads(sys.argv[1])
-        query = sys.argv[2]
-        for part in query.split('.'):
-            if part.isdigit():
-                result = result[int(part)]
-            elif part in result:
-                result = result[part]
-            else:
-                print('null', end='')
-                sys.exit(0)
-        if result is None:
-            print(result, end='')
-        elif isinstance(result, bool):
-            print(str(result).lower(), end='')
-        else:
-            print(result, end='')
+        for folder_id in "${TEST_FOLDERS[@]}"; do
+            echo "  Deleting folder $folder_id..."
+            curl -s -X DELETE "$BASE_URL/api/file" \
+                -H "Authorization: Bearer $ACCESS_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{\"file_ids\":[$folder_id]}" > /dev/null 2>&1 || true
+        done
+    fi
     
     echo -e "${GREEN}✓ Cleanup complete${NC}"
 }

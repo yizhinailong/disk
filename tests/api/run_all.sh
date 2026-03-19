@@ -70,12 +70,12 @@ echo "Running Tests"
 echo "=========================================="
 
 # Test scripts will be added here after implementation
-# run_test "$SCRIPT_DIR/test_system.sh"
-# run_test "$SCRIPT_DIR/test_folder.sh"
-# run_test "$SCRIPT_DIR/test_upload.sh"
-# run_test "$SCRIPT_DIR/test_file_ops.sh"
-# run_test "$SCRIPT_DIR/test_share.sh"
-# run_test "$SCRIPT_DIR/test_trash.sh"
+run_test "$SCRIPT_DIR/test_system.sh"
+run_test "$SCRIPT_DIR/test_folder.sh"
+run_test "$SCRIPT_DIR/test_upload.sh"
+run_test "$SCRIPT_DIR/test_file_ops.sh"
+run_test "$SCRIPT_DIR/test_share.sh"
+run_test "$SCRIPT_DIR/test_trash.sh"
 
 echo "=========================================="
 echo "Test Summary"
