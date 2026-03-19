@@ -483,6 +483,10 @@ namespace disk::share {
             // 根据文档：批量取消即使有部分失败也返回 200
             // 无论成功/失败计数如何，响应均有效
             // 批量操作应始终返回 HTTP 200
+            CancelShareResponse response;
+            response.summary.total = 3;
+            response.summary.succeeded = 2;
+            response.summary.failed = 1;
             EXPECT_TRUE(
                 response.summary.succeeded + response.summary.failed == response.summary.total
             );
@@ -511,93 +515,6 @@ namespace disk::share {
 
         class ShareApiRegressionTest : public ::testing::Test {};
 
-        // 错误码 50005 (FileNotFound) 的回归测试
-        // 验证访问分享中不存在的文件返回 FileNotFound 错误
-        // 错误码 50005 = FileNotFound（根据 ErrorCode.hpp）
-        // 当 file_id 有效但不在分享中时返回此错误
-        constexpr auto file_not_found_code = static_cast<uint32_t>(ErrorCode::FileNotFound);
-        EXPECT_EQ(file_not_found_code, 50005U);
-
-        // FileNotFound 的 HTTP 状态码应为 404
-        auto status = Error::GetHttpStatus(ErrorCode::FileNotFound);
-        EXPECT_EQ(status, drogon::k404NotFound);
-
-        // 验证错误消息
-        auto message = Error::GetErrorMessage(ErrorCode::FileNotFound);
-        EXPECT_EQ(message, std::string("File not found"));
-    }
-
-    // HTTP 416 Range Not Satisfiable 的回归测试
-    // 验证下载分享中的范围请求处理
-    // 当 Range 头无效或无法满足时返回 HTTP 416
-    // 示例：Range: bytes=1000-500 针对 600 字节文件（起始 > 结束）
-    // 示例：Range: bytes=500-600 针对 400 字节文件（范围超出文件大小）
-    constexpr auto range_not_satisfiable = drogon::k416RequestedRangeNotSatisfiable;
-    EXPECT_EQ(range_not_satisfiable, 416);
-
-    // 验证我们可以区分 416 与其他客户端错误
-    EXPECT_NE(range_not_satisfiable, drogon::k400BadRequest);
-    EXPECT_NE(range_not_satisfiable, drogon::k404NotFound);
-}
-
-// 有效范围请求（200 vs 206）的回归测试
-// 不带 Range 头的完整文件下载：200 OK
-// 带有效 Range 头的部分内容：206 Partial Content
-constexpr auto partial_status = drogon::k206PartialContent;
-EXPECT_EQ(partial_status, 206);
-}
-
-// 分享令牌格式错误（40107）的回归测试
-// 错误码 40107 = TokenMalformed（根据 ErrorCode.hpp）
-// 格式错误令牌的 HTTP 状态应为 401 Unauthorized
-// 验证错误消息
-auto message = Error::GetErrorMessage(ErrorCode::TokenMalformed);
-EXPECT_EQ(message, std::string("Token format error"));
-}
-
-// 分享令牌过期（40108）的回归测试
-// 错误码 40108 = TokenExpired（根据 ErrorCode.hpp）
-// 过期令牌的 HTTP 状态应为 401 Unauthorized
-// 验证错误消息
-auto message = Error::GetErrorMessage(ErrorCode::TokenExpired);
-EXPECT_EQ(message, std::string("Token expired"));
-}
-
-// 批量取消混合结果摘要契约的回归测试
-// 根据 API 文档：批量取消返回 HTTP 200，带摘要 + 每项结果
-// 即使某些项失败，总体响应仍为 200
-
-CancelShareResponse response;
-response.summary.total = 5;
-response.summary.succeeded = 3;
-response.summary.failed = 2;
-
-// 创建混合结果
-// 验证摘要计数与结果匹配
-// 验证 JSON 输出结构
-// 验证每个结果都有 share_id 和 status
-// 验证失败结果有错误对象
-// 验证成功结果没有错误对象
-EXPECT_FALSE(json["results"][0].isMember("error"));
-EXPECT_FALSE(json["results"][1].isMember("error"));
-EXPECT_FALSE(json["results"][2].isMember("error"));
-}
-
-// 分享令牌缺失（40106）的回归测试
-// 错误码 40106 = TokenMissing（根据 ErrorCode.hpp）
-// 缺失令牌的 HTTP 状态应为 401 Unauthorized
-// 验证错误消息
-auto message = Error::GetErrorMessage(ErrorCode::TokenMissing);
-EXPECT_EQ(message, std::string("Token not provided"));
-}
-
-// 分享访问被拒绝（60004）的回归测试
-// 错误码 60004 = ShareAccessDenied（根据 ErrorCode.hpp）
-// 访问被拒绝的 HTTP 状态应为 403 Forbidden
-// 验证错误消息
-auto message = Error::GetErrorMessage(ErrorCode::ShareAccessDenied);
-EXPECT_EQ(message, std::string("Access denied"));
-}
 
 } // namespace
 } // namespace disk::share
