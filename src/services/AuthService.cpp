@@ -13,6 +13,7 @@
 
 #include "dtos/AuthDto.hpp"
 #include "models/OperationLogs.hpp"
+#include "services/TokenService.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/HashUtil.hpp"
 #include "utils/RedisKeyPrefix.hpp"
