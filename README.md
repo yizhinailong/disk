@@ -213,41 +213,42 @@ ctest --preset linux-debug-clang -R PasswdHash -V
 
 ## 📁 项目结构
 
-```
-disk/
-├── docs/                    # 项目文档
-│   └── design/             # 设计文档
-│       ├── 00-系统概述.md      # 架构、技术栈、性能指标
-│       ├── 01-功能需求规格.md  # 详细功能需求
-│       ├── 02-API接口设计.md   # RESTful API 规范
-│       ├── 03-数据库设计.md    # ER图、表结构、索引
-│       ├── 04-系统测试计划.md  # 测试策略
-│       ├── 05-部署运维指南.md  # 部署配置
-│       └── 06-单元测试用例.md # 测试用例文档
-│
-├── src/                     # 源代码
-│   ├── controllers/         # HTTP 控制器
-│   ├── services/            # 业务逻辑层
-│   ├── filters/            # 中间件/过滤器
-│   ├── models/             # 数据库模型（自动生成）
-│   ├── dtos/               # 数据传输对象 (DTO)
-│   │   └── AuthDto.hpp
-│   └── utils/             # 工具类
-│
-├── test/                    # 单元测试
-│   ├── utils/             # 工具类测试
-│   └── requests/          # 请求验证测试
-│
-├── sql/                     # 数据库脚本
-│   ├── init.sql           # 初始化脚本
-│   └── disk.sql           # 存储过程
-│
-├── CMakeLists.txt          # 根构建配置
-├── CMakePresets.json       # 构建预设
-├── vcpkg.json             # 依赖管理
-├── config.json            # 应用配置
-├── AGENTS.md              # 开发规范
-└── README.md              # 本文件
+```mermaid
+flowchart TD
+    A[disk/] --> B[docs/]
+    A --> C[src/]
+    A --> D[test/]
+    A --> E[sql/]
+    A --> F[CMakeLists.txt]
+    A --> G[CMakePresets.json]
+    A --> H[vcpkg.json]
+    A --> I[config.json]
+    A --> J[AGENTS.md]
+    A --> K[README.md]
+
+    B --> L[design/]
+    L --> L1[00-系统概述.md<br/>架构、技术栈、性能指标]
+    L --> L2[01-功能需求规格.md<br/>详细功能需求]
+    L --> L3[02-API接口设计.md<br/>RESTful API 规范]
+    L --> L4[03-数据库设计.md<br/>ER图、表结构、索引]
+    L --> L5[04-系统测试计划.md<br/>测试策略]
+    L --> L6[05-部署运维指南.md<br/>部署配置]
+    L --> L7[06-单元测试用例.md<br/>测试用例文档]
+
+    C --> C1[controllers/<br/>HTTP 控制器]
+    C --> C2[services/<br/>业务逻辑层]
+    C --> C3[filters/<br/>中间件/过滤器]
+    C --> C4[models/<br/>数据库模型]
+    C --> C5[dtos/<br/>数据传输对象 DTO]
+    C --> C6[utils/<br/>工具类]
+
+    C5 --> C5a[AuthDto.hpp]
+
+    D --> D1[utils/<br/>工具类测试]
+    D --> D2[requests/<br/>请求验证测试]
+
+    E --> E1[init.sql<br/>初始化脚本]
+    E --> E2[disk.sql<br/>存储过程]
 ```
 
 ## 🔌 API 文档

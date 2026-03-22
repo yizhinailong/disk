@@ -197,17 +197,25 @@ grep result: "Compact|Medium|Expanded|responsive" = 0 matches (GAP CONFIRMED)
 
 ## 7. Dependency Graph
 
-```
-T1 (Contract) ─┬─→ T2 (Upload Entry) ─→ T3 (Upload Flow)
-               │
-               ├─→ T5 (User Wiring) ─┬─→ T6 (Profile Page)
-               │                     └─→ T7 (User Settings)
-               │
-               ├─→ T8 (Share Edit Service) ─→ T9 (Share Edit Dialog)
-               │
-               ├─→ T4 (Platform) ─→ T10 (Notifications)
-               │
-               └─→ T11 (Responsive) ─→ T12 (Documentation)
+```mermaid
+flowchart TD
+    T1["T1 (Contract)"]
+    
+    T1 --> T2["T2 (Upload Entry)"]
+    T2 --> T3["T3 (Upload Flow)"]
+    
+    T1 --> T5["T5 (User Wiring)"]
+    T5 --> T6["T6 (Profile Page)"]
+    T5 --> T7["T7 (User Settings)"]
+    
+    T1 --> T8["T8 (Share Edit Service)"]
+    T8 --> T9["T9 (Share Edit Dialog)"]
+    
+    T1 --> T4["T4 (Platform)"]
+    T4 --> T10["T10 (Notifications)"]
+    
+    T1 --> T11["T11 (Responsive)"]
+    T11 --> T12["T12 (Documentation)"]
 ```
 
 ---

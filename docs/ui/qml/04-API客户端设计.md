@@ -23,18 +23,37 @@
 
 ### 1.2 架构定位
 
-```
-QML Layer (Views)
-    ↓
-ViewModels (QObject + Q_PROPERTY)
-    ↓
-Services (Business Logic)
-    ↓
-API Layer (ApiClient + *Api classes)  ← 本文档范围
-    ↓
-HTTP Transport (QNetworkAccessManager)
-    ↓
-Backend API Server
+```mermaid
+flowchart TD
+    subgraph QML["QML Layer (Views)"]
+        Views["QML Views"]
+    end
+
+    subgraph VM["ViewModels (QObject + Q_PROPERTY)"]
+        ViewModels["ViewModels"]
+    end
+
+    subgraph Services["Services (Business Logic)"]
+        Services["Services"]
+    end
+
+    subgraph API["API Layer (ApiClient + *Api classes)"]
+        APILayer["API Layer<br/>← 本文档范围"]
+    end
+
+    subgraph HTTP["HTTP Transport (QNetworkAccessManager)"]
+        HTTPT["HTTP Transport"]
+    end
+
+    subgraph Backend["Backend API Server"]
+        BackendAPI["Backend API"]
+    end
+
+    Views --> ViewModels
+    ViewModels --> Services
+    Services --> API
+    API --> HTTP
+    HTTP --> Backend
 ```
 
 QML/JavaScript 仅处理 UI 渲染，所有业务逻辑、API 调用和数据处理必须在 C++ 层完成。
@@ -263,12 +282,12 @@ UI 层接收 forceLogout() 信号，跳转登录界面
 AuthService::Logout(accessToken, ctx, callback)
     ↓
 访问令牌是否为空？
-    ├─ 是 → 直接清除本地凭证
-    └─ 否 → POST /api/auth/logout
+    - 是 → 直接清除本地凭证
+    - 否 → POST /api/auth/logout
                 ↓
               响应成功或为本地登出成功码？
-                  ├─ 是 → 清除本地凭证
-                  └─ 否 → 返回错误
+                  - 是 → 清除本地凭证
+                  - 否 → 返回错误
 ```
 
 **本地登出成功码:** 40104, 40105, 40106, 40107, 40108, 40110, 40111
