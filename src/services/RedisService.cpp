@@ -181,12 +181,18 @@ namespace disk::services {
         }
 
         try {
-            auto result = co_await m_redis_client->execCommandCoro("MGET %s", keys[0].c_str());
+            std::string cmd = "MGET";
+            for (const auto& key : keys) {
+                cmd += " " + key;
+            }
+
+            auto result = co_await m_redis_client->execCommandCoro(cmd.c_str());
 
             std::vector<std::string> values;
             values.reserve(keys.size());
-            for (size_t i = 0; i < keys.size(); ++i) {
-                values.push_back(result.asArray()[i].isNil() ? "" : result.asArray()[i].asString());
+            const auto result_array = result.asArray();
+            for (size_t i = 0; i < result_array.size(); ++i) {
+                values.push_back(result_array[i].isNil() ? "" : result_array[i].asString());
             }
 
             LOG_TRACE << "Redis MGET: count=" << keys.size();
@@ -209,7 +215,12 @@ namespace disk::services {
         }
 
         try {
-            auto result = co_await m_redis_client->execCommandCoro("DEL %s", keys[0].c_str());
+            std::string cmd = "DEL";
+            for (const auto& key : keys) {
+                cmd += " " + key;
+            }
+
+            auto result = co_await m_redis_client->execCommandCoro(cmd.c_str());
             const auto deleted = result.asInteger();
 
             LOG_TRACE << "Redis MDELETE: count=" << keys.size() << ", deleted=" << deleted;
