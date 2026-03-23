@@ -46,6 +46,17 @@ namespace disk::utils {
          */
         auto LoadConfig() -> void;
 
+        /**
+         * @brief Validate required environment variables for secure mode
+         * @throws std::runtime_error if required secrets are missing in production
+         *
+         * In production mode (when DISK_SECURE_MODE=true), this validates:
+         * - JWT_SECRET (min 32 chars)
+         * - MYSQL_PASSWORD
+         * - REDIS_PASSWORD
+         */
+        auto ValidateSecureConfig() const -> void;
+
         ~ConfigMgr() = default;
         ConfigMgr(const ConfigMgr&) = delete;
         ConfigMgr& operator=(const ConfigMgr&) = delete;
@@ -109,6 +120,29 @@ namespace disk::utils {
          */
         [[nodiscard]]
         auto GetUploadTaskExpirySeconds() const noexcept -> int;
+
+        // ==================== 数据库配置 ====================
+
+        /**
+         * @brief 获取MySQL密码（从环境变量MYSQL_PASSWORD读取）
+         * @return std::string MySQL密码，开发环境可返回空字符串
+         */
+        [[nodiscard]]
+        auto GetMySqlPassword() const -> std::string;
+
+        /**
+         * @brief 获取Redis密码（从环境变量REDIS_PASSWORD读取）
+         * @return std::string Redis密码，开发环境可返回空字符串
+         */
+        [[nodiscard]]
+        auto GetRedisPassword() const -> std::string;
+
+        /**
+         * @brief 检查是否为安全模式
+         * @return bool 当DISK_SECURE_MODE=true时返回true
+         */
+        [[nodiscard]]
+        auto IsSecureMode() const -> bool;
 
     private:
         // JWT 配置

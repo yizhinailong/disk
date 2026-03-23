@@ -22,6 +22,14 @@ auto main() -> int {
     // 使用 config.json 中的值初始化 ConfigMgr
     disk::utils::ConfigMgr::GetInstance()->LoadConfig();
 
+    // 验证安全配置（生产环境必须设置环境变量）
+    try {
+        disk::utils::ConfigMgr::GetInstance()->ValidateSecureConfig();
+    } catch (const std::runtime_error& e) {
+        LOG_ERROR << "Secure config validation failed: " << e.what();
+        return 1;
+    }
+
     // 记录有效存储路径
     LOG_INFO << "Effective storage configuration:";
     LOG_INFO << "  storage_base_path: "

@@ -500,19 +500,24 @@ namespace disk::trash {
             if (item_data.isMember("content_id")) {
                 auto content_id = item_data["content_id"].asUInt64();
                 try {
-                    CoroMapper<FileContents> content_mapper(m_db_client);
-                    auto content = co_await content_mapper.findOne(
-                        Criteria(FileContents::Cols::_id, CompareOperator::EQ, content_id)
+                    auto decrement_result = co_await m_db_client->execSqlCoro(
+                        "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = ?",
+                        content_id
                     );
-                    auto current_ref_count = content.getValueOfRefCount();
-                    if (current_ref_count > 0) {
-                        const auto new_ref_count = current_ref_count - 1;
-                        content.setRefCount(new_ref_count);
-                        co_await content_mapper.update(content);
-                        LOG_DEBUG << "Updated file content ref count: content_id=" << content_id
-                                  << ", ref_count=" << new_ref_count;
 
-                        if (new_ref_count == 0) {
+                    if (decrement_result.affectedRows() == 0) {
+                        LOG_DEBUG << "File content ref count already 0 or content missing, not decrementing: content_id="
+                                  << content_id;
+                    } else {
+                        CoroMapper<FileContents> content_mapper(m_db_client);
+                        auto content = co_await content_mapper.findOne(
+                            Criteria(FileContents::Cols::_id, CompareOperator::EQ, content_id)
+                        );
+
+                        LOG_DEBUG << "Updated file content ref count: content_id=" << content_id
+                                  << ", ref_count=" << content.getValueOfRefCount();
+
+                        if (content.getValueOfRefCount() == 0) {
                             auto* storage = disk::storage::StorageMgr::GetStorage();
                             if (storage == nullptr) {
                                 LOG_WARN << "Storage manager is not initialized, skip blob cleanup: content_id="
@@ -535,10 +540,6 @@ namespace disk::trash {
                                 }
                             }
                         }
-                    } else {
-                        LOG_DEBUG
-                            << "File content ref count already 0, not decrementing: content_id="
-                            << content_id;
                     }
                 } catch (const drogon::orm::DrogonDbException& e) {
                     LOG_WARN << "Failed to update file content ref count: content_id="

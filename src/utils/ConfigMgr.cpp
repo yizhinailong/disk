@@ -8,7 +8,10 @@
  */
 #include "ConfigMgr.hpp"
 
+#include <cstring>
 #include <mutex>
+#include <stdexcept>
+#include <vector>
 
 #include <drogon/utils/Utilities.h>
 
@@ -109,6 +112,70 @@ namespace disk::utils {
 
     auto ConfigMgr::GetUploadTaskExpirySeconds() const noexcept -> int {
         return m_upload_task_expiry_seconds;
+    }
+
+    // ==================== 数据库配置 ====================
+
+    auto ConfigMgr::GetMySqlPassword() const -> std::string {
+        const auto* env_password = std::getenv("MYSQL_PASSWORD");
+        if (env_password != nullptr && std::strlen(env_password) > 0) {
+            return env_password;
+        }
+        return "";
+    }
+
+    auto ConfigMgr::GetRedisPassword() const -> std::string {
+        const auto* env_password = std::getenv("REDIS_PASSWORD");
+        if (env_password != nullptr && std::strlen(env_password) > 0) {
+            return env_password;
+        }
+        return "";
+    }
+
+    auto ConfigMgr::IsSecureMode() const -> bool {
+        const auto* secure_mode = std::getenv("DISK_SECURE_MODE");
+        return secure_mode != nullptr && (std::strcmp(secure_mode, "true") == 0 || std::strcmp(secure_mode, "1") == 0);
+    }
+
+    auto ConfigMgr::ValidateSecureConfig() const -> void {
+        if (!IsSecureMode()) {
+            LOG_INFO << "Running in development mode - skipping strict config validation";
+            return;
+        }
+
+        LOG_INFO << "Running in secure mode - validating required environment variables";
+
+        std::vector<std::string> missing_vars;
+
+        constexpr size_t MIN_JWT_SECRET_LENGTH = 32;
+        const auto* jwt_secret = std::getenv("JWT_SECRET");
+        if (jwt_secret == nullptr || std::strlen(jwt_secret) < MIN_JWT_SECRET_LENGTH) {
+            missing_vars.emplace_back("JWT_SECRET (min " + std::to_string(MIN_JWT_SECRET_LENGTH) + " chars)");
+        }
+
+        const auto* mysql_password = std::getenv("MYSQL_PASSWORD");
+        if (mysql_password == nullptr || std::strlen(mysql_password) == 0) {
+            missing_vars.emplace_back("MYSQL_PASSWORD");
+        }
+
+        const auto* redis_password = std::getenv("REDIS_PASSWORD");
+        if (redis_password == nullptr || std::strlen(redis_password) == 0) {
+            missing_vars.emplace_back("REDIS_PASSWORD");
+        }
+
+        if (!missing_vars.empty()) {
+            std::string error_msg = "Missing required environment variables in secure mode: ";
+            for (size_t i = 0; i < missing_vars.size(); ++i) {
+                if (i > 0) {
+                    error_msg += ", ";
+                }
+                error_msg += missing_vars[i];
+            }
+            LOG_ERROR << error_msg;
+            throw std::runtime_error(error_msg);
+        }
+
+        LOG_INFO << "All required environment variables validated successfully";
     }
 
 } // namespace disk::utils

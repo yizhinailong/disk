@@ -203,17 +203,6 @@ namespace disk::services {
         // ==================== Share Token Redis 异步方法 ====================
 
         /**
-         * @brief 存储分享令牌到 Redis
-         *
-         * @param share_code 分享码
-         * @param token 分享令牌
-         * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
-         */
-        [[nodiscard]]
-        auto StoreShareToken(const std::string& share_code, const std::string& token)
-            -> drogon::Task<Result<void>>;
-
-        /**
          * @brief 验证分享令牌（含 Redis 撤销检查）
          *
          * @param share_code 分享码

@@ -42,35 +42,10 @@ namespace disk::filters {
         const auto window = GetCurrentWindow();
         const auto key = RedisKeyPrefix::BuildUploadRateLimitKey(user_id, window);
 
-        // 尝试获取当前计数
-        auto get_result = co_await m_redis_service->Get(key);
-
-        int64_t current_count = 0;
-        if (get_result) {
-            try {
-                current_count = std::stoll(get_result.value());
-            } catch (const std::exception& e) {
-                LOG_ERROR << "Failed to parse count: " << e.what();
-                current_count = 0;
-            }
-        }
-
-        if (current_count >= DEFAULT_LIMIT) {
-            LOG_WARN << "Upload rate limit: user_id=" << user_id << ", count=" << current_count;
-
-            auto response = disk::Response::Error(disk::error::Code::TooManyRequests);
-            response->addHeader("X-RateLimit-Limit", std::to_string(DEFAULT_LIMIT));
-            response->addHeader("X-RateLimit-Remaining", "0");
-            response->addHeader("X-RateLimit-Reset", std::to_string(GetResetTime(window)));
-
-            co_return response;
-        }
-
-        // 原子递增计数
+        // 原子递增计数 (INCR-first gate - atomic admission control)
         auto incr_result = co_await m_redis_service->Incr(key);
         if (!incr_result) {
             LOG_ERROR << "Redis increment failed: " << incr_result.error().message;
-            // Redis 失败时不阻止请求
             co_return nullptr;
         }
 
@@ -79,9 +54,18 @@ namespace disk::filters {
             co_await m_redis_service->Expire(key, WINDOW_SECONDS);
         }
 
-        // 添加响应头（可选，供客户端参考）
-        // 注意：这里不能直接设置响应头，因为响应还没生成
-        // 可以在 request attributes 中存储，让后续处理添加
+        // 检查是否超过限制
+        if (incr_result.value() > DEFAULT_LIMIT) {
+            LOG_WARN << "Upload rate limit: user_id=" << user_id
+                     << ", count=" << incr_result.value();
+
+            auto response = disk::Response::Error(disk::error::Code::TooManyRequests);
+            response->addHeader("X-RateLimit-Limit", std::to_string(DEFAULT_LIMIT));
+            response->addHeader("X-RateLimit-Remaining", "0");
+            response->addHeader("X-RateLimit-Reset", std::to_string(GetResetTime(window)));
+
+            co_return response;
+        }
 
         LOG_DEBUG << "Upload rate limit check passed: user_id=" << user_id
                   << ", count=" << incr_result.value() << "/" << DEFAULT_LIMIT;

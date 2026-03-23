@@ -9,7 +9,6 @@
 
 #include "FileService.hpp"
 
-#include <algorithm>
 #include <cmath>
 
 #include <drogon/utils/Utilities.h>
@@ -19,7 +18,6 @@
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
 #include "models/Trash.hpp"
-#include "models/Users.hpp"
 #include "storage/IFileStorage.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
@@ -36,7 +34,6 @@ namespace disk::file {
     using drogon_model::disk::Folders;
     using drogon_model::disk::Trash;
     using drogon_model::disk::UploadTasks;
-    using drogon_model::disk::Users;
 
     // ==================== 构造函数 ====================
 
@@ -54,14 +51,7 @@ namespace disk::file {
                   << "\", file_size=" << request.file_size << ", file_hash=" << request.file_hash
                   << ", parent_id=" << request.parent_id << ", user_id=" << user_id;
 
-        // 1. 检查存储配额
-        auto quota_result = co_await CheckStorageQuota(user_id, request.file_size);
-        if (!quota_result) {
-            LOG_WARN << "Storage quota check failed: user_id=" << user_id;
-            co_return std::unexpected(quota_result.error());
-        }
-
-        // 2. 检测秒传：查找已存在的内容
+        // 1. 检测秒传：查找已存在的内容
         auto existing_content = co_await FindExistingContent(request.file_hash);
         if (existing_content.has_value()) {
             LOG_INFO << "Instant upload check successful: file_hash=" << request.file_hash
@@ -75,15 +65,22 @@ namespace disk::file {
 
             // 创建 Files 记录
             try {
+                auto increment_result = co_await m_db_client->execSqlCoro(
+                    "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = ?",
+                    existing_content.value()
+                );
+                if (increment_result.affectedRows() == 0) {
+                    LOG_WARN << "File content not found for instant upload: content_id="
+                             << existing_content.value();
+                    co_return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Failed to update file content")
+                    );
+                }
+
                 CoroMapper<FileContents> content_mapper(m_db_client);
                 auto content = co_await content_mapper.findOne(
                     Criteria(FileContents::Cols::_id, CompareOperator::EQ, existing_content.value())
                 );
-
-                // 增加引用计数
-                auto ref_count = content.getValueOfRefCount() + 1;
-                content.setRefCount(ref_count);
-                co_await content_mapper.update(content);
 
                 // 创建文件记录
                 Files file;
@@ -127,7 +124,7 @@ namespace disk::file {
             }
         }
 
-        // 3. 检测断点续传
+        // 2. 检测断点续传
         auto existing_task = co_await FindExistingTask(user_id, request.file_hash);
         if (existing_task.has_value()) {
             const auto& task = existing_task.value();
@@ -146,6 +143,13 @@ namespace disk::file {
             response.uploaded_chunks = std::vector<uint32_t>(chunks.begin(), chunks.end());
 
             co_return response;
+        }
+
+        // 3. 检查存储配额（原子检查 + 预留空间）
+        auto quota_result = co_await CheckStorageQuota(user_id, request.file_size);
+        if (!quota_result) {
+            LOG_WARN << "Storage quota check failed: user_id=" << user_id;
+            co_return std::unexpected(quota_result.error());
         }
 
         // 4. 创建新的上传任务
@@ -173,6 +177,7 @@ namespace disk::file {
         task.setStatus(0); // 进行中
         task.setExpiresAt(trantor::Date::now().after(expiry_seconds));
 
+        bool create_task_failed = false;
         try {
             CoroMapper<UploadTasks> mapper(m_db_client);
             task = co_await mapper.insert(task);
@@ -191,10 +196,19 @@ namespace disk::file {
 
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "Failed to create upload task: " << e.base().what();
+            create_task_failed = true;
+        }
+
+        if (create_task_failed) {
+            co_await UpdateStorageUsed(user_id, -static_cast<int64_t>(request.file_size));
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to create upload task")
             );
         }
+
+        co_return std::unexpected(
+            ErrorInfo(ErrorCode::InternalError, "Unexpected upload initialization state")
+        );
     }
 
     // ==================== UploadChunk ====================
@@ -410,16 +424,19 @@ namespace disk::file {
 
             CoroMapper<FileContents> content_mapper(transaction);
             CoroMapper<Files> file_mapper(transaction);
-            CoroMapper<Users> user_mapper(transaction);
 
             uint64_t content_id = 0;
             if (existing_content.has_value()) {
                 content_id = existing_content.value();
-                auto content = co_await content_mapper.findOne(
-                    Criteria(FileContents::Cols::_id, CompareOperator::EQ, content_id)
+                auto increment_result = co_await transaction->execSqlCoro(
+                    "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = ?",
+                    content_id
                 );
-                content.setRefCount(content.getValueOfRefCount() + 1);
-                co_await content_mapper.update(content);
+                if (increment_result.affectedRows() == 0) {
+                    LOG_WARN << "File content not found when finalizing upload: content_id="
+                             << content_id;
+                    throw std::runtime_error("Failed to increment file content reference count");
+                }
             } else {
                 FileContents content;
                 content.setHashMd5(final_hash);
@@ -447,13 +464,18 @@ namespace disk::file {
 
             file = co_await file_mapper.insert(file);
 
-            auto user =
-                co_await user_mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
-            user.setStorageUsed(user.getValueOfStorageUsed() + task.getValueOfFileSize());
-            co_await user_mapper.update(user);
-
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "Database operation failed: " << e.base().what();
+            if (transaction) {
+                try {
+                    transaction->rollback();
+                } catch (const std::exception& rollback_e) {
+                    LOG_ERROR << "Transaction rollback failed: " << rollback_e.what();
+                }
+            }
+            db_operation_failed = true;
+        } catch (const std::exception& e) {
+            LOG_ERROR << "Database operation failed: " << e.what();
             if (transaction) {
                 try {
                     transaction->rollback();
@@ -573,105 +595,148 @@ namespace disk::file {
             }
         }
 
-        // 2. 查询文件和文件夹
-        std::vector<FileListItem> all_items;
+        // 2. 使用 SQL 查询（JOIN 消除 N+1， LIMIT/OFFSET 宻除内存分页）
+        std::vector<FileListItem> items;
+        int total = 0;
+        int total_pages = 0;
 
-        // 查询文件
-        if (request.type == "all" || request.type == "file") {
-            try {
-                CoroMapper<Files> file_mapper(m_db_client);
-                auto file_criteria =
-                    Criteria(Files::Cols::_folder_id, CompareOperator::EQ, request.parent_id) &&
-                    Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id);
-                auto files = co_await file_mapper.findBy(file_criteria);
-
-                // 获取文件内容的 hash 信息
-                for (const auto& file : files) {
-                    FileListItem item;
-                    item.id = file.getValueOfId();
-                    item.name = file.getValueOfName();
-                    item.type = "file";
-                    item.size = file.getValueOfSize();
-                    item.mime_type = file.getValueOfMimeType();
-                    item.created_at = file.getValueOfCreatedAt().toDbStringLocal();
-                    item.updated_at = file.getValueOfUpdatedAt().toDbStringLocal();
-
-                    // 获取 hash
-                    if (file.getContentId()) {
-                        try {
-                            CoroMapper<FileContents> content_mapper(m_db_client);
-                            auto content = co_await content_mapper.findOne(Criteria(
-                                FileContents::Cols::_id,
-                                CompareOperator::EQ,
-                                *file.getContentId()
-                            ));
-                            item.hash = content.getValueOfHashMd5();
-                        } catch (const drogon::orm::DrogonDbException&) {
-                            item.hash = "";
-                        }
-                    }
-
-                    all_items.push_back(item);
-                }
-            } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "Failed to query file list: " << e.base().what();
-            }
+        // 构建 ORDER BY 子句
+        std::string order_by = "name";
+        if (request.sort_by == "size") {
+            order_by = "size";
+        } else if (request.sort_by == "created_at") {
+            order_by = "created_at";
+        } else if (request.sort_by == "updated_at") {
+            order_by = "updated_at";
         }
 
-        // 查询文件夹
-        if (request.type == "all" || request.type == "folder") {
-            try {
-                CoroMapper<Folders> folder_mapper(m_db_client);
-                auto folder_criteria =
-                    Criteria(Folders::Cols::_parent_id, CompareOperator::EQ, request.parent_id) &&
-                    Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id);
-                auto folders = co_await folder_mapper.findBy(folder_criteria);
+        std::string order_dir = (request.sort_order == "desc") ? "DESC" : "ASC";
 
-                for (const auto& folder : folders) {
-                    FileListItem item;
-                    item.id = folder.getValueOfId();
-                    item.name = folder.getValueOfName();
-                    item.type = "folder";
-                    item.item_count = static_cast<int>(folder.getValueOfItemCount());
-                    item.created_at = folder.getValueOfCreatedAt().toDbStringLocal();
-                    item.updated_at = folder.getValueOfUpdatedAt().toDbStringLocal();
-                    all_items.push_back(item);
-                }
-            } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "Failed to query folder list: " << e.base().what();
-            }
-        }
-
-        // 3. 排序
-        auto sort_comparator = [&request](const FileListItem& a, const FileListItem& b) -> bool {
-            bool result = false;
-            if (request.sort_by == "name") {
-                result = a.name < b.name;
-            } else if (request.sort_by == "size") {
-                result = a.size < b.size;
-            } else if (request.sort_by == "created_at") {
-                result = a.created_at < b.created_at;
-            } else if (request.sort_by == "updated_at") {
-                result = a.updated_at < b.updated_at;
-            }
-            return request.sort_order == "desc" ? !result : result;
-        };
-        std::sort(all_items.begin(), all_items.end(), sort_comparator);
-
-        // 4. 分页
-        auto total = static_cast<int>(all_items.size());
         auto offset = (request.page - 1) * request.page_size;
-        auto total_pages =
-            request.page_size > 0 ? (total + request.page_size - 1) / request.page_size : 0;
 
-        std::vector<FileListItem> paginated_items;
-        for (int i = offset; i < std::min(offset + request.page_size, total); ++i) {
-            paginated_items.push_back(all_items[i]);
+        try {
+            if (request.type == "all") {
+                auto count_result = co_await m_db_client->execSqlCoro(
+                    "SELECT COUNT(*) AS cnt FROM (" "  SELECT f.id FROM files f WHERE f.folder_id = ? AND f.user_id = ? " "  UNION ALL " "  SELECT fo.id FROM folders fo WHERE fo.parent_id = ? AND fo.user_id = ? " ") AS combined",
+                    request.parent_id,
+                    user_id,
+                    request.parent_id,
+                    user_id
+                );
+
+                if (!count_result.empty()) {
+                    total = static_cast<int>(count_result[0]["cnt"].as<int64_t>());
+                }
+
+                std::string data_sql =
+                    "SELECT * FROM (" "  SELECT f.id, f.name, 'file' AS type, f.size, f.mime_type, " "         COALESCE(fc.hash_md5, '') AS hash, 0 AS item_count, f.created_at, f.updated_at " "  FROM files f " "  LEFT JOIN file_contents fc ON f.content_id = fc.id " "  WHERE f.folder_id = ? AND f.user_id = ? " "  UNION ALL " "  SELECT fo.id, fo.name, 'folder' AS type, 0 AS size, '' AS mime_type, " "         '' AS hash, fo.item_count, fo.created_at, fo.updated_at " "  FROM folders fo " "  WHERE fo.parent_id = ? AND fo.user_id = ? " ") AS combined " "ORDER BY " + order_by + " " + order_dir + " " "LIMIT ? OFFSET ?";
+
+                auto paginated_result = co_await m_db_client->execSqlCoro(
+                    data_sql,
+                    request.parent_id,
+                    user_id,
+                    request.parent_id,
+                    user_id,
+                    request.page_size,
+                    offset
+                );
+
+                for (const auto& row : paginated_result) {
+                    FileListItem item;
+                    item.id = row["id"].as<uint64_t>();
+                    item.name = row["name"].as<std::string>();
+                    item.type = row["type"].as<std::string>();
+                    item.size = row["size"].as<uint64_t>();
+                    item.mime_type = row["mime_type"].as<std::string>();
+                    item.hash = row["hash"].as<std::string>();
+                    item.item_count = static_cast<int>(row["item_count"].as<int64_t>());
+                    item.created_at = row["created_at"].as<std::string>();
+                    item.updated_at = row["updated_at"].as<std::string>();
+                    items.push_back(item);
+                }
+
+            } else if (request.type == "file") {
+                auto count_result = co_await m_db_client->execSqlCoro(
+                    "SELECT COUNT(*) AS cnt FROM files WHERE folder_id = ? AND user_id = ?",
+                    request.parent_id,
+                    user_id
+                );
+
+                if (!count_result.empty()) {
+                    total = static_cast<int>(count_result[0]["cnt"].as<int64_t>());
+                }
+
+                std::string data_sql =
+                    "SELECT f.id, f.name, f.size, f.mime_type, " "       COALESCE(fc.hash_md5, '') AS hash, f.created_at, f.updated_at " "FROM files f " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE f.folder_id = ? AND f.user_id = ? " "ORDER BY " + order_by + " " + order_dir + " " "LIMIT ? OFFSET ?";
+
+                auto paginated_result = co_await m_db_client->execSqlCoro(
+                    data_sql,
+                    request.parent_id,
+                    user_id,
+                    request.page_size,
+                    offset
+                );
+
+                for (const auto& row : paginated_result) {
+                    FileListItem item;
+                    item.id = row["id"].as<uint64_t>();
+                    item.name = row["name"].as<std::string>();
+                    item.type = "file";
+                    item.size = row["size"].as<uint64_t>();
+                    item.mime_type = row["mime_type"].as<std::string>();
+                    item.hash = row["hash"].as<std::string>();
+                    item.item_count = 0;
+                    item.created_at = row["created_at"].as<std::string>();
+                    item.updated_at = row["updated_at"].as<std::string>();
+                    items.push_back(item);
+                }
+
+            } else if (request.type == "folder") {
+                auto count_result = co_await m_db_client->execSqlCoro(
+                    "SELECT COUNT(*) AS cnt FROM folders WHERE parent_id = ? AND user_id = ?",
+                    request.parent_id,
+                    user_id
+                );
+
+                if (!count_result.empty()) {
+                    total = static_cast<int>(count_result[0]["cnt"].as<int64_t>());
+                }
+
+                std::string data_sql =
+                    "SELECT id, name, item_count, created_at, updated_at " "FROM folders " "WHERE parent_id = ? AND user_id = ? " "ORDER BY " + order_by + " " + order_dir + " " "LIMIT ? OFFSET ?";
+
+                auto paginated_result = co_await m_db_client->execSqlCoro(
+                    data_sql,
+                    request.parent_id,
+                    user_id,
+                    request.page_size,
+                    offset
+                );
+
+                for (const auto& row : paginated_result) {
+                    FileListItem item;
+                    item.id = row["id"].as<uint64_t>();
+                    item.name = row["name"].as<std::string>();
+                    item.type = "folder";
+                    item.size = 0;
+                    item.mime_type = "";
+                    item.hash = "";
+                    item.item_count = static_cast<int>(row["item_count"].as<int64_t>());
+                    item.created_at = row["created_at"].as<std::string>();
+                    item.updated_at = row["updated_at"].as<std::string>();
+                    items.push_back(item);
+                }
+            }
+
+            total_pages = request.page_size > 0 ? (total + request.page_size - 1) / request.page_size : 0;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "Failed to query file list: " << e.base().what();
         }
 
-        // 5. 构造响应
+        // 3. 构造响应
         FileListResponse response;
-        response.items = paginated_items;
+        response.items = items;
         response.pagination = { .page = request.page,
                                 .page_size = request.page_size,
                                 .total = total,
@@ -923,22 +988,6 @@ namespace disk::file {
             }
         }
 
-        Users user;
-        try {
-            CoroMapper<Users> user_mapper(m_db_client);
-            user = co_await user_mapper.findOne(
-                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
-            );
-        } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to query user info: " << e.base().what();
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to query user info")
-            );
-        }
-
-        auto storage_used = user.getValueOfStorageUsed();
-        auto storage_quota = user.getValueOfStorageQuota();
-
         uint64_t total_copy_size = 0;
         CoroMapper<Files> file_mapper(m_db_client);
         std::vector<std::pair<uint64_t, Files>> files_to_copy;
@@ -956,10 +1005,19 @@ namespace disk::file {
             }
         }
 
-        if (storage_used + total_copy_size > storage_quota) {
-            LOG_WARN << "Insufficient storage space: used=" << storage_used
-                     << ", quota=" << storage_quota << ", copy_size=" << total_copy_size;
-            co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
+        if (total_copy_size == 0) {
+            LOG_INFO << "No files can be copied after validation";
+            CopyResponse response;
+            response.copied_count = 0;
+            response.new_files = {};
+            co_return response;
+        }
+
+        auto quota_result = co_await CheckStorageQuota(user_id, total_copy_size);
+        if (!quota_result) {
+            LOG_WARN << "Storage quota check failed for copy: user_id=" << user_id
+                     << ", total_copy_size=" << total_copy_size;
+            co_return std::unexpected(quota_result.error());
         }
 
         int copied_count = 0;
@@ -981,11 +1039,15 @@ namespace disk::file {
 
                 auto content_id_ptr = file.getContentId();
                 if (content_id_ptr) {
-                    auto content = co_await content_mapper.findOne(
-                        Criteria(FileContents::Cols::_id, CompareOperator::EQ, *content_id_ptr)
+                    auto increment_result = co_await m_db_client->execSqlCoro(
+                        "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = ?",
+                        *content_id_ptr
                     );
-                    content.setRefCount(content.getValueOfRefCount() + 1);
-                    co_await content_mapper.update(content);
+                    if (increment_result.affectedRows() == 0) {
+                        LOG_WARN << "File content not found during copy: content_id="
+                                 << *content_id_ptr;
+                        continue;
+                    }
                 }
 
                 Files new_file;
@@ -1016,8 +1078,11 @@ namespace disk::file {
             }
         }
 
-        if (copied_count > 0) {
-            co_await UpdateStorageUsed(user_id, static_cast<int64_t>(actual_copy_size));
+        auto reserved_size = static_cast<int64_t>(total_copy_size);
+        auto consumed_size = static_cast<int64_t>(actual_copy_size);
+        auto release_size = reserved_size - consumed_size;
+        if (release_size > 0) {
+            co_await UpdateStorageUsed(user_id, -release_size);
         }
 
         LOG_INFO << "File copy completed: copied_count=" << copied_count
@@ -1100,117 +1165,159 @@ namespace disk::file {
                   << ", page=" << request.page << ", page_size=" << request.page_size
                   << ", user_id=" << user_id;
 
-        std::vector<SearchResultItem> all_items;
+        std::vector<SearchResultItem> items;
+        int total = 0;
+        int total_pages = 0;
 
-        // 构建搜索模式（LIKE %keyword%）
         std::string search_pattern = "%" + request.keyword + "%";
-
-        // 搜索文件
-        if (request.type == "all" || request.type == "file") {
-            try {
-                CoroMapper<Files> file_mapper(m_db_client);
-                auto file_criteria =
-                    Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id) &&
-                    Criteria(Files::Cols::_name, CompareOperator::Like, search_pattern);
-
-                // 如果指定了 folder_id，限定搜索范围
-                if (request.folder_id.has_value()) {
-                    file_criteria =
-                        file_criteria &&
-                        Criteria(Files::Cols::_folder_id, CompareOperator::EQ, *request.folder_id);
-                }
-
-                auto files = co_await file_mapper.findBy(file_criteria);
-
-                for (const auto& file : files) {
-                    SearchResultItem item;
-                    item.id = file.getValueOfId();
-                    item.name = file.getValueOfName();
-                    item.type = "file";
-                    item.size = file.getValueOfSize();
-                    item.mime_type = file.getValueOfMimeType();
-                    item.path = file.getValueOfPath();
-                    item.created_at = file.getValueOfCreatedAt().toDbStringLocal();
-                    item.updated_at = file.getValueOfUpdatedAt().toDbStringLocal();
-
-                    // 获取 hash
-                    if (file.getContentId()) {
-                        try {
-                            CoroMapper<FileContents> content_mapper(m_db_client);
-                            auto content = co_await content_mapper.findOne(Criteria(
-                                FileContents::Cols::_id,
-                                CompareOperator::EQ,
-                                *file.getContentId()
-                            ));
-                            item.hash = content.getValueOfHashMd5();
-                        } catch (const drogon::orm::DrogonDbException&) {
-                            item.hash = "";
-                        }
-                    }
-
-                    all_items.push_back(item);
-                }
-            } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "Failed to search files: " << e.base().what();
-            }
-        }
-
-        // 搜索文件夹
-        if (request.type == "all" || request.type == "folder") {
-            try {
-                CoroMapper<Folders> folder_mapper(m_db_client);
-                auto folder_criteria =
-                    Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id) &&
-                    Criteria(Folders::Cols::_name, CompareOperator::Like, search_pattern);
-
-                // 如果指定了 folder_id，限定搜索范围
-                if (request.folder_id.has_value()) {
-                    folder_criteria = folder_criteria && Criteria(
-                                                             Folders::Cols::_parent_id,
-                                                             CompareOperator::EQ,
-                                                             *request.folder_id
-                                                         );
-                }
-
-                auto folders = co_await folder_mapper.findBy(folder_criteria);
-
-                for (const auto& folder : folders) {
-                    SearchResultItem item;
-                    item.id = folder.getValueOfId();
-                    item.name = folder.getValueOfName();
-                    item.type = "folder";
-                    item.item_count = static_cast<int>(folder.getValueOfItemCount());
-                    item.path = folder.getValueOfPath();
-                    item.created_at = folder.getValueOfCreatedAt().toDbStringLocal();
-                    item.updated_at = folder.getValueOfUpdatedAt().toDbStringLocal();
-                    all_items.push_back(item);
-                }
-            } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "Failed to search folders: " << e.base().what();
-            }
-        }
-
-        // 排序（按名称排序）
-        std::sort(
-            all_items.begin(),
-            all_items.end(),
-            [](const SearchResultItem& a, const SearchResultItem& b) { return a.name < b.name; }
-        );
-
-        // 分页
-        auto total = static_cast<int>(all_items.size());
         auto offset = (request.page - 1) * request.page_size;
-        auto total_pages =
-            request.page_size > 0 ? (total + request.page_size - 1) / request.page_size : 0;
 
-        std::vector<SearchResultItem> paginated_items;
-        for (int i = offset; i < std::min(offset + request.page_size, total); ++i) {
-            paginated_items.push_back(all_items[i]);
+        try {
+            if (request.type == "all") {
+                std::string count_sql =
+                    "SELECT COUNT(*) FROM (" "  SELECT f.id, f.name, 'file' AS type " "  FROM files f " "  WHERE f.user_id = ? AND f.name LIKE ? " "  AND (? IS NULL OR f.folder_id = ?) " "  UNION ALL " "  SELECT fo.id, fo.name, 'folder' AS type " "  FROM folders fo " "  WHERE fo.user_id = ? AND fo.name LIKE ? " "  AND (? IS NULL OR fo.parent_id = ?) " ") AS combined";
+
+                auto count_result = co_await m_db_client->execSqlCoro(
+                    count_sql,
+                    user_id,
+                    search_pattern,
+                    request.folder_id.has_value() ? *request.folder_id : 0,
+                    request.folder_id.has_value() ? *request.folder_id : 0,
+                    user_id,
+                    search_pattern,
+                    request.folder_id.has_value() ? *request.folder_id : 0,
+                    request.folder_id.has_value() ? *request.folder_id : 0
+                );
+
+                if (!count_result.empty()) {
+                    total = static_cast<int>(count_result[0]["COUNT(*)"].as<int64_t>());
+                }
+
+                std::string data_sql =
+                    "SELECT * FROM (" "  SELECT f.id, f.name, 'file' AS type, f.size, f.mime_type, " "         COALESCE(fc.hash_md5, '') AS hash, 0 AS item_count, f.path, f.created_at, f.updated_at " "  FROM files f " "  LEFT JOIN file_contents fc ON f.content_id = fc.id " "  WHERE f.user_id = ? AND f.name LIKE ? " "  AND (? IS NULL OR f.folder_id = ?) " "  UNION ALL " "  SELECT fo.id, fo.name, 'folder' AS type, 0 AS size, '' AS mime_type, " "         '' AS hash, fo.item_count, fo.path, fo.created_at, fo.updated_at " "  FROM folders fo " "  WHERE fo.user_id = ? AND fo.name LIKE ? " "  AND (? IS NULL OR fo.parent_id = ?) " ") AS combined " "ORDER BY name ASC " "LIMIT ? OFFSET ?";
+
+                auto result = co_await m_db_client->execSqlCoro(
+                    data_sql,
+                    user_id,
+                    search_pattern,
+                    request.folder_id.has_value() ? *request.folder_id : 0,
+                    request.folder_id.has_value() ? *request.folder_id : 0,
+                    user_id,
+                    search_pattern,
+                    request.folder_id.has_value() ? *request.folder_id : 0,
+                    request.folder_id.has_value() ? *request.folder_id : 0,
+                    request.page_size,
+                    offset
+                );
+
+                for (const auto& row : result) {
+                    SearchResultItem item;
+                    item.id = row["id"].as<uint64_t>();
+                    item.name = row["name"].as<std::string>();
+                    item.type = row["type"].as<std::string>();
+                    item.size = row["size"].as<uint64_t>();
+                    item.mime_type = row["mime_type"].as<std::string>();
+                    item.hash = row["hash"].as<std::string>();
+                    item.item_count = static_cast<int>(row["item_count"].as<int64_t>());
+                    item.path = row["path"].as<std::string>();
+                    item.created_at = row["created_at"].as<std::string>();
+                    item.updated_at = row["updated_at"].as<std::string>();
+                    items.push_back(item);
+                }
+
+            } else if (request.type == "file") {
+                std::string count_sql =
+                    "SELECT COUNT(*) FROM files f " "WHERE f.user_id = ? AND f.name LIKE ? " "AND (? IS NULL OR f.folder_id = ?)";
+
+                auto count_result = co_await m_db_client->execSqlCoro(
+                    count_sql,
+                    user_id,
+                    search_pattern,
+                    request.folder_id.has_value() ? *request.folder_id : 0,
+                    request.folder_id.has_value() ? *request.folder_id : 0
+                );
+
+                if (!count_result.empty()) {
+                    total = static_cast<int>(count_result[0]["COUNT(*)"].as<int64_t>());
+                }
+
+                std::string data_sql =
+                    "SELECT f.id, f.name, f.size, f.mime_type, f.path, f.created_at, f.updated_at, " "       COALESCE(fc.hash_md5, '') AS hash " "FROM files f " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE f.user_id = ? AND f.name LIKE ? " "AND (? IS NULL OR f.folder_id = ?) " "ORDER BY name ASC " "LIMIT ? OFFSET ?";
+
+                auto result = co_await m_db_client->execSqlCoro(
+                    data_sql,
+                    user_id,
+                    search_pattern,
+                    request.folder_id.has_value() ? *request.folder_id : 0,
+                    request.folder_id.has_value() ? *request.folder_id : 0,
+                    request.page_size,
+                    offset
+                );
+
+                for (const auto& row : result) {
+                    SearchResultItem item;
+                    item.id = row["id"].as<uint64_t>();
+                    item.name = row["name"].as<std::string>();
+                    item.type = "file";
+                    item.size = row["size"].as<uint64_t>();
+                    item.mime_type = row["mime_type"].as<std::string>();
+                    item.hash = row["hash"].as<std::string>();
+                    item.path = row["path"].as<std::string>();
+                    item.created_at = row["created_at"].as<std::string>();
+                    item.updated_at = row["updated_at"].as<std::string>();
+                    items.push_back(item);
+                }
+
+            } else if (request.type == "folder") {
+                std::string count_sql =
+                    "SELECT COUNT(*) FROM folders fo " "WHERE fo.user_id = ? AND fo.name LIKE ? " "AND (? IS NULL OR fo.parent_id = ?)";
+
+                auto count_result = co_await m_db_client->execSqlCoro(
+                    count_sql,
+                    user_id,
+                    search_pattern,
+                    request.folder_id.has_value() ? *request.folder_id : 0,
+                    request.folder_id.has_value() ? *request.folder_id : 0
+                );
+
+                if (!count_result.empty()) {
+                    total = static_cast<int>(count_result[0]["COUNT(*)"].as<int64_t>());
+                }
+
+                std::string data_sql =
+                    "SELECT fo.id, fo.name, fo.item_count, fo.path, fo.created_at, fo.updated_at " "FROM folders fo " "WHERE fo.user_id = ? AND fo.name LIKE ? " "AND (? IS NULL OR fo.parent_id = ?) " "ORDER BY name ASC " "LIMIT ? OFFSET ?";
+
+                auto result = co_await m_db_client->execSqlCoro(
+                    data_sql,
+                    user_id,
+                    search_pattern,
+                    request.folder_id.has_value() ? *request.folder_id : 0,
+                    request.folder_id.has_value() ? *request.folder_id : 0,
+                    request.page_size,
+                    offset
+                );
+
+                for (const auto& row : result) {
+                    SearchResultItem item;
+                    item.id = row["id"].as<uint64_t>();
+                    item.name = row["name"].as<std::string>();
+                    item.type = "folder";
+                    item.item_count = static_cast<int>(row["item_count"].as<int64_t>());
+                    item.path = row["path"].as<std::string>();
+                    item.created_at = row["created_at"].as<std::string>();
+                    item.updated_at = row["updated_at"].as<std::string>();
+                    items.push_back(item);
+                }
+            }
+
+            total_pages = request.page_size > 0 ? (total + request.page_size - 1) / request.page_size : 0;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "Failed to search: " << e.base().what();
         }
 
-        // 构造响应
         SearchResponse response;
-        response.items = paginated_items;
+        response.items = items;
         response.pagination = { .page = request.page,
                                 .page_size = request.page_size,
                                 .total = total,
@@ -1226,27 +1333,27 @@ namespace disk::file {
         -> drogon::Task<Result<void>> {
 
         try {
-            CoroMapper<Users> mapper(m_db_client);
-            auto user =
-                co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
+            auto result = co_await m_db_client->execSqlCoro(
+                "UPDATE users SET storage_used = storage_used + ? " "WHERE id = ? AND storage_used + ? <= storage_quota",
+                file_size,
+                user_id,
+                file_size
+            );
 
-            auto storage_used = user.getValueOfStorageUsed();
-            auto storage_quota = user.getValueOfStorageQuota();
-
-            if (storage_used + file_size > storage_quota) {
-                LOG_WARN << "Insufficient storage space: used=" << storage_used
-                         << ", quota=" << storage_quota << ", file_size=" << file_size;
+            if (result.affectedRows() == 0) {
+                LOG_WARN << "Insufficient storage space: user_id=" << user_id
+                         << ", file_size=" << file_size;
                 co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
             }
 
-            LOG_DEBUG << "Storage quota check passed: used=" << storage_used
-                      << ", quota=" << storage_quota;
+            LOG_DEBUG << "Storage quota check passed and reserved: user_id=" << user_id
+                      << ", file_size=" << file_size;
             co_return {};
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to query user storage quota: " << e.base().what();
+            LOG_ERROR << "Failed to reserve user storage quota: " << e.base().what();
             co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to query storage quota")
+                ErrorInfo(ErrorCode::InternalError, "Failed to reserve storage quota")
             );
         }
     }
@@ -1310,18 +1417,28 @@ namespace disk::file {
     auto FileService::UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void> {
 
         try {
-            CoroMapper<Users> mapper(m_db_client);
-            auto user =
-                co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
+            if (delta >= 0) {
+                auto result = co_await m_db_client->execSqlCoro(
+                    "UPDATE users SET storage_used = storage_used + ? " "WHERE id = ? AND storage_used + ? <= storage_quota",
+                    delta,
+                    user_id,
+                    delta
+                );
 
-            auto new_used = static_cast<int64_t>(user.getValueOfStorageUsed()) + delta;
-            new_used = std::max<int64_t>(new_used, 0);
+                if (result.affectedRows() == 0) {
+                    LOG_WARN << "Skipped storage usage increment due to quota limit: user_id="
+                             << user_id << ", delta=" << delta;
+                    co_return;
+                }
+            } else {
+                co_await m_db_client->execSqlCoro(
+                    "UPDATE users SET storage_used = GREATEST(storage_used + ?, 0) WHERE id = ?",
+                    delta,
+                    user_id
+                );
+            }
 
-            user.setStorageUsed(static_cast<uint64_t>(new_used));
-            co_await mapper.update(user);
-
-            LOG_DEBUG << "Storage usage updated: user_id=" << user_id << ", delta=" << delta
-                      << ", new_used=" << new_used;
+            LOG_DEBUG << "Storage usage updated: user_id=" << user_id << ", delta=" << delta;
 
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "Failed to update storage usage: " << e.base().what();
@@ -1393,7 +1510,7 @@ namespace disk::file {
     }
 
     auto FileService::IsImageMimeType(const std::string& mime_type) -> bool {
-        return mime_type.find("image/") == 0;
+        return mime_type.starts_with("image/");
     }
 
 } // namespace disk::file

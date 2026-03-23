@@ -472,7 +472,7 @@ namespace disk::share {
 
         // 验证密码
         if (share.getPasswordHash() != nullptr) {
-            // 检查密码尝试限制
+            // 检查密码尝试限制 (原子递增)
             auto limit_result = co_await CheckPasswordRateLimit(request.share_id, ip_address);
             if (!limit_result) {
                 co_return std::unexpected(limit_result.error());
@@ -485,14 +485,11 @@ namespace disk::share {
             }
 
             if (!VerifyPassword(share, *request.password)) {
-                co_await RecordPasswordFailure(request.share_id, ip_address);
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::SharePasswordError, "Incorrect access password")
                 );
             }
         }
-
-        // 生成分享令牌
         auto token_result = services::TokenService::GenerateShareToken(
             m_jwt_secret,
             share.getValueOfShareCode(),
@@ -500,18 +497,6 @@ namespace disk::share {
         );
         if (!token_result) {
             co_return std::unexpected(token_result.error());
-        }
-
-        // 存储分享令牌到 Redis
-        if (m_redis_service) {
-            auto token_hash_result = services::TokenService::ExtractShareTokenHash(*token_result);
-            if (token_hash_result) {
-                auto key = redis::RedisKeyPrefix::BuildShareTokenKey(
-                    share.getValueOfShareCode(),
-                    *token_hash_result
-                );
-                co_await m_redis_service->Set(key, "1", 3600);
-            }
         }
 
         // 增加访问次数
@@ -900,40 +885,30 @@ namespace disk::share {
         }
 
         auto key = redis::RedisKeyPrefix::BuildSharePasswordRateLimitKey(share_code, ip_address);
-        auto count_result = co_await m_redis_service->Get(key);
 
-        if (count_result.has_value()) {
-            try {
-                int count = std::stoi(*count_result);
-                if (count >= 5) {
-                    co_return std::unexpected(ErrorInfo(
-                        ErrorCode::TooManyRequests,
-                        "Too many password verification attempts, please try again later"
-                    ));
-                }
-            } catch (...) {
-                // 忽略解析错误
-            }
+        // 原子递增计数 (INCR-first gate - atomic admission control)
+        auto incr_result = co_await m_redis_service->Incr(key);
+
+        if (!incr_result) {
+            LOG_ERROR << "Redis increment failed: " << incr_result.error().message;
+            co_return {};
+        }
+
+        constexpr int MAX_ATTEMPTS = 5;
+
+        // 如果是第一次请求，设置过期时间（15分钟）
+        if (incr_result.value() == 1) {
+            co_await m_redis_service->Expire(key, 900);
+        }
+
+        // 检查是否超过限制
+        if (incr_result.value() > MAX_ATTEMPTS) {
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::TooManyRequests,
+                "Too many password verification attempts, please try again later"
+            ));
         }
 
         co_return {};
     }
-
-    auto ShareService::RecordPasswordFailure(
-        const std::string& share_code,
-        const std::string& ip_address
-    ) -> drogon::Task<void> {
-        if (!m_redis_service) {
-            co_return;
-        }
-
-        auto key = redis::RedisKeyPrefix::BuildSharePasswordRateLimitKey(share_code, ip_address);
-        auto count_result = co_await m_redis_service->Incr(key);
-
-        // 第一次失败时设置过期时间（15分钟）
-        if (count_result.has_value() && *count_result == 1) {
-            co_await m_redis_service->Expire(key, 900);
-        }
-    }
-
 } // namespace disk::share

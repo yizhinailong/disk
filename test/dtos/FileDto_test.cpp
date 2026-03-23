@@ -18,17 +18,23 @@
 
 #include "utils/ErrorCode.hpp"
 
+using disk::Pagination;
 using disk::file::CompleteUploadRequest;
 using disk::file::CompleteUploadResponse;
 using disk::file::CopyRequest;
 using disk::file::DeleteRequest;
 using disk::file::DownloadInfoRequest;
 using disk::file::FileItem;
+using disk::file::FileListItem;
 using disk::file::FileListRequest;
+using disk::file::FileListResponse;
 using disk::file::InitUploadRequest;
 using disk::file::InitUploadResponse;
 using disk::file::MoveRequest;
 using disk::file::RenameRequest;
+using disk::file::SearchRequest;
+using disk::file::SearchResponse;
+using disk::file::SearchResultItem;
 using disk::file::UploadChunkRequest;
 using disk::file::UploadChunkResponse;
 
@@ -1022,4 +1028,413 @@ TEST(DeleteRequest, InvalidFileIdZero) {
     if (!result.has_value()) {
         EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
     }
+}
+
+// ==================== FileListItem Tests ====================
+
+TEST(FileListItem, ToJsonFileType) {
+    FileListItem item;
+    item.id = 123;
+    item.name = "document.pdf";
+    item.type = "file";
+    item.size = 1048576;
+    item.mime_type = "application/pdf";
+    item.hash = "d41d8cd98f00b204e9800998ecf8427e";
+    item.created_at = "2026-02-14T10:30:00Z";
+    item.updated_at = "2026-02-15T11:00:00Z";
+
+    auto json = item.ToJson();
+
+    EXPECT_EQ(json["id"].asUInt64(), 123);
+    EXPECT_EQ(json["name"].asString(), "document.pdf");
+    EXPECT_EQ(json["type"].asString(), "file");
+    EXPECT_EQ(json["size"].asUInt64(), 1048576);
+    EXPECT_EQ(json["mime_type"].asString(), "application/pdf");
+    EXPECT_EQ(json["hash"].asString(), "d41d8cd98f00b204e9800998ecf8427e");
+    EXPECT_EQ(json["created_at"].asString(), "2026-02-14T10:30:00Z");
+    EXPECT_EQ(json["updated_at"].asString(), "2026-02-15T11:00:00Z");
+    // File type should NOT have item_count
+    EXPECT_FALSE(json.isMember("item_count"));
+}
+
+TEST(FileListItem, ToJsonFolderType) {
+    FileListItem item;
+    item.id = 456;
+    item.name = "Documents";
+    item.type = "folder";
+    item.item_count = 42;
+    item.created_at = "2026-02-14T10:30:00Z";
+    item.updated_at = "2026-02-15T11:00:00Z";
+
+    auto json = item.ToJson();
+
+    EXPECT_EQ(json["id"].asUInt64(), 456);
+    EXPECT_EQ(json["name"].asString(), "Documents");
+    EXPECT_EQ(json["type"].asString(), "folder");
+    EXPECT_EQ(json["item_count"].asInt(), 42);
+    EXPECT_EQ(json["created_at"].asString(), "2026-02-14T10:30:00Z");
+    EXPECT_EQ(json["updated_at"].asString(), "2026-02-15T11:00:00Z");
+    // Folder type should NOT have size, mime_type, hash
+    EXPECT_FALSE(json.isMember("size"));
+    EXPECT_FALSE(json.isMember("mime_type"));
+    EXPECT_FALSE(json.isMember("hash"));
+}
+
+// ==================== FileListResponse Tests ====================
+
+TEST(FileListResponse, ToJsonWithPaginationMetadata) {
+    FileListResponse response;
+
+    FileListItem item1;
+    item1.id = 1;
+    item1.name = "file1.txt";
+    item1.type = "file";
+    item1.size = 1024;
+    item1.mime_type = "text/plain";
+    item1.hash = "abc123def456789012345678901234ab";
+    item1.created_at = "2026-02-14T10:30:00Z";
+    item1.updated_at = "2026-02-14T10:30:00Z";
+
+    FileListItem item2;
+    item2.id = 2;
+    item2.name = "folder1";
+    item2.type = "folder";
+    item2.item_count = 5;
+    item2.created_at = "2026-02-13T10:30:00Z";
+    item2.updated_at = "2026-02-14T11:00:00Z";
+
+    response.items.push_back(item1);
+    response.items.push_back(item2);
+
+    response.pagination.page = 2;
+    response.pagination.page_size = 20;
+    response.pagination.total = 45;
+    response.pagination.total_pages = 3;
+
+    auto json = response.ToJson();
+
+    // Verify items array
+    ASSERT_TRUE(json.isMember("items"));
+    EXPECT_EQ(json["items"].size(), 2U);
+    EXPECT_EQ(json["items"][0]["name"].asString(), "file1.txt");
+    EXPECT_EQ(json["items"][1]["name"].asString(), "folder1");
+
+    // Verify pagination metadata structure
+    ASSERT_TRUE(json.isMember("pagination"));
+    EXPECT_EQ(json["pagination"]["page"].asInt(), 2);
+    EXPECT_EQ(json["pagination"]["page_size"].asInt(), 20);
+    EXPECT_EQ(json["pagination"]["total"].asInt(), 45);
+    EXPECT_EQ(json["pagination"]["total_pages"].asInt(), 3);
+}
+
+TEST(FileListResponse, PaginationMetadataFieldNames) {
+    // Regression test: ensure pagination field names are stable
+    FileListResponse response;
+    response.pagination.page = 1;
+    response.pagination.page_size = 10;
+    response.pagination.total = 100;
+    response.pagination.total_pages = 10;
+
+    auto json = response.ToJson();
+    auto pagination = json["pagination"];
+
+    // Verify exact field names
+    EXPECT_TRUE(pagination.isMember("page"));
+    EXPECT_TRUE(pagination.isMember("page_size"));
+    EXPECT_TRUE(pagination.isMember("total"));
+    EXPECT_TRUE(pagination.isMember("total_pages"));
+
+    // Verify field types
+    EXPECT_TRUE(pagination["page"].isInt());
+    EXPECT_TRUE(pagination["page_size"].isInt());
+    EXPECT_TRUE(pagination["total"].isInt());
+    EXPECT_TRUE(pagination["total_pages"].isInt());
+}
+
+TEST(FileListResponse, EmptyListWithPagination) {
+    FileListResponse response;
+    response.pagination.page = 1;
+    response.pagination.page_size = 20;
+    response.pagination.total = 0;
+    response.pagination.total_pages = 0;
+
+    auto json = response.ToJson();
+
+    EXPECT_TRUE(json["items"].isArray());
+    EXPECT_EQ(json["items"].size(), 0U);
+    EXPECT_EQ(json["pagination"]["total"].asInt(), 0);
+    EXPECT_EQ(json["pagination"]["total_pages"].asInt(), 0);
+}
+
+// ==================== SearchRequest Tests ====================
+
+TEST(SearchRequest, ValidParameters) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("keyword", "document");
+    req->setParameter("type", "file");
+    req->setParameter("folder_id", "10");
+    req->setParameter("page", "2");
+    req->setParameter("page_size", "50");
+
+    auto result = SearchRequest::FromRequest(req);
+    ASSERT_TRUE(result.has_value()) << "Valid parameters should pass";
+    EXPECT_EQ(result->keyword, "document");
+    EXPECT_EQ(result->type, "file");
+    ASSERT_TRUE(result->folder_id.has_value());
+    EXPECT_EQ(*result->folder_id, 10);
+    EXPECT_EQ(result->page, 2);
+    EXPECT_EQ(result->page_size, 50);
+}
+
+TEST(SearchRequest, DefaultValues) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("keyword", "test");
+
+    auto result = SearchRequest::FromRequest(req);
+    ASSERT_TRUE(result.has_value()) << "Valid keyword should pass";
+    EXPECT_EQ(result->keyword, "test");
+    EXPECT_EQ(result->type, "all");
+    EXPECT_FALSE(result->folder_id.has_value());
+    EXPECT_EQ(result->page, 1);
+    EXPECT_EQ(result->page_size, 20);
+}
+
+TEST(SearchRequest, MissingKeyword) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+
+    auto result = SearchRequest::FromRequest(req);
+    EXPECT_FALSE(result.has_value()) << "Missing keyword should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(SearchRequest, KeywordTooLong) {
+    std::string long_keyword(101, 'a');
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("keyword", long_keyword);
+
+    auto result = SearchRequest::FromRequest(req);
+    EXPECT_FALSE(result.has_value()) << "Keyword > 100 chars should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(SearchRequest, KeywordForbiddenChars) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("keyword", "test%keyword");
+
+    auto result = SearchRequest::FromRequest(req);
+    EXPECT_FALSE(result.has_value()) << "Keyword with % should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(SearchRequest, KeywordForbiddenUnderscore) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("keyword", "test_keyword");
+
+    auto result = SearchRequest::FromRequest(req);
+    EXPECT_FALSE(result.has_value()) << "Keyword with _ should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(SearchRequest, InvalidType) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("keyword", "test");
+    req->setParameter("type", "document");
+
+    auto result = SearchRequest::FromRequest(req);
+    EXPECT_FALSE(result.has_value()) << "Invalid type should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(SearchRequest, InvalidPage) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("keyword", "test");
+    req->setParameter("page", "0");
+
+    auto result = SearchRequest::FromRequest(req);
+    EXPECT_FALSE(result.has_value()) << "page = 0 should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(SearchRequest, InvalidPageSizeTooLarge) {
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setParameter("keyword", "test");
+    req->setParameter("page_size", "101");
+
+    auto result = SearchRequest::FromRequest(req);
+    EXPECT_FALSE(result.has_value()) << "page_size > 100 should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+// ==================== SearchResultItem Tests ====================
+
+TEST(SearchResultItem, ToJsonIncludesPath) {
+    SearchResultItem item;
+    item.id = 123;
+    item.name = "report.pdf";
+    item.type = "file";
+    item.size = 2048576;
+    item.mime_type = "application/pdf";
+    item.hash = "abc123def456789012345678901234ab";
+    item.created_at = "2026-02-14T10:30:00Z";
+    item.updated_at = "2026-02-15T11:00:00Z";
+    item.path = "/Documents/2026/report.pdf";
+
+    auto json = item.ToJson();
+
+    // Inherited fields from FileListItem
+    EXPECT_EQ(json["id"].asUInt64(), 123);
+    EXPECT_EQ(json["name"].asString(), "report.pdf");
+    EXPECT_EQ(json["type"].asString(), "file");
+    EXPECT_EQ(json["size"].asUInt64(), 2048576);
+    EXPECT_EQ(json["mime_type"].asString(), "application/pdf");
+    EXPECT_EQ(json["hash"].asString(), "abc123def456789012345678901234ab");
+
+    // Search-specific field
+    EXPECT_EQ(json["path"].asString(), "/Documents/2026/report.pdf");
+}
+
+TEST(SearchResultItem, ToJsonFolderWithPath) {
+    SearchResultItem item;
+    item.id = 456;
+    item.name = "Projects";
+    item.type = "folder";
+    item.item_count = 10;
+    item.created_at = "2026-02-14T10:30:00Z";
+    item.updated_at = "2026-02-15T11:00:00Z";
+    item.path = "/Documents/Projects";
+
+    auto json = item.ToJson();
+
+    EXPECT_EQ(json["id"].asUInt64(), 456);
+    EXPECT_EQ(json["name"].asString(), "Projects");
+    EXPECT_EQ(json["type"].asString(), "folder");
+    EXPECT_EQ(json["item_count"].asInt(), 10);
+    EXPECT_EQ(json["path"].asString(), "/Documents/Projects");
+}
+
+// ==================== SearchResponse Tests ====================
+
+TEST(SearchResponse, ToJsonWithPaginationMetadata) {
+    SearchResponse response;
+
+    SearchResultItem item1;
+    item1.id = 1;
+    item1.name = "doc1.pdf";
+    item1.type = "file";
+    item1.size = 1024;
+    item1.mime_type = "application/pdf";
+    item1.hash = "abc123def456789012345678901234ab";
+    item1.created_at = "2026-02-14T10:30:00Z";
+    item1.updated_at = "2026-02-14T10:30:00Z";
+    item1.path = "/docs/doc1.pdf";
+
+    SearchResultItem item2;
+    item2.id = 2;
+    item2.name = "folder1";
+    item2.type = "folder";
+    item2.item_count = 3;
+    item2.created_at = "2026-02-13T10:30:00Z";
+    item2.updated_at = "2026-02-14T11:00:00Z";
+    item2.path = "/docs/folder1";
+
+    response.items.push_back(item1);
+    response.items.push_back(item2);
+
+    response.pagination.page = 1;
+    response.pagination.page_size = 20;
+    response.pagination.total = 35;
+    response.pagination.total_pages = 2;
+
+    auto json = response.ToJson();
+
+    // Verify items array
+    ASSERT_TRUE(json.isMember("items"));
+    EXPECT_EQ(json["items"].size(), 2U);
+    EXPECT_EQ(json["items"][0]["name"].asString(), "doc1.pdf");
+    EXPECT_EQ(json["items"][0]["path"].asString(), "/docs/doc1.pdf");
+    EXPECT_EQ(json["items"][1]["name"].asString(), "folder1");
+    EXPECT_EQ(json["items"][1]["path"].asString(), "/docs/folder1");
+
+    // Verify pagination metadata
+    ASSERT_TRUE(json.isMember("pagination"));
+    EXPECT_EQ(json["pagination"]["page"].asInt(), 1);
+    EXPECT_EQ(json["pagination"]["page_size"].asInt(), 20);
+    EXPECT_EQ(json["pagination"]["total"].asInt(), 35);
+    EXPECT_EQ(json["pagination"]["total_pages"].asInt(), 2);
+}
+
+TEST(SearchResponse, PaginationMetadataFieldNames) {
+    // Regression test: ensure search pagination field names match list pagination
+    SearchResponse response;
+    response.pagination.page = 1;
+    response.pagination.page_size = 10;
+    response.pagination.total = 100;
+    response.pagination.total_pages = 10;
+
+    auto json = response.ToJson();
+    auto pagination = json["pagination"];
+
+    // Field names must match FileListResponse pagination
+    EXPECT_TRUE(pagination.isMember("page"));
+    EXPECT_TRUE(pagination.isMember("page_size"));
+    EXPECT_TRUE(pagination.isMember("total"));
+    EXPECT_TRUE(pagination.isMember("total_pages"));
+}
+
+TEST(SearchResponse, EmptySearchWithPagination) {
+    SearchResponse response;
+    response.pagination.page = 1;
+    response.pagination.page_size = 20;
+    response.pagination.total = 0;
+    response.pagination.total_pages = 0;
+
+    auto json = response.ToJson();
+
+    EXPECT_TRUE(json["items"].isArray());
+    EXPECT_EQ(json["items"].size(), 0U);
+    EXPECT_EQ(json["pagination"]["total"].asInt(), 0);
+    EXPECT_EQ(json["pagination"]["total_pages"].asInt(), 0);
+}
+
+// ==================== Pagination Create Factory Tests ====================
+
+TEST(Pagination, CreateFactoryCalculatesTotalPages) {
+    // Test the Pagination::Create factory method for correct total_pages calculation
+
+    // Case 1: Exact multiple
+    auto p1 = Pagination::Create(1, 20, 100);
+    EXPECT_EQ(p1.page, 1);
+    EXPECT_EQ(p1.page_size, 20);
+    EXPECT_EQ(p1.total, 100);
+    EXPECT_EQ(p1.total_pages, 5);
+
+    // Case 2: Non-exact multiple (round up)
+    auto p2 = Pagination::Create(1, 20, 45);
+    EXPECT_EQ(p2.total_pages, 3); // ceil(45/20) = 3
+
+    // Case 3: Empty result
+    auto p3 = Pagination::Create(1, 20, 0);
+    EXPECT_EQ(p3.total_pages, 0);
+
+    // Case 4: Single item
+    auto p4 = Pagination::Create(1, 20, 1);
+    EXPECT_EQ(p4.total_pages, 1);
+
+    // Case 5: Items less than page_size
+    auto p5 = Pagination::Create(1, 20, 15);
+    EXPECT_EQ(p5.total_pages, 1);
 }

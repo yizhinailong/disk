@@ -162,6 +162,28 @@ namespace disk::services {
         [[nodiscard]]
         auto IncrBy(const std::string& key, std::int64_t increment) -> drogon::Task<Result<std::int64_t>>;
 
+        /**
+         * @brief 原子性比较并交换 (Compare-And-Swap)
+         *
+         * 使用 Lua 脚本实现原子 CAS 操作：
+         * 1. 获取当前值
+         * 2. 如果当前值等于期望值，则设置新值并返回 true
+         * 3. 如果当前值不等于期望值，返回 false
+         *
+         * @param key Redis 键
+         * @param expected 期望的当前值
+         * @param new_value 要设置的新值
+         * @param ttl 过期时间（秒），0 表示不设置过期时间
+         * @return Result<bool> 成功返回是否交换成功，失败返回错误
+         */
+        [[nodiscard]]
+        auto CompareAndSwap(
+            const std::string& key,
+            const std::string& expected,
+            const std::string& new_value,
+            int ttl
+        ) -> drogon::Task<Result<bool>>;
+
     private:
         /**
          * @brief 私有构造函数（单例模式）

@@ -14,6 +14,7 @@
 
 #include "models/FileContents.hpp"
 #include "models/Trash.hpp"
+#include "models/UploadTasks.hpp"
 #include "models/Users.hpp"
 #include "storage/StorageMgr.hpp"
 
@@ -24,7 +25,10 @@ namespace disk::services {
     using drogon::orm::Criteria;
     using drogon_model::disk::FileContents;
     using drogon_model::disk::Trash;
+    using drogon_model::disk::UploadTasks;
     using drogon_model::disk::Users;
+
+    constexpr int kUploadTaskCleanupBatchSize = 100;
 
     CleanupService::CleanupService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
@@ -91,6 +95,62 @@ namespace disk::services {
         }
     }
 
+    auto CleanupService::CleanupExpiredUploadTasks() -> drogon::Task<Result<int>> {
+        LOG_INFO << "Starting cleanup of expired upload tasks";
+
+        try {
+            auto result = co_await m_db_client->execSqlCoro(
+                "SELECT id, temp_path FROM upload_tasks " "WHERE status = 0 AND expires_at < NOW() " "LIMIT ?",
+                kUploadTaskCleanupBatchSize
+            );
+
+            int cleaned_count = 0;
+            auto* storage = disk::storage::StorageMgr::GetStorage();
+
+            for (size_t i = 0; i < result.size(); ++i) {
+                const auto& row = result[i];
+                auto task_id = row["id"].as<std::string>();
+                auto temp_path = row["temp_path"].as<std::string>();
+
+                if (storage != nullptr) {
+                    auto delete_result = co_await storage->DeletePath(temp_path);
+                    if (!delete_result.has_value()) {
+                        LOG_WARN << "Failed to cleanup temp file for expired upload task: task_id="
+                                 << task_id << ", temp_path=" << temp_path
+                                 << ", error_code=" << static_cast<uint32_t>(delete_result.error().code)
+                                 << ", error_message=" << delete_result.error().message;
+                    } else {
+                        LOG_DEBUG << "Temp file cleaned for expired upload task: task_id="
+                                  << task_id << ", temp_path=" << temp_path;
+                    }
+                }
+
+                co_await m_db_client->execSqlCoro(
+                    "UPDATE upload_tasks SET status = 3 WHERE id = ? AND status = 0",
+                    task_id
+                );
+
+                cleaned_count++;
+
+                LOG_DEBUG << "Expired upload task marked as expired: task_id=" << task_id;
+            }
+
+            LOG_INFO << "Upload task cleanup completed: cleaned_count=" << cleaned_count;
+            co_return cleaned_count;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Database error cleaning expired upload tasks: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to clean expired upload tasks")
+            );
+        } catch (const std::exception& e) {
+            LOG_ERROR << "Unknown error cleaning expired upload tasks: " << e.what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to clean expired upload tasks")
+            );
+        }
+    }
+
     auto CleanupService::UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void> {
         try {
             CoroMapper<Users> mapper(m_db_client);
@@ -116,43 +176,45 @@ namespace disk::services {
 
     auto CleanupService::DecrementContentRefCount(uint64_t content_id) -> drogon::Task<void> {
         try {
+            auto decrement_result = co_await m_db_client->execSqlCoro(
+                "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = ?",
+                content_id
+            );
+
+            if (decrement_result.affectedRows() == 0) {
+                LOG_DEBUG << "File content reference count already 0 or content missing, skip decrement: content_id="
+                          << content_id;
+                co_return;
+            }
+
             CoroMapper<FileContents> mapper(m_db_client);
             auto content = co_await mapper.findOne(
                 Criteria(FileContents::Cols::_id, CompareOperator::EQ, content_id)
             );
 
-            auto current_ref_count = content.getValueOfRefCount();
-            if (current_ref_count > 0) {
-                const auto new_ref_count = current_ref_count - 1;
-                content.setRefCount(new_ref_count);
-                co_await mapper.update(content);
-                LOG_DEBUG << "File content reference count decremented: content_id=" << content_id
-                          << ", ref_count=" << new_ref_count;
+            LOG_DEBUG << "File content reference count decremented: content_id=" << content_id
+                      << ", ref_count=" << content.getValueOfRefCount();
 
-                if (new_ref_count == 0) {
-                    auto* storage = disk::storage::StorageMgr::GetStorage();
-                    if (storage == nullptr) {
+            if (content.getValueOfRefCount() == 0) {
+                auto* storage = disk::storage::StorageMgr::GetStorage();
+                if (storage == nullptr) {
+                    LOG_WARN
+                        << "Storage manager is not initialized, skip expired-trash blob cleanup: content_id="
+                        << content_id << ", storage_path=" << content.getValueOfStoragePath();
+                } else {
+                    auto delete_result = co_await storage->DeletePath(content.getValueOfStoragePath());
+                    if (!delete_result.has_value()) {
                         LOG_WARN
-                            << "Storage manager is not initialized, skip expired-trash blob cleanup: content_id="
-                            << content_id << ", storage_path=" << content.getValueOfStoragePath();
+                            << "Failed to cleanup expired-trash blob after ref_count reached zero: content_id="
+                            << content_id << ", storage_path=" << content.getValueOfStoragePath()
+                            << ", error_code=" << static_cast<uint32_t>(delete_result.error().code)
+                            << ", error_message=" << delete_result.error().message;
                     } else {
-                        auto delete_result = co_await storage->DeletePath(content.getValueOfStoragePath());
-                        if (!delete_result.has_value()) {
-                            LOG_WARN
-                                << "Failed to cleanup expired-trash blob after ref_count reached zero: content_id="
-                                << content_id << ", storage_path=" << content.getValueOfStoragePath()
-                                << ", error_code=" << static_cast<uint32_t>(delete_result.error().code)
-                                << ", error_message=" << delete_result.error().message;
-                        } else {
-                            LOG_INFO
-                                << "Expired-trash blob cleanup completed after ref_count reached zero: content_id="
-                                << content_id << ", storage_path=" << content.getValueOfStoragePath();
-                        }
+                        LOG_INFO
+                            << "Expired-trash blob cleanup completed after ref_count reached zero: content_id="
+                            << content_id << ", storage_path=" << content.getValueOfStoragePath();
                     }
                 }
-            } else {
-                LOG_DEBUG << "File content reference count already 0, skip decrement: content_id="
-                          << content_id;
             }
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_WARN << "Failed to update file content reference count: content_id=" << content_id

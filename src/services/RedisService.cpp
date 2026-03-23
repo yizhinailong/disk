@@ -276,4 +276,38 @@ namespace disk::services {
         }
     }
 
+    auto RedisService::CompareAndSwap(
+        const std::string& key,
+        const std::string& expected,
+        const std::string& new_value,
+        int ttl
+    ) -> drogon::Task<Result<bool>> {
+        static constexpr char CAS_LUA_SCRIPT[] =
+            "local current = redis.call('GET', KEYS[1]) " "if current == ARGV[1] then " "    redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3]) " "    return 1 " "else " "    return 0 " "end";
+
+        try {
+            auto result = co_await m_redis_client->execCommandCoro(
+                "EVAL %s 1 %s %s %s %d",
+                CAS_LUA_SCRIPT,
+                key.c_str(),
+                expected.c_str(),
+                new_value.c_str(),
+                ttl
+            );
+
+            const auto success = result.asInteger() == 1;
+
+            LOG_TRACE << "Redis CAS: key=" << key << ", success=" << success;
+
+            co_return success;
+
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis operation failed: CAS, key=" << key << ", error=" << ex.what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::RedisOperationFailed,
+                "Redis operation failed: " + std::string(ex.what())
+            ));
+        }
+    }
+
 } // namespace disk::services

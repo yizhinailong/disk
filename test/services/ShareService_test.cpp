@@ -515,6 +515,251 @@ namespace disk::share {
 
         class ShareApiRegressionTest : public ::testing::Test {};
 
+        // ==================== ShareListRequest Validation Tests ====================
 
-} // namespace
+        class ShareListRequestTest : public ::testing::Test {};
+
+        TEST_F(ShareListRequestTest, ValidParameters) {
+            auto req = drogon::HttpRequest::newHttpRequest();
+            req->setParameter("status", "active");
+            req->setParameter("page", "2");
+            req->setParameter("page_size", "50");
+
+            auto result = ShareListRequest::FromRequest(req);
+            ASSERT_TRUE(result.has_value());
+            EXPECT_EQ(result->status, "active");
+            EXPECT_EQ(result->page, 2);
+            EXPECT_EQ(result->page_size, 50);
+        }
+
+        TEST_F(ShareListRequestTest, DefaultValues) {
+            auto req = drogon::HttpRequest::newHttpRequest();
+
+            auto result = ShareListRequest::FromRequest(req);
+            ASSERT_TRUE(result.has_value());
+            EXPECT_EQ(result->status, "all");
+            EXPECT_EQ(result->page, 1);
+            EXPECT_EQ(result->page_size, 20);
+        }
+
+        TEST_F(ShareListRequestTest, InvalidStatus) {
+            auto req = drogon::HttpRequest::newHttpRequest();
+            req->setParameter("status", "invalid");
+
+            auto result = ShareListRequest::FromRequest(req);
+            EXPECT_FALSE(result.has_value());
+            if (!result.has_value()) {
+                EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+            }
+        }
+
+        TEST_F(ShareListRequestTest, InvalidPageZero) {
+            auto req = drogon::HttpRequest::newHttpRequest();
+            req->setParameter("page", "0");
+
+            auto result = ShareListRequest::FromRequest(req);
+            EXPECT_FALSE(result.has_value());
+            if (!result.has_value()) {
+                EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+            }
+        }
+
+        TEST_F(ShareListRequestTest, InvalidPageNegative) {
+            auto req = drogon::HttpRequest::newHttpRequest();
+            req->setParameter("page", "-1");
+
+            auto result = ShareListRequest::FromRequest(req);
+            EXPECT_FALSE(result.has_value());
+            if (!result.has_value()) {
+                EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+            }
+        }
+
+        TEST_F(ShareListRequestTest, InvalidPageSizeTooLarge) {
+            auto req = drogon::HttpRequest::newHttpRequest();
+            req->setParameter("page_size", "101");
+
+            auto result = ShareListRequest::FromRequest(req);
+            EXPECT_FALSE(result.has_value());
+            if (!result.has_value()) {
+                EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+            }
+        }
+
+        TEST_F(ShareListRequestTest, InvalidPageSizeZero) {
+            auto req = drogon::HttpRequest::newHttpRequest();
+            req->setParameter("page_size", "0");
+
+            auto result = ShareListRequest::FromRequest(req);
+            EXPECT_FALSE(result.has_value());
+            if (!result.has_value()) {
+                EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+            }
+        }
+
+        TEST_F(ShareListRequestTest, ValidStatusValues) {
+            std::vector<std::string> valid_statuses = { "all", "active", "expired", "cancelled" };
+            for (const auto& status : valid_statuses) {
+                auto req = drogon::HttpRequest::newHttpRequest();
+                req->setParameter("status", status);
+
+                auto result = ShareListRequest::FromRequest(req);
+                ASSERT_TRUE(result.has_value()) << "Status '" << status << "' should be valid";
+                EXPECT_EQ(result->status, status);
+            }
+        }
+
+        // ==================== ShareListResponse Ordering Tests ====================
+
+        class ShareListOrderingTest : public ::testing::Test {};
+
+        TEST_F(ShareListOrderingTest, ItemsMaintainInsertionOrder) {
+            ShareListResponse response;
+
+            for (int i = 0; i < 5; ++i) {
+                ShareItem item;
+                item.share_id = "share" + std::to_string(i);
+                item.file_name = "file" + std::to_string(i);
+                item.file_count = i;
+                item.share_link = "/s/share" + std::to_string(i);
+                item.has_password = false;
+                item.permission = "view";
+                item.view_count = i * 10;
+                item.download_count = i * 5;
+                item.created_at = "2026-02-" + std::to_string(10 + i) + " 10:00:00";
+                item.expires_at = "";
+                item.status = "active";
+                response.items.push_back(item);
+            }
+
+            auto json = response.ToJson();
+
+            ASSERT_EQ(json["items"].size(), 5U);
+            for (int i = 0; i < 5; ++i) {
+                EXPECT_EQ(json["items"][i]["share_id"].asString(), "share" + std::to_string(i))
+                    << "Items should maintain insertion order at index " << i;
+            }
+        }
+
+        TEST_F(ShareListOrderingTest, PaginationMetadataFieldOrder) {
+            ShareListResponse response;
+            response.pagination.page = 1;
+            response.pagination.page_size = 20;
+            response.pagination.total = 100;
+            response.pagination.total_pages = 5;
+
+            auto json = response.ToJson();
+            auto pagination = json["pagination"];
+
+            EXPECT_TRUE(pagination.isMember("page"));
+            EXPECT_TRUE(pagination.isMember("page_size"));
+            EXPECT_TRUE(pagination.isMember("total"));
+            EXPECT_TRUE(pagination.isMember("total_pages"));
+        }
+
+        // ==================== ShareItem Field Contract Tests ====================
+
+        class ShareItemContractTest : public ::testing::Test {};
+
+        TEST_F(ShareItemContractTest, AllRequiredFieldsPresent) {
+            ShareItem item;
+            item.share_id = "test123";
+            item.file_name = "test.pdf";
+            item.file_count = 1;
+            item.share_link = "/s/test123";
+            item.has_password = true;
+            item.permission = "download";
+            item.view_count = 100;
+            item.download_count = 50;
+            item.created_at = "2026-02-15 10:00:00";
+            item.expires_at = "2026-03-15 10:00:00";
+            item.status = "active";
+
+            auto json = item.ToJson();
+
+            EXPECT_TRUE(json.isMember("share_id"));
+            EXPECT_TRUE(json.isMember("file_name"));
+            EXPECT_TRUE(json.isMember("file_count"));
+            EXPECT_TRUE(json.isMember("share_link"));
+            EXPECT_TRUE(json.isMember("has_password"));
+            EXPECT_TRUE(json.isMember("permission"));
+            EXPECT_TRUE(json.isMember("view_count"));
+            EXPECT_TRUE(json.isMember("download_count"));
+            EXPECT_TRUE(json.isMember("created_at"));
+            EXPECT_TRUE(json.isMember("expires_at"));
+            EXPECT_TRUE(json.isMember("status"));
+        }
+
+        TEST_F(ShareItemContractTest, FieldTypesAreCorrect) {
+            ShareItem item;
+            item.share_id = "test123";
+            item.file_name = "test.pdf";
+            item.file_count = 1;
+            item.share_link = "/s/test123";
+            item.has_password = true;
+            item.permission = "download";
+            item.view_count = 100;
+            item.download_count = 50;
+            item.created_at = "2026-02-15 10:00:00";
+            item.expires_at = "2026-03-15 10:00:00";
+            item.status = "active";
+
+            auto json = item.ToJson();
+
+            EXPECT_TRUE(json["share_id"].isString());
+            EXPECT_TRUE(json["file_name"].isString());
+            EXPECT_TRUE(json["file_count"].isInt());
+            EXPECT_TRUE(json["share_link"].isString());
+            EXPECT_TRUE(json["has_password"].isBool());
+            EXPECT_TRUE(json["permission"].isString());
+            EXPECT_TRUE(json["view_count"].isInt());
+            EXPECT_TRUE(json["download_count"].isInt());
+            EXPECT_TRUE(json["created_at"].isString());
+            EXPECT_TRUE(json["expires_at"].isString());
+            EXPECT_TRUE(json["status"].isString());
+        }
+
+        // ==================== Pagination Consistency Tests ====================
+
+        class PaginationConsistencyTest : public ::testing::Test {};
+
+        TEST_F(PaginationConsistencyTest, SharePaginationMatchesFilePagination) {
+            Pagination share_pagination;
+            share_pagination.page = 2;
+            share_pagination.page_size = 25;
+            share_pagination.total = 75;
+            share_pagination.total_pages = 3;
+
+            auto json = share_pagination.ToJson();
+
+            EXPECT_EQ(json["page"].asInt(), 2);
+            EXPECT_EQ(json["page_size"].asInt(), 25);
+            EXPECT_EQ(json["total"].asInt(), 75);
+            EXPECT_EQ(json["total_pages"].asInt(), 3);
+        }
+
+        TEST_F(PaginationConsistencyTest, TotalPagesCalculation) {
+            Pagination p1;
+            p1.page = 1;
+            p1.page_size = 20;
+            p1.total = 100;
+            p1.total_pages = (p1.total + p1.page_size - 1) / p1.page_size;
+            EXPECT_EQ(p1.total_pages, 5);
+
+            Pagination p2;
+            p2.page = 1;
+            p2.page_size = 20;
+            p2.total = 45;
+            p2.total_pages = (p2.total + p2.page_size - 1) / p2.page_size;
+            EXPECT_EQ(p2.total_pages, 3);
+
+            Pagination p3;
+            p3.page = 1;
+            p3.page_size = 20;
+            p3.total = 0;
+            p3.total_pages = 0;
+            EXPECT_EQ(p3.total_pages, 0);
+        }
+
+    } // namespace
 } // namespace disk::share

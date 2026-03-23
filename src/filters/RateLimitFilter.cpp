@@ -42,20 +42,23 @@ namespace disk::filters {
         const auto window = GetCurrentWindow();
         const auto key = RedisKeyPrefix::BuildApiRateLimitKey(user_id, window);
 
-        // 尝试获取当前计数
-        auto get_result = co_await m_redis_service->Get(key);
-
-        int64_t current_count = 0;
-        if (get_result) {
-            try {
-                current_count = std::stoll(get_result.value());
-            } catch (const std::exception& e) {
-                LOG_ERROR << "Failed to parse count: " << e.what();
-                current_count = 0;
-            }
+        // 原子递增计数 (INCR-first gate - atomic admission control)
+        auto incr_result = co_await m_redis_service->Incr(key);
+        if (!incr_result) {
+            LOG_ERROR << "Redis increment failed: " << incr_result.error().message;
+            // Redis 失败时不阻止请求
+            co_return nullptr;
         }
 
-        if (current_count >= DEFAULT_LIMIT) {
+        const int64_t current_count = incr_result.value();
+
+        // 如果是第一次请求，设置过期时间
+        if (current_count == 1) {
+            co_await m_redis_service->Expire(key, WINDOW_SECONDS);
+        }
+
+        // 检查是否超过限制
+        if (current_count > DEFAULT_LIMIT) {
             LOG_WARN << "API rate limit: user_id=" << user_id << ", count=" << current_count;
 
             auto response = disk::Response::Error(disk::error::Code::TooManyRequests);
@@ -66,25 +69,8 @@ namespace disk::filters {
             co_return response;
         }
 
-        // 原子递增计数
-        auto incr_result = co_await m_redis_service->Incr(key);
-        if (!incr_result) {
-            LOG_ERROR << "Redis increment failed: " << incr_result.error().message;
-            // Redis 失败时不阻止请求
-            co_return nullptr;
-        }
-
-        // 如果是第一次请求，设置过期时间
-        if (incr_result.value() == 1) {
-            co_await m_redis_service->Expire(key, WINDOW_SECONDS);
-        }
-
-        // 添加响应头（可选，供客户端参考）
-        // 注意：这里不能直接设置响应头，因为响应还没生成
-        // 可以在 request attributes 中存储，让后续处理添加
-
         LOG_DEBUG << "API rate limit check passed: user_id=" << user_id
-                  << ", count=" << incr_result.value() << "/" << DEFAULT_LIMIT;
+                  << ", count=" << current_count << "/" << DEFAULT_LIMIT;
 
         co_return nullptr;
     }

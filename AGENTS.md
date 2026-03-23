@@ -198,7 +198,10 @@ cd ui/diskqml && cmake -B build -S . && cmake --build build
 
 | Variable | Purpose |
 |----------|---------|
-| `JWT_SECRET` | JWT signing key (REQUIRED in production) |
+| `JWT_SECRET` | JWT signing key (REQUIRED in production, min 32 chars) |
+| `MYSQL_PASSWORD` | MySQL database password (REQUIRED in production) |
+| `REDIS_PASSWORD` | Redis authentication password (REQUIRED in production) |
+| `DISK_SECURE_MODE` | Set to `true` or `1` to enforce production security checks |
 | `VCPKG_ROOT` | vcpkg installation path |
 
 ## NOTES

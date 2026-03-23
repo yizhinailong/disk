@@ -189,19 +189,27 @@ namespace disk::services {
         const auto old_hash = disk::utils::HashUtil::TokenHashToHex(old_hash_result.value());
         const auto new_hash = disk::utils::HashUtil::TokenHashToHex(new_hash_result.value());
 
-        auto get_result = co_await m_redis_service->Get(key);
-        if (!get_result) {
-            LOG_WARN << "Refresh token does not exist: user_id=" << user_id;
-            co_return std::unexpected(ErrorInfo(disk::error::Code::InvalidRefreshToken));
+        // Atomic CAS: compare and swap in one operation
+        // Uses Lua script to ensure exactly one success under concurrency
+        auto cas_result = co_await m_redis_service->CompareAndSwap(
+            key,
+            old_hash,
+            new_hash,
+            REFRESH_TOKEN_TTL
+        );
+
+        if (!cas_result) {
+            LOG_ERROR << "Redis CAS operation failed: user_id=" << user_id;
+            co_return std::unexpected(cas_result.error());
         }
 
-        const auto& current_hash = get_result.value();
-        if (current_hash != old_hash) {
-            LOG_WARN << "Refresh token already used or refreshed: user_id=" << user_id;
+        if (!cas_result.value()) {
+            LOG_WARN << "Refresh token already used or refreshed (CAS failed): user_id=" << user_id;
             co_return std::unexpected(ErrorInfo(disk::error::Code::RefreshTokenAlreadyUsed));
         }
 
-        co_return co_await m_redis_service->Set(key, new_hash, REFRESH_TOKEN_TTL);
+        LOG_DEBUG << "Refresh token rotated successfully: user_id=" << user_id;
+        co_return {};
     }
 
     auto TokenService::InvalidateAccessToken(const std::string& token)
@@ -360,20 +368,7 @@ namespace disk::services {
 
     // ==================== Share Token Redis 异步方法 ====================
 
-    auto TokenService::StoreShareToken(const std::string& share_code, const std::string& token)
-        -> drogon::Task<Result<void>> {
-        auto hash_result = ExtractShareTokenHash(token);
-        if (!hash_result) {
-            co_return std::unexpected(hash_result.error());
-        }
-
-        const auto key =
-            disk::redis::RedisKeyPrefix::BuildShareTokenKey(share_code, hash_result.value());
-        co_return co_await m_redis_service->Set(key, "1", SHARE_TOKEN_TTL);
-    }
-
-    auto
-    TokenService::VerifyShareTokenWithRedis(const std::string& share_code, const std::string& token)
+    auto TokenService::VerifyShareTokenWithRedis(const std::string& share_code, const std::string& token)
         -> drogon::Task<Result<ShareTokenClaims>> {
         auto verify_result = VerifyShareToken(m_jwt_secret, token);
         if (!verify_result) {

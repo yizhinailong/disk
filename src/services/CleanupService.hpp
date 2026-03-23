@@ -52,6 +52,21 @@ namespace disk::services {
         [[nodiscard]]
         auto CleanupExpiredTrash() -> drogon::Task<Result<int>>;
 
+        /**
+         * @brief 清理过期的上传任务
+         *
+         * 业务规则：
+         * - 查找 status = 0 (进行中) 且 expires_at < NOW() 的上传任务
+         * - 将状态更新为 3 (已过期)
+         * - 清理临时文件
+         * - 每批次处理最多 100 条记录（bounded）
+         * - 幂等操作：重复执行不会产生副作用
+         *
+         * @return drogon::Task<Result<int>> 成功返回清理数量，失败返回错误
+         */
+        [[nodiscard]]
+        auto CleanupExpiredUploadTasks() -> drogon::Task<Result<int>>;
+
     private:
         drogon::orm::DbClientPtr m_db_client;
 

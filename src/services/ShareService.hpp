@@ -364,15 +364,7 @@ namespace disk::share {
         auto CheckPasswordRateLimit(const std::string& share_code, const std::string& ip_address) const
             -> drogon::Task<Result<void>>;
 
-        /**
-         * @brief 记录密码验证失败
-         * @param share_code 分享码
-         * @param ip_address IP地址
-         * @return drogon::Task<void>
-         */
-        auto RecordPasswordFailure(const std::string& share_code, const std::string& ip_address)
-            -> drogon::Task<void>;
-
+    private:
         drogon::orm::DbClientPtr m_db_client;                          ///< 数据库客户端
         drogon::nosql::RedisClientPtr m_redis_client;                  ///< Redis客户端
         std::shared_ptr<disk::services::RedisService> m_redis_service; ///< Redis服务
