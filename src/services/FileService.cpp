@@ -18,6 +18,7 @@
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
 #include "models/Trash.hpp"
+#include "models/UploadTaskChunks.hpp"
 #include "storage/IFileStorage.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
@@ -33,6 +34,7 @@ namespace disk::file {
     using drogon_model::disk::Files;
     using drogon_model::disk::Folders;
     using drogon_model::disk::Trash;
+    using drogon_model::disk::UploadTaskChunks;
     using drogon_model::disk::UploadTasks;
 
     // ==================== 构造函数 ====================
@@ -128,27 +130,32 @@ namespace disk::file {
         auto existing_task = co_await FindExistingTask(user_id, request.file_hash);
         if (existing_task.has_value()) {
             const auto& task = existing_task.value();
-            LOG_INFO << "Resume upload check successful: upload_id=" << task.getValueOfId()
-                     << ", uploaded_chunks=" << task.getValueOfUploadedChunks();
+            LOG_INFO << "Resume upload check successful: upload_id=" << task.getValueOfId();
+
+            // 从 upload_task_chunks 表查询已上传分片
+            auto chunk_result = co_await m_db_client->execSqlCoro(
+                "SELECT chunk_index FROM upload_task_chunks WHERE task_id = ? ORDER BY chunk_index",
+                task.getValueOfId()
+            );
 
             InitUploadResponse response;
             response.upload_id = task.getValueOfId();
             response.chunk_size = task.getValueOfChunkSize();
             response.total_chunks = task.getValueOfTotalChunks();
-            response.uploaded_chunks = {};
             response.instant_upload = false;
 
-            // 解析已上传分片
-            auto chunks = ParseUploadedChunks(task.getValueOfUploadedChunks());
-            response.uploaded_chunks = std::vector<uint32_t>(chunks.begin(), chunks.end());
+            response.uploaded_chunks.clear();
+            for (const auto& row : chunk_result) {
+                response.uploaded_chunks.push_back(row["chunk_index"].as<uint32_t>());
+            }
 
             co_return response;
         }
 
-        // 3. 检查存储配额（原子检查 + 预留空间）
-        auto quota_result = co_await CheckStorageQuota(user_id, request.file_size);
+        // 3. 预留存储配额
+        auto quota_result = co_await ReserveStorageQuota(user_id, request.file_size);
         if (!quota_result) {
-            LOG_WARN << "Storage quota check failed: user_id=" << user_id;
+            LOG_WARN << "Storage quota reservation failed: user_id=" << user_id;
             co_return std::unexpected(quota_result.error());
         }
 
@@ -172,7 +179,7 @@ namespace disk::file {
         task.setFileHash(request.file_hash);
         task.setChunkSize(chunk_size);
         task.setTotalChunks(total_chunks);
-        task.setUploadedChunks("[]");
+        task.setReservedBytes(request.file_size);
         task.setTempPath(upload_id);
         task.setStatus(0); // 进行中
         task.setExpiresAt(trantor::Date::now().after(expiry_seconds));
@@ -200,7 +207,7 @@ namespace disk::file {
         }
 
         if (create_task_failed) {
-            co_await UpdateStorageUsed(user_id, -static_cast<int64_t>(request.file_size));
+            co_await ReleaseReservedQuota(user_id, request.file_size);
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to create upload task")
             );
@@ -270,15 +277,13 @@ namespace disk::file {
             co_return std::unexpected(write_result.error());
         }
 
-        // 6. 更新已上传分片列表
-        auto uploaded_chunks = ParseUploadedChunks(task.getValueOfUploadedChunks());
-        uploaded_chunks.insert(chunk_index);
-
+        // 6. 记录已上传分片（幂等：INSERT IGNORE 允许重复上传同一分片）
         try {
-            CoroMapper<UploadTasks> mapper(m_db_client);
-            auto updated_task = task;
-            updated_task.setUploadedChunks(SerializeUploadedChunks(uploaded_chunks));
-            co_await mapper.update(updated_task);
+            co_await m_db_client->execSqlCoro(
+                "INSERT IGNORE INTO upload_task_chunks (task_id, chunk_index, uploaded_at) VALUES (?, ?, NOW())",
+                upload_id,
+                chunk_index
+            );
 
             LOG_DEBUG << "Chunk upload successful: upload_id=" << upload_id
                       << ", chunk_index=" << chunk_index;
@@ -290,9 +295,9 @@ namespace disk::file {
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to update upload task: " << e.base().what();
+            LOG_ERROR << "Failed to record chunk upload: " << e.base().what();
             co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to update upload task")
+                ErrorInfo(ErrorCode::InternalError, "Failed to record chunk upload")
             );
         }
     }
@@ -313,10 +318,22 @@ namespace disk::file {
 
         auto task = task_result.value();
 
-        // 2. 验证所有分片已上传
-        auto uploaded_chunks = ParseUploadedChunks(task.getValueOfUploadedChunks());
-        if (uploaded_chunks.size() != task.getValueOfTotalChunks()) {
-            LOG_WARN << "Not all chunks uploaded: uploaded=" << uploaded_chunks.size()
+        // 2. Check idempotency: already completed
+        if (task.getValueOfStatus() == 1) {
+            LOG_INFO << "Upload task already completed: upload_id=" << upload_id;
+            // Return success without re-running file creation flow
+            co_return CompleteUploadResponse{};
+        }
+
+        // 3. 验证所有分片已上传
+        auto chunk_count_result = co_await m_db_client->execSqlCoro(
+            "SELECT COUNT(*) AS cnt FROM upload_task_chunks WHERE task_id = ?",
+            upload_id
+        );
+        auto uploaded_count = chunk_count_result.empty() ? 0 : static_cast<size_t>(chunk_count_result[0]["cnt"].as<int64_t>());
+
+        if (uploaded_count != task.getValueOfTotalChunks()) {
+            LOG_WARN << "Not all chunks uploaded: uploaded=" << uploaded_count
                      << ", total=" << task.getValueOfTotalChunks();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ValidationFailed, "Not all chunks uploaded")
@@ -501,19 +518,47 @@ namespace disk::file {
 
         LOG_INFO << "Files record created successfully: file_id=" << file.getValueOfId();
 
+        // 转移预留配额为实际使用量
         try {
-            CoroMapper<UploadTasks> task_mapper(m_db_client);
-            co_await task_mapper.deleteByPrimaryKey(task.getValueOfId());
+            auto transfer_result = co_await m_db_client->execSqlCoro(
+                "UPDATE users SET storage_reserved = GREATEST(storage_reserved - ?, 0), " "storage_used = storage_used + ? WHERE id = ?",
+                task.getValueOfFileSize(),
+                task.getValueOfFileSize(),
+                user_id
+            );
 
-            auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
-            if (!cleanup_result) {
-                LOG_WARN << "Failed to cleanup temp artifacts: "
-                         << static_cast<int>(cleanup_result.error().code);
+            if (transfer_result.affectedRows() == 0) {
+                LOG_WARN << "Failed to transfer reserved quota to used: user_id=" << user_id;
+            } else {
+                LOG_DEBUG << "Quota transferred: reserved -> used, user_id=" << user_id
+                          << ", bytes=" << task.getValueOfFileSize();
             }
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "Failed to transfer reserved quota: " << e.base().what();
+        }
 
-            LOG_DEBUG << "Upload task cleanup completed: " << upload_id;
-        } catch (const std::exception& e) {
-            LOG_WARN << "Failed to cleanup upload task (non-critical): " << e.what();
+        // 6. Set terminal state (status=1 completed) and cleanup chunk tracking rows
+        try {
+            co_await m_db_client->execSqlCoro(
+                "UPDATE upload_tasks SET status = 1, finalized_at = NOW() WHERE id = ? AND status = 0",
+                upload_id
+            );
+
+            co_await m_db_client->execSqlCoro(
+                "DELETE FROM upload_task_chunks WHERE task_id = ?",
+                upload_id
+            );
+
+            LOG_DEBUG << "Upload task finalized: " << upload_id;
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "Failed to finalize upload task (non-critical): " << e.base().what();
+        }
+
+        // 7. Cleanup temp directory
+        auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
+        if (!cleanup_result) {
+            LOG_WARN << "Failed to cleanup temp artifacts: "
+                     << static_cast<int>(cleanup_result.error().code);
         }
 
         CompleteUploadResponse response;
@@ -544,30 +589,50 @@ namespace disk::file {
             LOG_WARN << "Upload task verification failed: " << upload_id;
             co_return std::unexpected(task_result.error());
         }
+        const auto task = task_result.value();
 
-        // 2. 删除临时目录
+        // 2. Check idempotency: already in terminal state
+        if (task.getValueOfStatus() != 0) {
+            LOG_INFO << "Upload task already in terminal state: upload_id=" << upload_id
+                     << ", status=" << task.getValueOfStatus();
+            co_return {};
+        }
+
+        // 3. Release reserved quota
+        co_await ReleaseReservedQuota(user_id, task.getValueOfReservedBytes());
+
+        // 4. Set terminal state (status=2 cancelled)
+        try {
+            co_await m_db_client->execSqlCoro(
+                "UPDATE upload_tasks SET status = 2, finalized_at = NOW(), " "fail_reason = '用户取消' WHERE id = ? AND status = 0",
+                upload_id
+            );
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Failed to set cancel terminal state: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to cancel upload task")
+            );
+        }
+
+        // 5. Cleanup chunk tracking rows
+        try {
+            co_await m_db_client->execSqlCoro(
+                "DELETE FROM upload_task_chunks WHERE task_id = ?",
+                upload_id
+            );
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "Failed to cleanup upload_task_chunks: " << e.base().what();
+        }
+
+        // 6. Cleanup temp directory
         auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
         if (!cleanup_result) {
             LOG_WARN << "Failed to delete temp directory: upload_id=" << upload_id
                      << ", error=" << static_cast<int>(cleanup_result.error().code);
-        } else {
-            LOG_DEBUG << "Temp directory deleted: upload_id=" << upload_id;
         }
 
-        // 3. 删除上传任务记录
-        try {
-            CoroMapper<UploadTasks> mapper(m_db_client);
-            co_await mapper.deleteByPrimaryKey(upload_id);
-
-            LOG_INFO << "Upload task cancelled and deleted: upload_id=" << upload_id;
-            co_return {};
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to delete upload task: " << e.base().what();
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to delete upload task")
-            );
-        }
+        LOG_INFO << "Upload task cancelled: upload_id=" << upload_id;
+        co_return {};
     }
 
     // ==================== GetFileList ====================
@@ -1125,6 +1190,7 @@ namespace disk::file {
                 Json::Value item_data;
                 if (file.getContentId()) {
                     item_data["content_id"] = static_cast<Json::UInt64>(*file.getContentId());
+                    trash.setContentId(*file.getContentId());
                 }
                 item_data["mime_type"] = file.getValueOfMimeType();
                 Json::StreamWriterBuilder builder;
@@ -1358,6 +1424,57 @@ namespace disk::file {
         }
     }
 
+    auto FileService::ReserveStorageQuota(uint64_t user_id, uint64_t file_size) const
+        -> drogon::Task<Result<void>> {
+
+        try {
+            auto result = co_await m_db_client->execSqlCoro(
+                "UPDATE users SET storage_reserved = storage_reserved + ? " "WHERE id = ? AND storage_used + storage_reserved + ? <= storage_quota",
+                file_size,
+                user_id,
+                file_size
+            );
+
+            if (result.affectedRows() == 0) {
+                LOG_WARN << "Insufficient storage quota for reservation: user_id=" << user_id
+                         << ", file_size=" << file_size;
+                co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
+            }
+
+            LOG_DEBUG << "Storage quota reserved: user_id=" << user_id
+                      << ", file_size=" << file_size;
+            co_return {};
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Failed to reserve storage quota: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to reserve storage quota")
+            );
+        }
+    }
+
+    auto FileService::ReleaseReservedQuota(uint64_t user_id, uint64_t reserved_bytes)
+        -> drogon::Task<void> {
+
+        if (reserved_bytes == 0) {
+            co_return;
+        }
+
+        try {
+            co_await m_db_client->execSqlCoro(
+                "UPDATE users SET storage_reserved = GREATEST(storage_reserved - ?, 0) WHERE id = ?",
+                reserved_bytes,
+                user_id
+            );
+
+            LOG_DEBUG << "Reserved quota released: user_id=" << user_id
+                      << ", reserved_bytes=" << reserved_bytes;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Failed to release reserved quota: " << e.base().what();
+        }
+    }
+
     auto FileService::FindExistingContent(const std::string& file_hash) const
         -> drogon::Task<std::optional<uint64_t>> {
 
@@ -1443,40 +1560,6 @@ namespace disk::file {
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "Failed to update storage usage: " << e.base().what();
         }
-    }
-
-    auto FileService::ParseUploadedChunks(const std::string& uploaded_chunks_json)
-        -> std::set<uint32_t> {
-        std::set<uint32_t> result;
-
-        if (uploaded_chunks_json.empty() || uploaded_chunks_json == "[]") {
-            return result;
-        }
-
-        Json::Value root;
-        Json::Reader reader;
-
-        if (reader.parse(uploaded_chunks_json, root) && root.isArray()) {
-            for (const auto& item : root) {
-                if (item.isUInt()) {
-                    result.insert(item.asUInt());
-                }
-            }
-        }
-
-        return result;
-    }
-
-    auto FileService::SerializeUploadedChunks(const std::set<uint32_t>& chunks) -> std::string {
-        Json::Value root(Json::arrayValue);
-
-        for (const auto& chunk : chunks) {
-            root.append(chunk);
-        }
-
-        Json::StreamWriterBuilder builder;
-        builder["indentation"] = "";
-        return Json::writeString(builder, root);
     }
 
     auto FileService::IsFilenameExists(

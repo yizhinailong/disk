@@ -40,7 +40,7 @@ namespace disk::services {
 
         try {
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, item_type, item_size, item_data FROM trash " "WHERE " "exp" "i" "r" "e" "s" "_at < " "NOW()"
+                "SELECT id, user_id, item_type, item_size, content_id, item_data FROM trash " "WHERE " "exp" "i" "r" "e" "s" "_at < " "NOW()"
             );
 
             int deleted_count = 0;
@@ -55,11 +55,21 @@ namespace disk::services {
                 auto item_data_str = row["item_data"].as<std::string>();
 
                 if (item_type == "file") {
-                    Json::Value item_data;
-                    Json::Reader reader;
-                    if (reader.parse(item_data_str, item_data) &&
-                        item_data.isMember("content_id")) {
-                        auto content_id = item_data["content_id"].asUInt64();
+                    uint64_t content_id = 0;
+                    bool has_content_id = false;
+                    if (!row["content_id"].isNull()) {
+                        content_id = row["content_id"].as<uint64_t>();
+                        has_content_id = true;
+                    } else {
+                        Json::Value item_data;
+                        Json::Reader reader;
+                        if (reader.parse(item_data_str, item_data) &&
+                            item_data.isMember("content_id")) {
+                            content_id = item_data["content_id"].asUInt64();
+                            has_content_id = true;
+                        }
+                    }
+                    if (has_content_id) {
                         co_await DecrementContentRefCount(content_id);
                     }
                 }
@@ -100,17 +110,20 @@ namespace disk::services {
 
         try {
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, temp_path FROM upload_tasks " "WHERE status = 0 AND expires_at < NOW() " "LIMIT ?",
+                "SELECT id, temp_path, user_id, reserved_bytes FROM upload_tasks " "WHERE status = 0 AND expires_at < NOW() " "LIMIT ?",
                 kUploadTaskCleanupBatchSize
             );
 
             int cleaned_count = 0;
             auto* storage = disk::storage::StorageMgr::GetStorage();
+            std::unordered_map<uint64_t, uint64_t> user_reserved_delta;
 
             for (size_t i = 0; i < result.size(); ++i) {
                 const auto& row = result[i];
                 auto task_id = row["id"].as<std::string>();
                 auto temp_path = row["temp_path"].as<std::string>();
+                auto user_id = row["user_id"].as<uint64_t>();
+                auto reserved_bytes = row["reserved_bytes"].as<uint64_t>();
 
                 if (storage != nullptr) {
                     auto delete_result = co_await storage->DeletePath(temp_path);
@@ -126,13 +139,28 @@ namespace disk::services {
                 }
 
                 co_await m_db_client->execSqlCoro(
-                    "UPDATE upload_tasks SET status = 3 WHERE id = ? AND status = 0",
+                    "UPDATE upload_tasks SET status = 3, finalized_at = NOW(), fail_reason = '任务过期' " "WHERE id = ? AND status = 0",
                     task_id
                 );
 
+                if (reserved_bytes > 0) {
+                    user_reserved_delta[user_id] += reserved_bytes;
+                }
+
                 cleaned_count++;
 
-                LOG_DEBUG << "Expired upload task marked as expired: task_id=" << task_id;
+                LOG_DEBUG << "Expired upload task marked as expired: task_id=" << task_id
+                          << ", user_id=" << user_id << ", reserved_bytes=" << reserved_bytes;
+            }
+
+            for (const auto& [user_id, delta] : user_reserved_delta) {
+                co_await m_db_client->execSqlCoro(
+                    "UPDATE users SET storage_reserved = GREATEST(storage_reserved - ?, 0) WHERE id = ?",
+                    delta,
+                    user_id
+                );
+                LOG_DEBUG << "Released reserved storage for expired upload tasks: user_id=" << user_id
+                          << ", released_bytes=" << delta;
             }
 
             LOG_INFO << "Upload task cleanup completed: cleaned_count=" << cleaned_count;

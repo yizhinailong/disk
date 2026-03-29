@@ -11,7 +11,6 @@
 
 #include <cstdint>
 #include <optional>
-#include <set>
 #include <string>
 
 #include <drogon/orm/DbClient.h>
@@ -267,107 +266,39 @@ namespace disk::file {
             -> drogon::Task<Result<SearchResponse>>;
 
     private:
-        /**
-         * @brief 检查存储配额
-         *
-         * @param user_id 用户 ID
-         * @param file_size 文件大小
-         * @return drogon::Task<Result<void>> 成功返回空，失败返回错误
-         */
         [[nodiscard]]
         auto CheckStorageQuota(uint64_t user_id, uint64_t file_size) const
             -> drogon::Task<Result<void>>;
 
-        /**
-         * @brief 查找已存在的文件内容（用于秒传）
-         *
-         * @param file_hash 文件 MD5 哈希
-         * @return drogon::Task<std::optional<uint64_t>> 存在返回 content_id，不存在返回空
-         */
+        [[nodiscard]]
+        auto ReserveStorageQuota(uint64_t user_id, uint64_t file_size) const
+            -> drogon::Task<Result<void>>;
+
+        auto ReleaseReservedQuota(uint64_t user_id, uint64_t reserved_bytes)
+            -> drogon::Task<void>;
+
         [[nodiscard]]
         auto FindExistingContent(const std::string& file_hash) const
             -> drogon::Task<std::optional<uint64_t>>;
 
-        /**
-         * @brief 查找已存在的上传任务（用于断点续传）
-         *
-         * @param user_id 用户 ID
-         * @param file_hash 文件 MD5 哈希
-         * @return drogon::Task<std::optional<drogon_model::disk::UploadTasks>>
-         * 存在返回上传任务，不存在返回空
-         */
         [[nodiscard]]
         auto FindExistingTask(uint64_t user_id, const std::string& file_hash) const
             -> drogon::Task<std::optional<drogon_model::disk::UploadTasks>>;
 
-        /**
-         * @brief 查找上传任务
-         *
-         * @param upload_id 上传会话 ID
-         * @param user_id 用户 ID
-         * @return drogon::Task<Result<drogon_model::disk::UploadTasks>>
-         * 成功返回上传任务，失败返回错误
-         */
         [[nodiscard]]
         auto FindUploadTask(const std::string& upload_id, uint64_t user_id) const
             -> drogon::Task<Result<drogon_model::disk::UploadTasks>>;
 
-        /**
-         * @brief 更新用户存储使用量
-         *
-         * @param user_id 用户 ID
-         * @param delta 变化量（正数为增加，负数为减少）
-         * @return drogon::Task<void>
-         */
         auto UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void>;
 
-        /**
-         * @brief 解析已上传分片列表
-         *
-         * @param uploaded_chunks_json JSON 字符串
-         * @return std::set<uint32_t> 已上传分片索引集合
-         */
-        [[nodiscard]]
-        static auto ParseUploadedChunks(const std::string& uploaded_chunks_json)
-            -> std::set<uint32_t>;
-
-        /**
-         * @brief 序列化已上传分片列表为 JSON
-         *
-         * @param chunks 已上传分片索引集合
-         * @return std::string JSON 字符串
-         */
-        [[nodiscard]]
-        static auto SerializeUploadedChunks(const std::set<uint32_t>& chunks) -> std::string;
-
-        /**
-         * @brief 检查文件夹中是否存在同名文件
-         *
-         * @param folder_id 文件夹 ID
-         * @param filename 文件名
-         * @param user_id 用户 ID
-         * @return drogon::Task<bool> 存在返回 true
-         */
         [[nodiscard]]
         auto
         IsFilenameExists(uint64_t folder_id, const std::string& filename, uint64_t user_id) const
             -> drogon::Task<bool>;
 
-        /**
-         * @brief 从文件名提取扩展名
-         *
-         * @param filename 文件名
-         * @return std::string 扩展名（不含点）
-         */
         [[nodiscard]]
         static auto ExtractExtension(const std::string& filename) -> std::string;
 
-        /**
-         * @brief 根据 MIME 类型判断是否为图片
-         *
-         * @param mime_type MIME 类型
-         * @return bool 是否为图片
-         */
         [[nodiscard]]
         static auto IsImageMimeType(const std::string& mime_type) -> bool;
 

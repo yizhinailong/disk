@@ -357,6 +357,19 @@ namespace disk::trash {
                           << final_name;
             }
 
+            // Read content_id from column first, fall back to JSON for legacy rows
+            uint64_t content_id = 0;
+            if (trash_item.getContentId()) {
+                content_id = *trash_item.getContentId();
+            } else {
+                Json::Value item_data;
+                Json::Reader reader;
+                reader.parse(trash_item.getValueOfItemData(), item_data);
+                if (item_data.isMember("content_id")) {
+                    content_id = item_data["content_id"].asUInt64();
+                }
+            }
+
             Json::Value item_data;
             Json::Reader reader;
             reader.parse(trash_item.getValueOfItemData(), item_data);
@@ -365,7 +378,7 @@ namespace disk::trash {
 
             Files file;
             file.setUserId(user_id);
-            file.setContentId(item_data["content_id"].asUInt64());
+            file.setContentId(content_id);
             file.setFolderId(target_folder_id);
             file.setName(final_name);
             file.setExtension(ExtractExtension(final_name));
@@ -493,12 +506,22 @@ namespace disk::trash {
 
             auto item_size = trash_item.getValueOfItemSize();
 
-            Json::Value item_data;
-            Json::Reader reader;
-            reader.parse(trash_item.getValueOfItemData(), item_data);
+            uint64_t content_id = 0;
+            bool has_content_id = false;
+            if (trash_item.getContentId()) {
+                content_id = *trash_item.getContentId();
+                has_content_id = true;
+            } else {
+                Json::Value item_data;
+                Json::Reader reader;
+                reader.parse(trash_item.getValueOfItemData(), item_data);
+                if (item_data.isMember("content_id")) {
+                    content_id = item_data["content_id"].asUInt64();
+                    has_content_id = true;
+                }
+            }
 
-            if (item_data.isMember("content_id")) {
-                auto content_id = item_data["content_id"].asUInt64();
+            if (has_content_id) {
                 try {
                     auto decrement_result = co_await m_db_client->execSqlCoro(
                         "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = ?",
