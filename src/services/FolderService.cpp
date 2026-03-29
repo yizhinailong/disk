@@ -198,14 +198,14 @@ namespace disk::folder {
         // 2. 计算最大深度（-1 映射为 100）
         int max_depth = (depth == -1) ? 100 : depth;
 
-        // 3. 调用存储过程获取文件夹树
         std::vector<FolderNodeData> nodes;
 
         try {
             auto result = co_await m_db_client->execSqlCoro(
-                "CALL sp_get_folder_tree(?, ?, ?)",
+                "WITH RECURSIVE folder_tree AS (" "SELECT id, name, parent_id, path, 0 AS level " "FROM folders " "WHERE user_id = ? AND parent_id = ? " "UNION ALL " "SELECT f.id, f.name, f.parent_id, f.path, ft.level + 1 " "FROM folders f " "INNER JOIN folder_tree ft ON f.parent_id = ft.id " "WHERE f.user_id = ? AND ft.level < ?" ") " "SELECT id, name, parent_id FROM folder_tree ORDER BY path",
                 user_id,
                 parent_id,
+                user_id,
                 max_depth
             );
 

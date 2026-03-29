@@ -66,7 +66,7 @@ namespace disk::folder {
          *
          * 业务规则：
          * - 如果 parent_id > 0，验证父文件夹存在且属于用户
-         * - 调用存储过程 sp_get_folder_tree 获取文件夹树
+         * - 使用递归 CTE 查询文件夹树
          * - depth=-1 表示无限深度（实际限制为100层）
          *
          * @param user_id 用户 ID

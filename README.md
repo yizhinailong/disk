@@ -124,9 +124,6 @@ cd vcpkg
 ```bash
 # 创建数据库
 mysql -u root -p < sql/init.sql
-
-# 导入存储过程（可选）
-mysql -u root -p disk < sql/disk.sql
 ```
 
 ### 4. 配置应用
@@ -248,7 +245,6 @@ flowchart TD
     D --> D2[requests/<br/>请求验证测试]
 
     E --> E1[init.sql<br/>初始化脚本]
-    E --> E2[disk.sql<br/>存储过程]
 ```
 
 ## 🔌 API 文档

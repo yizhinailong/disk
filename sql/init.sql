@@ -15,6 +15,7 @@ CREATE TABLE `users` (
     `avatar` VARCHAR(512) DEFAULT NULL COMMENT '头像URL',
     `storage_quota` BIGINT UNSIGNED NOT NULL DEFAULT 10737418240 COMMENT '存储配额(字节)，默认10GB',
     `storage_used` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '已用存储(字节)',
+    `storage_reserved` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '上传预占用存储(字节)',
     `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 0-禁用, 1-正常, 2-锁定',
     `login_attempts` INT NOT NULL DEFAULT 0 COMMENT '登录失败次数',
     `locked_until` DATETIME DEFAULT NULL COMMENT '锁定截止时间',
@@ -102,10 +103,13 @@ CREATE TABLE `upload_tasks` (
     `file_hash` CHAR(32) NOT NULL COMMENT '文件MD5哈希',
     `chunk_size` INT UNSIGNED NOT NULL COMMENT '分片大小',
     `total_chunks` INT UNSIGNED NOT NULL COMMENT '总分片数',
-    `uploaded_chunks` TEXT COMMENT '已上传分片索引列表(JSON数组)',
+    `uploaded_chunks` TEXT COMMENT '已上传分片索引列表(JSON数组)【已废弃，兼容性保留】',
+    `reserved_bytes` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '预占用字节数',
     `temp_path` VARCHAR(512) NOT NULL COMMENT '临时存储路径',
     `status` TINYINT NOT NULL DEFAULT 0 COMMENT '状态: 0-进行中, 1-已完成, 2-已取消, 3-已过期',
     `expires_at` DATETIME NOT NULL COMMENT '过期时间',
+    `finalized_at` DATETIME DEFAULT NULL COMMENT '完成/失败时间',
+    `fail_reason` VARCHAR(512) DEFAULT NULL COMMENT '失败原因',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
@@ -113,8 +117,20 @@ CREATE TABLE `upload_tasks` (
     KEY `idx_upload_tasks_status` (`status`),
     KEY `idx_upload_tasks_expires_at` (`expires_at`),
     KEY `idx_upload_tasks_user_hash` (`user_id`, `file_hash`),
+    KEY `idx_upload_tasks_status_expires` (`status`, `expires_at`),
+    KEY `idx_upload_tasks_user_status` (`user_id`, `status`),
     CONSTRAINT `fk_upload_tasks_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='上传任务表';
+
+-- 上传任务分片表
+CREATE TABLE `upload_task_chunks` (
+    `task_id` VARCHAR(64) NOT NULL COMMENT '上传任务ID',
+    `chunk_index` INT UNSIGNED NOT NULL COMMENT '分片索引(从0开始)',
+    `uploaded_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
+    PRIMARY KEY (`task_id`, `chunk_index`),
+    KEY `idx_upload_task_chunks_task_id` (`task_id`),
+    CONSTRAINT `fk_upload_task_chunks_task_id` FOREIGN KEY (`task_id`) REFERENCES `upload_tasks` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='上传任务分片表';
 
 -- 回收站表
 CREATE TABLE `trash` (
@@ -124,6 +140,7 @@ CREATE TABLE `trash` (
     `item_id` BIGINT UNSIGNED NOT NULL COMMENT '原项目ID',
     `item_name` VARCHAR(255) NOT NULL COMMENT '项目名称',
     `item_size` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '项目大小',
+    `content_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '关联的文件内容ID(结构化引用)',
     `original_folder_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '原所属文件夹ID',
     `original_path` VARCHAR(4096) NOT NULL COMMENT '原完整路径',
     `item_data` JSON COMMENT '项目完整数据备份',
@@ -134,7 +151,9 @@ CREATE TABLE `trash` (
     KEY `idx_trash_item_type` (`item_type`),
     KEY `idx_trash_deleted_at` (`deleted_at`),
     KEY `idx_trash_expires_at` (`expires_at`),
-    CONSTRAINT `fk_trash_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+    KEY `idx_trash_content_id` (`content_id`),
+    CONSTRAINT `fk_trash_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_trash_content_id` FOREIGN KEY (`content_id`) REFERENCES `file_contents` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='回收站表';
 
 -- 分享表

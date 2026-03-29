@@ -630,9 +630,39 @@ Authorization: Bearer <access_token>
 #### 实现说明
 
 - `storage_used` 使用实时 SQL 计算（SUM of Files.size）
+- `storage_reserved` 使用实时 SQL 计算（SUM of upload_tasks.file_size WHERE status = 0）
 - 回收站（Trash）中的文件计入 `storage_used`
 - `categories` 当前版本返回空数组，后续版本支持文件类型分类
 - 百分比精度为1位小数
+
+#### 存储配额语义说明
+
+本接口返回三个关键字段，分别代表不同的存储配额语义：
+
+| 字段 | 计算方式 | 说明 |
+|------|---------|------|
+| `used` | `storage_used` | 实际已使用的存储空间，包含正常文件和回收站中的文件 |
+| `reserved` | `storage_reserved` | 已预留但未完成的上传空间，防止并发上传超过配额 |
+| `quota` | `storage_quota` | 用户总存储配额 |
+
+**有效可用空间计算**：
+```
+有效可用 = quota - used - reserved
+```
+
+**上传生命周期配额变化**：
+```
+init:    storage_reserved += file_size  (预占用)
+chunk:   无变化
+complete: storage_reserved -= file_size, storage_used += file_size  (预占用 → 实际使用)
+cancel:   storage_reserved -= file_size  (释放预占用)
+expire:   storage_reserved -= file_size  (过期释放，由定时清理服务执行)
+```
+
+**重要说明**：
+- 回收站文件仍计入 `storage_used`，只有永久删除（从回收站删除）才会释放
+- 秒传（文件哈希匹配）不经过预占用流程，直接创建 `files` 记录，不消耗 `storage_reserved`
+- 并发上传场景下，`storage_reserved` 防止多个上传任务同时超过配额
 
 #### 请求头
 
@@ -683,8 +713,9 @@ Authorization: Bearer <access_token>
   "message": "success",
   "data": {
     "used": 1073741824,
+    "reserved": 524288000,
     "quota": 10737418240,
-    "percentage": 10.0,
+    "percentage": 15.0,
     "categories": [
       {"type": "document", "size": 214748364, "count": 50},
       {"type": "image", "size": 429496729, "count": 200},
@@ -736,6 +767,12 @@ Authorization: Bearer <access_token>
 | file_size | integer | 是 | 文件大小（字节） |
 | file_hash | string | 是 | 文件 MD5 哈希 |
 | parent_id | integer | 否 | 父文件夹 ID，默认 0（根目录） |
+
+> **📤 上传预占用语义（CRITICAL）**：本接口执行**存储空间预占用**操作：
+> - `storage_reserved` 增加 `file_size`，防止并发上传超过配额
+> - 如果 `storage_used + storage_reserved + file_size > storage_quota`，返回 `400 + 50004 StorageQuotaExceeded`
+> - 秒传（文件哈希已存在）不经过预占用流程，直接创建 `files` 记录
+> - 取消上传或超时后，预占用的空间通过 `storage_reserved` 释放
 
 #### 错误响应矩阵
 
@@ -868,6 +905,11 @@ Authorization: Bearer <access_token>
 |------|------|------|------|
 | upload_id | string | 是 | 上传会话 ID |
 
+> **✅ 上传完成配额转换（CRITICAL）**：本接口执行**预占用转换为实际使用**：
+> - `storage_reserved` 减少 `file_size`（释放预占用）
+> - `storage_used` 增加 `file_size`（记录实际使用）
+> - 原子性操作，确保配额一致性
+
 #### 错误响应矩阵
 
 | HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
@@ -908,6 +950,10 @@ Authorization: Bearer <access_token>
 **已实现**
 
 取消上传任务，清理临时数据。
+
+> **❌ 上传取消释放预占用（CRITICAL）**：本接口执行**释放预占用空间**：
+> - `storage_reserved` 减少 `file_size`（释放预占用）
+> - 清理临时文件和上传任务记录
 
 #### 请求头
 
@@ -1626,6 +1672,7 @@ Authorization: Bearer <access_token>
 > **🗑️ 软删除语义（CRITICAL）**：本接口执行的是**移入回收站**操作，而非物理删除：
 > - 文件/文件夹从原位置移除，添加到 `trash` 表
 > - **存储配额不释放**：`users.storage_used` 不会减少，文件仍占用空间
+> - **预占用不受影响**：删除操作不影响 `storage_reserved`，仅针对已完成上传的文件
 > - **可恢复**：用户可通过回收站 API（第 6 节）恢复误删文件
 > - **自动清理**：回收站项目 30 天后自动彻底删除，届时才释放存储空间
 >
