@@ -57,6 +57,7 @@ set(Models_HEADERS
     models/ShareFiles.hpp
     models/Shares.hpp
     models/Trash.hpp
+    models/UploadTaskChunks.hpp
     models/UploadTasks.hpp
     models/Users.hpp
 )
@@ -68,6 +69,7 @@ set(Models_SOURCES
     models/ShareFiles.cpp
     models/Shares.cpp
     models/Trash.cpp
+    models/UploadTaskChunks.cpp
     models/UploadTasks.cpp
     models/Users.cpp
 )

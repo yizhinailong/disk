@@ -2431,9 +2431,7 @@ bool UploadTasks::validJsonOfField(size_t index, const std::string& fieldName, c
                 err = "Type error in the " + fieldName + " field";
                 return false;
             }
-            if (pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                                            .from_bytes(pJson.asCString())
-                                            .size() > 64) {
+            if (pJson.isString() && std::string(pJson.asCString()).size() > 64) {
                 err = "String length exceeds limit for the " +
                       fieldName +
                       " field (the maximum value is 64)";
@@ -2469,9 +2467,7 @@ bool UploadTasks::validJsonOfField(size_t index, const std::string& fieldName, c
                 err = "Type error in the " + fieldName + " field";
                 return false;
             }
-            if (pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                                            .from_bytes(pJson.asCString())
-                                            .size() > 255) {
+            if (pJson.isString() && std::string(pJson.asCString()).size() > 255) {
                 err = "String length exceeds limit for the " +
                       fieldName +
                       " field (the maximum value is 255)";
@@ -2546,9 +2542,7 @@ bool UploadTasks::validJsonOfField(size_t index, const std::string& fieldName, c
                 err = "Type error in the " + fieldName + " field";
                 return false;
             }
-            if (pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                                            .from_bytes(pJson.asCString())
-                                            .size() > 512) {
+            if (pJson.isString() && std::string(pJson.asCString()).size() > 512) {
                 err = "String length exceeds limit for the " +
                       fieldName +
                       " field (the maximum value is 512)";
@@ -2592,9 +2586,7 @@ bool UploadTasks::validJsonOfField(size_t index, const std::string& fieldName, c
                 err = "Type error in the " + fieldName + " field";
                 return false;
             }
-            if (pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                                            .from_bytes(pJson.asCString())
-                                            .size() > 512) {
+            if (pJson.isString() && std::string(pJson.asCString()).size() > 512) {
                 err = "String length exceeds limit for the " +
                       fieldName +
                       " field (the maximum value is 512)";
