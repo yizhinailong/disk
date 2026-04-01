@@ -11,6 +11,7 @@ set(TEST_SOURCES
     services/HashUtil_test.cpp
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp
+    services/FileUploadConsistency_test.cpp
     services/ShareService_test.cpp
     services/ShareServiceQuery_test.cpp
     services/TokenService_test.cpp
