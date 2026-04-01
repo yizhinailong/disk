@@ -12,10 +12,13 @@ set(TEST_SOURCES
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp
     services/FileUploadConsistency_test.cpp
+    services/FileServiceBatch_test.cpp
     services/ShareService_test.cpp
+    services/ShareServiceBatch_test.cpp
     services/ShareServiceQuery_test.cpp
     services/TokenService_test.cpp
     services/TrashService_test.cpp
+    services/TrashServiceBatch_test.cpp
     services/OperationLogJsonDetails_test.cpp
     filters/ShareAuthFilter_test.cpp
     filters/JwtAuthFilter_test.cpp
