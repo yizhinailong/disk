@@ -77,9 +77,10 @@ namespace {
         auto result = TokenService::GetInstance()->VerifyAccessToken(token);
 
         ASSERT_TRUE(result.has_value()) << "Valid access token should verify successfully";
-        const auto& [user_id, username] = result.value();
-        EXPECT_EQ(user_id, 42u);
-        EXPECT_EQ(username, "alice");
+        const auto& claims = result.value();
+        EXPECT_EQ(claims.user_id, 42u);
+        EXPECT_EQ(claims.username, "alice");
+        EXPECT_EQ(claims.jti, "jti-test-001");
     }
 
     TEST_F(JwtAuthFilterTest, VerifyAccessTokenValidTokenWithLargeUserId) {
@@ -88,8 +89,9 @@ namespace {
         auto result = TokenService::GetInstance()->VerifyAccessToken(token);
 
         ASSERT_TRUE(result.has_value());
-        EXPECT_EQ(result.value().first, 9999999999ULL);
-        EXPECT_EQ(result.value().second, "big_id_user");
+        EXPECT_EQ(result.value().user_id, 9999999999ULL);
+        EXPECT_EQ(result.value().username, "big_id_user");
+        EXPECT_EQ(result.value().jti, "jti-large-id");
     }
 
     // ================================================================================
@@ -209,51 +211,34 @@ namespace {
     }
 
     // ================================================================================
-    // JwtAuthFilter doFilter — baseline: duplicate decode pattern
+    // JwtAuthFilter doFilter — optimized: single decode pattern
     //
-    // These tests document the current behavior where JwtAuthFilter decodes
-    // the JWT token TWICE per request:
-    //   1st decode: inside VerifyAccessToken (returns user_id, username)
-    //   2nd decode: manual jwt::decode to extract JTI for revocation check
-    //
-    // After optimization, VerifyAccessToken should return {user_id, username, jti}
-    // and the second decode should be eliminated.
+    // VerifyAccessToken now returns AccessTokenClaims{user_id, username, jti}
+    // from a single JWT decode. The redundant second decode has been eliminated.
     // ================================================================================
 
-    TEST_F(JwtAuthFilterTest, BaselineDocumentDuplicateDecode_VerifyAccessTokenReturnsPairOnly) {
-        // VerifyAccessToken returns pair<user_id, username> — NOT jti.
-        // This is the baseline: jti is NOT included in the return value.
+    TEST_F(JwtAuthFilterTest, VerifyAccessTokenReturnsAccessTokenClaimsWithJti) {
         auto token = BuildAccessToken(100, "baseline_user", "jti-dup-decode");
 
         auto result = TokenService::GetInstance()->VerifyAccessToken(token);
 
         ASSERT_TRUE(result.has_value());
-        // Verify the return type is pair<uint64_t, string> with no jti access
-        auto [user_id, username] = result.value();
-        EXPECT_EQ(user_id, 100u);
-        EXPECT_EQ(username, "baseline_user");
-        // No jti in the return value — filter must decode again to get it
+        const auto& claims = result.value();
+        EXPECT_EQ(claims.user_id, 100u);
+        EXPECT_EQ(claims.username, "baseline_user");
+        EXPECT_EQ(claims.jti, "jti-dup-decode");
     }
 
-    TEST_F(JwtAuthFilterTest, BaselineDocumentDuplicateDecode_JtiRequiresSecondDecode) {
-        // Demonstrates that after VerifyAccessToken, the filter must still
-        // decode the token again to extract JTI. This is the waste we measure.
-        auto token = BuildAccessToken(100, "baseline_user", "jti-dup-decode");
+    TEST_F(JwtAuthFilterTest, VerifyAccessTokenJtiAvailableWithoutSecondDecode) {
+        auto token = BuildAccessToken(100, "baseline_user", "jti-single-decode");
 
-        // Step 1: VerifyAccessToken — first decode
         auto verify_result = TokenService::GetInstance()->VerifyAccessToken(token);
         ASSERT_TRUE(verify_result.has_value());
 
-        // Step 2: Second decode — currently done in JwtAuthFilter.cpp:52
-        // This is the redundant operation the optimization will eliminate.
-        using traits = jwt::traits::open_source_parsers_jsoncpp;
-        auto decoded = jwt::decode<traits>(token);
+        // JTI is available directly from the verification result — no second decode needed.
+        EXPECT_EQ(verify_result.value().jti, "jti-single-decode");
 
-        ASSERT_TRUE(decoded.has_payload_claim("jti"));
-        EXPECT_EQ(decoded.get_payload_claim("jti").as_string(), "jti-dup-decode");
-
-        // BASELINE METRIC: 2 JWT decode operations per authenticated request.
-        // Target after optimization: 1 decode operation.
+        // OPTIMIZED: 1 JWT decode operation per authenticated request (was 2).
     }
 
     // ================================================================================

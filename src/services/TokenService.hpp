@@ -22,6 +22,15 @@
 namespace disk::services {
 
     /**
+     * @brief 访问令牌声明信息
+     */
+    struct AccessTokenClaims {
+        uint64_t user_id;
+        std::string username;
+        std::string jti;
+    };
+
+    /**
      * @brief 分享令牌声明信息
      */
     struct ShareTokenClaims {
@@ -86,10 +95,10 @@ namespace disk::services {
         /**
          * @brief 验证访问令牌
          * @param token 访问令牌字符串
-         * @return Result<pair<user_id, username>> 验证成功返回用户信息，失败返回错误
+         * @return Result<AccessTokenClaims> 验证成功返回声明信息（含jti），失败返回错误
          */
         [[nodiscard]]
-        auto VerifyAccessToken(const std::string& token) const -> Result<std::pair<uint64_t, std::string>>;
+        auto VerifyAccessToken(const std::string& token) const -> Result<AccessTokenClaims>;
 
         /**
          * @brief 验证刷新令牌

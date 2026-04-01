@@ -16,12 +16,8 @@
 namespace disk::filters {
     class ShareAuthFilter : public drogon::HttpCoroFilter<ShareAuthFilter> {
     public:
-        ShareAuthFilter();
-
         [[nodiscard]]
         auto doFilter(const drogon::HttpRequestPtr& request)
             -> drogon::Task<drogon::HttpResponsePtr> override;
-
-    private:
     };
 } // namespace disk::filters

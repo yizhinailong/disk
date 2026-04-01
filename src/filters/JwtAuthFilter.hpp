@@ -13,8 +13,6 @@
 namespace disk::filters {
     class JwtAuthFilter : public drogon::HttpCoroFilter<JwtAuthFilter> {
     public:
-        JwtAuthFilter();
-
         /**
          * @brief JWT认证过滤器
          * @param request HTTP请求
@@ -23,7 +21,5 @@ namespace disk::filters {
         [[nodiscard]]
         auto doFilter(const drogon::HttpRequestPtr& request)
             -> drogon::Task<drogon::HttpResponsePtr> override;
-
-    private:
     };
 } // namespace disk::filters

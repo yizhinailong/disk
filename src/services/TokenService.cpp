@@ -79,7 +79,7 @@ namespace disk::services {
     }
 
     auto TokenService::VerifyAccessToken(const std::string& token) const
-        -> Result<std::pair<uint64_t, std::string>> {
+        -> Result<AccessTokenClaims> {
 
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
@@ -99,12 +99,13 @@ namespace disk::services {
 
             const auto user_id_str = decoded.get_subject();
             const auto username = decoded.get_payload_claim("username").as_string();
+            const auto jti = decoded.get_payload_claim("jti").as_string();
 
             const auto user_id = std::stoull(user_id_str);
 
             LOG_DEBUG << "JWT verification successful: user_id=" << user_id
-                      << ", username=" << username;
-            return std::make_pair(user_id, username);
+                      << ", username=" << username << ", jti=" << jti;
+            return AccessTokenClaims{ .user_id = user_id, .username = username, .jti = jti };
 
         } catch (const jwt::error::token_verification_exception& e) {
             LOG_WARN << "JWT verification failed: " << e.what();

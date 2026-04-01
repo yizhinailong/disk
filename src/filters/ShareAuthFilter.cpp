@@ -9,18 +9,11 @@
 
 #include "ShareAuthFilter.hpp"
 
-#include "utils/ConfigMgr.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::filters {
 
     using disk::services::TokenService;
-    using disk::utils::ConfigMgr;
-
-    ShareAuthFilter::ShareAuthFilter() {
-        // 初始化 TokenService 单例
-        disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
-    }
 
     auto ShareAuthFilter::doFilter(const drogon::HttpRequestPtr& request)
         -> drogon::Task<drogon::HttpResponsePtr> {

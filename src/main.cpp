@@ -1,6 +1,7 @@
 #include <drogon/drogon.h>
 
 #include "services/ScheduledTasks.hpp"
+#include "services/TokenService.hpp"
 #include "storage/LocalFileStorage.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/ConfigMgr.hpp"
@@ -29,6 +30,12 @@ auto main() -> int {
         LOG_ERROR << "Secure config validation failed: " << e.what();
         return 1;
     }
+
+    // 初始化 TokenService 单例（启动时一次性完成）
+    disk::services::TokenService::Initialize(
+        disk::utils::ConfigMgr::GetInstance()->GetJwtSecret()
+    );
+    LOG_INFO << "TokenService initialized successfully";
 
     // 记录有效存储路径
     LOG_INFO << "Effective storage configuration:";
