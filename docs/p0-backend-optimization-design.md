@@ -953,9 +953,9 @@ flowchart TD
     style H fill:#51cf66,stroke:#333,stroke-width:2px
 ```
 
-**Behavior Semantics Contract** (actual implementation):
+**Behavior Semantics Contract / 行为语义契约** (actual implementation):
 
-| Endpoint Category | Transaction Policy | Failure Mode | SQL Strategy | Redis Invalidation |
+| Endpoint Category | Transaction Policy（事务策略） | Failure Mode | SQL Strategy | Redis Invalidation |
 |------------------|-------------------|--------------|--------------|-------------------|
 | **FileService::Move** | Per-item (partial success) | Track per-item status | Chunked IN-clause fetch + batch UPDATE | None |
 | **FileService::Copy** | Per-item (partial success) | Track per-item status | Chunked IN-clause fetch + per-item INSERT* | None |
@@ -1074,7 +1074,7 @@ flowchart TD
 - Query plan optimization for batch operations (IN-clause uses indexes efficiently)
 - Transaction overhead reduced (fewer transaction boundaries for atomic operations)
 
-**Doc-Code Parity Checklist** (final audit results):
+**Doc-Code Parity Checklist（一致性检查）** (final audit results):
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
