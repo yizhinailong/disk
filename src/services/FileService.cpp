@@ -481,6 +481,30 @@ namespace disk::file {
 
             file = co_await file_mapper.insert(file);
 
+            auto transfer_result = co_await transaction->execSqlCoro(
+                "UPDATE users SET storage_reserved = GREATEST(storage_reserved - ?, 0), " "storage_used = storage_used + ? WHERE id = ?",
+                task.getValueOfFileSize(),
+                task.getValueOfFileSize(),
+                user_id
+            );
+
+            if (transfer_result.affectedRows() == 0) {
+                throw std::runtime_error("Failed to transfer reserved quota to used");
+            }
+
+            auto finalize_result = co_await transaction->execSqlCoro(
+                "UPDATE upload_tasks SET status = 1, finalized_at = NOW() WHERE id = ? AND status = 0",
+                upload_id
+            );
+            if (finalize_result.affectedRows() == 0) {
+                throw std::runtime_error("Failed to finalize upload task");
+            }
+
+            co_await transaction->execSqlCoro(
+                "DELETE FROM upload_task_chunks WHERE task_id = ?",
+                upload_id
+            );
+
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "Database operation failed: " << e.base().what();
             if (transaction) {
@@ -517,42 +541,6 @@ namespace disk::file {
         }
 
         LOG_INFO << "Files record created successfully: file_id=" << file.getValueOfId();
-
-        // 转移预留配额为实际使用量
-        try {
-            auto transfer_result = co_await m_db_client->execSqlCoro(
-                "UPDATE users SET storage_reserved = GREATEST(storage_reserved - ?, 0), " "storage_used = storage_used + ? WHERE id = ?",
-                task.getValueOfFileSize(),
-                task.getValueOfFileSize(),
-                user_id
-            );
-
-            if (transfer_result.affectedRows() == 0) {
-                LOG_WARN << "Failed to transfer reserved quota to used: user_id=" << user_id;
-            } else {
-                LOG_DEBUG << "Quota transferred: reserved -> used, user_id=" << user_id
-                          << ", bytes=" << task.getValueOfFileSize();
-            }
-        } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "Failed to transfer reserved quota: " << e.base().what();
-        }
-
-        // 6. Set terminal state (status=1 completed) and cleanup chunk tracking rows
-        try {
-            co_await m_db_client->execSqlCoro(
-                "UPDATE upload_tasks SET status = 1, finalized_at = NOW() WHERE id = ? AND status = 0",
-                upload_id
-            );
-
-            co_await m_db_client->execSqlCoro(
-                "DELETE FROM upload_task_chunks WHERE task_id = ?",
-                upload_id
-            );
-
-            LOG_DEBUG << "Upload task finalized: " << upload_id;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "Failed to finalize upload task (non-critical): " << e.base().what();
-        }
 
         // 7. Cleanup temp directory
         auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
