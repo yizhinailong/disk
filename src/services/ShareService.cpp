@@ -13,6 +13,7 @@
 #include <chrono>
 #include <random>
 #include <sstream>
+#include <unordered_map>
 
 #include <drogon/orm/CoroMapper.h>
 #include <trantor/utils/Date.h>
@@ -699,23 +700,55 @@ namespace disk::share {
             );
         }
 
-        CoroMapper<Files> mapper(m_db_client);
+        auto unique_file_ids = file_ids;
+        std::sort(unique_file_ids.begin(), unique_file_ids.end());
+        unique_file_ids.erase(
+            std::unique(unique_file_ids.begin(), unique_file_ids.end()),
+            unique_file_ids.end()
+        );
+
+        std::ostringstream in_clause;
+        for (size_t i = 0; i < unique_file_ids.size(); ++i) {
+            if (i > 0) {
+                in_clause << ",";
+            }
+            in_clause << unique_file_ids[i];
+        }
+
         std::vector<Files> files;
         files.reserve(file_ids.size());
 
-        for (auto file_id : file_ids) {
-            try {
-                auto file_opt = co_await mapper.findOne(
-                    Criteria(Files::Cols::_id, file_id) && Criteria(Files::Cols::_user_id, user_id)
-                );
+        try {
+            auto sql =
+                "SELECT f.* FROM files f WHERE f.user_id = ? AND f.id IN (" + in_clause.str() + ")";
+            auto result = co_await m_db_client->execSqlCoro(sql, user_id);
 
-                files.push_back(file_opt);
-            } catch (const DrogonDbException& e) {
-                LOG_WARN << "File not found or not owned by user: file_id=" << file_id;
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::FileNotFound, "File not found or no permission")
-                );
+            std::vector<Files> matched_files;
+            matched_files.reserve(result.size());
+            std::unordered_map<uint64_t, size_t> file_index_by_id;
+            file_index_by_id.reserve(result.size());
+            for (const auto& row : result) {
+                auto file = Files(row);
+                auto file_id = file.getValueOfId();
+                matched_files.push_back(std::move(file));
+                file_index_by_id.emplace(file_id, matched_files.size() - 1);
             }
+
+            for (auto file_id : file_ids) {
+                auto it = file_index_by_id.find(file_id);
+                if (it == file_index_by_id.end()) {
+                    LOG_WARN << "File not found or not owned by user: file_id=" << file_id;
+                    co_return std::unexpected(
+                        ErrorInfo(ErrorCode::FileNotFound, "File not found or no permission")
+                    );
+                }
+                files.push_back(matched_files[it->second]);
+            }
+        } catch (const DrogonDbException& e) {
+            LOG_ERROR << "Failed to validate file ownership: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to validate file ownership")
+            );
         }
 
         co_return files;
@@ -737,49 +770,60 @@ namespace disk::share {
 
     auto ShareService::GetShareFiles(uint64_t share_id) const
         -> drogon::Task<std::vector<ShareFile>> {
-        CoroMapper<ShareFiles> sf_mapper(m_db_client);
-        CoroMapper<Files> file_mapper(m_db_client);
-        CoroMapper<Folders> folder_mapper(m_db_client);
-
         std::vector<ShareFile> result;
 
+        struct OrderedShareFile {
+            uint64_t share_file_id;
+            ShareFile share_file;
+        };
+
         try {
-            auto share_files =
-                co_await sf_mapper.findBy(Criteria(ShareFiles::Cols::_share_id, share_id));
+            auto file_rows = co_await m_db_client->execSqlCoro(
+                "SELECT sf.id AS share_file_id, f.id, f.name, f.size, 'file' AS type " "FROM share_files sf " "JOIN files f ON sf.item_id = f.id " "WHERE sf.share_id = ? AND sf.item_type = 'file' " "ORDER BY sf.id",
+                share_id
+            );
 
-            for (const auto& sf : share_files) {
-                if (sf.getValueOfItemType() == "file") {
-                    try {
-                        auto file = co_await file_mapper.findOne(
-                            Criteria(Files::Cols::_id, sf.getValueOfItemId())
-                        );
+            auto folder_rows = co_await m_db_client->execSqlCoro(
+                "SELECT sf.id AS share_file_id, fo.id, fo.name, 0 AS size, 'folder' AS type " "FROM share_files sf " "JOIN folders fo ON sf.item_id = fo.id " "WHERE sf.share_id = ? AND sf.item_type = 'folder' " "ORDER BY sf.id",
+                share_id
+            );
 
-                        ShareFile sf_item;
-                        sf_item.id = file.getValueOfId();
-                        sf_item.name = file.getValueOfName();
-                        sf_item.type = "file";
-                        sf_item.size = file.getValueOfSize();
-                        result.push_back(sf_item);
-                    } catch (const DrogonDbException& e) {
-                        LOG_WARN << "Failed to get share file: file_id=" << sf.getValueOfItemId();
-                    }
-                } else if (sf.getValueOfItemType() == "folder") {
-                    try {
-                        auto folder = co_await folder_mapper.findOne(
-                            Criteria(Folders::Cols::_id, sf.getValueOfItemId())
-                        );
+            std::vector<OrderedShareFile> ordered_items;
+            ordered_items.reserve(file_rows.size() + folder_rows.size());
 
-                        ShareFile sf_item;
-                        sf_item.id = folder.getValueOfId();
-                        sf_item.name = folder.getValueOfName();
-                        sf_item.type = "folder";
-                        sf_item.size = 0;
-                        result.push_back(sf_item);
-                    } catch (const DrogonDbException& e) {
-                        LOG_WARN << "Failed to get share folder: folder_id="
-                                 << sf.getValueOfItemId();
-                    }
+            for (const auto& row : file_rows) {
+                ShareFile sf_item;
+                sf_item.id = row["id"].as<uint64_t>();
+                sf_item.name = row["name"].as<std::string>();
+                sf_item.type = row["type"].as<std::string>();
+                sf_item.size = row["size"].as<uint64_t>();
+                ordered_items.push_back(
+                    OrderedShareFile{ row["share_file_id"].as<uint64_t>(), std::move(sf_item) }
+                );
+            }
+
+            for (const auto& row : folder_rows) {
+                ShareFile sf_item;
+                sf_item.id = row["id"].as<uint64_t>();
+                sf_item.name = row["name"].as<std::string>();
+                sf_item.type = row["type"].as<std::string>();
+                sf_item.size = row["size"].as<uint64_t>();
+                ordered_items.push_back(
+                    OrderedShareFile{ row["share_file_id"].as<uint64_t>(), std::move(sf_item) }
+                );
+            }
+
+            std::sort(
+                ordered_items.begin(),
+                ordered_items.end(),
+                [](const OrderedShareFile& lhs, const OrderedShareFile& rhs) {
+                    return lhs.share_file_id < rhs.share_file_id;
                 }
+            );
+
+            result.reserve(ordered_items.size());
+            for (auto& item : ordered_items) {
+                result.push_back(std::move(item.share_file));
             }
         } catch (const DrogonDbException& e) {
             LOG_ERROR << "Failed to get share file list: " << e.base().what();
