@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <drogon/nosql/RedisClient.h>
@@ -289,6 +290,10 @@ namespace disk::share {
          */
         [[nodiscard]]
         auto GetShareFiles(uint64_t share_id) const -> drogon::Task<std::vector<ShareFile>>;
+
+        [[nodiscard]]
+        auto GetShareFilesBatch(const std::vector<uint64_t>& share_ids) const
+            -> drogon::Task<std::unordered_map<uint64_t, std::vector<ShareFile>>>;
 
         /**
          * @brief 检查分享是否过期

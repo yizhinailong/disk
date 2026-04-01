@@ -11,9 +11,11 @@
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 #include <random>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <drogon/orm/CoroMapper.h>
 #include <trantor/utils/Date.h>
@@ -23,6 +25,7 @@
 #include "models/Folders.hpp"
 #include "models/ShareFiles.hpp"
 #include "models/Shares.hpp"
+#include "utils/BatchUtils.hpp"
 #include "utils/HashUtil.hpp"
 #include "utils/RedisKeyPrefix.hpp"
 
@@ -30,6 +33,8 @@ namespace disk::share {
 
     using namespace drogon::orm;
     using disk::error::Result;
+    using disk::utils::BatchUtils;
+    using disk::utils::DEFAULT_BATCH_CHUNK_SIZE;
     using drogon_model::disk::Files;
     using drogon_model::disk::Folders;
     using drogon_model::disk::ShareFiles;
@@ -191,9 +196,18 @@ namespace disk::share {
 
         // 构建响应
         ShareListResponse response;
+        std::vector<uint64_t> share_ids;
+        share_ids.reserve(shares.size());
         for (const auto& share : shares) {
-            // 获取分享的文件列表
-            auto share_files = co_await GetShareFiles(share.getValueOfId());
+            share_ids.push_back(share.getValueOfId());
+        }
+
+        auto share_files_map = co_await GetShareFilesBatch(share_ids);
+
+        for (const auto& share : shares) {
+            auto map_it = share_files_map.find(share.getValueOfId());
+            const auto& share_files =
+                map_it != share_files_map.end() ? map_it->second : std::vector<ShareFile>{};
 
             ShareItem item;
             item.share_id = share.getValueOfShareCode();
@@ -377,69 +391,146 @@ namespace disk::share {
         response.summary.succeeded = 0;
         response.summary.failed = 0;
 
-        CoroMapper<Shares> mapper(m_db_client);
+        if (!BatchUtils::ValidateBatchInput(
+                request.share_ids,
+                std::numeric_limits<size_t>::max()
+            )) {
+            LOG_INFO << "Batch cancel shares completed: succeeded=" << response.summary.succeeded
+                     << ", failed=" << response.summary.failed;
+            co_return response;
+        }
 
-        for (const auto& share_id : request.share_ids) {
-            CancelShareResult result;
-            result.share_id = share_id;
+        auto chunks = BatchUtils::Chunk(request.share_ids, DEFAULT_BATCH_CHUNK_SIZE);
 
-            // 查找分享
-            auto shares = co_await mapper.findBy(Criteria(Shares::Cols::_share_code, share_id));
+        for (const auto& chunk : chunks) {
+            auto placeholders = BatchUtils::BuildInPlaceholders(chunk);
+            auto select_sql =
+                "SELECT id, share_code, user_id, status, updated_at FROM shares WHERE share_code IN (" + placeholders + ")";
 
-            if (shares.empty()) {
-                result.status = "failed";
-                result.error = CancelShareError{ .code = static_cast<int>(ErrorCode::ShareNotFound),
-                                                 .message = "Share not found",
-                                                 .reason = "share_not_found" };
-                response.results.push_back(result);
-                response.summary.failed++;
-                continue;
-            }
+            struct ShareRow {
+                uint64_t user_id;
+                int8_t status;
+            };
 
-            auto& share = shares[0];
-
-            // 验证所有权
-            if (share.getValueOfUserId() != user_id) {
-                result.status = "failed";
-                result.error =
-                    CancelShareError{ .code = static_cast<int>(ErrorCode::ShareAccessDenied),
-                                      .message = "Access denied",
-                                      .reason = "access_denied" };
-                response.results.push_back(result);
-                response.summary.failed++;
-                continue;
-            }
-
-            // 检查是否已取消
-            if (share.getValueOfStatus() == static_cast<int8_t>(ShareStatus::Cancelled)) {
-                result.status = "failed";
-                result.error =
-                    CancelShareError{ .code = static_cast<int>(ErrorCode::ValidationFailed),
-                                      .message = "Share already cancelled",
-                                      .reason = "already_cancelled" };
-                response.results.push_back(result);
-                response.summary.failed++;
-                continue;
-            }
-
-            // 取消分享
-            share.setStatus(static_cast<int8_t>(ShareStatus::Cancelled));
-            share.setUpdatedAt(trantor::Date::now());
-
+            std::unordered_map<std::string, ShareRow> share_map;
             try {
-                co_await mapper.update(share);
-                result.status = "success";
-                response.summary.succeeded++;
+                auto select_rows = co_await m_db_client->execSqlCoro(select_sql, chunk);
+                share_map.reserve(select_rows.size());
+                for (const auto& row : select_rows) {
+                    auto share_code = row["share_code"].as<std::string>();
+                    share_map.emplace(
+                        std::move(share_code),
+                        ShareRow{ .user_id = row["user_id"].as<uint64_t>(),
+                                  .status = row["status"].as<int8_t>() }
+                    );
+                }
             } catch (const DrogonDbException& e) {
-                LOG_ERROR << "Failed to cancel share: " << e.base().what();
-                result.status = "failed";
-                result.error = CancelShareError{ .code = static_cast<int>(ErrorCode::InternalError),
-                                                 .message = "Operation failed",
-                                                 .reason = "internal_error" };
-                response.summary.failed++;
+                LOG_ERROR << "Failed to fetch shares for cancel: " << e.base().what();
+
+                for (const auto& share_id : chunk) {
+                    CancelShareResult result;
+                    result.share_id = share_id;
+                    result.status = "failed";
+                    result.error = CancelShareError{ .code = static_cast<int>(ErrorCode::InternalError),
+                                                     .message = "Operation failed",
+                                                     .reason = "internal_error" };
+                    response.results.push_back(result);
+                    response.summary.failed++;
+                }
+                continue;
             }
 
-            response.results.push_back(result);
+            std::unordered_set<std::string> valid_codes_to_cancel;
+            valid_codes_to_cancel.reserve(chunk.size());
+
+            for (const auto& share_id : chunk) {
+                CancelShareResult result;
+                result.share_id = share_id;
+
+                auto map_it = share_map.find(share_id);
+                if (map_it == share_map.end()) {
+                    result.status = "failed";
+                    result.error =
+                        CancelShareError{ .code = static_cast<int>(ErrorCode::ShareNotFound),
+                                          .message = "Share not found",
+                                          .reason = "share_not_found" };
+                    response.results.push_back(result);
+                    response.summary.failed++;
+                    continue;
+                }
+
+                const auto& share = map_it->second;
+
+                if (share.user_id != user_id) {
+                    result.status = "failed";
+                    result.error =
+                        CancelShareError{ .code = static_cast<int>(ErrorCode::ShareAccessDenied),
+                                          .message = "Access denied",
+                                          .reason = "access_denied" };
+                    response.results.push_back(result);
+                    response.summary.failed++;
+                    continue;
+                }
+
+                if (share.status == static_cast<int8_t>(ShareStatus::Cancelled) || valid_codes_to_cancel.contains(share_id)) {
+                    result.status = "failed";
+                    result.error =
+                        CancelShareError{ .code = static_cast<int>(ErrorCode::ValidationFailed),
+                                          .message = "Share already cancelled",
+                                          .reason = "already_cancelled" };
+                    response.results.push_back(result);
+                    response.summary.failed++;
+                    continue;
+                }
+
+                valid_codes_to_cancel.insert(share_id);
+                result.status = "success";
+                response.results.push_back(result);
+            }
+
+            if (!valid_codes_to_cancel.empty()) {
+                std::vector<std::string> valid_share_codes(
+                    valid_codes_to_cancel.begin(),
+                    valid_codes_to_cancel.end()
+                );
+
+                auto update_placeholders = BatchUtils::BuildInPlaceholders(valid_share_codes);
+                auto update_sql =
+                    "UPDATE shares SET status = 0, updated_at = ? WHERE share_code IN (" + update_placeholders + ")";
+                std::vector<std::string> update_args;
+                update_args.reserve(valid_share_codes.size() + 1);
+                update_args.push_back(trantor::Date::now().toDbStringLocal());
+                update_args.insert(
+                    update_args.end(),
+                    valid_share_codes.begin(),
+                    valid_share_codes.end()
+                );
+
+                try {
+                    co_await m_db_client->execSqlCoro(update_sql, std::as_const(update_args));
+                } catch (const DrogonDbException& e) {
+                    LOG_ERROR << "Failed to cancel share: " << e.base().what();
+
+                    for (auto& result : response.results) {
+                        if (result.status == "success" && valid_codes_to_cancel.contains(result.share_id) && result.error == std::nullopt) {
+                            result.status = "failed";
+                            result.error = CancelShareError{ .code = static_cast<int>(ErrorCode::InternalError),
+                                                             .message = "Operation failed",
+                                                             .reason = "internal_error" };
+                        }
+                    }
+                }
+            }
+
+            response.summary.succeeded = 0;
+            response.summary.failed = 0;
+            for (const auto& result : response.results) {
+                if (result.status == "success") {
+                    response.summary.succeeded++;
+                } else {
+                    response.summary.failed++;
+                }
+            }
         }
 
         LOG_INFO << "Batch cancel shares completed: succeeded=" << response.summary.succeeded
@@ -824,6 +915,79 @@ namespace disk::share {
             result.reserve(ordered_items.size());
             for (auto& item : ordered_items) {
                 result.push_back(std::move(item.share_file));
+            }
+        } catch (const DrogonDbException& e) {
+            LOG_ERROR << "Failed to get share file list: " << e.base().what();
+        }
+
+        co_return result;
+    }
+
+    auto ShareService::GetShareFilesBatch(const std::vector<uint64_t>& share_ids) const
+        -> drogon::Task<std::unordered_map<uint64_t, std::vector<ShareFile>>> {
+        std::unordered_map<uint64_t, std::vector<ShareFile>> result;
+        if (share_ids.empty()) {
+            co_return result;
+        }
+
+        struct OrderedShareFile {
+            uint64_t share_file_id;
+            ShareFile share_file;
+        };
+
+        auto chunks = BatchUtils::Chunk(share_ids, DEFAULT_BATCH_CHUNK_SIZE);
+        std::unordered_map<uint64_t, std::vector<OrderedShareFile>> ordered_items_by_share;
+
+        try {
+            for (const auto& chunk : chunks) {
+                auto placeholders = BatchUtils::BuildInPlaceholders(chunk);
+
+                auto file_rows = co_await m_db_client->execSqlCoro(
+                    "SELECT sf.id AS share_file_id, sf.share_id, f.id, f.name, f.size, 'file' AS " "type " "FROM share_files sf " "JOIN files f ON sf.item_id = f.id " "WHERE sf.share_id IN (" + placeholders + ") AND sf.item_type = 'file' " "ORDER BY sf.id",
+                    chunk
+                );
+
+                auto folder_rows = co_await m_db_client->execSqlCoro(
+                    "SELECT sf.id AS share_file_id, sf.share_id, fo.id, fo.name, 0 AS size, " "'folder' AS type " "FROM share_files sf " "JOIN folders fo ON sf.item_id = fo.id " "WHERE sf.share_id IN (" + placeholders + ") AND sf.item_type = 'folder' " "ORDER BY sf.id",
+                    chunk
+                );
+
+                for (const auto& row : file_rows) {
+                    ShareFile share_file;
+                    share_file.id = row["id"].as<uint64_t>();
+                    share_file.name = row["name"].as<std::string>();
+                    share_file.type = row["type"].as<std::string>();
+                    share_file.size = row["size"].as<uint64_t>();
+                    auto share_id = row["share_id"].as<uint64_t>();
+                    ordered_items_by_share[share_id].push_back(OrderedShareFile{ .share_file_id = row["share_file_id"].as<uint64_t>(), .share_file = std::move(share_file) });
+                }
+
+                for (const auto& row : folder_rows) {
+                    ShareFile share_file;
+                    share_file.id = row["id"].as<uint64_t>();
+                    share_file.name = row["name"].as<std::string>();
+                    share_file.type = row["type"].as<std::string>();
+                    share_file.size = row["size"].as<uint64_t>();
+                    auto share_id = row["share_id"].as<uint64_t>();
+                    ordered_items_by_share[share_id].push_back(OrderedShareFile{ .share_file_id = row["share_file_id"].as<uint64_t>(), .share_file = std::move(share_file) });
+                }
+            }
+
+            result.reserve(ordered_items_by_share.size());
+            for (auto& [share_id, ordered_items] : ordered_items_by_share) {
+                std::sort(
+                    ordered_items.begin(),
+                    ordered_items.end(),
+                    [](const OrderedShareFile& lhs, const OrderedShareFile& rhs) {
+                        return lhs.share_file_id < rhs.share_file_id;
+                    }
+                );
+
+                auto& share_files = result[share_id];
+                share_files.reserve(ordered_items.size());
+                for (auto& ordered_item : ordered_items) {
+                    share_files.push_back(std::move(ordered_item.share_file));
+                }
             }
         } catch (const DrogonDbException& e) {
             LOG_ERROR << "Failed to get share file list: " << e.base().what();

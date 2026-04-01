@@ -10,6 +10,8 @@
 #include "FileService.hpp"
 
 #include <cmath>
+#include <unordered_map>
+#include <unordered_set>
 
 #include <drogon/utils/Utilities.h>
 #include <json/writer.h>
@@ -20,12 +22,15 @@
 #include "models/Trash.hpp"
 #include "models/UploadTaskChunks.hpp"
 #include "storage/IFileStorage.hpp"
+#include "utils/BatchUtils.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
 
 namespace disk::file {
 
+    using disk::utils::BatchUtils;
     using disk::utils::ConfigMgr;
+    using disk::utils::DEFAULT_BATCH_CHUNK_SIZE;
     using disk::utils::FileHashUtil;
     using drogon::orm::CompareOperator;
     using drogon::orm::CoroMapper;
@@ -972,41 +977,161 @@ namespace disk::file {
             }
         }
 
-        int moved_count = 0;
-        CoroMapper<Files> file_mapper(m_db_client);
+        auto BuildNumericInClause = [](const std::vector<uint64_t>& ids) -> std::string {
+            auto placeholders = BatchUtils::BuildInPlaceholders(ids);
+            std::string in_clause;
+            in_clause.reserve(placeholders.size() * 2);
 
-        for (const auto& file_id : request.file_ids) {
+            size_t id_index = 0;
+            for (const auto ch : placeholders) {
+                if (ch == '?' && id_index < ids.size()) {
+                    in_clause += std::to_string(ids[id_index++]);
+                } else {
+                    in_clause.push_back(ch);
+                }
+            }
+
+            return in_clause;
+        };
+
+        auto EscapeSqlLiteral = [](const std::string& input) -> std::string {
+            std::string escaped;
+            escaped.reserve(input.size());
+            for (const auto ch : input) {
+                if (ch == '\'') {
+                    escaped += "''";
+                } else {
+                    escaped.push_back(ch);
+                }
+            }
+            return escaped;
+        };
+
+        int moved_count = 0;
+        std::unordered_set<uint64_t> already_moved_ids;
+
+        auto chunks = BatchUtils::Chunk(request.file_ids, DEFAULT_BATCH_CHUNK_SIZE);
+        for (const auto& chunk : chunks) {
+            if (chunk.empty()) {
+                continue;
+            }
+
+            auto in_clause = BuildNumericInClause(chunk);
+
+            std::unordered_map<uint64_t, Files> file_map;
+            file_map.reserve(chunk.size());
+
             try {
-                auto file = co_await file_mapper.findOne(
-                    Criteria(Files::Cols::_id, CompareOperator::EQ, file_id) &&
-                    Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
+                auto result = co_await m_db_client->execSqlCoro(
+                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, " "       is_favorite, download_count, created_at, updated_at " "FROM files WHERE id IN (" + in_clause + ") AND user_id = ?",
+                    user_id
                 );
 
-                if (file.getValueOfFolderId() == request.target_folder_id) {
+                for (const auto& row : result) {
+                    auto file = Files(row);
+                    file_map[file.getValueOfId()] = std::move(file);
+                }
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_WARN << "File batch fetch failed in move, skipping chunk: " << e.base().what();
+                for (const auto& file_id : chunk) {
+                    LOG_WARN << "File not found or move failed, skipping: file_id=" << file_id;
+                }
+                continue;
+            }
+
+            std::unordered_set<std::string> occupied_names;
+            {
+                std::unordered_set<std::string> names_to_check;
+                for (const auto& file_id : chunk) {
+                    auto it = file_map.find(file_id);
+                    if (it != file_map.end()) {
+                        names_to_check.insert(it->second.getValueOfName());
+                    }
+                }
+
+                if (!names_to_check.empty()) {
+                    std::string names_clause;
+                    bool first_name = true;
+                    for (const auto& name : names_to_check) {
+                        if (!first_name) {
+                            names_clause += ",";
+                        }
+                        first_name = false;
+                        names_clause += "'" + EscapeSqlLiteral(name) + "'";
+                    }
+
+                    try {
+                        auto conflict_result = co_await m_db_client->execSqlCoro(
+                            "SELECT name FROM files WHERE folder_id = ? AND user_id = ? AND name IN (" +
+                                names_clause + ")",
+                            request.target_folder_id,
+                            user_id
+                        );
+
+                        for (const auto& row : conflict_result) {
+                            occupied_names.insert(row["name"].as<std::string>());
+                        }
+                    } catch (const drogon::orm::DrogonDbException& e) {
+                        LOG_WARN << "Filename conflict batch query failed in move, skipping chunk: "
+                                 << e.base().what();
+                        continue;
+                    }
+                }
+            }
+
+            std::vector<uint64_t> valid_ids;
+            valid_ids.reserve(chunk.size());
+
+            for (const auto& file_id : chunk) {
+                if (already_moved_ids.contains(file_id)) {
                     LOG_DEBUG << "File already in target folder, skipping: file_id=" << file_id;
                     ++moved_count;
                     continue;
                 }
 
-                if (co_await IsFilenameExists(
-                        request.target_folder_id,
-                        file.getValueOfName(),
-                        user_id
-                    )) {
+                auto it = file_map.find(file_id);
+                if (it == file_map.end()) {
+                    LOG_WARN << "File not found or move failed, skipping: file_id=" << file_id;
+                    continue;
+                }
+
+                auto& file = it->second;
+
+                if (file.getValueOfFolderId() == request.target_folder_id) {
+                    LOG_DEBUG << "File already in target folder, skipping: file_id=" << file_id;
+                    ++moved_count;
+                    occupied_names.insert(file.getValueOfName());
+                    already_moved_ids.insert(file_id);
+                    continue;
+                }
+
+                if (occupied_names.contains(file.getValueOfName())) {
                     LOG_WARN << "Target folder already has file with same name, skipping: "
                              << file.getValueOfName();
                     continue;
                 }
 
-                file.setFolderId(request.target_folder_id);
-                file.setUpdatedAt(trantor::Date::now());
-                co_await file_mapper.update(file);
+                valid_ids.push_back(file_id);
+                occupied_names.insert(file.getValueOfName());
+                already_moved_ids.insert(file_id);
 
                 ++moved_count;
                 LOG_DEBUG << "File move successful: file_id=" << file_id;
+            }
 
-            } catch (const drogon::orm::DrogonDbException&) {
-                LOG_WARN << "File not found or move failed, skipping: file_id=" << file_id;
+            if (!valid_ids.empty()) {
+                auto update_in_clause = BuildNumericInClause(valid_ids);
+                try {
+                    co_await m_db_client->execSqlCoro(
+                        "UPDATE files SET folder_id = ?, updated_at = ? WHERE id IN (" +
+                            update_in_clause + ")",
+                        request.target_folder_id,
+                        trantor::Date::now()
+                    );
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_WARN << "Batch move update failed: " << e.base().what();
+                    moved_count -= static_cast<int>(valid_ids.size());
+                }
             }
         }
 
@@ -1041,20 +1166,80 @@ namespace disk::file {
             }
         }
 
+        auto BuildNumericInClause = [](const std::vector<uint64_t>& ids) -> std::string {
+            auto placeholders = BatchUtils::BuildInPlaceholders(ids);
+            std::string in_clause;
+            in_clause.reserve(placeholders.size() * 2);
+
+            size_t id_index = 0;
+            for (const auto ch : placeholders) {
+                if (ch == '?' && id_index < ids.size()) {
+                    in_clause += std::to_string(ids[id_index++]);
+                } else {
+                    in_clause.push_back(ch);
+                }
+            }
+
+            return in_clause;
+        };
+
+        auto EscapeSqlLiteral = [](const std::string& input) -> std::string {
+            std::string escaped;
+            escaped.reserve(input.size());
+            for (const auto ch : input) {
+                if (ch == '\'') {
+                    escaped += "''";
+                } else {
+                    escaped.push_back(ch);
+                }
+            }
+            return escaped;
+        };
+
         uint64_t total_copy_size = 0;
         CoroMapper<Files> file_mapper(m_db_client);
         std::vector<std::pair<uint64_t, Files>> files_to_copy;
 
-        for (const auto& file_id : request.file_ids) {
-            try {
-                auto file = co_await file_mapper.findOne(
-                    Criteria(Files::Cols::_id, CompareOperator::EQ, file_id) &&
-                    Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
-                );
-                total_copy_size += file.getValueOfSize();
-                files_to_copy.emplace_back(file_id, file);
-            } catch (const drogon::orm::DrogonDbException&) {
-                LOG_WARN << "File not found or no permission, skipping: file_id=" << file_id;
+        {
+            auto id_chunks = BatchUtils::Chunk(request.file_ids, DEFAULT_BATCH_CHUNK_SIZE);
+            for (const auto& chunk : id_chunks) {
+                if (chunk.empty()) {
+                    continue;
+                }
+
+                auto in_clause = BuildNumericInClause(chunk);
+
+                std::unordered_map<uint64_t, Files> file_map;
+                file_map.reserve(chunk.size());
+
+                try {
+                    auto result = co_await m_db_client->execSqlCoro(
+                        "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, " "       is_favorite, download_count, created_at, updated_at " "FROM files WHERE id IN (" + in_clause + ") AND user_id = ?",
+                        user_id
+                    );
+
+                    for (const auto& row : result) {
+                        auto file = Files(row);
+                        file_map[file.getValueOfId()] = std::move(file);
+                    }
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_WARN << "File batch fetch failed in copy, skipping chunk: " << e.base().what();
+                    for (const auto& file_id : chunk) {
+                        LOG_WARN << "File not found or no permission, skipping: file_id=" << file_id;
+                    }
+                    continue;
+                }
+
+                for (const auto& file_id : chunk) {
+                    auto it = file_map.find(file_id);
+                    if (it == file_map.end()) {
+                        LOG_WARN << "File not found or no permission, skipping: file_id=" << file_id;
+                        continue;
+                    }
+
+                    total_copy_size += it->second.getValueOfSize();
+                    files_to_copy.emplace_back(file_id, it->second);
+                }
             }
         }
 
@@ -1076,58 +1261,164 @@ namespace disk::file {
         int copied_count = 0;
         uint64_t actual_copy_size = 0;
         std::vector<FileIdMapping> new_files;
-        CoroMapper<FileContents> content_mapper(m_db_client);
 
-        for (const auto& [old_id, file] : files_to_copy) {
-            try {
-                if (co_await IsFilenameExists(
-                        request.target_folder_id,
-                        file.getValueOfName(),
-                        user_id
-                    )) {
+        auto copy_chunks = BatchUtils::Chunk(files_to_copy, DEFAULT_BATCH_CHUNK_SIZE);
+        for (const auto& chunk : copy_chunks) {
+            if (chunk.empty()) {
+                continue;
+            }
+
+            std::unordered_set<std::string> occupied_names;
+            {
+                std::unordered_set<std::string> names_to_check;
+                for (const auto& [_, file] : chunk) {
+                    names_to_check.insert(file.getValueOfName());
+                }
+
+                if (!names_to_check.empty()) {
+                    std::string names_clause;
+                    bool first_name = true;
+                    for (const auto& name : names_to_check) {
+                        if (!first_name) {
+                            names_clause += ",";
+                        }
+                        first_name = false;
+                        names_clause += "'" + EscapeSqlLiteral(name) + "'";
+                    }
+
+                    try {
+                        auto conflict_result = co_await m_db_client->execSqlCoro(
+                            "SELECT name FROM files WHERE folder_id = ? AND user_id = ? AND name IN (" +
+                                names_clause + ")",
+                            request.target_folder_id,
+                            user_id
+                        );
+
+                        for (const auto& row : conflict_result) {
+                            occupied_names.insert(row["name"].as<std::string>());
+                        }
+                    } catch (const drogon::orm::DrogonDbException& e) {
+                        LOG_WARN << "Filename conflict batch query failed in copy, skipping chunk: "
+                                 << e.base().what();
+                        continue;
+                    }
+                }
+            }
+
+            struct PendingCopyItem {
+                uint64_t old_id;
+                Files file;
+            };
+
+            std::vector<PendingCopyItem> pending_items;
+            pending_items.reserve(chunk.size());
+            std::unordered_map<uint64_t, uint64_t> content_ref_increment;
+
+            for (const auto& [old_id, file] : chunk) {
+                if (occupied_names.contains(file.getValueOfName())) {
                     LOG_WARN << "Target folder already has file with same name, skipping: "
                              << file.getValueOfName();
                     continue;
                 }
 
-                auto content_id_ptr = file.getContentId();
-                if (content_id_ptr) {
-                    auto increment_result = co_await m_db_client->execSqlCoro(
-                        "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = ?",
-                        *content_id_ptr
+                occupied_names.insert(file.getValueOfName());
+
+                if (file.getContentId()) {
+                    content_ref_increment[*file.getContentId()] += 1;
+                }
+
+                pending_items.push_back({ .old_id = old_id, .file = file });
+            }
+
+            std::unordered_set<uint64_t> missing_content_ids;
+            if (!content_ref_increment.empty()) {
+                std::vector<uint64_t> content_ids;
+                content_ids.reserve(content_ref_increment.size());
+                for (const auto& [content_id, _] : content_ref_increment) {
+                    content_ids.push_back(content_id);
+                }
+
+                auto content_in_clause = BuildNumericInClause(content_ids);
+                std::unordered_set<uint64_t> existing_content_ids;
+                existing_content_ids.reserve(content_ids.size());
+
+                try {
+                    auto content_result = co_await m_db_client->execSqlCoro(
+                        "SELECT id FROM file_contents WHERE id IN (" + content_in_clause + ")"
                     );
-                    if (increment_result.affectedRows() == 0) {
-                        LOG_WARN << "File content not found during copy: content_id="
-                                 << *content_id_ptr;
+                    for (const auto& row : content_result) {
+                        existing_content_ids.insert(row["id"].as<uint64_t>());
+                    }
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_WARN << "File content batch query failed in copy, skipping chunk: "
+                             << e.base().what();
+                    continue;
+                }
+
+                std::string update_sql = "UPDATE file_contents SET ref_count = ref_count + CASE id ";
+                std::vector<uint64_t> valid_content_ids;
+                valid_content_ids.reserve(content_ids.size());
+
+                for (const auto& [content_id, increment] : content_ref_increment) {
+                    if (!existing_content_ids.contains(content_id)) {
+                        missing_content_ids.insert(content_id);
+                        continue;
+                    }
+
+                    valid_content_ids.push_back(content_id);
+                    update_sql += " WHEN " + std::to_string(content_id) + " THEN " +
+                                  std::to_string(increment);
+                }
+
+                if (!valid_content_ids.empty()) {
+                    update_sql += " ELSE 0 END WHERE id IN (" +
+                                  BuildNumericInClause(valid_content_ids) + ")";
+
+                    try {
+                        co_await m_db_client->execSqlCoro(update_sql);
+                    } catch (const drogon::orm::DrogonDbException& e) {
+                        LOG_WARN << "File content batch ref_count update failed in copy: "
+                                 << e.base().what();
                         continue;
                     }
                 }
+            }
 
-                Files new_file;
-                new_file.setUserId(user_id);
-                if (content_id_ptr) {
-                    new_file.setContentId(*content_id_ptr);
+            for (const auto& pending : pending_items) {
+                try {
+                    auto content_id_ptr = pending.file.getContentId();
+                    if (content_id_ptr && missing_content_ids.contains(*content_id_ptr)) {
+                        LOG_WARN << "File content not found during copy: content_id=" << *content_id_ptr;
+                        continue;
+                    }
+
+                    Files new_file;
+                    new_file.setUserId(user_id);
+                    if (content_id_ptr) {
+                        new_file.setContentId(*content_id_ptr);
+                    }
+                    new_file.setFolderId(request.target_folder_id);
+                    new_file.setName(pending.file.getValueOfName());
+                    new_file.setExtension(pending.file.getValueOfExtension());
+                    new_file.setSize(pending.file.getValueOfSize());
+                    new_file.setMimeType(pending.file.getValueOfMimeType());
+                    new_file.setPath("");
+                    new_file.setIsFavorite(0);
+                    new_file.setDownloadCount(0);
+
+                    new_file = co_await file_mapper.insert(new_file);
+
+                    ++copied_count;
+                    actual_copy_size += pending.file.getValueOfSize();
+                    new_files.push_back({ .old_id = pending.old_id, .new_id = new_file.getValueOfId() });
+
+                    LOG_DEBUG << "File copy successful: old_id=" << pending.old_id
+                              << ", new_id=" << new_file.getValueOfId();
+
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_ERROR << "Failed to copy file: file_id=" << pending.old_id
+                              << " - " << e.base().what();
                 }
-                new_file.setFolderId(request.target_folder_id);
-                new_file.setName(file.getValueOfName());
-                new_file.setExtension(file.getValueOfExtension());
-                new_file.setSize(file.getValueOfSize());
-                new_file.setMimeType(file.getValueOfMimeType());
-                new_file.setPath("");
-                new_file.setIsFavorite(0);
-                new_file.setDownloadCount(0);
-
-                new_file = co_await file_mapper.insert(new_file);
-
-                ++copied_count;
-                actual_copy_size += file.getValueOfSize();
-                new_files.push_back({ .old_id = old_id, .new_id = new_file.getValueOfId() });
-
-                LOG_DEBUG << "File copy successful: old_id=" << old_id
-                          << ", new_id=" << new_file.getValueOfId();
-
-            } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_ERROR << "Failed to copy file: file_id=" << old_id << " - " << e.base().what();
             }
         }
 
@@ -1155,49 +1446,111 @@ namespace disk::file {
         LOG_DEBUG << "Starting delete file: file_ids.size()=" << request.file_ids.size()
                   << ", user_id=" << user_id;
 
+        auto BuildNumericInClause = [](const std::vector<uint64_t>& ids) -> std::string {
+            auto placeholders = BatchUtils::BuildInPlaceholders(ids);
+            std::string in_clause;
+            in_clause.reserve(placeholders.size() * 2);
+
+            size_t id_index = 0;
+            for (const auto ch : placeholders) {
+                if (ch == '?' && id_index < ids.size()) {
+                    in_clause += std::to_string(ids[id_index++]);
+                } else {
+                    in_clause.push_back(ch);
+                }
+            }
+
+            return in_clause;
+        };
+
         int deleted_count = 0;
-        CoroMapper<Files> file_mapper(m_db_client);
         CoroMapper<Trash> trash_mapper(m_db_client);
 
-        for (const auto& file_id : request.file_ids) {
+        auto chunks = BatchUtils::Chunk(request.file_ids, DEFAULT_BATCH_CHUNK_SIZE);
+        for (const auto& chunk : chunks) {
+            if (chunk.empty()) {
+                continue;
+            }
+
+            auto in_clause = BuildNumericInClause(chunk);
+
+            std::unordered_map<uint64_t, Files> file_map;
+            file_map.reserve(chunk.size());
+
             try {
-                auto file = co_await file_mapper.findOne(
-                    Criteria(Files::Cols::_id, CompareOperator::EQ, file_id) &&
-                    Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
+                auto result = co_await m_db_client->execSqlCoro(
+                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, " "       is_favorite, download_count, created_at, updated_at " "FROM files WHERE id IN (" + in_clause + ") AND user_id = ?",
+                    user_id
                 );
 
-                Trash trash;
-                trash.setUserId(user_id);
-                trash.setItemType("file");
-                trash.setItemId(file.getValueOfId());
-                trash.setItemName(file.getValueOfName());
-                trash.setItemSize(file.getValueOfSize());
-                trash.setOriginalFolderId(file.getValueOfFolderId());
-                trash.setOriginalPath(file.getValueOfPath());
-
-                Json::Value item_data;
-                if (file.getContentId()) {
-                    item_data["content_id"] = static_cast<Json::UInt64>(*file.getContentId());
-                    trash.setContentId(*file.getContentId());
+                for (const auto& row : result) {
+                    auto file = Files(row);
+                    file_map[file.getValueOfId()] = std::move(file);
                 }
-                item_data["mime_type"] = file.getValueOfMimeType();
-                Json::StreamWriterBuilder builder;
-                builder["indentation"] = "";
-                trash.setItemData(Json::writeString(builder, item_data));
-
-                auto now = trantor::Date::now();
-                trash.setDeletedAt(now);
-                trash.setExpiresAt(now.after(30 * 24 * 60 * 60));
-
-                co_await trash_mapper.insert(trash);
-                co_await file_mapper.deleteByPrimaryKey(file.getValueOfId());
-
-                ++deleted_count;
-                LOG_DEBUG << "File moved to trash: file_id=" << file_id;
-
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "File not found or delete failed, skipping: file_id=" << file_id
-                         << " - " << e.base().what();
+                LOG_WARN << "File batch fetch failed in delete, skipping chunk: " << e.base().what();
+                for (const auto& file_id : chunk) {
+                    LOG_WARN << "File not found or delete failed, skipping: file_id=" << file_id;
+                }
+                continue;
+            }
+
+            std::vector<uint64_t> deletable_ids;
+            deletable_ids.reserve(chunk.size());
+
+            for (const auto& file_id : chunk) {
+                auto it = file_map.find(file_id);
+                if (it == file_map.end()) {
+                    LOG_WARN << "File not found or delete failed, skipping: file_id=" << file_id;
+                    continue;
+                }
+
+                const auto& file = it->second;
+
+                try {
+                    Trash trash;
+                    trash.setUserId(user_id);
+                    trash.setItemType("file");
+                    trash.setItemId(file.getValueOfId());
+                    trash.setItemName(file.getValueOfName());
+                    trash.setItemSize(file.getValueOfSize());
+                    trash.setOriginalFolderId(file.getValueOfFolderId());
+                    trash.setOriginalPath(file.getValueOfPath());
+
+                    Json::Value item_data;
+                    if (file.getContentId()) {
+                        item_data["content_id"] = static_cast<Json::UInt64>(*file.getContentId());
+                        trash.setContentId(*file.getContentId());
+                    }
+                    item_data["mime_type"] = file.getValueOfMimeType();
+                    Json::StreamWriterBuilder builder;
+                    builder["indentation"] = "";
+                    trash.setItemData(Json::writeString(builder, item_data));
+
+                    auto now = trantor::Date::now();
+                    trash.setDeletedAt(now);
+                    trash.setExpiresAt(now.after(30 * 24 * 60 * 60));
+
+                    co_await trash_mapper.insert(trash);
+                    deletable_ids.push_back(file.getValueOfId());
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_WARN << "File not found or delete failed, skipping: file_id=" << file_id
+                             << " - " << e.base().what();
+                }
+            }
+
+            if (!deletable_ids.empty()) {
+                try {
+                    co_await m_db_client->execSqlCoro(
+                        "DELETE FROM files WHERE id IN (" + BuildNumericInClause(deletable_ids) + ")"
+                    );
+                    deleted_count += static_cast<int>(deletable_ids.size());
+                    for (const auto& file_id : deletable_ids) {
+                        LOG_DEBUG << "File moved to trash: file_id=" << file_id;
+                    }
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_WARN << "Batch file delete failed, skipping chunk delete: " << e.base().what();
+                }
             }
         }
 

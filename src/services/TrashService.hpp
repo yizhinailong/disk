@@ -23,6 +23,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -146,6 +147,19 @@ namespace disk::trash {
         auto DeleteAll(uint64_t user_id) -> drogon::Task<Result<DeleteAllResponse>>;
 
     private:
+        struct PrefetchedTrashItem {
+            uint64_t id{ 0 };
+            uint64_t user_id{ 0 };
+            std::string item_type;
+            uint64_t item_id{ 0 };
+            std::string item_name;
+            uint64_t item_size{ 0 };
+            uint64_t original_folder_id{ 0 };
+            std::string original_path;
+            std::string item_data;
+            std::optional<uint64_t> content_id;
+        };
+
         /**
          * @brief 生成唯一文件名（用于冲突自动重命名）
          *
@@ -220,6 +234,8 @@ namespace disk::trash {
          * @return drogon::Task<void>
          */
         auto RestoreFile(uint64_t trash_id, uint64_t user_id, BatchResultItem& result) -> drogon::Task<void>;
+        auto RestoreFile(const PrefetchedTrashItem& trash_item, uint64_t user_id, BatchResultItem& result)
+            -> drogon::Task<void>;
 
         /**
          * @brief 恢复单个文件夹
@@ -230,6 +246,11 @@ namespace disk::trash {
          * @return drogon::Task<void>
          */
         auto RestoreFolder(uint64_t trash_id, uint64_t user_id, BatchResultItem& result) -> drogon::Task<void>;
+        auto RestoreFolder(
+            const PrefetchedTrashItem& trash_item,
+            uint64_t user_id,
+            BatchResultItem& result
+        ) -> drogon::Task<void>;
 
         /**
          * @brief 永久删除单个文件
@@ -240,6 +261,8 @@ namespace disk::trash {
          * @return drogon::Task<uint64_t> 返回释放的空间大小
          */
         auto DeleteFile(uint64_t trash_id, uint64_t user_id, BatchResultItem& result) -> drogon::Task<uint64_t>;
+        auto DeleteFile(const PrefetchedTrashItem& trash_item, uint64_t user_id, BatchResultItem& result)
+            -> drogon::Task<uint64_t>;
 
         /**
          * @brief 永久删除单个文件夹
@@ -250,6 +273,8 @@ namespace disk::trash {
          * @return drogon::Task<uint64_t> 返回释放的空间大小
          */
         auto DeleteFolder(uint64_t trash_id, uint64_t user_id, BatchResultItem& result) -> drogon::Task<uint64_t>;
+        auto DeleteFolder(const PrefetchedTrashItem& trash_item, uint64_t user_id, BatchResultItem& result)
+            -> drogon::Task<uint64_t>;
 
         /**
          * @brief 从文件名提取扩展名
