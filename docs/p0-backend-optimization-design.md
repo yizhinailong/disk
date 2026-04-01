@@ -814,4 +814,368 @@ LOG_INFO << "Upload completed atomically: file_id=" << file.getValueOfId();
 
 ---
 
+## 4. Batch Operations Optimization Contract
+
+### Current Flow
+
+**Problem**: Batch operations across FileService, ShareService, and TrashService use per-item processing loops, causing N+1 database queries and linear Redis invalidation scaling. Each item triggers a separate findOne, update/insert/delete SQL operation, and individual Redis cache invalidation request.
+
+**File References**:
+- `src/services/FileService.cpp:978-1011` - Move operation with per-item loop
+- `src/services/FileService.cpp:1048-1132` - Copy operation with per-item loop
+- `src/services/FileService.cpp:1162-1202` - Delete operation with per-item loop
+- `src/services/ShareService.cpp:153-240` - ListShares (stateless read, no N+1)
+- `src/services/ShareService.cpp:370-449` - CancelShare with per-item loop
+- `src/services/TrashService.cpp:111-176` - Restore with per-item loop
+- `src/services/TrashService.cpp:178-254` - Delete with per-item loop
+- `src/services/TrashService.cpp:256-312` - DeleteAll with per-item loop
+- `src/services/RedisService.cpp` - Individual Redis invalidation calls
+
+```mermaid
+flowchart TD
+    A[Batch Operation Request<br/>N items] --> B[Validate Request]
+    B --> C[Per-Item Validation Loop]
+
+    C --> D["FOR EACH item i IN 1..N:"]
+    D --> E["Item Validation"]
+    E --> F{Item Valid?}
+    F -->|No| G[Log error, skip item]
+    F -->|Yes| H["Database Query #i:<br/>findOne/findBy"]
+    H --> I["Process Item"]
+    I --> J["Database Write #i:<br/>update/insert/delete"]
+    J --> K["Redis Invalidations #i:<br/>del/delPattern"]
+
+    K --> L[Collect per-item result]
+    L --> M{More Items?}
+    M -->|Yes| D
+    M -->|No| N[Build response with<br/>per-item status]
+
+    N --> O[Return batch result]
+
+    style H fill:#ff6b6b,stroke:#333,stroke-width:2px
+    style H stroke-dasharray: 5 5
+    style J fill:#ff6b6b,stroke:#333,stroke-width:2px
+    style J stroke-dasharray: 5 5
+    style K fill:#ff6b6b,stroke:#333,stroke-width:2px
+    style K stroke-dasharray: 5 5
+```
+
+**Current Code Flow** (`FileService.cpp:978-1011` - Move example):
+
+```cpp
+auto FileService::MoveFiles(
+    uint64_t user_id,
+    const std::vector<uint64_t>& file_ids,
+    uint64_t target_folder_id
+) -> drogon::Task<Result<std::vector<MoveResult>>> {
+    std::vector<MoveResult> results;
+    CoroMapper<Files> mapper(m_db_client);
+
+    for (const auto file_id : file_ids) {
+        MoveResult result;
+        result.file_id = file_id;
+        result.success = false;
+
+        try {
+            // Query per file (N queries)
+            auto file = co_await mapper.findOne(
+                Criteria(Files::Cols::_id, file_id)
+            );
+
+            if (file.getValueOfUserId() != user_id) {
+                result.error = "Not owner";
+                results.push_back(result);
+                continue;
+            }
+
+            // Update per file (N queries)
+            file.setFolderId(target_folder_id);
+            co_await mapper.update(file);
+
+            // Redis invalidation per file (N Redis calls)
+            co_await RedisService::GetInstance()->InvalidateFileCache(file_id);
+
+            result.success = true;
+        } catch (const DrogonDbException& e) {
+            result.error = e.base().what();
+        }
+
+        results.push_back(result);
+    }
+
+    co_return results;
+}
+```
+
+**Performance Impact**:
+- SQL query count = N (where N = batch size)
+- Redis operations = N individual calls
+- Network round-trips multiplied by N
+- For 1000 items = 1000 SQL queries + 1000 Redis calls
+- Transaction boundaries per item or no transaction at all
+- No batch SQL optimization (no IN-clause, no bulk operations)
+
+### Target Flow
+
+**Solution**: Chunk batch operations into fixed-size batches (default 500 items per chunk). Use IN-clause queries for retrieval, batch SQL operations for writes, and batch Redis operations for cache invalidation. Maintain partial-success semantics with per-item result tracking.
+
+**File References to Modify**:
+- `src/services/FileService.cpp:978-1011` - Move: chunked IN-clause + batch update
+- `src/services/FileService.cpp:1048-1132` - Copy: chunked IN-clause + batch insert
+- `src/services/FileService.cpp:1162-1202` - Delete: chunked IN-clause + batch delete
+- `src/services/ShareService.cpp:370-449` - CancelShare: chunked IN-clause + batch delete
+- `src/services/TrashService.cpp:111-176` - Restore: chunked IN-clause + batch update
+- `src/services/TrashService.cpp:178-254` - Delete: chunked IN-clause + batch delete
+- `src/services/TrashService.cpp:256-312` - DeleteAll: chunked IN-clause + batch delete (atomic per chunk)
+- `src/services/RedisService.cpp` - Add batch Redis invalidation methods
+
+```mermaid
+flowchart TD
+    A[Batch Operation Request<br/>N items] --> B[Validate Request]
+    B --> C[Split into chunks<br/>size = 500]
+
+    C --> D["FOR EACH chunk C_k IN 1..ceil(N/500):"]
+    D --> E["Batch Query #k:<br/>WHERE id IN (500 items)"]
+    E --> F[Validate chunk items<br/>Build processing lists]
+
+    F --> G["Batch Write #k:<br/>Bulk UPDATE/INSERT/DELETE"]
+    G --> H["Batch Redis #k:<br/>Pipeline N/500 calls"]
+
+    H --> I[Collect per-item results<br/>from batch response]
+    I --> J{More Chunks?}
+    J -->|Yes| D
+    J -->|No| K[Build response with<br/>per-item status]
+
+    K --> L[Return batch result]
+
+    style E fill:#51cf66,stroke:#333,stroke-width:2px
+    style G fill:#51cf66,stroke:#333,stroke-width:2px
+    style H fill:#51cf66,stroke:#333,stroke-width:2px
+```
+
+**Behavior Semantics Contract**:
+
+| Endpoint Category | Transaction Policy | Failure Mode | Redis Invalidation |
+|------------------|-------------------|--------------|-------------------|
+| **FileService::Move** | Per-item (partial success) | Track per-item status | Batch by file_id |
+| **FileService::Copy** | Per-item (partial success) | Track per-item status | Batch by file_id |
+| **FileService::Delete** | Per-item (partial success) | Track per-item status | Batch by file_id |
+| **ShareService::List** | Stateless read (no transaction) | N/A | No invalidation (read-only) |
+| **ShareService::Cancel** | Per-item (partial success) | Track per-item status | Batch by share_id |
+| **TrashService::Restore** | Per-item (partial success) | Track per-item status | Batch by file_id |
+| **TrashService::Delete** | Per-item (partial success) | Track per-item status | Batch by file_id |
+| **TrashService::DeleteAll** | Atomic per chunk (all-or-nothing) | Chunk rollback on failure | Batch by file_id |
+
+**Chunk Size Policy**:
+- Default chunk size: **500 items** per SQL batch
+- Configurable via service constructor (allow tuning based on DB performance)
+- Rationale: Balance between query plan complexity and transaction size
+- 500 items fits well within MySQL's default max_allowed_packet (4MB) for typical row sizes
+- Smaller chunks reduce lock contention and transaction timeout risk
+- Larger chunks reduce network round-trips but increase memory pressure
+
+**Proposed Implementation** (`FileService.cpp:978-1011` - Move example):
+
+```cpp
+auto FileService::MoveFiles(
+    uint64_t user_id,
+    const std::vector<uint64_t>& file_ids,
+    uint64_t target_folder_id
+) -> drogon::Task<Result<std::vector<MoveResult>>> {
+    const size_t CHUNK_SIZE = 500;
+    std::vector<MoveResult> results;
+    results.reserve(file_ids.size());
+
+    for (size_t chunk_start = 0; chunk_start < file_ids.size(); chunk_start += CHUNK_SIZE) {
+        size_t chunk_end = std::min(chunk_start + CHUNK_SIZE, file_ids.size());
+        std::vector<uint64_t> chunk_ids(
+            file_ids.begin() + chunk_start,
+            file_ids.begin() + chunk_end
+        );
+
+        // Build IN-clause placeholder string
+        std::string in_clause;
+        for (size_t i = 0; i < chunk_ids.size(); ++i) {
+            in_clause += "?";
+            if (i < chunk_ids.size() - 1) in_clause += ",";
+        }
+
+        // Batch query: fetch all files in chunk (1 query per chunk)
+        auto query_result = co_await m_db_client->execSqlCoro(
+            "SELECT id, user_id, folder_id, name FROM files WHERE id IN (" + in_clause + ")",
+            chunk_ids
+        );
+
+        // Build maps for ownership validation and tracking
+        std::unordered_map<uint64_t, bool> ownership_map;
+        for (const auto& row : query_result) {
+            uint64_t file_id = row["id"].as<uint64_t>();
+            uint64_t row_user_id = row["user_id"].as<uint64_t>();
+            ownership_map[file_id] = (row_user_id == user_id);
+        }
+
+        // Collect valid file_ids for batch update
+        std::vector<uint64_t> valid_ids;
+        std::vector<MoveResult> chunk_results;
+
+        for (const auto file_id : chunk_ids) {
+            MoveResult result;
+            result.file_id = file_id;
+            result.success = false;
+
+            auto it = ownership_map.find(file_id);
+            if (it == ownership_map.end()) {
+                result.error = "File not found";
+            } else if (!it->second) {
+                result.error = "Not owner";
+            } else {
+                result.success = true;
+                valid_ids.push_back(file_id);
+            }
+            chunk_results.push_back(result);
+        }
+
+        // Batch update: move all valid files in chunk (1 update per chunk)
+        if (!valid_ids.empty()) {
+            std::string update_in_clause;
+            for (size_t i = 0; i < valid_ids.size(); ++i) {
+                update_in_clause += std::to_string(valid_ids[i]);
+                if (i < valid_ids.size() - 1) update_in_clause += ",";
+            }
+
+            co_await m_db_client->execSqlCoro(
+                "UPDATE files SET folder_id = ? WHERE id IN (" + update_in_clause + ")",
+                target_folder_id
+            );
+
+            // Batch Redis invalidation (1 pipeline per chunk)
+            co_await RedisService::GetInstance()->BatchInvalidateFileCache(valid_ids);
+        }
+
+        results.insert(results.end(), chunk_results.begin(), chunk_results.end());
+    }
+
+    co_return results;
+}
+```
+
+**RedisService Batch Operations** (new methods to add):
+
+```cpp
+// src/services/RedisService.hpp
+class RedisService {
+public:
+    // Add batch invalidation methods
+    auto BatchInvalidateFileCache(const std::vector<uint64_t>& file_ids) const
+        -> drogon::Task<void>;
+    auto BatchInvalidateFolderCache(const std::vector<uint64_t>& folder_ids) const
+        -> drogon::Task<void>;
+    auto BatchInvalidateShareCache(const std::vector<uint64_t>& share_ids) const
+        -> drogon::Task<void>;
+};
+
+// src/services/RedisService.cpp
+auto RedisService::BatchInvalidateFileCache(const std::vector<uint64_t>& file_ids) const
+    -> drogon::Task<void> {
+    if (file_ids.empty()) co_return;
+
+    auto redis = m_redis_client->newTransaction();
+
+    for (const auto file_id : file_ids) {
+        std::string pattern = "file:*:" + std::to_string(file_id);
+        co_await redis->execCommandCoro<std::string>("DEL", pattern);
+    }
+
+    co_await redis->commit();
+}
+
+auto RedisService::BatchInvalidateFolderCache(const std::vector<uint64_t>& folder_ids) const
+    -> drogon::Task<void> {
+    if (folder_ids.empty()) co_return;
+
+    auto redis = m_redis_client->newTransaction();
+
+    for (const auto folder_id : folder_ids) {
+        std::string pattern = "folder:*:" + std::to_string(folder_id);
+        co_await redis->execCommandCoro<std::string>("DEL", pattern);
+    }
+
+    co_await redis->commit();
+}
+```
+
+**Implementation Steps**:
+
+1. **Step 1**: Add batch Redis invalidation methods to RedisService
+    - Add `BatchInvalidateFileCache`, `BatchInvalidateFolderCache`, `BatchInvalidateShareCache`
+    - Use Redis transactions/pipelines to batch multiple DEL commands
+    - Return void (log errors but don't fail Redis failures)
+
+2. **Step 2**: Refactor FileService batch operations
+    - **Move** (`978-1011`): Chunked IN-clause query + batch UPDATE + batch Redis
+    - **Copy** (`1048-1132`): Chunked IN-clause query + batch INSERT + batch Redis
+    - **Delete** (`1162-1202`): Chunked IN-clause query + batch DELETE + batch Redis
+    - Maintain per-item result tracking for partial-success semantics
+
+3. **Step 3**: Refactor ShareService batch operations
+    - **ListShares** (`153-240`): No change needed (already uses JOIN from section 2)
+    - **CancelShare** (`370-449`): Chunked IN-clause query + batch DELETE + batch Redis
+    - Maintain per-item result tracking for partial-success semantics
+
+4. **Step 4**: Refactor TrashService batch operations
+    - **Restore** (`111-176`): Chunked IN-clause query + batch UPDATE + batch Redis
+    - **Delete** (`178-254`): Chunked IN-clause query + batch DELETE + batch Redis
+    - **DeleteAll** (`256-312`): Chunked IN-clause query + batch DELETE (atomic per chunk) + batch Redis
+
+5. **Step 5**: Add chunk size configuration
+    - Add constexpr chunk size constants in each service (500 default)
+    - Document chunk size selection rationale in service headers
+    - Consider making it configurable via config.json for production tuning
+
+**Redis Invalidation Expectations**:
+- Batch operations scale by **chunk count**, not item count
+- For 1000 items (chunk size 500): 2 Redis pipeline calls instead of 1000 individual calls
+- 98% reduction in Redis network round-trips for 1000-item batches
+- Use Redis MULTI/EXEC or pipelines for atomic batch execution
+- Log Redis failures as warnings but don't block batch operation (cache inconsistencies eventually heal)
+
+**Consistency Guarantees**:
+- **Partial-success endpoints** (Move, Copy, Delete, Cancel, Restore, Delete): Individual item failures don't fail the entire batch; per-item status tracking in response
+- **Atomic-chunk endpoint** (DeleteAll): All-or-nothing per chunk - if any item in a chunk fails, the entire chunk is rolled back
+- **Response format unchanged**: Per-item status in response payload maintained for API contract compatibility
+
+**Behavioral Compatibility**:
+- API response structure unchanged (still per-item success/error status)
+- Partial-success behavior preserved
+- Error messages for failed items unchanged
+- Ordering of results matches input ordering
+
+**Performance Improvement**:
+- SQL query count reduced from N to ceil(N/500) (98% reduction for 1000 items)
+- Redis operations reduced from N to ceil(N/500) (98% reduction for 1000 items)
+- Network round-trips reduced by 98% for typical batch sizes
+- Query plan optimization for batch operations (IN-clause uses indexes efficiently)
+- Transaction overhead reduced (fewer transaction boundaries for atomic operations)
+
+**Doc-Code Parity Checklist**:
+
+At final audit, verify the following parity items:
+
+- [ ] Chunk size constant (500) documented in all modified service headers
+- [ ] FileService Move uses chunked IN-clause at `FileService.cpp:978-1011`
+- [ ] FileService Copy uses chunked IN-clause at `FileService.cpp:1048-1132`
+- [ ] FileService Delete uses chunked IN-clause at `FileService.cpp:1162-1202`
+- [ ] ShareService Cancel uses chunked IN-clause at `ShareService.cpp:370-449`
+- [ ] TrashService Restore uses chunked IN-clause at `TrashService.cpp:111-176`
+- [ ] TrashService Delete uses chunked IN-clause at `TrashService.cpp:178-254`
+- [ ] TrashService DeleteAll uses atomic-chunk semantics at `TrashService.cpp:256-312`
+- [ ] RedisService has `BatchInvalidateFileCache`, `BatchInvalidateFolderCache`, `BatchInvalidateShareCache` methods
+- [ ] All batch operations use Redis transactions/pipelines for batching
+- [ ] Per-item result tracking preserved in all batch endpoints
+- [ ] Response format matches original API contract (no breaking changes)
+- [ ] Code comments reference this section for batch operation semantics
+- [ ] Unit tests added for chunk edge cases (empty batch, single item, exact chunk size, chunk+1 items)
+
+---
+
 **End of P0 Backend Optimization Design**
