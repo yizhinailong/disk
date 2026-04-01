@@ -1,7 +1,7 @@
 /**
  * @file FileUploadConsistency_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief FileService 上传一致性基线与故障注入测试（优化前）
+ * @brief FileService 上传一致性基线与故障注入测试（T7 优化后）
  *
  * @copyright Copyright (c) 2026
  *
@@ -36,27 +36,27 @@ namespace disk::file {
         //      - rollback on DB exception
         //  9) [506-517] DB failure compensation:
         //      - delete promoted storage file when needed
-        // 10) [522-538] ZONE B (outside transaction): quota transfer
+        // 10) [522-538] ZONE B (inside transaction): quota transfer
         //      UPDATE users
         //      SET storage_reserved = GREATEST(storage_reserved - ?, 0),
         //          storage_used = storage_used + ?
-        //      Failure is warning-only (no rollback of Zone A).
-        // 11) [540-555] ZONE C (outside transaction): task finalization
+        //      Failure throws std::runtime_error to force rollback.
+        // 11) [540-555] ZONE C (inside transaction): task finalization
         //      - UPDATE upload_tasks SET status = 1, finalized_at = NOW()
         //      - DELETE upload_task_chunks
-        //      Failure is warning-only (marked non-critical).
+        //      Failure throws std::runtime_error to force rollback.
         // 12) [557-562] Temp directory cleanup.
         // 13) [564-570] Build response payload (file item + hash).
         //
-        // Consistency risk zones before optimization:
-        //  - Zone A (440-504): transactional only for file_contents + files tables.
-        //  - Zone B (522-538): quota transfer outside transaction; may fail silently.
-        //  - Zone C (540-555): task finalization outside transaction; may fail silently.
+        // Consistency guarantees after T7 optimization:
+        //  - Zone A (440-504): transactional for file_contents + files tables.
+        //  - Zone B (522-538): quota transfer inside transaction; failure triggers rollback.
+        //  - Zone C (540-555): task finalization inside transaction; failure triggers rollback.
         //
-        // Documented baseline failure scenarios:
-        //  - Zone B failure: file exists but storage_used not incremented -> free storage leak.
-        //  - Zone C failure: task remains status=0 -> upload appears in-progress forever.
-        //  - Zone A+B partial: file commit succeeds, quota transfer fails, no compensation path.
+        // Post-optimization failure behavior:
+        //  - Zone B failure: entire transaction rolls back; file not committed.
+        //  - Zone C failure: entire transaction rolls back; upload task remains pending.
+        //  - All-or-nothing consistency: partial success is impossible.
         //
         // Instant-upload path consistency note (FileService.cpp lines 70-102):
         //  - ref_count increment + files insert executed without explicit transaction wrapper.
