@@ -210,6 +210,39 @@ namespace disk::utils {
             return BuildInPlaceholders(items.size());
         }
 
+        // ==================== 数值 IN 子句 ====================
+
+        /**
+         * @brief 构建数字类型的 SQL IN 子句（字面量，不使用参数绑定）
+         *
+         * 用于安全的 uint64_t ID 列表，直接嵌入 SQL 语句。
+         * 适用于不需要参数绑定的整数 ID 场景。
+         *
+         * @param ids 要嵌入的 ID 列表
+         * @return std::string 逗号分隔的 ID 字符串，如 "1,2,3,4"
+         *
+         * @code
+         * std::vector<uint64_t> file_ids = {1, 2, 3};
+         * auto in_clause = BatchUtils::BuildNumericInClause(file_ids);
+         * // in_clause = "1,2,3"
+         * auto sql = "SELECT * FROM files WHERE id IN (" + in_clause + ")";
+         * @endcode
+         */
+        [[nodiscard]]
+        static auto BuildNumericInClause(const std::vector<uint64_t>& ids) -> std::string {
+            if (ids.empty()) {
+                return "";
+            }
+            std::ostringstream oss;
+            for (size_t i = 0; i < ids.size(); ++i) {
+                if (i > 0) {
+                    oss << ",";
+                }
+                oss << ids[i];
+            }
+            return oss.str();
+        }
+
         // ==================== 批量验证 ====================
 
         /**
