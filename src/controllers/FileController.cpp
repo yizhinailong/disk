@@ -137,7 +137,7 @@ namespace disk::file {
         // 4. 调用 Service 层上传分片
         auto result =
             co_await m_file_service
-                ->UploadChunk(upload_id, chunk_index, chunk_hash, std::string(chunk_data), user_id);
+                ->UploadChunk(upload_id, chunk_index, chunk_hash, std::string{ chunk_data }, user_id);
         if (!result) {
             LOG_ERROR << "Upload chunk failed: " << result.error().message
                       << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";

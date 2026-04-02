@@ -229,7 +229,7 @@ namespace disk::file {
         std::string upload_id,
         uint32_t chunk_index,
         std::string chunk_hash,
-        std::string chunk_data,
+        const std::string& chunk_data,
         uint64_t user_id
     ) -> drogon::Task<Result<UploadChunkResponse>> {
 
@@ -354,13 +354,13 @@ namespace disk::file {
         }
         const auto& assemble_path = assemble_result.value();
 
-        // 4. 计算并验证最终 MD5
-        auto hash_result = FileHashUtil::HashFileMd5(assemble_path);
-        if (!hash_result) {
-            LOG_ERROR << "Failed to compute file MD5";
+        // 4. 计算并验证最终 MD5 + SHA256（单次文件读取）
+        auto hash_pair_result = FileHashUtil::HashFileMd5AndSha256(assemble_path);
+        if (!hash_pair_result) {
+            LOG_ERROR << "Failed to compute file hashes";
             auto delete_result = co_await m_storage->DeletePath(assemble_path);
             if (!delete_result) {
-                LOG_WARN << "Failed to cleanup assemble file after md5 failure: "
+                LOG_WARN << "Failed to cleanup assemble file after hash failure: "
                          << static_cast<int>(delete_result.error().code);
             }
             co_return std::unexpected(
@@ -368,7 +368,7 @@ namespace disk::file {
             );
         }
 
-        const auto& final_hash = hash_result.value();
+        const auto& [final_hash, precomputed_sha256] = hash_pair_result.value();
         if (final_hash != task.getValueOfFileHash()) {
             LOG_ERROR << "File hash mismatch: expected=" << task.getValueOfFileHash()
                       << ", actual=" << final_hash;
@@ -420,21 +420,7 @@ namespace disk::file {
             }
 
             final_storage_path = promote_result.value();
-
-            auto sha256_result = FileHashUtil::HashFileSha256(final_storage_path);
-            if (!sha256_result) {
-                LOG_ERROR << "Failed to compute SHA256";
-                auto delete_result = co_await m_storage->DeletePath(final_storage_path);
-                if (!delete_result) {
-                    LOG_WARN << "Failed to cleanup final file after sha256 failure: "
-                             << static_cast<int>(delete_result.error().code);
-                }
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::InternalError, "Failed to compute SHA256")
-                );
-            }
-
-            final_sha256 = sha256_result.value();
+            final_sha256 = precomputed_sha256;
             should_compensate_storage_file = true;
         }
 

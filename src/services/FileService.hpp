@@ -88,7 +88,7 @@ namespace disk::file {
             std::string upload_id,
             uint32_t chunk_index,
             std::string chunk_hash,
-            std::string chunk_data,
+            const std::string& chunk_data,
             uint64_t user_id
         ) -> drogon::Task<Result<UploadChunkResponse>>;
 
