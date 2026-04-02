@@ -9,6 +9,13 @@
 
 #include "CleanupService.hpp"
 
+#include <algorithm>
+#include <optional>
+#include <sstream>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 #include <drogon/orm/CoroMapper.h>
 #include <drogon/orm/Criteria.h>
 
@@ -17,18 +24,29 @@
 #include "models/UploadTasks.hpp"
 #include "models/Users.hpp"
 #include "storage/StorageMgr.hpp"
+#include "utils/BatchUtils.hpp"
 
 namespace disk::services {
 
+    using disk::utils::BatchUtils;
+    using disk::utils::DEFAULT_BATCH_CHUNK_SIZE;
     using drogon::orm::CompareOperator;
     using drogon::orm::CoroMapper;
     using drogon::orm::Criteria;
     using drogon_model::disk::FileContents;
-    using drogon_model::disk::Trash;
-    using drogon_model::disk::UploadTasks;
-    using drogon_model::disk::Users;
 
     constexpr int kUploadTaskCleanupBatchSize = 100;
+
+    auto cleanup_internal::BuildNumericInClause(const std::vector<uint64_t>& ids) -> std::string {
+        std::ostringstream oss;
+        for (size_t i = 0; i < ids.size(); ++i) {
+            if (i > 0) {
+                oss << ",";
+            }
+            oss << ids[i];
+        }
+        return oss.str();
+    }
 
     CleanupService::CleanupService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
@@ -43,44 +61,150 @@ namespace disk::services {
                 "SELECT id, user_id, item_type, item_size, content_id, item_data FROM trash " "WHERE " "exp" "i" "r" "e" "s" "_at < " "NOW()"
             );
 
+            struct ExpiredTrashItem {
+                uint64_t id;
+                uint64_t user_id;
+                std::string item_type;
+                uint64_t item_size;
+                std::optional<uint64_t> content_id;
+                std::string item_data;
+            };
+
+            std::vector<ExpiredTrashItem> trash_items;
+            trash_items.reserve(result.size());
+            for (const auto& row : result) {
+                ExpiredTrashItem item{ .id = row["id"].as<uint64_t>(),
+                                       .user_id = row["user_id"].as<uint64_t>(),
+                                       .item_type = row["item_type"].as<std::string>(),
+                                       .item_size = row["item_size"].as<uint64_t>(),
+                                       .item_data = row["item_data"].as<std::string>() };
+                if (!row["content_id"].isNull()) {
+                    item.content_id = row["content_id"].as<uint64_t>();
+                }
+                trash_items.push_back(std::move(item));
+            }
+
             int deleted_count = 0;
             std::unordered_map<uint64_t, int64_t> user_storage_delta;
 
-            for (size_t i = 0; i < result.size(); ++i) {
-                const auto& row = result[i];
-                auto trash_id = row["id"].as<uint64_t>();
-                auto user_id = row["user_id"].as<uint64_t>();
-                auto item_type = row["item_type"].as<std::string>();
-                auto item_size = row["item_size"].as<uint64_t>();
-                auto item_data_str = row["item_data"].as<std::string>();
-
-                if (item_type == "file") {
-                    uint64_t content_id = 0;
-                    bool has_content_id = false;
-                    if (!row["content_id"].isNull()) {
-                        content_id = row["content_id"].as<uint64_t>();
-                        has_content_id = true;
-                    } else {
-                        Json::Value item_data;
-                        Json::Reader reader;
-                        if (reader.parse(item_data_str, item_data) &&
-                            item_data.isMember("content_id")) {
-                            content_id = item_data["content_id"].asUInt64();
-                            has_content_id = true;
-                        }
-                    }
-                    if (has_content_id) {
-                        co_await DecrementContentRefCount(content_id);
-                    }
+            auto chunks = BatchUtils::Chunk(trash_items, DEFAULT_BATCH_CHUNK_SIZE);
+            for (const auto& chunk : chunks) {
+                if (chunk.empty()) {
+                    continue;
                 }
 
-                co_await m_db_client->execSqlCoro("DELETE FROM trash WHERE id = ?", trash_id);
+                std::shared_ptr<drogon::orm::Transaction> transaction;
+                std::vector<std::string> zero_ref_paths;
+                std::unordered_map<uint64_t, int64_t> chunk_user_storage_delta;
 
-                user_storage_delta[user_id] -= static_cast<int64_t>(item_size);
-                deleted_count++;
+                try {
+                    transaction = co_await m_db_client->newTransactionCoro();
 
-                LOG_DEBUG << "Cleaned up trash item: trash_id=" << trash_id
-                          << ", user_id=" << user_id << ", size=" << item_size;
+                    std::vector<uint64_t> trash_ids;
+                    trash_ids.reserve(chunk.size());
+
+                    std::vector<uint64_t> content_ids;
+                    content_ids.reserve(chunk.size());
+
+                    for (const auto& item : chunk) {
+                        trash_ids.push_back(item.id);
+                        chunk_user_storage_delta[item.user_id] -= static_cast<int64_t>(item.item_size);
+
+                        if (item.item_type != "file") {
+                            continue;
+                        }
+
+                        if (item.content_id.has_value()) {
+                            content_ids.push_back(item.content_id.value());
+                            continue;
+                        }
+
+                        Json::Value item_data;
+                        Json::Reader reader;
+                        if (reader.parse(item.item_data, item_data) && item_data.isMember("content_id")) {
+                            content_ids.push_back(item_data["content_id"].asUInt64());
+                        }
+                    }
+
+                    if (!content_ids.empty()) {
+                        std::unordered_map<uint64_t, int> content_id_counts;
+                        content_id_counts.reserve(content_ids.size());
+                        for (const auto& id : content_ids) {
+                            content_id_counts[id]++;
+                        }
+
+                        std::vector<uint64_t> unique_content_ids;
+                        unique_content_ids.reserve(content_id_counts.size());
+
+                        std::string update_sql = "UPDATE file_contents SET ref_count = GREATEST(ref_count - CASE id ";
+                        for (const auto& [id, count] : content_id_counts) {
+                            unique_content_ids.push_back(id);
+                            update_sql += "WHEN " + std::to_string(id) + " THEN " +
+                                          std::to_string(count) + " ";
+                        }
+                        update_sql += "ELSE 0 END, 0) WHERE id IN (" +
+                                      cleanup_internal::BuildNumericInClause(unique_content_ids) +
+                                      ")";
+                        co_await transaction->execSqlCoro(update_sql);
+
+                        auto content_in_clause = cleanup_internal::BuildNumericInClause(unique_content_ids);
+
+                        auto zero_ref_rows = co_await transaction->execSqlCoro(
+                            "SELECT id, storage_path FROM file_contents " "WHERE ref_count = 0 AND id IN (" + content_in_clause + ")"
+                        );
+
+                        zero_ref_paths.reserve(zero_ref_rows.size());
+                        for (const auto& row : zero_ref_rows) {
+                            zero_ref_paths.push_back(row["storage_path"].as<std::string>());
+                        }
+                    }
+
+                    auto delete_result = co_await transaction->execSqlCoro(
+                        "DELETE FROM trash WHERE id IN (" + cleanup_internal::BuildNumericInClause(trash_ids) +
+                        ")"
+                    );
+
+                    if (delete_result.affectedRows() != trash_ids.size()) {
+                        throw std::runtime_error("Chunk delete affected rows mismatch");
+                    }
+
+                    deleted_count += static_cast<int>(trash_ids.size());
+                    for (const auto& [user_id, delta] : chunk_user_storage_delta) {
+                        user_storage_delta[user_id] += delta;
+                    }
+                } catch (const std::exception& e) {
+                    if (transaction) {
+                        try {
+                            transaction->rollback();
+                        } catch (const std::exception& rollback_error) {
+                            LOG_ERROR << "Rollback failed for expired trash cleanup chunk: "
+                                      << rollback_error.what();
+                        }
+                    }
+                    LOG_ERROR << "Failed to cleanup expired trash chunk atomically: " << e.what();
+                    continue;
+                }
+
+                if (!zero_ref_paths.empty()) {
+                    auto* storage = disk::storage::StorageMgr::GetStorage();
+                    if (storage == nullptr) {
+                        LOG_WARN << "Storage manager is not initialized, skip expired-trash blob cleanup for chunk: blob_count="
+                                 << zero_ref_paths.size();
+                    } else {
+                        for (const auto& path : zero_ref_paths) {
+                            auto delete_result = co_await storage->DeletePath(path);
+                            if (!delete_result.has_value()) {
+                                LOG_WARN << "Failed to cleanup expired-trash blob after chunk: storage_path="
+                                         << path << ", error_code="
+                                         << static_cast<uint32_t>(delete_result.error().code)
+                                         << ", error_message=" << delete_result.error().message;
+                            } else {
+                                LOG_INFO << "Expired-trash blob cleanup completed after chunk: storage_path="
+                                         << path;
+                            }
+                        }
+                    }
+                }
             }
 
             for (const auto& [user_id, delta] : user_storage_delta) {
@@ -117,13 +241,16 @@ namespace disk::services {
             int cleaned_count = 0;
             auto* storage = disk::storage::StorageMgr::GetStorage();
             std::unordered_map<uint64_t, uint64_t> user_reserved_delta;
+            std::vector<std::string> expired_task_ids;
+            expired_task_ids.reserve(result.size());
 
-            for (size_t i = 0; i < result.size(); ++i) {
-                const auto& row = result[i];
+            for (const auto& row : result) {
                 auto task_id = row["id"].as<std::string>();
                 auto temp_path = row["temp_path"].as<std::string>();
                 auto user_id = row["user_id"].as<uint64_t>();
                 auto reserved_bytes = row["reserved_bytes"].as<uint64_t>();
+
+                expired_task_ids.push_back(task_id);
 
                 if (storage != nullptr) {
                     auto delete_result = co_await storage->DeletePath(temp_path);
@@ -138,11 +265,6 @@ namespace disk::services {
                     }
                 }
 
-                co_await m_db_client->execSqlCoro(
-                    "UPDATE upload_tasks SET status = 3, finalized_at = NOW(), fail_reason = '任务过期' " "WHERE id = ? AND status = 0",
-                    task_id
-                );
-
                 if (reserved_bytes > 0) {
                     user_reserved_delta[user_id] += reserved_bytes;
                 }
@@ -151,6 +273,14 @@ namespace disk::services {
 
                 LOG_DEBUG << "Expired upload task marked as expired: task_id=" << task_id
                           << ", user_id=" << user_id << ", reserved_bytes=" << reserved_bytes;
+            }
+
+            if (!expired_task_ids.empty()) {
+                auto placeholders = BatchUtils::BuildInPlaceholders(expired_task_ids);
+                co_await m_db_client->execSqlCoro(
+                    "UPDATE upload_tasks SET status = 3, finalized_at = NOW(), fail_reason = '任务过期' " "WHERE id IN (" + placeholders + ") AND status = 0",
+                    std::as_const(expired_task_ids)
+                );
             }
 
             for (const auto& [user_id, delta] : user_reserved_delta) {
@@ -181,20 +311,11 @@ namespace disk::services {
 
     auto CleanupService::UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void> {
         try {
-            CoroMapper<Users> mapper(m_db_client);
-            auto user =
-                co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
-
-            auto new_used = static_cast<int64_t>(user.getValueOfStorageUsed()) + delta;
-            if (new_used < 0) {
-                new_used = 0;
-            }
-
-            user.setStorageUsed(static_cast<uint64_t>(new_used));
-            co_await mapper.update(user);
-
-            LOG_DEBUG << "Storage usage updated: user_id=" << user_id << ", delta=" << delta
-                      << ", new_used=" << new_used;
+            co_await m_db_client->execSqlCoro(
+                "UPDATE users SET storage_used = GREATEST(CAST(storage_used AS SIGNED) + ?, 0) " "WHERE id = ?",
+                delta,
+                user_id
+            );
 
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "Failed to update storage usage: user_id=" << user_id << " - "

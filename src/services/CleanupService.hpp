@@ -10,12 +10,18 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 #include <drogon/orm/DbClient.h>
 
 #include "utils/ErrorCode.hpp"
 
 namespace disk::services {
+
+    namespace cleanup_internal {
+        [[nodiscard]] auto BuildNumericInClause(const std::vector<uint64_t>& ids) -> std::string;
+    }
 
     /**
      * @brief 系统清理服务类

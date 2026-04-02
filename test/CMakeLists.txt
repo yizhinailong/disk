@@ -19,6 +19,7 @@ set(TEST_SOURCES
     services/TokenService_test.cpp
     services/TrashService_test.cpp
     services/TrashServiceBatch_test.cpp
+    services/CleanupService_test.cpp
     services/OperationLogJsonDetails_test.cpp
     filters/ShareAuthFilter_test.cpp
     filters/JwtAuthFilter_test.cpp
@@ -28,6 +29,9 @@ set(TEST_SOURCES
     dtos/ShareDto_test.cpp
     dtos/TrashDto_test.cpp
     dtos/UserDto_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
+    ${CMAKE_SOURCE_DIR}/src/storage/StorageMgr.cpp
+    ${CMAKE_SOURCE_DIR}/src/models/FileContents.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TokenService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/RedisService.cpp
 )
