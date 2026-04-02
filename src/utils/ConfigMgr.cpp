@@ -9,7 +9,6 @@
 #include "ConfigMgr.hpp"
 
 #include <cstring>
-#include <mutex>
 #include <stdexcept>
 #include <vector>
 
@@ -67,21 +66,17 @@ namespace disk::utils {
         const auto* env_secret = std::getenv("JWT_SECRET");
 
         if (env_secret != nullptr && std::strlen(env_secret) >= MIN_SECRET_LENGTH) {
-            LOG_INFO << "Reading JWT secret from environment variable";
             return env_secret;
         }
-        if (env_secret != nullptr) {
-            LOG_ERROR << "JWT_SECRET length is insufficient, at least " << MIN_SECRET_LENGTH
-                      << " characters required";
+
+        std::string error_msg;
+        if (env_secret == nullptr) {
+            error_msg = "JWT_SECRET environment variable is not set. " "A minimum of 32 characters is required in all environments.";
+        } else {
+            error_msg = "JWT_SECRET is too short (" + std::to_string(std::strlen(env_secret)) + " chars). A minimum of " + std::to_string(MIN_SECRET_LENGTH) + " characters is required in all environments.";
         }
-
-        static std::once_flag warning_flag;
-        std::call_once(warning_flag, [] {
-            LOG_WARN
-                << "JWT_SECRET not properly configured, using default secret (development only)";
-        });
-
-        return m_jwt_secret;
+        LOG_ERROR << error_msg;
+        throw std::runtime_error(error_msg);
     }
 
     auto ConfigMgr::GetAccessTokenExpireSeconds() const -> int {
@@ -138,20 +133,24 @@ namespace disk::utils {
     }
 
     auto ConfigMgr::ValidateSecureConfig() const -> void {
+        // ALWAYS validate JWT_SECRET in all environments
+        constexpr size_t MIN_JWT_SECRET_LENGTH = 32;
+        const auto* jwt_secret = std::getenv("JWT_SECRET");
+        if (jwt_secret == nullptr || std::strlen(jwt_secret) < MIN_JWT_SECRET_LENGTH) {
+            std::string error_msg = "JWT_SECRET environment variable is missing or too short. " "A minimum of " + std::to_string(MIN_JWT_SECRET_LENGTH) + " characters is required in all environments.";
+            LOG_ERROR << error_msg;
+            throw std::runtime_error(error_msg);
+        }
+
+        // Only validate MYSQL_PASSWORD and REDIS_PASSWORD in secure mode
         if (!IsSecureMode()) {
-            LOG_INFO << "Running in development mode - skipping strict config validation";
+            LOG_INFO << "Running in development mode - skipping MYSQL/REDIS password validation";
             return;
         }
 
         LOG_INFO << "Running in secure mode - validating required environment variables";
 
         std::vector<std::string> missing_vars;
-
-        constexpr size_t MIN_JWT_SECRET_LENGTH = 32;
-        const auto* jwt_secret = std::getenv("JWT_SECRET");
-        if (jwt_secret == nullptr || std::strlen(jwt_secret) < MIN_JWT_SECRET_LENGTH) {
-            missing_vars.emplace_back("JWT_SECRET (min " + std::to_string(MIN_JWT_SECRET_LENGTH) + " chars)");
-        }
 
         const auto* mysql_password = std::getenv("MYSQL_PASSWORD");
         if (mysql_password == nullptr || std::strlen(mysql_password) == 0) {

@@ -20,7 +20,7 @@ namespace disk::utils {
      * - 提供统一的配置访问接口
      *
      * 配置来源：
-     * - JWT密钥: 环境变量 JWT_SECRET (最小32字符) 或默认值
+     * - JWT密钥: 环境变量 JWT_SECRET (最小32字符，所有环境必须设置)
      * - 令牌过期时间: 默认值
      * - 存储路径: config.json 中的 custom_config.disk.* 字段或默认值
      *
@@ -50,8 +50,10 @@ namespace disk::utils {
          * @brief Validate required environment variables for secure mode
          * @throws std::runtime_error if required secrets are missing in production
          *
-         * In production mode (when DISK_SECURE_MODE=true), this validates:
-         * - JWT_SECRET (min 32 chars)
+         * Always validates:
+         * - JWT_SECRET (min 32 chars, required in all environments)
+         *
+         * In secure mode (when DISK_SECURE_MODE=true), additionally validates:
          * - MYSQL_PASSWORD
          * - REDIS_PASSWORD
          */
@@ -146,7 +148,6 @@ namespace disk::utils {
 
     private:
         // JWT 配置
-        std::string m_jwt_secret{ "dev-secret-key-change-in-production-min-32-chars" };
         int m_access_token_expire_seconds{ 7200 };
         int m_refresh_token_expire_seconds{ 604800 };
 

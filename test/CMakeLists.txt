@@ -4,6 +4,7 @@ include(GoogleTest)
 
 set(TEST_SOURCES
     main.cpp
+    utils/ConfigMgr_test.cpp
     utils/FileHashUtil_test.cpp
     utils/PasswdHash_test.cpp
     utils/RedisKeyPrefix_test.cpp
@@ -30,6 +31,7 @@ set(TEST_SOURCES
     dtos/TrashDto_test.cpp
     dtos/UserDto_test.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/StorageMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/models/FileContents.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TokenService.cpp
@@ -37,6 +39,13 @@ set(TEST_SOURCES
 )
 
 add_executable(disk-test ${TEST_SOURCES})
+
+# ConfigMgr.cpp uses LOG_* macros from trantor but doesn't include the header directly.
+# In the main build this works via PCH; for the test target we force-include it.
+set_source_files_properties(
+    ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
+    PROPERTIES COMPILE_FLAGS "-include drogon/HttpAppFramework.h"
+)
 
 target_include_directories(disk-test PRIVATE 
     ${CMAKE_SOURCE_DIR}/src

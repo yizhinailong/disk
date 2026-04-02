@@ -23,7 +23,7 @@ auto main() -> int {
     // 使用 config.json 中的值初始化 ConfigMgr
     disk::utils::ConfigMgr::GetInstance()->LoadConfig();
 
-    // 验证安全配置（生产环境必须设置环境变量）
+    // 验证配置（JWT_SECRET 所有环境必须设置，MYSQL/REDIS 仅安全模式要求）
     try {
         disk::utils::ConfigMgr::GetInstance()->ValidateSecureConfig();
     } catch (const std::runtime_error& e) {
