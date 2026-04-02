@@ -223,7 +223,17 @@ namespace disk::services {
         const auto jti = jti_result.value();
         const auto key = disk::redis::RedisKeyPrefix::BuildAccessTokenBlacklistKey(jti);
 
-        co_return co_await m_redis_service->Set(key, "1", ACCESS_TOKEN_TTL);
+        auto invalidate_result = co_await m_redis_service->Set(key, "1", ACCESS_TOKEN_TTL);
+        if (invalidate_result.has_value()) {
+            const auto now = std::chrono::steady_clock::now();
+            std::lock_guard<std::mutex> lock(m_cache_mutex);
+            m_revocation_cache[jti] = RevocationCacheEntry{
+                .is_revoked = true,
+                .expires_at = now + std::chrono::seconds(GetAccessTokenExpireSeconds())
+            };
+        }
+
+        co_return invalidate_result;
     }
 
     auto TokenService::RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>> {
@@ -232,8 +242,50 @@ namespace disk::services {
     }
 
     auto TokenService::IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool> {
+        EvictExpiredCacheEntries();
+
+        const auto now = std::chrono::steady_clock::now();
+        {
+            std::lock_guard<std::mutex> lock(m_cache_mutex);
+            auto it = m_revocation_cache.find(jti);
+            if (it != m_revocation_cache.end()) {
+                if (it->second.expires_at > now) {
+                    co_return it->second.is_revoked;
+                }
+                m_revocation_cache.erase(it);
+            }
+        }
+
         const auto key = disk::redis::RedisKeyPrefix::BuildAccessTokenBlacklistKey(jti);
-        co_return co_await m_redis_service->Exists(key);
+        const auto revoked = co_await m_redis_service->Exists(key);
+
+        {
+            std::lock_guard<std::mutex> lock(m_cache_mutex);
+            m_revocation_cache[jti] = RevocationCacheEntry{
+                .is_revoked = revoked,
+                .expires_at = std::chrono::steady_clock::now() +
+                              std::chrono::seconds(GetAccessTokenExpireSeconds())
+            };
+        }
+
+        co_return revoked;
+    }
+
+    auto TokenService::ClearRevocationCache() -> void {
+        std::lock_guard<std::mutex> lock(m_cache_mutex);
+        m_revocation_cache.clear();
+    }
+
+    auto TokenService::EvictExpiredCacheEntries() const -> void {
+        const auto now = std::chrono::steady_clock::now();
+        std::lock_guard<std::mutex> lock(m_cache_mutex);
+        for (auto it = m_revocation_cache.begin(); it != m_revocation_cache.end();) {
+            if (it->second.expires_at <= now) {
+                it = m_revocation_cache.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 
     auto TokenService::ExtractJti(const std::string& token) const -> Result<std::string> {

@@ -278,6 +278,35 @@ namespace {
         EXPECT_NE(static_cast<uint32_t>(Code::InvalidToken), static_cast<uint32_t>(Code::TokenMalformed));
     }
 
+    TEST_F(JwtAuthFilterTest, ClearRevocationCache) {
+        auto token_service = TokenService::GetInstance();
+        ASSERT_NE(token_service, nullptr);
+
+        token_service->ClearRevocationCache();
+        token_service->ClearRevocationCache();
+
+        auto token = BuildAccessToken(7, "cache_clear_user", "jti-clear-cache");
+        auto verify_result = token_service->VerifyAccessToken(token);
+        ASSERT_TRUE(verify_result.has_value());
+        EXPECT_EQ(verify_result.value().jti, "jti-clear-cache");
+    }
+
+    TEST_F(JwtAuthFilterTest, DISABLED_RevocationCacheNonRevokedToken) {
+        SUCCEED() << "Requires Redis/Drogon runtime to assert Redis bypass on cache hit";
+    }
+
+    TEST_F(JwtAuthFilterTest, DISABLED_RevocationCacheRevokedToken) {
+        SUCCEED() << "Requires Redis/Drogon runtime to validate revoked-token rejection path";
+    }
+
+    TEST_F(JwtAuthFilterTest, DISABLED_RevocationCacheInvalidation) {
+        SUCCEED() << "Requires Redis/Drogon runtime to validate immediate in-memory invalidation";
+    }
+
+    TEST_F(JwtAuthFilterTest, DISABLED_RevocationCacheExpiry) {
+        SUCCEED() << "Requires Redis/Drogon runtime to validate cache TTL expiry behavior";
+    }
+
     // ================================================================================
     // JwtAuthFilter doFilter — integration tests (require Drogon runtime)
     //

@@ -9,8 +9,11 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 #include <drogon/nosql/RedisClient.h>
@@ -155,6 +158,8 @@ namespace disk::services {
         [[nodiscard]]
         auto IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool>;
 
+        auto ClearRevocationCache() -> void;
+
         // ==================== Share Token 静态方法 ====================
 
         /**
@@ -262,9 +267,18 @@ namespace disk::services {
         [[nodiscard]]
         auto CalculateRemainingTtl(const std::string& token) const -> Result<int>;
 
+        struct RevocationCacheEntry {
+            bool is_revoked;
+            std::chrono::steady_clock::time_point expires_at;
+        };
+
+        auto EvictExpiredCacheEntries() const -> void;
+
         std::string m_jwt_secret;
         drogon::nosql::RedisClientPtr m_redis_client;
         std::shared_ptr<RedisService> m_redis_service;
+        mutable std::mutex m_cache_mutex;
+        mutable std::unordered_map<std::string, RevocationCacheEntry> m_revocation_cache;
     };
 
 } // namespace disk::services
