@@ -45,7 +45,7 @@ namespace disk::filters {
         request->attributes()->insert("user_id", claims.user_id);
         request->attributes()->insert("username", claims.username);
 
-        LOG_DEBUG << "JWT authentication successful: user_id=" << claims.user_id
+        LOG_TRACE << "JWT authentication successful: user_id=" << claims.user_id
                   << ", username=" << claims.username;
         co_return nullptr;
     }

@@ -103,7 +103,7 @@ namespace disk::services {
 
             const auto user_id = std::stoull(user_id_str);
 
-            LOG_DEBUG << "JWT verification successful: user_id=" << user_id
+            LOG_TRACE << "JWT verification successful: user_id=" << user_id
                       << ", username=" << username << ", jti=" << jti;
             return AccessTokenClaims{ .user_id = user_id, .username = username, .jti = jti };
 
@@ -143,7 +143,7 @@ namespace disk::services {
             const auto user_id_str = decoded.get_subject();
             const auto user_id = std::stoull(user_id_str);
 
-            LOG_DEBUG << "Refresh token verification successful: user_id=" << user_id
+            LOG_TRACE << "Refresh token verification successful: user_id=" << user_id
                       << ", jti=" << jti;
             return std::make_pair(user_id, jti);
 
