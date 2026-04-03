@@ -21,6 +21,12 @@
 
 namespace disk::storage {
 
+    struct AssembleResult {
+        std::filesystem::path path;
+        std::string md5_hash;
+        std::string sha256_hash;
+    };
+
     /**
      * @brief 文件存储抽象接口
      *
@@ -55,7 +61,7 @@ namespace disk::storage {
          */
         [[nodiscard]]
         virtual auto AssembleChunks(const std::string& upload_id, uint32_t chunk_count)
-            -> drogon::Task<Result<std::filesystem::path>> = 0;
+            -> drogon::Task<Result<AssembleResult>> = 0;
 
         /**
          * @brief 将临时文件移动到最终存储位置（哈希分片目录）

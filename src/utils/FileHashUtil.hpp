@@ -227,14 +227,151 @@ namespace disk::utils {
             };
         }
 
-    private:
-        // ==================== MD5 内部实现 ====================
+    public:
+        // ==================== MD5 增量 API ====================
 
         struct Md5Context {
             uint32_t state[4];
             uint32_t count[2];
             uint8_t buffer[64];
         };
+
+        static void Md5Init(Md5Context& context) {
+            context.state[0] = 0x67452301;
+            context.state[1] = 0xefcdab89;
+            context.state[2] = 0x98badcfe;
+            context.state[3] = 0x10325476;
+            context.count[0] = 0;
+            context.count[1] = 0;
+            std::memset(context.buffer, 0, 64);
+        }
+
+        static void Md5Update(Md5Context& context, const uint8_t* data, size_t length) {
+            size_t index = (context.count[0] >> 3) & 0x3F;
+            size_t part_len = 64 - index;
+            size_t i = 0;
+
+            context.count[0] += static_cast<uint32_t>(length << 3);
+            if (context.count[0] < (length << 3)) {
+                context.count[1]++;
+            }
+            context.count[1] += static_cast<uint32_t>(length >> 29);
+
+            if (length >= part_len) {
+                std::memcpy(&context.buffer[index], data, part_len);
+                Md5Transform(context.state, context.buffer);
+
+                for (i = part_len; i + 63 < length; i += 64) {
+                    Md5Transform(context.state, data + i);
+                }
+
+                index = 0;
+            }
+
+            std::memcpy(&context.buffer[index], data + i, length - i);
+        }
+
+        static void Md5Final(Md5Context& context, uint8_t digest[16]) {
+            static constexpr uint8_t PADDING[64] = {
+                0x80,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            };
+
+            uint8_t bits[8];
+            for (size_t i = 0; i < 4; ++i) {
+                bits[i] = static_cast<uint8_t>((context.count[0] >> (i * 8)) & 0xFF);
+                bits[i + 4] = static_cast<uint8_t>((context.count[1] >> (i * 8)) & 0xFF);
+            }
+
+            size_t index = (context.count[0] >> 3) & 0x3F;
+            size_t pad_len = (index < 56) ? (56 - index) : (120 - index);
+
+            Md5Update(context, PADDING, pad_len);
+            Md5Update(context, bits, 8);
+
+            for (size_t i = 0; i < 4; ++i) {
+                digest[i] = static_cast<uint8_t>((context.state[0] >> (i * 8)) & 0xFF);
+                digest[i + 4] = static_cast<uint8_t>((context.state[1] >> (i * 8)) & 0xFF);
+                digest[i + 8] = static_cast<uint8_t>((context.state[2] >> (i * 8)) & 0xFF);
+                digest[i + 12] = static_cast<uint8_t>((context.state[3] >> (i * 8)) & 0xFF);
+            }
+
+            std::memset(context.buffer, 0, 64);
+        }
+
+        static auto BytesToHex(const uint8_t* bytes, size_t length) -> std::string {
+            std::ostringstream oss;
+            oss << std::hex << std::setfill('0');
+            for (size_t i = 0; i < length; ++i) {
+                oss << std::setw(2) << static_cast<unsigned>(bytes[i]);
+            }
+            return oss.str();
+        }
+
+    private:
+        // ==================== MD5 内部实现 ====================
 
         static constexpr uint32_t K[64] = {
             0xd76aa478,
@@ -370,16 +507,6 @@ namespace disk::utils {
             21
         };
 
-        static void Md5Init(Md5Context& context) {
-            context.state[0] = 0x67452301;
-            context.state[1] = 0xefcdab89;
-            context.state[2] = 0x98badcfe;
-            context.state[3] = 0x10325476;
-            context.count[0] = 0;
-            context.count[1] = 0;
-            std::memset(context.buffer, 0, 64);
-        }
-
         static void Md5Transform(uint32_t state[4], const uint8_t block[64]) {
             uint32_t a = state[0];
             uint32_t b = state[1];
@@ -425,130 +552,6 @@ namespace disk::utils {
             state[3] += d;
 
             std::memset(x, 0, sizeof(x));
-        }
-
-        static void Md5Update(Md5Context& context, const uint8_t* data, size_t length) {
-            size_t index = (context.count[0] >> 3) & 0x3F;
-            size_t part_len = 64 - index;
-            size_t i = 0;
-
-            context.count[0] += static_cast<uint32_t>(length << 3);
-            if (context.count[0] < (length << 3)) {
-                context.count[1]++;
-            }
-            context.count[1] += static_cast<uint32_t>(length >> 29);
-
-            if (length >= part_len) {
-                std::memcpy(&context.buffer[index], data, part_len);
-                Md5Transform(context.state, context.buffer);
-
-                for (i = part_len; i + 63 < length; i += 64) {
-                    Md5Transform(context.state, data + i);
-                }
-
-                index = 0;
-            }
-
-            std::memcpy(&context.buffer[index], data + i, length - i);
-        }
-
-        static void Md5Final(Md5Context& context, uint8_t digest[16]) {
-            static constexpr uint8_t PADDING[64] = {
-                0x80,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0
-            };
-
-            uint8_t bits[8];
-            for (size_t i = 0; i < 4; ++i) {
-                bits[i] = static_cast<uint8_t>((context.count[0] >> (i * 8)) & 0xFF);
-                bits[i + 4] = static_cast<uint8_t>((context.count[1] >> (i * 8)) & 0xFF);
-            }
-
-            size_t index = (context.count[0] >> 3) & 0x3F;
-            size_t pad_len = (index < 56) ? (56 - index) : (120 - index);
-
-            Md5Update(context, PADDING, pad_len);
-            Md5Update(context, bits, 8);
-
-            for (size_t i = 0; i < 4; ++i) {
-                digest[i] = static_cast<uint8_t>((context.state[0] >> (i * 8)) & 0xFF);
-                digest[i + 4] = static_cast<uint8_t>((context.state[1] >> (i * 8)) & 0xFF);
-                digest[i + 8] = static_cast<uint8_t>((context.state[2] >> (i * 8)) & 0xFF);
-                digest[i + 12] = static_cast<uint8_t>((context.state[3] >> (i * 8)) & 0xFF);
-            }
-
-            std::memset(context.buffer, 0, 64);
-        }
-
-        static auto BytesToHex(const uint8_t* bytes, size_t length) -> std::string {
-            std::ostringstream oss;
-            oss << std::hex << std::setfill('0');
-            for (size_t i = 0; i < length; ++i) {
-                oss << std::setw(2) << static_cast<unsigned>(bytes[i]);
-            }
-            return oss.str();
         }
     };
 

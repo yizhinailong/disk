@@ -65,7 +65,7 @@ namespace disk::storage {
          */
         [[nodiscard]]
         auto AssembleChunks(const std::string& upload_id, uint32_t chunk_count)
-            -> drogon::Task<Result<std::filesystem::path>> override;
+            -> drogon::Task<Result<AssembleResult>> override;
 
         /**
          * @brief 将临时文件移动到最终存储位置（哈希分片目录）

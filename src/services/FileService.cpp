@@ -10,6 +10,7 @@
 #include "FileService.hpp"
 
 #include <cmath>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -360,30 +361,19 @@ namespace disk::file {
             );
         }
 
-        // 3. 组装分片
+        // 3. 组装分片（同时计算 MD5 + SHA256）
         auto assemble_result = co_await m_storage->AssembleChunks(upload_id, task.getValueOfTotalChunks());
         if (!assemble_result) {
             LOG_ERROR << "Failed to assemble chunks: upload_id=" << upload_id
                       << ", error=" << static_cast<int>(assemble_result.error().code);
             co_return std::unexpected(assemble_result.error());
         }
-        const auto& assemble_path = assemble_result.value();
+        const auto& assembled = assemble_result.value();
+        const auto& assemble_path = assembled.path;
 
-        // 4. 计算并验证最终 MD5 + SHA256（单次文件读取）
-        auto hash_pair_result = FileHashUtil::HashFileMd5AndSha256(assemble_path);
-        if (!hash_pair_result) {
-            LOG_ERROR << "Failed to compute file hashes";
-            auto delete_result = co_await m_storage->DeletePath(assemble_path);
-            if (!delete_result) {
-                LOG_WARN << "Failed to cleanup assemble file after hash failure: "
-                         << static_cast<int>(delete_result.error().code);
-            }
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to compute file hash")
-            );
-        }
-
-        const auto& [final_hash, precomputed_sha256] = hash_pair_result.value();
+        // 4. 使用组装时计算的哈希值
+        const auto& final_hash = assembled.md5_hash;
+        const auto& precomputed_sha256 = assembled.sha256_hash;
         if (final_hash != task.getValueOfFileHash()) {
             LOG_ERROR << "File hash mismatch: expected=" << task.getValueOfFileHash()
                       << ", actual=" << final_hash;
@@ -1010,21 +1000,45 @@ namespace disk::file {
                 continue;
             }
 
-            std::unordered_set<std::string> occupied_names;
-            try {
-                auto conflict_result = co_await m_db_client->execSqlCoro(
-                    "SELECT name FROM files WHERE folder_id = ? AND user_id = ?",
-                    request.target_folder_id,
-                    user_id
-                );
+            // Extract candidate names from already-fetched file_map
+            std::vector<std::string> candidate_names;
+            candidate_names.reserve(file_map.size());
+            for (const auto& [id, file] : file_map) {
+                candidate_names.push_back(file.getValueOfName());
+            }
 
-                for (const auto& row : conflict_result) {
-                    occupied_names.insert(row["name"].as<std::string>());
+            std::unordered_set<std::string> occupied_names;
+            if (!candidate_names.empty()) {
+                try {
+                    // Build safe string IN clause (escape single quotes)
+                    std::ostringstream name_in;
+                    for (size_t i = 0; i < candidate_names.size(); ++i) {
+                        if (i > 0) {
+                            name_in << ",";
+                        }
+                        std::string escaped = candidate_names[i];
+                        size_t pos = 0;
+                        while ((pos = escaped.find('\'', pos)) != std::string::npos) {
+                            escaped.replace(pos, 1, "''");
+                            pos += 2;
+                        }
+                        name_in << "'" << escaped << "'";
+                    }
+
+                    auto conflict_result = co_await m_db_client->execSqlCoro(
+                        "SELECT name FROM files WHERE folder_id = ? AND user_id = ? AND name IN (" + name_in.str() + ")",
+                        request.target_folder_id,
+                        user_id
+                    );
+
+                    for (const auto& row : conflict_result) {
+                        occupied_names.insert(row["name"].as<std::string>());
+                    }
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_WARN << "Filename conflict query failed in move, skipping chunk: "
+                             << e.base().what();
+                    continue;
                 }
-            } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "Filename conflict query failed in move, skipping chunk: "
-                         << e.base().what();
-                continue;
             }
 
             std::vector<uint64_t> valid_ids;
@@ -1185,21 +1199,45 @@ namespace disk::file {
                 continue;
             }
 
-            std::unordered_set<std::string> occupied_names;
-            try {
-                auto conflict_result = co_await m_db_client->execSqlCoro(
-                    "SELECT name FROM files WHERE folder_id = ? AND user_id = ?",
-                    request.target_folder_id,
-                    user_id
-                );
+            // Extract candidate names from current chunk for targeted query
+            std::vector<std::string> candidate_names;
+            candidate_names.reserve(chunk.size());
+            for (const auto& [old_id, file] : chunk) {
+                candidate_names.push_back(file.getValueOfName());
+            }
 
-                for (const auto& row : conflict_result) {
-                    occupied_names.insert(row["name"].as<std::string>());
+            std::unordered_set<std::string> occupied_names;
+            if (!candidate_names.empty()) {
+                try {
+                    // Build safe string IN clause (escape single quotes)
+                    std::ostringstream name_in;
+                    for (size_t i = 0; i < candidate_names.size(); ++i) {
+                        if (i > 0) {
+                            name_in << ",";
+                        }
+                        std::string escaped = candidate_names[i];
+                        size_t pos = 0;
+                        while ((pos = escaped.find('\'', pos)) != std::string::npos) {
+                            escaped.replace(pos, 1, "''");
+                            pos += 2;
+                        }
+                        name_in << "'" << escaped << "'";
+                    }
+
+                    auto conflict_result = co_await m_db_client->execSqlCoro(
+                        "SELECT name FROM files WHERE folder_id = ? AND user_id = ? AND name IN (" + name_in.str() + ")",
+                        request.target_folder_id,
+                        user_id
+                    );
+
+                    for (const auto& row : conflict_result) {
+                        occupied_names.insert(row["name"].as<std::string>());
+                    }
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_WARN << "Filename conflict query failed in copy, skipping chunk: "
+                             << e.base().what();
+                    continue;
                 }
-            } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "Filename conflict query failed in copy, skipping chunk: "
-                         << e.base().what();
-                continue;
             }
 
             struct PendingCopyItem {

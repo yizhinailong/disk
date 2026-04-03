@@ -3,9 +3,16 @@
 #include <array>
 #include <system_error>
 
+#include <sodium/crypto_hash_sha256.h>
+#include <trantor/utils/Logger.h>
+
+#include "storage/AssemblyWorkerPool.hpp"
 #include "utils/ConfigMgr.hpp"
+#include "utils/FileHashUtil.hpp"
 
 namespace disk::storage {
+
+    using disk::utils::FileHashUtil;
 
     LocalFileStorage::LocalFileStorage(std::shared_ptr<disk::utils::ConfigMgr> config_mgr)
         : m_config_mgr(config_mgr == nullptr ? disk::utils::ConfigMgr::GetInstance() : std::move(config_mgr)) {}
@@ -46,7 +53,21 @@ namespace disk::storage {
     }
 
     auto LocalFileStorage::AssembleChunks(const std::string& upload_id, uint32_t chunk_count)
-        -> drogon::Task<Result<std::filesystem::path>> {
+        -> drogon::Task<Result<AssembleResult>> {
+        auto& pool = AssemblyWorkerPool::GetInstance();
+
+        auto slot_guard = pool.TryAcquireGuard();
+        if (!slot_guard.has_value()) {
+            LOG_WARN << "Assembly concurrency limit reached, fast-failing: running="
+                     << pool.RunningCount() << " pending=" << pool.PendingCount();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::TooManyRequests, "Too many concurrent assembly operations, please retry later")
+            );
+        }
+
+        LOG_DEBUG << "Assembly started: running=" << pool.RunningCount()
+                  << " pending=" << pool.PendingCount();
+
         const auto assembled_path = GetAssembleFilePath(upload_id);
         const auto assembled_parent = assembled_path.parent_path();
 
@@ -65,6 +86,12 @@ namespace disk::storage {
             );
         }
 
+        FileHashUtil::Md5Context md5_ctx;
+        FileHashUtil::Md5Init(md5_ctx);
+
+        crypto_hash_sha256_state sha256_state;
+        crypto_hash_sha256_init(&sha256_state);
+
         std::array<char, 8192> buffer{};
         for (uint32_t index = 0; index < chunk_count; ++index) {
             const auto chunk_path = GetChunkFilePath(upload_id, index);
@@ -78,10 +105,16 @@ namespace disk::storage {
             }
 
             while (chunk_file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()))) {
-                assembled_file.write(buffer.data(), chunk_file.gcount());
+                auto bytes_read = static_cast<size_t>(chunk_file.gcount());
+                assembled_file.write(buffer.data(), static_cast<std::streamsize>(bytes_read));
+                FileHashUtil::Md5Update(md5_ctx, reinterpret_cast<const uint8_t*>(buffer.data()), bytes_read);
+                crypto_hash_sha256_update(&sha256_state, reinterpret_cast<const unsigned char*>(buffer.data()), bytes_read);
             }
             if (chunk_file.gcount() > 0) {
-                assembled_file.write(buffer.data(), chunk_file.gcount());
+                auto bytes_read = static_cast<size_t>(chunk_file.gcount());
+                assembled_file.write(buffer.data(), static_cast<std::streamsize>(bytes_read));
+                FileHashUtil::Md5Update(md5_ctx, reinterpret_cast<const uint8_t*>(buffer.data()), bytes_read);
+                crypto_hash_sha256_update(&sha256_state, reinterpret_cast<const unsigned char*>(buffer.data()), bytes_read);
             }
             if (!chunk_file.eof()) {
                 assembled_file.close();
@@ -100,7 +133,20 @@ namespace disk::storage {
             );
         }
 
-        co_return assembled_path;
+        uint8_t md5_digest[16];
+        FileHashUtil::Md5Final(md5_ctx, md5_digest);
+
+        std::array<uint8_t, crypto_hash_sha256_BYTES> sha256_digest{};
+        crypto_hash_sha256_final(&sha256_state, sha256_digest.data());
+
+        LOG_DEBUG << "Assembly completed: running=" << pool.RunningCount()
+                  << " pending=" << pool.PendingCount();
+
+        co_return AssembleResult{
+            .path = assembled_path,
+            .md5_hash = FileHashUtil::BytesToHex(md5_digest, 16),
+            .sha256_hash = FileHashUtil::BytesToHex(sha256_digest.data(), sha256_digest.size())
+        };
     }
 
     auto LocalFileStorage::PromoteToFinal(const std::filesystem::path& temp_path, const std::string& hash)
