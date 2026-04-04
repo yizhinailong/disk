@@ -33,7 +33,7 @@
   "redis_clients": [
     {
       "name": "default",
-      "host": "47.97.231.191",
+      "host": "127.0.0.1",
       "port": 6379,
       "db": 0,
       "is_fast": false,
