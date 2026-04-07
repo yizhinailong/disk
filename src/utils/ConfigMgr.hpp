@@ -123,6 +123,20 @@ namespace disk::utils {
         [[nodiscard]]
         auto GetUploadTaskExpirySeconds() const noexcept -> int;
 
+        /**
+         * @brief 获取分片组装最大并发数
+         * @return uint32_t 最大并发数（默认 4）
+         */
+        [[nodiscard]]
+        auto GetAssemblyMaxConcurrent() const noexcept -> uint32_t;
+
+        /**
+         * @brief 获取组装缓冲区大小（字节）
+         * @return uint32_t 缓冲区大小（默认 256KB）
+         */
+        [[nodiscard]]
+        auto GetAssembleBufferSizeBytes() const noexcept -> uint32_t;
+
         // ==================== 数据库配置 ====================
 
         /**
@@ -157,6 +171,8 @@ namespace disk::utils {
         uint32_t m_chunk_size{ 5242880 };
         uint64_t m_max_file_size{ 10737418240 };
         int m_upload_task_expiry_seconds{ 86400 };
+        uint32_t m_assembly_max_concurrent{ 4 };
+        uint32_t m_assemble_buffer_size_bytes{ 262144 };
     };
 
 } // namespace disk::utils

@@ -15,6 +15,7 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "storage/IFileStorage.hpp"
 
@@ -47,6 +48,15 @@ namespace disk::storage {
         auto operator=(LocalFileStorage&&) -> LocalFileStorage& = default;
 
         /**
+         * @brief 确保上传会话的临时目录已创建
+         * @param upload_id 上传会话 ID
+         * @return 成功返回空，失败返回错误信息
+         */
+        [[nodiscard]]
+        auto EnsureUploadTempDir(const std::string& upload_id)
+            -> drogon::Task<Result<void>> override;
+
+        /**
          * @brief 写入上传分片到临时目录
          * @param upload_id 上传会话 ID
          * @param chunk_index 分片索引
@@ -54,7 +64,7 @@ namespace disk::storage {
          * @return 成功返回空，失败返回错误信息
          */
         [[nodiscard]]
-        auto WriteChunk(const std::string& upload_id, uint32_t chunk_index, const std::string& data)
+        auto WriteChunk(const std::string& upload_id, uint32_t chunk_index, std::string_view data)
             -> drogon::Task<Result<void>> override;
 
         /**

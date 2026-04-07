@@ -213,6 +213,13 @@ namespace disk::file {
             LOG_INFO << "Upload task created successfully: upload_id=" << task.getValueOfId()
                      << ", total_chunks=" << total_chunks;
 
+            // 预创建临时上传目录，避免每个分片写入时重复创建
+            auto ensure_result = co_await m_storage->EnsureUploadTempDir(task.getValueOfId());
+            if (!ensure_result) {
+                LOG_WARN << "Failed to ensure upload temp directory: upload_id="
+                         << task.getValueOfId();
+            }
+
             InitUploadResponse response;
             response.upload_id = task.getValueOfId();
             response.chunk_size = task.getValueOfChunkSize();
@@ -245,7 +252,7 @@ namespace disk::file {
         std::string upload_id,
         uint32_t chunk_index,
         std::string chunk_hash,
-        const std::string& chunk_data,
+        std::string_view chunk_data,
         uint64_t user_id
     ) -> drogon::Task<Result<UploadChunkResponse>> {
 
@@ -280,7 +287,7 @@ namespace disk::file {
         }
 
         // 4. 验证分片哈希
-        auto actual_hash = FileHashUtil::HashMd5(chunk_data);
+        auto actual_hash = FileHashUtil::HashMd5(std::string{ chunk_data });
         if (actual_hash != chunk_hash) {
             LOG_WARN << "Chunk hash mismatch: expected=" << chunk_hash
                      << ", actual=" << actual_hash;

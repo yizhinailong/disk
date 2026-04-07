@@ -19,6 +19,7 @@
 #include <cstring>
 #include <string>
 
+#include <drogon/drogon.h>
 #include <gtest/gtest.h>
 
 namespace {
@@ -269,6 +270,132 @@ namespace {
             { ConfigMgr::GetInstance()->ValidateSecureConfig(); },
             std::runtime_error
         );
+    }
+
+    // ================================================================================
+    // GetAssemblyMaxConcurrent — returns default value when not loaded
+    // ================================================================================
+
+    TEST_F(ConfigMgrJwtTest, GetAssemblyMaxConcurrentReturnsDefault) {
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent(), 4);
+    }
+
+    // ================================================================================
+    // GetAssembleBufferSizeBytes — returns default value when not loaded
+    // ================================================================================
+
+    TEST_F(ConfigMgrJwtTest, GetAssembleBufferSizeBytesReturnsDefault) {
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 262144);
+    }
+
+    // ================================================================================
+    // Assembly config — getters are accessible and return uint32_t
+    // ================================================================================
+
+    TEST_F(ConfigMgrJwtTest, AssemblyGettersAreAccessible) {
+        auto assembly_max_concurrent = ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent();
+        auto assemble_buffer_size_bytes = ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes();
+
+        EXPECT_GT(assembly_max_concurrent, 0);
+        EXPECT_GT(assemble_buffer_size_bytes, 0);
+    }
+
+    // ================================================================================
+    // Helper — restore assembly config to defaults after each LoadConfig test
+    // ================================================================================
+
+    static auto RestoreAssemblyDefaults() -> void {
+        Json::Value cfg;
+        cfg["custom_config"]["disk"]["assembly_max_concurrent"] = 4;
+        cfg["custom_config"]["disk"]["assemble_buffer_size_bytes"] = 262144;
+        drogon::app().loadConfigJson(cfg);
+        ConfigMgr::GetInstance()->LoadConfig();
+    }
+
+    // ================================================================================
+    // LoadConfig — explicit assembly values are read correctly
+    // ================================================================================
+
+    TEST_F(ConfigMgrJwtTest, LoadConfigWithExplicitAssemblyValues) {
+        Json::Value cfg;
+        cfg["custom_config"]["disk"]["assembly_max_concurrent"] = 16;
+        cfg["custom_config"]["disk"]["assemble_buffer_size_bytes"] = 524288;
+        drogon::app().loadConfigJson(cfg);
+
+        ConfigMgr::GetInstance()->LoadConfig();
+
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent(), 16);
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 524288);
+
+        RestoreAssemblyDefaults();
+    }
+
+    // ================================================================================
+    // LoadConfig — missing assembly keys fall back to defaults
+    // ================================================================================
+
+    TEST_F(ConfigMgrJwtTest, LoadConfigWithoutAssemblyKeysFallsBackToDefaults) {
+        Json::Value cfg;
+        cfg["custom_config"]["disk"]["storage_base_path"] = "test";
+        drogon::app().loadConfigJson(cfg);
+
+        ConfigMgr::GetInstance()->LoadConfig();
+
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent(), 4);
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 262144);
+
+        RestoreAssemblyDefaults();
+    }
+
+    // ================================================================================
+    // LoadConfig — only assembly_max_concurrent present, buffer falls back
+    // ================================================================================
+
+    TEST_F(ConfigMgrJwtTest, LoadConfigOnlyMaxConcurrentBufferFallsBack) {
+        Json::Value cfg;
+        cfg["custom_config"]["disk"]["assembly_max_concurrent"] = 8;
+        drogon::app().loadConfigJson(cfg);
+
+        ConfigMgr::GetInstance()->LoadConfig();
+
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent(), 8);
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 262144);
+
+        RestoreAssemblyDefaults();
+    }
+
+    // ================================================================================
+    // LoadConfig — only assemble_buffer_size_bytes present, concurrent falls back
+    // ================================================================================
+
+    TEST_F(ConfigMgrJwtTest, LoadConfigOnlyBufferSizeConcurrentFallsBack) {
+        Json::Value cfg;
+        cfg["custom_config"]["disk"]["assemble_buffer_size_bytes"] = 131072;
+        drogon::app().loadConfigJson(cfg);
+
+        ConfigMgr::GetInstance()->LoadConfig();
+
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent(), 4);
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 131072);
+
+        RestoreAssemblyDefaults();
+    }
+
+    // ================================================================================
+    // LoadConfig — no disk section at all, all values stay at defaults
+    // ================================================================================
+
+    TEST_F(ConfigMgrJwtTest, LoadConfigNoDiskSectionStaysDefaults) {
+        Json::Value cfg;
+        cfg["custom_config"]["other"]["key"] = "value";
+        drogon::app().loadConfigJson(cfg);
+
+        ConfigMgr::GetInstance()->LoadConfig();
+
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent(), 4);
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 262144);
+
+        RestoreAssemblyDefaults();
     }
 
 } // namespace

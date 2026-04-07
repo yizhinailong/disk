@@ -17,6 +17,7 @@
 #include <utility>
 
 #include <drogon/nosql/RedisClient.h>
+#include <gtest/gtest_prod.h>
 
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
@@ -96,6 +97,27 @@ namespace disk::services {
         }
 
         /**
+         * @brief 获取否定缓存条目最大存活时间（秒）
+         *
+         * 未撤销令牌（revoked=false）的本地缓存条目最多存活 5 秒，
+         * 确保撤销操作能在短时间内生效。
+         *
+         * @return int 最大存活时间（秒）
+         */
+        [[nodiscard]]
+        static constexpr auto GetNegativeCacheTtlSeconds() noexcept -> int {
+            return 5;
+        }
+
+        /**
+         * @brief 启动撤销缓存后台清理任务
+         *
+         * 在 Drogon 事件循环中注册周期性定时器，定期清理过期缓存条目。
+         * 应在应用启动后（beginning advice）调用一次。
+         */
+        auto StartCacheMaintenance() -> void;
+
+        /**
          * @brief 验证访问令牌
          * @param token 访问令牌字符串
          * @return Result<AccessTokenClaims> 验证成功返回声明信息（含jti），失败返回错误
@@ -159,6 +181,31 @@ namespace disk::services {
         auto IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool>;
 
         auto ClearRevocationCache() -> void;
+
+        // ==================== 测试辅助方法 ====================
+
+        /**
+         * @brief 测试用：直接向本地撤销缓存插入条目
+         *
+         * 仅用于单元测试，绕过 Redis 直接设置本地缓存状态。
+         * 正常运行时不调用此方法。
+         *
+         * @param jti 令牌 JTI
+         * @param is_revoked 是否已撤销
+         * @param ttl_seconds 缓存条目存活时间（秒）
+         */
+        auto SetRevocationCacheEntryForTest(
+            const std::string& jti,
+            bool is_revoked,
+            int ttl_seconds
+        ) -> void;
+
+        /**
+         * @brief 测试用：获取本地撤销缓存条目数
+         * @return size_t 缓存条目数量
+         */
+        [[nodiscard]]
+        auto GetRevocationCacheSizeForTest() const -> size_t;
 
         // ==================== Share Token 静态方法 ====================
 
@@ -266,6 +313,8 @@ namespace disk::services {
          */
         [[nodiscard]]
         auto CalculateRemainingTtl(const std::string& token) const -> Result<int>;
+
+        static constexpr int CACHE_MAINTENANCE_INTERVAL_SECONDS = 60;
 
         struct RevocationCacheEntry {
             bool is_revoked;

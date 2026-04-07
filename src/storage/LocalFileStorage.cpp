@@ -1,7 +1,9 @@
 #include "storage/LocalFileStorage.hpp"
 
 #include <array>
+#include <bit>
 #include <system_error>
+#include <vector>
 
 #include <sodium/crypto_hash_sha256.h>
 #include <trantor/utils/Logger.h>
@@ -17,11 +19,8 @@ namespace disk::storage {
     LocalFileStorage::LocalFileStorage(std::shared_ptr<disk::utils::ConfigMgr> config_mgr)
         : m_config_mgr(config_mgr == nullptr ? disk::utils::ConfigMgr::GetInstance() : std::move(config_mgr)) {}
 
-    auto LocalFileStorage::WriteChunk(
-        const std::string& upload_id,
-        uint32_t chunk_index,
-        const std::string& data
-    ) -> drogon::Task<Result<void>> {
+    auto LocalFileStorage::EnsureUploadTempDir(const std::string& upload_id)
+        -> drogon::Task<Result<void>> {
         const auto temp_dir = GetTempDirPath(upload_id);
 
         std::error_code ec;
@@ -30,6 +29,27 @@ namespace disk::storage {
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to create temp upload directory")
             );
+        }
+
+        co_return {};
+    }
+
+    auto LocalFileStorage::WriteChunk(
+        const std::string& upload_id,
+        uint32_t chunk_index,
+        std::string_view data
+    ) -> drogon::Task<Result<void>> {
+        const auto temp_dir = GetTempDirPath(upload_id);
+
+        // 防御性回退：目录应由 EnsureUploadTempDir 预创建，此处仅处理意外丢失
+        std::error_code ec;
+        if (!std::filesystem::exists(temp_dir, ec) || ec) {
+            std::filesystem::create_directories(temp_dir, ec);
+            if (ec) {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to create temp upload directory")
+                );
+            }
         }
 
         const auto chunk_path = GetChunkFilePath(upload_id, chunk_index);
@@ -56,17 +76,23 @@ namespace disk::storage {
         -> drogon::Task<Result<AssembleResult>> {
         auto& pool = AssemblyWorkerPool::GetInstance();
 
-        auto slot_guard = pool.TryAcquireGuard();
+        auto slot_guard = pool.TryAcquireGuard(upload_id);
         if (!slot_guard.has_value()) {
-            LOG_WARN << "Assembly concurrency limit reached, fast-failing: running="
-                     << pool.RunningCount() << " pending=" << pool.PendingCount();
+            const auto upload_already_active = pool.IsUploadActive(upload_id);
+            const auto* message = upload_already_active ? "Upload assembly already in progress for this upload_id, please retry later" : "Too many concurrent assembly operations, please retry later";
+
+            LOG_WARN << "Assembly admission rejected: upload_id=" << upload_id
+                     << ", reason="
+                     << (upload_already_active ? "upload_already_active" : "pool_saturated")
+                     << ", running=" << pool.ActiveCount()
+                     << ", max_concurrent=" << pool.MaxConcurrent();
             co_return std::unexpected(
-                ErrorInfo(ErrorCode::TooManyRequests, "Too many concurrent assembly operations, please retry later")
+                ErrorInfo(ErrorCode::TooManyRequests, message)
             );
         }
 
-        LOG_DEBUG << "Assembly started: running=" << pool.RunningCount()
-                  << " pending=" << pool.PendingCount();
+        LOG_DEBUG << "Assembly started: upload_id=" << upload_id << ", running=" << pool.ActiveCount()
+                  << ", max_concurrent=" << pool.MaxConcurrent();
 
         const auto assembled_path = GetAssembleFilePath(upload_id);
         const auto assembled_parent = assembled_path.parent_path();
@@ -86,13 +112,14 @@ namespace disk::storage {
             );
         }
 
-        FileHashUtil::Md5Context md5_ctx;
+        FileHashUtil::Md5Context md5_ctx{};
         FileHashUtil::Md5Init(md5_ctx);
 
         crypto_hash_sha256_state sha256_state;
         crypto_hash_sha256_init(&sha256_state);
 
-        std::array<char, 8192> buffer{};
+        const auto buffer_size = m_config_mgr->GetAssembleBufferSizeBytes();
+        std::vector<char> buffer(buffer_size);
         for (uint32_t index = 0; index < chunk_count; ++index) {
             const auto chunk_path = GetChunkFilePath(upload_id, index);
             std::ifstream chunk_file(chunk_path, std::ios::binary);
@@ -106,15 +133,19 @@ namespace disk::storage {
 
             while (chunk_file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()))) {
                 auto bytes_read = static_cast<size_t>(chunk_file.gcount());
+                const auto* md5_bytes = std::bit_cast<const uint8_t*>(buffer.data());
+                const auto* sha256_bytes = std::bit_cast<const unsigned char*>(buffer.data());
                 assembled_file.write(buffer.data(), static_cast<std::streamsize>(bytes_read));
-                FileHashUtil::Md5Update(md5_ctx, reinterpret_cast<const uint8_t*>(buffer.data()), bytes_read);
-                crypto_hash_sha256_update(&sha256_state, reinterpret_cast<const unsigned char*>(buffer.data()), bytes_read);
+                FileHashUtil::Md5Update(md5_ctx, md5_bytes, bytes_read);
+                crypto_hash_sha256_update(&sha256_state, sha256_bytes, bytes_read);
             }
             if (chunk_file.gcount() > 0) {
                 auto bytes_read = static_cast<size_t>(chunk_file.gcount());
+                const auto* md5_bytes = std::bit_cast<const uint8_t*>(buffer.data());
+                const auto* sha256_bytes = std::bit_cast<const unsigned char*>(buffer.data());
                 assembled_file.write(buffer.data(), static_cast<std::streamsize>(bytes_read));
-                FileHashUtil::Md5Update(md5_ctx, reinterpret_cast<const uint8_t*>(buffer.data()), bytes_read);
-                crypto_hash_sha256_update(&sha256_state, reinterpret_cast<const unsigned char*>(buffer.data()), bytes_read);
+                FileHashUtil::Md5Update(md5_ctx, md5_bytes, bytes_read);
+                crypto_hash_sha256_update(&sha256_state, sha256_bytes, bytes_read);
             }
             if (!chunk_file.eof()) {
                 assembled_file.close();
@@ -133,18 +164,18 @@ namespace disk::storage {
             );
         }
 
-        uint8_t md5_digest[16];
-        FileHashUtil::Md5Final(md5_ctx, md5_digest);
+        std::array<uint8_t, 16> md5_digest{};
+        FileHashUtil::Md5Final(md5_ctx, md5_digest.data());
 
         std::array<uint8_t, crypto_hash_sha256_BYTES> sha256_digest{};
         crypto_hash_sha256_final(&sha256_state, sha256_digest.data());
 
-        LOG_DEBUG << "Assembly completed: running=" << pool.RunningCount()
-                  << " pending=" << pool.PendingCount();
+        LOG_DEBUG << "Assembly completed: upload_id=" << upload_id << ", running=" << pool.ActiveCount()
+                  << ", max_concurrent=" << pool.MaxConcurrent();
 
         co_return AssembleResult{
             .path = assembled_path,
-            .md5_hash = FileHashUtil::BytesToHex(md5_digest, 16),
+            .md5_hash = FileHashUtil::BytesToHex(md5_digest.data(), md5_digest.size()),
             .sha256_hash = FileHashUtil::BytesToHex(sha256_digest.data(), sha256_digest.size())
         };
     }

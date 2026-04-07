@@ -1,10 +1,7 @@
 /**
  * @file AssemblyWorkerPool.hpp
- * @brief Bounded worker pool for upload assembly I/O offload
- * @details Enforces backpressure on concurrent assembly operations:
- *          - Max concurrent: 4
- *          - Queue limit: 32 pending jobs
- *          - Overflow: fast-fail with error response
+ * @brief Assembly 组装并发控制池
+ * @details 仅限制实际运行中的组装任务数量，并为同一 upload_id 提供单飞保护。
  * @author LiuFeng (liufeng.code@outlook.com)
  *
  * @copyright Copyright (c) 2026
@@ -15,22 +12,22 @@
 #include <cstddef>
 #include <mutex>
 #include <optional>
+#include <string>
+#include <unordered_set>
+#include <utility>
+
+#include "utils/ConfigMgr.hpp"
 
 namespace disk::storage {
 
     /**
-     * @brief Bounded two-tier worker pool for assembly I/O concurrency control
+     * @brief Assembly 组装任务并发控制池
      *
-     * Enforces backpressure with two tiers:
-     *   - Running tier (m_running): up to MAX_CONCURRENT (4) jobs executing now
-     *   - Pending tier (m_pending): up to QUEUE_LIMIT (32) jobs queued by the
-     *     coroutine runtime (Drogon's thread pool scheduler provides natural queuing)
-     *   - Overflow: fast-fail with error response
-     *
-     * Total capacity = 4 running + 32 pending = 36 concurrent slot holders.
-     * Beyond 36, requests are immediately rejected.
-     *
-     * Thread-safe: all public methods are guarded by a mutex.
+     * 设计约束：
+     * - 只统计真实运行中的组装任务（m_running）
+     * - 最大并发数来自 ConfigMgr::GetAssemblyMaxConcurrent()
+     * - 同一 upload_id 在进程内只允许一个组装任务运行
+     * - 超出并发上限或命中单飞保护时立即失败，不做排队
      */
     class AssemblyWorkerPool {
     public:
@@ -40,37 +37,46 @@ namespace disk::storage {
 
             ~SlotGuard() {
                 if (m_pool != nullptr) {
-                    m_pool->Release();
+                    m_pool->Release(m_upload_id);
                 }
             }
 
             SlotGuard(const SlotGuard&) = delete;
             auto operator=(const SlotGuard&) -> SlotGuard& = delete;
 
-            SlotGuard(SlotGuard&& other) noexcept : m_pool(other.m_pool) { other.m_pool = nullptr; }
+            SlotGuard(SlotGuard&& other) noexcept
+                : m_pool(other.m_pool),
+                  m_upload_id(std::move(other.m_upload_id)) {
+                other.m_pool = nullptr;
+                other.m_upload_id.clear();
+            }
 
             auto operator=(SlotGuard&& other) noexcept -> SlotGuard& {
                 if (this == &other) {
                     return *this;
                 }
                 if (m_pool != nullptr) {
-                    m_pool->Release();
+                    m_pool->Release(m_upload_id);
                 }
                 m_pool = other.m_pool;
+                m_upload_id = std::move(other.m_upload_id);
                 other.m_pool = nullptr;
+                other.m_upload_id.clear();
                 return *this;
             }
 
         private:
             friend class AssemblyWorkerPool;
 
-            explicit SlotGuard(AssemblyWorkerPool* pool) : m_pool(pool) {}
+            SlotGuard(AssemblyWorkerPool* pool, std::string upload_id)
+                : m_pool(pool),
+                  m_upload_id(std::move(upload_id)) {}
 
             AssemblyWorkerPool* m_pool = nullptr;
+            std::string m_upload_id;
         };
 
-        static constexpr size_t MAX_CONCURRENT = 4;
-        static constexpr size_t QUEUE_LIMIT = 32;
+        static constexpr size_t DEFAULT_MAX_CONCURRENT = 4;
 
         /**
          * @brief Get the singleton instance
@@ -82,87 +88,102 @@ namespace disk::storage {
         }
 
         /**
-         * @brief Try to acquire a slot for assembly work
-         * @details First MAX_CONCURRENT callers get a "running" slot.
-         *          Next QUEUE_LIMIT callers get a "pending" slot (queued by the
-         *          coroutine runtime — in Drogon's thread pool model, pending jobs
-         *          are naturally queued by the scheduler until a running slot frees up).
-         *          Beyond that: fast-fail (returns false).
-         * @return true if slot acquired (either running or pending),
-         *         false if the pool is fully saturated (fast-fail)
+         * @brief 尝试获取组装运行槽位
+         * @param upload_id 上传任务 ID
+         * @return 成功返回槽位守卫，失败返回 std::nullopt
          */
-        auto TryAcquire() -> bool {
+        [[nodiscard]]
+        auto TryAcquire(const std::string& upload_id) -> std::optional<SlotGuard> {
             std::lock_guard<std::mutex> lock(m_mutex);
-            if (m_running < MAX_CONCURRENT) {
-                ++m_running;
-                return true;
-            }
-            if (m_pending < QUEUE_LIMIT) {
-                ++m_pending;
-                return true;
-            }
-            return false; // fast-fail: pool saturated
-        }
-
-        auto TryAcquireGuard() -> std::optional<SlotGuard> {
-            if (!TryAcquire()) {
+            if (m_active_upload_ids.contains(upload_id)) {
                 return std::nullopt;
             }
-            return SlotGuard(this);
-        }
 
-        /**
-         * @brief Release a slot after assembly work completes
-         * @details Decrements m_pending first, then m_running. This naturally
-         *          promotes queued jobs to running status as callers release slots.
-         */
-        auto Release() -> void {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            if (m_pending > 0) {
-                --m_pending;
-            } else if (m_running > 0) {
-                --m_running;
+            if (m_running >= m_max_concurrent) {
+                return std::nullopt;
             }
+
+            ++m_running;
+            m_active_upload_ids.insert(upload_id);
+            return SlotGuard(this, upload_id);
         }
 
         /**
-         * @brief Get current number of running + pending assembly jobs
-         * @return Count of all jobs holding a slot
+         * @brief 尝试获取组装运行槽位守卫
+         * @param upload_id 上传任务 ID
+         * @return 成功返回槽位守卫，失败返回 std::nullopt
          */
+        [[nodiscard]]
+        auto TryAcquireGuard(const std::string& upload_id) -> std::optional<SlotGuard> {
+            return TryAcquire(upload_id);
+        }
+
+        /**
+         * @brief 获取当前运行中的组装任务数量
+         * @return 运行中的任务数
+         */
+        [[nodiscard]]
         auto ActiveCount() const -> size_t {
             std::lock_guard<std::mutex> lock(m_mutex);
-            return m_running + m_pending;
+            return m_running;
         }
 
         /**
-         * @brief Get current number of running assembly jobs
-         * @return Count of jobs in the running tier
+         * @brief 获取当前运行中的组装任务数量
+         * @return 运行中的任务数
          */
+        [[nodiscard]]
         auto RunningCount() const -> size_t {
             std::lock_guard<std::mutex> lock(m_mutex);
             return m_running;
         }
 
         /**
-         * @brief Get current number of pending assembly jobs
-         * @return Count of jobs in the pending (queued) tier
+         * @brief 获取配置的组装最大并发数
+         * @return 最大并发数
          */
-        auto PendingCount() const -> size_t {
+        [[nodiscard]]
+        auto MaxConcurrent() const -> size_t {
             std::lock_guard<std::mutex> lock(m_mutex);
-            return m_pending;
+            return m_max_concurrent;
+        }
+
+        /**
+         * @brief 判断指定 upload_id 是否正在组装
+         * @param upload_id 上传任务 ID
+         * @return true 表示正在组装，false 表示未在组装
+         */
+        [[nodiscard]]
+        auto IsUploadActive(const std::string& upload_id) const -> bool {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            return m_active_upload_ids.contains(upload_id);
         }
 
         AssemblyWorkerPool(const AssemblyWorkerPool&) = delete;
+        ~AssemblyWorkerPool() = default;
         auto operator=(const AssemblyWorkerPool&) -> AssemblyWorkerPool& = delete;
         AssemblyWorkerPool(AssemblyWorkerPool&&) = delete;
         auto operator=(AssemblyWorkerPool&&) -> AssemblyWorkerPool& = delete;
 
     private:
-        AssemblyWorkerPool() = default;
+        AssemblyWorkerPool() {
+            const auto configured_max =
+                static_cast<size_t>(disk::utils::ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent());
+            m_max_concurrent = configured_max == 0 ? DEFAULT_MAX_CONCURRENT : configured_max;
+        }
+
+        auto Release(const std::string& upload_id) -> void {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_running > 0) {
+                --m_running;
+            }
+            m_active_upload_ids.erase(upload_id);
+        }
 
         mutable std::mutex m_mutex;
+        size_t m_max_concurrent = DEFAULT_MAX_CONCURRENT;
         size_t m_running = 0;
-        size_t m_pending = 0;
+        std::unordered_set<std::string> m_active_upload_ids;
     };
 
 } // namespace disk::storage

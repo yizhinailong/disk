@@ -14,6 +14,7 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include <drogon/orm/DbClient.h>
 
@@ -40,6 +41,15 @@ namespace disk::storage {
         virtual ~IFileStorage() = default;
 
         /**
+         * @brief 确保上传会话的临时目录已创建
+         * @param upload_id 上传会话 ID
+         * @return 成功返回空，失败返回错误信息
+         */
+        [[nodiscard]]
+        virtual auto EnsureUploadTempDir(const std::string& upload_id)
+            -> drogon::Task<Result<void>> = 0;
+
+        /**
          * @brief 写入上传分片到临时目录
          * @param upload_id 上传会话 ID
          * @param chunk_index 分片索引
@@ -50,7 +60,7 @@ namespace disk::storage {
         virtual auto WriteChunk(
             const std::string& upload_id,
             uint32_t chunk_index,
-            const std::string& data
+            std::string_view data
         ) -> drogon::Task<Result<void>> = 0;
 
         /**

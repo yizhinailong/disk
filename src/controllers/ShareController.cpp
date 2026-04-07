@@ -9,11 +9,10 @@
 
 #include "ShareController.hpp"
 
-#include <algorithm>
 #include <filesystem>
-#include <limits>
 #include <memory>
 
+#include "DownloadResponder.hpp"
 #include "dtos/ShareDto.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/ConfigMgr.hpp"
@@ -21,21 +20,15 @@
 
 namespace disk::share {
 
-    namespace {
-        constexpr std::size_t DOWNLOAD_STREAM_CHUNK_BYTES = 64ULL * 1024ULL;
-    }
-
-    using disk::utils::ConfigMgr;
-
     ShareController::ShareController()
         : m_share_service(
               std::make_unique<ShareService>(
                   drogon::app().getDbClient(),
                   drogon::app().getRedisClient(),
-                  ConfigMgr::GetInstance()->GetJwtSecret()
+                  disk::utils::ConfigMgr::GetInstance()->GetJwtSecret()
               )
           ),
-          m_storage(disk::storage::StorageMgr::GetStorage()) {
+          m_storage(storage::StorageMgr::GetStorage()) {
     }
 
     // ==================== 所有者端点（JWT 保护） ====================
@@ -348,118 +341,20 @@ namespace disk::share {
             co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "File not found"));
         }
 
-        // 6. 解析 Range 请求头
-        auto range_header = std::string(request->getHeader("Range"));
-        auto range_request = RangeRequest::Parse(range_header, download_info.file_size);
-
-        // 7. 处理 Range 请求
-        if (range_request.has_range && !range_request.satisfiable) {
-            LOG_WARN << "Range request not satisfiable: " << range_header
-                     << ", file_size=" << download_info.file_size;
-
-            auto resp = drogon::HttpResponse::newHttpResponse();
-            resp->setStatusCode(drogon::HttpStatusCode::k416RequestedRangeNotSatisfiable);
-            resp->setContentTypeCode(drogon::CT_APPLICATION_JSON);
-
-            std::string content_range = "bytes */" + std::to_string(download_info.file_size);
-            resp->addHeader("Content-Range", content_range);
-
-            Json::Value error_data;
-            error_data["file_size"] = static_cast<Json::UInt64>(download_info.file_size);
-            error_data["requested_range"] = range_header;
-            error_data["reason"] = "Requested start position exceeds file size";
-
-            Json::Value body;
-            body["code"] = 10002;
-            body["message"] = "Invalid request range";
-            body["data"] = error_data;
-
-            resp->setBody(body.toStyledString());
-            co_return resp;
-        }
-
-        uint64_t start = range_request.has_range ? range_request.start : 0;
-        uint64_t end = range_request.has_range ? range_request.end : download_info.file_size - 1;
-        uint64_t content_length = end - start + 1;
-
-        auto open_result = co_await m_storage->OpenForRead(download_info.storage_path);
-        if (!open_result) {
-            LOG_ERROR << "Failed to open file: " << download_info.storage_path;
-            co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "Failed to open file"));
-        }
-        auto file = std::move(*open_result);
-        if (start > static_cast<uint64_t>(std::numeric_limits<std::streamoff>::max())) {
-            LOG_ERROR << "Range start exceeds stream offset limit: " << start;
-            co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "Invalid request range"));
-        }
-        file->seekg(static_cast<std::streamoff>(start));
-
-        auto remaining = std::make_shared<uint64_t>(content_length);
-        auto resp = drogon::HttpResponse::newStreamResponse(
-            [file, remaining](char* buffer, std::size_t suggested_length) -> std::size_t {
-                if (!buffer) {
-                    if (file->is_open()) {
-                        file->close();
-                    }
-                    return 0;
-                }
-
-                if (*remaining == 0 || !file->is_open()) {
-                    return 0;
-                }
-
-                const auto max_remaining = static_cast<uint64_t>(
-                    std::numeric_limits<std::size_t>::max()
-                );
-                const auto bounded_remaining =
-                    static_cast<std::size_t>(std::min<uint64_t>(*remaining, max_remaining));
-                const auto read_size =
-                    std::min({ suggested_length, DOWNLOAD_STREAM_CHUNK_BYTES, bounded_remaining });
-
-                file->read(buffer, static_cast<std::streamsize>(read_size));
-                const auto read_bytes = static_cast<std::size_t>(file->gcount());
-                if (read_bytes == 0) {
-                    *remaining = 0;
-                    if (file->is_open()) {
-                        file->close();
-                    }
-                    return 0;
-                }
-
-                *remaining -= read_bytes;
-                if (*remaining == 0 && file->is_open()) {
-                    file->close();
-                }
-                return read_bytes;
-            }
+        // 6. 委托共享下载响应构造
+        auto resp = co_await BuildDownloadResponse(
+            disk::controllers::DownloadParams{
+                .storage_path = download_info.storage_path,
+                .filename = download_info.filename,
+                .file_size = download_info.file_size,
+                .mime_type = download_info.mime_type,
+                .file_hash = download_info.hash_md5,
+                .range_header = std::string(request->getHeader("Range")),
+            },
+            m_storage
         );
 
-        if (range_request.has_range) {
-            resp->setStatusCode(drogon::HttpStatusCode::k206PartialContent);
-            std::string content_range = "bytes " + std::to_string(start) + "-" +
-                                        std::to_string(end) + "/" +
-                                        std::to_string(download_info.file_size);
-            resp->addHeader("Content-Range", content_range);
-            LOG_INFO << "Returning partial content: start=" << start << ", end=" << end
-                     << ", total=" << download_info.file_size;
-        } else {
-            resp->setStatusCode(drogon::HttpStatusCode::k200OK);
-            LOG_INFO << "Returning full file: size=" << download_info.file_size;
-        }
-
-        // 设置响应头
-        resp->setContentTypeString(download_info.mime_type);
-        resp->addHeader("Content-Length", std::to_string(content_length));
-        resp->addHeader("Accept-Ranges", "bytes");
-
-        std::string disposition = "attachment; filename=\"" + download_info.filename + "\"";
-        resp->addHeader("Content-Disposition", disposition);
-
-        if (!download_info.hash_md5.empty()) {
-            resp->addHeader("ETag", "\"" + download_info.hash_md5 + "\"");
-        }
-
-        // 10. 增加下载次数
+        // 7. 增加下载次数
         co_await m_share_service->IncrementDownloadCount(internal_share_id);
 
         co_return resp;

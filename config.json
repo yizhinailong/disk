@@ -15,7 +15,9 @@
       "temp_upload_path": "build/temp_uploads",
       "chunk_size": 5242880,
       "max_file_size": 10737418240,
-      "upload_task_expiry_seconds": 86400
+      "upload_task_expiry_seconds": 86400,
+      "assembly_max_concurrent": 4,
+      "assemble_buffer_size_bytes": 262144
     }
   },
   "db_clients": [

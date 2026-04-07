@@ -9,6 +9,7 @@
 
 #include "TokenService.hpp"
 
+#include <drogon/drogon.h>
 #include <drogon/utils/Utilities.h>
 #include <jwt-cpp/jwt.h>
 #include <jwt-cpp/traits/open-source-parsers-jsoncpp/traits.h>
@@ -221,10 +222,9 @@ namespace disk::services {
         }
 
         const auto jti = jti_result.value();
-        const auto key = disk::redis::RedisKeyPrefix::BuildAccessTokenBlacklistKey(jti);
 
-        auto invalidate_result = co_await m_redis_service->Set(key, "1", ACCESS_TOKEN_TTL);
-        if (invalidate_result.has_value()) {
+        // 无论 Redis 结果如何，立即覆盖本地缓存为 revoked=true
+        {
             const auto now = std::chrono::steady_clock::now();
             std::lock_guard<std::mutex> lock(m_cache_mutex);
             m_revocation_cache[jti] = RevocationCacheEntry{
@@ -233,7 +233,8 @@ namespace disk::services {
             };
         }
 
-        co_return invalidate_result;
+        const auto key = disk::redis::RedisKeyPrefix::BuildAccessTokenBlacklistKey(jti);
+        co_return co_await m_redis_service->Set(key, "1", ACCESS_TOKEN_TTL);
     }
 
     auto TokenService::RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>> {
@@ -242,8 +243,6 @@ namespace disk::services {
     }
 
     auto TokenService::IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool> {
-        EvictExpiredCacheEntries();
-
         const auto now = std::chrono::steady_clock::now();
         {
             std::lock_guard<std::mutex> lock(m_cache_mutex);
@@ -252,6 +251,7 @@ namespace disk::services {
                 if (it->second.expires_at > now) {
                     co_return it->second.is_revoked;
                 }
+                // 仅擦除当前过期的单条目 — 不遍历整个缓存
                 m_revocation_cache.erase(it);
             }
         }
@@ -263,8 +263,9 @@ namespace disk::services {
             std::lock_guard<std::mutex> lock(m_cache_mutex);
             m_revocation_cache[jti] = RevocationCacheEntry{
                 .is_revoked = revoked,
-                .expires_at = std::chrono::steady_clock::now() +
-                              std::chrono::seconds(GetAccessTokenExpireSeconds())
+                .expires_at = now + std::chrono::seconds(
+                                        revoked ? GetAccessTokenExpireSeconds() : GetNegativeCacheTtlSeconds()
+                                    )
             };
         }
 
@@ -274,6 +275,33 @@ namespace disk::services {
     auto TokenService::ClearRevocationCache() -> void {
         std::lock_guard<std::mutex> lock(m_cache_mutex);
         m_revocation_cache.clear();
+    }
+
+    auto TokenService::SetRevocationCacheEntryForTest(
+        const std::string& jti,
+        bool is_revoked,
+        int ttl_seconds
+    ) -> void {
+        const auto now = std::chrono::steady_clock::now();
+        std::lock_guard<std::mutex> lock(m_cache_mutex);
+        m_revocation_cache[jti] = RevocationCacheEntry{
+            .is_revoked = is_revoked,
+            .expires_at = now + std::chrono::seconds(ttl_seconds)
+        };
+    }
+
+    auto TokenService::GetRevocationCacheSizeForTest() const -> size_t {
+        std::lock_guard<std::mutex> lock(m_cache_mutex);
+        return m_revocation_cache.size();
+    }
+
+    auto TokenService::StartCacheMaintenance() -> void {
+        drogon::app().getLoop()->runEvery(
+            CACHE_MAINTENANCE_INTERVAL_SECONDS,
+            [this]() { EvictExpiredCacheEntries(); }
+        );
+        LOG_DEBUG << "Revocation cache maintenance timer started (interval="
+                  << CACHE_MAINTENANCE_INTERVAL_SECONDS << "s)";
     }
 
     auto TokenService::EvictExpiredCacheEntries() const -> void {

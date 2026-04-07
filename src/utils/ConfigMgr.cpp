@@ -56,6 +56,18 @@ namespace disk::utils {
                 m_upload_task_expiry_seconds = app_config["upload_task_expiry_seconds"].asInt();
                 LOG_INFO << "Loaded upload_task_expiry_seconds from config: " << m_upload_task_expiry_seconds;
             }
+
+            // 从配置读取 assembly_max_concurrent
+            if (app_config.isMember("assembly_max_concurrent")) {
+                m_assembly_max_concurrent = static_cast<uint32_t>(app_config["assembly_max_concurrent"].asUInt());
+                LOG_INFO << "Loaded assembly_max_concurrent from config: " << m_assembly_max_concurrent;
+            }
+
+            // 从配置读取 assemble_buffer_size_bytes
+            if (app_config.isMember("assemble_buffer_size_bytes")) {
+                m_assemble_buffer_size_bytes = static_cast<uint32_t>(app_config["assemble_buffer_size_bytes"].asUInt());
+                LOG_INFO << "Loaded assemble_buffer_size_bytes from config: " << m_assemble_buffer_size_bytes;
+            }
         } else {
             LOG_WARN << "'disk' section not found in custom config, using default values";
         }
@@ -107,6 +119,14 @@ namespace disk::utils {
 
     auto ConfigMgr::GetUploadTaskExpirySeconds() const noexcept -> int {
         return m_upload_task_expiry_seconds;
+    }
+
+    auto ConfigMgr::GetAssemblyMaxConcurrent() const noexcept -> uint32_t {
+        return m_assembly_max_concurrent;
+    }
+
+    auto ConfigMgr::GetAssembleBufferSizeBytes() const noexcept -> uint32_t {
+        return m_assemble_buffer_size_bytes;
     }
 
     // ==================== 数据库配置 ====================

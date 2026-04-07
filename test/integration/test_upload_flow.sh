@@ -155,30 +155,28 @@ test_init_upload_quota() {
 }
 
 # Test 4.2: Upload Chunk
+# Contract: POST with query params (upload_id, chunk_index, chunk_hash) + raw binary body (application/octet-stream)
 test_upload_chunk() {
     log_info "Testing Upload Chunk..."
-    
-    # Create test chunk (1KB for testing)
+
     local chunk_file="/tmp/test_chunk.bin"
     dd if=/dev/urandom of="$chunk_file" bs=1024 count=1 2>/dev/null
     local chunk_hash
     chunk_hash=$(md5sum "$chunk_file" | cut -d' ' -f1)
-    
+
     local response
-    response=$(curl -s -X POST "$BASE_URL/api/file/upload/chunk" \
+    response=$(curl -s -X POST "$BASE_URL/api/file/upload/chunk?upload_id=$UPLOAD_ID&chunk_index=0&chunk_hash=$chunk_hash" \
         -H "Authorization: Bearer $TOKEN" \
-        -F "upload_id=$UPLOAD_ID" \
-        -F "chunk_index=0" \
-        -F "chunk_hash=$chunk_hash" \
-        -F "chunk=@$chunk_file")
-    
+        -H "Content-Type: application/octet-stream" \
+        --data-binary "@$chunk_file")
+
     local uploaded
     uploaded=$(echo "$response" | jq -r '.data.uploaded // empty')
-    
+
     rm -f "$chunk_file"
-    
+
     if [ "$uploaded" = "true" ]; then
-        log_pass "Upload Chunk - index 0"
+        log_pass "Upload Chunk - index 0 (binary body)"
         save_evidence "upload-chunk" "$response"
         return 0
     else

@@ -3,6 +3,7 @@ add_executable(${PROJECT_NAME} main.cpp)
 # Controller
 set(Controllers_HEADERS
     controllers/AuthController.hpp
+    controllers/DownloadResponder.hpp
     controllers/FileController.hpp
     controllers/FolderController.hpp
     controllers/HealthController.hpp
@@ -14,6 +15,7 @@ set(Controllers_HEADERS
 )
 set(Controllers_SOURCES
     controllers/AuthController.cpp
+    controllers/DownloadResponder.cpp
     controllers/FileController.cpp
     controllers/FolderController.cpp
     controllers/HealthController.cpp

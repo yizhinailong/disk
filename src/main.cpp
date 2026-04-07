@@ -46,6 +46,10 @@ auto main() -> int {
     LOG_INFO << "  max_file_size: " << disk::utils::ConfigMgr::GetInstance()->GetMaxFileSize();
     LOG_INFO << "  upload_task_expiry_seconds: "
              << disk::utils::ConfigMgr::GetInstance()->GetUploadTaskExpirySeconds();
+    LOG_INFO << "  assembly_max_concurrent: "
+             << disk::utils::ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent();
+    LOG_INFO << "  assemble_buffer_size_bytes: "
+             << disk::utils::ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes();
 
     // 初始化文件存储
     auto storage = std::make_shared<disk::storage::LocalFileStorage>(disk::utils::ConfigMgr::GetInstance());
@@ -59,6 +63,7 @@ auto main() -> int {
     drogon::app().registerBeginningAdvice([]() {
         disk::services::ScheduledTasks::Initialize(drogon::app().getDbClient());
         disk::services::ScheduledTasks::Register();
+        disk::services::TokenService::GetInstance()->StartCacheMaintenance();
     });
 
     drogon::app().run();

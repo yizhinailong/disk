@@ -13,11 +13,13 @@ set(TEST_SOURCES
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp
     services/FileUploadConsistency_test.cpp
+    services/CompleteUploadSingleflight_test.cpp
     services/FileServiceBatch_test.cpp
     services/ShareService_test.cpp
     services/ShareServiceBatch_test.cpp
     services/ShareServiceQuery_test.cpp
     services/TokenService_test.cpp
+    services/TokenServiceRevocation_test.cpp
     services/TrashService_test.cpp
     services/TrashServiceBatch_test.cpp
     services/CleanupService_test.cpp
@@ -30,6 +32,7 @@ set(TEST_SOURCES
     dtos/ShareDto_test.cpp
     dtos/TrashDto_test.cpp
     dtos/UserDto_test.cpp
+    storage/AssemblyWorkerPool_test.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
     ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/StorageMgr.cpp
