@@ -14,6 +14,9 @@
         "CMAKE_CXX_STANDARD_REQUIRED": "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       },
+      "environment": {
+        "JWT_SECRET": "dev-only-jwt-secret-key-change-in-production-2024"
+      },
       "warnings": {
         "dev": false
       }
