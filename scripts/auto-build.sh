@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export JWT_SECRET="dev-only-jwt-secret-key-change-in-production-2024"
+
 build_message="echo '🔄 文件变化，重新构建...'"
 preset_name="linux-debug-clang"
 build_command="cmake --build --preset $preset_name"
