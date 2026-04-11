@@ -1481,6 +1481,7 @@ namespace disk::file {
             }
 
             if (!trash_items.empty()) {
+                // ── 构建回收站 SQL（事务外，仅字符串拼接） ──
                 std::string trash_sql =
                     "INSERT INTO trash (user_id, item_type, item_id, item_name, item_size, " "content_id, original_folder_id, original_path, item_data, " "deleted_at, expires_at) VALUES ";
 
@@ -1507,20 +1508,53 @@ namespace disk::file {
 
                 std::vector<uint64_t> deletable_ids;
                 deletable_ids.reserve(trash_items.size());
-
-                auto insert_ok = co_await InsertTrashRecords(m_db_client, trash_sql);
-                if (insert_ok) {
-                    for (const auto& item : trash_items) {
-                        deletable_ids.push_back(item.file_id);
-                    }
+                for (const auto& item : trash_items) {
+                    deletable_ids.push_back(item.file_id);
                 }
 
-                if (!deletable_ids.empty()) {
-                    int deleted = co_await DeleteFilesByIds(m_db_client, deletable_ids);
-                    deleted_count += deleted;
-                    for (const auto& file_id : deletable_ids) {
-                        LOG_DEBUG << "File moved to trash: file_id=" << file_id;
+                // ── 事务阶段：回收站插入 + 文件删除，原子提交/回滚 ──
+                std::shared_ptr<drogon::orm::Transaction> txn;
+                bool batch_failed = false;
+                try {
+                    txn = co_await m_db_client->newTransactionCoro();
+
+                    auto insert_ok = co_await InsertTrashRecords(txn, trash_sql);
+                    if (!insert_ok) {
+                        LOG_WARN << "Trash insert failed in transaction, rolling back batch";
+                        batch_failed = true;
+                    } else {
+                        int deleted = co_await DeleteFilesByIds(txn, deletable_ids);
+                        deleted_count += deleted;
+                        for (const auto& file_id : deletable_ids) {
+                            LOG_DEBUG << "File moved to trash: file_id=" << file_id;
+                        }
                     }
+                    // 事务自动提交（协程正常完成）
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_ERROR << "Delete batch transaction failed (DB): " << e.base().what();
+                    if (txn) {
+                        try {
+                            txn->rollback();
+                        } catch (const std::exception& rb_e) {
+                            LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                        }
+                    }
+                    batch_failed = true;
+                } catch (const std::exception& e) {
+                    LOG_ERROR << "Delete batch transaction failed: " << e.what();
+                    if (txn) {
+                        try {
+                            txn->rollback();
+                        } catch (const std::exception& rb_e) {
+                            LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                        }
+                    }
+                    batch_failed = true;
+                }
+
+                if (batch_failed) {
+                    LOG_WARN << "Delete batch rolled back, skipping "
+                             << trash_items.size() << " files in this chunk";
                 }
             }
         }
