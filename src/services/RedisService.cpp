@@ -310,4 +310,34 @@ namespace disk::services {
         }
     }
 
+    auto RedisService::IncrWithExpire(
+        const std::string& key,
+        int ttl
+    ) -> drogon::Task<Result<std::int64_t>> {
+        static constexpr char RATE_LIMIT_LUA_SCRIPT[] =
+            "local count = redis.call('INCR', KEYS[1]) " "if count == 1 then " "    redis.call('EXPIRE', KEYS[1], ARGV[1]) " "end " "return count";
+
+        try {
+            auto result = co_await m_redis_client->execCommandCoro(
+                "EVAL %s 1 %s %d",
+                RATE_LIMIT_LUA_SCRIPT,
+                key.c_str(),
+                ttl
+            );
+
+            const auto count = result.asInteger();
+
+            LOG_TRACE << "Redis IncrWithExpire: key=" << key << ", count=" << count;
+
+            co_return count;
+
+        } catch (const drogon::nosql::RedisException& ex) {
+            LOG_ERROR << "Redis operation failed: IncrWithExpire, key=" << key << ", error=" << ex.what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::RedisOperationFailed,
+                "Redis operation failed: " + std::string(ex.what())
+            ));
+        }
+    }
+
 } // namespace disk::services

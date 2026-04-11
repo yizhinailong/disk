@@ -226,7 +226,7 @@ namespace disk::services {
         // 无论 Redis 结果如何，立即覆盖本地缓存为 revoked=true
         {
             const auto now = std::chrono::steady_clock::now();
-            std::lock_guard<std::mutex> lock(m_cache_mutex);
+            std::unique_lock lock(m_cache_mutex);
             m_revocation_cache[jti] = RevocationCacheEntry{
                 .is_revoked = true,
                 .expires_at = now + std::chrono::seconds(GetAccessTokenExpireSeconds())
@@ -244,13 +244,19 @@ namespace disk::services {
 
     auto TokenService::IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool> {
         const auto now = std::chrono::steady_clock::now();
+
         {
-            std::lock_guard<std::mutex> lock(m_cache_mutex);
+            std::shared_lock lock(m_cache_mutex);
             auto it = m_revocation_cache.find(jti);
-            if (it != m_revocation_cache.end()) {
-                if (it->second.expires_at > now) {
-                    co_return it->second.is_revoked;
-                }
+            if (it != m_revocation_cache.end() && it->second.expires_at > now) {
+                co_return it->second.is_revoked;
+            }
+        }
+
+        {
+            std::unique_lock lock(m_cache_mutex);
+            auto it = m_revocation_cache.find(jti);
+            if (it != m_revocation_cache.end() && it->second.expires_at <= now) {
                 // 仅擦除当前过期的单条目 — 不遍历整个缓存
                 m_revocation_cache.erase(it);
             }
@@ -260,7 +266,7 @@ namespace disk::services {
         const auto revoked = co_await m_redis_service->Exists(key);
 
         {
-            std::lock_guard<std::mutex> lock(m_cache_mutex);
+            std::unique_lock lock(m_cache_mutex);
             m_revocation_cache[jti] = RevocationCacheEntry{
                 .is_revoked = revoked,
                 .expires_at = now + std::chrono::seconds(
@@ -273,7 +279,7 @@ namespace disk::services {
     }
 
     auto TokenService::ClearRevocationCache() -> void {
-        std::lock_guard<std::mutex> lock(m_cache_mutex);
+        std::unique_lock lock(m_cache_mutex);
         m_revocation_cache.clear();
     }
 
@@ -283,7 +289,7 @@ namespace disk::services {
         int ttl_seconds
     ) -> void {
         const auto now = std::chrono::steady_clock::now();
-        std::lock_guard<std::mutex> lock(m_cache_mutex);
+        std::unique_lock lock(m_cache_mutex);
         m_revocation_cache[jti] = RevocationCacheEntry{
             .is_revoked = is_revoked,
             .expires_at = now + std::chrono::seconds(ttl_seconds)
@@ -291,7 +297,7 @@ namespace disk::services {
     }
 
     auto TokenService::GetRevocationCacheSizeForTest() const -> size_t {
-        std::lock_guard<std::mutex> lock(m_cache_mutex);
+        std::shared_lock lock(m_cache_mutex);
         return m_revocation_cache.size();
     }
 
@@ -306,12 +312,24 @@ namespace disk::services {
 
     auto TokenService::EvictExpiredCacheEntries() const -> void {
         const auto now = std::chrono::steady_clock::now();
-        std::lock_guard<std::mutex> lock(m_cache_mutex);
-        for (auto it = m_revocation_cache.begin(); it != m_revocation_cache.end();) {
-            if (it->second.expires_at <= now) {
-                it = m_revocation_cache.erase(it);
-            } else {
-                ++it;
+        {
+            std::unique_lock lock(m_cache_mutex);
+            for (auto it = m_revocation_cache.begin(); it != m_revocation_cache.end();) {
+                if (it->second.expires_at <= now) {
+                    it = m_revocation_cache.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+        {
+            std::unique_lock lock(m_share_cache_mutex);
+            for (auto it = m_share_revocation_cache.begin(); it != m_share_revocation_cache.end();) {
+                if (it->second.expires_at <= now) {
+                    it = m_share_revocation_cache.erase(it);
+                } else {
+                    ++it;
+                }
             }
         }
     }
@@ -481,8 +499,56 @@ namespace disk::services {
     }
 
     auto TokenService::IsShareTokenRevoked(const std::string& token_hash) -> drogon::Task<bool> {
+        const auto now = std::chrono::steady_clock::now();
+
+        // 读锁：检查本地缓存（读多写少场景使用 shared_mutex）
+        {
+            std::shared_lock lock(m_share_cache_mutex);
+            auto it = m_share_revocation_cache.find(token_hash);
+            if (it != m_share_revocation_cache.end() && it->second.expires_at > now) {
+                co_return it->second.is_revoked;
+            }
+        }
+
+        // 缓存未命中 → 回退到 Redis
         const auto key = disk::redis::RedisKeyPrefix::BuildShareTokenBlacklistKey(token_hash);
-        co_return co_await m_redis_service->Exists(key);
+        const auto revoked = co_await m_redis_service->Exists(key);
+
+        // 写锁：更新缓存
+        {
+            std::unique_lock lock(m_share_cache_mutex);
+            m_share_revocation_cache[token_hash] = ShareCacheEntry{
+                .is_revoked = revoked,
+                .expires_at = now + std::chrono::seconds(
+                                        revoked ? GetShareTokenExpireSeconds() : GetNegativeCacheTtlSeconds()
+                                    )
+            };
+        }
+
+        co_return revoked;
+    }
+
+    auto TokenService::SetShareRevocationCacheEntryForTest(
+        const std::string& token_hash,
+        bool is_revoked,
+        int ttl_seconds
+    ) -> void {
+        const auto now = std::chrono::steady_clock::now();
+        std::unique_lock lock(m_share_cache_mutex);
+        m_share_revocation_cache[token_hash] = ShareCacheEntry{
+            .is_revoked = is_revoked,
+            .expires_at = now + std::chrono::seconds(ttl_seconds)
+        };
+    }
+
+    auto TokenService::GetShareRevocationCacheSizeForTest() const -> size_t {
+        std::shared_lock lock(m_share_cache_mutex);
+        return m_share_revocation_cache.size();
+    }
+
+    auto TokenService::ClearShareRevocationCache() -> void {
+        std::unique_lock lock(m_share_cache_mutex);
+        m_share_revocation_cache.clear();
     }
 
 } // namespace disk::services

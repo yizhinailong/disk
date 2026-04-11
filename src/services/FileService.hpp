@@ -9,11 +9,16 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
+#include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <string>
+#include <unordered_map>
 
 #include <drogon/orm/DbClient.h>
+#include <trantor/utils/Date.h>
 
 #include "dtos/FileDto.hpp"
 #include "models/Files.hpp"
@@ -46,8 +51,8 @@ namespace disk::file {
         ~FileService() = default;
         FileService(const FileService&) = delete;
         auto operator=(const FileService&) -> FileService& = delete;
-        FileService(FileService&&) = default;
-        auto operator=(FileService&&) -> FileService& = default;
+        FileService(FileService&&) = delete;
+        auto operator=(FileService&&) -> FileService& = delete;
 
         /**
          * @brief 初始化上传
@@ -267,7 +272,43 @@ namespace disk::file {
             -> drogon::Task<Result<SearchResponse>>;
 
     private:
+        /**
+         * @brief 上传任务缓存条目
+         *
+         * 缓存 UploadChunk 热路径需要的不可变元数据，避免每个分片都访问数据库。
+         */
+        struct UploadTaskCacheEntry {
+            uint64_t user_id = 0;
+            uint32_t total_chunks = 0;
+            trantor::Date expires_at;
+            int status = 0;
+            std::string file_hash;
+            std::string filename;
+            uint64_t parent_id = 0;
+            std::chrono::steady_clock::time_point cache_expires_at;
+        };
+
+        static constexpr auto UPLOAD_TASK_CACHE_TTL = std::chrono::seconds(60);
+        static constexpr double UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS = 60.0;
+
         // ── 原有私有方法（使用 m_db_client） ──
+
+        [[nodiscard]]
+        static auto BuildUploadTaskCacheEntry(const drogon_model::disk::UploadTasks& task)
+            -> UploadTaskCacheEntry;
+
+        [[nodiscard]]
+        auto TryGetUploadTaskCacheEntry(const std::string& upload_id, uint64_t user_id)
+            -> std::optional<UploadTaskCacheEntry>;
+
+        auto CacheUploadTaskEntry(const std::string& upload_id, UploadTaskCacheEntry entry)
+            -> void;
+
+        auto InvalidateUploadTaskCache(const std::string& upload_id) -> void;
+
+        auto StartUploadTaskCacheMaintenance() -> void;
+
+        auto EvictExpiredUploadTaskCacheEntries() -> void;
 
         [[nodiscard]]
         auto CheckStorageQuota(uint64_t user_id, uint64_t file_size) const
@@ -398,8 +439,10 @@ namespace disk::file {
             const std::vector<uint64_t>& file_ids
         ) -> drogon::Task<int>;
 
-        drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
-        storage::IFileStorage* m_storage;     ///< 文件存储接口
+        drogon::orm::DbClientPtr m_db_client;                                      ///< 数据库客户端
+        storage::IFileStorage* m_storage;                                          ///< 文件存储接口
+        std::unordered_map<std::string, UploadTaskCacheEntry> m_upload_task_cache; ///< 上传任务元数据缓存
+        std::shared_mutex m_upload_task_cache_mutex;                               ///< 上传任务缓存读写锁
     };
 
 } // namespace disk::file

@@ -11,7 +11,7 @@
 
 #include <chrono>
 #include <cstdint>
-#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -286,11 +286,40 @@ namespace disk::services {
         /**
          * @brief 检查分享令牌是否已被撤销
          *
+         * 优先检查本地否定缓存（5秒 TTL），缓存未命中时回退到 Redis。
+         *
          * @param token_hash 令牌哈希
          * @return drogon::Task<bool> true 表示已撤销
          */
         [[nodiscard]]
         auto IsShareTokenRevoked(const std::string& token_hash) -> drogon::Task<bool>;
+
+        /**
+         * @brief 测试用：直接向分享令牌撤销缓存插入条目
+         *
+         * 仅用于单元测试，绕过 Redis 直接设置本地缓存状态。
+         *
+         * @param token_hash 令牌哈希
+         * @param is_revoked 是否已撤销
+         * @param ttl_seconds 缓存条目存活时间（秒）
+         */
+        auto SetShareRevocationCacheEntryForTest(
+            const std::string& token_hash,
+            bool is_revoked,
+            int ttl_seconds
+        ) -> void;
+
+        /**
+         * @brief 测试用：获取分享令牌撤销缓存条目数
+         * @return size_t 缓存条目数量
+         */
+        [[nodiscard]]
+        auto GetShareRevocationCacheSizeForTest() const -> size_t;
+
+        /**
+         * @brief 测试用：清空分享令牌撤销缓存
+         */
+        auto ClearShareRevocationCache() -> void;
 
     private:
         /**
@@ -316,7 +345,14 @@ namespace disk::services {
 
         static constexpr int CACHE_MAINTENANCE_INTERVAL_SECONDS = 60;
 
+        /// 访问令牌撤销缓存条目
         struct RevocationCacheEntry {
+            bool is_revoked;
+            std::chrono::steady_clock::time_point expires_at;
+        };
+
+        /// 分享令牌撤销缓存条目
+        struct ShareCacheEntry {
             bool is_revoked;
             std::chrono::steady_clock::time_point expires_at;
         };
@@ -326,8 +362,10 @@ namespace disk::services {
         std::string m_jwt_secret;
         drogon::nosql::RedisClientPtr m_redis_client;
         std::shared_ptr<RedisService> m_redis_service;
-        mutable std::mutex m_cache_mutex;
+        mutable std::shared_mutex m_cache_mutex;
         mutable std::unordered_map<std::string, RevocationCacheEntry> m_revocation_cache;
+        mutable std::shared_mutex m_share_cache_mutex;
+        mutable std::unordered_map<std::string, ShareCacheEntry> m_share_revocation_cache;
     };
 
 } // namespace disk::services

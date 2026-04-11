@@ -184,6 +184,24 @@ namespace disk::services {
             int ttl
         ) -> drogon::Task<Result<bool>>;
 
+        /**
+         * @brief 原子性递增计数并设置过期时间（用于频率限制）
+         *
+         * 使用 Lua 脚本实现原子 INCR + 条件 EXPIRE 操作：
+         * 1. 递增键值
+         * 2. 如果新值为 1，则设置过期时间
+         * 3. 返回递增后的值
+         *
+         * @param key Redis 键
+         * @param ttl 过期时间（秒）
+         * @return Result<std::int64_t> 成功返回递增后的新值，失败返回错误
+         */
+        [[nodiscard]]
+        auto IncrWithExpire(
+            const std::string& key,
+            int ttl
+        ) -> drogon::Task<Result<std::int64_t>>;
+
     private:
         /**
          * @brief 私有构造函数（单例模式）

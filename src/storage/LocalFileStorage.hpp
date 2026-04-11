@@ -19,6 +19,10 @@
 
 #include "storage/IFileStorage.hpp"
 
+namespace trantor {
+    class ConcurrentTaskQueue;
+}
+
 namespace disk::utils {
     class ConfigMgr;
 }
@@ -163,7 +167,8 @@ namespace disk::storage {
         [[nodiscard]]
         auto GetAssembleFilePath(const std::string& upload_id) const -> std::filesystem::path;
 
-        std::shared_ptr<disk::utils::ConfigMgr> m_config_mgr; ///< 配置管理器
+        std::shared_ptr<disk::utils::ConfigMgr> m_config_mgr;         ///< 配置管理器
+        std::shared_ptr<trantor::ConcurrentTaskQueue> m_worker_queue; ///< 本地文件系统阻塞操作工作队列
     };
 
 } // namespace disk::storage

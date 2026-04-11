@@ -9,6 +9,8 @@
 
 #include "ShareAuthFilter.hpp"
 
+#include <chrono>
+
 #include "utils/Response.hpp"
 
 namespace disk::filters {
@@ -18,9 +20,15 @@ namespace disk::filters {
     auto ShareAuthFilter::doFilter(const drogon::HttpRequestPtr& request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
+        auto start = std::chrono::steady_clock::now();
+
         const auto& share_token_header = request->getHeader("X-Share-Token");
 
         if (share_token_header.empty()) {
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[share_auth_filter] duration_us=" << duration_us << " outcome=failure";
             co_return disk::Response::Error(disk::error::Code::TokenMissing);
         }
 
@@ -29,6 +37,12 @@ namespace disk::filters {
 
         if (!verify_result) {
             const auto& error = verify_result.error();
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[share_auth_filter] duration_us=" << duration_us << " outcome=failure";
+
             switch (error.code) {
                 case disk::error::Code::TokenExpired:
                     co_return disk::Response::Error(disk::error::Code::TokenExpired);
@@ -43,8 +57,12 @@ namespace disk::filters {
         request->attributes()->insert("share_code", claims.share_code);
         request->attributes()->insert("share_id", claims.share_id);
 
-        LOG_DEBUG << "Share token authentication successful: share_code=" << claims.share_code
-                  << ", share_id=" << claims.share_id;
+        auto end = std::chrono::steady_clock::now();
+        auto duration_us =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        LOG_INFO << "[share_auth_filter] duration_us=" << duration_us
+                 << " outcome=success share_code=" << claims.share_code;
+
         co_return nullptr;
     }
 

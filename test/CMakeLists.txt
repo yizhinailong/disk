@@ -35,6 +35,7 @@ set(TEST_SOURCES
     dtos/UserDto_test.cpp
     storage/AssemblyWorkerPool_test.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/ShareAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/StorageMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/models/FileContents.cpp
@@ -66,3 +67,16 @@ target_link_libraries(disk-test
 )
 
 gtest_discover_tests(disk-test)
+
+add_test(
+    NAME LoginRateLimitIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_login_rate_limit.sh"
+)
+
+set_tests_properties(
+    LoginRateLimitIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)

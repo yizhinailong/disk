@@ -7,132 +7,172 @@
  *
  */
 
+#include "services/RedisService.hpp"
+
+#include <chrono>
+#include <string>
+#include <thread>
+#include <vector>
+
+#include <drogon/nosql/RedisClient.h>
+#include <drogon/utils/Utilities.h>
+#include <drogon/utils/coroutine.h>
 #include <gtest/gtest.h>
+#include <trantor/net/InetAddress.h>
+
+#include "utils/ErrorCode.hpp"
 
 namespace {
 
-    TEST(RedisServiceTest, DISABLED_Set) {
-        // 【需要 Redis 环境】Set 操作测试
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
-        // 测试步骤：
-        // 1. 创建 RedisService 实例
-        // 2. 创建 Redis 客户端
-        // 3. 调用 Set 方法设置键值对
-        // 4. 验证返回 Result<void>
-        // 5. 验证错误码（如果失败）
+    using disk::error::Code;
+    using disk::services::RedisService;
 
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
+    auto PingRedis(const drogon::nosql::RedisClientPtr& redis_client) -> drogon::Task<std::string> {
+        auto result = co_await redis_client->execCommandCoro("PING");
+        co_return result.asString();
     }
 
-    TEST(RedisServiceTest, DISABLED_Get) {
-        // 【需要 Redis 环境】Get 操作测试
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试
-        // 测试步骤：
-        // 1. 创建 RedisService 实例
-        // 2. 调用 Get 方法读取值
-        // 3. 验证返回的 Result<std::string>
+    auto WaitForRedisReady(const drogon::nosql::RedisClientPtr& redis_client) -> bool {
+        for (int attempt = 0; attempt < 30; ++attempt) {
+            try {
+                if (drogon::sync_wait(PingRedis(redis_client)) == "PONG") {
+                    return true;
+                }
+            } catch (const drogon::nosql::RedisException&) {
+            }
 
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        return false;
     }
 
-    TEST(RedisServiceTest, DISABLED_Delete) {
-        // 【需要 Redis 环境】Delete 操作测试
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试
-        // 测试步骤：
-        // 1. 创建 RedisService 实例
-        // 2. 调用 Delete 方法删除键
-        // 3. 验证返回的 Result<void>
+    class RedisServiceRuntimeTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            s_redis_client = drogon::nosql::RedisClient::newRedisClient(
+                trantor::InetAddress("127.0.0.1", 6379),
+                1
+            );
 
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
+            ASSERT_NE(s_redis_client, nullptr);
+            ASSERT_TRUE(WaitForRedisReady(s_redis_client));
+
+            RedisService::Initialize(s_redis_client);
+        }
+
+        void SetUp() override {
+            m_service = RedisService::GetInstance();
+            ASSERT_NE(m_service, nullptr);
+            m_key_prefix = "test:redis_service:" + drogon::utils::getUuid();
+        }
+
+        void TearDown() override {
+            for (const auto& key : m_tracked_keys) {
+                auto delete_result = drogon::sync_wait(m_service->Delete(key));
+                if (!delete_result.has_value() &&
+                    delete_result.error().code != Code::RedisKeyNotFound) {
+                    ADD_FAILURE() << "Redis cleanup failed for key: " << key;
+                }
+            }
+        }
+
+        auto TrackKey(const std::string& suffix) -> std::string {
+            auto key = m_key_prefix + ":" + suffix;
+            m_tracked_keys.push_back(key);
+            return key;
+        }
+
+        inline static drogon::nosql::RedisClientPtr s_redis_client;
+
+        std::shared_ptr<RedisService> m_service;
+        std::string m_key_prefix;
+        std::vector<std::string> m_tracked_keys;
+    };
+
+    TEST_F(RedisServiceRuntimeTest, PingRespondsWithPong) {
+        EXPECT_EQ(drogon::sync_wait(PingRedis(s_redis_client)), "PONG");
     }
 
-    TEST(RedisServiceTest, DISABLED_Exists) {
-        // 【需要 Redis 环境】Exists 操作测试
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试
-        // 测试步骤：
-        // 1. 创建 RedisService 实例
-        // 2. 调用 Exists 方法检查键是否存在
-        // 3. 验证返回的 bool
+    TEST_F(RedisServiceRuntimeTest, SetGetExistsDeleteRoundTrip) {
+        const auto key = TrackKey("roundtrip");
 
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
+        auto set_result = drogon::sync_wait(m_service->Set(key, "hello-redis"));
+        ASSERT_TRUE(set_result.has_value());
+
+        EXPECT_TRUE(drogon::sync_wait(m_service->Exists(key)));
+
+        auto get_result = drogon::sync_wait(m_service->Get(key));
+        ASSERT_TRUE(get_result.has_value());
+        EXPECT_EQ(get_result.value(), "hello-redis");
+
+        auto delete_result = drogon::sync_wait(m_service->Delete(key));
+        ASSERT_TRUE(delete_result.has_value());
+
+        EXPECT_FALSE(drogon::sync_wait(m_service->Exists(key)));
+
+        auto missing_result = drogon::sync_wait(m_service->Get(key));
+        ASSERT_FALSE(missing_result.has_value());
+        EXPECT_EQ(missing_result.error().code, Code::RedisKeyNotFound);
     }
 
-    TEST(RedisServiceTest, DISABLED_Expire) {
-        // 【需要 Redis 环境】Expire 操作测试
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试
-        // 测试步骤：
-        // 1. 创建 RedisService 实例
-        // 2. 先 Set 设置值
-        // 3. 调用 Expire 设置过期时间
-        // 4. 验证返回的 Result<void>
+    TEST_F(RedisServiceRuntimeTest, ExpireRemovesKeyAfterTtl) {
+        const auto key = TrackKey("expire");
 
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
+        auto set_result = drogon::sync_wait(m_service->Set(key, "expires"));
+        ASSERT_TRUE(set_result.has_value());
+
+        auto expire_result = drogon::sync_wait(m_service->Expire(key, 1));
+        ASSERT_TRUE(expire_result.has_value());
+
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+
+        EXPECT_FALSE(drogon::sync_wait(m_service->Exists(key)));
+
+        auto get_result = drogon::sync_wait(m_service->Get(key));
+        ASSERT_FALSE(get_result.has_value());
+        EXPECT_EQ(get_result.error().code, Code::RedisKeyNotFound);
     }
 
-    TEST(RedisServiceTest, DISABLED_RedisRequiredIncrNewKeyReturnsOne) {
-        // 【需要 Redis 环境】Incr 新键返回 1
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
-        // 测试步骤：
-        // 1. 创建 RedisService 实例
-        // 2. 对不存在的键调用 Incr 方法
-        // 3. 验证返回值为 1
-        // 4. 验证返回类型为 Result<long long>
+    TEST_F(RedisServiceRuntimeTest, IncrAndIncrByRoundTrip) {
+        const auto key = TrackKey("counter");
 
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
+        auto incr_result = drogon::sync_wait(m_service->Incr(key));
+        ASSERT_TRUE(incr_result.has_value());
+        EXPECT_EQ(incr_result.value(), 1);
+
+        auto incr_existing_result = drogon::sync_wait(m_service->Incr(key));
+        ASSERT_TRUE(incr_existing_result.has_value());
+        EXPECT_EQ(incr_existing_result.value(), 2);
+
+        auto incr_by_result = drogon::sync_wait(m_service->IncrBy(key, 10));
+        ASSERT_TRUE(incr_by_result.has_value());
+        EXPECT_EQ(incr_by_result.value(), 12);
+
+        auto decr_by_result = drogon::sync_wait(m_service->IncrBy(key, -3));
+        ASSERT_TRUE(decr_by_result.has_value());
+        EXPECT_EQ(decr_by_result.value(), 9);
+
+        auto get_result = drogon::sync_wait(m_service->Get(key));
+        ASSERT_TRUE(get_result.has_value());
+        EXPECT_EQ(get_result.value(), "9");
     }
 
-    TEST(RedisServiceTest, DISABLED_RedisRequiredIncrExistingKeyIncrementsValue) {
-        // 【需要 Redis 环境】Incr 现有键递增值
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
-        // 测试步骤：
-        // 1. 创建 RedisService 实例
-        // 2. 先使用 Set 设置键的初始值
-        // 3. 调用 Incr 方法递增键值
-        // 4. 验证返回值为初始值 + 1
+    TEST_F(RedisServiceRuntimeTest, IncrWithExpireAtomicallyIncrsAndSetsExpiry) {
+        const auto key = TrackKey("rate_limit_test");
+        const int window_seconds = 60;
 
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
-    }
+        auto result1 = drogon::sync_wait(m_service->IncrWithExpire(key, window_seconds));
+        ASSERT_TRUE(result1.has_value());
+        EXPECT_EQ(result1.value(), 1);
 
-    TEST(RedisServiceTest, DISABLED_RedisRequiredIncrByAddsSpecifiedAmount) {
-        // 【需要 Redis 环境】IncrBy 增加指定数量
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
-        // 测试步骤：
-        // 1. 创建 RedisService 实例
-        // 2. 先使用 Set 设置键的初始值
-        // 3. 调用 IncrBy(key, 10) 方法增加指定数量
-        // 4. 验证返回值为初始值 + 10
+        auto result2 = drogon::sync_wait(m_service->IncrWithExpire(key, window_seconds));
+        ASSERT_TRUE(result2.has_value());
+        EXPECT_EQ(result2.value(), 2);
 
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
-    }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    TEST(RedisServiceTest, DISABLED_RedisRequiredIncrByNegativeDecrementsValue) {
-        // 【需要 Redis 环境】IncrBy 负数减少值
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
-        // 测试步骤：
-        // 1. 创建 RedisService 实例
-        // 2. 先使用 Set 设置键的初始值为 10
-        // 3. 调用 IncrBy(key, -3) 方法减少指定数量
-        // 4. 验证返回值为 7
-
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
+        EXPECT_TRUE(drogon::sync_wait(m_service->Exists(key)));
     }
 
     TEST(RedisServiceTest, MethodSignatures) {

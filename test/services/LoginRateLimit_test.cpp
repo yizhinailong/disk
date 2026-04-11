@@ -1,102 +1,44 @@
 /**
  * @file LoginRateLimit_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief 登录频率限制单元测试
+ * @brief 登录频率限制契约测试
  *
  * @copyright Copyright (c) 2026
  *
  */
 
+#include <string>
+
 #include <gtest/gtest.h>
+
+#include "utils/ErrorCode.hpp"
+#include "utils/RedisKeyPrefix.hpp"
 
 namespace {
 
-    TEST(LoginRateLimit, DISABLED_RedisRequiredFourAttemptsAllowed) {
-        // 【需要 Redis 环境】4 次登录尝试允许通过
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
-        // 测试步骤：
-        // 1. 创建 AuthService 实例
-        // 2. 模拟同一 IP 地址的 4 次登录尝试
-        // 3. 验证前 4 次尝试都成功返回（未被频率限制阻止）
-        // 4. 验证 Redis 计数器值为 4
+    using disk::error::Code;
+    using disk::redis::RedisKeyPrefix;
 
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
+    TEST(LoginRateLimit, TooManyRequestsMapsToHttp429) {
+        EXPECT_EQ(disk::error::GetHttpStatus(Code::TooManyRequests), drogon::k429TooManyRequests);
     }
 
-    TEST(LoginRateLimit, DISABLED_RedisRequiredFiveAttemptsBlocked) {
-        // 【需要 Redis 环境】5 次登录尝试被阻止
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
-        // 测试步骤：
-        // 1. 创建 AuthService 实例
-        // 2. 模拟同一 IP 地址的 5 次登录尝试
-        // 3. 验证第 5 次尝试返回 TooManyRequests 错误
-        // 4. 验证错误消息为"登录尝试过于频繁，请 5 分钟后重试"
-
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
+    TEST(LoginRateLimit, TooManyRequestsDefaultMessageIsStable) {
+        EXPECT_EQ(disk::error::GetErrorMessage(Code::TooManyRequests), std::string("Too many requests"));
     }
 
-    TEST(LoginRateLimit, DISABLED_RedisRequiredAfterResetAllowed) {
-        // 【需要 Redis 环境】5 分钟后重置允许登录
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
-        // 测试步骤：
-        // 1. 创建 AuthService 实例
-        // 2. 模拟同一 IP 地址的 5 次登录尝试（触发限制）
-        // 3. 等待 5 分钟（或模拟 TTL 过期）
-        // 4. 再次尝试登录
-        // 5. 验证新尝试成功（未被频率限制阻止）
-
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
+    TEST(LoginRateLimit, BuildLoginRateLimitKeyNormalizesIpv4SourcePort) {
+        EXPECT_EQ(
+            RedisKeyPrefix::BuildLoginRateLimitKey("127.0.0.11:54321"),
+            std::string("rate:login:127.0.0.11")
+        );
     }
 
-    TEST(LoginRateLimit, DISABLED_RedisRequiredSuccessClearsCounter) {
-        // 【需要 Redis 环境】成功登录清除计数器
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
-        // 测试步骤：
-        // 1. 创建 AuthService 实例
-        // 2. 模拟同一 IP 地址的 3 次失败登录尝试
-        // 3. 模拟一次成功登录
-        // 4. 验证 Redis 计数器被清除（值为 0 或不存在）
-        // 5. 立即再次尝试登录应被允许（因为计数器已清除）
-
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
-    }
-
-    TEST(LoginRateLimit, DISABLED_RedisRequiredDifferentIPsIndependent) {
-        // 【需要 Redis 环境】不同 IP 地址独立计数
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
-        // 测试步骤：
-        // 1. 创建 AuthService 实例
-        // 2. 模拟 IP1 的 5 次登录尝试（触发限制）
-        // 3. 模拟 IP2 的登录尝试
-        // 4. 验证 IP2 的尝试成功（不受 IP1 限制影响）
-        // 5. 验证 Redis 中有两个独立的计数器键
-
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
-    }
-
-    TEST(LoginRateLimit, DISABLED_RedisRequiredRedisDownFailsOpen) {
-        // 【需要 Redis 环境】Redis 宕机时允许登录（Fail-Open）
-        // 此测试需要实际 Redis 连接才能运行
-        // 跳过原因：单元测试无法创建有效的 Drogon Redis 客户端
-        // TODO(liufeng): 在集成测试中运行此测试（需要完整的 Drogon 应用环境）
-        // 测试步骤：
-        // 1. 创建 AuthService 实例
-        // 2. 模拟 Redis 连接失败场景
-        // 3. 尝试登录（即使超过 5 次）
-        // 4. 验证登录成功（Redis 失败不阻止登录）
-        // 5. 验证日志中有警告消息记录 Redis 失败
-
-        SUCCEED() << "测试已跳过：需要 Redis 环境";
+    TEST(LoginRateLimit, BuildLoginRateLimitKeyKeepsDifferentLoopbackIpsIndependent) {
+        EXPECT_NE(
+            RedisKeyPrefix::BuildLoginRateLimitKey("127.0.0.11:54321"),
+            RedisKeyPrefix::BuildLoginRateLimitKey("127.0.0.12:54321")
+        );
     }
 
 } // namespace

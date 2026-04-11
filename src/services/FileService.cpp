@@ -9,11 +9,13 @@
 
 #include "FileService.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 
+#include <drogon/drogon.h>
 #include <drogon/utils/Utilities.h>
 #include <json/writer.h>
 
@@ -62,6 +64,7 @@ namespace disk::file {
 
     FileService::FileService(drogon::orm::DbClientPtr db_client, storage::IFileStorage* storage)
         : m_db_client(std::move(db_client)), m_storage(storage) {
+        StartUploadTaskCacheMaintenance();
         LOG_DEBUG << "FileService initialization completed";
     }
 
@@ -152,6 +155,7 @@ namespace disk::file {
         if (existing_task.has_value()) {
             const auto& task = existing_task.value();
             LOG_INFO << "Resume upload check successful: upload_id=" << task.getValueOfId();
+            InvalidateUploadTaskCache(task.getValueOfId());
 
             // 从 upload_task_chunks 表查询已上传分片
             auto chunk_result = co_await m_db_client->execSqlCoro(
@@ -212,6 +216,7 @@ namespace disk::file {
 
             LOG_INFO << "Upload task created successfully: upload_id=" << task.getValueOfId()
                      << ", total_chunks=" << total_chunks;
+            InvalidateUploadTaskCache(task.getValueOfId());
 
             // 预创建临时上传目录，避免每个分片写入时重复创建
             auto ensure_result = co_await m_storage->EnsureUploadTempDir(task.getValueOfId());
@@ -256,31 +261,68 @@ namespace disk::file {
         uint64_t user_id
     ) -> drogon::Task<Result<UploadChunkResponse>> {
 
+        auto start = std::chrono::steady_clock::now();
+
         LOG_DEBUG << "Starting upload chunk: upload_id=" << upload_id
                   << ", chunk_index=" << chunk_index << ", chunk_hash=" << chunk_hash
                   << ", data_size=" << chunk_data.size();
 
-        // 1. 查找并验证上传任务
-        auto task_result = co_await FindUploadTask(upload_id, user_id);
-        if (!task_result) {
-            LOG_WARN << "Upload task verification failed: " << upload_id;
-            co_return std::unexpected(task_result.error());
+        // 1. 优先读取短 TTL 上传任务缓存，命中后避免重复查询数据库
+        auto cached_task = TryGetUploadTaskCacheEntry(upload_id, user_id);
+        if (!cached_task.has_value()) {
+            auto task_result = co_await FindUploadTask(upload_id, user_id);
+            if (!task_result) {
+                LOG_WARN << "Upload task verification failed: " << upload_id;
+
+                auto end = std::chrono::steady_clock::now();
+                auto duration_us =
+                    std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+                LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+                         << " outcome=failure upload_id=" << upload_id
+                         << " chunk_index=" << chunk_index
+                         << " data_size=" << chunk_data.size();
+
+                co_return std::unexpected(task_result.error());
+            }
+
+            auto cache_entry = BuildUploadTaskCacheEntry(task_result.value());
+            CacheUploadTaskEntry(upload_id, cache_entry);
+            cached_task = std::move(cache_entry);
         }
 
-        const auto& task = task_result.value();
+        const auto& task = cached_task.value();
 
         // 2. 验证任务未过期
-        if (task.getValueOfExpiresAt() < trantor::Date::now()) {
+        if (task.expires_at < trantor::Date::now()) {
             LOG_WARN << "Upload task expired: " << upload_id;
+            InvalidateUploadTaskCache(upload_id);
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+                     << " outcome=failure upload_id=" << upload_id
+                     << " chunk_index=" << chunk_index
+                     << " data_size=" << chunk_data.size();
+
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::UploadTaskNotFound, "Upload task expired")
             );
         }
 
         // 3. 验证分片索引有效
-        if (chunk_index >= task.getValueOfTotalChunks()) {
+        if (chunk_index >= task.total_chunks) {
             LOG_WARN << "Chunk index out of range: chunk_index=" << chunk_index
-                     << ", total_chunks=" << task.getValueOfTotalChunks();
+                     << ", total_chunks=" << task.total_chunks;
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+                     << " outcome=failure upload_id=" << upload_id
+                     << " chunk_index=" << chunk_index
+                     << " data_size=" << chunk_data.size();
+
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ValidationFailed, "Chunk index out of range")
             );
@@ -291,6 +333,15 @@ namespace disk::file {
         if (actual_hash != chunk_hash) {
             LOG_WARN << "Chunk hash mismatch: expected=" << chunk_hash
                      << ", actual=" << actual_hash;
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+                     << " outcome=failure upload_id=" << upload_id
+                     << " chunk_index=" << chunk_index
+                     << " data_size=" << chunk_data.size();
+
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ChunkVerifyFailed, "Chunk hash mismatch")
             );
@@ -302,6 +353,15 @@ namespace disk::file {
             LOG_ERROR << "Failed to write chunk file: upload_id=" << upload_id
                       << ", chunk_index=" << chunk_index << ", error="
                       << static_cast<int>(write_result.error().code);
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+                     << " outcome=failure upload_id=" << upload_id
+                     << " chunk_index=" << chunk_index
+                     << " data_size=" << chunk_data.size();
+
             co_return std::unexpected(write_result.error());
         }
 
@@ -316,6 +376,14 @@ namespace disk::file {
             LOG_DEBUG << "Chunk upload successful: upload_id=" << upload_id
                       << ", chunk_index=" << chunk_index;
 
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+                     << " outcome=success upload_id=" << upload_id
+                     << " chunk_index=" << chunk_index
+                     << " data_size=" << chunk_data.size();
+
             UploadChunkResponse response;
             response.chunk_index = chunk_index;
             response.uploaded = true;
@@ -324,6 +392,15 @@ namespace disk::file {
 
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "Failed to record chunk upload: " << e.base().what();
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+                     << " outcome=failure upload_id=" << upload_id
+                     << " chunk_index=" << chunk_index
+                     << " data_size=" << chunk_data.size();
+
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to record chunk upload")
             );
@@ -335,12 +412,21 @@ namespace disk::file {
     auto FileService::CompleteUpload(std::string upload_id, uint64_t user_id)
         -> drogon::Task<Result<CompleteUploadResponse>> {
 
+        auto start = std::chrono::steady_clock::now();
+
         LOG_DEBUG << "Starting complete upload: upload_id=" << upload_id << ", user_id=" << user_id;
 
         // 1. 查找并验证上传任务
         auto task_result = co_await FindUploadTask(upload_id, user_id);
         if (!task_result) {
             LOG_WARN << "Upload task verification failed: " << upload_id;
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+                     << " outcome=failure upload_id=" << upload_id;
+
             co_return std::unexpected(task_result.error());
         }
 
@@ -349,23 +435,60 @@ namespace disk::file {
         // 2. Check idempotency: already completed
         if (task.getValueOfStatus() == 1) {
             LOG_INFO << "Upload task already completed: upload_id=" << upload_id;
-            // Return success without re-running file creation flow
+            InvalidateUploadTaskCache(upload_id);
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+                     << " outcome=success upload_id=" << upload_id
+                     << " total_chunks=" << task.getValueOfTotalChunks();
+
             co_return CompleteUploadResponse{};
         }
 
-        // 3. 验证所有分片已上传
-        auto chunk_count_result = co_await m_db_client->execSqlCoro(
-            "SELECT COUNT(*) AS cnt FROM upload_task_chunks WHERE task_id = ?",
+        // 3. 用一次有序分片索引查询同时验证数量与连续性
+        auto uploaded_chunks_result = co_await m_db_client->execSqlCoro(
+            "SELECT chunk_index FROM upload_task_chunks WHERE task_id = ? ORDER BY chunk_index",
             upload_id
         );
-        auto uploaded_count = chunk_count_result.empty() ? 0 : static_cast<size_t>(chunk_count_result[0]["cnt"].as<int64_t>());
+        auto uploaded_count = uploaded_chunks_result.size();
 
         if (uploaded_count != task.getValueOfTotalChunks()) {
             LOG_WARN << "Not all chunks uploaded: uploaded=" << uploaded_count
                      << ", total=" << task.getValueOfTotalChunks();
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+                     << " outcome=failure upload_id=" << upload_id
+                     << " total_chunks=" << task.getValueOfTotalChunks();
+
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ValidationFailed, "Not all chunks uploaded")
             );
+        }
+
+        for (uint32_t expected_index = 0; expected_index < task.getValueOfTotalChunks();
+             ++expected_index) {
+            auto actual_index = uploaded_chunks_result[expected_index]["chunk_index"].as<uint32_t>();
+            if (actual_index != expected_index) {
+                LOG_WARN << "Uploaded chunks are not contiguous: upload_id=" << upload_id
+                         << ", expected_index=" << expected_index
+                         << ", actual_index=" << actual_index;
+
+                auto end = std::chrono::steady_clock::now();
+                auto duration_us =
+                    std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+                LOG_INFO << "[complete_upload] duration_us=" << duration_us
+                         << " outcome=failure upload_id=" << upload_id
+                         << " total_chunks=" << task.getValueOfTotalChunks();
+
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Not all chunks uploaded")
+                );
+            }
         }
 
         // 3. 组装分片（同时计算 MD5 + SHA256）
@@ -373,6 +496,14 @@ namespace disk::file {
         if (!assemble_result) {
             LOG_ERROR << "Failed to assemble chunks: upload_id=" << upload_id
                       << ", error=" << static_cast<int>(assemble_result.error().code);
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+                     << " outcome=failure upload_id=" << upload_id
+                     << " total_chunks=" << task.getValueOfTotalChunks();
+
             co_return std::unexpected(assemble_result.error());
         }
         const auto& assembled = assemble_result.value();
@@ -389,6 +520,14 @@ namespace disk::file {
                 LOG_WARN << "Failed to cleanup assemble file after hash mismatch: "
                          << static_cast<int>(delete_result.error().code);
             }
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+                     << " outcome=failure upload_id=" << upload_id
+                     << " total_chunks=" << task.getValueOfTotalChunks();
+
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ChunkVerifyFailed, "File hash verification failed")
             );
@@ -403,6 +542,14 @@ namespace disk::file {
                 LOG_WARN << "Failed to cleanup assemble file on duplicate name: "
                          << static_cast<int>(delete_result.error().code);
             }
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+                     << " outcome=failure upload_id=" << upload_id
+                     << " total_chunks=" << task.getValueOfTotalChunks();
+
             co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
         }
 
@@ -428,6 +575,14 @@ namespace disk::file {
                     LOG_WARN << "Failed to cleanup assemble file after promote failure: "
                              << static_cast<int>(cleanup_result.error().code);
                 }
+
+                auto end = std::chrono::steady_clock::now();
+                auto duration_us =
+                    std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+                LOG_INFO << "[complete_upload] duration_us=" << duration_us
+                         << " outcome=failure upload_id=" << upload_id
+                         << " total_chunks=" << task.getValueOfTotalChunks();
+
                 co_return std::unexpected(promote_result.error());
             }
 
@@ -538,12 +693,21 @@ namespace disk::file {
                               << final_storage_path;
                 }
             }
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+                     << " outcome=failure upload_id=" << upload_id
+                     << " total_chunks=" << task.getValueOfTotalChunks();
+
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Database operation failed")
             );
         }
 
         LOG_INFO << "Files record created successfully: file_id=" << file.getValueOfId();
+        InvalidateUploadTaskCache(upload_id);
 
         // 7. Cleanup temp directory
         auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
@@ -564,10 +728,15 @@ namespace disk::file {
         LOG_INFO << "File upload completed: file_id=" << file.getValueOfId()
                  << ", filename=" << task.getValueOfFilename();
 
+        auto end = std::chrono::steady_clock::now();
+        auto duration_us =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        LOG_INFO << "[complete_upload] duration_us=" << duration_us
+                 << " outcome=success upload_id=" << upload_id
+                 << " total_chunks=" << task.getValueOfTotalChunks();
+
         co_return response;
     }
-
-    // ==================== CancelUpload ====================
 
     auto FileService::CancelUpload(std::string upload_id, uint64_t user_id)
         -> drogon::Task<Result<void>> {
@@ -598,6 +767,7 @@ namespace disk::file {
                 "UPDATE upload_tasks SET status = 2, finalized_at = NOW(), " "fail_reason = '用户取消' WHERE id = ? AND status = 0",
                 upload_id
             );
+            InvalidateUploadTaskCache(upload_id);
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "Failed to set cancel terminal state: " << e.base().what();
             co_return std::unexpected(
@@ -1850,6 +2020,85 @@ namespace disk::file {
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "Failed to query upload task: " << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
+        }
+    }
+
+    auto FileService::BuildUploadTaskCacheEntry(const UploadTasks& task) -> UploadTaskCacheEntry {
+        return UploadTaskCacheEntry{ .user_id = task.getValueOfUserId(),
+                                     .total_chunks = task.getValueOfTotalChunks(),
+                                     .expires_at = task.getValueOfExpiresAt(),
+                                     .status = task.getValueOfStatus(),
+                                     .file_hash = task.getValueOfFileHash(),
+                                     .filename = task.getValueOfFilename(),
+                                     .parent_id = task.getValueOfFolderId(),
+                                     .cache_expires_at = std::chrono::steady_clock::now() + UPLOAD_TASK_CACHE_TTL };
+    }
+
+    auto FileService::TryGetUploadTaskCacheEntry(const std::string& upload_id, uint64_t user_id)
+        -> std::optional<UploadTaskCacheEntry> {
+
+        const auto now = std::chrono::steady_clock::now();
+        {
+            // 读路径使用共享锁，降低高频分片上传之间的锁竞争。
+            std::shared_lock<std::shared_mutex> lock(m_upload_task_cache_mutex);
+            auto it = m_upload_task_cache.find(upload_id);
+            if (it == m_upload_task_cache.end()) {
+                return std::nullopt;
+            }
+
+            if (it->second.cache_expires_at > now && it->second.user_id == user_id) {
+                return it->second;
+            }
+
+            if (it->second.cache_expires_at > now) {
+                return std::nullopt;
+            }
+        }
+
+        // 仅在确认缓存过期后切换到写锁做清理，避免读路径长时间持有独占锁。
+        std::unique_lock<std::shared_mutex> lock(m_upload_task_cache_mutex);
+        auto it = m_upload_task_cache.find(upload_id);
+        if (it == m_upload_task_cache.end()) {
+            return std::nullopt;
+        }
+        if (it->second.cache_expires_at <= now) {
+            m_upload_task_cache.erase(it);
+        }
+        return std::nullopt;
+    }
+
+    auto FileService::CacheUploadTaskEntry(const std::string& upload_id, UploadTaskCacheEntry entry)
+        -> void {
+
+        std::unique_lock<std::shared_mutex> lock(m_upload_task_cache_mutex);
+        m_upload_task_cache[upload_id] = std::move(entry);
+    }
+
+    auto FileService::InvalidateUploadTaskCache(const std::string& upload_id) -> void {
+        std::unique_lock<std::shared_mutex> lock(m_upload_task_cache_mutex);
+        m_upload_task_cache.erase(upload_id);
+    }
+
+    auto FileService::StartUploadTaskCacheMaintenance() -> void {
+        if (auto* loop = drogon::app().getLoop(); loop != nullptr) {
+            loop->runEvery(
+                UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS,
+                [this]() { EvictExpiredUploadTaskCacheEntries(); }
+            );
+            LOG_DEBUG << "Upload task cache maintenance timer started (interval="
+                      << UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS << "s)";
+        }
+    }
+
+    auto FileService::EvictExpiredUploadTaskCacheEntries() -> void {
+        const auto now = std::chrono::steady_clock::now();
+        std::unique_lock<std::shared_mutex> lock(m_upload_task_cache_mutex);
+        for (auto it = m_upload_task_cache.begin(); it != m_upload_task_cache.end();) {
+            if (it->second.cache_expires_at <= now) {
+                it = m_upload_task_cache.erase(it);
+            } else {
+                ++it;
+            }
         }
     }
 
