@@ -1206,6 +1206,7 @@ namespace disk::file {
                 continue;
             }
 
+            // ── 读取阶段（事务外）：名称冲突检查 ──
             std::vector<std::string> candidate_names;
             candidate_names.reserve(chunk.size());
             for (const auto& [old_id, file] : chunk) {
@@ -1270,7 +1271,8 @@ namespace disk::file {
                 pending_items.push_back({ .old_id = old_id, .file = file });
             }
 
-            std::unordered_set<uint64_t> missing_content_ids;
+            // ── 读取阶段（事务外）：内容存在性校验 ──
+            std::unordered_set<uint64_t> existing_content_ids;
             if (!content_ref_increment.empty()) {
                 std::vector<uint64_t> content_ids;
                 content_ids.reserve(content_ref_increment.size());
@@ -1279,7 +1281,6 @@ namespace disk::file {
                 }
 
                 auto content_in_clause = BatchUtils::BuildNumericInClause(content_ids);
-                std::unordered_set<uint64_t> existing_content_ids;
                 existing_content_ids.reserve(content_ids.size());
 
                 try {
@@ -1294,17 +1295,12 @@ namespace disk::file {
                              << e.base().what();
                     continue;
                 }
+            }
 
-                auto incremented_ids = co_await IncrementContentRefCount(
-                    m_db_client,
-                    content_ref_increment,
-                    existing_content_ids
-                );
-
-                for (const auto& [content_id, _] : content_ref_increment) {
-                    if (!incremented_ids.contains(content_id)) {
-                        missing_content_ids.insert(content_id);
-                    }
+            std::unordered_set<uint64_t> missing_content_ids;
+            for (const auto& [content_id, _] : content_ref_increment) {
+                if (!existing_content_ids.contains(content_id)) {
+                    missing_content_ids.insert(content_id);
                 }
             }
 
@@ -1320,25 +1316,78 @@ namespace disk::file {
                 valid_items.emplace_back(pending.old_id, &pending.file);
             }
 
+            // ── 事务阶段：ref_count 递增 + 文件行插入，原子提交/回滚 ──
             if (!valid_items.empty()) {
                 std::unordered_map<uint64_t, uint64_t> old_id_to_size;
                 for (const auto& [old_id, file_ptr] : valid_items) {
                     old_id_to_size[old_id] = file_ptr->getValueOfSize();
                 }
 
-                auto id_mappings = co_await InsertCopiedFiles(
-                    m_db_client,
-                    user_id,
-                    request.target_folder_id,
-                    valid_items
-                );
+                std::shared_ptr<drogon::orm::Transaction> txn;
+                bool batch_failed = false;
+                try {
+                    txn = co_await m_db_client->newTransactionCoro();
 
-                for (const auto& [old_id, new_id] : id_mappings) {
-                    ++copied_count;
-                    actual_copy_size += old_id_to_size[old_id];
-                    new_files.push_back({ .old_id = old_id, .new_id = new_id });
-                    LOG_DEBUG << "File copy successful: old_id=" << old_id
-                              << ", new_id=" << new_id;
+                    auto incremented_ids = co_await IncrementContentRefCount(
+                        txn,
+                        content_ref_increment,
+                        existing_content_ids
+                    );
+
+                    // 重新校验：仅保留实际成功递增 ref_count 的条目
+                    std::vector<std::pair<uint64_t, const Files*>> txn_valid_items;
+                    txn_valid_items.reserve(valid_items.size());
+                    for (const auto& [old_id, file_ptr] : valid_items) {
+                        auto cid = file_ptr->getContentId();
+                        if (cid && !incremented_ids.contains(*cid)) {
+                            LOG_WARN << "Content ref_count increment skipped in txn, dropping file: content_id="
+                                     << *cid;
+                            continue;
+                        }
+                        txn_valid_items.emplace_back(old_id, file_ptr);
+                    }
+
+                    auto id_mappings = co_await InsertCopiedFiles(
+                        txn,
+                        user_id,
+                        request.target_folder_id,
+                        txn_valid_items
+                    );
+
+                    // 事务自动提交（协程正常完成）
+
+                    for (const auto& [old_id, new_id] : id_mappings) {
+                        ++copied_count;
+                        actual_copy_size += old_id_to_size[old_id];
+                        new_files.push_back({ .old_id = old_id, .new_id = new_id });
+                        LOG_DEBUG << "File copy successful: old_id=" << old_id
+                                  << ", new_id=" << new_id;
+                    }
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_ERROR << "Copy batch transaction failed (DB): " << e.base().what();
+                    if (txn) {
+                        try {
+                            txn->rollback();
+                        } catch (const std::exception& rb_e) {
+                            LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                        }
+                    }
+                    batch_failed = true;
+                } catch (const std::exception& e) {
+                    LOG_ERROR << "Copy batch transaction failed: " << e.what();
+                    if (txn) {
+                        try {
+                            txn->rollback();
+                        } catch (const std::exception& rb_e) {
+                            LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                        }
+                    }
+                    batch_failed = true;
+                }
+
+                if (batch_failed) {
+                    LOG_WARN << "Copy batch rolled back, skipping "
+                             << valid_items.size() << " files in this chunk";
                 }
             }
         }
