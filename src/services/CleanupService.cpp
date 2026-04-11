@@ -23,6 +23,7 @@
 #include "models/Trash.hpp"
 #include "models/UploadTasks.hpp"
 #include "models/Users.hpp"
+#include "services/TrashContentIdResolver.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/BatchUtils.hpp"
 
@@ -124,23 +125,33 @@ namespace disk::services {
                         content_ids.reserve(chunk.size());
 
                         for (const auto& item : chunk) {
+                            if (item.item_type == "file") {
+                                auto content_id_result =
+                                    trash_content_internal::ResolveRequiredContentId(
+                                        item.content_id,
+                                        item.item_data
+                                    );
+                                if (!content_id_result.has_value()) {
+                                    LOG_WARN << "Skip expired trash cleanup for legacy row without valid content_id: trash_id="
+                                             << item.id << ", user_id=" << item.user_id;
+                                    continue;
+                                }
+
+                                if (content_id_result->source ==
+                                    trash_content_internal::ContentIdSource::ItemData) {
+                                    LOG_DEBUG << "Resolved legacy trash content_id from item_data during cleanup: trash_id="
+                                              << item.id << ", content_id=" << content_id_result->value;
+                                }
+
+                                content_ids.push_back(content_id_result->value);
+                            }
+
                             trash_ids.push_back(item.id);
                             chunk_user_storage_delta[item.user_id] -= static_cast<int64_t>(item.item_size);
+                        }
 
-                            if (item.item_type != "file") {
-                                continue;
-                            }
-
-                            if (item.content_id.has_value()) {
-                                content_ids.push_back(item.content_id.value());
-                                continue;
-                            }
-
-                            Json::Value item_data;
-                            Json::Reader reader;
-                            if (reader.parse(item.item_data, item_data) && item_data.isMember("content_id")) {
-                                content_ids.push_back(item_data["content_id"].asUInt64());
-                            }
+                        if (trash_ids.empty()) {
+                            continue;
                         }
 
                         if (!content_ids.empty()) {

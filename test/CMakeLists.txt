@@ -26,7 +26,9 @@ set(TEST_SOURCES
     services/TrashServiceBatch_test.cpp
     services/UserService_test.cpp
     services/CleanupService_test.cpp
+    services/SystemService_test.cpp
     services/OperationLogJsonDetails_test.cpp
+    services/OperationLogService_test.cpp
     filters/ShareAuthFilter_test.cpp
     filters/JwtAuthFilter_test.cpp
     dtos/AuthDto_test.cpp

@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include "services/TrashContentIdResolver.hpp"
 #include "utils/BatchUtils.hpp"
 
 namespace disk::services {
@@ -23,6 +24,28 @@ namespace disk::services {
         TEST(CleanupServiceBuildNumericInClauseTest, MultipleIdsReturnCommaSeparatedClause) {
             const std::vector<uint64_t> ids{ 1, 42, 500, 999999 };
             EXPECT_EQ(cleanup_internal::BuildNumericInClause(ids), "1,42,500,999999");
+        }
+
+        TEST(CleanupServiceLegacyContentIdTest, CleanupResolvesContentIdFromLegacyItemDataWhenColumnIsNull) {
+            auto result = trash_content_internal::ResolveRequiredContentId(
+                std::nullopt,
+                R"({"content_id":987,"mime_type":"text/plain"})"
+            );
+
+            ASSERT_TRUE(result.has_value());
+            EXPECT_EQ(result->value, 987U);
+            EXPECT_EQ(result->source, trash_content_internal::ContentIdSource::ItemData);
+        }
+
+        TEST(CleanupServiceLegacyContentIdTest, CleanupRejectsLegacyRowWithoutRecoverableContentId) {
+            auto result = trash_content_internal::ResolveRequiredContentId(
+                std::nullopt,
+                R"({"mime_type":"text/plain"})"
+            );
+
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+            EXPECT_EQ(result.error().message, "Trash item is missing valid content_id");
         }
 
         TEST(CleanupServiceBatchingTest, CursorAdvancesPastAllRowsInMultiplePages) {

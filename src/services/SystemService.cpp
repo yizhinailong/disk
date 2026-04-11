@@ -70,9 +70,10 @@ namespace disk::system {
             }
 
             // 获取文件总数和总大小
+            // files 表只含活跃数据（删除操作会将行移至 trash 表），无需 WHERE 过滤
             auto files_result =
                 co_await m_db_client->execSqlCoro(
-                    "SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as total_size FROM files " "WHERE " "deleted_at IS NULL"
+                    "SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as total_size FROM files"
                 );
             if (!files_result.empty()) {
                 stats.total_files = files_result[0]["count"].as<int64_t>();
@@ -80,8 +81,9 @@ namespace disk::system {
             }
 
             // 获取文件夹总数
+            // folders 表只含活跃数据（删除操作会将行移至 trash 表），无需 WHERE 过滤
             auto folders_result = co_await m_db_client->execSqlCoro(
-                "SELECT COUNT(*) as count FROM folders WHERE deleted_at IS NULL"
+                "SELECT COUNT(*) as count FROM folders"
             );
             if (!folders_result.empty()) {
                 stats.total_folders = folders_result[0]["count"].as<int64_t>();

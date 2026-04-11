@@ -36,9 +36,7 @@ namespace disk::log {
             if (!entry.details.empty()) {
                 log.setDetails(entry.details);
             }
-            if (!entry.ip_address.empty()) {
-                log.setIpAddress(entry.ip_address);
-            }
+            log.setIpAddress(NormalizeIpAddress(entry.ip_address));
             if (!entry.user_agent.empty()) {
                 log.setUserAgent(entry.user_agent);
             }

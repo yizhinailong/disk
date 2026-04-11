@@ -14,16 +14,16 @@
 #
 # Environment variables:
 #   BASE_URL    - Server URL (default: http://localhost:8080)
-#   TEST_USER   - Test username (default: testuser)
-#   TEST_PASS   - Test password (default: TestPass123)
+#   TEST_USER   - Test username (default: admin)
+#   TEST_PASS   - Test password (default: Admin123)
 #
 
 set -e
 
 # Configuration
 BASE_URL="${BASE_URL:-http://localhost:8080}"
-TEST_USER="${TEST_USER:-testuser}"
-TEST_PASS="${TEST_PASS:-TestPass123}"
+TEST_USER="${TEST_USER:-admin}"
+TEST_PASS="${TEST_PASS:-Admin123}"
 EVIDENCE_DIR=".sisyphus/evidence"
 
 # Colors
@@ -59,6 +59,39 @@ save_evidence() {
     log_info "Evidence saved: $name.json"
 }
 
+# Parse JSON field using python3 (no jq dependency)
+json_field() {
+    local json="$1"
+    local path="$2"
+
+    JSON_INPUT="$json" python3 - "$path" <<'PY'
+import json
+import os
+import sys
+
+try:
+    data = json.loads(os.environ["JSON_INPUT"])
+except Exception:
+    print("")
+    raise SystemExit(0)
+
+value = data
+for part in sys.argv[1].split('.'):
+    if isinstance(value, dict) and part in value:
+        value = value[part]
+    else:
+        print("")
+        raise SystemExit(0)
+
+if isinstance(value, bool):
+    print("true" if value else "false")
+elif value is None:
+    print("")
+else:
+    print(value)
+PY
+}
+
 # Check server health
 check_server() {
     log_info "Checking server at $BASE_URL..."
@@ -79,9 +112,9 @@ login() {
     response=$(curl -s -X POST "$BASE_URL/api/auth/login" \
         -H "Content-Type: application/json" \
         -d "{\"account\":\"$TEST_USER\",\"password\":\"$TEST_PASS\"}")
-    
-    TOKEN=$(echo "$response" | jq -r '.data.access_token // empty')
-    
+
+    TOKEN=$(json_field "$response" "data.access_token")
+
     if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
         log_fail "Login failed"
         echo "$response"
@@ -96,7 +129,7 @@ login() {
 # Test 4.1: Init Upload - Normal
 test_init_upload_normal() {
     log_info "Testing Init Upload (normal)..."
-    
+
     local response
     response=$(curl -s -X POST "$BASE_URL/api/file/upload/init" \
         -H "Authorization: Bearer $TOKEN" \
@@ -104,15 +137,15 @@ test_init_upload_normal() {
         -d '{
             "filename": "test_document.pdf",
             "file_size": 10485760,
-            "file_hash": "abc123def456789012345678901234ab",
+            "file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             "parent_id": 0
         }')
-    
+
     local instant_upload
-    instant_upload=$(echo "$response" | jq -r '.data.instant_upload // empty')
+    instant_upload=$(json_field "$response" "data.instant_upload")
     local upload_id
-    upload_id=$(echo "$response" | jq -r '.data.upload_id // empty')
-    
+    upload_id=$(json_field "$response" "data.upload_id")
+
     if [ "$instant_upload" = "false" ] && [ -n "$upload_id" ]; then
         log_pass "Init Upload (normal) - upload_id: $upload_id"
         UPLOAD_ID="$upload_id"
@@ -128,7 +161,7 @@ test_init_upload_normal() {
 # Test 4.1: Init Upload - Quota Exceeded
 test_init_upload_quota() {
     log_info "Testing Init Upload (quota exceeded)..."
-    
+
     local response
     response=$(curl -s -X POST "$BASE_URL/api/file/upload/init" \
         -H "Authorization: Bearer $TOKEN" \
@@ -136,13 +169,13 @@ test_init_upload_quota() {
         -d '{
             "filename": "huge_file.pdf",
             "file_size": 999999999999,
-            "file_hash": "xyz123def456789012345678901234ab",
+            "file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             "parent_id": 0
         }')
-    
+
     local code
-    code=$(echo "$response" | jq -r '.code // empty')
-    
+    code=$(json_field "$response" "code")
+
     if [ "$code" = "50004" ]; then
         log_pass "Init Upload (quota exceeded) - code: $code"
         save_evidence "init-upload-quota" "$response"
@@ -171,7 +204,7 @@ test_upload_chunk() {
         --data-binary "@$chunk_file")
 
     local uploaded
-    uploaded=$(echo "$response" | jq -r '.data.uploaded // empty')
+    uploaded=$(json_field "$response" "data.uploaded")
 
     rm -f "$chunk_file"
 
@@ -193,10 +226,10 @@ test_cancel_upload() {
     local response
     response=$(curl -s -X DELETE "$BASE_URL/api/file/upload/$UPLOAD_ID" \
         -H "Authorization: Bearer $TOKEN")
-    
+
     local code
-    code=$(echo "$response" | jq -r '.code // empty')
-    
+    code=$(json_field "$response" "code")
+
     if [ "$code" = "0" ]; then
         log_pass "Cancel Upload"
         save_evidence "cancel-upload" "$response"
@@ -216,11 +249,11 @@ main() {
     echo ""
     
     # Check prerequisites
-    if ! command -v jq &> /dev/null; then
-        log_fail "jq is required but not installed"
+    if ! command -v python3 &> /dev/null; then
+        log_fail "python3 is required but not installed"
         exit 1
     fi
-    
+
     if ! command -v curl &> /dev/null; then
         log_fail "curl is required but not installed"
         exit 1

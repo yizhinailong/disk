@@ -22,6 +22,7 @@
 #include "models/Folders.hpp"
 #include "models/Trash.hpp"
 #include "models/Users.hpp"
+#include "services/TrashContentIdResolver.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/BatchUtils.hpp"
 
@@ -400,30 +401,34 @@ namespace disk::trash {
                             throw std::runtime_error("Unknown item type in trash chunk");
                         }
 
+                        if (item.item_type == "file") {
+                            auto content_id_result =
+                                disk::services::trash_content_internal::ResolveRequiredContentId(
+                                    item.content_id,
+                                    item.item_data
+                                );
+                            if (!content_id_result.has_value()) {
+                                LOG_WARN << "Skip DeleteAll for legacy trash file without valid content_id: trash_id="
+                                         << item.id << ", user_id=" << user_id;
+                                continue;
+                            }
+
+                            if (content_id_result->source ==
+                                disk::services::trash_content_internal::ContentIdSource::ItemData) {
+                                LOG_DEBUG << "Resolved legacy trash content_id from item_data during DeleteAll: trash_id="
+                                          << item.id << ", content_id=" << content_id_result->value;
+                            }
+
+                            content_ids.push_back(content_id_result->value);
+                        }
+
                         chunk_trash_ids.push_back(item.id);
                         chunk_freed_space += item.item_size;
                         chunk_deleted_count++;
+                    }
 
-                        if (item.item_type == "file") {
-                            uint64_t content_id = 0;
-                            bool has_content_id = false;
-                            if (item.content_id.has_value()) {
-                                content_id = item.content_id.value();
-                                has_content_id = true;
-                            } else {
-                                Json::Value item_data;
-                                Json::Reader reader;
-                                reader.parse(item.item_data, item_data);
-                                if (item_data.isMember("content_id")) {
-                                    content_id = item_data["content_id"].asUInt64();
-                                    has_content_id = true;
-                                }
-                            }
-
-                            if (has_content_id) {
-                                content_ids.push_back(content_id);
-                            }
-                        }
+                    if (chunk_trash_ids.empty()) {
+                        continue;
                     }
 
                     std::vector<std::string> zero_ref_paths;
@@ -597,17 +602,25 @@ namespace disk::trash {
                           << final_name;
             }
 
-            // Read content_id from column first, fall back to JSON for legacy rows
-            uint64_t content_id = 0;
-            if (trash_item.content_id.has_value()) {
-                content_id = trash_item.content_id.value();
-            } else {
-                Json::Value item_data;
-                Json::Reader reader;
-                reader.parse(trash_item.item_data, item_data);
-                if (item_data.isMember("content_id")) {
-                    content_id = item_data["content_id"].asUInt64();
-                }
+            auto content_id_result =
+                disk::services::trash_content_internal::ResolveRequiredContentId(
+                    trash_item.content_id,
+                    trash_item.item_data
+                );
+            if (!content_id_result.has_value()) {
+                LOG_WARN << "Cannot restore trash file without valid content_id: trash_id=" << trash_id;
+                result.status = "failed";
+                result.code = static_cast<uint16_t>(content_id_result.error().code);
+                result.message = content_id_result.error().message;
+                result.field = "content_id";
+                result.value = trash_item.content_id.has_value() ? std::to_string(trash_item.content_id.value()) : "NULL";
+                co_return;
+            }
+
+            if (content_id_result->source ==
+                disk::services::trash_content_internal::ContentIdSource::ItemData) {
+                LOG_DEBUG << "Resolved legacy trash content_id from item_data during restore: trash_id="
+                          << trash_id << ", content_id=" << content_id_result->value;
             }
 
             Json::Value item_data;
@@ -618,7 +631,7 @@ namespace disk::trash {
 
             Files file;
             file.setUserId(user_id);
-            file.setContentId(content_id);
+            file.setContentId(content_id_result->value);
             file.setFolderId(target_folder_id);
             file.setName(final_name);
             file.setExtension(ExtractExtension(final_name));
@@ -813,22 +826,31 @@ namespace disk::trash {
             auto trash_id = trash_item.id;
             auto item_size = trash_item.item_size;
 
-            uint64_t content_id = 0;
-            bool has_content_id = false;
-            if (trash_item.content_id.has_value()) {
-                content_id = trash_item.content_id.value();
-                has_content_id = true;
-            } else {
-                Json::Value item_data;
-                Json::Reader reader;
-                reader.parse(trash_item.item_data, item_data);
-                if (item_data.isMember("content_id")) {
-                    content_id = item_data["content_id"].asUInt64();
-                    has_content_id = true;
-                }
+            auto content_id_result =
+                disk::services::trash_content_internal::ResolveRequiredContentId(
+                    trash_item.content_id,
+                    trash_item.item_data
+                );
+            if (!content_id_result.has_value()) {
+                LOG_WARN << "Cannot permanently delete trash file without valid content_id: trash_id="
+                         << trash_id;
+                result.status = "failed";
+                result.code = static_cast<uint16_t>(content_id_result.error().code);
+                result.message = content_id_result.error().message;
+                result.field = "content_id";
+                result.value = trash_item.content_id.has_value() ? std::to_string(trash_item.content_id.value()) : "NULL";
+                co_return 0;
             }
 
-            if (has_content_id) {
+            if (content_id_result->source ==
+                disk::services::trash_content_internal::ContentIdSource::ItemData) {
+                LOG_DEBUG << "Resolved legacy trash content_id from item_data during delete: trash_id="
+                          << trash_id << ", content_id=" << content_id_result->value;
+            }
+
+            auto content_id = content_id_result->value;
+
+            {
                 try {
                     auto decrement_result = co_await m_db_client->execSqlCoro(
                         "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = ?",

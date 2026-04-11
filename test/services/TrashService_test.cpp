@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include "dtos/TrashDto.hpp"
+#include "services/TrashContentIdResolver.hpp"
 
 namespace disk::trash {
     namespace {
@@ -27,6 +28,47 @@ namespace disk::trash {
         // 这些测试验证 TrashService 方法使用的 DTO 结构
 
         class TrashServiceResponseDtoTest : public ::testing::Test {};
+
+        class TrashServiceLegacyContentIdTest : public ::testing::Test {};
+
+        TEST_F(TrashServiceLegacyContentIdTest, RestoreResolvesContentIdFromLegacyItemDataWhenColumnIsNull) {
+            auto result = disk::services::trash_content_internal::ResolveRequiredContentId(
+                std::nullopt,
+                R"({"content_id":321,"mime_type":"text/plain"})"
+            );
+
+            ASSERT_TRUE(result.has_value());
+            EXPECT_EQ(result->value, 321U);
+            EXPECT_EQ(
+                result->source,
+                disk::services::trash_content_internal::ContentIdSource::ItemData
+            );
+        }
+
+        TEST_F(TrashServiceLegacyContentIdTest, DeleteResolvesContentIdFromLegacyItemDataWhenColumnIsNull) {
+            auto result = disk::services::trash_content_internal::ResolveRequiredContentId(
+                std::nullopt,
+                R"({"content_id":654,"mime_type":"application/pdf"})"
+            );
+
+            ASSERT_TRUE(result.has_value());
+            EXPECT_EQ(result->value, 654U);
+            EXPECT_EQ(
+                result->source,
+                disk::services::trash_content_internal::ContentIdSource::ItemData
+            );
+        }
+
+        TEST_F(TrashServiceLegacyContentIdTest, DeleteRejectsLegacyRowWithoutRecoverableContentId) {
+            auto result = disk::services::trash_content_internal::ResolveRequiredContentId(
+                std::nullopt,
+                R"({"mime_type":"application/octet-stream"})"
+            );
+
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+            EXPECT_EQ(result.error().message, "Trash item is missing valid content_id");
+        }
 
         TEST_F(TrashServiceResponseDtoTest, TrashItemResponseFileItem) {
             TrashItemResponse response;

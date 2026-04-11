@@ -77,6 +77,11 @@ namespace disk::log {
         auto GetList(uint64_t user_id, int page, int page_size)
             -> drogon::Task<Result<OperationLogListResponse>>;
 
+        [[nodiscard]]
+        static auto NormalizeIpAddress(const std::string& ip) -> std::string {
+            return ip.empty() ? "unknown" : ip;
+        }
+
     private:
         static auto ActionTypeToString(ActionType action) -> std::string;
         static auto TargetTypeToString(TargetType type) -> std::string;
