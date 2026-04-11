@@ -1189,7 +1189,7 @@ namespace disk::file {
             co_return response;
         }
 
-        auto quota_result = co_await CheckStorageQuota(user_id, total_copy_size);
+        auto quota_result = co_await CheckStorageQuota(m_db_client, user_id, total_copy_size);
         if (!quota_result) {
             LOG_WARN << "Storage quota check failed for copy: user_id=" << user_id
                      << ", total_copy_size=" << total_copy_size;
@@ -1206,7 +1206,6 @@ namespace disk::file {
                 continue;
             }
 
-            // Extract candidate names from current chunk for targeted query
             std::vector<std::string> candidate_names;
             candidate_names.reserve(chunk.size());
             for (const auto& [old_id, file] : chunk) {
@@ -1216,7 +1215,6 @@ namespace disk::file {
             std::unordered_set<std::string> occupied_names;
             if (!candidate_names.empty()) {
                 try {
-                    // Build safe string IN clause (escape single quotes)
                     std::ostringstream name_in;
                     for (size_t i = 0; i < candidate_names.size(); ++i) {
                         if (i > 0) {
@@ -1297,41 +1295,20 @@ namespace disk::file {
                     continue;
                 }
 
-                std::string update_sql = "UPDATE file_contents SET ref_count = ref_count + CASE id ";
-                std::vector<uint64_t> valid_content_ids;
-                valid_content_ids.reserve(content_ids.size());
+                auto incremented_ids = co_await IncrementContentRefCount(
+                    m_db_client,
+                    content_ref_increment,
+                    existing_content_ids
+                );
 
-                for (const auto& [content_id, increment] : content_ref_increment) {
-                    if (!existing_content_ids.contains(content_id)) {
+                for (const auto& [content_id, _] : content_ref_increment) {
+                    if (!incremented_ids.contains(content_id)) {
                         missing_content_ids.insert(content_id);
-                        continue;
-                    }
-
-                    valid_content_ids.push_back(content_id);
-                    update_sql += " WHEN " + std::to_string(content_id) + " THEN " +
-                                  std::to_string(increment);
-                }
-
-                if (!valid_content_ids.empty()) {
-                    update_sql += " ELSE 0 END WHERE id IN (" +
-                                  BatchUtils::BuildNumericInClause(valid_content_ids) + ")";
-
-                    try {
-                        co_await m_db_client->execSqlCoro(update_sql);
-                    } catch (const drogon::orm::DrogonDbException& e) {
-                        LOG_WARN << "File content batch ref_count update failed in copy: "
-                                 << e.base().what();
-                        continue;
                     }
                 }
             }
 
-            struct ValidCopyItem {
-                uint64_t old_id;
-                const Files* file;
-            };
-
-            std::vector<ValidCopyItem> valid_items;
+            std::vector<std::pair<uint64_t, const Files*>> valid_items;
             valid_items.reserve(pending_items.size());
 
             for (const auto& pending : pending_items) {
@@ -1340,52 +1317,28 @@ namespace disk::file {
                     LOG_WARN << "File content not found during copy: content_id=" << *content_id_ptr;
                     continue;
                 }
-                valid_items.push_back({ .old_id = pending.old_id, .file = &pending.file });
+                valid_items.emplace_back(pending.old_id, &pending.file);
             }
 
             if (!valid_items.empty()) {
-                std::string insert_sql =
-                    "INSERT INTO files (user_id, content_id, folder_id, name, extension, " "size, mime_type, path, is_favorite, download_count) VALUES ";
-
-                for (size_t i = 0; i < valid_items.size(); ++i) {
-                    if (i > 0) {
-                        insert_sql += ",";
-                    }
-                    const auto& file = *valid_items[i].file;
-                    auto content_id_ptr = file.getContentId();
-
-                    insert_sql += "(" + std::to_string(user_id) + ",";
-                    if (content_id_ptr) {
-                        insert_sql += std::to_string(*content_id_ptr);
-                    } else {
-                        insert_sql += "NULL";
-                    }
-                    insert_sql += "," + std::to_string(request.target_folder_id);
-                    insert_sql += ",'" + EscapeSqlLiteral(file.getValueOfName()) + "'";
-                    insert_sql += ",'" + EscapeSqlLiteral(file.getValueOfExtension()) + "'";
-                    insert_sql += "," + std::to_string(file.getValueOfSize());
-                    insert_sql += ",'" + EscapeSqlLiteral(file.getValueOfMimeType()) + "'";
-                    insert_sql += ",'',0,0)";
+                std::unordered_map<uint64_t, uint64_t> old_id_to_size;
+                for (const auto& [old_id, file_ptr] : valid_items) {
+                    old_id_to_size[old_id] = file_ptr->getValueOfSize();
                 }
 
-                try {
-                    co_await m_db_client->execSqlCoro(insert_sql);
+                auto id_mappings = co_await InsertCopiedFiles(
+                    m_db_client,
+                    user_id,
+                    request.target_folder_id,
+                    valid_items
+                );
 
-                    auto id_result = co_await m_db_client->execSqlCoro("SELECT LAST_INSERT_ID() AS id");
-                    if (!id_result.empty()) {
-                        uint64_t first_id = id_result[0]["id"].as<uint64_t>();
-                        for (size_t i = 0; i < valid_items.size(); ++i) {
-                            uint64_t new_id = first_id + i;
-                            ++copied_count;
-                            actual_copy_size += valid_items[i].file->getValueOfSize();
-                            new_files.push_back({ .old_id = valid_items[i].old_id, .new_id = new_id });
-
-                            LOG_DEBUG << "File copy successful: old_id=" << valid_items[i].old_id
-                                      << ", new_id=" << new_id;
-                        }
-                    }
-                } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_ERROR << "Batch file insert failed in copy: " << e.base().what();
+                for (const auto& [old_id, new_id] : id_mappings) {
+                    ++copied_count;
+                    actual_copy_size += old_id_to_size[old_id];
+                    new_files.push_back({ .old_id = old_id, .new_id = new_id });
+                    LOG_DEBUG << "File copy successful: old_id=" << old_id
+                              << ", new_id=" << new_id;
                 }
             }
         }
@@ -1394,7 +1347,7 @@ namespace disk::file {
         auto consumed_size = static_cast<int64_t>(actual_copy_size);
         auto release_size = reserved_size - consumed_size;
         if (release_size > 0) {
-            co_await UpdateStorageUsed(user_id, -release_size);
+            co_await UpdateStorageUsed(m_db_client, user_id, -release_size);
         }
 
         LOG_INFO << "File copy completed: copied_count=" << copied_count
@@ -1506,29 +1459,18 @@ namespace disk::file {
                 std::vector<uint64_t> deletable_ids;
                 deletable_ids.reserve(trash_items.size());
 
-                try {
-                    co_await m_db_client->execSqlCoro(trash_sql);
-
+                auto insert_ok = co_await InsertTrashRecords(m_db_client, trash_sql);
+                if (insert_ok) {
                     for (const auto& item : trash_items) {
                         deletable_ids.push_back(item.file_id);
                     }
-                } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_WARN << "Batch trash insert failed, skipping chunk: " << e.base().what();
                 }
 
                 if (!deletable_ids.empty()) {
-                    try {
-                        co_await m_db_client->execSqlCoro(
-                            "DELETE FROM files WHERE id IN (" +
-                            BatchUtils::BuildNumericInClause(deletable_ids) + ")"
-                        );
-                        deleted_count += static_cast<int>(deletable_ids.size());
-                        for (const auto& file_id : deletable_ids) {
-                            LOG_DEBUG << "File moved to trash: file_id=" << file_id;
-                        }
-                    } catch (const drogon::orm::DrogonDbException& e) {
-                        LOG_WARN << "Batch file delete failed, skipping chunk delete: "
-                                 << e.base().what();
+                    int deleted = co_await DeleteFilesByIds(m_db_client, deletable_ids);
+                    deleted_count += deleted;
+                    for (const auto& file_id : deletable_ids) {
+                        LOG_DEBUG << "File moved to trash: file_id=" << file_id;
                     }
                 }
             }
@@ -1718,31 +1660,7 @@ namespace disk::file {
 
     auto FileService::CheckStorageQuota(uint64_t user_id, uint64_t file_size) const
         -> drogon::Task<Result<void>> {
-
-        try {
-            auto result = co_await m_db_client->execSqlCoro(
-                "UPDATE users SET storage_used = storage_used + ? " "WHERE id = ? AND storage_used + ? <= storage_quota",
-                file_size,
-                user_id,
-                file_size
-            );
-
-            if (result.affectedRows() == 0) {
-                LOG_WARN << "Insufficient storage space: user_id=" << user_id
-                         << ", file_size=" << file_size;
-                co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
-            }
-
-            LOG_DEBUG << "Storage quota check passed and reserved: user_id=" << user_id
-                      << ", file_size=" << file_size;
-            co_return {};
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to reserve user storage quota: " << e.base().what();
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to reserve storage quota")
-            );
-        }
+        co_return co_await CheckStorageQuota(m_db_client, user_id, file_size);
     }
 
     auto FileService::ReserveStorageQuota(uint64_t user_id, uint64_t file_size) const
@@ -1853,34 +1771,7 @@ namespace disk::file {
     }
 
     auto FileService::UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void> {
-
-        try {
-            if (delta >= 0) {
-                auto result = co_await m_db_client->execSqlCoro(
-                    "UPDATE users SET storage_used = storage_used + ? " "WHERE id = ? AND storage_used + ? <= storage_quota",
-                    delta,
-                    user_id,
-                    delta
-                );
-
-                if (result.affectedRows() == 0) {
-                    LOG_WARN << "Skipped storage usage increment due to quota limit: user_id="
-                             << user_id << ", delta=" << delta;
-                    co_return;
-                }
-            } else {
-                co_await m_db_client->execSqlCoro(
-                    "UPDATE users SET storage_used = GREATEST(storage_used + ?, 0) WHERE id = ?",
-                    delta,
-                    user_id
-                );
-            }
-
-            LOG_DEBUG << "Storage usage updated: user_id=" << user_id << ", delta=" << delta;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to update storage usage: " << e.base().what();
-        }
+        co_await UpdateStorageUsed(m_db_client, user_id, delta);
     }
 
     auto FileService::IsFilenameExists(
@@ -1915,6 +1806,204 @@ namespace disk::file {
 
     auto FileService::IsImageMimeType(const std::string& mime_type) -> bool {
         return mime_type.starts_with("image/");
+    }
+
+    // ── 事务感知辅助方法实现 ──
+
+    auto FileService::CheckStorageQuota(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t user_id,
+        uint64_t file_size
+    ) const -> drogon::Task<Result<void>> {
+
+        try {
+            auto result = co_await client->execSqlCoro(
+                "UPDATE users SET storage_used = storage_used + ? " "WHERE id = ? AND storage_used + ? <= storage_quota",
+                file_size,
+                user_id,
+                file_size
+            );
+
+            if (result.affectedRows() == 0) {
+                LOG_WARN << "Insufficient storage space: user_id=" << user_id
+                         << ", file_size=" << file_size;
+                co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
+            }
+
+            LOG_DEBUG << "Storage quota check passed and reserved: user_id=" << user_id
+                      << ", file_size=" << file_size;
+            co_return {};
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Failed to reserve user storage quota: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to reserve storage quota")
+            );
+        }
+    }
+
+    auto FileService::UpdateStorageUsed(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t user_id,
+        int64_t delta
+    ) -> drogon::Task<void> {
+
+        try {
+            if (delta >= 0) {
+                auto result = co_await client->execSqlCoro(
+                    "UPDATE users SET storage_used = storage_used + ? " "WHERE id = ? AND storage_used + ? <= storage_quota",
+                    delta,
+                    user_id,
+                    delta
+                );
+
+                if (result.affectedRows() == 0) {
+                    LOG_WARN << "Skipped storage usage increment due to quota limit: user_id="
+                             << user_id << ", delta=" << delta;
+                    co_return;
+                }
+            } else {
+                co_await client->execSqlCoro(
+                    "UPDATE users SET storage_used = GREATEST(storage_used + ?, 0) WHERE id = ?",
+                    delta,
+                    user_id
+                );
+            }
+
+            LOG_DEBUG << "Storage usage updated: user_id=" << user_id << ", delta=" << delta;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Failed to update storage usage: " << e.base().what();
+        }
+    }
+
+    auto FileService::IncrementContentRefCount(
+        const drogon::orm::DbClientPtr& client,
+        const std::unordered_map<uint64_t, uint64_t>& content_ref_increment,
+        const std::unordered_set<uint64_t>& existing_content_ids
+    ) -> drogon::Task<std::unordered_set<uint64_t>> {
+
+        std::string update_sql = "UPDATE file_contents SET ref_count = ref_count + CASE id ";
+        std::vector<uint64_t> valid_content_ids;
+        valid_content_ids.reserve(content_ref_increment.size());
+
+        for (const auto& [content_id, increment] : content_ref_increment) {
+            if (!existing_content_ids.contains(content_id)) {
+                continue;
+            }
+            valid_content_ids.push_back(content_id);
+            update_sql += " WHEN " + std::to_string(content_id) + " THEN " +
+                          std::to_string(increment);
+        }
+
+        std::unordered_set<uint64_t> incremented_ids;
+        incremented_ids.reserve(valid_content_ids.size());
+
+        if (!valid_content_ids.empty()) {
+            update_sql += " ELSE 0 END WHERE id IN (" +
+                          BatchUtils::BuildNumericInClause(valid_content_ids) + ")";
+
+            try {
+                co_await client->execSqlCoro(update_sql);
+                for (const auto id : valid_content_ids) {
+                    incremented_ids.insert(id);
+                }
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_WARN << "File content batch ref_count update failed: " << e.base().what();
+            }
+        }
+
+        co_return incremented_ids;
+    }
+
+    auto FileService::InsertCopiedFiles(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t user_id,
+        uint64_t target_folder_id,
+        const std::vector<std::pair<uint64_t, const drogon_model::disk::Files*>>& valid_items
+    ) -> drogon::Task<std::vector<std::pair<uint64_t, uint64_t>>> {
+
+        std::vector<std::pair<uint64_t, uint64_t>> id_mappings;
+
+        if (valid_items.empty()) {
+            co_return id_mappings;
+        }
+
+        std::string insert_sql =
+            "INSERT INTO files (user_id, content_id, folder_id, name, extension, " "size, mime_type, path, is_favorite, download_count) VALUES ";
+
+        for (size_t i = 0; i < valid_items.size(); ++i) {
+            if (i > 0) {
+                insert_sql += ",";
+            }
+            const auto& file = *valid_items[i].second;
+            auto content_id_ptr = file.getContentId();
+
+            insert_sql += "(" + std::to_string(user_id) + ",";
+            if (content_id_ptr) {
+                insert_sql += std::to_string(*content_id_ptr);
+            } else {
+                insert_sql += "NULL";
+            }
+            insert_sql += "," + std::to_string(target_folder_id);
+            insert_sql += ",'" + EscapeSqlLiteral(file.getValueOfName()) + "'";
+            insert_sql += ",'" + EscapeSqlLiteral(file.getValueOfExtension()) + "'";
+            insert_sql += "," + std::to_string(file.getValueOfSize());
+            insert_sql += ",'" + EscapeSqlLiteral(file.getValueOfMimeType()) + "'";
+            insert_sql += ",'',0,0)";
+        }
+
+        try {
+            co_await client->execSqlCoro(insert_sql);
+
+            auto id_result = co_await client->execSqlCoro("SELECT LAST_INSERT_ID() AS id");
+            if (!id_result.empty()) {
+                uint64_t first_id = id_result[0]["id"].as<uint64_t>();
+                for (size_t i = 0; i < valid_items.size(); ++i) {
+                    uint64_t new_id = first_id + i;
+                    id_mappings.emplace_back(valid_items[i].first, new_id);
+                }
+            }
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Batch file insert failed in copy: " << e.base().what();
+        }
+
+        co_return id_mappings;
+    }
+
+    auto FileService::InsertTrashRecords(
+        const drogon::orm::DbClientPtr& client,
+        const std::string& trash_sql
+    ) -> drogon::Task<bool> {
+
+        try {
+            co_await client->execSqlCoro(trash_sql);
+            co_return true;
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "Batch trash insert failed: " << e.base().what();
+            co_return false;
+        }
+    }
+
+    auto FileService::DeleteFilesByIds(
+        const drogon::orm::DbClientPtr& client,
+        const std::vector<uint64_t>& file_ids
+    ) -> drogon::Task<int> {
+
+        if (file_ids.empty()) {
+            co_return 0;
+        }
+
+        try {
+            co_await client->execSqlCoro(
+                "DELETE FROM files WHERE id IN (" +
+                BatchUtils::BuildNumericInClause(file_ids) + ")"
+            );
+            co_return static_cast<int>(file_ids.size());
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "Batch file delete failed: " << e.base().what();
+            co_return 0;
+        }
     }
 
 } // namespace disk::file

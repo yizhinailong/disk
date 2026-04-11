@@ -16,6 +16,7 @@
 #include <drogon/orm/DbClient.h>
 
 #include "dtos/FileDto.hpp"
+#include "models/Files.hpp"
 #include "models/UploadTasks.hpp"
 #include "utils/ErrorCode.hpp"
 
@@ -266,6 +267,8 @@ namespace disk::file {
             -> drogon::Task<Result<SearchResponse>>;
 
     private:
+        // ── 原有私有方法（使用 m_db_client） ──
+
         [[nodiscard]]
         auto CheckStorageQuota(uint64_t user_id, uint64_t file_size) const
             -> drogon::Task<Result<void>>;
@@ -301,6 +304,99 @@ namespace disk::file {
 
         [[nodiscard]]
         static auto IsImageMimeType(const std::string& mime_type) -> bool;
+
+        // ── 事务感知辅助方法（接受 DbClientPtr，可传入事务或普通连接） ──
+
+        /**
+         * @brief 检查并扣除存储配额（事务版）
+         *
+         * 在指定数据库连接（事务或普通连接）上执行配额检查与扣除。
+         * 事务场景下，扣除操作可随事务回滚。
+         *
+         * @param client 数据库客户端（事务或普通连接）
+         * @param user_id 用户 ID
+         * @param file_size 需要的存储空间
+         * @return drogon::Task<Result<void>> 成功或配额不足错误
+         */
+        [[nodiscard]]
+        auto CheckStorageQuota(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t user_id,
+            uint64_t file_size
+        ) const -> drogon::Task<Result<void>>;
+
+        /**
+         * @brief 更新存储使用量（事务版）
+         *
+         * @param client 数据库客户端（事务或普通连接）
+         * @param user_id 用户 ID
+         * @param delta 存储增量（正数为增加，负数为减少）
+         */
+        auto UpdateStorageUsed(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t user_id,
+            int64_t delta
+        ) -> drogon::Task<void>;
+
+        /**
+         * @brief 批量递增 file_contents.ref_count（事务版）
+         *
+         * 在指定连接上执行 CASE WHEN 批量更新。
+         *
+         * @param client 数据库客户端
+         * @param content_ref_increment content_id → 递增量映射
+         * @param existing_content_ids 已验证存在的 content_id 集合
+         * @return drogon::Task<std::unordered_set<uint64_t>> 实际成功递增的 content_id 集合
+         */
+        [[nodiscard]]
+        auto IncrementContentRefCount(
+            const drogon::orm::DbClientPtr& client,
+            const std::unordered_map<uint64_t, uint64_t>& content_ref_increment,
+            const std::unordered_set<uint64_t>& existing_content_ids
+        ) -> drogon::Task<std::unordered_set<uint64_t>>;
+
+        /**
+         * @brief 批量插入复制文件记录并获取新 ID（事务版）
+         *
+         * @param client 数据库客户端
+         * @param user_id 用户 ID
+         * @param target_folder_id 目标文件夹 ID
+         * @param valid_items 待插入的文件列表
+         * @return drogon::Task<std::vector<std::pair<uint64_t, uint64_t>>> (old_id, new_id) 映射
+         */
+        [[nodiscard]]
+        auto InsertCopiedFiles(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t user_id,
+            uint64_t target_folder_id,
+            const std::vector<std::pair<uint64_t, const drogon_model::disk::Files*>>& valid_items
+        ) -> drogon::Task<std::vector<std::pair<uint64_t, uint64_t>>>;
+
+        /**
+         * @brief 批量插入回收站记录（事务版）
+         *
+         * @param client 数据库客户端
+         * @param trash_sql 完整的 INSERT INTO trash ... SQL 语句
+         * @return drogon::Task<bool> 是否插入成功
+         */
+        [[nodiscard]]
+        auto InsertTrashRecords(
+            const drogon::orm::DbClientPtr& client,
+            const std::string& trash_sql
+        ) -> drogon::Task<bool>;
+
+        /**
+         * @brief 批量删除文件记录（事务版）
+         *
+         * @param client 数据库客户端
+         * @param file_ids 待删除的文件 ID 列表
+         * @return drogon::Task<int> 实际删除的行数
+         */
+        [[nodiscard]]
+        auto DeleteFilesByIds(
+            const drogon::orm::DbClientPtr& client,
+            const std::vector<uint64_t>& file_ids
+        ) -> drogon::Task<int>;
 
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
         storage::IFileStorage* m_storage;     ///< 文件存储接口
