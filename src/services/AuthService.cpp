@@ -104,17 +104,10 @@ namespace disk::auth {
         const std::string rate_key =
             disk::redis::RedisKeyPrefix::BuildLoginRateLimitKey(ip_address);
 
-        auto incr_result = co_await m_redis_service->Incr(rate_key);
+        // 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
+        auto incr_result = co_await m_redis_service->IncrWithExpire(rate_key, 300);
         if (incr_result.has_value()) {
             const auto count = incr_result.value();
-
-            // 首次计数时设置 TTL 为 300 秒（5 分钟）
-            if (count == 1) {
-                auto expire_result = co_await m_redis_service->Expire(rate_key, 300);
-                if (!expire_result.has_value()) {
-                    LOG_WARN << "Failed to set rate limit TTL: " << expire_result.error().message;
-                }
-            }
 
             // 检查是否超过阈值（5 次）
             if (count > 5) {

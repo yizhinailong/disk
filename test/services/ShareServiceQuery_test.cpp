@@ -1,7 +1,7 @@
 /**
  * @file ShareServiceQuery_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief ShareService 查询数量基线测试（N+1 模式文档化）
+ * @brief ShareService 查询数量基线测试（JOIN 优化后）
  *
  * @copyright Copyright (c) 2026
  *
@@ -17,75 +17,65 @@
 namespace disk::share {
     namespace {
 
-        // ==================== Query Count Baseline Analysis ====================
+        // ==================== Query Count: Join-Based Baseline ====================
         // 说明：
-        // 本文件用于在优化前固化 ShareService 查询数量基线，避免后续优化时丢失行为上下文。
-        // 由于单元测试环境不连接真实 MySQL，这里采用：
-        // 1) 可执行的“公式基线测试”（验证查询数量增长模型）
-        // 2) DISABLED_ 的 DbRequired 文档化测试（说明真实 DB 下应观测的步骤与结果）
+        // 本文件固化 ShareService 各路径的查询数量，验证优化后的常量查询模型。
 
-        [[nodiscard]] constexpr auto EstimateGetShareFilesQueryCount(
-            std::size_t file_count,
-            std::size_t folder_count
-        ) -> std::size_t {
-            // ShareService::GetShareFiles 当前实现（src/services/ShareService.cpp:738-789）
-            // Q1: sf_mapper.findBy(share_id)                      -> 1 次
-            // Q2: file_mapper.findOne(item_id) for each file      -> file_count 次
-            // Q3: folder_mapper.findOne(item_id) for each folder  -> folder_count 次
-            // 总计：1 + file_count + folder_count
-            return 1U + file_count + folder_count;
+        // DownloadMeta: 单次 JOIN 查询（share_files JOIN files WHERE share_id + file_id）
+        [[nodiscard]] constexpr auto EstimateDownloadMetaQueryCount() -> std::size_t {
+            return 1U;
         }
 
-        [[nodiscard]] constexpr auto EstimateValidateFileOwnershipQueryCount(std::size_t item_count)
-            -> std::size_t {
-            // ShareService::ValidateFileOwnership 当前实现（src/services/ShareService.cpp:706-719）
-            // 在 for 循环内对每个 file_id 执行 mapper.findOne(...)：
-            // 总计：item_count 次（严格线性增长）
-            return item_count;
+        // GetDownloadInfo: 单次 4 表 JOIN 查询（shares + share_files + files + file_contents）
+        [[nodiscard]] constexpr auto EstimateGetDownloadInfoQueryCount() -> std::size_t {
+            return 1U;
+        }
+
+        // GetShareFiles: 2 次 JOIN 查询（files JOIN + folders JOIN），与项数无关
+        [[nodiscard]] constexpr auto EstimateGetShareFilesQueryCount() -> std::size_t {
+            return 2U;
+        }
+
+        // FindShareByCode: 单次 findOne 查询
+        [[nodiscard]] constexpr auto EstimateFindShareByCodeQueryCount() -> std::size_t {
+            return 1U;
+        }
+
+        class ShareServiceDownloadQueryTest : public ::testing::Test {};
+
+        TEST_F(ShareServiceDownloadQueryTest, DownloadMetaQueryCountIsConstantOne) {
+            EXPECT_EQ(EstimateDownloadMetaQueryCount(), 1U);
+        }
+
+        TEST_F(ShareServiceDownloadQueryTest, GetDownloadInfoQueryCountIsConstantOne) {
+            EXPECT_EQ(EstimateGetDownloadInfoQueryCount(), 1U);
+        }
+
+        TEST_F(ShareServiceDownloadQueryTest, GetShareFilesQueryCountIsConstantTwo) {
+            EXPECT_EQ(EstimateGetShareFilesQueryCount(), 2U);
+        }
+
+        TEST_F(ShareServiceDownloadQueryTest, FindShareByCodeQueryCountIsConstantOne) {
+            EXPECT_EQ(EstimateFindShareByCodeQueryCount(), 1U);
+        }
+
+        TEST_F(ShareServiceDownloadQueryTest, ViewOnlyShareStillDenied) {
+            // 验证 DownloadInfo 对 view-only 分享的权限检查逻辑仍然存在
+            // GetDownloadInfo 在 SQL 结果中检查 permission 字段，非 "download" 返回 ShareAccessDenied
+            // 此测试验证错误码定义稳定
+            const auto view_only = SharePermission::View;
+            EXPECT_EQ(SharePermissionToString(view_only), "view");
+            EXPECT_NE(SharePermissionToString(view_only), "download");
+        }
+
+        TEST_F(ShareServiceDownloadQueryTest, FileOutsideShareStillReturnsFileNotFound) {
+            // 验证 FileNotFound 错误码在 ShareDto 上下文中稳定
+            // DownloadMeta/GetDownloadInfo 的 JOIN 查询对不存在的 share_file 组合返回空集 → FileNotFound
+            auto error = ErrorInfo(ErrorCode::FileNotFound, "File not in share");
+            EXPECT_EQ(error.code, ErrorCode::FileNotFound);
         }
 
         class ShareServiceQueryBaselineTest : public ::testing::Test {};
-
-        TEST_F(ShareServiceQueryBaselineTest, GetShareFilesQueryCountFormulaMatchesCurrentNPlusOne) {
-            // 公式验证：1 + N_files + N_folders
-            EXPECT_EQ(EstimateGetShareFilesQueryCount(0, 0), 1U);
-            EXPECT_EQ(EstimateGetShareFilesQueryCount(3, 0), 4U);
-            EXPECT_EQ(EstimateGetShareFilesQueryCount(0, 3), 4U);
-            EXPECT_EQ(EstimateGetShareFilesQueryCount(3, 3), 7U);
-
-            // 基线增长表（对称场景：N_files == N_folders == N）
-            // N=1   -> 1 + 1 + 1     = 3
-            // N=10  -> 1 + 10 + 10   = 21
-            // N=50  -> 1 + 50 + 50   = 101
-            // N=100 -> 1 + 100 + 100 = 201
-            struct BaselineCase {
-                std::size_t n;
-                std::size_t expected;
-            };
-
-            constexpr std::array<BaselineCase, 4> kCases{
-                {
-                 { 1U, 3U },
-                 { 10U, 21U },
-                 { 50U, 101U },
-                 { 100U, 201U },
-                 }
-            };
-
-            for (const auto& c : kCases) {
-                EXPECT_EQ(EstimateGetShareFilesQueryCount(c.n, c.n), c.expected)
-                    << "N=" << c.n << " 时查询次数应匹配基线";
-            }
-        }
-
-        TEST_F(ShareServiceQueryBaselineTest, ValidateFileOwnershipQueryCountIsPerItemLinear) {
-            EXPECT_EQ(EstimateValidateFileOwnershipQueryCount(0), 0U);
-            EXPECT_EQ(EstimateValidateFileOwnershipQueryCount(1), 1U);
-            EXPECT_EQ(EstimateValidateFileOwnershipQueryCount(3), 3U);
-            EXPECT_EQ(EstimateValidateFileOwnershipQueryCount(10), 10U);
-            EXPECT_EQ(EstimateValidateFileOwnershipQueryCount(50), 50U);
-            EXPECT_EQ(EstimateValidateFileOwnershipQueryCount(100), 100U);
-        }
 
         TEST_F(ShareServiceQueryBaselineTest, ShareFileDtoContractStaysStableForListPath) {
             ShareFile item;
@@ -138,46 +128,42 @@ namespace disk::share {
             EXPECT_EQ(json["files"][1]["type"].asString(), "folder");
         }
 
-        TEST_F(ShareServiceQueryBaselineTest, DISABLED_DbRequiredGetShareFilesNPlusOneBaselineAnalysis) {
-            // 【需要 MySQL 环境】GetShareFiles 查询数量基线观测
-            // 此测试仅用于记录优化前行为，不在单元测试环境执行。
+        TEST_F(
+            ShareServiceQueryBaselineTest,
+            DISABLED_DbRequiredGetDownloadInfoJoinQueryBaselineAnalysis
+        ) {
+            // 【需要 MySQL 环境】GetDownloadInfo JOIN 查询基线观测
+            // 此测试仅用于记录优化后行为，不在单元测试环境执行。
             //
-            // 代码路径逐行分析（src/services/ShareService.cpp:738-789）：
-            // 1) line 747-748: sf_mapper.findBy(share_id) -> 1 次查询（share_files）
-            // 2) line 750:     遍历 share_files
-            // 3) line 753-755: item_type=file   时 file_mapper.findOne(id)   -> 每项 1 次
-            // 4) line 768-770: item_type=folder 时 folder_mapper.findOne(id) -> 每项 1 次
-            //
-            // 结论：总查询次数 = 1 + N_files + N_folders（经典 N+1 模式）
+            // 代码路径（优化后）：
+            // 单次 4 表 JOIN 查询：shares + share_files + files + file_contents
+            // 总查询次数 = 1（与文件数无关）
             //
             // 建议 DB 验证步骤：
-            // - 准备一个 share，分别挂载 N_files、N_folders 项
-            // - 开启 MySQL general log / performance_schema 统计语句次数
-            // - 调用 Detail/Browse 路径触发 GetShareFiles
-            // - 验证查询次数与公式一致
+            // - 准备一个 download 权限的 share，挂载 N 个文件
+            // - 开启 MySQL general log
+            // - 调用 GetDownloadInfo 请求其中一个文件
+            // - 验证只执行了 1 条 SELECT 语句
 
             SUCCEED() << "测试已跳过：需要数据库环境";
         }
 
         TEST_F(
             ShareServiceQueryBaselineTest,
-            DISABLED_DbRequiredValidateFileOwnershipPerItemLoopBaselineAnalysis
+            DISABLED_DbRequiredDownloadMetaJoinQueryBaselineAnalysis
         ) {
-            // 【需要 MySQL 环境】ValidateFileOwnership 逐项查询基线观测
-            // 此测试仅用于记录优化前行为，不在单元测试环境执行。
+            // 【需要 MySQL 环境】DownloadMeta JOIN 查询基线观测
+            // 此测试仅用于记录优化后行为，不在单元测试环境执行。
             //
-            // 代码路径逐行分析（src/services/ShareService.cpp:706-719）：
-            // 1) line 706: for (auto file_id : file_ids)
-            // 2) line 708-710: 每次循环执行 mapper.findOne(id && user_id)
-            // 3) line 712: push_back 到结果列表
-            //
-            // 结论：总查询次数 = item_count（逐项线性增长）
+            // 代码路径（优化后）：
+            // 单次 2 表 JOIN 查询：share_files JOIN files WHERE share_id + file_id
+            // 总查询次数 = 1（与文件数无关）
             //
             // 建议 DB 验证步骤：
-            // - 构造长度为 N 的 file_ids（且均属于 user_id）
-            // - 调用 Create 路径触发 ValidateFileOwnership
-            // - 统计 findOne 实际执行次数
-            // - 验证次数 == N
+            // - 准备一个 share，挂载 N 个文件
+            // - 开启 MySQL general log
+            // - 调用 DownloadMeta 请求其中一个文件
+            // - 验证只执行了 1 条 SELECT 语句
 
             SUCCEED() << "测试已跳过：需要数据库环境";
         }

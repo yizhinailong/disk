@@ -16,6 +16,7 @@ set(TEST_SOURCES
     services/CompleteUploadSingleflight_test.cpp
     services/FileServiceAtomicity_test.cpp
     services/FileServiceBatch_test.cpp
+    services/FileServiceSearch_test.cpp
     services/ShareService_test.cpp
     services/ShareServiceBatch_test.cpp
     services/ShareServiceQuery_test.cpp
@@ -23,6 +24,7 @@ set(TEST_SOURCES
     services/TokenServiceRevocation_test.cpp
     services/TrashService_test.cpp
     services/TrashServiceBatch_test.cpp
+    services/UserService_test.cpp
     services/CleanupService_test.cpp
     services/OperationLogJsonDetails_test.cpp
     filters/ShareAuthFilter_test.cpp
@@ -75,6 +77,19 @@ add_test(
 
 set_tests_properties(
     LoginRateLimitIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME UserProfileStorageIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_user_profile_storage.sh"
+)
+
+set_tests_properties(
+    UserProfileStorageIntegration
     PROPERTIES
     RUN_SERIAL TRUE
     TIMEOUT 120

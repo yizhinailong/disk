@@ -20,7 +20,6 @@
 #include <drogon/orm/CoroMapper.h>
 #include <trantor/utils/Date.h>
 
-#include "models/FileContents.hpp"
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
 #include "models/ShareFiles.hpp"
@@ -642,19 +641,34 @@ namespace disk::share {
         LOG_DEBUG << "Getting download metadata: share_id=" << request.share_id
                   << ", file_id=" << request.file_id;
 
-        // 获取分享文件列表
-        auto share_files = co_await GetShareFiles(share_id);
+        // 单次 JOIN 查询：验证文件属于分享内容并获取元数据
+        try {
+            auto rows = co_await m_db_client->execSqlCoro(
+                "SELECT sf.id AS share_file_id, f.id, f.name, f.size, 'file' AS type " "FROM share_files sf " "JOIN files f ON sf.item_id = f.id " "WHERE sf.share_id = ? AND sf.item_type = 'file' AND sf.item_id = ?",
+                share_id,
+                request.file_id
+            );
 
-        // 查找请求的文件
-        for (const auto& file : share_files) {
-            if (file.id == request.file_id) {
-                // 增加下载次数
-                co_await IncrementDownloadCount(share_id);
-                co_return file;
+            if (rows.empty()) {
+                co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "File not in share"));
             }
-        }
 
-        co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "File not in share"));
+            const auto& row = rows[0];
+            ShareFile file;
+            file.id = row["id"].as<uint64_t>();
+            file.name = row["name"].as<std::string>();
+            file.type = row["type"].as<std::string>();
+            file.size = row["size"].as<uint64_t>();
+
+            // 增加下载次数
+            co_await IncrementDownloadCount(share_id);
+            co_return file;
+        } catch (const DrogonDbException& e) {
+            LOG_ERROR << "Failed to get download metadata: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to get download metadata")
+            );
+        }
     }
 
     auto ShareService::GetDownloadInfo(const DownloadShareRequest& request, uint64_t share_id)
@@ -662,84 +676,47 @@ namespace disk::share {
         LOG_DEBUG << "Getting download info: share_id=" << request.share_id
                   << ", file_id=" << request.file_id;
 
-        // 1. 获取分享信息，验证下载权限
-        CoroMapper<Shares> share_mapper(m_db_client);
-        Shares share;
+        // 单次 4 表 JOIN 查询：shares + share_files + files + file_contents
         try {
-            share = co_await share_mapper.findOne(Criteria(Shares::Cols::_id, share_id));
-        } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to get share info: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "Share not found"));
-        }
-
-        if (share.getValueOfPermission() != "download") {
-            LOG_WARN << "Insufficient share permissions: share_id=" << share_id
-                     << ", permission=" << share.getValueOfPermission();
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::ShareAccessDenied, "Share is view-only, download not allowed")
+            auto rows = co_await m_db_client->execSqlCoro(
+                "SELECT s.id AS share_id, s.permission, " "f.id AS file_id, f.name AS file_name, f.size AS file_size, f.content_id, " "fc.storage_path, fc.hash_md5, fc.mime_type " "FROM shares s " "JOIN share_files sf ON s.id = sf.share_id " "AND sf.item_type = 'file' AND sf.item_id = ? " "JOIN files f ON sf.item_id = f.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE s.id = ?",
+                request.file_id,
+                share_id
             );
-        }
 
-        // 2. 验证文件属于分享内容，获取文件基本信息
-        CoroMapper<ShareFiles> sf_mapper(m_db_client);
-        CoroMapper<Files> file_mapper(m_db_client);
-
-        std::vector<ShareFiles> share_files;
-        try {
-            share_files =
-                co_await sf_mapper.findBy(Criteria(ShareFiles::Cols::_share_id, share_id));
-        } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to get share-file associations: " << e.base().what();
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to get share file")
-            );
-        }
-
-        drogon_model::disk::Files file;
-        bool found = false;
-
-        for (const auto& sf : share_files) {
-            if (sf.getValueOfItemType() == "file" && sf.getValueOfItemId() == request.file_id) {
-                try {
-                    file =
-                        co_await file_mapper.findOne(Criteria(Files::Cols::_id, request.file_id));
-                    found = true;
-                    break;
-                } catch (const DrogonDbException& e) {
-                    LOG_WARN << "Failed to get file: file_id=" << request.file_id;
-                    co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "File not found"));
-                }
+            if (rows.empty()) {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::FileNotFound, "File not in share")
+                );
             }
-        }
 
-        if (!found) {
-            co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "File not in share"));
-        }
+            const auto& row = rows[0];
+            auto permission = row["permission"].as<std::string>();
 
-        // 3. 获取文件内容（存储路径）
-        CoroMapper<drogon_model::disk::FileContents> content_mapper(m_db_client);
-        drogon_model::disk::FileContents content;
+            if (permission != "download") {
+                LOG_WARN << "Insufficient share permissions: share_id=" << share_id
+                         << ", permission=" << permission;
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ShareAccessDenied, "Share is view-only, download not allowed")
+                );
+            }
 
-        try {
-            content = co_await content_mapper.findOne(
-                Criteria(drogon_model::disk::FileContents::Cols::_id, file.getValueOfContentId())
-            );
+            DownloadInfo info;
+            info.file_id = row["file_id"].as<uint64_t>();
+            info.filename = row["file_name"].as<std::string>();
+            info.storage_path = row["storage_path"].as<std::string>();
+            info.file_size = row["file_size"].as<uint64_t>();
+            info.mime_type =
+                row["mime_type"].isNull() ? "application/octet-stream" : row["mime_type"].as<std::string>();
+            info.hash_md5 = row["hash_md5"].as<std::string>();
+
+            co_return info;
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to get file content: " << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "File content not found"));
+            LOG_ERROR << "Failed to get download info: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to get download info")
+            );
         }
-
-        // 4. 构建下载信息
-        DownloadInfo info;
-        info.file_id = file.getValueOfId();
-        info.filename = file.getValueOfName();
-        info.storage_path = content.getValueOfStoragePath();
-        info.file_size = file.getValueOfSize();
-        info.mime_type =
-            content.getMimeType() ? content.getValueOfMimeType() : "application/octet-stream";
-        info.hash_md5 = content.getValueOfHashMd5();
-
-        co_return info;
     }
 
     auto ShareService::FindShareByCode(const std::string& share_code) const
@@ -747,14 +724,15 @@ namespace disk::share {
         CoroMapper<Shares> mapper(m_db_client);
 
         try {
-            auto shares = co_await mapper.findBy(Criteria(Shares::Cols::_share_code, share_code));
-
-            if (shares.empty()) {
+            auto share = co_await mapper.findOne(Criteria(Shares::Cols::_share_code, share_code));
+            co_return share;
+        } catch (const DrogonDbException& e) {
+            const auto error_msg = std::string(e.base().what());
+            // findOne() 抛出异常时，可能是"未找到"或真正的 DB 错误
+            if (error_msg.find("empty") != std::string::npos ||
+                error_msg.find("condition") != std::string::npos) {
                 co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "Share not found"));
             }
-
-            co_return shares[0];
-        } catch (const DrogonDbException& e) {
             LOG_ERROR << "Failed to find share: " << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to find share"));
         }
@@ -1094,23 +1072,19 @@ namespace disk::share {
 
         auto key = redis::RedisKeyPrefix::BuildSharePasswordRateLimitKey(share_code, ip_address);
 
-        // 原子递增计数 (INCR-first gate - atomic admission control)
-        auto incr_result = co_await m_redis_service->Incr(key);
+        // 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
+        auto incr_result = co_await m_redis_service->IncrWithExpire(key, 900);
 
         if (!incr_result) {
-            LOG_ERROR << "Redis increment failed: " << incr_result.error().message;
+            LOG_ERROR << "Redis IncrWithExpire failed: " << incr_result.error().message;
             co_return {};
         }
 
         constexpr int MAX_ATTEMPTS = 5;
-
-        // 如果是第一次请求，设置过期时间（15分钟）
-        if (incr_result.value() == 1) {
-            co_await m_redis_service->Expire(key, 900);
-        }
+        const int64_t count = incr_result.value();
 
         // 检查是否超过限制
-        if (incr_result.value() > MAX_ATTEMPTS) {
+        if (count > MAX_ATTEMPTS) {
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::TooManyRequests,
                 "Too many password verification attempts, please try again later"

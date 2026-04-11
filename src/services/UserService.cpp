@@ -22,8 +22,6 @@ namespace disk::user {
     using drogon::orm::CompareOperator;
     using drogon::orm::CoroMapper;
     using drogon::orm::Criteria;
-    using drogon_model::disk::Files;
-    using drogon_model::disk::Folders;
     using drogon_model::disk::Users;
 
     UserService::UserService(drogon::orm::DbClientPtr db_client)
@@ -35,70 +33,51 @@ namespace disk::user {
         LOG_INFO << "Get user profile request: user_id=" << user_id;
 
         try {
-            // 步骤 1: 查询用户信息
-            CoroMapper<Users> user_mapper(m_db_client);
-            const auto user = co_await user_mapper.findOne(
-                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
+            // 单次聚合查询：用户基本信息 + 文件数量 + 文件夹数量
+            auto result = co_await m_db_client->execSqlCoro(
+                "SELECT u.id, u.username, u.email, u.nickname, u.avatar, " "       u.storage_quota, u.storage_used, " "       u.created_at, u.updated_at, " "       (SELECT COUNT(*) FROM files WHERE user_id = u.id) AS file_count, " "       (SELECT COUNT(*) FROM folders WHERE user_id = u.id) AS folder_count " "FROM users u " "WHERE u.id = ?",
+                user_id
             );
-            LOG_DEBUG << "Found user: " << user.getValueOfUsername() << " (ID: " << user_id << ")";
 
-            // 步骤 2: 检查用户是否存在（findOne 会抛出异常如果不存在）
-            // 不需要额外检查，因为 findOne 会抛出 DrogonDbException
-
-            // 步骤 3: 查询文件数量
-            CoroMapper<Files> file_mapper(m_db_client);
-            const auto file_count = co_await file_mapper.count(
-                Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
-            );
-            LOG_DEBUG << "User file count: user_id=" << user_id << ", count=" << file_count;
-
-            // 步骤 4: 查询文件夹数量
-            CoroMapper<Folders> folder_mapper(m_db_client);
-            const auto folder_count = co_await folder_mapper.count(
-                Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id)
-            );
-            LOG_DEBUG << "User folder count: user_id=" << user_id << ", count=" << folder_count;
-
-            // 步骤 5: 构建 UserProfileResponse
-            UserProfileResponse response;
-
-            // 复制基本字段
-            response.id = user.getValueOfId();
-            response.username = user.getValueOfUsername();
-            response.email = user.getValueOfEmail();
-
-            // 处理可空 nickname
-            response.nickname = user.getNickname() ? *user.getNickname() : "";
-
-            // 处理可空 avatar
-            response.avatar = user.getAvatar() ? *user.getAvatar() : "";
-
-            // 复制存储信息
-            response.storage_quota = user.getValueOfStorageQuota();
-            response.storage_used = user.getValueOfStorageUsed();
-
-            // 添加统计信息
-            response.file_count = static_cast<uint32_t>(file_count);
-            response.folder_count = static_cast<uint32_t>(folder_count);
-
-            // 格式化时间戳
-            response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
-            response.updated_at = user.getValueOfUpdatedAt().toDbStringLocal();
-
-            // 步骤 6: 返回响应
-            LOG_INFO << "Get user profile successful: user_id=" << user_id;
-            co_return response;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            // 检查是否是"未找到"错误（drogon 抛出异常表示记录不存在）
-            const auto error_msg = std::string(e.base().what());
-            if (error_msg.find("condition") != std::string::npos ||
-                error_msg.find("empty") != std::string::npos) {
+            if (result.empty()) {
                 LOG_WARN << "User not found: user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
             }
 
-            // 其他数据库错误
+            const auto& row = result[0];
+            LOG_DEBUG << "Found user: " << row["username"].as<std::string>() << " (ID: " << user_id
+                      << ")";
+
+            UserProfileResponse response;
+            response.id = row["id"].as<uint64_t>();
+            response.username = row["username"].as<std::string>();
+            response.email = row["email"].as<std::string>();
+
+            // 处理可空 nickname
+            if (!row["nickname"].isNull()) {
+                response.nickname = row["nickname"].as<std::string>();
+            }
+
+            // 处理可空 avatar
+            if (!row["avatar"].isNull()) {
+                response.avatar = row["avatar"].as<std::string>();
+            }
+
+            // 复制存储信息
+            response.storage_quota = row["storage_quota"].as<uint64_t>();
+            response.storage_used = row["storage_used"].as<uint64_t>();
+
+            response.file_count = row["file_count"].as<uint32_t>();
+            response.folder_count = row["folder_count"].as<uint32_t>();
+
+            // 格式化时间戳
+            response.created_at = row["created_at"].as<std::string>();
+            response.updated_at = row["updated_at"].as<std::string>();
+
+            LOG_INFO << "Get user profile successful: user_id=" << user_id;
+            co_return response;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "Get user profile database error: user_id=" << user_id << " - "
                       << e.base().what();
             co_return std::unexpected(ErrorInfo(
@@ -256,33 +235,26 @@ namespace disk::user {
         LOG_DEBUG << "Get user storage stats: user_id=" << user_id;
 
         try {
-            // 1. 获取用户配额
-            CoroMapper<Users> user_mapper(m_db_client);
-            auto user = co_await user_mapper.findByPrimaryKey(user_id);
-            uint64_t quota = user.getValueOfStorageQuota();
-
-            // 2. 计算已使用空间 (SUM of Files.size)
-            auto used_result = co_await m_db_client->execSqlCoro(
-                "SELECT COALESCE(SUM(size), 0) as total_size FROM files WHERE user_id = ?",
+            // 单次聚合查询：配额 + 已使用 + 文件数量 + 文件夹数量
+            auto result = co_await m_db_client->execSqlCoro(
+                "SELECT u.storage_quota, " "       COALESCE((SELECT SUM(f.size) FROM files f WHERE f.user_id = u.id), 0) AS used, " "       (SELECT COUNT(*) FROM files WHERE user_id = u.id) AS file_count, " "       (SELECT COUNT(*) FROM folders WHERE user_id = u.id) AS folder_count " "FROM users u " "WHERE u.id = ?",
                 user_id
             );
-            uint64_t used = used_result[0]["total_size"].as<uint64_t>();
 
-            // 3. 计算文件数量
-            auto file_count_result = co_await m_db_client->execSqlCoro(
-                "SELECT COUNT(*) as count FROM files WHERE user_id = ?",
-                user_id
-            );
-            uint32_t file_count = file_count_result[0]["count"].as<uint32_t>();
+            if (result.empty()) {
+                LOG_ERROR << "User not found for storage stats: user_id=" << user_id;
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to get storage stats")
+                );
+            }
 
-            // 4. 计算文件夹数量
-            auto folder_count_result = co_await m_db_client->execSqlCoro(
-                "SELECT COUNT(*) as count FROM folders WHERE user_id = ?",
-                user_id
-            );
-            uint32_t folder_count = folder_count_result[0]["count"].as<uint32_t>();
+            const auto& row = result[0];
+            uint64_t quota = row["storage_quota"].as<uint64_t>();
+            uint64_t used = row["used"].as<uint64_t>();
+            uint32_t file_count = row["file_count"].as<uint32_t>();
+            uint32_t folder_count = row["folder_count"].as<uint32_t>();
 
-            // 5. 计算百分比（1位小数）
+            // 百分比（1位小数）
             double percentage = 0.0;
             if (quota > 0) {
                 percentage =
@@ -290,7 +262,6 @@ namespace disk::user {
                     10.0;
             }
 
-            // 6. 构建响应
             StorageResponse response{ .used = used,
                                       .quota = quota,
                                       .percentage = percentage,

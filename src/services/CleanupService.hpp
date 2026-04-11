@@ -49,8 +49,9 @@ namespace disk::services {
          * @brief 清理过期的回收站项目
          *
          * 业务规则：
-         * - 查找所有 expires_at < NOW() 的回收站记录
-         * - 逐个处理，释放存储配额并更新引用计数
+         * - 使用游标分批查找 expires_at < NOW() 的回收站记录（id ASC + LIMIT）
+         * - 每批内部分块事务处理，释放存储配额并更新引用计数
+         * - 游标始终推进，失败的行不会在同次运行中重试
          * - 删除回收站记录
          *
          * @return drogon::Task<Result<int>> 成功返回清理数量，失败返回错误

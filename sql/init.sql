@@ -61,6 +61,7 @@ CREATE TABLE `folders` (
     KEY `idx_folders_user_id` (`user_id`),
     KEY `idx_folders_parent_id` (`parent_id`),
     KEY `idx_folders_user_parent` (`user_id`, `parent_id`),
+    FULLTEXT KEY `ft_folders_name` (`name`),
     UNIQUE KEY `uk_folders_user_parent_name` (`user_id`, `parent_id`, `name`),
     CONSTRAINT `fk_folders_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文件夹表';
@@ -88,6 +89,7 @@ CREATE TABLE `files` (
     KEY `idx_files_user_folder` (`user_id`, `folder_id`),
     KEY `idx_files_extension` (`extension`),
     KEY `idx_files_created_at` (`created_at`),
+    FULLTEXT KEY `ft_files_name` (`name`),
     UNIQUE KEY `uk_files_user_folder_name` (`user_id`, `folder_id`, `name`),
     CONSTRAINT `fk_files_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_files_content_id` FOREIGN KEY (`content_id`) REFERENCES `file_contents` (`id`)
