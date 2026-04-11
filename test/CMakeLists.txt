@@ -14,6 +14,7 @@ set(TEST_SOURCES
     services/LoginRateLimit_test.cpp
     services/FileUploadConsistency_test.cpp
     services/CompleteUploadSingleflight_test.cpp
+    services/FileServiceAtomicity_test.cpp
     services/FileServiceBatch_test.cpp
     services/ShareService_test.cpp
     services/ShareServiceBatch_test.cpp
