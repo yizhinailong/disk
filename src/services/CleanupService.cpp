@@ -10,6 +10,7 @@
 #include "CleanupService.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <optional>
 #include <sstream>
 #include <unordered_map>
@@ -73,6 +74,7 @@ namespace disk::services {
             uint64_t last_seen_id = 0;
 
             while (true) {
+                auto batch_start = std::chrono::steady_clock::now();
                 auto result = co_await m_db_client->execSqlCoro(
                     "SELECT id, user_id, item_type, item_size, content_id, item_data " "FROM trash " "WHERE expires_at < NOW() AND id > ? " "ORDER BY id ASC " "LIMIT ?",
                     last_seen_id,
@@ -235,6 +237,15 @@ namespace disk::services {
                     }
                 }
 
+                LOG_INFO << "[cleanup_batch] trash batch_size="
+                         << result.size()
+                         << " rows_deleted_so_far=" << deleted_count
+                         << " batch_duration_ms="
+                         << std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - batch_start
+                            )
+                                .count();
+
                 // 关键：无论分块处理是否成功，始终推进游标以避免毒丸重试
                 last_seen_id = batch_max_id;
 
@@ -268,6 +279,7 @@ namespace disk::services {
     auto CleanupService::CleanupExpiredUploadTasks() -> drogon::Task<Result<int>> {
         LOG_INFO << "Starting cleanup of expired upload tasks";
 
+        auto batch_start = std::chrono::steady_clock::now();
         try {
             auto result = co_await m_db_client->execSqlCoro(
                 "SELECT id, temp_path, user_id, reserved_bytes FROM upload_tasks " "WHERE status = 0 AND expires_at < NOW() " "LIMIT ?",
@@ -328,6 +340,15 @@ namespace disk::services {
                 LOG_DEBUG << "Released reserved storage for expired upload tasks: user_id=" << user_id
                           << ", released_bytes=" << delta;
             }
+
+            LOG_INFO << "[cleanup_batch] upload_tasks batch_size="
+                     << result.size()
+                     << " cleaned_count=" << cleaned_count
+                     << " batch_duration_ms="
+                     << std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - batch_start
+                        )
+                            .count();
 
             LOG_INFO << "Upload task cleanup completed: cleaned_count=" << cleaned_count;
             co_return cleaned_count;

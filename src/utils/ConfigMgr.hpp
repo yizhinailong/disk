@@ -160,6 +160,20 @@ namespace disk::utils {
         [[nodiscard]]
         auto IsSecureMode() const -> bool;
 
+        /**
+         * @brief 获取数据库连接池大小
+         * @return int64_t 连接池大小
+         */
+        [[nodiscard]]
+        auto GetDbPoolSize() const noexcept -> int64_t;
+
+        /**
+         * @brief 获取 Redis 连接池大小
+         * @return int64_t 连接池大小
+         */
+        [[nodiscard]]
+        auto GetRedisPoolSize() const noexcept -> int64_t;
+
     private:
         // JWT 配置
         int m_access_token_expire_seconds{ 7200 };
@@ -173,6 +187,9 @@ namespace disk::utils {
         int m_upload_task_expiry_seconds{ 86400 };
         uint32_t m_assembly_max_concurrent{ 4 };
         uint32_t m_assemble_buffer_size_bytes{ 262144 };
+
+        int64_t m_db_pool_size{ 0 };
+        int64_t m_redis_pool_size{ 0 };
     };
 
 } // namespace disk::utils

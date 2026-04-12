@@ -14,6 +14,7 @@
 #include <sstream>
 
 #include <drogon/orm/CoroMapper.h>
+#include <drogon/utils/coroutine.h>
 
 namespace disk::health {
 
@@ -37,9 +38,15 @@ namespace disk::health {
         auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - m_start_time);
         result.uptime = uptime.count();
 
-        // 并行检查各组件
+        // 并行检查各组件：通过 co_future 启动 Redis 检查为独立异步任务，
+        // 同时 co_await 数据库检查，两者在不同连接上交错执行
+        auto check_start = std::chrono::steady_clock::now();
+        auto redis_future = drogon::co_future(CheckRedis());
         auto db_status = co_await CheckDatabase();
-        auto redis_status = co_await CheckRedis();
+        auto redis_status = redis_future.get();
+        auto check_end = std::chrono::steady_clock::now();
+        result.total_check_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(check_end - check_start).count();
 
         result.components["database"] = db_status;
         result.components["redis"] = redis_status;

@@ -9,6 +9,8 @@
 
 #include "RedisService.hpp"
 
+#include <chrono>
+
 #include "utils/ErrorCode.hpp"
 
 namespace disk::services {
@@ -29,6 +31,7 @@ namespace disk::services {
 
     auto RedisService::Set(const std::string& key, const std::string& value, int ttl)
         -> drogon::Task<Result<void>> {
+        auto cmd_start = std::chrono::steady_clock::now();
         try {
             if (ttl > 0) {
                 co_await m_redis_client
@@ -37,7 +40,12 @@ namespace disk::services {
                 co_await m_redis_client->execCommandCoro("SET %s %s", key.c_str(), value.c_str());
             }
 
-            LOG_TRACE << "Redis SET: key=" << key << ", ttl=" << ttl;
+            LOG_DEBUG << "[redis_timer] SET duration_us="
+                      << std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::steady_clock::now() - cmd_start
+                         )
+                             .count()
+                      << " key=" << key;
 
             co_return {};
 
@@ -51,20 +59,24 @@ namespace disk::services {
     }
 
     auto RedisService::Get(const std::string& key) -> drogon::Task<Result<std::string>> {
+        auto cmd_start = std::chrono::steady_clock::now();
         try {
             auto result = co_await m_redis_client->execCommandCoro("GET %s", key.c_str());
 
-            if (result.isNil()) {
-                LOG_TRACE << "Redis GET: key=" << key;
+            LOG_DEBUG << "[redis_timer] GET duration_us="
+                      << std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::steady_clock::now() - cmd_start
+                         )
+                             .count()
+                      << " key=" << key;
 
+            if (result.isNil()) {
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::RedisKeyNotFound, "Redis key not found: " + key)
                 );
             }
 
             const auto value = result.asString();
-
-            LOG_TRACE << "Redis GET: key=" << key;
 
             co_return value;
 
@@ -78,10 +90,16 @@ namespace disk::services {
     }
 
     auto RedisService::Delete(const std::string& key) -> drogon::Task<Result<void>> {
+        auto cmd_start = std::chrono::steady_clock::now();
         try {
             co_await m_redis_client->execCommandCoro("DEL %s", key.c_str());
 
-            LOG_TRACE << "Redis DEL: key=" << key;
+            LOG_DEBUG << "[redis_timer] DEL duration_us="
+                      << std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::steady_clock::now() - cmd_start
+                         )
+                             .count()
+                      << " key=" << key;
 
             co_return {};
 
@@ -141,6 +159,7 @@ namespace disk::services {
             co_return {};
         }
 
+        auto cmd_start = std::chrono::steady_clock::now();
         try {
             if (ttl == 0) {
                 for (const auto& pair : pairs) {
@@ -160,7 +179,12 @@ namespace disk::services {
                 co_await m_redis_client->execCommandCoro("EXEC");
             }
 
-            LOG_TRACE << "Redis MSET: count=" << pairs.size() << ", ttl=" << ttl;
+            LOG_DEBUG << "[redis_timer] MSET duration_us="
+                      << std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::steady_clock::now() - cmd_start
+                         )
+                             .count()
+                      << " count=" << pairs.size();
 
             co_return {};
 
@@ -180,6 +204,7 @@ namespace disk::services {
             co_return std::vector<std::string>{};
         }
 
+        auto cmd_start = std::chrono::steady_clock::now();
         try {
             std::string cmd = "MGET";
             for (const auto& key : keys) {
@@ -195,7 +220,12 @@ namespace disk::services {
                 values.push_back(result_array[i].isNil() ? "" : result_array[i].asString());
             }
 
-            LOG_TRACE << "Redis MGET: count=" << keys.size();
+            LOG_DEBUG << "[redis_timer] MGET duration_us="
+                      << std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::steady_clock::now() - cmd_start
+                         )
+                             .count()
+                      << " count=" << keys.size();
 
             co_return values;
 
@@ -214,6 +244,7 @@ namespace disk::services {
             co_return 0;
         }
 
+        auto cmd_start = std::chrono::steady_clock::now();
         try {
             std::string cmd = "DEL";
             for (const auto& key : keys) {
@@ -223,7 +254,12 @@ namespace disk::services {
             auto result = co_await m_redis_client->execCommandCoro(cmd.c_str());
             const auto deleted = result.asInteger();
 
-            LOG_TRACE << "Redis MDELETE: count=" << keys.size() << ", deleted=" << deleted;
+            LOG_DEBUG << "[redis_timer] MDELETE duration_us="
+                      << std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::steady_clock::now() - cmd_start
+                         )
+                             .count()
+                      << " count=" << keys.size() << " deleted=" << deleted;
 
             co_return deleted;
 

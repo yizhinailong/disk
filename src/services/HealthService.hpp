@@ -32,6 +32,7 @@ namespace disk::health {
         std::string version;                               // 系统版本
         int64_t uptime{ 0 };                               // 运行时间（秒）
         std::string timestamp;                             // ISO 8601 时间戳
+        int64_t total_check_ms{ 0 };                       // 健康检查总耗时（毫秒）
         std::map<std::string, ComponentStatus> components; // 各组件状态
     };
 

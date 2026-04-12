@@ -23,6 +23,8 @@ namespace disk::system {
     struct ConnectionStats {
         int64_t current{ 0 };
         int64_t peak{ 0 };
+        int64_t db_pool_size{ 0 };
+        int64_t redis_pool_size{ 0 };
     };
 
     struct StorageStats {

@@ -9,6 +9,7 @@
 #include "ConfigMgr.hpp"
 
 #include <cstring>
+#include <fstream>
 #include <stdexcept>
 #include <vector>
 
@@ -70,6 +71,28 @@ namespace disk::utils {
             }
         } else {
             LOG_WARN << "'disk' section not found in custom config, using default values";
+        }
+
+        // 读取数据库和 Redis 连接池大小
+        {
+            std::ifstream ifs("config.json");
+            if (ifs.is_open()) {
+                Json::Value root;
+                Json::CharReaderBuilder builder;
+                std::string errors;
+                if (Json::parseFromStream(builder, ifs, &root, &errors)) {
+                    if (root.isMember("db_clients") && root["db_clients"].isArray() &&
+                        !root["db_clients"].empty()) {
+                        m_db_pool_size =
+                            root["db_clients"][0].get("num_connection_number", 0).asInt64();
+                    }
+                    if (root.isMember("redis_clients") && root["redis_clients"].isArray() &&
+                        !root["redis_clients"].empty()) {
+                        m_redis_pool_size =
+                            root["redis_clients"][0].get("number_of_connections", 0).asInt64();
+                    }
+                }
+            }
         }
     }
 
@@ -195,6 +218,14 @@ namespace disk::utils {
         }
 
         LOG_INFO << "All required environment variables validated successfully";
+    }
+
+    auto ConfigMgr::GetDbPoolSize() const noexcept -> int64_t {
+        return m_db_pool_size;
+    }
+
+    auto ConfigMgr::GetRedisPoolSize() const noexcept -> int64_t {
+        return m_redis_pool_size;
     }
 
 } // namespace disk::utils

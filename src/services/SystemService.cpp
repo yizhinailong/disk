@@ -14,8 +14,13 @@
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
 #include "models/Users.hpp"
+#include "utils/ConfigMgr.hpp"
+#include "utils/StageTimer.hpp"
 
 namespace disk::system {
+
+    using disk::utils::ConfigMgr;
+    using disk::utils::StageTimer;
 
     SystemService::SystemService(
         drogon::orm::DbClientPtr db_client,
@@ -28,6 +33,8 @@ namespace disk::system {
     }
 
     auto SystemService::GetInfo(uint64_t user_id) -> drogon::Task<Result<SystemInfo>> {
+        StageTimer timer("system_get_info");
+
         SystemInfo info;
         info.version = "1.0.0";
         info.drogon_version = drogon::getVersion();
@@ -50,9 +57,13 @@ namespace disk::system {
     auto SystemService::GetConnectionStats() -> drogon::Task<ConnectionStats> {
         ConnectionStats stats;
 
-        // 获取当前数据库连接数（Drogon 没有直接提供这个 API，返回估算值）
-        stats.current = 1;
-        stats.peak = 10;
+        auto config = ConfigMgr::GetInstance();
+        stats.db_pool_size = config->GetDbPoolSize();
+        stats.redis_pool_size = config->GetRedisPoolSize();
+
+        // Drogon 不暴露运行时活跃连接数，使用配置池大小作为上限估算
+        stats.current = stats.db_pool_size;
+        stats.peak = stats.db_pool_size;
 
         co_return stats;
     }

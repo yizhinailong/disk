@@ -30,6 +30,7 @@
 #include "utils/BatchUtils.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
+#include "utils/StageTimer.hpp"
 
 namespace disk::file {
 
@@ -492,11 +493,18 @@ namespace disk::file {
         }
 
         // 3. 用一次有序分片索引查询同时验证数量与连续性
+        auto chunk_scan_start = std::chrono::steady_clock::now();
         auto uploaded_chunks_result = co_await m_db_client->execSqlCoro(
             "SELECT chunk_index FROM upload_task_chunks WHERE task_id = ? ORDER BY chunk_index",
             upload_id
         );
         auto uploaded_count = uploaded_chunks_result.size();
+        LOG_INFO << "[stage_timer] chunk_scan duration_ms="
+                 << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - chunk_scan_start
+                    )
+                        .count()
+                 << " upload_id=" << upload_id;
 
         if (uploaded_count != task.getValueOfTotalChunks()) {
             LOG_WARN << "Not all chunks uploaded: uploaded=" << uploaded_count
@@ -536,7 +544,15 @@ namespace disk::file {
         }
 
         // 3. 组装分片（同时计算 MD5 + SHA256）
+        auto assemble_start = std::chrono::steady_clock::now();
         auto assemble_result = co_await m_storage->AssembleChunks(upload_id, task.getValueOfTotalChunks());
+        LOG_INFO << "[stage_timer] assemble duration_ms="
+                 << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - assemble_start
+                    )
+                        .count()
+                 << " upload_id=" << upload_id
+                 << " total_chunks=" << task.getValueOfTotalChunks();
         if (!assemble_result) {
             LOG_ERROR << "Failed to assemble chunks: upload_id=" << upload_id
                       << ", error=" << static_cast<int>(assemble_result.error().code);
@@ -597,6 +613,7 @@ namespace disk::file {
             co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
         }
 
+        auto dedup_start = std::chrono::steady_clock::now();
         auto existing_content = co_await FindExistingContent(final_hash);
         std::filesystem::path final_storage_path;
         std::string final_sha256;
@@ -634,10 +651,18 @@ namespace disk::file {
             final_sha256 = precomputed_sha256;
             should_compensate_storage_file = true;
         }
+        LOG_INFO << "[stage_timer] dedup_lookup duration_ms="
+                 << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - dedup_start
+                    )
+                        .count()
+                 << " upload_id=" << upload_id
+                 << " dedup_hit=" << (existing_content.has_value() ? "true" : "false");
 
         std::shared_ptr<drogon::orm::Transaction> transaction;
         Files file;
         bool db_operation_failed = false;
+        auto tx_start = std::chrono::steady_clock::now();
         try {
             transaction = co_await m_db_client->newTransactionCoro();
 
@@ -728,8 +753,16 @@ namespace disk::file {
             }
             db_operation_failed = true;
         }
+        LOG_INFO << "[stage_timer] tx duration_ms="
+                 << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - tx_start
+                    )
+                        .count()
+                 << " upload_id=" << upload_id
+                 << " success=" << (!db_operation_failed ? "true" : "false");
 
         if (db_operation_failed) {
+            auto compensation_start = std::chrono::steady_clock::now();
             if (should_compensate_storage_file) {
                 auto cleanup_result = co_await m_storage->DeletePath(final_storage_path);
                 if (!cleanup_result) {
@@ -737,6 +770,12 @@ namespace disk::file {
                               << final_storage_path;
                 }
             }
+            LOG_INFO << "[stage_timer] compensation_cleanup duration_ms="
+                     << std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - compensation_start
+                        )
+                            .count()
+                     << " upload_id=" << upload_id;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
@@ -754,7 +793,14 @@ namespace disk::file {
         InvalidateUploadTaskCache(upload_id);
 
         // 7. Cleanup temp directory
+        auto temp_cleanup_start = std::chrono::steady_clock::now();
         auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
+        LOG_INFO << "[stage_timer] temp_cleanup duration_ms="
+                 << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - temp_cleanup_start
+                    )
+                        .count()
+                 << " upload_id=" << upload_id;
         if (!cleanup_result) {
             LOG_WARN << "Failed to cleanup temp artifacts: "
                      << static_cast<int>(cleanup_result.error().code);
