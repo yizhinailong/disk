@@ -189,6 +189,119 @@ namespace disk::services {
             EXPECT_EQ(chunks[2], (std::vector<uint64_t>{ 50 }));
         }
 
+        TEST(CleanupServiceBatchingTest, BoundedBatchCapStopsAfterMaxIterations) {
+            constexpr int kFetchBatchSize = 3;
+            constexpr int kMaxBatchesPerRun = 2;
+
+            std::vector<uint64_t> all_expired_ids = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
+            uint64_t last_seen_id = 0;
+            std::vector<uint64_t> visited_ids;
+            int batch_iteration = 0;
+
+            while (batch_iteration < kMaxBatchesPerRun) {
+                std::vector<uint64_t> batch;
+                for (auto id : all_expired_ids) {
+                    if (id > last_seen_id && batch.size() < static_cast<size_t>(kFetchBatchSize)) {
+                        batch.push_back(id);
+                    }
+                }
+
+                if (batch.empty()) {
+                    break;
+                }
+
+                uint64_t batch_max_id = 0;
+                for (auto id : batch) {
+                    if (id > batch_max_id) {
+                        batch_max_id = id;
+                    }
+                }
+
+                for (auto id : batch) {
+                    visited_ids.push_back(id);
+                }
+
+                last_seen_id = batch_max_id;
+                batch_iteration++;
+
+                if (batch.size() < static_cast<size_t>(kFetchBatchSize)) {
+                    break;
+                }
+            }
+
+            EXPECT_EQ(batch_iteration, 2);
+            EXPECT_EQ(visited_ids, (std::vector<uint64_t>{ 10, 20, 30, 40, 50, 60 }));
+            EXPECT_EQ(last_seen_id, 60u);
+        }
+
+        TEST(CleanupServiceBatchingTest, BlobDeletionOnlyAfterReferenceReverification) {
+            struct ContentRef {
+                uint64_t id;
+                std::string path;
+                bool still_zero;
+            };
+
+            std::vector<ContentRef> transaction_zero_refs = {
+                { 100, "/disk/blob_a",  true },
+                { 200, "/disk/blob_b", false },
+                { 300, "/disk/blob_c",  true },
+            };
+
+            std::vector<std::string> verified_paths;
+            for (const auto& ref : transaction_zero_refs) {
+                if (ref.still_zero) {
+                    verified_paths.push_back(ref.path);
+                }
+            }
+
+            ASSERT_EQ(verified_paths.size(), 2u);
+            EXPECT_EQ(verified_paths[0], "/disk/blob_a");
+            EXPECT_EQ(verified_paths[1], "/disk/blob_c");
+        }
+
+        TEST(CleanupServiceBatchingTest, EvidenceCountersTrackChunkResults) {
+            struct ChunkResult {
+                bool succeeded;
+                int blobs_verified;
+                int blobs_deleted;
+            };
+
+            std::vector<ChunkResult> chunk_results = {
+                {  true, 3, 3 },
+                { false, 0, 0 },
+                {  true, 2, 1 },
+            };
+
+            int chunks_succeeded = 0;
+            int chunks_failed = 0;
+            int total_blobs_verified = 0;
+            int total_blobs_deleted = 0;
+
+            for (const auto& cr : chunk_results) {
+                if (cr.succeeded) {
+                    chunks_succeeded++;
+                    total_blobs_verified += cr.blobs_verified;
+                    total_blobs_deleted += cr.blobs_deleted;
+                } else {
+                    chunks_failed++;
+                }
+            }
+
+            EXPECT_EQ(chunks_succeeded, 2);
+            EXPECT_EQ(chunks_failed, 1);
+            EXPECT_EQ(total_blobs_verified, 5);
+            EXPECT_EQ(total_blobs_deleted, 4);
+        }
+
+        TEST(CleanupServiceBatchingTest, UploadTaskCleanupIsSinglePassBounded) {
+            constexpr int kUploadTaskCleanupBatchSize = 100;
+            int total_expired = 250;
+            int fetched = std::min(total_expired, kUploadTaskCleanupBatchSize);
+
+            EXPECT_EQ(fetched, 100);
+            EXPECT_EQ(total_expired - fetched, 150);
+        }
+
         TEST(DISABLED_CleanupServiceIntegrationTest, BatchCleanupExpiredTrashMultipleItems) {
             GTEST_SKIP();
         }

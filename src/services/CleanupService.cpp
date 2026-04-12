@@ -38,6 +38,7 @@ namespace disk::services {
 
     constexpr int kUploadTaskCleanupBatchSize = 100;
     constexpr int kTrashFetchBatchSize = 100;
+    constexpr int kMaxTrashBatchesPerRun = 20;
 
     CleanupService::CleanupService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
@@ -60,8 +61,9 @@ namespace disk::services {
             int deleted_count = 0;
             std::unordered_map<uint64_t, int64_t> user_storage_delta;
             uint64_t last_seen_id = 0;
+            int batch_iteration = 0;
 
-            while (true) {
+            while (batch_iteration < kMaxTrashBatchesPerRun) {
                 auto batch_start = std::chrono::steady_clock::now();
                 auto result = co_await m_db_client->execSqlCoro(
                     "SELECT id, user_id, item_type, item_size, content_id, item_data " "FROM trash " "WHERE expires_at < NOW() AND id > ? " "ORDER BY id ASC " "LIMIT ?",
@@ -84,16 +86,23 @@ namespace disk::services {
                 std::vector<ExpiredTrashItem> trash_items;
                 trash_items.reserve(result.size());
                 for (const auto& row : result) {
-                    ExpiredTrashItem item{ .id = row["id"].as<uint64_t>(),
-                                           .user_id = row["user_id"].as<uint64_t>(),
-                                           .item_type = row["item_type"].as<std::string>(),
-                                           .item_size = row["item_size"].as<uint64_t>(),
-                                           .item_data = row["item_data"].as<std::string>() };
+                    ExpiredTrashItem item{
+                        .id = row["id"].as<uint64_t>(),
+                        .user_id = row["user_id"].as<uint64_t>(),
+                        .item_type = row["item_type"].as<std::string>(),
+                        .item_size = row["item_size"].as<uint64_t>(),
+                        .item_data = row["item_data"].as<std::string>()
+                    };
                     if (!row["content_id"].isNull()) {
                         item.content_id = row["content_id"].as<uint64_t>();
                     }
                     trash_items.push_back(std::move(item));
                 }
+
+                int chunks_succeeded = 0;
+                int chunks_failed = 0;
+                int blobs_verified = 0;
+                int blobs_deleted = 0;
 
                 auto chunks = BatchUtils::Chunk(trash_items, DEFAULT_BATCH_CHUNK_SIZE);
                 for (const auto& chunk : chunks) {
@@ -103,6 +112,7 @@ namespace disk::services {
 
                     std::shared_ptr<drogon::orm::Transaction> transaction;
                     std::vector<std::string> zero_ref_paths;
+                    std::vector<uint64_t> unique_content_ids;
                     std::unordered_map<uint64_t, int64_t> chunk_user_storage_delta;
 
                     try {
@@ -151,7 +161,6 @@ namespace disk::services {
                                 content_id_counts[id]++;
                             }
 
-                            std::vector<uint64_t> unique_content_ids;
                             unique_content_ids.reserve(content_id_counts.size());
 
                             std::string update_sql = "UPDATE file_contents SET ref_count = GREATEST(ref_count - CASE id ";
@@ -200,46 +209,81 @@ namespace disk::services {
                             }
                         }
                         LOG_ERROR << "Failed to cleanup expired trash chunk atomically: " << e.what();
+                        chunks_failed++;
                         continue;
                     }
 
-                    if (!zero_ref_paths.empty()) {
-                        auto* storage = disk::storage::StorageMgr::GetStorage();
-                        if (storage == nullptr) {
-                            LOG_WARN << "Storage manager is not initialized, skip expired-trash blob cleanup for chunk: blob_count="
-                                     << zero_ref_paths.size();
-                        } else {
-                            for (const auto& path : zero_ref_paths) {
-                                auto delete_result = co_await storage->DeletePath(path);
-                                if (!delete_result.has_value()) {
-                                    LOG_WARN << "Failed to cleanup expired-trash blob after chunk: storage_path="
-                                             << path << ", error_code="
-                                             << static_cast<uint32_t>(delete_result.error().code)
-                                             << ", error_message=" << delete_result.error().message;
-                                } else {
-                                    LOG_INFO << "Expired-trash blob cleanup completed after chunk: storage_path="
-                                             << path;
+                    chunks_succeeded++;
+
+                    if (!zero_ref_paths.empty() && !unique_content_ids.empty()) {
+                        try {
+                            auto verified_rows = co_await m_db_client->execSqlCoro(
+                                "SELECT id, storage_path FROM file_contents " "WHERE ref_count = 0 AND id IN (" +
+                                BatchUtils::BuildSafeNumericInClause(unique_content_ids) + ")"
+                            );
+
+                            blobs_verified += static_cast<int>(verified_rows.size());
+
+                            if (verified_rows.size() < zero_ref_paths.size()) {
+                                LOG_INFO << "[cleanup_batch] blob safety check: candidates="
+                                         << zero_ref_paths.size()
+                                         << " verified=" << verified_rows.size()
+                                         << " reclaimed_by_concurrent="
+                                         << (zero_ref_paths.size() - verified_rows.size());
+                            }
+
+                            auto* storage = disk::storage::StorageMgr::GetStorage();
+                            if (storage == nullptr) {
+                                LOG_WARN << "Storage manager is not initialized, skip expired-trash blob cleanup for chunk: blob_count="
+                                         << verified_rows.size();
+                            } else {
+                                for (const auto& row : verified_rows) {
+                                    auto path = row["storage_path"].as<std::string>();
+                                    auto blob_delete_result = co_await storage->DeletePath(path);
+                                    if (!blob_delete_result.has_value()) {
+                                        LOG_WARN << "Failed to cleanup expired-trash blob after chunk: storage_path="
+                                                 << path << ", error_code="
+                                                 << static_cast<uint32_t>(blob_delete_result.error().code)
+                                                 << ", error_message=" << blob_delete_result.error().message;
+                                    } else {
+                                        blobs_deleted++;
+                                        LOG_INFO << "Expired-trash blob cleanup completed after chunk: storage_path="
+                                                 << path;
+                                    }
                                 }
                             }
+                        } catch (const std::exception& e) {
+                            LOG_ERROR << "[cleanup_batch] blob re-verification failed, skipping blob deletion for chunk: "
+                                      << e.what();
                         }
                     }
                 }
 
-                LOG_INFO << "[cleanup_batch] trash batch_size="
-                         << result.size()
+                LOG_INFO << "[cleanup_batch] trash batch_iteration="
+                         << batch_iteration
+                         << " fetch_size=" << result.size()
                          << " rows_deleted_so_far=" << deleted_count
+                         << " chunks_succeeded=" << chunks_succeeded
+                         << " chunks_failed=" << chunks_failed
+                         << " blobs_verified=" << blobs_verified
+                         << " blobs_deleted=" << blobs_deleted
                          << " batch_duration_ms="
                          << std::chrono::duration_cast<std::chrono::milliseconds>(
                                 std::chrono::steady_clock::now() - batch_start
                             )
                                 .count();
 
-                // 关键：无论分块处理是否成功，始终推进游标以避免毒丸重试
                 last_seen_id = batch_max_id;
+                batch_iteration++;
 
                 if (result.size() < static_cast<size_t>(kTrashFetchBatchSize)) {
                     break;
                 }
+            }
+
+            if (batch_iteration >= kMaxTrashBatchesPerRun) {
+                LOG_INFO << "[cleanup_batch] trash reached max batches per run cap: max="
+                         << kMaxTrashBatchesPerRun << " rows_deleted=" << deleted_count;
             }
 
             for (const auto& [user_id, delta] : user_storage_delta) {
