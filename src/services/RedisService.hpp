@@ -120,6 +120,9 @@ namespace disk::services {
         /**
          * @brief 批量设置键值对
          *
+         * ttl == 0 时使用单条 MSET 命令；ttl > 0 时使用 Redis 事务批量执行 SETEX。
+         * 该方法保持现有 Result<void> 返回语义，仅减少安全可行的 Redis 往返次数。
+         *
          * @param pairs 键值对数组
          * @param ttl 过期时间（0=永久，>0=自动过期）
          * @return Result<void> 成功返回void，失败返回错误
@@ -130,6 +133,9 @@ namespace disk::services {
         /**
          * @brief 批量获取键值
          *
+         * 使用单条 MGET 命令获取所有键，并按输入顺序返回结果。
+         * 缺失键使用空字符串占位，以保持现有调用方语义。
+         *
          * @param keys 键数组
          * @return Result<std::vector<std::string>> 成功返回值数组，失败返回错误
          */
@@ -138,6 +144,8 @@ namespace disk::services {
 
         /**
          * @brief 批量删除键
+         *
+         * 使用单条 DEL 命令删除全部键，并返回 Redis 报告的删除数量。
          *
          * @param keys 键数组
          * @return Result<int> 成功返回删除的键数量，失败返回错误

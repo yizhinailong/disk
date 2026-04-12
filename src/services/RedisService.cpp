@@ -10,10 +10,67 @@
 #include "RedisService.hpp"
 
 #include <chrono>
+#include <string_view>
 
 #include "utils/ErrorCode.hpp"
 
 namespace disk::services {
+
+    namespace {
+
+        auto BuildMultiKeyCommand(
+            std::string_view command_name,
+            const std::vector<std::string>& keys
+        ) -> std::string {
+            size_t command_size = command_name.size();
+            for (const auto& key : keys) {
+                command_size += 1 + key.size();
+            }
+
+            std::string command;
+            command.reserve(command_size);
+            command.append(command_name);
+
+            for (const auto& key : keys) {
+                command.push_back(' ');
+                command.append(key);
+            }
+
+            return command;
+        }
+
+        auto BuildMSetCommand(const std::vector<KeyValue>& pairs) -> std::string {
+            size_t command_size = 4;
+            for (const auto& pair : pairs) {
+                command_size += 2 + pair.key.size() + pair.value.size();
+            }
+
+            std::string command;
+            command.reserve(command_size);
+            command.append("MSET");
+
+            for (const auto& pair : pairs) {
+                command.push_back(' ');
+                command.append(pair.key);
+                command.push_back(' ');
+                command.append(pair.value);
+            }
+
+            return command;
+        }
+
+        auto WrapRedisResultParseError(
+            std::string_view operation,
+            const std::exception& ex
+        ) -> std::unexpected<ErrorInfo> {
+            LOG_ERROR << "Redis result parse failed: " << operation << ", error=" << ex.what();
+            return std::unexpected(ErrorInfo(
+                ErrorCode::RedisOperationFailed,
+                "Redis operation failed: " + std::string(ex.what())
+            ));
+        }
+
+    } // namespace
 
     using disk::error::ErrorInfo;
 
@@ -162,21 +219,30 @@ namespace disk::services {
         auto cmd_start = std::chrono::steady_clock::now();
         try {
             if (ttl == 0) {
-                for (const auto& pair : pairs) {
-                    co_await m_redis_client
-                        ->execCommandCoro("SET %s %s", pair.key.c_str(), pair.value.c_str());
-                }
+                const auto command = BuildMSetCommand(pairs);
+                co_await m_redis_client->execCommandCoro(command.c_str());
             } else {
-                co_await m_redis_client->execCommandCoro("MULTI");
+                auto transaction = co_await m_redis_client->newTransactionCoro();
                 for (const auto& pair : pairs) {
-                    co_await m_redis_client->execCommandCoro(
-                        "SET %s %s EX %d",
+                    co_await transaction->execCommandCoro(
+                        "SETEX %s %d %s",
                         pair.key.c_str(),
-                        pair.value.c_str(),
-                        ttl
+                        ttl,
+                        pair.value.c_str()
                     );
                 }
-                co_await m_redis_client->execCommandCoro("EXEC");
+
+                auto exec_result = co_await transaction->executeCoro();
+                const auto exec_results = exec_result.asArray();
+
+                if (exec_results.size() != pairs.size()) {
+                    LOG_ERROR << "Redis transaction returned unexpected reply count: expected="
+                              << pairs.size() << ", actual=" << exec_results.size();
+                    co_return std::unexpected(ErrorInfo(
+                        ErrorCode::RedisOperationFailed,
+                        "Redis operation failed: unexpected transaction reply count"
+                    ));
+                }
             }
 
             LOG_DEBUG << "[redis_timer] MSET duration_us="
@@ -195,6 +261,8 @@ namespace disk::services {
                 ErrorCode::RedisOperationFailed,
                 "Redis operation failed: " + std::string(ex.what())
             ));
+        } catch (const std::exception& ex) {
+            co_return WrapRedisResultParseError("MSET", ex);
         }
     }
 
@@ -206,16 +274,22 @@ namespace disk::services {
 
         auto cmd_start = std::chrono::steady_clock::now();
         try {
-            std::string cmd = "MGET";
-            for (const auto& key : keys) {
-                cmd += " " + key;
-            }
-
-            auto result = co_await m_redis_client->execCommandCoro(cmd.c_str());
+            const auto command = BuildMultiKeyCommand("MGET", keys);
+            auto result = co_await m_redis_client->execCommandCoro(command.c_str());
 
             std::vector<std::string> values;
             values.reserve(keys.size());
             const auto result_array = result.asArray();
+
+            if (result_array.size() != keys.size()) {
+                LOG_ERROR << "Redis MGET returned unexpected value count: expected=" << keys.size()
+                          << ", actual=" << result_array.size();
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::RedisOperationFailed,
+                    "Redis operation failed: unexpected MGET reply count"
+                ));
+            }
+
             for (size_t i = 0; i < result_array.size(); ++i) {
                 values.push_back(result_array[i].isNil() ? "" : result_array[i].asString());
             }
@@ -236,6 +310,8 @@ namespace disk::services {
                 ErrorCode::RedisOperationFailed,
                 "Redis operation failed: " + std::string(ex.what())
             ));
+        } catch (const std::exception& ex) {
+            co_return WrapRedisResultParseError("MGET", ex);
         }
     }
 
@@ -246,12 +322,8 @@ namespace disk::services {
 
         auto cmd_start = std::chrono::steady_clock::now();
         try {
-            std::string cmd = "DEL";
-            for (const auto& key : keys) {
-                cmd += " " + key;
-            }
-
-            auto result = co_await m_redis_client->execCommandCoro(cmd.c_str());
+            const auto command = BuildMultiKeyCommand("DEL", keys);
+            auto result = co_await m_redis_client->execCommandCoro(command.c_str());
             const auto deleted = result.asInteger();
 
             LOG_DEBUG << "[redis_timer] MDELETE duration_us="
@@ -270,6 +342,8 @@ namespace disk::services {
                 ErrorCode::RedisOperationFailed,
                 "Redis operation failed: " + std::string(ex.what())
             ));
+        } catch (const std::exception& ex) {
+            co_return WrapRedisResultParseError("MDELETE", ex);
         }
     }
 
