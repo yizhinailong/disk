@@ -102,6 +102,67 @@ namespace disk::file {
 
             return normalized.find_first_not_of(' ') != std::string::npos;
         }
+
+        [[nodiscard]] auto ResolveListSortColumn(
+            std::string_view sort_by,
+            bool folder_only
+        ) -> std::string_view {
+            if (sort_by == "size") {
+                return folder_only ? "sort_size" : "size";
+            }
+            if (sort_by == "created_at") {
+                return "created_at";
+            }
+            if (sort_by == "updated_at") {
+                return "updated_at";
+            }
+            return "name";
+        }
+
+        [[nodiscard]] auto BuildDeterministicOrderByClause(
+            std::string_view primary_column,
+            std::string_view direction,
+            bool include_type,
+            std::string_view prefix = {}
+        ) -> std::string {
+            const auto QualifyColumn = [prefix](std::string_view column) {
+                if (prefix.empty()) {
+                    return std::string(column);
+                }
+
+                std::string qualified;
+                qualified.reserve(prefix.size() + column.size());
+                qualified.append(prefix);
+                qualified.append(column);
+                return qualified;
+            };
+
+            std::string order_by;
+            order_by.reserve(96);
+            order_by.append(QualifyColumn(primary_column));
+            order_by.push_back(' ');
+            order_by.append(direction);
+
+            if (primary_column != "name") {
+                order_by.append(", ");
+                order_by.append(QualifyColumn("name"));
+                order_by.push_back(' ');
+                order_by.append(direction);
+            }
+
+            if (include_type) {
+                order_by.append(", ");
+                order_by.append(QualifyColumn("type"));
+                order_by.push_back(' ');
+                order_by.append(direction);
+            }
+
+            order_by.append(", ");
+            order_by.append(QualifyColumn("id"));
+            order_by.push_back(' ');
+            order_by.append(direction);
+            return order_by;
+        }
     } // namespace
 
     // ==================== 构造函数 ====================
@@ -969,36 +1030,44 @@ namespace disk::file {
         int total = 0;
         int total_pages = 0;
 
-        // 构建 ORDER BY 子句
-        std::string order_by = "name";
-        if (request.sort_by == "size") {
-            order_by = "size";
-        } else if (request.sort_by == "created_at") {
-            order_by = "created_at";
-        } else if (request.sort_by == "updated_at") {
-            order_by = "updated_at";
-        }
-
-        std::string order_dir = (request.sort_order == "desc") ? "DESC" : "ASC";
+        const auto order_column = ResolveListSortColumn(request.sort_by, request.type == "folder");
+        const std::string order_dir = (request.sort_order == "desc") ? "DESC" : "ASC";
+        const std::string inner_order_by =
+            BuildDeterministicOrderByClause(order_column, order_dir, request.type == "all");
+        const std::string outer_order_by = BuildDeterministicOrderByClause(
+            order_column,
+            order_dir,
+            request.type == "all",
+            "page."
+        );
 
         auto offset = (request.page - 1) * request.page_size;
 
         try {
             if (request.type == "all") {
-                auto count_result = co_await m_db_client->execSqlCoro(
-                    "SELECT COUNT(*) AS cnt FROM (" "  SELECT f.id FROM files f WHERE f.folder_id = ? AND f.user_id = ? " "  UNION ALL " "  SELECT fo.id FROM folders fo WHERE fo.parent_id = ? AND fo.user_id = ? " ") AS combined",
-                    request.parent_id,
-                    user_id,
+                auto file_count_result = co_await m_db_client->execSqlCoro(
+                    "SELECT COUNT(*) AS cnt FROM files f WHERE f.folder_id = ? AND f.user_id = ?",
                     request.parent_id,
                     user_id
                 );
 
-                if (!count_result.empty()) {
-                    total = static_cast<int>(count_result[0]["cnt"].as<int64_t>());
+                if (!file_count_result.empty()) {
+                    total += static_cast<int>(file_count_result[0]["cnt"].as<int64_t>());
                 }
 
-                std::string data_sql =
-                    "SELECT * FROM (" "  SELECT f.id, f.name, 'file' AS type, f.size, f.mime_type, " "         COALESCE(fc.hash_md5, '') AS hash, 0 AS item_count, f.created_at, f.updated_at " "  FROM files f " "  LEFT JOIN file_contents fc ON f.content_id = fc.id " "  WHERE f.folder_id = ? AND f.user_id = ? " "  UNION ALL " "  SELECT fo.id, fo.name, 'folder' AS type, 0 AS size, '' AS mime_type, " "         '' AS hash, fo.item_count, fo.created_at, fo.updated_at " "  FROM folders fo " "  WHERE fo.parent_id = ? AND fo.user_id = ? " ") AS combined " "ORDER BY " + order_by + " " + order_dir + " " "LIMIT ? OFFSET ?";
+                auto folder_count_result = co_await m_db_client->execSqlCoro(
+                    "SELECT COUNT(*) AS cnt FROM folders fo WHERE fo.parent_id = ? AND fo.user_id = ?",
+                    request.parent_id,
+                    user_id
+                );
+
+                if (!folder_count_result.empty()) {
+                    total += static_cast<int>(folder_count_result[0]["cnt"].as<int64_t>());
+                }
+
+                // 先在窄行结果集上完成分页，再回表补齐详情，避免在宽行 UNION 结果上提前排序。
+                const std::string data_sql =
+                    "SELECT page.id, page.name, page.type, page.size, " "       COALESCE(f.mime_type, '') AS mime_type, " "       COALESCE(fc.hash_md5, '') AS hash, " "       COALESCE(fo.item_count, 0) AS item_count, " "       page.created_at, page.updated_at " "FROM (" "  SELECT combined.id, combined.name, combined.type, combined.size, combined.created_at, combined.updated_at " "  FROM (" "    SELECT f.id, f.name, 'file' AS type, f.size, f.created_at, f.updated_at " "    FROM files f " "    WHERE f.folder_id = ? AND f.user_id = ? " "    UNION ALL " "    SELECT fo.id, fo.name, 'folder' AS type, 0 AS size, fo.created_at, fo.updated_at " "    FROM folders fo " "    WHERE fo.parent_id = ? AND fo.user_id = ? " "  ) AS combined " "  ORDER BY " + inner_order_by + " " "  LIMIT ? OFFSET ?" ") AS page " "LEFT JOIN files f ON page.type = 'file' AND page.id = f.id " "LEFT JOIN folders fo ON page.type = 'folder' AND page.id = fo.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "ORDER BY " + outer_order_by;
 
                 auto paginated_result = co_await m_db_client->execSqlCoro(
                     data_sql,
@@ -1035,8 +1104,8 @@ namespace disk::file {
                     total = static_cast<int>(count_result[0]["cnt"].as<int64_t>());
                 }
 
-                std::string data_sql =
-                    "SELECT f.id, f.name, f.size, f.mime_type, " "       COALESCE(fc.hash_md5, '') AS hash, f.created_at, f.updated_at " "FROM files f " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE f.folder_id = ? AND f.user_id = ? " "ORDER BY " + order_by + " " + order_dir + " " "LIMIT ? OFFSET ?";
+                const std::string data_sql =
+                    "SELECT f.id, f.name, f.size, f.mime_type, " "       COALESCE(fc.hash_md5, '') AS hash, f.created_at, f.updated_at " "FROM (" "  SELECT f.id, f.name, f.size, f.created_at, f.updated_at " "  FROM files f " "  WHERE f.folder_id = ? AND f.user_id = ? " "  ORDER BY " + inner_order_by + " " "  LIMIT ? OFFSET ?" ") AS page " "JOIN files f ON f.id = page.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "ORDER BY " + outer_order_by;
 
                 auto paginated_result = co_await m_db_client->execSqlCoro(
                     data_sql,
@@ -1071,8 +1140,8 @@ namespace disk::file {
                     total = static_cast<int>(count_result[0]["cnt"].as<int64_t>());
                 }
 
-                std::string data_sql =
-                    "SELECT id, name, item_count, created_at, updated_at " "FROM folders " "WHERE parent_id = ? AND user_id = ? " "ORDER BY " + order_by + " " + order_dir + " " "LIMIT ? OFFSET ?";
+                const std::string data_sql =
+                    "SELECT page.id, page.name, page.item_count, page.created_at, page.updated_at " "FROM (" "  SELECT fo.id, fo.name, fo.item_count, fo.created_at, fo.updated_at, 0 AS sort_size " "  FROM folders fo " "  WHERE fo.parent_id = ? AND fo.user_id = ? " "  ORDER BY " + inner_order_by + " " "  LIMIT ? OFFSET ?" ") AS page " "ORDER BY " + outer_order_by;
 
                 auto paginated_result = co_await m_db_client->execSqlCoro(
                     data_sql,
@@ -1895,140 +1964,263 @@ namespace disk::file {
         int total_pages = 0;
 
         const bool use_fulltext = IsFulltextEligible(request.keyword);
+        const bool has_folder_filter = request.folder_id.has_value();
         const auto normalized_keyword = NormalizeFulltextKeyword(request.keyword);
-        const std::string search_param = use_fulltext ? normalized_keyword : "%" + request.keyword + "%";
-        const auto folder_id_param = request.folder_id.has_value() ? *request.folder_id : 0;
+        const std::string search_param =
+            use_fulltext ? normalized_keyword : "%" + request.keyword + "%";
+        const std::string inner_order_by =
+            BuildDeterministicOrderByClause("name", "ASC", request.type == "all");
+        const std::string outer_order_by = BuildDeterministicOrderByClause(
+            "name",
+            "ASC",
+            request.type == "all",
+            "page."
+        );
         auto offset = (request.page - 1) * request.page_size;
 
         try {
+            std::string file_where = use_fulltext ?
+                                         "WHERE f.user_id = ? AND MATCH(f.name) AGAINST(? IN BOOLEAN MODE)" :
+                                         "WHERE f.user_id = ? AND f.name LIKE ?";
+            std::string folder_where = use_fulltext ?
+                                           "WHERE fo.user_id = ? AND MATCH(fo.name) AGAINST(? IN BOOLEAN MODE)" :
+                                           "WHERE fo.user_id = ? AND fo.name LIKE ?";
+
+            if (has_folder_filter) {
+                file_where += " AND f.folder_id = ?";
+                folder_where += " AND fo.parent_id = ?";
+            }
+
             if (request.type == "all") {
-                const std::string count_sql = use_fulltext ? "SELECT COUNT(*) FROM (" "  SELECT f.id, f.name, 'file' AS type " "  FROM files f " "  WHERE f.user_id = ? AND MATCH(f.name) AGAINST(? IN BOOLEAN MODE) " "  AND (? IS NULL OR f.folder_id = ?) " "  UNION ALL " "  SELECT fo.id, fo.name, 'folder' AS type " "  FROM folders fo " "  WHERE fo.user_id = ? AND MATCH(fo.name) AGAINST(? IN BOOLEAN MODE) " "  AND (? IS NULL OR fo.parent_id = ?) " ") AS combined" : "SELECT COUNT(*) FROM (" "  SELECT f.id, f.name, 'file' AS type " "  FROM files f " "  WHERE f.user_id = ? AND f.name LIKE ? " "  AND (? IS NULL OR f.folder_id = ?) " "  UNION ALL " "  SELECT fo.id, fo.name, 'folder' AS type " "  FROM folders fo " "  WHERE fo.user_id = ? AND fo.name LIKE ? " "  AND (? IS NULL OR fo.parent_id = ?) " ") AS combined";
+                const std::string file_count_sql =
+                    "SELECT COUNT(*) AS cnt FROM files f " + file_where;
+                const std::string folder_count_sql =
+                    "SELECT COUNT(*) AS cnt FROM folders fo " + folder_where;
+                const std::string data_sql =
+                    "SELECT page.id, page.name, page.type, " "       COALESCE(f.size, 0) AS size, " "       COALESCE(f.mime_type, '') AS mime_type, " "       COALESCE(fc.hash_md5, '') AS hash, " "       COALESCE(fo.item_count, 0) AS item_count, " "       COALESCE(f.path, fo.path) AS path, " "       COALESCE(f.created_at, fo.created_at) AS created_at, " "       COALESCE(f.updated_at, fo.updated_at) AS updated_at " "FROM (" "  SELECT combined.id, combined.name, combined.type " "  FROM (" "    SELECT f.id, f.name, 'file' AS type " "    FROM files f " + file_where + " " "    UNION ALL " "    SELECT fo.id, fo.name, 'folder' AS type " "    FROM folders fo " + folder_where + " " "  ) AS combined " "  ORDER BY " + inner_order_by + " " "  LIMIT ? OFFSET ?" ") AS page " "LEFT JOIN files f ON page.type = 'file' AND f.id = page.id " "LEFT JOIN folders fo ON page.type = 'folder' AND fo.id = page.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "ORDER BY " + outer_order_by;
 
-                auto count_result = co_await m_db_client->execSqlCoro(
-                    count_sql,
-                    user_id,
-                    search_param,
-                    folder_id_param,
-                    folder_id_param,
-                    user_id,
-                    search_param,
-                    folder_id_param,
-                    folder_id_param
-                );
+                if (has_folder_filter) {
+                    auto file_count_result = co_await m_db_client->execSqlCoro(
+                        file_count_sql,
+                        user_id,
+                        search_param,
+                        *request.folder_id
+                    );
+                    if (!file_count_result.empty()) {
+                        total += static_cast<int>(file_count_result[0]["cnt"].as<int64_t>());
+                    }
 
-                if (!count_result.empty()) {
-                    total = static_cast<int>(count_result[0]["COUNT(*)"].as<int64_t>());
-                }
+                    auto folder_count_result = co_await m_db_client->execSqlCoro(
+                        folder_count_sql,
+                        user_id,
+                        search_param,
+                        *request.folder_id
+                    );
+                    if (!folder_count_result.empty()) {
+                        total += static_cast<int>(folder_count_result[0]["cnt"].as<int64_t>());
+                    }
 
-                const std::string data_sql = use_fulltext ? "SELECT * FROM (" "  SELECT f.id, f.name, 'file' AS type, f.size, f.mime_type, " "         COALESCE(fc.hash_md5, '') AS hash, 0 AS item_count, f.path, f.created_at, f.updated_at " "  FROM files f " "  LEFT JOIN file_contents fc ON f.content_id = fc.id " "  WHERE f.user_id = ? AND MATCH(f.name) AGAINST(? IN BOOLEAN MODE) " "  AND (? IS NULL OR f.folder_id = ?) " "  UNION ALL " "  SELECT fo.id, fo.name, 'folder' AS type, 0 AS size, '' AS mime_type, " "         '' AS hash, fo.item_count, fo.path, fo.created_at, fo.updated_at " "  FROM folders fo " "  WHERE fo.user_id = ? AND MATCH(fo.name) AGAINST(? IN BOOLEAN MODE) " "  AND (? IS NULL OR fo.parent_id = ?) " ") AS combined " "ORDER BY name ASC " "LIMIT ? OFFSET ?" : "SELECT * FROM (" "  SELECT f.id, f.name, 'file' AS type, f.size, f.mime_type, " "         COALESCE(fc.hash_md5, '') AS hash, 0 AS item_count, f.path, f.created_at, f.updated_at " "  FROM files f " "  LEFT JOIN file_contents fc ON f.content_id = fc.id " "  WHERE f.user_id = ? AND f.name LIKE ? " "  AND (? IS NULL OR f.folder_id = ?) " "  UNION ALL " "  SELECT fo.id, fo.name, 'folder' AS type, 0 AS size, '' AS mime_type, " "         '' AS hash, fo.item_count, fo.path, fo.created_at, fo.updated_at " "  FROM folders fo " "  WHERE fo.user_id = ? AND fo.name LIKE ? " "  AND (? IS NULL OR fo.parent_id = ?) " ") AS combined " "ORDER BY name ASC " "LIMIT ? OFFSET ?";
+                    auto result = co_await m_db_client->execSqlCoro(
+                        data_sql,
+                        user_id,
+                        search_param,
+                        *request.folder_id,
+                        user_id,
+                        search_param,
+                        *request.folder_id,
+                        request.page_size,
+                        offset
+                    );
 
-                auto result = co_await m_db_client->execSqlCoro(
-                    data_sql,
-                    user_id,
-                    search_param,
-                    folder_id_param,
-                    folder_id_param,
-                    user_id,
-                    search_param,
-                    folder_id_param,
-                    folder_id_param,
-                    request.page_size,
-                    offset
-                );
+                    for (const auto& row : result) {
+                        SearchResultItem item;
+                        item.id = row["id"].as<uint64_t>();
+                        item.name = row["name"].as<std::string>();
+                        item.type = row["type"].as<std::string>();
+                        item.size = row["size"].as<uint64_t>();
+                        item.mime_type = row["mime_type"].as<std::string>();
+                        item.hash = row["hash"].as<std::string>();
+                        item.item_count = static_cast<int>(row["item_count"].as<int64_t>());
+                        item.path = row["path"].as<std::string>();
+                        item.created_at = row["created_at"].as<std::string>();
+                        item.updated_at = row["updated_at"].as<std::string>();
+                        items.push_back(item);
+                    }
+                } else {
+                    auto file_count_result =
+                        co_await m_db_client->execSqlCoro(file_count_sql, user_id, search_param);
+                    if (!file_count_result.empty()) {
+                        total += static_cast<int>(file_count_result[0]["cnt"].as<int64_t>());
+                    }
 
-                for (const auto& row : result) {
-                    SearchResultItem item;
-                    item.id = row["id"].as<uint64_t>();
-                    item.name = row["name"].as<std::string>();
-                    item.type = row["type"].as<std::string>();
-                    item.size = row["size"].as<uint64_t>();
-                    item.mime_type = row["mime_type"].as<std::string>();
-                    item.hash = row["hash"].as<std::string>();
-                    item.item_count = static_cast<int>(row["item_count"].as<int64_t>());
-                    item.path = row["path"].as<std::string>();
-                    item.created_at = row["created_at"].as<std::string>();
-                    item.updated_at = row["updated_at"].as<std::string>();
-                    items.push_back(item);
+                    auto folder_count_result =
+                        co_await m_db_client->execSqlCoro(folder_count_sql, user_id, search_param);
+                    if (!folder_count_result.empty()) {
+                        total += static_cast<int>(folder_count_result[0]["cnt"].as<int64_t>());
+                    }
+
+                    auto result = co_await m_db_client->execSqlCoro(
+                        data_sql,
+                        user_id,
+                        search_param,
+                        user_id,
+                        search_param,
+                        request.page_size,
+                        offset
+                    );
+
+                    for (const auto& row : result) {
+                        SearchResultItem item;
+                        item.id = row["id"].as<uint64_t>();
+                        item.name = row["name"].as<std::string>();
+                        item.type = row["type"].as<std::string>();
+                        item.size = row["size"].as<uint64_t>();
+                        item.mime_type = row["mime_type"].as<std::string>();
+                        item.hash = row["hash"].as<std::string>();
+                        item.item_count = static_cast<int>(row["item_count"].as<int64_t>());
+                        item.path = row["path"].as<std::string>();
+                        item.created_at = row["created_at"].as<std::string>();
+                        item.updated_at = row["updated_at"].as<std::string>();
+                        items.push_back(item);
+                    }
                 }
 
             } else if (request.type == "file") {
-                const std::string count_sql = use_fulltext ? "SELECT COUNT(*) FROM files f " "WHERE f.user_id = ? AND MATCH(f.name) AGAINST(? IN BOOLEAN MODE) " "AND (? IS NULL OR f.folder_id = ?)" : "SELECT COUNT(*) FROM files f " "WHERE f.user_id = ? AND f.name LIKE ? " "AND (? IS NULL OR f.folder_id = ?)";
+                const std::string count_sql =
+                    "SELECT COUNT(*) AS cnt FROM files f " + file_where;
+                const std::string data_sql =
+                    "SELECT f.id, f.name, f.size, f.mime_type, f.path, f.created_at, f.updated_at, " "       COALESCE(fc.hash_md5, '') AS hash " "FROM (" "  SELECT f.id, f.name " "  FROM files f " + file_where + " " "  ORDER BY " + inner_order_by + " " "  LIMIT ? OFFSET ?" ") AS page " "JOIN files f ON f.id = page.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "ORDER BY " + outer_order_by;
 
-                auto count_result = co_await m_db_client->execSqlCoro(
-                    count_sql,
-                    user_id,
-                    search_param,
-                    folder_id_param,
-                    folder_id_param
-                );
+                if (has_folder_filter) {
+                    auto count_result = co_await m_db_client->execSqlCoro(
+                        count_sql,
+                        user_id,
+                        search_param,
+                        *request.folder_id
+                    );
 
-                if (!count_result.empty()) {
-                    total = static_cast<int>(count_result[0]["COUNT(*)"].as<int64_t>());
-                }
+                    if (!count_result.empty()) {
+                        total = static_cast<int>(count_result[0]["cnt"].as<int64_t>());
+                    }
 
-                const std::string data_sql = use_fulltext ? "SELECT f.id, f.name, f.size, f.mime_type, f.path, f.created_at, f.updated_at, " "       COALESCE(fc.hash_md5, '') AS hash " "FROM files f " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE f.user_id = ? AND MATCH(f.name) AGAINST(? IN BOOLEAN MODE) " "AND (? IS NULL OR f.folder_id = ?) " "ORDER BY name ASC " "LIMIT ? OFFSET ?" : "SELECT f.id, f.name, f.size, f.mime_type, f.path, f.created_at, f.updated_at, " "       COALESCE(fc.hash_md5, '') AS hash " "FROM files f " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE f.user_id = ? AND f.name LIKE ? " "AND (? IS NULL OR f.folder_id = ?) " "ORDER BY name ASC " "LIMIT ? OFFSET ?";
+                    auto result = co_await m_db_client->execSqlCoro(
+                        data_sql,
+                        user_id,
+                        search_param,
+                        *request.folder_id,
+                        request.page_size,
+                        offset
+                    );
 
-                auto result = co_await m_db_client->execSqlCoro(
-                    data_sql,
-                    user_id,
-                    search_param,
-                    folder_id_param,
-                    folder_id_param,
-                    request.page_size,
-                    offset
-                );
+                    for (const auto& row : result) {
+                        SearchResultItem item;
+                        item.id = row["id"].as<uint64_t>();
+                        item.name = row["name"].as<std::string>();
+                        item.type = "file";
+                        item.size = row["size"].as<uint64_t>();
+                        item.mime_type = row["mime_type"].as<std::string>();
+                        item.hash = row["hash"].as<std::string>();
+                        item.path = row["path"].as<std::string>();
+                        item.created_at = row["created_at"].as<std::string>();
+                        item.updated_at = row["updated_at"].as<std::string>();
+                        items.push_back(item);
+                    }
+                } else {
+                    auto count_result =
+                        co_await m_db_client->execSqlCoro(count_sql, user_id, search_param);
 
-                for (const auto& row : result) {
-                    SearchResultItem item;
-                    item.id = row["id"].as<uint64_t>();
-                    item.name = row["name"].as<std::string>();
-                    item.type = "file";
-                    item.size = row["size"].as<uint64_t>();
-                    item.mime_type = row["mime_type"].as<std::string>();
-                    item.hash = row["hash"].as<std::string>();
-                    item.path = row["path"].as<std::string>();
-                    item.created_at = row["created_at"].as<std::string>();
-                    item.updated_at = row["updated_at"].as<std::string>();
-                    items.push_back(item);
+                    if (!count_result.empty()) {
+                        total = static_cast<int>(count_result[0]["cnt"].as<int64_t>());
+                    }
+
+                    auto result = co_await m_db_client->execSqlCoro(
+                        data_sql,
+                        user_id,
+                        search_param,
+                        request.page_size,
+                        offset
+                    );
+
+                    for (const auto& row : result) {
+                        SearchResultItem item;
+                        item.id = row["id"].as<uint64_t>();
+                        item.name = row["name"].as<std::string>();
+                        item.type = "file";
+                        item.size = row["size"].as<uint64_t>();
+                        item.mime_type = row["mime_type"].as<std::string>();
+                        item.hash = row["hash"].as<std::string>();
+                        item.path = row["path"].as<std::string>();
+                        item.created_at = row["created_at"].as<std::string>();
+                        item.updated_at = row["updated_at"].as<std::string>();
+                        items.push_back(item);
+                    }
                 }
 
             } else if (request.type == "folder") {
-                const std::string count_sql = use_fulltext ? "SELECT COUNT(*) FROM folders fo " "WHERE fo.user_id = ? AND MATCH(fo.name) AGAINST(? IN BOOLEAN MODE) " "AND (? IS NULL OR fo.parent_id = ?)" : "SELECT COUNT(*) FROM folders fo " "WHERE fo.user_id = ? AND fo.name LIKE ? " "AND (? IS NULL OR fo.parent_id = ?)";
+                const std::string count_sql =
+                    "SELECT COUNT(*) AS cnt FROM folders fo " + folder_where;
+                const std::string data_sql =
+                    "SELECT fo.id, fo.name, fo.item_count, fo.path, fo.created_at, fo.updated_at " "FROM (" "  SELECT fo.id, fo.name " "  FROM folders fo " + folder_where + " " "  ORDER BY " + inner_order_by + " " "  LIMIT ? OFFSET ?" ") AS page " "JOIN folders fo ON fo.id = page.id " "ORDER BY " + outer_order_by;
 
-                auto count_result = co_await m_db_client->execSqlCoro(
-                    count_sql,
-                    user_id,
-                    search_param,
-                    folder_id_param,
-                    folder_id_param
-                );
+                if (has_folder_filter) {
+                    auto count_result = co_await m_db_client->execSqlCoro(
+                        count_sql,
+                        user_id,
+                        search_param,
+                        *request.folder_id
+                    );
 
-                if (!count_result.empty()) {
-                    total = static_cast<int>(count_result[0]["COUNT(*)"].as<int64_t>());
-                }
+                    if (!count_result.empty()) {
+                        total = static_cast<int>(count_result[0]["cnt"].as<int64_t>());
+                    }
 
-                const std::string data_sql = use_fulltext ? "SELECT fo.id, fo.name, fo.item_count, fo.path, fo.created_at, fo.updated_at " "FROM folders fo " "WHERE fo.user_id = ? AND MATCH(fo.name) AGAINST(? IN BOOLEAN MODE) " "AND (? IS NULL OR fo.parent_id = ?) " "ORDER BY name ASC " "LIMIT ? OFFSET ?" : "SELECT fo.id, fo.name, fo.item_count, fo.path, fo.created_at, fo.updated_at " "FROM folders fo " "WHERE fo.user_id = ? AND fo.name LIKE ? " "AND (? IS NULL OR fo.parent_id = ?) " "ORDER BY name ASC " "LIMIT ? OFFSET ?";
+                    auto result = co_await m_db_client->execSqlCoro(
+                        data_sql,
+                        user_id,
+                        search_param,
+                        *request.folder_id,
+                        request.page_size,
+                        offset
+                    );
 
-                auto result = co_await m_db_client->execSqlCoro(
-                    data_sql,
-                    user_id,
-                    search_param,
-                    folder_id_param,
-                    folder_id_param,
-                    request.page_size,
-                    offset
-                );
+                    for (const auto& row : result) {
+                        SearchResultItem item;
+                        item.id = row["id"].as<uint64_t>();
+                        item.name = row["name"].as<std::string>();
+                        item.type = "folder";
+                        item.item_count = static_cast<int>(row["item_count"].as<int64_t>());
+                        item.path = row["path"].as<std::string>();
+                        item.created_at = row["created_at"].as<std::string>();
+                        item.updated_at = row["updated_at"].as<std::string>();
+                        items.push_back(item);
+                    }
+                } else {
+                    auto count_result =
+                        co_await m_db_client->execSqlCoro(count_sql, user_id, search_param);
 
-                for (const auto& row : result) {
-                    SearchResultItem item;
-                    item.id = row["id"].as<uint64_t>();
-                    item.name = row["name"].as<std::string>();
-                    item.type = "folder";
-                    item.item_count = static_cast<int>(row["item_count"].as<int64_t>());
-                    item.path = row["path"].as<std::string>();
-                    item.created_at = row["created_at"].as<std::string>();
-                    item.updated_at = row["updated_at"].as<std::string>();
-                    items.push_back(item);
+                    if (!count_result.empty()) {
+                        total = static_cast<int>(count_result[0]["cnt"].as<int64_t>());
+                    }
+
+                    auto result = co_await m_db_client->execSqlCoro(
+                        data_sql,
+                        user_id,
+                        search_param,
+                        request.page_size,
+                        offset
+                    );
+
+                    for (const auto& row : result) {
+                        SearchResultItem item;
+                        item.id = row["id"].as<uint64_t>();
+                        item.name = row["name"].as<std::string>();
+                        item.type = "folder";
+                        item.item_count = static_cast<int>(row["item_count"].as<int64_t>());
+                        item.path = row["path"].as<std::string>();
+                        item.created_at = row["created_at"].as<std::string>();
+                        item.updated_at = row["updated_at"].as<std::string>();
+                        items.push_back(item);
+                    }
                 }
             }
 
