@@ -492,21 +492,25 @@ namespace disk::file {
             co_return CompleteUploadResponse{};
         }
 
-        // 3. 用一次有序分片索引查询同时验证数量与连续性
+        // 3. 先做分片数量预检查，命中后再做有序索引连续性验证
         auto chunk_scan_start = std::chrono::steady_clock::now();
-        auto uploaded_chunks_result = co_await m_db_client->execSqlCoro(
-            "SELECT chunk_index FROM upload_task_chunks WHERE task_id = ? ORDER BY chunk_index",
+        const auto LogChunkScanDuration = [&chunk_scan_start, &upload_id]() {
+            LOG_INFO << "[stage_timer] chunk_scan duration_ms="
+                     << std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - chunk_scan_start
+                        )
+                            .count()
+                     << " upload_id=" << upload_id;
+        };
+
+        auto uploaded_count_result = co_await m_db_client->execSqlCoro(
+            "SELECT COUNT(*) AS cnt FROM upload_task_chunks WHERE task_id = ?",
             upload_id
         );
-        auto uploaded_count = uploaded_chunks_result.size();
-        LOG_INFO << "[stage_timer] chunk_scan duration_ms="
-                 << std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now() - chunk_scan_start
-                    )
-                        .count()
-                 << " upload_id=" << upload_id;
+        const auto uploaded_count = uploaded_count_result[0]["cnt"].as<uint64_t>();
 
         if (uploaded_count != task.getValueOfTotalChunks()) {
+            LogChunkScanDuration();
             LOG_WARN << "Not all chunks uploaded: uploaded=" << uploaded_count
                      << ", total=" << task.getValueOfTotalChunks();
 
@@ -521,6 +525,12 @@ namespace disk::file {
                 ErrorInfo(ErrorCode::ValidationFailed, "Not all chunks uploaded")
             );
         }
+
+        auto uploaded_chunks_result = co_await m_db_client->execSqlCoro(
+            "SELECT chunk_index FROM upload_task_chunks WHERE task_id = ? ORDER BY chunk_index",
+            upload_id
+        );
+        LogChunkScanDuration();
 
         for (uint32_t expected_index = 0; expected_index < task.getValueOfTotalChunks();
              ++expected_index) {
@@ -595,7 +605,41 @@ namespace disk::file {
 
         LOG_DEBUG << "File hash verification passed: " << final_hash;
 
-        if (co_await IsFilenameExists(task.getValueOfFolderId(), task.getValueOfFilename(), user_id)) {
+        struct FinalizeLookupResult {
+            std::optional<uint64_t> existing_content_id;
+            bool filename_exists = false;
+        };
+
+        auto dedup_start = std::chrono::steady_clock::now();
+        auto lookup_result = co_await [this,
+                                       &final_hash,
+                                       &task,
+                                       user_id]() -> drogon::Task<FinalizeLookupResult> {
+            try {
+                auto result = co_await m_db_client->execSqlCoro(
+                    "SELECT (SELECT id FROM file_contents WHERE hash_md5 = ? LIMIT 1) AS content_id, " "EXISTS(SELECT 1 FROM files WHERE user_id = ? AND folder_id = ? AND name = ?) AS filename_exists",
+                    final_hash,
+                    user_id,
+                    task.getValueOfFolderId(),
+                    task.getValueOfFilename()
+                );
+
+                FinalizeLookupResult lookup;
+                if (!result.empty()) {
+                    if (!result[0]["content_id"].isNull()) {
+                        lookup.existing_content_id = result[0]["content_id"].as<uint64_t>();
+                    }
+                    lookup.filename_exists = result[0]["filename_exists"].as<int>() != 0;
+                }
+
+                co_return lookup;
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_ERROR << "Failed to query finalize upload metadata: " << e.base().what();
+                co_return FinalizeLookupResult{};
+            }
+        }();
+
+        if (lookup_result.filename_exists) {
             LOG_WARN << "File with same name already exists: " << task.getValueOfFilename();
             auto delete_result = co_await m_storage->DeletePath(assemble_path);
             if (!delete_result) {
@@ -610,11 +654,19 @@ namespace disk::file {
                      << " outcome=failure upload_id=" << upload_id
                      << " total_chunks=" << task.getValueOfTotalChunks();
 
+            LOG_INFO << "[stage_timer] dedup_lookup duration_ms="
+                     << std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - dedup_start
+                        )
+                            .count()
+                     << " upload_id=" << upload_id
+                     << " dedup_hit=" << (lookup_result.existing_content_id.has_value() ? "true" : "false")
+                     << " filename_exists=true";
+
             co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
         }
 
-        auto dedup_start = std::chrono::steady_clock::now();
-        auto existing_content = co_await FindExistingContent(final_hash);
+        auto existing_content = lookup_result.existing_content_id;
         std::filesystem::path final_storage_path;
         std::string final_sha256;
         bool should_compensate_storage_file = false;
@@ -657,7 +709,8 @@ namespace disk::file {
                     )
                         .count()
                  << " upload_id=" << upload_id
-                 << " dedup_hit=" << (existing_content.has_value() ? "true" : "false");
+                 << " dedup_hit=" << (existing_content.has_value() ? "true" : "false")
+                 << " filename_exists=false";
 
         std::shared_ptr<drogon::orm::Transaction> transaction;
         Files file;
