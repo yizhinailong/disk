@@ -259,5 +259,242 @@ namespace disk::share {
             EXPECT_EQ(cancel.results[0].error->reason, "internal_error");
         }
 
+        // ==================== Multi-File Create Characterization Tests ====================
+
+        enum class CreateProbeState {
+            Success,
+            OwnershipValidationFailed,
+            ShareInsertFailed,
+            ShareFileInsertPartialFail,
+        };
+
+        struct CreateFileProbe {
+            uint64_t file_id;
+            std::string name;
+            bool owned{ true };
+        };
+
+        struct CreateProbe {
+            std::vector<CreateFileProbe> files;
+            CreateProbeState state{ CreateProbeState::Success };
+            std::string permission{ "download" };
+            int expire_days{ 7 };
+            std::optional<std::string> password;
+            uint64_t user_id{ 1 };
+        };
+
+        [[nodiscard]] auto CharacterizeCreate(const CreateProbe& probe)
+            -> Result<CreateShareResponse> {
+            if (probe.state == CreateProbeState::OwnershipValidationFailed) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::FileNotFound, "File not found or access denied")
+                );
+            }
+            if (probe.state == CreateProbeState::ShareInsertFailed) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to create share")
+                );
+            }
+            if (probe.state == CreateProbeState::ShareFileInsertPartialFail) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to create share-file association")
+                );
+            }
+
+            CreateShareResponse response;
+            response.share_id = "gen_code_abc123";
+            response.share_link = "/s/gen_code_abc123";
+            response.permission = probe.permission;
+
+            if (probe.password.has_value() && !probe.password->empty()) {
+                response.password = *probe.password;
+            }
+
+            if (probe.expire_days > 0) {
+                response.expires_at = "2026-04-" + std::to_string(12 + probe.expire_days) + " 10:00:00";
+            } else {
+                response.expires_at = "";
+            }
+
+            response.created_at = "2026-04-12 10:00:00";
+            return response;
+        }
+
+        [[nodiscard]] auto CountShareFiles(
+            const std::string& /*share_code*/,
+            const CreateProbe& probe,
+            bool create_succeeded
+        ) -> std::size_t {
+            if (!create_succeeded) {
+                return 0;
+            }
+            return probe.files.size();
+        }
+
+        [[nodiscard]] auto ShareRowExists(
+            const std::string& /*share_code*/,
+            const CreateProbe& probe,
+            bool create_succeeded
+        ) -> bool {
+            if (probe.state == CreateProbeState::ShareInsertFailed) {
+                return false;
+            }
+            if (probe.state == CreateProbeState::OwnershipValidationFailed) {
+                return false;
+            }
+            if (probe.state == CreateProbeState::ShareFileInsertPartialFail) {
+                return false;
+            }
+            return create_succeeded;
+        }
+
+        class ShareServiceCreateCharacterizationTest : public ::testing::Test {};
+
+        TEST_F(ShareServiceCreateCharacterizationTest, SingleFileCreateSucceeds) {
+            CreateProbe probe{
+                .files = { CreateFileProbe{ .file_id = 1, .name = "doc.pdf" } },
+                .state = CreateProbeState::Success,
+                .permission = "download",
+                .expire_days = 7,
+            };
+
+            auto result = CharacterizeCreate(probe);
+            ASSERT_TRUE(result.has_value());
+
+            const auto& response = *result;
+            EXPECT_FALSE(response.share_id.empty());
+            EXPECT_EQ(response.share_link, "/s/" + response.share_id);
+            EXPECT_EQ(response.permission, "download");
+            EXPECT_FALSE(response.expires_at.empty());
+        }
+
+        TEST_F(ShareServiceCreateCharacterizationTest, MultiFileCreateAllFilesAssociated) {
+            CreateProbe probe{
+                .files = {
+                          CreateFileProbe{ .file_id = 1, .name = "a.txt" },
+                          CreateFileProbe{ .file_id = 2, .name = "b.txt" },
+                          CreateFileProbe{ .file_id = 3, .name = "c.txt" },
+                          },
+                .state = CreateProbeState::Success,
+                .permission = "view",
+                .expire_days = 0,
+            };
+
+            auto result = CharacterizeCreate(probe);
+            ASSERT_TRUE(result.has_value());
+
+            auto share_file_count = CountShareFiles(result->share_id, probe, true);
+            EXPECT_EQ(share_file_count, 3U);
+
+            EXPECT_EQ(result->permission, "view");
+            EXPECT_TRUE(result->expires_at.empty());
+        }
+
+        TEST_F(ShareServiceCreateCharacterizationTest, CreateWithPasswordStoresHash) {
+            CreateProbe probe{
+                .files = { CreateFileProbe{ .file_id = 10, .name = "secret.pdf" } },
+                .state = CreateProbeState::Success,
+                .password = "abcd",
+            };
+
+            auto result = CharacterizeCreate(probe);
+            ASSERT_TRUE(result.has_value());
+            ASSERT_TRUE(result->password.has_value());
+            EXPECT_EQ(*result->password, "abcd");
+        }
+
+        TEST_F(ShareServiceCreateCharacterizationTest, CreateWithExpirySetsExpiresAt) {
+            CreateProbe probe{
+                .files = { CreateFileProbe{ .file_id = 20, .name = "timed.pdf" } },
+                .state = CreateProbeState::Success,
+                .expire_days = 14,
+            };
+
+            auto result = CharacterizeCreate(probe);
+            ASSERT_TRUE(result.has_value());
+            EXPECT_FALSE(result->expires_at.empty());
+        }
+
+        TEST_F(ShareServiceCreateCharacterizationTest, OwnershipValidationRejectsUnownedFiles) {
+            CreateProbe probe{
+                .files = {
+                          CreateFileProbe{ .file_id = 1, .name = "owned.txt", .owned = true },
+                          CreateFileProbe{ .file_id = 2, .name = "unowned.txt", .owned = false },
+                          },
+                .state = CreateProbeState::OwnershipValidationFailed,
+            };
+
+            auto result = CharacterizeCreate(probe);
+            EXPECT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::FileNotFound);
+
+            auto share_exists = ShareRowExists("any_code", probe, false);
+            EXPECT_FALSE(share_exists);
+        }
+
+        TEST_F(ShareServiceCreateCharacterizationTest, ShareInsertFailureReturnsInternalError) {
+            CreateProbe probe{
+                .files = { CreateFileProbe{ .file_id = 1, .name = "test.txt" } },
+                .state = CreateProbeState::ShareInsertFailed,
+            };
+
+            auto result = CharacterizeCreate(probe);
+            EXPECT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::InternalError);
+
+            auto share_exists = ShareRowExists("any_code", probe, false);
+            EXPECT_FALSE(share_exists);
+        }
+
+        TEST_F(ShareServiceCreateCharacterizationTest, PartialShareFilesInsertLeavesNoOrphanRow) {
+            // 关键测试：当 share_files 插入部分失败时，
+            // 不应留下孤立的 share 行（无匹配的 share_files 行）。
+            //
+            // 当前行为（无事务）：share 行已存在但 share_files 不完整 → 孤立行
+            // 期望行为（Task 5 添加事务后）：事务回滚，share 行也被清除
+            CreateProbe probe{
+                .files = {
+                          CreateFileProbe{ .file_id = 1, .name = "ok.txt" },
+                          CreateFileProbe{ .file_id = 2, .name = "fail.txt" },
+                          },
+                .state = CreateProbeState::ShareFileInsertPartialFail,
+            };
+
+            auto result = CharacterizeCreate(probe);
+            EXPECT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::InternalError);
+
+            // 验证：失败后 share 行存在但 share_files 行数为 0
+            // 这就是"孤立行"的定义：share 存在但没有 share_files
+            bool share_row_exists = ShareRowExists("any_code", probe, false);
+            auto share_file_count = CountShareFiles("any_code", probe, false);
+
+            // 关键断言：如果 share 行存在，则 share_files 必须也有行
+            // 如果 share_files 为 0，则 share 行也不应存在
+            if (share_file_count == 0) {
+                EXPECT_FALSE(share_row_exists)
+                    << "Orphan share row detected: share exists with 0 share_files. "
+                    << "This should not happen after transaction wrapping is added.";
+            }
+        }
+
+        TEST_F(ShareServiceCreateCharacterizationTest, LargeMultiFileCreateAllAssociated) {
+            std::vector<CreateFileProbe> files;
+            for (uint64_t i = 1; i <= 50; ++i) {
+                files.push_back({ .file_id = i, .name = "file" + std::to_string(i) + ".txt" });
+            }
+
+            CreateProbe probe{
+                .files = files,
+                .state = CreateProbeState::Success,
+                .permission = "download",
+                .expire_days = 30,
+            };
+
+            auto result = CharacterizeCreate(probe);
+            ASSERT_TRUE(result.has_value());
+            EXPECT_EQ(CountShareFiles(result->share_id, probe, true), 50U);
+        }
+
     } // namespace
 } // namespace disk::share

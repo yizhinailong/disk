@@ -68,7 +68,7 @@ namespace disk::storage {
          * @return 成功返回空，失败返回错误信息
          */
         [[nodiscard]]
-        auto WriteChunk(const std::string& upload_id, uint32_t chunk_index, std::string_view data)
+        auto WriteChunk(const std::string& upload_id, uint32_t chunk_index, std::string data)
             -> drogon::Task<Result<void>> override;
 
         /**
@@ -167,8 +167,9 @@ namespace disk::storage {
         [[nodiscard]]
         auto GetAssembleFilePath(const std::string& upload_id) const -> std::filesystem::path;
 
-        std::shared_ptr<disk::utils::ConfigMgr> m_config_mgr;         ///< 配置管理器
-        std::shared_ptr<trantor::ConcurrentTaskQueue> m_worker_queue; ///< 本地文件系统阻塞操作工作队列
+        std::shared_ptr<disk::utils::ConfigMgr> m_config_mgr;                  ///< 配置管理器
+        std::shared_ptr<trantor::ConcurrentTaskQueue> m_worker_queue;          ///< 短时文件系统阻塞操作工作队列
+        std::shared_ptr<trantor::ConcurrentTaskQueue> m_assembly_worker_queue; ///< 分片组装专用工作队列
     };
 
 } // namespace disk::storage

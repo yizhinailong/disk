@@ -9,10 +9,15 @@
 
 #include "TokenService.hpp"
 
+#include <algorithm>
+#include <functional>
+#include <thread>
+
 #include <drogon/drogon.h>
 #include <drogon/utils/Utilities.h>
 #include <jwt-cpp/jwt.h>
 #include <jwt-cpp/traits/open-source-parsers-jsoncpp/traits.h>
+#include <trantor/net/EventLoopThreadPool.h>
 
 #include "utils/ErrorCode.hpp"
 #include "utils/HashUtil.hpp"
@@ -20,22 +25,62 @@
 
 namespace disk::services {
 
+    namespace {
+
+        auto CreateAuthCpuPool() -> trantor::EventLoopThreadPool* {
+            const auto hardware_threads = std::max(1u, std::thread::hardware_concurrency());
+            auto* pool = new trantor::EventLoopThreadPool(
+                static_cast<size_t>(hardware_threads),
+                "AuthCpuPool"
+            );
+            pool->start();
+            return pool;
+        }
+
+    } // namespace
+
     using disk::error::ErrorInfo;
 
     static constexpr int REFRESH_TOKEN_TTL = 604800;
     static constexpr int ACCESS_TOKEN_TTL = 7200;
     static constexpr int SHARE_TOKEN_TTL = 3600;
 
+    namespace detail {
+
+        auto GetAuthCpuWorkLoop() -> trantor::EventLoop* {
+            static auto* pool = CreateAuthCpuPool();
+            return pool->getNextLoop();
+        }
+
+    } // namespace detail
+
     // TokenService 私有构造函数（单例模式）
     TokenService::TokenService()
         : m_jwt_secret(),
+          m_jwt_verifier(BuildJwtVerifier("")),
+          m_share_jwt_verifier(BuildShareJwtVerifier("")),
           m_redis_client(nullptr),
           m_redis_service(RedisService::GetInstance()) {
         LOG_DEBUG << "TokenService initialization completed";
     }
 
     void TokenService::Initialize(std::string jwt_secret) {
-        GetInstance()->m_jwt_secret = std::move(jwt_secret);
+        auto instance = GetInstance();
+        instance->m_jwt_secret = std::move(jwt_secret);
+        instance->m_jwt_verifier = BuildJwtVerifier(instance->m_jwt_secret);
+        instance->m_share_jwt_verifier = BuildShareJwtVerifier(instance->m_jwt_secret);
+    }
+
+    auto TokenService::BuildJwtVerifier(const std::string& jwt_secret) -> JwtVerifier {
+        return jwt::verify<JwtTraits>()
+            .allow_algorithm(jwt::algorithm::hs256{ jwt_secret })
+            .with_issuer("disk");
+    }
+
+    auto TokenService::BuildShareJwtVerifier(const std::string& jwt_secret) -> JwtVerifier {
+        return jwt::verify<JwtTraits>()
+            .allow_algorithm(jwt::algorithm::hs256{ jwt_secret })
+            .with_issuer("disk_share");
     }
 
     auto TokenService::GenerateTokens(uint64_t user_id, const std::string& username) const
@@ -82,16 +127,10 @@ namespace disk::services {
     auto TokenService::VerifyAccessToken(const std::string& token) const
         -> Result<AccessTokenClaims> {
 
-        using traits = jwt::traits::open_source_parsers_jsoncpp;
-
         try {
-            auto decoded = jwt::decode<traits>(token);
+            auto decoded = jwt::decode<JwtTraits>(token);
 
-            auto verifier = jwt::verify<traits>()
-                                .allow_algorithm(jwt::algorithm::hs256{ m_jwt_secret })
-                                .with_issuer("disk");
-
-            verifier.verify(decoded);
+            m_jwt_verifier.verify(decoded);
 
             const auto type = decoded.get_payload_claim("type").as_string();
             if (type != "access") {
@@ -123,16 +162,10 @@ namespace disk::services {
     auto TokenService::VerifyRefreshToken(const std::string& token) const
         -> Result<std::pair<uint64_t, std::string>> {
 
-        using traits = jwt::traits::open_source_parsers_jsoncpp;
-
         try {
-            auto decoded = jwt::decode<traits>(token);
+            auto decoded = jwt::decode<JwtTraits>(token);
 
-            auto verifier = jwt::verify<traits>()
-                                .allow_algorithm(jwt::algorithm::hs256{ m_jwt_secret })
-                                .with_issuer("disk");
-
-            verifier.verify(decoded);
+            m_jwt_verifier.verify(decoded);
 
             const auto type = decoded.get_payload_claim("type").as_string();
             if (type != "refresh") {
@@ -416,20 +449,19 @@ namespace disk::services {
 
     auto TokenService::VerifyShareToken(const std::string& jwt_secret, const std::string& token)
         -> Result<ShareTokenClaims> {
-        using traits = jwt::traits::open_source_parsers_jsoncpp;
-
         if (token.empty()) {
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed, "Token is empty"));
         }
 
         try {
-            auto decoded = jwt::decode<traits>(token);
+            auto decoded = jwt::decode<JwtTraits>(token);
 
-            auto verifier = jwt::verify<traits>()
-                                .allow_algorithm(jwt::algorithm::hs256{ jwt_secret })
-                                .with_issuer("disk_share");
-
-            verifier.verify(decoded);
+            const auto token_service = GetInstance();
+            if (token_service->m_jwt_secret == jwt_secret) {
+                token_service->m_share_jwt_verifier.verify(decoded);
+            } else {
+                BuildShareJwtVerifier(jwt_secret).verify(decoded);
+            }
 
             const auto type = decoded.get_payload_claim("type").as_string();
             if (type != "share") {

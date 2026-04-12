@@ -336,4 +336,272 @@ namespace {
         SUCCEED() << "Integration test requires Drogon runtime with HTTP request context";
     }
 
+    // ================================================================================
+    // Error code contract tests — lock in auth error codes before optimization
+    //
+    // JwtAuthFilter doFilter maps to these error codes:
+    //   empty Authorization   → TokenMissing  (line 32)
+    //   non-Bearer prefix     → TokenMalformed (line 40)
+    //   VerifyAccessToken fail → forwarded error (TokenExpired/InvalidToken/TokenWrongType/TokenMalformed)
+    //   IsAccessTokenRevoked   → TokenRevoked  (line 64)
+    //   success               → user_id + username attributes (line 67-68)
+    //
+    // These tests lock in the numeric values, HTTP status codes, and messages.
+    // ================================================================================
+
+    // --- TokenMissing (empty Authorization header) ---
+
+    TEST_F(JwtAuthFilterTest, TokenMissingErrorCodeValue) {
+        EXPECT_EQ(static_cast<uint32_t>(Code::TokenMissing), 40106u);
+    }
+
+    TEST_F(JwtAuthFilterTest, TokenMissingHttpStatusIs401) {
+        EXPECT_EQ(disk::error::GetHttpStatus(Code::TokenMissing), drogon::k401Unauthorized);
+    }
+
+    TEST_F(JwtAuthFilterTest, TokenMissingErrorMessage) {
+        EXPECT_EQ(disk::error::GetErrorMessage(Code::TokenMissing), std::string("Token not provided"));
+    }
+
+    // --- TokenMalformed (non-Bearer prefix / garbled token) ---
+
+    TEST_F(JwtAuthFilterTest, TokenMalformedErrorCodeValue) {
+        EXPECT_EQ(static_cast<uint32_t>(Code::TokenMalformed), 40107u);
+    }
+
+    TEST_F(JwtAuthFilterTest, TokenMalformedHttpStatusIs401) {
+        EXPECT_EQ(disk::error::GetHttpStatus(Code::TokenMalformed), drogon::k401Unauthorized);
+    }
+
+    TEST_F(JwtAuthFilterTest, TokenMalformedErrorMessage) {
+        EXPECT_EQ(disk::error::GetErrorMessage(Code::TokenMalformed), std::string("Token format error"));
+    }
+
+    // --- TokenExpired ---
+
+    TEST_F(JwtAuthFilterTest, TokenExpiredErrorCodeValue) {
+        EXPECT_EQ(static_cast<uint32_t>(Code::TokenExpired), 40108u);
+    }
+
+    TEST_F(JwtAuthFilterTest, TokenExpiredHttpStatusIs401) {
+        EXPECT_EQ(disk::error::GetHttpStatus(Code::TokenExpired), drogon::k401Unauthorized);
+    }
+
+    TEST_F(JwtAuthFilterTest, TokenExpiredErrorMessage) {
+        EXPECT_EQ(disk::error::GetErrorMessage(Code::TokenExpired), std::string("Token expired"));
+    }
+
+    // --- TokenWrongType (refresh token used where access expected) ---
+
+    TEST_F(JwtAuthFilterTest, TokenWrongTypeErrorCodeValue) {
+        EXPECT_EQ(static_cast<uint32_t>(Code::TokenWrongType), 40109u);
+    }
+
+    TEST_F(JwtAuthFilterTest, TokenWrongTypeHttpStatusIs401) {
+        EXPECT_EQ(disk::error::GetHttpStatus(Code::TokenWrongType), drogon::k401Unauthorized);
+    }
+
+    TEST_F(JwtAuthFilterTest, TokenWrongTypeErrorMessage) {
+        EXPECT_EQ(disk::error::GetErrorMessage(Code::TokenWrongType), std::string("Token type error"));
+    }
+
+    // --- TokenRevoked (post-verification revocation check) ---
+
+    TEST_F(JwtAuthFilterTest, TokenRevokedErrorCodeValue) {
+        EXPECT_EQ(static_cast<uint32_t>(Code::TokenRevoked), 40111u);
+    }
+
+    TEST_F(JwtAuthFilterTest, TokenRevokedHttpStatusIs401) {
+        EXPECT_EQ(disk::error::GetHttpStatus(Code::TokenRevoked), drogon::k401Unauthorized);
+    }
+
+    TEST_F(JwtAuthFilterTest, TokenRevokedErrorMessage) {
+        EXPECT_EQ(disk::error::GetErrorMessage(Code::TokenRevoked), std::string("Token revoked"));
+    }
+
+    // --- InvalidToken (signature / issuer mismatch) ---
+
+    TEST_F(JwtAuthFilterTest, InvalidTokenErrorCodeValue) {
+        EXPECT_EQ(static_cast<uint32_t>(Code::InvalidToken), 40104u);
+    }
+
+    TEST_F(JwtAuthFilterTest, InvalidTokenHttpStatusIs401) {
+        EXPECT_EQ(disk::error::GetHttpStatus(Code::InvalidToken), drogon::k401Unauthorized);
+    }
+
+    TEST_F(JwtAuthFilterTest, InvalidTokenErrorMessage) {
+        EXPECT_EQ(disk::error::GetErrorMessage(Code::InvalidToken), std::string("Token invalid or expired"));
+    }
+
+    // ================================================================================
+    // VerifyRefreshToken — refresh token validation paths
+    // ================================================================================
+
+    TEST_F(JwtAuthFilterTest, VerifyRefreshTokenValidTokenReturnsUserIdAndJti) {
+        using traits = jwt::traits::open_source_parsers_jsoncpp;
+        auto now = std::chrono::system_clock::now();
+        jwt::builder<jwt::default_clock, traits> builder{ jwt::default_clock{} };
+        auto refresh_token = builder
+                                 .set_issuer("disk")
+                                 .set_type("JWT")
+                                 .set_subject("42")
+                                 .set_payload_claim("type", "refresh")
+                                 .set_payload_claim("jti", "jti-refresh-valid-001")
+                                 .set_issued_at(now)
+                                 .set_expires_at(now + std::chrono::hours(168))
+                                 .sign(jwt::algorithm::hs256{ TEST_JWT_SECRET });
+
+        auto result = TokenService::GetInstance()->VerifyRefreshToken(refresh_token);
+
+        ASSERT_TRUE(result.has_value()) << "Valid refresh token should verify";
+        EXPECT_EQ(result.value().first, 42u);
+        EXPECT_EQ(result.value().second, "jti-refresh-valid-001");
+    }
+
+    TEST_F(JwtAuthFilterTest, VerifyRefreshTokenExpiredTokenReturnsTokenExpired) {
+        using traits = jwt::traits::open_source_parsers_jsoncpp;
+        auto now = std::chrono::system_clock::now();
+        auto past = now - std::chrono::hours(1);
+        jwt::builder<jwt::default_clock, traits> builder{ jwt::default_clock{} };
+        auto expired_refresh = builder
+                                   .set_issuer("disk")
+                                   .set_type("JWT")
+                                   .set_subject("1")
+                                   .set_payload_claim("type", "refresh")
+                                   .set_payload_claim("jti", "jti-refresh-expired")
+                                   .set_issued_at(past)
+                                   .set_expires_at(past)
+                                   .sign(jwt::algorithm::hs256{ TEST_JWT_SECRET });
+
+        auto result = TokenService::GetInstance()->VerifyRefreshToken(expired_refresh);
+
+        ASSERT_FALSE(result.has_value());
+        EXPECT_EQ(result.error().code, Code::TokenExpired);
+    }
+
+    TEST_F(JwtAuthFilterTest, VerifyRefreshTokenWithAccessTokenReturnsTokenWrongType) {
+        auto access_token = BuildAccessToken(1, "user", "jti-access-as-refresh");
+        auto result = TokenService::GetInstance()->VerifyRefreshToken(access_token);
+        ASSERT_FALSE(result.has_value());
+        EXPECT_EQ(result.error().code, Code::TokenWrongType);
+    }
+
+    TEST_F(JwtAuthFilterTest, VerifyRefreshTokenEmptyTokenReturnsTokenMalformed) {
+        auto result = TokenService::GetInstance()->VerifyRefreshToken("");
+        ASSERT_FALSE(result.has_value());
+        EXPECT_EQ(result.error().code, Code::TokenMalformed);
+    }
+
+    TEST_F(JwtAuthFilterTest, VerifyRefreshTokenWrongSecretReturnsError) {
+        using traits = jwt::traits::open_source_parsers_jsoncpp;
+        auto now = std::chrono::system_clock::now();
+        jwt::builder<jwt::default_clock, traits> builder{ jwt::default_clock{} };
+        auto bad_secret_token = builder
+                                    .set_issuer("disk")
+                                    .set_type("JWT")
+                                    .set_subject("1")
+                                    .set_payload_claim("type", "refresh")
+                                    .set_payload_claim("jti", "jti-bad-secret-refresh")
+                                    .set_issued_at(now)
+                                    .set_expires_at(now + std::chrono::hours(168))
+                                    .sign(jwt::algorithm::hs256{ "wrong_secret_key_for_share_token_" });
+
+        auto result = TokenService::GetInstance()->VerifyRefreshToken(bad_secret_token);
+        ASSERT_FALSE(result.has_value());
+        EXPECT_TRUE(
+            result.error().code == Code::InvalidRefreshToken ||
+            result.error().code == Code::TokenMalformed
+        ) << "Expected InvalidRefreshToken or TokenMalformed for wrong secret, got: "
+          << static_cast<uint32_t>(result.error().code);
+    }
+
+    // ================================================================================
+    // GenerateTokens — token pair generation contract
+    // ================================================================================
+
+    TEST_F(JwtAuthFilterTest, GenerateTokensReturnsTwoDistinctNonEmptyTokens) {
+        auto [access_token, refresh_token] = TokenService::GetInstance()->GenerateTokens(42, "gen_user");
+        EXPECT_FALSE(access_token.empty());
+        EXPECT_FALSE(refresh_token.empty());
+        EXPECT_NE(access_token, refresh_token);
+    }
+
+    TEST_F(JwtAuthFilterTest, GenerateTokensAccessVerifiableWithCorrectClaims) {
+        auto [access_token, refresh_token] = TokenService::GetInstance()->GenerateTokens(42, "gen_user");
+
+        auto result = TokenService::GetInstance()->VerifyAccessToken(access_token);
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(result.value().user_id, 42u);
+        EXPECT_EQ(result.value().username, "gen_user");
+        EXPECT_FALSE(result.value().jti.empty());
+    }
+
+    TEST_F(JwtAuthFilterTest, GenerateTokensRefreshVerifiableWithCorrectUserId) {
+        auto [access_token, refresh_token] = TokenService::GetInstance()->GenerateTokens(42, "gen_user");
+
+        auto result = TokenService::GetInstance()->VerifyRefreshToken(refresh_token);
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(result.value().first, 42u);
+        EXPECT_FALSE(result.value().second.empty()) << "Refresh token should have a JTI";
+    }
+
+    TEST_F(JwtAuthFilterTest, GenerateTokensAccessAndRefreshHaveDifferentJtis) {
+        auto [access_token, refresh_token] = TokenService::GetInstance()->GenerateTokens(42, "gen_user");
+
+        auto access_result = TokenService::GetInstance()->VerifyAccessToken(access_token);
+        auto refresh_result = TokenService::GetInstance()->VerifyRefreshToken(refresh_token);
+        ASSERT_TRUE(access_result.has_value());
+        ASSERT_TRUE(refresh_result.has_value());
+
+        EXPECT_NE(access_result.value().jti, refresh_result.value().second)
+            << "Access and refresh tokens should have different JTIs";
+    }
+
+    // ================================================================================
+    // VerifyAccessToken — additional edge cases
+    // ================================================================================
+
+    TEST_F(JwtAuthFilterTest, VerifyAccessTokenTokenWithoutUsernameClaimReturnsMalformed) {
+        using traits = jwt::traits::open_source_parsers_jsoncpp;
+        auto now = std::chrono::system_clock::now();
+        jwt::builder<jwt::default_clock, traits> builder{ jwt::default_clock{} };
+        // Token without username claim — VerifyAccessToken calls
+        // decoded.get_payload_claim("username").as_string() which will throw
+        auto token = builder
+                         .set_issuer("disk")
+                         .set_type("JWT")
+                         .set_subject("1")
+                         .set_payload_claim("type", "access")
+                         .set_payload_claim("jti", "jti-no-username")
+                         .set_issued_at(now)
+                         .set_expires_at(now + std::chrono::hours(2))
+                         .sign(jwt::algorithm::hs256{ TEST_JWT_SECRET });
+
+        auto result = TokenService::GetInstance()->VerifyAccessToken(token);
+        // Missing "username" claim → std::exception → TokenMalformed
+        ASSERT_FALSE(result.has_value());
+        EXPECT_EQ(result.error().code, Code::TokenMalformed);
+    }
+
+    TEST_F(JwtAuthFilterTest, VerifyAccessTokenTokenWithoutJtiClaimReturnsMalformed) {
+        using traits = jwt::traits::open_source_parsers_jsoncpp;
+        auto now = std::chrono::system_clock::now();
+        jwt::builder<jwt::default_clock, traits> builder{ jwt::default_clock{} };
+        auto token = builder
+                         .set_issuer("disk")
+                         .set_type("JWT")
+                         .set_subject("1")
+                         .set_payload_claim("username", "user")
+                         .set_payload_claim("type", "access")
+                         // No jti claim
+                         .set_issued_at(now)
+                         .set_expires_at(now + std::chrono::hours(2))
+                         .sign(jwt::algorithm::hs256{ TEST_JWT_SECRET });
+
+        auto result = TokenService::GetInstance()->VerifyAccessToken(token);
+        // Missing "jti" claim → std::exception → TokenMalformed
+        ASSERT_FALSE(result.has_value());
+        EXPECT_EQ(result.error().code, Code::TokenMalformed);
+    }
+
 } // namespace

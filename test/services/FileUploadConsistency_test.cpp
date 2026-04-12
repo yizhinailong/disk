@@ -7,12 +7,106 @@
  *
  */
 
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <vector>
+
+#include <drogon/drogon.h>
+#include <drogon/utils/coroutine.h>
 #include <gtest/gtest.h>
+#include <json/json.h>
 
 #include "../../src/dtos/FileDto.hpp"
+#include "../../src/storage/LocalFileStorage.hpp"
+#include "../../src/utils/ConfigMgr.hpp"
+#include "../../src/utils/FileHashUtil.hpp"
+
+// disk-test 未直接链接 LocalFileStorage.cpp，这里按测试翻译单元引入实现，
+// 以便对真实分片写入与组装路径做特征回归保护。
+#include "../../src/storage/LocalFileStorage.cpp"
 
 namespace disk::file {
     namespace {
+
+        using disk::storage::LocalFileStorage;
+        using disk::utils::ConfigMgr;
+        using disk::utils::FileHashUtil;
+
+        auto SanitizePathComponent(std::string value) -> std::string {
+            for (auto& ch : value) {
+                const auto is_alpha_num = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+                                          (ch >= '0' && ch <= '9');
+                if (!is_alpha_num) {
+                    ch = '_';
+                }
+            }
+            return value;
+        }
+
+        auto LoadStorageConfig(
+            const std::filesystem::path& storage_base,
+            const std::filesystem::path& temp_upload_base
+        ) -> void {
+            Json::Value cfg;
+            cfg["custom_config"]["disk"]["storage_base_path"] = storage_base.string();
+            cfg["custom_config"]["disk"]["temp_upload_path"] = temp_upload_base.string();
+            cfg["custom_config"]["disk"]["assembly_max_concurrent"] = 4;
+            cfg["custom_config"]["disk"]["assemble_buffer_size_bytes"] = 4096;
+            drogon::app().loadConfigJson(cfg);
+            ConfigMgr::GetInstance()->LoadConfig();
+        }
+
+        auto RestoreDefaultStorageConfig() -> void {
+            LoadStorageConfig("build/uploaded", "build/temp_uploads");
+        }
+
+        auto ReadBinaryFile(const std::filesystem::path& path) -> std::string {
+            std::ifstream input(path, std::ios::binary);
+            return {
+                std::istreambuf_iterator<char>(input),
+                std::istreambuf_iterator<char>()
+            };
+        }
+
+        class LocalFileStorageUploadConsistencyTest : public ::testing::Test {
+        protected:
+            void SetUp() override {
+                const auto* test_info = ::testing::UnitTest::GetInstance()->current_test_info();
+                m_root = std::filesystem::path("build/test_upload_consistency") /
+                         SanitizePathComponent(std::string(test_info->test_suite_name()) + "_" + test_info->name());
+                m_storage_base = m_root / "uploaded";
+                m_temp_base = m_root / "temp";
+
+                std::error_code ec;
+                std::filesystem::remove_all(m_root, ec);
+
+                LoadStorageConfig(m_storage_base, m_temp_base);
+                m_storage = std::make_unique<LocalFileStorage>();
+            }
+
+            void TearDown() override {
+                m_storage.reset();
+                RestoreDefaultStorageConfig();
+
+                std::error_code ec;
+                std::filesystem::remove_all(m_root, ec);
+            }
+
+            auto ChunkPath(const std::string& upload_id, uint32_t chunk_index) const
+                -> std::filesystem::path {
+                return m_temp_base / upload_id / (std::to_string(chunk_index) + ".chunk");
+            }
+
+            auto AssembledPath(const std::string& upload_id) const -> std::filesystem::path {
+                return m_temp_base / (upload_id + ".tmp");
+            }
+
+            std::filesystem::path m_root;
+            std::filesystem::path m_storage_base;
+            std::filesystem::path m_temp_base;
+            std::unique_ptr<LocalFileStorage> m_storage;
+        };
 
         // ============================================================================
         // Transaction Boundary Analysis Baseline (FileService::CompleteUpload)
@@ -141,6 +235,62 @@ namespace disk::file {
         TEST(FileUploadStatusContract, UploadTaskStatusEnumValues) {
             EXPECT_EQ(static_cast<int>(UploadTaskStatusContract::Pending), 0);
             EXPECT_EQ(static_cast<int>(UploadTaskStatusContract::Completed), 1);
+        }
+
+        // ==================== LocalFileStorage 上传一致性测试 ====================
+
+        TEST_F(LocalFileStorageUploadConsistencyTest, WriteChunkPersistsExactBytesAndSizeOnDisk) {
+            const std::string upload_id = "write-chunk-integrity";
+            const std::string chunk_data = std::string("AB\0CD", 5) + std::string(4096, 'x');
+
+            ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
+
+            auto result = drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, chunk_data));
+            ASSERT_TRUE(result.has_value());
+
+            const auto chunk_path = ChunkPath(upload_id, 0);
+            ASSERT_TRUE(std::filesystem::exists(chunk_path));
+            EXPECT_EQ(std::filesystem::file_size(chunk_path), static_cast<uintmax_t>(chunk_data.size()));
+            EXPECT_EQ(ReadBinaryFile(chunk_path), chunk_data);
+        }
+
+        TEST_F(LocalFileStorageUploadConsistencyTest, AssembleChunksProducesExpectedHashesAndMergedBytes) {
+            const std::string upload_id = "assemble-success";
+            const std::vector<std::string> chunks = {
+                "header-",
+                std::string("mid\0section", 11),
+                std::string(2048, 'z')
+            };
+            const std::string expected_content = chunks[0] + chunks[1] + chunks[2];
+
+            ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
+            for (uint32_t index = 0; index < chunks.size(); ++index) {
+                ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, index, chunks[index])).has_value())
+                    << "chunk_index=" << index;
+            }
+
+            auto assemble_result =
+                drogon::sync_wait(m_storage->AssembleChunks(upload_id, static_cast<uint32_t>(chunks.size())));
+            ASSERT_TRUE(assemble_result.has_value());
+
+            const auto& assembled = assemble_result.value();
+            ASSERT_TRUE(std::filesystem::exists(assembled.path));
+            EXPECT_EQ(std::filesystem::file_size(assembled.path), static_cast<uintmax_t>(expected_content.size()));
+            EXPECT_EQ(ReadBinaryFile(assembled.path), expected_content);
+            EXPECT_EQ(assembled.md5_hash, FileHashUtil::HashMd5(expected_content));
+            EXPECT_EQ(assembled.sha256_hash, FileHashUtil::HashSha256(expected_content));
+        }
+
+        TEST_F(LocalFileStorageUploadConsistencyTest, AssembleChunksMissingChunkCleansTempArtifact) {
+            const std::string upload_id = "assemble-missing-chunk";
+
+            ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
+            ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, "only-first-chunk")).has_value());
+
+            auto assemble_result = drogon::sync_wait(m_storage->AssembleChunks(upload_id, 2));
+            ASSERT_FALSE(assemble_result.has_value());
+            EXPECT_EQ(assemble_result.error().code, ErrorCode::InternalError);
+            EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
         }
 
         // ==================== Fault Injection Scenario Tests (DB-dependent) ====================

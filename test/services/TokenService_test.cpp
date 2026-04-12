@@ -441,4 +441,54 @@ namespace {
         EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
     }
 
+    // ================================================================================
+    // Access/Refresh token generation — instance method tests
+    // ================================================================================
+
+    class TokenServiceInstanceTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            TokenService::Initialize(TEST_JWT_SECRET);
+        }
+    };
+
+    TEST_F(TokenServiceInstanceTest, GenerateTokensProducesVerifiableAccessAndRefresh) {
+        auto [access_token, refresh_token] = TokenService::GetInstance()->GenerateTokens(42, "instance_user");
+
+        auto access_result = TokenService::GetInstance()->VerifyAccessToken(access_token);
+        ASSERT_TRUE(access_result.has_value());
+        EXPECT_EQ(access_result.value().user_id, 42u);
+        EXPECT_EQ(access_result.value().username, "instance_user");
+        EXPECT_FALSE(access_result.value().jti.empty());
+
+        auto refresh_result = TokenService::GetInstance()->VerifyRefreshToken(refresh_token);
+        ASSERT_TRUE(refresh_result.has_value());
+        EXPECT_EQ(refresh_result.value().first, 42u);
+        EXPECT_FALSE(refresh_result.value().second.empty());
+    }
+
+    TEST_F(TokenServiceInstanceTest, GenerateTokensProducesDifferentJtisPerCall) {
+        auto [access1, refresh1] = TokenService::GetInstance()->GenerateTokens(1, "user_a");
+        auto [access2, refresh2] = TokenService::GetInstance()->GenerateTokens(1, "user_a");
+
+        auto r1 = TokenService::GetInstance()->VerifyAccessToken(access1);
+        auto r2 = TokenService::GetInstance()->VerifyAccessToken(access2);
+        ASSERT_TRUE(r1.has_value());
+        ASSERT_TRUE(r2.has_value());
+
+        EXPECT_NE(r1.value().jti, r2.value().jti);
+    }
+
+    TEST_F(TokenServiceInstanceTest, AccessTokenTtlIs7200) {
+        EXPECT_EQ(TokenService::GetAccessTokenExpireSeconds(), 7200);
+    }
+
+    TEST_F(TokenServiceInstanceTest, RefreshTokenTtlIs604800) {
+        EXPECT_EQ(TokenService::GetRefreshTokenExpireSeconds(), 604800);
+    }
+
+    TEST_F(TokenServiceInstanceTest, ShareTokenTtlIs3600) {
+        EXPECT_EQ(TokenService::GetShareTokenExpireSeconds(), 3600);
+    }
+
 } // namespace

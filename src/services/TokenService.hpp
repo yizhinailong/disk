@@ -18,10 +18,27 @@
 
 #include <drogon/nosql/RedisClient.h>
 #include <gtest/gtest_prod.h>
+#include <jwt-cpp/jwt.h>
+#include <jwt-cpp/traits/open-source-parsers-jsoncpp/traits.h>
 
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
 #include "utils/Singleton.hpp"
+
+namespace trantor {
+    class EventLoop;
+}
+
+namespace disk {
+    namespace services {
+        namespace detail {
+
+            [[nodiscard]]
+            auto GetAuthCpuWorkLoop() -> trantor::EventLoop*;
+
+        } // namespace detail
+    } // namespace services
+} // namespace disk
 
 namespace disk::services {
 
@@ -322,10 +339,19 @@ namespace disk::services {
         auto ClearShareRevocationCache() -> void;
 
     private:
+        using JwtTraits = jwt::traits::open_source_parsers_jsoncpp;
+        using JwtVerifier = jwt::verifier<jwt::default_clock, JwtTraits>;
+
         /**
          * @brief 私有构造函数（单例模式）
          */
         TokenService();
+
+        [[nodiscard]]
+        static auto BuildJwtVerifier(const std::string& jwt_secret) -> JwtVerifier;
+
+        [[nodiscard]]
+        static auto BuildShareJwtVerifier(const std::string& jwt_secret) -> JwtVerifier;
 
         /**
          * @brief 从 JWT 中提取 JTI
@@ -360,6 +386,8 @@ namespace disk::services {
         auto EvictExpiredCacheEntries() const -> void;
 
         std::string m_jwt_secret;
+        JwtVerifier m_jwt_verifier;
+        JwtVerifier m_share_jwt_verifier;
         drogon::nosql::RedisClientPtr m_redis_client;
         std::shared_ptr<RedisService> m_redis_service;
         mutable std::shared_mutex m_cache_mutex;

@@ -92,7 +92,7 @@ namespace disk::share {
             password_hash = *hash_result;
         }
 
-        // 5. 创建分享记录
+        // 5. 创建分享记录 + 分享文件关联（事务保证原子性）
         Shares share;
         share.setShareCode(share_code);
         share.setUserId(user_id);
@@ -109,34 +109,48 @@ namespace disk::share {
         share.setCreatedAt(now);
         share.setUpdatedAt(now);
 
-        CoroMapper<Shares> share_mapper(m_db_client);
         Shares created_share;
+        std::shared_ptr<drogon::orm::Transaction> transaction;
         try {
+            transaction = co_await m_db_client->newTransactionCoro();
+
+            // 插入分享行
+            CoroMapper<Shares> share_mapper(transaction);
             created_share = co_await share_mapper.insert(share);
+
+            // 批量插入 share_files 关联
+            if (!files.empty()) {
+                auto chunks = BatchUtils::Chunk(files, DEFAULT_BATCH_CHUNK_SIZE);
+                for (const auto& chunk : chunks) {
+                    // 构建 VALUES 子句: (share_id, 'file', item_id, created_at)
+                    std::ostringstream values_oss;
+                    for (size_t i = 0; i < chunk.size(); ++i) {
+                        if (i > 0) {
+                            values_oss << ", ";
+                        }
+                        values_oss << "(" << created_share.getValueOfId()
+                                   << ", 'file', " << chunk[i].getValueOfId()
+                                   << ", '" << now.toDbStringLocal() << "')";
+                    }
+
+                    auto insert_sql =
+                        "INSERT INTO share_files (share_id, item_type, item_id, created_at) VALUES " + values_oss.str();
+
+                    co_await transaction->execSqlCoro(insert_sql);
+                }
+            }
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to create share: " << e.base().what();
+            LOG_ERROR << "Failed to create share (transaction): " << e.base().what();
+            if (transaction) {
+                try {
+                    transaction->rollback();
+                } catch (const std::exception& rollback_e) {
+                    LOG_ERROR << "Transaction rollback failed: " << rollback_e.what();
+                }
+            }
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to create share")
             );
-        }
-
-        // 6. 创建分享文件关联
-        CoroMapper<ShareFiles> sf_mapper(m_db_client);
-        for (const auto& file : files) {
-            ShareFiles sf;
-            sf.setShareId(created_share.getValueOfId());
-            sf.setItemType("file");
-            sf.setItemId(file.getValueOfId());
-            sf.setCreatedAt(now);
-
-            try {
-                co_await sf_mapper.insert(sf);
-            } catch (const DrogonDbException& e) {
-                LOG_ERROR << "Failed to create share-file association: " << e.base().what();
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::InternalError, "Failed to create share-file association")
-                );
-            }
         }
 
         // 7. 构建响应

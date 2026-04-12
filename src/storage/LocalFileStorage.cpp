@@ -26,17 +26,30 @@ namespace disk::storage {
 
         constexpr size_t MIN_LOCAL_FILE_IO_THREADS = 2;
         constexpr size_t MAX_LOCAL_FILE_IO_THREADS = 4;
+        constexpr size_t MIN_ASSEMBLY_IO_THREADS = 1;
+        constexpr size_t MAX_ASSEMBLY_IO_THREADS = 4;
         constexpr std::string_view LOCAL_FILE_IO_QUEUE_NAME = "local-file-storage";
+        constexpr std::string_view LOCAL_FILE_ASSEMBLY_QUEUE_NAME = "local-file-assembly";
 
-        auto ResolveLocalFileIoThreadCount(const disk::utils::ConfigMgr& config_mgr) -> size_t {
+        auto ResolveConfiguredAssemblyConcurrency(const disk::utils::ConfigMgr& config_mgr) -> size_t {
             const auto configured_count =
                 static_cast<size_t>(config_mgr.GetAssemblyMaxConcurrent());
-            const auto normalized_count =
-                configured_count == 0 ? AssemblyWorkerPool::DEFAULT_MAX_CONCURRENT : configured_count;
+            return configured_count == 0 ? AssemblyWorkerPool::DEFAULT_MAX_CONCURRENT : configured_count;
+        }
+
+        auto ResolveLocalFileIoThreadCount(const disk::utils::ConfigMgr& config_mgr) -> size_t {
             return std::clamp(
-                normalized_count,
+                ResolveConfiguredAssemblyConcurrency(config_mgr),
                 MIN_LOCAL_FILE_IO_THREADS,
                 MAX_LOCAL_FILE_IO_THREADS
+            );
+        }
+
+        auto ResolveAssemblyIoThreadCount(const disk::utils::ConfigMgr& config_mgr) -> size_t {
+            return std::clamp(
+                ResolveConfiguredAssemblyConcurrency(config_mgr),
+                MIN_ASSEMBLY_IO_THREADS,
+                MAX_ASSEMBLY_IO_THREADS
             );
         }
 
@@ -101,12 +114,18 @@ namespace disk::storage {
     LocalFileStorage::LocalFileStorage(std::shared_ptr<disk::utils::ConfigMgr> config_mgr)
         : m_config_mgr(config_mgr == nullptr ? disk::utils::ConfigMgr::GetInstance() : std::move(config_mgr)) {
         const auto worker_thread_count = ResolveLocalFileIoThreadCount(*m_config_mgr);
+        const auto assembly_worker_thread_count = ResolveAssemblyIoThreadCount(*m_config_mgr);
         m_worker_queue = std::make_shared<trantor::ConcurrentTaskQueue>(
             worker_thread_count,
             std::string(LOCAL_FILE_IO_QUEUE_NAME)
         );
+        m_assembly_worker_queue = std::make_shared<trantor::ConcurrentTaskQueue>(
+            assembly_worker_thread_count,
+            std::string(LOCAL_FILE_ASSEMBLY_QUEUE_NAME)
+        );
 
-        LOG_INFO << "LocalFileStorage worker queue initialized: threads=" << worker_thread_count;
+        LOG_INFO << "LocalFileStorage worker queues initialized: io_threads=" << worker_thread_count
+                 << ", assembly_threads=" << assembly_worker_thread_count;
     }
 
     auto LocalFileStorage::EnsureUploadTempDir(const std::string& upload_id)
@@ -134,15 +153,14 @@ namespace disk::storage {
     auto LocalFileStorage::WriteChunk(
         const std::string& upload_id,
         uint32_t chunk_index,
-        std::string_view data
+        std::string data
     ) -> drogon::Task<Result<void>> {
         const auto temp_dir = GetTempDirPath(upload_id);
         const auto chunk_path = GetChunkFilePath(upload_id, chunk_index);
-        auto chunk_data = std::string(data);
 
         auto result = co_await RunBlockingFilesystemTask(
             m_worker_queue,
-            [temp_dir, chunk_path, chunk_data = std::move(chunk_data)]() -> Result<void> {
+            [temp_dir, chunk_path, chunk_data = std::move(data)]() -> Result<void> {
                 // 防御性回退：目录应由 EnsureUploadTempDir 预创建，此处仅处理意外丢失。
                 std::error_code ec;
                 if (!std::filesystem::exists(temp_dir, ec) || ec) {
@@ -222,7 +240,7 @@ namespace disk::storage {
         const auto buffer_size = m_config_mgr->GetAssembleBufferSizeBytes();
 
         auto result = co_await RunBlockingFilesystemTask(
-            m_worker_queue,
+            m_assembly_worker_queue,
             [temp_dir, assembled_path, assembled_parent, chunk_count, buffer_size]() -> Result<AssembleResult> {
                 std::error_code ec;
                 std::filesystem::create_directories(assembled_parent, ec);

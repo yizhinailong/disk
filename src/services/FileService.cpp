@@ -371,8 +371,9 @@ namespace disk::file {
             );
         }
 
-        // 4. 验证分片哈希
-        auto actual_hash = FileHashUtil::HashMd5(std::string{ chunk_data });
+        // 4. 将请求体复制到拥有所有权的缓冲区，只做一次哈希+落盘复用。
+        std::string chunk_payload{ chunk_data };
+        auto actual_hash = FileHashUtil::HashMd5(chunk_payload);
         if (actual_hash != chunk_hash) {
             LOG_WARN << "Chunk hash mismatch: expected=" << chunk_hash
                      << ", actual=" << actual_hash;
@@ -391,7 +392,7 @@ namespace disk::file {
         }
 
         // 5. 创建临时目录并写入分片
-        auto write_result = co_await m_storage->WriteChunk(upload_id, chunk_index, chunk_data);
+        auto write_result = co_await m_storage->WriteChunk(upload_id, chunk_index, std::move(chunk_payload));
         if (!write_result) {
             LOG_ERROR << "Failed to write chunk file: upload_id=" << upload_id
                       << ", chunk_index=" << chunk_index << ", error="

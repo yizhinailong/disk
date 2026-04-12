@@ -60,7 +60,7 @@ namespace disk::storage {
         virtual auto WriteChunk(
             const std::string& upload_id,
             uint32_t chunk_index,
-            std::string_view data
+            std::string data
         ) -> drogon::Task<Result<void>> = 0;
 
         /**

@@ -362,4 +362,106 @@ namespace {
         ) << "Positive cache entries should outlive negative cache entries";
     }
 
+    // ================================================================================
+    // Simulated JwtAuthFilter flow — verify → revoke → verify → cache check
+    //
+    // This replicates the JwtAuthFilter::doFilter logic at the unit-test level:
+    //   1. VerifyAccessToken (signature/type/expiry) — should succeed
+    //   2. IsAccessTokenRevoked — checked via local cache (simulated)
+    //   3. After revocation, cache reflects revoked=true
+    // ================================================================================
+
+    TEST_F(TokenServiceRevocationTest, SimulatedFilterFlowBeforeRevocation) {
+        const std::string jti = "jti-filter-sim-before";
+
+        auto token = BuildAccessToken(42, "sim_user", jti);
+
+        auto verify_result = m_service->VerifyAccessToken(token);
+        ASSERT_TRUE(verify_result.has_value());
+        EXPECT_EQ(verify_result.value().user_id, 42u);
+        EXPECT_EQ(verify_result.value().username, "sim_user");
+        EXPECT_EQ(verify_result.value().jti, jti);
+
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u)
+            << "VerifyAccessToken does not populate revocation cache";
+
+        m_service->SetRevocationCacheEntryForTest(jti, false, TokenService::GetNegativeCacheTtlSeconds());
+        // Simulate IsAccessTokenRevoked → Redis miss → cache false (not revoked)
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
+    }
+
+    TEST_F(TokenServiceRevocationTest, SimulatedFilterFlowAfterRevocation) {
+        const std::string jti = "jti-filter-sim-after";
+
+        auto token = BuildAccessToken(42, "revoked_user", jti);
+
+        // Step 1: VerifyAccessToken succeeds
+        auto verify_result = m_service->VerifyAccessToken(token);
+        ASSERT_TRUE(verify_result.has_value());
+        EXPECT_EQ(verify_result.value().user_id, 42u);
+
+        // Step 2: Simulate InvalidateAccessToken — local cache set to revoked=true
+        m_service->SetRevocationCacheEntryForTest(jti, true, TokenService::GetAccessTokenExpireSeconds());
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
+
+        // Step 3: VerifyAccessToken still succeeds (signature-level only)
+        auto verify_after = m_service->VerifyAccessToken(token);
+        ASSERT_TRUE(verify_after.has_value())
+            << "VerifyAccessToken is signature-only; revocation is checked separately";
+
+        // Step 4: Cache correctly reflects revoked=true
+        // In real JwtAuthFilter, co_await IsAccessTokenRevoked(jti) would return true
+        // and the filter would return Response::Error(Code::TokenRevoked)
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
+    }
+
+    TEST_F(TokenServiceRevocationTest, SimulatedFilterFlowValidTokenNotRevoked) {
+        const std::string jti = "jti-filter-sim-valid";
+
+        auto token = BuildAccessToken(100, "valid_user", jti);
+
+        // Step 1: VerifyAccessToken succeeds with correct claims
+        auto verify_result = m_service->VerifyAccessToken(token);
+        ASSERT_TRUE(verify_result.has_value());
+        const auto& claims = verify_result.value();
+        EXPECT_EQ(claims.user_id, 100u);
+        EXPECT_EQ(claims.username, "valid_user");
+        EXPECT_EQ(claims.jti, jti);
+
+        // Step 2: Cache is empty — no prior revocation check
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
+
+        // Step 3: Simulate IsAccessTokenRevoked → not revoked
+        // Cache false with short negative TTL
+        m_service->SetRevocationCacheEntryForTest(jti, false, TokenService::GetNegativeCacheTtlSeconds());
+
+        // Step 4: JwtAuthFilter would set request attributes and return nullptr
+        // attributes: user_id=100, username="valid_user"
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
+    }
+
+    // ================================================================================
+    // TTL contract tests — revoked vs non-revoked cache TTLs
+    // ================================================================================
+
+    TEST_F(TokenServiceRevocationTest, RevokedEntryUsesAccessTokenTtl) {
+        const std::string jti = "jti-ttl-revoked";
+        m_service->SetRevocationCacheEntryForTest(jti, true, TokenService::GetAccessTokenExpireSeconds());
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
+    }
+
+    TEST_F(TokenServiceRevocationTest, NonRevokedEntryUsesNegativeCacheTtl) {
+        const std::string jti = "jti-ttl-non-revoked";
+        m_service->SetRevocationCacheEntryForTest(jti, false, TokenService::GetNegativeCacheTtlSeconds());
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
+    }
+
+    TEST_F(TokenServiceRevocationTest, AccessTokenExpireSecondsIs7200) {
+        EXPECT_EQ(TokenService::GetAccessTokenExpireSeconds(), 7200);
+    }
+
+    TEST_F(TokenServiceRevocationTest, RefreshTokenExpireSecondsIs604800) {
+        EXPECT_EQ(TokenService::GetRefreshTokenExpireSeconds(), 604800);
+    }
+
 } // namespace

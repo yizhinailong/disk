@@ -69,16 +69,243 @@
  */
 
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <memory>
 #include <string>
 #include <vector>
 
+#include <drogon/drogon.h>
+#include <drogon/utils/coroutine.h>
 #include <gtest/gtest.h>
 #include <json/json.h>
 
 #include "../../src/dtos/FileDto.hpp"
+#include "../../src/storage/LocalFileStorage.hpp"
+#include "../../src/utils/ConfigMgr.hpp"
+#include "../../src/utils/FileHashUtil.hpp"
 
 namespace disk::file {
     namespace {
+
+        using disk::storage::LocalFileStorage;
+        using disk::utils::ConfigMgr;
+        using disk::utils::FileHashUtil;
+
+        auto SanitizePathComponent(std::string value) -> std::string {
+            for (auto& ch : value) {
+                const auto is_alpha_num = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+                                          (ch >= '0' && ch <= '9');
+                if (!is_alpha_num) {
+                    ch = '_';
+                }
+            }
+            return value;
+        }
+
+        auto LoadStorageConfig(
+            const std::filesystem::path& storage_base,
+            const std::filesystem::path& temp_upload_base
+        ) -> void {
+            Json::Value cfg;
+            cfg["custom_config"]["disk"]["storage_base_path"] = storage_base.string();
+            cfg["custom_config"]["disk"]["temp_upload_path"] = temp_upload_base.string();
+            cfg["custom_config"]["disk"]["assembly_max_concurrent"] = 4;
+            cfg["custom_config"]["disk"]["assemble_buffer_size_bytes"] = 4096;
+            drogon::app().loadConfigJson(cfg);
+            ConfigMgr::GetInstance()->LoadConfig();
+        }
+
+        auto RestoreDefaultStorageConfig() -> void {
+            LoadStorageConfig("build/uploaded", "build/temp_uploads");
+        }
+
+        auto ReadBinaryFile(const std::filesystem::path& path) -> std::string {
+            std::ifstream input(path, std::ios::binary);
+            return {
+                std::istreambuf_iterator<char>(input),
+                std::istreambuf_iterator<char>()
+            };
+        }
+
+        struct UploadTaskModel {
+            std::string upload_id;
+            std::string filename;
+            uint64_t folder_id = 0;
+            uint64_t file_size = 0;
+            std::string file_hash;
+            uint32_t total_chunks = 0;
+            uint64_t reserved_bytes = 0;
+            int status = 0;
+        };
+
+        struct FileRecordModel {
+            uint64_t id = 0;
+            std::string name;
+            uint64_t size = 0;
+            std::string hash;
+            uint64_t parent_id = 0;
+        };
+
+        struct QuotaStateModel {
+            uint64_t reserved = 0;
+            uint64_t used = 0;
+        };
+
+        auto SimulateCompleteUpload(
+            LocalFileStorage& storage,
+            UploadTaskModel& task,
+            const std::vector<uint32_t>& uploaded_chunks,
+            bool filename_exists,
+            QuotaStateModel& quota,
+            std::vector<FileRecordModel>& file_records
+        ) -> Result<CompleteUploadResponse> {
+            if (uploaded_chunks.size() != task.total_chunks) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Not all chunks uploaded")
+                );
+            }
+
+            for (uint32_t expected_index = 0; expected_index < task.total_chunks; ++expected_index) {
+                if (uploaded_chunks[expected_index] != expected_index) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ValidationFailed, "Not all chunks uploaded")
+                    );
+                }
+            }
+
+            auto assemble_result = drogon::sync_wait(storage.AssembleChunks(task.upload_id, task.total_chunks));
+            if (!assemble_result) {
+                return std::unexpected(assemble_result.error());
+            }
+
+            const auto& assembled = assemble_result.value();
+            if (assembled.md5_hash != task.file_hash) {
+                auto cleanup_result = drogon::sync_wait(storage.DeletePath(assembled.path));
+                (void)cleanup_result;
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ChunkVerifyFailed, "File hash verification failed")
+                );
+            }
+
+            if (filename_exists) {
+                auto cleanup_result = drogon::sync_wait(storage.DeletePath(assembled.path));
+                (void)cleanup_result;
+                return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
+            }
+
+            auto promote_result = drogon::sync_wait(storage.PromoteToFinal(assembled.path, assembled.md5_hash));
+            if (!promote_result) {
+                return std::unexpected(promote_result.error());
+            }
+
+            quota.reserved = quota.reserved > task.file_size ? quota.reserved - task.file_size : 0;
+            quota.used += task.file_size;
+            task.status = 1;
+
+            file_records.push_back(FileRecordModel{ .id = static_cast<uint64_t>(file_records.size() + 1), .name = task.filename, .size = task.file_size, .hash = assembled.md5_hash, .parent_id = task.folder_id });
+
+            auto cleanup_temp_result = drogon::sync_wait(storage.CleanupTemp(task.upload_id));
+            (void)cleanup_temp_result;
+
+            CompleteUploadResponse response;
+            response.file = FileItem{ .id = file_records.back().id,
+                                      .name = task.filename,
+                                      .size = task.file_size,
+                                      .hash = assembled.md5_hash,
+                                      .mime_type = "",
+                                      .parent_id = task.folder_id,
+                                      .created_at = "2026-04-12 00:00:00" };
+            return response;
+        }
+
+        auto SimulateCancelUpload(
+            LocalFileStorage& storage,
+            UploadTaskModel& task,
+            QuotaStateModel& quota,
+            std::vector<uint32_t>& uploaded_chunks
+        ) -> Result<void> {
+            if (task.status != 0) {
+                return {};
+            }
+
+            quota.reserved = quota.reserved > task.reserved_bytes ? quota.reserved - task.reserved_bytes : 0;
+            task.status = 2;
+            uploaded_chunks.clear();
+
+            auto cleanup_result = drogon::sync_wait(storage.CleanupTemp(task.upload_id));
+            (void)cleanup_result;
+            return {};
+        }
+
+        class FileServiceUploadAtomicityModelTest : public ::testing::Test {
+        protected:
+            void SetUp() override {
+                const auto* test_info = ::testing::UnitTest::GetInstance()->current_test_info();
+                m_root = std::filesystem::path("build/test_file_service_atomicity") /
+                         SanitizePathComponent(std::string(test_info->test_suite_name()) + "_" + test_info->name());
+                m_storage_base = m_root / "uploaded";
+                m_temp_base = m_root / "temp";
+
+                std::error_code ec;
+                std::filesystem::remove_all(m_root, ec);
+
+                LoadStorageConfig(m_storage_base, m_temp_base);
+                m_storage = std::make_unique<LocalFileStorage>();
+            }
+
+            void TearDown() override {
+                m_storage.reset();
+                RestoreDefaultStorageConfig();
+
+                std::error_code ec;
+                std::filesystem::remove_all(m_root, ec);
+            }
+
+            auto TempDir(const std::string& upload_id) const -> std::filesystem::path {
+                return m_temp_base / upload_id;
+            }
+
+            auto ChunkPath(const std::string& upload_id, uint32_t chunk_index) const
+                -> std::filesystem::path {
+                return TempDir(upload_id) / (std::to_string(chunk_index) + ".chunk");
+            }
+
+            auto AssembledPath(const std::string& upload_id) const -> std::filesystem::path {
+                return m_temp_base / (upload_id + ".tmp");
+            }
+
+            auto FinalStoragePath(const std::string& hash) const -> std::filesystem::path {
+                return m_storage->GetFinalStoragePath(hash);
+            }
+
+            auto WriteChunks(
+                const std::string& upload_id,
+                const std::vector<std::pair<uint32_t, std::string>>& chunks
+            ) -> void {
+                ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
+                for (const auto& [index, data] : chunks) {
+                    ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, index, data)).has_value())
+                        << "chunk_index=" << index;
+                }
+            }
+
+            auto WriteAssembledTempArtifact(const std::string& upload_id, const std::string& content) -> void {
+                std::error_code ec;
+                std::filesystem::create_directories(m_temp_base, ec);
+                ASSERT_FALSE(ec);
+
+                std::ofstream output(AssembledPath(upload_id), std::ios::binary);
+                output.write(content.data(), static_cast<std::streamsize>(content.size()));
+                output.close();
+                ASSERT_TRUE(output);
+            }
+
+            std::filesystem::path m_root;
+            std::filesystem::path m_storage_base;
+            std::filesystem::path m_temp_base;
+            std::unique_ptr<LocalFileStorage> m_storage;
+        };
 
         // ============================================================================
         // Part 1: ENABLED 特征测试 — Copy/Delete 响应契约回归保护
@@ -230,6 +457,247 @@ namespace disk::file {
             EXPECT_EQ(request.file_ids[0], 10U);
             EXPECT_EQ(request.file_ids[1], 20U);
             EXPECT_EQ(request.file_ids[2], 30U);
+        }
+
+        // ==================== Upload finalize / cancel 语义特征测试 ====================
+
+        TEST_F(FileServiceUploadAtomicityModelTest, CompleteUploadSuccessCreatesFileRecordAndTransfersQuota) {
+            const std::string upload_id = "complete-upload-success";
+            const std::vector<std::string> chunk_payloads = {
+                "alpha-",
+                std::string("beta\0", 5),
+                std::string(1024, 'q')
+            };
+            const std::string merged = chunk_payloads[0] + chunk_payloads[1] + chunk_payloads[2];
+            const auto expected_md5 = FileHashUtil::HashMd5(merged);
+
+            WriteChunks(
+                upload_id,
+                {
+                    { 0, chunk_payloads[0] },
+                    { 1, chunk_payloads[1] },
+                    { 2, chunk_payloads[2] }
+            }
+            );
+
+            UploadTaskModel task{ .upload_id = upload_id,
+                                  .filename = "final.bin",
+                                  .folder_id = 7,
+                                  .file_size = static_cast<uint64_t>(merged.size()),
+                                  .file_hash = expected_md5,
+                                  .total_chunks = 3,
+                                  .reserved_bytes = static_cast<uint64_t>(merged.size()),
+                                  .status = 0 };
+            QuotaStateModel quota{ .reserved = task.reserved_bytes, .used = 128 };
+            std::vector<FileRecordModel> file_records;
+
+            auto result = SimulateCompleteUpload(
+                *m_storage,
+                task,
+                { 0, 1, 2 },
+                false,
+                quota,
+                file_records
+            );
+
+            ASSERT_TRUE(result.has_value());
+            ASSERT_EQ(file_records.size(), 1U);
+            EXPECT_EQ(task.status, 1);
+            EXPECT_EQ(quota.reserved, 0U);
+            EXPECT_EQ(quota.used, 128U + static_cast<uint64_t>(merged.size()));
+            EXPECT_EQ(file_records[0].name, "final.bin");
+            EXPECT_EQ(file_records[0].hash, expected_md5);
+            EXPECT_EQ(result->file.hash, expected_md5);
+            EXPECT_EQ(result->file.parent_id, 7U);
+
+            const auto final_path = FinalStoragePath(expected_md5);
+            ASSERT_TRUE(std::filesystem::exists(final_path));
+            EXPECT_EQ(ReadBinaryFile(final_path), merged);
+            EXPECT_FALSE(std::filesystem::exists(TempDir(upload_id)));
+            EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
+        }
+
+        TEST_F(FileServiceUploadAtomicityModelTest, CompleteUploadMissingChunksReturnsValidationFailed) {
+            const std::string upload_id = "complete-upload-missing";
+
+            WriteChunks(
+                upload_id,
+                {
+                    { 0, "part-0" },
+                    { 1, "part-1" }
+            }
+            );
+
+            UploadTaskModel task{ .upload_id = upload_id,
+                                  .filename = "missing.bin",
+                                  .folder_id = 0,
+                                  .file_size = 12,
+                                  .file_hash = FileHashUtil::HashMd5("part-0part-1part-2"),
+                                  .total_chunks = 3,
+                                  .reserved_bytes = 12,
+                                  .status = 0 };
+            QuotaStateModel quota{ .reserved = 12, .used = 0 };
+            std::vector<FileRecordModel> file_records;
+
+            auto result = SimulateCompleteUpload(
+                *m_storage,
+                task,
+                { 0, 1 },
+                false,
+                quota,
+                file_records
+            );
+
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+            EXPECT_EQ(task.status, 0);
+            EXPECT_TRUE(file_records.empty());
+            EXPECT_TRUE(std::filesystem::exists(ChunkPath(upload_id, 0)));
+            EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
+        }
+
+        TEST_F(FileServiceUploadAtomicityModelTest, CompleteUploadNonContiguousChunkIndicesReturnValidationFailed) {
+            const std::string upload_id = "complete-upload-non-contiguous";
+
+            WriteChunks(
+                upload_id,
+                {
+                    { 0, "part-0" },
+                    { 2, "part-2" }
+            }
+            );
+
+            UploadTaskModel task{ .upload_id = upload_id,
+                                  .filename = "non-contiguous.bin",
+                                  .folder_id = 0,
+                                  .file_size = 12,
+                                  .file_hash = FileHashUtil::HashMd5("part-0part-2"),
+                                  .total_chunks = 2,
+                                  .reserved_bytes = 12,
+                                  .status = 0 };
+            QuotaStateModel quota{ .reserved = 12, .used = 0 };
+            std::vector<FileRecordModel> file_records;
+
+            auto result = SimulateCompleteUpload(
+                *m_storage,
+                task,
+                { 0, 2 },
+                false,
+                quota,
+                file_records
+            );
+
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+            EXPECT_EQ(task.status, 0);
+            EXPECT_TRUE(file_records.empty());
+            EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
+        }
+
+        TEST_F(FileServiceUploadAtomicityModelTest, CompleteUploadDuplicateFilenameDeletesAssembledTempFile) {
+            const std::string upload_id = "complete-upload-duplicate-name";
+            const std::string merged = "same-name-content";
+
+            WriteChunks(
+                upload_id,
+                {
+                    { 0,        "same-" },
+                    { 1, "name-content" }
+            }
+            );
+
+            UploadTaskModel task{ .upload_id = upload_id,
+                                  .filename = "exists.bin",
+                                  .folder_id = 3,
+                                  .file_size = static_cast<uint64_t>(merged.size()),
+                                  .file_hash = FileHashUtil::HashMd5(merged),
+                                  .total_chunks = 2,
+                                  .reserved_bytes = static_cast<uint64_t>(merged.size()),
+                                  .status = 0 };
+            QuotaStateModel quota{ .reserved = task.reserved_bytes, .used = 0 };
+            std::vector<FileRecordModel> file_records;
+
+            auto result = SimulateCompleteUpload(
+                *m_storage,
+                task,
+                { 0, 1 },
+                true,
+                quota,
+                file_records
+            );
+
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::FileAlreadyExists);
+            EXPECT_TRUE(file_records.empty());
+            EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
+            EXPECT_FALSE(std::filesystem::exists(FinalStoragePath(task.file_hash)));
+        }
+
+        TEST_F(FileServiceUploadAtomicityModelTest, CompleteUploadHashMismatchDeletesAssembledTempFile) {
+            const std::string upload_id = "complete-upload-hash-mismatch";
+
+            WriteChunks(
+                upload_id,
+                {
+                    { 0,    "hash-" },
+                    { 1, "mismatch" }
+            }
+            );
+
+            UploadTaskModel task{ .upload_id = upload_id,
+                                  .filename = "mismatch.bin",
+                                  .folder_id = 4,
+                                  .file_size = 13,
+                                  .file_hash = FileHashUtil::HashMd5("different-content"),
+                                  .total_chunks = 2,
+                                  .reserved_bytes = 13,
+                                  .status = 0 };
+            QuotaStateModel quota{ .reserved = 13, .used = 0 };
+            std::vector<FileRecordModel> file_records;
+
+            auto result = SimulateCompleteUpload(
+                *m_storage,
+                task,
+                { 0, 1 },
+                false,
+                quota,
+                file_records
+            );
+
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::ChunkVerifyFailed);
+            EXPECT_TRUE(file_records.empty());
+            EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
+        }
+
+        TEST_F(FileServiceUploadAtomicityModelTest, CancelUploadReleasesReservedQuotaAndCleansArtifacts) {
+            const std::string upload_id = "cancel-upload";
+
+            WriteChunks(upload_id, {
+                                       { 0, "cancel-me" }
+            });
+            WriteAssembledTempArtifact(upload_id, "assembled-temp");
+
+            UploadTaskModel task{ .upload_id = upload_id,
+                                  .filename = "cancel.bin",
+                                  .folder_id = 0,
+                                  .file_size = 9,
+                                  .file_hash = FileHashUtil::HashMd5("cancel-me"),
+                                  .total_chunks = 1,
+                                  .reserved_bytes = 9,
+                                  .status = 0 };
+            QuotaStateModel quota{ .reserved = 9, .used = 100 };
+            std::vector<uint32_t> uploaded_chunks = { 0 };
+
+            auto result = SimulateCancelUpload(*m_storage, task, quota, uploaded_chunks);
+
+            ASSERT_TRUE(result.has_value());
+            EXPECT_EQ(task.status, 2);
+            EXPECT_EQ(quota.reserved, 0U);
+            EXPECT_EQ(quota.used, 100U);
+            EXPECT_TRUE(uploaded_chunks.empty());
+            EXPECT_FALSE(std::filesystem::exists(TempDir(upload_id)));
+            EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
         }
 
         // ============================================================================

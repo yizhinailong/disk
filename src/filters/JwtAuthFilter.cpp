@@ -10,10 +10,39 @@
 #include "JwtAuthFilter.hpp"
 
 #include <chrono>
+#include <functional>
+#include <type_traits>
+
+#include <drogon/utils/coroutine.h>
 
 #include "utils/Response.hpp"
 
 namespace disk::filters {
+
+    namespace {
+
+        template <typename Func>
+        auto RunOnAuthCpuPool(Func func)
+            -> drogon::Task<std::remove_cvref_t<std::invoke_result_t<Func&>>> {
+            using ReturnType = std::remove_cvref_t<std::invoke_result_t<Func&>>;
+
+            auto* resume_loop = trantor::EventLoop::getEventLoopOfCurrentThread();
+            auto result = co_await drogon::queueInLoopCoro<ReturnType>(
+                disk::services::detail::GetAuthCpuWorkLoop(),
+                std::function<ReturnType()>([func = std::move(func)]() mutable -> ReturnType {
+                    return func();
+                })
+            );
+
+            if (resume_loop != nullptr &&
+                resume_loop != trantor::EventLoop::getEventLoopOfCurrentThread()) {
+                co_await drogon::switchThreadCoro(resume_loop);
+            }
+
+            co_return result;
+        }
+
+    } // namespace
 
     using disk::services::TokenService;
 
@@ -41,8 +70,11 @@ namespace disk::filters {
         }
 
         const auto token = auth_header.substr(7);
+        auto token_service = TokenService::GetInstance();
 
-        auto verify_result = TokenService::GetInstance()->VerifyAccessToken(token);
+        auto verify_result = co_await RunOnAuthCpuPool([token_service, token]() {
+            return token_service->VerifyAccessToken(token);
+        });
         if (!verify_result) {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
@@ -53,7 +85,7 @@ namespace disk::filters {
 
         const auto& claims = verify_result.value();
 
-        if (co_await TokenService::GetInstance()->IsAccessTokenRevoked(claims.jti)) {
+        if (co_await token_service->IsAccessTokenRevoked(claims.jti)) {
             LOG_WARN << "Token revoked: user_id=" << claims.user_id << ", jti=" << claims.jti;
 
             auto end = std::chrono::steady_clock::now();

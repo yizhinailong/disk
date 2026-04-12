@@ -9,6 +9,10 @@
 
 #include "AuthService.hpp"
 
+#include <functional>
+#include <type_traits>
+
+#include <drogon/utils/coroutine.h>
 #include <json/writer.h>
 
 #include "dtos/AuthDto.hpp"
@@ -19,6 +23,31 @@
 #include "utils/RedisKeyPrefix.hpp"
 
 namespace disk::auth {
+
+    namespace {
+
+        template <typename Func>
+        auto RunOnAuthCpuPool(Func func)
+            -> drogon::Task<std::remove_cvref_t<std::invoke_result_t<Func&>>> {
+            using ReturnType = std::remove_cvref_t<std::invoke_result_t<Func&>>;
+
+            auto* resume_loop = trantor::EventLoop::getEventLoopOfCurrentThread();
+            auto result = co_await drogon::queueInLoopCoro<ReturnType>(
+                disk::services::detail::GetAuthCpuWorkLoop(),
+                std::function<ReturnType()>([func = std::move(func)]() mutable -> ReturnType {
+                    return func();
+                })
+            );
+
+            if (resume_loop != nullptr &&
+                resume_loop != trantor::EventLoop::getEventLoopOfCurrentThread()) {
+                co_await drogon::switchThreadCoro(resume_loop);
+            }
+
+            co_return result;
+        }
+
+    } // namespace
 
     using disk::services::TokenService;
     using disk::utils::ConfigMgr;
@@ -56,7 +85,11 @@ namespace disk::auth {
 
         // 3. 加密密码（使用 libsodium Argon2id）
         LOG_DEBUG << "Starting password hash: " << request.username;
-        auto hash_result = HashUtil::HashPassword(request.password);
+        auto hash_result = co_await RunOnAuthCpuPool(
+            [password = std::move(request.password)]() {
+                return HashUtil::HashPassword(password);
+            }
+        );
         if (!hash_result) {
             LOG_ERROR << "Password hash failed: " << request.username;
             co_return std::unexpected(hash_result.error());
@@ -145,7 +178,13 @@ namespace disk::auth {
         }
 
         // 3. 验证密码
-        if (!HashUtil::VerifyPassword(request.password, user.getValueOfPasswordHash())) {
+        const auto stored_password_hash = user.getValueOfPasswordHash();
+        auto password_matches = co_await RunOnAuthCpuPool(
+            [password = request.password, stored_password_hash]() {
+                return HashUtil::VerifyPassword(password, stored_password_hash);
+            }
+        );
+        if (!password_matches) {
             LOG_WARN << "Invalid password: " << request.account;
             co_await IncrementLoginAttempts(user.getValueOfId());
             co_return std::unexpected(ErrorInfo(ErrorCode::InvalidCredentials));
