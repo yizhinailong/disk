@@ -18,12 +18,12 @@ namespace disk::services {
 
         TEST(CleanupServiceBuildNumericInClauseTest, EmptyVectorReturnsEmptyString) {
             const std::vector<uint64_t> ids;
-            EXPECT_TRUE(cleanup_internal::BuildNumericInClause(ids).empty());
+            EXPECT_TRUE(utils::BatchUtils::BuildSafeNumericInClause(ids).empty());
         }
 
         TEST(CleanupServiceBuildNumericInClauseTest, MultipleIdsReturnCommaSeparatedClause) {
             const std::vector<uint64_t> ids{ 1, 42, 500, 999999 };
-            EXPECT_EQ(cleanup_internal::BuildNumericInClause(ids), "1,42,500,999999");
+            EXPECT_EQ(utils::BatchUtils::BuildSafeNumericInClause(ids), "1,42,500,999999");
         }
 
         TEST(CleanupServiceLegacyContentIdTest, CleanupResolvesContentIdFromLegacyItemDataWhenColumnIsNull) {

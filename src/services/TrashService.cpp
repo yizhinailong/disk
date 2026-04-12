@@ -11,7 +11,6 @@
 
 #include <algorithm>
 #include <optional>
-#include <sstream>
 #include <unordered_map>
 
 #include <drogon/orm/CoroMapper.h>
@@ -38,19 +37,6 @@ namespace disk::trash {
     using drogon_model::disk::Folders;
     using drogon_model::disk::Trash;
     using drogon_model::disk::Users;
-
-    namespace {
-        auto BuildNumericInClause(const std::vector<uint64_t>& ids) -> std::string {
-            std::ostringstream oss;
-            for (size_t i = 0; i < ids.size(); ++i) {
-                if (i > 0) {
-                    oss << ",";
-                }
-                oss << ids[i];
-            }
-            return oss.str();
-        }
-    } // namespace
 
     TrashService::TrashService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
@@ -151,7 +137,7 @@ namespace disk::trash {
                 }
 
                 auto rows = co_await m_db_client->execSqlCoro(
-                    "SELECT id, user_id, item_type, item_id, item_name, item_size, " "original_folder_id, original_path, item_data, content_id " "FROM trash WHERE id IN (" + BuildNumericInClause(chunk) + ")"
+                    "SELECT id, user_id, item_type, item_id, item_name, item_size, " "original_folder_id, original_path, item_data, content_id " "FROM trash WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ")"
                 );
 
                 for (const auto& row : rows) {
@@ -256,7 +242,7 @@ namespace disk::trash {
                 }
 
                 auto rows = co_await m_db_client->execSqlCoro(
-                    "SELECT id, user_id, item_type, item_id, item_name, item_size, " "original_folder_id, original_path, item_data, content_id " "FROM trash WHERE id IN (" + BuildNumericInClause(chunk) + ")"
+                    "SELECT id, user_id, item_type, item_id, item_name, item_size, " "original_folder_id, original_path, item_data, content_id " "FROM trash WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ")"
                 );
 
                 for (const auto& row : rows) {
@@ -436,7 +422,7 @@ namespace disk::trash {
                         std::sort(content_ids.begin(), content_ids.end());
                         content_ids.erase(std::unique(content_ids.begin(), content_ids.end()), content_ids.end());
 
-                        auto content_in_clause = BuildNumericInClause(content_ids);
+                        auto content_in_clause = BatchUtils::BuildSafeNumericInClause(content_ids);
                         co_await transaction->execSqlCoro(
                             "UPDATE file_contents " "SET ref_count = GREATEST(ref_count - 1, 0) " "WHERE id IN (" + content_in_clause + ")"
                         );
@@ -453,7 +439,7 @@ namespace disk::trash {
                     }
 
                     auto delete_result = co_await transaction->execSqlCoro(
-                        "DELETE FROM trash WHERE id IN (" + BuildNumericInClause(chunk_trash_ids) + ")"
+                        "DELETE FROM trash WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk_trash_ids) + ")"
                     );
 
                     if (delete_result.affectedRows() != chunk_trash_ids.size()) {

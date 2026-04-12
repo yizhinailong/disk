@@ -19,10 +19,6 @@
 
 namespace disk::services {
 
-    namespace cleanup_internal {
-        [[nodiscard]] auto BuildNumericInClause(const std::vector<uint64_t>& ids) -> std::string;
-    }
-
     /**
      * @brief 系统清理服务类
      *

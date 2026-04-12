@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <chrono>
 #include <optional>
-#include <sstream>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -39,17 +38,6 @@ namespace disk::services {
 
     constexpr int kUploadTaskCleanupBatchSize = 100;
     constexpr int kTrashFetchBatchSize = 100;
-
-    auto cleanup_internal::BuildNumericInClause(const std::vector<uint64_t>& ids) -> std::string {
-        std::ostringstream oss;
-        for (size_t i = 0; i < ids.size(); ++i) {
-            if (i > 0) {
-                oss << ",";
-            }
-            oss << ids[i];
-        }
-        return oss.str();
-    }
 
     CleanupService::CleanupService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
@@ -173,11 +161,11 @@ namespace disk::services {
                                               std::to_string(count) + " ";
                             }
                             update_sql += "ELSE 0 END, 0) WHERE id IN (" +
-                                          cleanup_internal::BuildNumericInClause(unique_content_ids) +
+                                          BatchUtils::BuildSafeNumericInClause(unique_content_ids) +
                                           ")";
                             co_await transaction->execSqlCoro(update_sql);
 
-                            auto content_in_clause = cleanup_internal::BuildNumericInClause(unique_content_ids);
+                            auto content_in_clause = BatchUtils::BuildSafeNumericInClause(unique_content_ids);
 
                             auto zero_ref_rows = co_await transaction->execSqlCoro(
                                 "SELECT id, storage_path FROM file_contents " "WHERE ref_count = 0 AND id IN (" + content_in_clause + ")"
@@ -190,7 +178,7 @@ namespace disk::services {
                         }
 
                         auto delete_result = co_await transaction->execSqlCoro(
-                            "DELETE FROM trash WHERE id IN (" + cleanup_internal::BuildNumericInClause(trash_ids) +
+                            "DELETE FROM trash WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(trash_ids) +
                             ")"
                         );
 

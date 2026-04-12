@@ -213,23 +213,24 @@ namespace disk::utils {
         // ==================== 数值 IN 子句 ====================
 
         /**
-         * @brief 构建数字类型的 SQL IN 子句（字面量，不使用参数绑定）
+         * @brief 构建安全的数字类型 SQL IN 子句
          *
-         * 用于安全的 uint64_t ID 列表，直接嵌入 SQL 语句。
-         * 适用于不需要参数绑定的整数 ID 场景。
+         * 将 uint64_t ID 列表直接嵌入 SQL 语句，生成逗号分隔的数字字面量。
+         * 由于输入类型严格为 uint64_t，不存在 SQL 注入风险。
+         * 此为所有批处理路径的统一入口，禁止在 Service 层自行拼接。
          *
-         * @param ids 要嵌入的 ID 列表
-         * @return std::string 逗号分隔的 ID 字符串，如 "1,2,3,4"
+         * @param ids 要嵌入的 ID 列表（必须为 uint64_t，不接受字符串）
+         * @return std::string 逗号分隔的 ID 字符串，如 "1,2,3,4"；空列表返回空串
          *
          * @code
          * std::vector<uint64_t> file_ids = {1, 2, 3};
-         * auto in_clause = BatchUtils::BuildNumericInClause(file_ids);
+         * auto in_clause = BatchUtils::BuildSafeNumericInClause(file_ids);
          * // in_clause = "1,2,3"
          * auto sql = "SELECT * FROM files WHERE id IN (" + in_clause + ")";
          * @endcode
          */
         [[nodiscard]]
-        static auto BuildNumericInClause(const std::vector<uint64_t>& ids) -> std::string {
+        static auto BuildSafeNumericInClause(const std::vector<uint64_t>& ids) -> std::string {
             if (ids.empty()) {
                 return "";
             }
@@ -241,6 +242,19 @@ namespace disk::utils {
                 oss << ids[i];
             }
             return oss.str();
+        }
+
+        /**
+         * @brief BuildSafeNumericInClause 的旧名称别名
+         *
+         * 保持向后兼容，新代码应优先使用 BuildSafeNumericInClause。
+         *
+         * @param ids 要嵌入的 ID 列表
+         * @return std::string 逗号分隔的 ID 字符串
+         */
+        [[nodiscard]]
+        static auto BuildNumericInClause(const std::vector<uint64_t>& ids) -> std::string {
+            return BuildSafeNumericInClause(ids);
         }
 
         // ==================== 批量验证 ====================
