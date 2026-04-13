@@ -6,10 +6,8 @@
  */
 
 #include "OperationLogs.hpp"
-
-#include <string>
-
 #include <drogon/utils/Utilities.h>
+#include <string>
 
 using namespace drogon;
 using namespace drogon::orm;
@@ -29,690 +27,822 @@ const std::string OperationLogs::primaryKeyName = "id";
 const bool OperationLogs::hasPrimaryKey = true;
 const std::string OperationLogs::tableName = "operation_logs";
 
-const std::vector<typename OperationLogs::MetaData> OperationLogs::metaData_ = {
-    {          "id",        "uint64_t", "bigint unsigned",   8, 1, 1, 1 },
-    {     "user_id",        "uint64_t", "bigint unsigned",   8, 0, 0, 1 },
-    {      "action",     "std::string",     "varchar(32)",  32, 0, 0, 1 },
-    { "target_type",     "std::string",     "varchar(32)",  32, 0, 0, 0 },
-    {   "target_id",        "uint64_t", "bigint unsigned",   8, 0, 0, 0 },
-    { "target_name",     "std::string",    "varchar(255)", 255, 0, 0, 0 },
-    {     "details",     "std::string",            "json",   0, 0, 0, 0 },
-    {  "ip_address",     "std::string",     "varchar(45)",  45, 0, 0, 1 },
-    {  "user_agent",     "std::string",    "varchar(512)", 512, 0, 0, 0 },
-    {  "created_at", "::trantor::Date",        "datetime",   0, 0, 0, 1 }
+const std::vector<typename OperationLogs::MetaData> OperationLogs::metaData_={
+{"id","uint64_t","bigint unsigned",8,1,1,1},
+{"user_id","uint64_t","bigint unsigned",8,0,0,1},
+{"action","std::string","varchar(32)",32,0,0,1},
+{"target_type","std::string","varchar(32)",32,0,0,0},
+{"target_id","uint64_t","bigint unsigned",8,0,0,0},
+{"target_name","std::string","varchar(255)",255,0,0,0},
+{"details","std::string","json",0,0,0,0},
+{"ip_address","std::string","varchar(45)",45,0,0,1},
+{"user_agent","std::string","varchar(512)",512,0,0,0},
+{"created_at","::trantor::Date","datetime",0,0,0,1}
 };
-
-const std::string& OperationLogs::getColumnName(size_t index) noexcept(false) {
+const std::string &OperationLogs::getColumnName(size_t index) noexcept(false)
+{
     assert(index < metaData_.size());
     return metaData_[index].colName_;
 }
-
-OperationLogs::OperationLogs(const Row& r, const ssize_t indexOffset) noexcept {
-    if (indexOffset < 0) {
-        if (!r["id"].isNull()) {
-            id_ = std::make_shared<uint64_t>(r["id"].as<uint64_t>());
+OperationLogs::OperationLogs(const Row &r, const ssize_t indexOffset) noexcept
+{
+    if(indexOffset < 0)
+    {
+        if(!r["id"].isNull())
+        {
+            id_=std::make_shared<uint64_t>(r["id"].as<uint64_t>());
         }
-        if (!r["user_id"].isNull()) {
-            userId_ = std::make_shared<uint64_t>(r["user_id"].as<uint64_t>());
+        if(!r["user_id"].isNull())
+        {
+            userId_=std::make_shared<uint64_t>(r["user_id"].as<uint64_t>());
         }
-        if (!r["action"].isNull()) {
-            action_ = std::make_shared<std::string>(r["action"].as<std::string>());
+        if(!r["action"].isNull())
+        {
+            action_=std::make_shared<std::string>(r["action"].as<std::string>());
         }
-        if (!r["target_type"].isNull()) {
-            targetType_ = std::make_shared<std::string>(r["target_type"].as<std::string>());
+        if(!r["target_type"].isNull())
+        {
+            targetType_=std::make_shared<std::string>(r["target_type"].as<std::string>());
         }
-        if (!r["target_id"].isNull()) {
-            targetId_ = std::make_shared<uint64_t>(r["target_id"].as<uint64_t>());
+        if(!r["target_id"].isNull())
+        {
+            targetId_=std::make_shared<uint64_t>(r["target_id"].as<uint64_t>());
         }
-        if (!r["target_name"].isNull()) {
-            targetName_ = std::make_shared<std::string>(r["target_name"].as<std::string>());
+        if(!r["target_name"].isNull())
+        {
+            targetName_=std::make_shared<std::string>(r["target_name"].as<std::string>());
         }
-        if (!r["details"].isNull()) {
-            details_ = std::make_shared<std::string>(r["details"].as<std::string>());
+        if(!r["details"].isNull())
+        {
+            details_=std::make_shared<std::string>(r["details"].as<std::string>());
         }
-        if (!r["ip_address"].isNull()) {
-            ipAddress_ = std::make_shared<std::string>(r["ip_address"].as<std::string>());
+        if(!r["ip_address"].isNull())
+        {
+            ipAddress_=std::make_shared<std::string>(r["ip_address"].as<std::string>());
         }
-        if (!r["user_agent"].isNull()) {
-            userAgent_ = std::make_shared<std::string>(r["user_agent"].as<std::string>());
+        if(!r["user_agent"].isNull())
+        {
+            userAgent_=std::make_shared<std::string>(r["user_agent"].as<std::string>());
         }
-        if (!r["created_at"].isNull()) {
+        if(!r["created_at"].isNull())
+        {
             auto timeStr = r["created_at"].as<std::string>();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                createdAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
-    } else {
+    }
+    else
+    {
         size_t offset = (size_t)indexOffset;
-        if (offset + 10 > r.size()) {
+        if(offset + 10 > r.size())
+        {
             LOG_FATAL << "Invalid SQL result for this model";
             return;
         }
         size_t index;
         index = offset + 0;
-        if (!r[index].isNull()) {
-            id_ = std::make_shared<uint64_t>(r[index].as<uint64_t>());
+        if(!r[index].isNull())
+        {
+            id_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
         }
         index = offset + 1;
-        if (!r[index].isNull()) {
-            userId_ = std::make_shared<uint64_t>(r[index].as<uint64_t>());
+        if(!r[index].isNull())
+        {
+            userId_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
         }
         index = offset + 2;
-        if (!r[index].isNull()) {
-            action_ = std::make_shared<std::string>(r[index].as<std::string>());
+        if(!r[index].isNull())
+        {
+            action_=std::make_shared<std::string>(r[index].as<std::string>());
         }
         index = offset + 3;
-        if (!r[index].isNull()) {
-            targetType_ = std::make_shared<std::string>(r[index].as<std::string>());
+        if(!r[index].isNull())
+        {
+            targetType_=std::make_shared<std::string>(r[index].as<std::string>());
         }
         index = offset + 4;
-        if (!r[index].isNull()) {
-            targetId_ = std::make_shared<uint64_t>(r[index].as<uint64_t>());
+        if(!r[index].isNull())
+        {
+            targetId_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
         }
         index = offset + 5;
-        if (!r[index].isNull()) {
-            targetName_ = std::make_shared<std::string>(r[index].as<std::string>());
+        if(!r[index].isNull())
+        {
+            targetName_=std::make_shared<std::string>(r[index].as<std::string>());
         }
         index = offset + 6;
-        if (!r[index].isNull()) {
-            details_ = std::make_shared<std::string>(r[index].as<std::string>());
+        if(!r[index].isNull())
+        {
+            details_=std::make_shared<std::string>(r[index].as<std::string>());
         }
         index = offset + 7;
-        if (!r[index].isNull()) {
-            ipAddress_ = std::make_shared<std::string>(r[index].as<std::string>());
+        if(!r[index].isNull())
+        {
+            ipAddress_=std::make_shared<std::string>(r[index].as<std::string>());
         }
         index = offset + 8;
-        if (!r[index].isNull()) {
-            userAgent_ = std::make_shared<std::string>(r[index].as<std::string>());
+        if(!r[index].isNull())
+        {
+            userAgent_=std::make_shared<std::string>(r[index].as<std::string>());
         }
         index = offset + 9;
-        if (!r[index].isNull()) {
+        if(!r[index].isNull())
+        {
             auto timeStr = r[index].as<std::string>();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                createdAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
+
 }
 
-OperationLogs::OperationLogs(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
-    if (pMasqueradingVector.size() != 10) {
+OperationLogs::OperationLogs(const Json::Value &pJson, const std::vector<std::string> &pMasqueradingVector) noexcept(false)
+{
+    if(pMasqueradingVector.size() != 10)
+    {
         LOG_ERROR << "Bad masquerading vector";
         return;
     }
-    if (!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0])) {
+    if(!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0]))
+    {
         dirtyFlag_[0] = true;
-        if (!pJson[pMasqueradingVector[0]].isNull()) {
-            id_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[0]].asUInt64());
+        if(!pJson[pMasqueradingVector[0]].isNull())
+        {
+            id_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[0]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1])) {
+    if(!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1]))
+    {
         dirtyFlag_[1] = true;
-        if (!pJson[pMasqueradingVector[1]].isNull()) {
-            userId_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[1]].asUInt64());
+        if(!pJson[pMasqueradingVector[1]].isNull())
+        {
+            userId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[1]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2])) {
+    if(!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2]))
+    {
         dirtyFlag_[2] = true;
-        if (!pJson[pMasqueradingVector[2]].isNull()) {
-            action_ = std::make_shared<std::string>(pJson[pMasqueradingVector[2]].asString());
+        if(!pJson[pMasqueradingVector[2]].isNull())
+        {
+            action_=std::make_shared<std::string>(pJson[pMasqueradingVector[2]].asString());
         }
     }
-    if (!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3])) {
+    if(!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3]))
+    {
         dirtyFlag_[3] = true;
-        if (!pJson[pMasqueradingVector[3]].isNull()) {
-            targetType_ = std::make_shared<std::string>(pJson[pMasqueradingVector[3]].asString());
+        if(!pJson[pMasqueradingVector[3]].isNull())
+        {
+            targetType_=std::make_shared<std::string>(pJson[pMasqueradingVector[3]].asString());
         }
     }
-    if (!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4])) {
+    if(!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4]))
+    {
         dirtyFlag_[4] = true;
-        if (!pJson[pMasqueradingVector[4]].isNull()) {
-            targetId_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[4]].asUInt64());
+        if(!pJson[pMasqueradingVector[4]].isNull())
+        {
+            targetId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[4]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5])) {
+    if(!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5]))
+    {
         dirtyFlag_[5] = true;
-        if (!pJson[pMasqueradingVector[5]].isNull()) {
-            targetName_ = std::make_shared<std::string>(pJson[pMasqueradingVector[5]].asString());
+        if(!pJson[pMasqueradingVector[5]].isNull())
+        {
+            targetName_=std::make_shared<std::string>(pJson[pMasqueradingVector[5]].asString());
         }
     }
-    if (!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6])) {
+    if(!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6]))
+    {
         dirtyFlag_[6] = true;
-        if (!pJson[pMasqueradingVector[6]].isNull()) {
-            details_ = std::make_shared<std::string>(pJson[pMasqueradingVector[6]].asString());
+        if(!pJson[pMasqueradingVector[6]].isNull())
+        {
+            details_=std::make_shared<std::string>(pJson[pMasqueradingVector[6]].asString());
         }
     }
-    if (!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7])) {
+    if(!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7]))
+    {
         dirtyFlag_[7] = true;
-        if (!pJson[pMasqueradingVector[7]].isNull()) {
-            ipAddress_ = std::make_shared<std::string>(pJson[pMasqueradingVector[7]].asString());
+        if(!pJson[pMasqueradingVector[7]].isNull())
+        {
+            ipAddress_=std::make_shared<std::string>(pJson[pMasqueradingVector[7]].asString());
         }
     }
-    if (!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8])) {
+    if(!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8]))
+    {
         dirtyFlag_[8] = true;
-        if (!pJson[pMasqueradingVector[8]].isNull()) {
-            userAgent_ = std::make_shared<std::string>(pJson[pMasqueradingVector[8]].asString());
+        if(!pJson[pMasqueradingVector[8]].isNull())
+        {
+            userAgent_=std::make_shared<std::string>(pJson[pMasqueradingVector[8]].asString());
         }
     }
-    if (!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9])) {
+    if(!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9]))
+    {
         dirtyFlag_[9] = true;
-        if (!pJson[pMasqueradingVector[9]].isNull()) {
+        if(!pJson[pMasqueradingVector[9]].isNull())
+        {
             auto timeStr = pJson[pMasqueradingVector[9]].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                createdAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
 }
 
-OperationLogs::OperationLogs(const Json::Value& pJson) noexcept(false) {
-    if (pJson.isMember("id")) {
-        dirtyFlag_[0] = true;
-        if (!pJson["id"].isNull()) {
-            id_ = std::make_shared<uint64_t>((uint64_t)pJson["id"].asUInt64());
+OperationLogs::OperationLogs(const Json::Value &pJson) noexcept(false)
+{
+    if(pJson.isMember("id"))
+    {
+        dirtyFlag_[0]=true;
+        if(!pJson["id"].isNull())
+        {
+            id_=std::make_shared<uint64_t>((uint64_t)pJson["id"].asUInt64());
         }
     }
-    if (pJson.isMember("user_id")) {
-        dirtyFlag_[1] = true;
-        if (!pJson["user_id"].isNull()) {
-            userId_ = std::make_shared<uint64_t>((uint64_t)pJson["user_id"].asUInt64());
+    if(pJson.isMember("user_id"))
+    {
+        dirtyFlag_[1]=true;
+        if(!pJson["user_id"].isNull())
+        {
+            userId_=std::make_shared<uint64_t>((uint64_t)pJson["user_id"].asUInt64());
         }
     }
-    if (pJson.isMember("action")) {
-        dirtyFlag_[2] = true;
-        if (!pJson["action"].isNull()) {
-            action_ = std::make_shared<std::string>(pJson["action"].asString());
+    if(pJson.isMember("action"))
+    {
+        dirtyFlag_[2]=true;
+        if(!pJson["action"].isNull())
+        {
+            action_=std::make_shared<std::string>(pJson["action"].asString());
         }
     }
-    if (pJson.isMember("target_type")) {
-        dirtyFlag_[3] = true;
-        if (!pJson["target_type"].isNull()) {
-            targetType_ = std::make_shared<std::string>(pJson["target_type"].asString());
+    if(pJson.isMember("target_type"))
+    {
+        dirtyFlag_[3]=true;
+        if(!pJson["target_type"].isNull())
+        {
+            targetType_=std::make_shared<std::string>(pJson["target_type"].asString());
         }
     }
-    if (pJson.isMember("target_id")) {
-        dirtyFlag_[4] = true;
-        if (!pJson["target_id"].isNull()) {
-            targetId_ = std::make_shared<uint64_t>((uint64_t)pJson["target_id"].asUInt64());
+    if(pJson.isMember("target_id"))
+    {
+        dirtyFlag_[4]=true;
+        if(!pJson["target_id"].isNull())
+        {
+            targetId_=std::make_shared<uint64_t>((uint64_t)pJson["target_id"].asUInt64());
         }
     }
-    if (pJson.isMember("target_name")) {
-        dirtyFlag_[5] = true;
-        if (!pJson["target_name"].isNull()) {
-            targetName_ = std::make_shared<std::string>(pJson["target_name"].asString());
+    if(pJson.isMember("target_name"))
+    {
+        dirtyFlag_[5]=true;
+        if(!pJson["target_name"].isNull())
+        {
+            targetName_=std::make_shared<std::string>(pJson["target_name"].asString());
         }
     }
-    if (pJson.isMember("details")) {
-        dirtyFlag_[6] = true;
-        if (!pJson["details"].isNull()) {
-            details_ = std::make_shared<std::string>(pJson["details"].asString());
+    if(pJson.isMember("details"))
+    {
+        dirtyFlag_[6]=true;
+        if(!pJson["details"].isNull())
+        {
+            details_=std::make_shared<std::string>(pJson["details"].asString());
         }
     }
-    if (pJson.isMember("ip_address")) {
-        dirtyFlag_[7] = true;
-        if (!pJson["ip_address"].isNull()) {
-            ipAddress_ = std::make_shared<std::string>(pJson["ip_address"].asString());
+    if(pJson.isMember("ip_address"))
+    {
+        dirtyFlag_[7]=true;
+        if(!pJson["ip_address"].isNull())
+        {
+            ipAddress_=std::make_shared<std::string>(pJson["ip_address"].asString());
         }
     }
-    if (pJson.isMember("user_agent")) {
-        dirtyFlag_[8] = true;
-        if (!pJson["user_agent"].isNull()) {
-            userAgent_ = std::make_shared<std::string>(pJson["user_agent"].asString());
+    if(pJson.isMember("user_agent"))
+    {
+        dirtyFlag_[8]=true;
+        if(!pJson["user_agent"].isNull())
+        {
+            userAgent_=std::make_shared<std::string>(pJson["user_agent"].asString());
         }
     }
-    if (pJson.isMember("created_at")) {
-        dirtyFlag_[9] = true;
-        if (!pJson["created_at"].isNull()) {
+    if(pJson.isMember("created_at"))
+    {
+        dirtyFlag_[9]=true;
+        if(!pJson["created_at"].isNull())
+        {
             auto timeStr = pJson["created_at"].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                createdAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
 }
 
-void OperationLogs::updateByMasqueradedJson(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
-    if (pMasqueradingVector.size() != 10) {
+void OperationLogs::updateByMasqueradedJson(const Json::Value &pJson,
+                                            const std::vector<std::string> &pMasqueradingVector) noexcept(false)
+{
+    if(pMasqueradingVector.size() != 10)
+    {
         LOG_ERROR << "Bad masquerading vector";
         return;
     }
-    if (!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0])) {
-        if (!pJson[pMasqueradingVector[0]].isNull()) {
-            id_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[0]].asUInt64());
+    if(!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0]))
+    {
+        if(!pJson[pMasqueradingVector[0]].isNull())
+        {
+            id_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[0]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1])) {
+    if(!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1]))
+    {
         dirtyFlag_[1] = true;
-        if (!pJson[pMasqueradingVector[1]].isNull()) {
-            userId_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[1]].asUInt64());
+        if(!pJson[pMasqueradingVector[1]].isNull())
+        {
+            userId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[1]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2])) {
+    if(!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2]))
+    {
         dirtyFlag_[2] = true;
-        if (!pJson[pMasqueradingVector[2]].isNull()) {
-            action_ = std::make_shared<std::string>(pJson[pMasqueradingVector[2]].asString());
+        if(!pJson[pMasqueradingVector[2]].isNull())
+        {
+            action_=std::make_shared<std::string>(pJson[pMasqueradingVector[2]].asString());
         }
     }
-    if (!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3])) {
+    if(!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3]))
+    {
         dirtyFlag_[3] = true;
-        if (!pJson[pMasqueradingVector[3]].isNull()) {
-            targetType_ = std::make_shared<std::string>(pJson[pMasqueradingVector[3]].asString());
+        if(!pJson[pMasqueradingVector[3]].isNull())
+        {
+            targetType_=std::make_shared<std::string>(pJson[pMasqueradingVector[3]].asString());
         }
     }
-    if (!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4])) {
+    if(!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4]))
+    {
         dirtyFlag_[4] = true;
-        if (!pJson[pMasqueradingVector[4]].isNull()) {
-            targetId_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[4]].asUInt64());
+        if(!pJson[pMasqueradingVector[4]].isNull())
+        {
+            targetId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[4]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5])) {
+    if(!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5]))
+    {
         dirtyFlag_[5] = true;
-        if (!pJson[pMasqueradingVector[5]].isNull()) {
-            targetName_ = std::make_shared<std::string>(pJson[pMasqueradingVector[5]].asString());
+        if(!pJson[pMasqueradingVector[5]].isNull())
+        {
+            targetName_=std::make_shared<std::string>(pJson[pMasqueradingVector[5]].asString());
         }
     }
-    if (!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6])) {
+    if(!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6]))
+    {
         dirtyFlag_[6] = true;
-        if (!pJson[pMasqueradingVector[6]].isNull()) {
-            details_ = std::make_shared<std::string>(pJson[pMasqueradingVector[6]].asString());
+        if(!pJson[pMasqueradingVector[6]].isNull())
+        {
+            details_=std::make_shared<std::string>(pJson[pMasqueradingVector[6]].asString());
         }
     }
-    if (!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7])) {
+    if(!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7]))
+    {
         dirtyFlag_[7] = true;
-        if (!pJson[pMasqueradingVector[7]].isNull()) {
-            ipAddress_ = std::make_shared<std::string>(pJson[pMasqueradingVector[7]].asString());
+        if(!pJson[pMasqueradingVector[7]].isNull())
+        {
+            ipAddress_=std::make_shared<std::string>(pJson[pMasqueradingVector[7]].asString());
         }
     }
-    if (!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8])) {
+    if(!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8]))
+    {
         dirtyFlag_[8] = true;
-        if (!pJson[pMasqueradingVector[8]].isNull()) {
-            userAgent_ = std::make_shared<std::string>(pJson[pMasqueradingVector[8]].asString());
+        if(!pJson[pMasqueradingVector[8]].isNull())
+        {
+            userAgent_=std::make_shared<std::string>(pJson[pMasqueradingVector[8]].asString());
         }
     }
-    if (!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9])) {
+    if(!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9]))
+    {
         dirtyFlag_[9] = true;
-        if (!pJson[pMasqueradingVector[9]].isNull()) {
+        if(!pJson[pMasqueradingVector[9]].isNull())
+        {
             auto timeStr = pJson[pMasqueradingVector[9]].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                createdAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
 }
 
-void OperationLogs::updateByJson(const Json::Value& pJson) noexcept(false) {
-    if (pJson.isMember("id")) {
-        if (!pJson["id"].isNull()) {
-            id_ = std::make_shared<uint64_t>((uint64_t)pJson["id"].asUInt64());
+void OperationLogs::updateByJson(const Json::Value &pJson) noexcept(false)
+{
+    if(pJson.isMember("id"))
+    {
+        if(!pJson["id"].isNull())
+        {
+            id_=std::make_shared<uint64_t>((uint64_t)pJson["id"].asUInt64());
         }
     }
-    if (pJson.isMember("user_id")) {
+    if(pJson.isMember("user_id"))
+    {
         dirtyFlag_[1] = true;
-        if (!pJson["user_id"].isNull()) {
-            userId_ = std::make_shared<uint64_t>((uint64_t)pJson["user_id"].asUInt64());
+        if(!pJson["user_id"].isNull())
+        {
+            userId_=std::make_shared<uint64_t>((uint64_t)pJson["user_id"].asUInt64());
         }
     }
-    if (pJson.isMember("action")) {
+    if(pJson.isMember("action"))
+    {
         dirtyFlag_[2] = true;
-        if (!pJson["action"].isNull()) {
-            action_ = std::make_shared<std::string>(pJson["action"].asString());
+        if(!pJson["action"].isNull())
+        {
+            action_=std::make_shared<std::string>(pJson["action"].asString());
         }
     }
-    if (pJson.isMember("target_type")) {
+    if(pJson.isMember("target_type"))
+    {
         dirtyFlag_[3] = true;
-        if (!pJson["target_type"].isNull()) {
-            targetType_ = std::make_shared<std::string>(pJson["target_type"].asString());
+        if(!pJson["target_type"].isNull())
+        {
+            targetType_=std::make_shared<std::string>(pJson["target_type"].asString());
         }
     }
-    if (pJson.isMember("target_id")) {
+    if(pJson.isMember("target_id"))
+    {
         dirtyFlag_[4] = true;
-        if (!pJson["target_id"].isNull()) {
-            targetId_ = std::make_shared<uint64_t>((uint64_t)pJson["target_id"].asUInt64());
+        if(!pJson["target_id"].isNull())
+        {
+            targetId_=std::make_shared<uint64_t>((uint64_t)pJson["target_id"].asUInt64());
         }
     }
-    if (pJson.isMember("target_name")) {
+    if(pJson.isMember("target_name"))
+    {
         dirtyFlag_[5] = true;
-        if (!pJson["target_name"].isNull()) {
-            targetName_ = std::make_shared<std::string>(pJson["target_name"].asString());
+        if(!pJson["target_name"].isNull())
+        {
+            targetName_=std::make_shared<std::string>(pJson["target_name"].asString());
         }
     }
-    if (pJson.isMember("details")) {
+    if(pJson.isMember("details"))
+    {
         dirtyFlag_[6] = true;
-        if (!pJson["details"].isNull()) {
-            details_ = std::make_shared<std::string>(pJson["details"].asString());
+        if(!pJson["details"].isNull())
+        {
+            details_=std::make_shared<std::string>(pJson["details"].asString());
         }
     }
-    if (pJson.isMember("ip_address")) {
+    if(pJson.isMember("ip_address"))
+    {
         dirtyFlag_[7] = true;
-        if (!pJson["ip_address"].isNull()) {
-            ipAddress_ = std::make_shared<std::string>(pJson["ip_address"].asString());
+        if(!pJson["ip_address"].isNull())
+        {
+            ipAddress_=std::make_shared<std::string>(pJson["ip_address"].asString());
         }
     }
-    if (pJson.isMember("user_agent")) {
+    if(pJson.isMember("user_agent"))
+    {
         dirtyFlag_[8] = true;
-        if (!pJson["user_agent"].isNull()) {
-            userAgent_ = std::make_shared<std::string>(pJson["user_agent"].asString());
+        if(!pJson["user_agent"].isNull())
+        {
+            userAgent_=std::make_shared<std::string>(pJson["user_agent"].asString());
         }
     }
-    if (pJson.isMember("created_at")) {
+    if(pJson.isMember("created_at"))
+    {
         dirtyFlag_[9] = true;
-        if (!pJson["created_at"].isNull()) {
+        if(!pJson["created_at"].isNull())
+        {
             auto timeStr = pJson["created_at"].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                createdAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
 }
 
-const uint64_t& OperationLogs::getValueOfId() const noexcept {
+const uint64_t &OperationLogs::getValueOfId() const noexcept
+{
     static const uint64_t defaultValue = uint64_t();
-    if (id_) {
+    if(id_)
         return *id_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<uint64_t>& OperationLogs::getId() const noexcept {
+const std::shared_ptr<uint64_t> &OperationLogs::getId() const noexcept
+{
     return id_;
 }
-
-void OperationLogs::setId(const uint64_t& pId) noexcept {
+void OperationLogs::setId(const uint64_t &pId) noexcept
+{
     id_ = std::make_shared<uint64_t>(pId);
     dirtyFlag_[0] = true;
 }
-
-const typename OperationLogs::PrimaryKeyType& OperationLogs::getPrimaryKey() const {
+const typename OperationLogs::PrimaryKeyType & OperationLogs::getPrimaryKey() const
+{
     assert(id_);
     return *id_;
 }
 
-const uint64_t& OperationLogs::getValueOfUserId() const noexcept {
+const uint64_t &OperationLogs::getValueOfUserId() const noexcept
+{
     static const uint64_t defaultValue = uint64_t();
-    if (userId_) {
+    if(userId_)
         return *userId_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<uint64_t>& OperationLogs::getUserId() const noexcept {
+const std::shared_ptr<uint64_t> &OperationLogs::getUserId() const noexcept
+{
     return userId_;
 }
-
-void OperationLogs::setUserId(const uint64_t& pUserId) noexcept {
+void OperationLogs::setUserId(const uint64_t &pUserId) noexcept
+{
     userId_ = std::make_shared<uint64_t>(pUserId);
     dirtyFlag_[1] = true;
 }
 
-const std::string& OperationLogs::getValueOfAction() const noexcept {
+const std::string &OperationLogs::getValueOfAction() const noexcept
+{
     static const std::string defaultValue = std::string();
-    if (action_) {
+    if(action_)
         return *action_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<std::string>& OperationLogs::getAction() const noexcept {
+const std::shared_ptr<std::string> &OperationLogs::getAction() const noexcept
+{
     return action_;
 }
-
-void OperationLogs::setAction(const std::string& pAction) noexcept {
+void OperationLogs::setAction(const std::string &pAction) noexcept
+{
     action_ = std::make_shared<std::string>(pAction);
     dirtyFlag_[2] = true;
 }
-
-void OperationLogs::setAction(std::string&& pAction) noexcept {
+void OperationLogs::setAction(std::string &&pAction) noexcept
+{
     action_ = std::make_shared<std::string>(std::move(pAction));
     dirtyFlag_[2] = true;
 }
 
-const std::string& OperationLogs::getValueOfTargetType() const noexcept {
+const std::string &OperationLogs::getValueOfTargetType() const noexcept
+{
     static const std::string defaultValue = std::string();
-    if (targetType_) {
+    if(targetType_)
         return *targetType_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<std::string>& OperationLogs::getTargetType() const noexcept {
+const std::shared_ptr<std::string> &OperationLogs::getTargetType() const noexcept
+{
     return targetType_;
 }
-
-void OperationLogs::setTargetType(const std::string& pTargetType) noexcept {
+void OperationLogs::setTargetType(const std::string &pTargetType) noexcept
+{
     targetType_ = std::make_shared<std::string>(pTargetType);
     dirtyFlag_[3] = true;
 }
-
-void OperationLogs::setTargetType(std::string&& pTargetType) noexcept {
+void OperationLogs::setTargetType(std::string &&pTargetType) noexcept
+{
     targetType_ = std::make_shared<std::string>(std::move(pTargetType));
     dirtyFlag_[3] = true;
 }
-
-void OperationLogs::setTargetTypeToNull() noexcept {
+void OperationLogs::setTargetTypeToNull() noexcept
+{
     targetType_.reset();
     dirtyFlag_[3] = true;
 }
 
-const uint64_t& OperationLogs::getValueOfTargetId() const noexcept {
+const uint64_t &OperationLogs::getValueOfTargetId() const noexcept
+{
     static const uint64_t defaultValue = uint64_t();
-    if (targetId_) {
+    if(targetId_)
         return *targetId_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<uint64_t>& OperationLogs::getTargetId() const noexcept {
+const std::shared_ptr<uint64_t> &OperationLogs::getTargetId() const noexcept
+{
     return targetId_;
 }
-
-void OperationLogs::setTargetId(const uint64_t& pTargetId) noexcept {
+void OperationLogs::setTargetId(const uint64_t &pTargetId) noexcept
+{
     targetId_ = std::make_shared<uint64_t>(pTargetId);
     dirtyFlag_[4] = true;
 }
-
-void OperationLogs::setTargetIdToNull() noexcept {
+void OperationLogs::setTargetIdToNull() noexcept
+{
     targetId_.reset();
     dirtyFlag_[4] = true;
 }
 
-const std::string& OperationLogs::getValueOfTargetName() const noexcept {
+const std::string &OperationLogs::getValueOfTargetName() const noexcept
+{
     static const std::string defaultValue = std::string();
-    if (targetName_) {
+    if(targetName_)
         return *targetName_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<std::string>& OperationLogs::getTargetName() const noexcept {
+const std::shared_ptr<std::string> &OperationLogs::getTargetName() const noexcept
+{
     return targetName_;
 }
-
-void OperationLogs::setTargetName(const std::string& pTargetName) noexcept {
+void OperationLogs::setTargetName(const std::string &pTargetName) noexcept
+{
     targetName_ = std::make_shared<std::string>(pTargetName);
     dirtyFlag_[5] = true;
 }
-
-void OperationLogs::setTargetName(std::string&& pTargetName) noexcept {
+void OperationLogs::setTargetName(std::string &&pTargetName) noexcept
+{
     targetName_ = std::make_shared<std::string>(std::move(pTargetName));
     dirtyFlag_[5] = true;
 }
-
-void OperationLogs::setTargetNameToNull() noexcept {
+void OperationLogs::setTargetNameToNull() noexcept
+{
     targetName_.reset();
     dirtyFlag_[5] = true;
 }
 
-const std::string& OperationLogs::getValueOfDetails() const noexcept {
+const std::string &OperationLogs::getValueOfDetails() const noexcept
+{
     static const std::string defaultValue = std::string();
-    if (details_) {
+    if(details_)
         return *details_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<std::string>& OperationLogs::getDetails() const noexcept {
+const std::shared_ptr<std::string> &OperationLogs::getDetails() const noexcept
+{
     return details_;
 }
-
-void OperationLogs::setDetails(const std::string& pDetails) noexcept {
+void OperationLogs::setDetails(const std::string &pDetails) noexcept
+{
     details_ = std::make_shared<std::string>(pDetails);
     dirtyFlag_[6] = true;
 }
-
-void OperationLogs::setDetails(std::string&& pDetails) noexcept {
+void OperationLogs::setDetails(std::string &&pDetails) noexcept
+{
     details_ = std::make_shared<std::string>(std::move(pDetails));
     dirtyFlag_[6] = true;
 }
-
-void OperationLogs::setDetailsToNull() noexcept {
+void OperationLogs::setDetailsToNull() noexcept
+{
     details_.reset();
     dirtyFlag_[6] = true;
 }
 
-const std::string& OperationLogs::getValueOfIpAddress() const noexcept {
+const std::string &OperationLogs::getValueOfIpAddress() const noexcept
+{
     static const std::string defaultValue = std::string();
-    if (ipAddress_) {
+    if(ipAddress_)
         return *ipAddress_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<std::string>& OperationLogs::getIpAddress() const noexcept {
+const std::shared_ptr<std::string> &OperationLogs::getIpAddress() const noexcept
+{
     return ipAddress_;
 }
-
-void OperationLogs::setIpAddress(const std::string& pIpAddress) noexcept {
+void OperationLogs::setIpAddress(const std::string &pIpAddress) noexcept
+{
     ipAddress_ = std::make_shared<std::string>(pIpAddress);
     dirtyFlag_[7] = true;
 }
-
-void OperationLogs::setIpAddress(std::string&& pIpAddress) noexcept {
+void OperationLogs::setIpAddress(std::string &&pIpAddress) noexcept
+{
     ipAddress_ = std::make_shared<std::string>(std::move(pIpAddress));
     dirtyFlag_[7] = true;
 }
 
-const std::string& OperationLogs::getValueOfUserAgent() const noexcept {
+const std::string &OperationLogs::getValueOfUserAgent() const noexcept
+{
     static const std::string defaultValue = std::string();
-    if (userAgent_) {
+    if(userAgent_)
         return *userAgent_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<std::string>& OperationLogs::getUserAgent() const noexcept {
+const std::shared_ptr<std::string> &OperationLogs::getUserAgent() const noexcept
+{
     return userAgent_;
 }
-
-void OperationLogs::setUserAgent(const std::string& pUserAgent) noexcept {
+void OperationLogs::setUserAgent(const std::string &pUserAgent) noexcept
+{
     userAgent_ = std::make_shared<std::string>(pUserAgent);
     dirtyFlag_[8] = true;
 }
-
-void OperationLogs::setUserAgent(std::string&& pUserAgent) noexcept {
+void OperationLogs::setUserAgent(std::string &&pUserAgent) noexcept
+{
     userAgent_ = std::make_shared<std::string>(std::move(pUserAgent));
     dirtyFlag_[8] = true;
 }
-
-void OperationLogs::setUserAgentToNull() noexcept {
+void OperationLogs::setUserAgentToNull() noexcept
+{
     userAgent_.reset();
     dirtyFlag_[8] = true;
 }
 
-const ::trantor::Date& OperationLogs::getValueOfCreatedAt() const noexcept {
+const ::trantor::Date &OperationLogs::getValueOfCreatedAt() const noexcept
+{
     static const ::trantor::Date defaultValue = ::trantor::Date();
-    if (createdAt_) {
+    if(createdAt_)
         return *createdAt_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<::trantor::Date>& OperationLogs::getCreatedAt() const noexcept {
+const std::shared_ptr<::trantor::Date> &OperationLogs::getCreatedAt() const noexcept
+{
     return createdAt_;
 }
-
-void OperationLogs::setCreatedAt(const ::trantor::Date& pCreatedAt) noexcept {
+void OperationLogs::setCreatedAt(const ::trantor::Date &pCreatedAt) noexcept
+{
     createdAt_ = std::make_shared<::trantor::Date>(pCreatedAt);
     dirtyFlag_[9] = true;
 }
 
-void OperationLogs::updateId(const uint64_t id) {
+void OperationLogs::updateId(const uint64_t id)
+{
     id_ = std::make_shared<uint64_t>(id);
 }
 
-const std::vector<std::string>& OperationLogs::insertColumns() noexcept {
-    static const std::vector<std::string> inCols = {
+const std::vector<std::string> &OperationLogs::insertColumns() noexcept
+{
+    static const std::vector<std::string> inCols={
         "user_id",
         "action",
         "target_type",
@@ -726,771 +856,1030 @@ const std::vector<std::string>& OperationLogs::insertColumns() noexcept {
     return inCols;
 }
 
-void OperationLogs::outputArgs(drogon::orm::internal::SqlBinder& binder) const {
-    if (dirtyFlag_[1]) {
-        if (getUserId()) {
+void OperationLogs::outputArgs(drogon::orm::internal::SqlBinder &binder) const
+{
+    if(dirtyFlag_[1])
+    {
+        if(getUserId())
+        {
             binder << getValueOfUserId();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[2]) {
-        if (getAction()) {
+    if(dirtyFlag_[2])
+    {
+        if(getAction())
+        {
             binder << getValueOfAction();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[3]) {
-        if (getTargetType()) {
+    if(dirtyFlag_[3])
+    {
+        if(getTargetType())
+        {
             binder << getValueOfTargetType();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[4]) {
-        if (getTargetId()) {
+    if(dirtyFlag_[4])
+    {
+        if(getTargetId())
+        {
             binder << getValueOfTargetId();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[5]) {
-        if (getTargetName()) {
+    if(dirtyFlag_[5])
+    {
+        if(getTargetName())
+        {
             binder << getValueOfTargetName();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[6]) {
-        if (getDetails()) {
+    if(dirtyFlag_[6])
+    {
+        if(getDetails())
+        {
             binder << getValueOfDetails();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[7]) {
-        if (getIpAddress()) {
+    if(dirtyFlag_[7])
+    {
+        if(getIpAddress())
+        {
             binder << getValueOfIpAddress();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[8]) {
-        if (getUserAgent()) {
+    if(dirtyFlag_[8])
+    {
+        if(getUserAgent())
+        {
             binder << getValueOfUserAgent();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[9]) {
-        if (getCreatedAt()) {
+    if(dirtyFlag_[9])
+    {
+        if(getCreatedAt())
+        {
             binder << getValueOfCreatedAt();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
 }
 
-const std::vector<std::string> OperationLogs::updateColumns() const {
+const std::vector<std::string> OperationLogs::updateColumns() const
+{
     std::vector<std::string> ret;
-    if (dirtyFlag_[1]) {
+    if(dirtyFlag_[1])
+    {
         ret.push_back(getColumnName(1));
     }
-    if (dirtyFlag_[2]) {
+    if(dirtyFlag_[2])
+    {
         ret.push_back(getColumnName(2));
     }
-    if (dirtyFlag_[3]) {
+    if(dirtyFlag_[3])
+    {
         ret.push_back(getColumnName(3));
     }
-    if (dirtyFlag_[4]) {
+    if(dirtyFlag_[4])
+    {
         ret.push_back(getColumnName(4));
     }
-    if (dirtyFlag_[5]) {
+    if(dirtyFlag_[5])
+    {
         ret.push_back(getColumnName(5));
     }
-    if (dirtyFlag_[6]) {
+    if(dirtyFlag_[6])
+    {
         ret.push_back(getColumnName(6));
     }
-    if (dirtyFlag_[7]) {
+    if(dirtyFlag_[7])
+    {
         ret.push_back(getColumnName(7));
     }
-    if (dirtyFlag_[8]) {
+    if(dirtyFlag_[8])
+    {
         ret.push_back(getColumnName(8));
     }
-    if (dirtyFlag_[9]) {
+    if(dirtyFlag_[9])
+    {
         ret.push_back(getColumnName(9));
     }
     return ret;
 }
 
-void OperationLogs::updateArgs(drogon::orm::internal::SqlBinder& binder) const {
-    if (dirtyFlag_[1]) {
-        if (getUserId()) {
+void OperationLogs::updateArgs(drogon::orm::internal::SqlBinder &binder) const
+{
+    if(dirtyFlag_[1])
+    {
+        if(getUserId())
+        {
             binder << getValueOfUserId();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[2]) {
-        if (getAction()) {
+    if(dirtyFlag_[2])
+    {
+        if(getAction())
+        {
             binder << getValueOfAction();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[3]) {
-        if (getTargetType()) {
+    if(dirtyFlag_[3])
+    {
+        if(getTargetType())
+        {
             binder << getValueOfTargetType();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[4]) {
-        if (getTargetId()) {
+    if(dirtyFlag_[4])
+    {
+        if(getTargetId())
+        {
             binder << getValueOfTargetId();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[5]) {
-        if (getTargetName()) {
+    if(dirtyFlag_[5])
+    {
+        if(getTargetName())
+        {
             binder << getValueOfTargetName();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[6]) {
-        if (getDetails()) {
+    if(dirtyFlag_[6])
+    {
+        if(getDetails())
+        {
             binder << getValueOfDetails();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[7]) {
-        if (getIpAddress()) {
+    if(dirtyFlag_[7])
+    {
+        if(getIpAddress())
+        {
             binder << getValueOfIpAddress();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[8]) {
-        if (getUserAgent()) {
+    if(dirtyFlag_[8])
+    {
+        if(getUserAgent())
+        {
             binder << getValueOfUserAgent();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[9]) {
-        if (getCreatedAt()) {
+    if(dirtyFlag_[9])
+    {
+        if(getCreatedAt())
+        {
             binder << getValueOfCreatedAt();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
 }
-
-Json::Value OperationLogs::toJson() const {
+Json::Value OperationLogs::toJson() const
+{
     Json::Value ret;
-    if (getId()) {
-        ret["id"] = (Json::UInt64)getValueOfId();
-    } else {
-        ret["id"] = Json::Value();
+    if(getId())
+    {
+        ret["id"]=(Json::UInt64)getValueOfId();
     }
-    if (getUserId()) {
-        ret["user_id"] = (Json::UInt64)getValueOfUserId();
-    } else {
-        ret["user_id"] = Json::Value();
+    else
+    {
+        ret["id"]=Json::Value();
     }
-    if (getAction()) {
-        ret["action"] = getValueOfAction();
-    } else {
-        ret["action"] = Json::Value();
+    if(getUserId())
+    {
+        ret["user_id"]=(Json::UInt64)getValueOfUserId();
     }
-    if (getTargetType()) {
-        ret["target_type"] = getValueOfTargetType();
-    } else {
-        ret["target_type"] = Json::Value();
+    else
+    {
+        ret["user_id"]=Json::Value();
     }
-    if (getTargetId()) {
-        ret["target_id"] = (Json::UInt64)getValueOfTargetId();
-    } else {
-        ret["target_id"] = Json::Value();
+    if(getAction())
+    {
+        ret["action"]=getValueOfAction();
     }
-    if (getTargetName()) {
-        ret["target_name"] = getValueOfTargetName();
-    } else {
-        ret["target_name"] = Json::Value();
+    else
+    {
+        ret["action"]=Json::Value();
     }
-    if (getDetails()) {
-        ret["details"] = getValueOfDetails();
-    } else {
-        ret["details"] = Json::Value();
+    if(getTargetType())
+    {
+        ret["target_type"]=getValueOfTargetType();
     }
-    if (getIpAddress()) {
-        ret["ip_address"] = getValueOfIpAddress();
-    } else {
-        ret["ip_address"] = Json::Value();
+    else
+    {
+        ret["target_type"]=Json::Value();
     }
-    if (getUserAgent()) {
-        ret["user_agent"] = getValueOfUserAgent();
-    } else {
-        ret["user_agent"] = Json::Value();
+    if(getTargetId())
+    {
+        ret["target_id"]=(Json::UInt64)getValueOfTargetId();
     }
-    if (getCreatedAt()) {
-        ret["created_at"] = getCreatedAt()->toDbStringLocal();
-    } else {
-        ret["created_at"] = Json::Value();
+    else
+    {
+        ret["target_id"]=Json::Value();
+    }
+    if(getTargetName())
+    {
+        ret["target_name"]=getValueOfTargetName();
+    }
+    else
+    {
+        ret["target_name"]=Json::Value();
+    }
+    if(getDetails())
+    {
+        ret["details"]=getValueOfDetails();
+    }
+    else
+    {
+        ret["details"]=Json::Value();
+    }
+    if(getIpAddress())
+    {
+        ret["ip_address"]=getValueOfIpAddress();
+    }
+    else
+    {
+        ret["ip_address"]=Json::Value();
+    }
+    if(getUserAgent())
+    {
+        ret["user_agent"]=getValueOfUserAgent();
+    }
+    else
+    {
+        ret["user_agent"]=Json::Value();
+    }
+    if(getCreatedAt())
+    {
+        ret["created_at"]=getCreatedAt()->toDbStringLocal();
+    }
+    else
+    {
+        ret["created_at"]=Json::Value();
     }
     return ret;
 }
 
-std::string OperationLogs::toString() const {
+std::string OperationLogs::toString() const
+{
     return toJson().toStyledString();
 }
 
 Json::Value OperationLogs::toMasqueradedJson(
-    const std::vector<std::string>& pMasqueradingVector
-) const {
+    const std::vector<std::string> &pMasqueradingVector) const
+{
     Json::Value ret;
-    if (pMasqueradingVector.size() == 10) {
-        if (!pMasqueradingVector[0].empty()) {
-            if (getId()) {
-                ret[pMasqueradingVector[0]] = (Json::UInt64)getValueOfId();
-            } else {
-                ret[pMasqueradingVector[0]] = Json::Value();
+    if(pMasqueradingVector.size() == 10)
+    {
+        if(!pMasqueradingVector[0].empty())
+        {
+            if(getId())
+            {
+                ret[pMasqueradingVector[0]]=(Json::UInt64)getValueOfId();
+            }
+            else
+            {
+                ret[pMasqueradingVector[0]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[1].empty()) {
-            if (getUserId()) {
-                ret[pMasqueradingVector[1]] = (Json::UInt64)getValueOfUserId();
-            } else {
-                ret[pMasqueradingVector[1]] = Json::Value();
+        if(!pMasqueradingVector[1].empty())
+        {
+            if(getUserId())
+            {
+                ret[pMasqueradingVector[1]]=(Json::UInt64)getValueOfUserId();
+            }
+            else
+            {
+                ret[pMasqueradingVector[1]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[2].empty()) {
-            if (getAction()) {
-                ret[pMasqueradingVector[2]] = getValueOfAction();
-            } else {
-                ret[pMasqueradingVector[2]] = Json::Value();
+        if(!pMasqueradingVector[2].empty())
+        {
+            if(getAction())
+            {
+                ret[pMasqueradingVector[2]]=getValueOfAction();
+            }
+            else
+            {
+                ret[pMasqueradingVector[2]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[3].empty()) {
-            if (getTargetType()) {
-                ret[pMasqueradingVector[3]] = getValueOfTargetType();
-            } else {
-                ret[pMasqueradingVector[3]] = Json::Value();
+        if(!pMasqueradingVector[3].empty())
+        {
+            if(getTargetType())
+            {
+                ret[pMasqueradingVector[3]]=getValueOfTargetType();
+            }
+            else
+            {
+                ret[pMasqueradingVector[3]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[4].empty()) {
-            if (getTargetId()) {
-                ret[pMasqueradingVector[4]] = (Json::UInt64)getValueOfTargetId();
-            } else {
-                ret[pMasqueradingVector[4]] = Json::Value();
+        if(!pMasqueradingVector[4].empty())
+        {
+            if(getTargetId())
+            {
+                ret[pMasqueradingVector[4]]=(Json::UInt64)getValueOfTargetId();
+            }
+            else
+            {
+                ret[pMasqueradingVector[4]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[5].empty()) {
-            if (getTargetName()) {
-                ret[pMasqueradingVector[5]] = getValueOfTargetName();
-            } else {
-                ret[pMasqueradingVector[5]] = Json::Value();
+        if(!pMasqueradingVector[5].empty())
+        {
+            if(getTargetName())
+            {
+                ret[pMasqueradingVector[5]]=getValueOfTargetName();
+            }
+            else
+            {
+                ret[pMasqueradingVector[5]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[6].empty()) {
-            if (getDetails()) {
-                ret[pMasqueradingVector[6]] = getValueOfDetails();
-            } else {
-                ret[pMasqueradingVector[6]] = Json::Value();
+        if(!pMasqueradingVector[6].empty())
+        {
+            if(getDetails())
+            {
+                ret[pMasqueradingVector[6]]=getValueOfDetails();
+            }
+            else
+            {
+                ret[pMasqueradingVector[6]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[7].empty()) {
-            if (getIpAddress()) {
-                ret[pMasqueradingVector[7]] = getValueOfIpAddress();
-            } else {
-                ret[pMasqueradingVector[7]] = Json::Value();
+        if(!pMasqueradingVector[7].empty())
+        {
+            if(getIpAddress())
+            {
+                ret[pMasqueradingVector[7]]=getValueOfIpAddress();
+            }
+            else
+            {
+                ret[pMasqueradingVector[7]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[8].empty()) {
-            if (getUserAgent()) {
-                ret[pMasqueradingVector[8]] = getValueOfUserAgent();
-            } else {
-                ret[pMasqueradingVector[8]] = Json::Value();
+        if(!pMasqueradingVector[8].empty())
+        {
+            if(getUserAgent())
+            {
+                ret[pMasqueradingVector[8]]=getValueOfUserAgent();
+            }
+            else
+            {
+                ret[pMasqueradingVector[8]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[9].empty()) {
-            if (getCreatedAt()) {
-                ret[pMasqueradingVector[9]] = getCreatedAt()->toDbStringLocal();
-            } else {
-                ret[pMasqueradingVector[9]] = Json::Value();
+        if(!pMasqueradingVector[9].empty())
+        {
+            if(getCreatedAt())
+            {
+                ret[pMasqueradingVector[9]]=getCreatedAt()->toDbStringLocal();
+            }
+            else
+            {
+                ret[pMasqueradingVector[9]]=Json::Value();
             }
         }
         return ret;
     }
     LOG_ERROR << "Masquerade failed";
-    if (getId()) {
-        ret["id"] = (Json::UInt64)getValueOfId();
-    } else {
-        ret["id"] = Json::Value();
+    if(getId())
+    {
+        ret["id"]=(Json::UInt64)getValueOfId();
     }
-    if (getUserId()) {
-        ret["user_id"] = (Json::UInt64)getValueOfUserId();
-    } else {
-        ret["user_id"] = Json::Value();
+    else
+    {
+        ret["id"]=Json::Value();
     }
-    if (getAction()) {
-        ret["action"] = getValueOfAction();
-    } else {
-        ret["action"] = Json::Value();
+    if(getUserId())
+    {
+        ret["user_id"]=(Json::UInt64)getValueOfUserId();
     }
-    if (getTargetType()) {
-        ret["target_type"] = getValueOfTargetType();
-    } else {
-        ret["target_type"] = Json::Value();
+    else
+    {
+        ret["user_id"]=Json::Value();
     }
-    if (getTargetId()) {
-        ret["target_id"] = (Json::UInt64)getValueOfTargetId();
-    } else {
-        ret["target_id"] = Json::Value();
+    if(getAction())
+    {
+        ret["action"]=getValueOfAction();
     }
-    if (getTargetName()) {
-        ret["target_name"] = getValueOfTargetName();
-    } else {
-        ret["target_name"] = Json::Value();
+    else
+    {
+        ret["action"]=Json::Value();
     }
-    if (getDetails()) {
-        ret["details"] = getValueOfDetails();
-    } else {
-        ret["details"] = Json::Value();
+    if(getTargetType())
+    {
+        ret["target_type"]=getValueOfTargetType();
     }
-    if (getIpAddress()) {
-        ret["ip_address"] = getValueOfIpAddress();
-    } else {
-        ret["ip_address"] = Json::Value();
+    else
+    {
+        ret["target_type"]=Json::Value();
     }
-    if (getUserAgent()) {
-        ret["user_agent"] = getValueOfUserAgent();
-    } else {
-        ret["user_agent"] = Json::Value();
+    if(getTargetId())
+    {
+        ret["target_id"]=(Json::UInt64)getValueOfTargetId();
     }
-    if (getCreatedAt()) {
-        ret["created_at"] = getCreatedAt()->toDbStringLocal();
-    } else {
-        ret["created_at"] = Json::Value();
+    else
+    {
+        ret["target_id"]=Json::Value();
+    }
+    if(getTargetName())
+    {
+        ret["target_name"]=getValueOfTargetName();
+    }
+    else
+    {
+        ret["target_name"]=Json::Value();
+    }
+    if(getDetails())
+    {
+        ret["details"]=getValueOfDetails();
+    }
+    else
+    {
+        ret["details"]=Json::Value();
+    }
+    if(getIpAddress())
+    {
+        ret["ip_address"]=getValueOfIpAddress();
+    }
+    else
+    {
+        ret["ip_address"]=Json::Value();
+    }
+    if(getUserAgent())
+    {
+        ret["user_agent"]=getValueOfUserAgent();
+    }
+    else
+    {
+        ret["user_agent"]=Json::Value();
+    }
+    if(getCreatedAt())
+    {
+        ret["created_at"]=getCreatedAt()->toDbStringLocal();
+    }
+    else
+    {
+        ret["created_at"]=Json::Value();
     }
     return ret;
 }
 
-bool OperationLogs::validateJsonForCreation(const Json::Value& pJson, std::string& err) {
-    if (pJson.isMember("id")) {
-        if (!validJsonOfField(0, "id", pJson["id"], err, true)) {
+bool OperationLogs::validateJsonForCreation(const Json::Value &pJson, std::string &err)
+{
+    if(pJson.isMember("id"))
+    {
+        if(!validJsonOfField(0, "id", pJson["id"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("user_id")) {
-        if (!validJsonOfField(1, "user_id", pJson["user_id"], err, true)) {
+    if(pJson.isMember("user_id"))
+    {
+        if(!validJsonOfField(1, "user_id", pJson["user_id"], err, true))
             return false;
-        }
-    } else {
-        err = "The user_id column cannot be null";
+    }
+    else
+    {
+        err="The user_id column cannot be null";
         return false;
     }
-    if (pJson.isMember("action")) {
-        if (!validJsonOfField(2, "action", pJson["action"], err, true)) {
+    if(pJson.isMember("action"))
+    {
+        if(!validJsonOfField(2, "action", pJson["action"], err, true))
             return false;
-        }
-    } else {
-        err = "The action column cannot be null";
+    }
+    else
+    {
+        err="The action column cannot be null";
         return false;
     }
-    if (pJson.isMember("target_type")) {
-        if (!validJsonOfField(3, "target_type", pJson["target_type"], err, true)) {
+    if(pJson.isMember("target_type"))
+    {
+        if(!validJsonOfField(3, "target_type", pJson["target_type"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("target_id")) {
-        if (!validJsonOfField(4, "target_id", pJson["target_id"], err, true)) {
+    if(pJson.isMember("target_id"))
+    {
+        if(!validJsonOfField(4, "target_id", pJson["target_id"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("target_name")) {
-        if (!validJsonOfField(5, "target_name", pJson["target_name"], err, true)) {
+    if(pJson.isMember("target_name"))
+    {
+        if(!validJsonOfField(5, "target_name", pJson["target_name"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("details")) {
-        if (!validJsonOfField(6, "details", pJson["details"], err, true)) {
+    if(pJson.isMember("details"))
+    {
+        if(!validJsonOfField(6, "details", pJson["details"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("ip_address")) {
-        if (!validJsonOfField(7, "ip_address", pJson["ip_address"], err, true)) {
+    if(pJson.isMember("ip_address"))
+    {
+        if(!validJsonOfField(7, "ip_address", pJson["ip_address"], err, true))
             return false;
-        }
-    } else {
-        err = "The ip_address column cannot be null";
+    }
+    else
+    {
+        err="The ip_address column cannot be null";
         return false;
     }
-    if (pJson.isMember("user_agent")) {
-        if (!validJsonOfField(8, "user_agent", pJson["user_agent"], err, true)) {
+    if(pJson.isMember("user_agent"))
+    {
+        if(!validJsonOfField(8, "user_agent", pJson["user_agent"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("created_at")) {
-        if (!validJsonOfField(9, "created_at", pJson["created_at"], err, true)) {
+    if(pJson.isMember("created_at"))
+    {
+        if(!validJsonOfField(9, "created_at", pJson["created_at"], err, true))
             return false;
-        }
     }
     return true;
 }
-
-bool OperationLogs::validateMasqueradedJsonForCreation(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
-    if (pMasqueradingVector.size() != 10) {
+bool OperationLogs::validateMasqueradedJsonForCreation(const Json::Value &pJson,
+                                                       const std::vector<std::string> &pMasqueradingVector,
+                                                       std::string &err)
+{
+    if(pMasqueradingVector.size() != 10)
+    {
         err = "Bad masquerading vector";
         return false;
     }
     try {
-        if (!pMasqueradingVector[0].empty()) {
-            if (pJson.isMember(pMasqueradingVector[0])) {
-                if (!validJsonOfField(0, pMasqueradingVector[0], pJson[pMasqueradingVector[0]], err, true)) {
-                    return false;
-                }
-            }
+      if(!pMasqueradingVector[0].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[0]))
+          {
+              if(!validJsonOfField(0, pMasqueradingVector[0], pJson[pMasqueradingVector[0]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[1].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[1]))
+          {
+              if(!validJsonOfField(1, pMasqueradingVector[1], pJson[pMasqueradingVector[1]], err, true))
+                  return false;
+          }
+        else
+        {
+            err="The " + pMasqueradingVector[1] + " column cannot be null";
+            return false;
         }
-        if (!pMasqueradingVector[1].empty()) {
-            if (pJson.isMember(pMasqueradingVector[1])) {
-                if (!validJsonOfField(1, pMasqueradingVector[1], pJson[pMasqueradingVector[1]], err, true)) {
-                    return false;
-                }
-            } else {
-                err = "The " + pMasqueradingVector[1] + " column cannot be null";
-                return false;
-            }
+      }
+      if(!pMasqueradingVector[2].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[2]))
+          {
+              if(!validJsonOfField(2, pMasqueradingVector[2], pJson[pMasqueradingVector[2]], err, true))
+                  return false;
+          }
+        else
+        {
+            err="The " + pMasqueradingVector[2] + " column cannot be null";
+            return false;
         }
-        if (!pMasqueradingVector[2].empty()) {
-            if (pJson.isMember(pMasqueradingVector[2])) {
-                if (!validJsonOfField(2, pMasqueradingVector[2], pJson[pMasqueradingVector[2]], err, true)) {
-                    return false;
-                }
-            } else {
-                err = "The " + pMasqueradingVector[2] + " column cannot be null";
-                return false;
-            }
+      }
+      if(!pMasqueradingVector[3].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[3]))
+          {
+              if(!validJsonOfField(3, pMasqueradingVector[3], pJson[pMasqueradingVector[3]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[4].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[4]))
+          {
+              if(!validJsonOfField(4, pMasqueradingVector[4], pJson[pMasqueradingVector[4]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[5].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[5]))
+          {
+              if(!validJsonOfField(5, pMasqueradingVector[5], pJson[pMasqueradingVector[5]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[6].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[6]))
+          {
+              if(!validJsonOfField(6, pMasqueradingVector[6], pJson[pMasqueradingVector[6]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[7].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[7]))
+          {
+              if(!validJsonOfField(7, pMasqueradingVector[7], pJson[pMasqueradingVector[7]], err, true))
+                  return false;
+          }
+        else
+        {
+            err="The " + pMasqueradingVector[7] + " column cannot be null";
+            return false;
         }
-        if (!pMasqueradingVector[3].empty()) {
-            if (pJson.isMember(pMasqueradingVector[3])) {
-                if (!validJsonOfField(3, pMasqueradingVector[3], pJson[pMasqueradingVector[3]], err, true)) {
-                    return false;
-                }
-            }
-        }
-        if (!pMasqueradingVector[4].empty()) {
-            if (pJson.isMember(pMasqueradingVector[4])) {
-                if (!validJsonOfField(4, pMasqueradingVector[4], pJson[pMasqueradingVector[4]], err, true)) {
-                    return false;
-                }
-            }
-        }
-        if (!pMasqueradingVector[5].empty()) {
-            if (pJson.isMember(pMasqueradingVector[5])) {
-                if (!validJsonOfField(5, pMasqueradingVector[5], pJson[pMasqueradingVector[5]], err, true)) {
-                    return false;
-                }
-            }
-        }
-        if (!pMasqueradingVector[6].empty()) {
-            if (pJson.isMember(pMasqueradingVector[6])) {
-                if (!validJsonOfField(6, pMasqueradingVector[6], pJson[pMasqueradingVector[6]], err, true)) {
-                    return false;
-                }
-            }
-        }
-        if (!pMasqueradingVector[7].empty()) {
-            if (pJson.isMember(pMasqueradingVector[7])) {
-                if (!validJsonOfField(7, pMasqueradingVector[7], pJson[pMasqueradingVector[7]], err, true)) {
-                    return false;
-                }
-            } else {
-                err = "The " + pMasqueradingVector[7] + " column cannot be null";
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[8].empty()) {
-            if (pJson.isMember(pMasqueradingVector[8])) {
-                if (!validJsonOfField(8, pMasqueradingVector[8], pJson[pMasqueradingVector[8]], err, true)) {
-                    return false;
-                }
-            }
-        }
-        if (!pMasqueradingVector[9].empty()) {
-            if (pJson.isMember(pMasqueradingVector[9])) {
-                if (!validJsonOfField(9, pMasqueradingVector[9], pJson[pMasqueradingVector[9]], err, true)) {
-                    return false;
-                }
-            }
-        }
-    } catch (const Json::LogicError& e) {
-        err = e.what();
-        return false;
+      }
+      if(!pMasqueradingVector[8].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[8]))
+          {
+              if(!validJsonOfField(8, pMasqueradingVector[8], pJson[pMasqueradingVector[8]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[9].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[9]))
+          {
+              if(!validJsonOfField(9, pMasqueradingVector[9], pJson[pMasqueradingVector[9]], err, true))
+                  return false;
+          }
+      }
+    }
+    catch(const Json::LogicError &e)
+    {
+      err = e.what();
+      return false;
     }
     return true;
 }
-
-bool OperationLogs::validateJsonForUpdate(const Json::Value& pJson, std::string& err) {
-    if (pJson.isMember("id")) {
-        if (!validJsonOfField(0, "id", pJson["id"], err, false)) {
+bool OperationLogs::validateJsonForUpdate(const Json::Value &pJson, std::string &err)
+{
+    if(pJson.isMember("id"))
+    {
+        if(!validJsonOfField(0, "id", pJson["id"], err, false))
             return false;
-        }
-    } else {
+    }
+    else
+    {
         err = "The value of primary key must be set in the json object for update";
         return false;
     }
-    if (pJson.isMember("user_id")) {
-        if (!validJsonOfField(1, "user_id", pJson["user_id"], err, false)) {
+    if(pJson.isMember("user_id"))
+    {
+        if(!validJsonOfField(1, "user_id", pJson["user_id"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("action")) {
-        if (!validJsonOfField(2, "action", pJson["action"], err, false)) {
+    if(pJson.isMember("action"))
+    {
+        if(!validJsonOfField(2, "action", pJson["action"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("target_type")) {
-        if (!validJsonOfField(3, "target_type", pJson["target_type"], err, false)) {
+    if(pJson.isMember("target_type"))
+    {
+        if(!validJsonOfField(3, "target_type", pJson["target_type"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("target_id")) {
-        if (!validJsonOfField(4, "target_id", pJson["target_id"], err, false)) {
+    if(pJson.isMember("target_id"))
+    {
+        if(!validJsonOfField(4, "target_id", pJson["target_id"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("target_name")) {
-        if (!validJsonOfField(5, "target_name", pJson["target_name"], err, false)) {
+    if(pJson.isMember("target_name"))
+    {
+        if(!validJsonOfField(5, "target_name", pJson["target_name"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("details")) {
-        if (!validJsonOfField(6, "details", pJson["details"], err, false)) {
+    if(pJson.isMember("details"))
+    {
+        if(!validJsonOfField(6, "details", pJson["details"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("ip_address")) {
-        if (!validJsonOfField(7, "ip_address", pJson["ip_address"], err, false)) {
+    if(pJson.isMember("ip_address"))
+    {
+        if(!validJsonOfField(7, "ip_address", pJson["ip_address"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("user_agent")) {
-        if (!validJsonOfField(8, "user_agent", pJson["user_agent"], err, false)) {
+    if(pJson.isMember("user_agent"))
+    {
+        if(!validJsonOfField(8, "user_agent", pJson["user_agent"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("created_at")) {
-        if (!validJsonOfField(9, "created_at", pJson["created_at"], err, false)) {
+    if(pJson.isMember("created_at"))
+    {
+        if(!validJsonOfField(9, "created_at", pJson["created_at"], err, false))
             return false;
-        }
     }
     return true;
 }
-
-bool OperationLogs::validateMasqueradedJsonForUpdate(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
-    if (pMasqueradingVector.size() != 10) {
+bool OperationLogs::validateMasqueradedJsonForUpdate(const Json::Value &pJson,
+                                                     const std::vector<std::string> &pMasqueradingVector,
+                                                     std::string &err)
+{
+    if(pMasqueradingVector.size() != 10)
+    {
         err = "Bad masquerading vector";
         return false;
     }
     try {
-        if (!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0])) {
-            if (!validJsonOfField(0, pMasqueradingVector[0], pJson[pMasqueradingVector[0]], err, false)) {
-                return false;
-            }
-        } else {
-            err = "The value of primary key must be set in the json object for update";
-            return false;
-        }
-        if (!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1])) {
-            if (!validJsonOfField(1, pMasqueradingVector[1], pJson[pMasqueradingVector[1]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2])) {
-            if (!validJsonOfField(2, pMasqueradingVector[2], pJson[pMasqueradingVector[2]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3])) {
-            if (!validJsonOfField(3, pMasqueradingVector[3], pJson[pMasqueradingVector[3]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4])) {
-            if (!validJsonOfField(4, pMasqueradingVector[4], pJson[pMasqueradingVector[4]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5])) {
-            if (!validJsonOfField(5, pMasqueradingVector[5], pJson[pMasqueradingVector[5]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6])) {
-            if (!validJsonOfField(6, pMasqueradingVector[6], pJson[pMasqueradingVector[6]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7])) {
-            if (!validJsonOfField(7, pMasqueradingVector[7], pJson[pMasqueradingVector[7]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8])) {
-            if (!validJsonOfField(8, pMasqueradingVector[8], pJson[pMasqueradingVector[8]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9])) {
-            if (!validJsonOfField(9, pMasqueradingVector[9], pJson[pMasqueradingVector[9]], err, false)) {
-                return false;
-            }
-        }
-    } catch (const Json::LogicError& e) {
-        err = e.what();
+      if(!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0]))
+      {
+          if(!validJsonOfField(0, pMasqueradingVector[0], pJson[pMasqueradingVector[0]], err, false))
+              return false;
+      }
+    else
+    {
+        err = "The value of primary key must be set in the json object for update";
         return false;
+    }
+      if(!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1]))
+      {
+          if(!validJsonOfField(1, pMasqueradingVector[1], pJson[pMasqueradingVector[1]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2]))
+      {
+          if(!validJsonOfField(2, pMasqueradingVector[2], pJson[pMasqueradingVector[2]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3]))
+      {
+          if(!validJsonOfField(3, pMasqueradingVector[3], pJson[pMasqueradingVector[3]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4]))
+      {
+          if(!validJsonOfField(4, pMasqueradingVector[4], pJson[pMasqueradingVector[4]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5]))
+      {
+          if(!validJsonOfField(5, pMasqueradingVector[5], pJson[pMasqueradingVector[5]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6]))
+      {
+          if(!validJsonOfField(6, pMasqueradingVector[6], pJson[pMasqueradingVector[6]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7]))
+      {
+          if(!validJsonOfField(7, pMasqueradingVector[7], pJson[pMasqueradingVector[7]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8]))
+      {
+          if(!validJsonOfField(8, pMasqueradingVector[8], pJson[pMasqueradingVector[8]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9]))
+      {
+          if(!validJsonOfField(9, pMasqueradingVector[9], pJson[pMasqueradingVector[9]], err, false))
+              return false;
+      }
+    }
+    catch(const Json::LogicError &e)
+    {
+      err = e.what();
+      return false;
     }
     return true;
 }
-
-bool OperationLogs::validJsonOfField(size_t index, const std::string& fieldName, const Json::Value& pJson, std::string& err, bool isForCreation) {
-    switch (index) {
+bool OperationLogs::validJsonOfField(size_t index,
+                                     const std::string &fieldName,
+                                     const Json::Value &pJson,
+                                     std::string &err,
+                                     bool isForCreation)
+{
+    switch(index)
+    {
         case 0:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (isForCreation) {
-                err = "The automatic primary key cannot be set";
+            if(isForCreation)
+            {
+                err="The automatic primary key cannot be set";
                 return false;
             }
-            if (!pJson.isUInt64()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isUInt64())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         case 1:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isUInt64()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isUInt64())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         case 2:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if (pJson.isString() && std::string(pJson.asCString()).size() > 32) {
-                err = "String length exceeds limit for the " +
-                      fieldName +
-                      " field (the maximum value is 32)";
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 32)
+            {
+                err="String length exceeds limit for the " +
+                    fieldName +
+                    " field (the maximum value is 32)";
                 return false;
             }
             break;
         case 3:
-            if (pJson.isNull()) {
+            if(pJson.isNull())
+            {
                 return true;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if (pJson.isString() && std::string(pJson.asCString()).size() > 32) {
-                err = "String length exceeds limit for the " +
-                      fieldName +
-                      " field (the maximum value is 32)";
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 32)
+            {
+                err="String length exceeds limit for the " +
+                    fieldName +
+                    " field (the maximum value is 32)";
                 return false;
             }
             break;
         case 4:
-            if (pJson.isNull()) {
+            if(pJson.isNull())
+            {
                 return true;
             }
-            if (!pJson.isUInt64()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isUInt64())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         case 5:
-            if (pJson.isNull()) {
+            if(pJson.isNull())
+            {
                 return true;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if (pJson.isString() && std::string(pJson.asCString()).size() > 255) {
-                err = "String length exceeds limit for the " +
-                      fieldName +
-                      " field (the maximum value is 255)";
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 255)
+            {
+                err="String length exceeds limit for the " +
+                    fieldName +
+                    " field (the maximum value is 255)";
                 return false;
             }
             break;
         case 6:
-            if (pJson.isNull()) {
+            if(pJson.isNull())
+            {
                 return true;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         case 7:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if (pJson.isString() && std::string(pJson.asCString()).size() > 45) {
-                err = "String length exceeds limit for the " +
-                      fieldName +
-                      " field (the maximum value is 45)";
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 45)
+            {
+                err="String length exceeds limit for the " +
+                    fieldName +
+                    " field (the maximum value is 45)";
                 return false;
             }
             break;
         case 8:
-            if (pJson.isNull()) {
+            if(pJson.isNull())
+            {
                 return true;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if (pJson.isString() && std::string(pJson.asCString()).size() > 512) {
-                err = "String length exceeds limit for the " +
-                      fieldName +
-                      " field (the maximum value is 512)";
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 512)
+            {
+                err="String length exceeds limit for the " +
+                    fieldName +
+                    " field (the maximum value is 512)";
                 return false;
             }
             break;
         case 9:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         default:
-            err = "Internal error in the server";
+            err="Internal error in the server";
             return false;
     }
     return true;
