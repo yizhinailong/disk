@@ -530,7 +530,8 @@ namespace disk::trash {
             trash_item.item_size = trash_model.getValueOfItemSize();
             trash_item.original_folder_id = trash_model.getValueOfOriginalFolderId();
             trash_item.original_path = trash_model.getValueOfOriginalPath();
-            trash_item.item_data = trash_model.getValueOfItemData();
+            trash_item.item_data =
+                trash_model.getItemData() ? *trash_model.getItemData() : "";
             if (trash_model.getContentId()) {
                 trash_item.content_id = *trash_model.getContentId();
             }
@@ -670,7 +671,8 @@ namespace disk::trash {
             trash_item.item_size = trash_model.getValueOfItemSize();
             trash_item.original_folder_id = trash_model.getValueOfOriginalFolderId();
             trash_item.original_path = trash_model.getValueOfOriginalPath();
-            trash_item.item_data = trash_model.getValueOfItemData();
+            trash_item.item_data =
+                trash_model.getItemData() ? *trash_model.getItemData() : "";
             if (trash_model.getContentId()) {
                 trash_item.content_id = *trash_model.getContentId();
             }
@@ -786,7 +788,8 @@ namespace disk::trash {
             trash_item.item_size = trash_model.getValueOfItemSize();
             trash_item.original_folder_id = trash_model.getValueOfOriginalFolderId();
             trash_item.original_path = trash_model.getValueOfOriginalPath();
-            trash_item.item_data = trash_model.getValueOfItemData();
+            trash_item.item_data =
+                trash_model.getItemData() ? *trash_model.getItemData() : "";
             if (trash_model.getContentId()) {
                 trash_item.content_id = *trash_model.getContentId();
             }
@@ -924,7 +927,8 @@ namespace disk::trash {
             trash_item.item_size = trash_model.getValueOfItemSize();
             trash_item.original_folder_id = trash_model.getValueOfOriginalFolderId();
             trash_item.original_path = trash_model.getValueOfOriginalPath();
-            trash_item.item_data = trash_model.getValueOfItemData();
+            trash_item.item_data =
+                trash_model.getItemData() ? *trash_model.getItemData() : "";
             if (trash_model.getContentId()) {
                 trash_item.content_id = *trash_model.getContentId();
             }
