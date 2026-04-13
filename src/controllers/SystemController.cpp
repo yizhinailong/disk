@@ -50,6 +50,8 @@ namespace disk::system {
         Json::Value connections;
         connections["current"] = info_result->connections.current;
         connections["peak"] = info_result->connections.peak;
+        connections["db_pool_size"] = info_result->connections.db_pool_size;
+        connections["redis_pool_size"] = info_result->connections.redis_pool_size;
         data["connections"] = connections;
 
         Json::Value storage;

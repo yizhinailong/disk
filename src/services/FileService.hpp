@@ -414,19 +414,6 @@ namespace disk::file {
         ) -> drogon::Task<std::vector<std::pair<uint64_t, uint64_t>>>;
 
         /**
-         * @brief 批量插入回收站记录（事务版）
-         *
-         * @param client 数据库客户端
-         * @param trash_sql 完整的 INSERT INTO trash ... SQL 语句
-         * @return drogon::Task<bool> 是否插入成功
-         */
-        [[nodiscard]]
-        auto InsertTrashRecords(
-            const drogon::orm::DbClientPtr& client,
-            const std::string& trash_sql
-        ) -> drogon::Task<bool>;
-
-        /**
          * @brief 批量删除文件记录（事务版）
          *
          * @param client 数据库客户端

@@ -32,6 +32,7 @@ namespace disk::health {
         data["overall_status"] = health_result.overall_status;
         data["version"] = health_result.version;
         data["uptime"] = health_result.uptime;
+        data["total_check_ms"] = health_result.total_check_ms;
         data["timestamp"] = health_result.timestamp;
 
         Json::Value components;

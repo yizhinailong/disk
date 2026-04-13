@@ -13,7 +13,6 @@
 #include <chrono>
 #include <limits>
 #include <random>
-#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -38,6 +37,19 @@ namespace disk::share {
     using drogon_model::disk::Folders;
     using drogon_model::disk::ShareFiles;
     using drogon_model::disk::Shares;
+
+    namespace {
+        template <typename BindParameters>
+        auto ExecSqlWithBindings(
+            const drogon::orm::DbClientPtr& client,
+            const std::string& sql,
+            BindParameters bind_parameters
+        ) -> drogon::Task<drogon::orm::Result> {
+            auto binder = *client << sql;
+            bind_parameters(binder);
+            co_return co_await drogon::orm::internal::SqlAwaiter(std::move(binder));
+        }
+    } // namespace
 
     // ==================== 构造函数 ====================
 
@@ -122,21 +134,25 @@ namespace disk::share {
             if (!files.empty()) {
                 auto chunks = BatchUtils::Chunk(files, DEFAULT_BATCH_CHUNK_SIZE);
                 for (const auto& chunk : chunks) {
-                    // 构建 VALUES 子句: (share_id, 'file', item_id, created_at)
-                    std::ostringstream values_oss;
+                    std::string insert_sql =
+                        "INSERT INTO share_files (share_id, item_type, item_id, created_at) VALUES ";
                     for (size_t i = 0; i < chunk.size(); ++i) {
                         if (i > 0) {
-                            values_oss << ", ";
+                            insert_sql += ", ";
                         }
-                        values_oss << "(" << created_share.getValueOfId()
-                                   << ", 'file', " << chunk[i].getValueOfId()
-                                   << ", '" << now.toDbStringLocal() << "')";
+                        insert_sql += "(?, ?, ?, ?)";
                     }
 
-                    auto insert_sql =
-                        "INSERT INTO share_files (share_id, item_type, item_id, created_at) VALUES " + values_oss.str();
-
-                    co_await transaction->execSqlCoro(insert_sql);
+                    co_await ExecSqlWithBindings(
+                        transaction,
+                        insert_sql,
+                        [&](auto& binder) {
+                            for (const auto& file : chunk) {
+                                binder << created_share.getValueOfId() << "file"
+                                       << file.getValueOfId() << now;
+                            }
+                        }
+                    );
                 }
             }
         } catch (const DrogonDbException& e) {
@@ -790,20 +806,14 @@ namespace disk::share {
             unique_file_ids.end()
         );
 
-        std::ostringstream in_clause;
-        for (size_t i = 0; i < unique_file_ids.size(); ++i) {
-            if (i > 0) {
-                in_clause << ",";
-            }
-            in_clause << unique_file_ids[i];
-        }
+        auto in_clause = BatchUtils::BuildSafeNumericInClause(unique_file_ids);
 
         std::vector<Files> files;
         files.reserve(file_ids.size());
 
         try {
             auto sql =
-                "SELECT f.* FROM files f WHERE f.user_id = ? AND f.id IN (" + in_clause.str() + ")";
+                "SELECT f.* FROM files f WHERE f.user_id = ? AND f.id IN (" + in_clause + ")";
             auto result = co_await m_db_client->execSqlCoro(sql, user_id);
 
             std::vector<Files> matched_files;

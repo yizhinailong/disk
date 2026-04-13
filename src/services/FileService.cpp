@@ -49,17 +49,97 @@ namespace disk::file {
     using drogon_model::disk::UploadTasks;
 
     namespace {
-        auto EscapeSqlLiteral(const std::string& input) -> std::string {
-            std::string escaped;
-            escaped.reserve(input.size());
-            for (const auto ch : input) {
-                if (ch == '\'') {
-                    escaped += "''";
-                } else {
-                    escaped.push_back(ch);
-                }
+        template <typename BindParameters>
+        auto ExecSqlWithBindings(
+            const drogon::orm::DbClientPtr& client,
+            const std::string& sql,
+            BindParameters bind_parameters
+        ) -> drogon::Task<drogon::orm::Result> {
+            auto binder = *client << sql;
+            bind_parameters(binder);
+            co_return co_await drogon::orm::internal::SqlAwaiter(std::move(binder));
+        }
+
+        struct TrashInsertItem {
+            uint64_t file_id;
+            std::string item_name;
+            uint64_t item_size;
+            uint64_t original_folder_id;
+            std::string original_path;
+            std::optional<uint64_t> content_id;
+            std::string item_data;
+        };
+
+        auto QueryOccupiedNames(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t folder_id,
+            uint64_t user_id,
+            const std::vector<std::string>& candidate_names
+        ) -> drogon::Task<std::unordered_set<std::string>> {
+            std::unordered_set<std::string> occupied_names;
+            if (candidate_names.empty()) {
+                co_return occupied_names;
             }
-            return escaped;
+
+            auto sql =
+                "SELECT name FROM files WHERE folder_id = ? AND user_id = ? AND name IN (" +
+                BatchUtils::BuildInPlaceholders(candidate_names) + ")";
+            auto result = co_await ExecSqlWithBindings(
+                client,
+                sql,
+                [&](auto& binder) {
+                    binder << folder_id << user_id;
+                    for (const auto& candidate_name : candidate_names) {
+                        binder << candidate_name;
+                    }
+                }
+            );
+
+            occupied_names.reserve(result.size());
+            for (const auto& row : result) {
+                occupied_names.insert(row["name"].as<std::string>());
+            }
+
+            co_return occupied_names;
+        }
+
+        auto InsertTrashRecords(
+            const drogon::orm::DbClientPtr& client,
+            const std::vector<TrashInsertItem>& trash_items,
+            uint64_t user_id
+        ) -> drogon::Task<bool> {
+            if (trash_items.empty()) {
+                co_return true;
+            }
+
+            std::string insert_sql =
+                "INSERT INTO trash (user_id, item_type, item_id, item_name, item_size, " "content_id, original_folder_id, original_path, item_data, " "deleted_at, expires_at) VALUES ";
+
+            for (size_t i = 0; i < trash_items.size(); ++i) {
+                if (i > 0) {
+                    insert_sql += ",";
+                }
+                insert_sql +=
+                    "(?, 'file', ?, ?, ?, ?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY))";
+            }
+
+            try {
+                co_await ExecSqlWithBindings(
+                    client,
+                    insert_sql,
+                    [&](auto& binder) {
+                        for (const auto& item : trash_items) {
+                            binder << user_id << item.file_id << item.item_name << item.item_size
+                                   << item.content_id << item.original_folder_id
+                                   << item.original_path << item.item_data;
+                        }
+                    }
+                );
+                co_return true;
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_WARN << "Batch trash insert failed: " << e.base().what();
+                co_return false;
+            }
         }
 
         [[nodiscard]] auto NormalizeFulltextKeyword(std::string_view keyword) -> std::string {
@@ -1366,7 +1446,7 @@ namespace disk::file {
                 continue;
             }
 
-            auto in_clause = BatchUtils::BuildNumericInClause(chunk);
+            auto in_clause = BatchUtils::BuildSafeNumericInClause(chunk);
 
             std::unordered_map<uint64_t, Files> file_map;
             file_map.reserve(chunk.size());
@@ -1399,30 +1479,12 @@ namespace disk::file {
             std::unordered_set<std::string> occupied_names;
             if (!candidate_names.empty()) {
                 try {
-                    // Build safe string IN clause (escape single quotes)
-                    std::ostringstream name_in;
-                    for (size_t i = 0; i < candidate_names.size(); ++i) {
-                        if (i > 0) {
-                            name_in << ",";
-                        }
-                        std::string escaped = candidate_names[i];
-                        size_t pos = 0;
-                        while ((pos = escaped.find('\'', pos)) != std::string::npos) {
-                            escaped.replace(pos, 1, "''");
-                            pos += 2;
-                        }
-                        name_in << "'" << escaped << "'";
-                    }
-
-                    auto conflict_result = co_await m_db_client->execSqlCoro(
-                        "SELECT name FROM files WHERE folder_id = ? AND user_id = ? AND name IN (" + name_in.str() + ")",
+                    occupied_names = co_await QueryOccupiedNames(
+                        m_db_client,
                         request.target_folder_id,
-                        user_id
+                        user_id,
+                        candidate_names
                     );
-
-                    for (const auto& row : conflict_result) {
-                        occupied_names.insert(row["name"].as<std::string>());
-                    }
                 } catch (const drogon::orm::DrogonDbException& e) {
                     LOG_WARN << "Filename conflict query failed in move, skipping chunk: "
                              << e.base().what();
@@ -1471,7 +1533,7 @@ namespace disk::file {
             }
 
             if (!valid_ids.empty()) {
-                auto update_in_clause = BatchUtils::BuildNumericInClause(valid_ids);
+                auto update_in_clause = BatchUtils::BuildSafeNumericInClause(valid_ids);
                 try {
                     co_await m_db_client->execSqlCoro(
                         "UPDATE files SET folder_id = ?, updated_at = ? WHERE id IN (" +
@@ -1527,7 +1589,7 @@ namespace disk::file {
                     continue;
                 }
 
-                auto in_clause = BatchUtils::BuildNumericInClause(chunk);
+                auto in_clause = BatchUtils::BuildSafeNumericInClause(chunk);
 
                 std::unordered_map<uint64_t, Files> file_map;
                 file_map.reserve(chunk.size());
@@ -1598,29 +1660,12 @@ namespace disk::file {
             std::unordered_set<std::string> occupied_names;
             if (!candidate_names.empty()) {
                 try {
-                    std::ostringstream name_in;
-                    for (size_t i = 0; i < candidate_names.size(); ++i) {
-                        if (i > 0) {
-                            name_in << ",";
-                        }
-                        std::string escaped = candidate_names[i];
-                        size_t pos = 0;
-                        while ((pos = escaped.find('\'', pos)) != std::string::npos) {
-                            escaped.replace(pos, 1, "''");
-                            pos += 2;
-                        }
-                        name_in << "'" << escaped << "'";
-                    }
-
-                    auto conflict_result = co_await m_db_client->execSqlCoro(
-                        "SELECT name FROM files WHERE folder_id = ? AND user_id = ? AND name IN (" + name_in.str() + ")",
+                    occupied_names = co_await QueryOccupiedNames(
+                        m_db_client,
                         request.target_folder_id,
-                        user_id
+                        user_id,
+                        candidate_names
                     );
-
-                    for (const auto& row : conflict_result) {
-                        occupied_names.insert(row["name"].as<std::string>());
-                    }
                 } catch (const drogon::orm::DrogonDbException& e) {
                     LOG_WARN << "Filename conflict query failed in copy, skipping chunk: "
                              << e.base().what();
@@ -1662,7 +1707,7 @@ namespace disk::file {
                     content_ids.push_back(content_id);
                 }
 
-                auto content_in_clause = BatchUtils::BuildNumericInClause(content_ids);
+                auto content_in_clause = BatchUtils::BuildSafeNumericInClause(content_ids);
                 existing_content_ids.reserve(content_ids.size());
 
                 try {
@@ -1806,7 +1851,7 @@ namespace disk::file {
                 continue;
             }
 
-            auto in_clause = BatchUtils::BuildNumericInClause(chunk);
+            auto in_clause = BatchUtils::BuildSafeNumericInClause(chunk);
 
             std::unordered_map<uint64_t, Files> file_map;
             file_map.reserve(chunk.size());
@@ -1829,17 +1874,7 @@ namespace disk::file {
                 continue;
             }
 
-            struct TrashItem {
-                uint64_t file_id;
-                std::string item_name;
-                uint64_t item_size;
-                uint64_t original_folder_id;
-                std::string original_path;
-                std::optional<uint64_t> content_id;
-                std::string item_data;
-            };
-
-            std::vector<TrashItem> trash_items;
+            std::vector<TrashInsertItem> trash_items;
             trash_items.reserve(chunk.size());
 
             for (const auto& file_id : chunk) {
@@ -1863,31 +1898,6 @@ namespace disk::file {
             }
 
             if (!trash_items.empty()) {
-                // ── 构建回收站 SQL（事务外，仅字符串拼接） ──
-                std::string trash_sql =
-                    "INSERT INTO trash (user_id, item_type, item_id, item_name, item_size, " "content_id, original_folder_id, original_path, item_data, " "deleted_at, expires_at) VALUES ";
-
-                for (size_t i = 0; i < trash_items.size(); ++i) {
-                    if (i > 0) {
-                        trash_sql += ",";
-                    }
-                    const auto& item = trash_items[i];
-
-                    trash_sql += "(" + std::to_string(user_id) + ",'file',";
-                    trash_sql += std::to_string(item.file_id) + ",";
-                    trash_sql += "'" + EscapeSqlLiteral(item.item_name) + "',";
-                    trash_sql += std::to_string(item.item_size) + ",";
-                    if (item.content_id.has_value()) {
-                        trash_sql += std::to_string(item.content_id.value());
-                    } else {
-                        trash_sql += "NULL";
-                    }
-                    trash_sql += "," + std::to_string(item.original_folder_id) + ",";
-                    trash_sql += "'" + EscapeSqlLiteral(item.original_path) + "',";
-                    trash_sql += "'" + EscapeSqlLiteral(item.item_data) + "',";
-                    trash_sql += "NOW(),DATE_ADD(NOW(), INTERVAL 30 DAY))";
-                }
-
                 std::vector<uint64_t> deletable_ids;
                 deletable_ids.reserve(trash_items.size());
                 for (const auto& item : trash_items) {
@@ -1900,7 +1910,7 @@ namespace disk::file {
                 try {
                     txn = co_await m_db_client->newTransactionCoro();
 
-                    auto insert_ok = co_await InsertTrashRecords(txn, trash_sql);
+                    auto insert_ok = co_await InsertTrashRecords(txn, trash_items, user_id);
                     if (!insert_ok) {
                         LOG_WARN << "Trash insert failed in transaction, rolling back batch";
                         batch_failed = true;
@@ -2548,6 +2558,8 @@ namespace disk::file {
     ) -> drogon::Task<std::unordered_set<uint64_t>> {
 
         std::string update_sql = "UPDATE file_contents SET ref_count = ref_count + CASE id ";
+        std::vector<std::pair<uint64_t, uint64_t>> update_cases;
+        update_cases.reserve(content_ref_increment.size());
         std::vector<uint64_t> valid_content_ids;
         valid_content_ids.reserve(content_ref_increment.size());
 
@@ -2555,9 +2567,9 @@ namespace disk::file {
             if (!existing_content_ids.contains(content_id)) {
                 continue;
             }
+            update_cases.emplace_back(content_id, increment);
             valid_content_ids.push_back(content_id);
-            update_sql += " WHEN " + std::to_string(content_id) + " THEN " +
-                          std::to_string(increment);
+            update_sql += " WHEN ? THEN ?";
         }
 
         std::unordered_set<uint64_t> incremented_ids;
@@ -2565,10 +2577,18 @@ namespace disk::file {
 
         if (!valid_content_ids.empty()) {
             update_sql += " ELSE 0 END WHERE id IN (" +
-                          BatchUtils::BuildNumericInClause(valid_content_ids) + ")";
+                          BatchUtils::BuildSafeNumericInClause(valid_content_ids) + ")";
 
             try {
-                co_await client->execSqlCoro(update_sql);
+                co_await ExecSqlWithBindings(
+                    client,
+                    update_sql,
+                    [&](auto& binder) {
+                        for (const auto& [content_id, increment] : update_cases) {
+                            binder << content_id << increment;
+                        }
+                    }
+                );
                 for (const auto id : valid_content_ids) {
                     incremented_ids.insert(id);
                 }
@@ -2600,25 +2620,27 @@ namespace disk::file {
             if (i > 0) {
                 insert_sql += ",";
             }
-            const auto& file = *valid_items[i].second;
-            auto content_id_ptr = file.getContentId();
-
-            insert_sql += "(" + std::to_string(user_id) + ",";
-            if (content_id_ptr) {
-                insert_sql += std::to_string(*content_id_ptr);
-            } else {
-                insert_sql += "NULL";
-            }
-            insert_sql += "," + std::to_string(target_folder_id);
-            insert_sql += ",'" + EscapeSqlLiteral(file.getValueOfName()) + "'";
-            insert_sql += ",'" + EscapeSqlLiteral(file.getValueOfExtension()) + "'";
-            insert_sql += "," + std::to_string(file.getValueOfSize());
-            insert_sql += ",'" + EscapeSqlLiteral(file.getValueOfMimeType()) + "'";
-            insert_sql += ",'',0,0)";
+            insert_sql += "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         }
 
         try {
-            co_await client->execSqlCoro(insert_sql);
+            co_await ExecSqlWithBindings(
+                client,
+                insert_sql,
+                [&](auto& binder) {
+                    for (const auto& [old_id, file_ptr] : valid_items) {
+                        (void)old_id;
+                        const auto& file = *file_ptr;
+                        auto content_id_ptr = file.getContentId();
+                        auto content_id = content_id_ptr ? std::optional<uint64_t>(*content_id_ptr) : std::nullopt;
+
+                        binder << user_id << content_id << target_folder_id
+                               << file.getValueOfName() << file.getValueOfExtension()
+                               << file.getValueOfSize() << file.getValueOfMimeType()
+                               << std::string{} << 0 << 0;
+                    }
+                }
+            );
 
             auto id_result = co_await client->execSqlCoro("SELECT LAST_INSERT_ID() AS id");
             if (!id_result.empty()) {
@@ -2635,20 +2657,6 @@ namespace disk::file {
         co_return id_mappings;
     }
 
-    auto FileService::InsertTrashRecords(
-        const drogon::orm::DbClientPtr& client,
-        const std::string& trash_sql
-    ) -> drogon::Task<bool> {
-
-        try {
-            co_await client->execSqlCoro(trash_sql);
-            co_return true;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "Batch trash insert failed: " << e.base().what();
-            co_return false;
-        }
-    }
-
     auto FileService::DeleteFilesByIds(
         const drogon::orm::DbClientPtr& client,
         const std::vector<uint64_t>& file_ids
@@ -2661,7 +2669,7 @@ namespace disk::file {
         try {
             co_await client->execSqlCoro(
                 "DELETE FROM files WHERE id IN (" +
-                BatchUtils::BuildNumericInClause(file_ids) + ")"
+                BatchUtils::BuildSafeNumericInClause(file_ids) + ")"
             );
             co_return static_cast<int>(file_ids.size());
         } catch (const drogon::orm::DrogonDbException& e) {
