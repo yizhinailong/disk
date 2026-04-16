@@ -6,10 +6,8 @@
  */
 
 #include "Files.hpp"
-
-#include <string>
-
 #include <drogon/utils/Utilities.h>
+#include <string>
 
 using namespace drogon;
 using namespace drogon::orm;
@@ -33,1046 +31,1254 @@ const std::string Files::primaryKeyName = "id";
 const bool Files::hasPrimaryKey = true;
 const std::string Files::tableName = "files";
 
-const std::vector<typename Files::MetaData> Files::metaData_ = {
-    {               "id",        "uint64_t", "bigint unsigned",    8, 1, 1, 1 },
-    {          "user_id",        "uint64_t", "bigint unsigned",    8, 0, 0, 1 },
-    {       "content_id",        "uint64_t", "bigint unsigned",    8, 0, 0, 1 },
-    {        "folder_id",        "uint64_t", "bigint unsigned",    8, 0, 0, 1 },
-    {             "name",     "std::string",    "varchar(255)",  255, 0, 0, 1 },
-    {        "extension",     "std::string",     "varchar(32)",   32, 0, 0, 0 },
-    {             "size",        "uint64_t", "bigint unsigned",    8, 0, 0, 1 },
-    {        "mime_type",     "std::string",    "varchar(128)",  128, 0, 0, 0 },
-    {             "path",     "std::string",   "varchar(4096)", 4096, 0, 0, 1 },
-    {      "is_favorite",          "int8_t",         "tinyint",    1, 0, 0, 1 },
-    {   "download_count",        "uint32_t",    "int unsigned",    4, 0, 0, 1 },
-    { "last_accessed_at", "::trantor::Date",        "datetime",    0, 0, 0, 0 },
-    {       "created_at", "::trantor::Date",        "datetime",    0, 0, 0, 1 },
-    {       "updated_at", "::trantor::Date",        "datetime",    0, 0, 0, 1 }
+const std::vector<typename Files::MetaData> Files::metaData_={
+{"id","uint64_t","bigint unsigned",8,1,1,1},
+{"user_id","uint64_t","bigint unsigned",8,0,0,1},
+{"content_id","uint64_t","bigint unsigned",8,0,0,1},
+{"folder_id","uint64_t","bigint unsigned",8,0,0,1},
+{"name","std::string","varchar(255)",255,0,0,1},
+{"extension","std::string","varchar(32)",32,0,0,0},
+{"size","uint64_t","bigint unsigned",8,0,0,1},
+{"mime_type","std::string","varchar(128)",128,0,0,0},
+{"path","std::string","varchar(4096)",4096,0,0,1},
+{"is_favorite","int8_t","tinyint",1,0,0,1},
+{"download_count","uint32_t","int unsigned",4,0,0,1},
+{"last_accessed_at","::trantor::Date","datetime",0,0,0,0},
+{"created_at","::trantor::Date","datetime",0,0,0,1},
+{"updated_at","::trantor::Date","datetime",0,0,0,1}
 };
-
-const std::string& Files::getColumnName(size_t index) noexcept(false) {
+const std::string &Files::getColumnName(size_t index) noexcept(false)
+{
     assert(index < metaData_.size());
     return metaData_[index].colName_;
 }
-
-Files::Files(const Row& r, const ssize_t indexOffset) noexcept {
-    if (indexOffset < 0) {
-        if (!r["id"].isNull()) {
-            id_ = std::make_shared<uint64_t>(r["id"].as<uint64_t>());
+Files::Files(const Row &r, const ssize_t indexOffset) noexcept
+{
+    if(indexOffset < 0)
+    {
+        if(!r["id"].isNull())
+        {
+            id_=std::make_shared<uint64_t>(r["id"].as<uint64_t>());
         }
-        if (!r["user_id"].isNull()) {
-            userId_ = std::make_shared<uint64_t>(r["user_id"].as<uint64_t>());
+        if(!r["user_id"].isNull())
+        {
+            userId_=std::make_shared<uint64_t>(r["user_id"].as<uint64_t>());
         }
-        if (!r["content_id"].isNull()) {
-            contentId_ = std::make_shared<uint64_t>(r["content_id"].as<uint64_t>());
+        if(!r["content_id"].isNull())
+        {
+            contentId_=std::make_shared<uint64_t>(r["content_id"].as<uint64_t>());
         }
-        if (!r["folder_id"].isNull()) {
-            folderId_ = std::make_shared<uint64_t>(r["folder_id"].as<uint64_t>());
+        if(!r["folder_id"].isNull())
+        {
+            folderId_=std::make_shared<uint64_t>(r["folder_id"].as<uint64_t>());
         }
-        if (!r["name"].isNull()) {
-            name_ = std::make_shared<std::string>(r["name"].as<std::string>());
+        if(!r["name"].isNull())
+        {
+            name_=std::make_shared<std::string>(r["name"].as<std::string>());
         }
-        if (!r["extension"].isNull()) {
-            extension_ = std::make_shared<std::string>(r["extension"].as<std::string>());
+        if(!r["extension"].isNull())
+        {
+            extension_=std::make_shared<std::string>(r["extension"].as<std::string>());
         }
-        if (!r["size"].isNull()) {
-            size_ = std::make_shared<uint64_t>(r["size"].as<uint64_t>());
+        if(!r["size"].isNull())
+        {
+            size_=std::make_shared<uint64_t>(r["size"].as<uint64_t>());
         }
-        if (!r["mime_type"].isNull()) {
-            mimeType_ = std::make_shared<std::string>(r["mime_type"].as<std::string>());
+        if(!r["mime_type"].isNull())
+        {
+            mimeType_=std::make_shared<std::string>(r["mime_type"].as<std::string>());
         }
-        if (!r["path"].isNull()) {
-            path_ = std::make_shared<std::string>(r["path"].as<std::string>());
+        if(!r["path"].isNull())
+        {
+            path_=std::make_shared<std::string>(r["path"].as<std::string>());
         }
-        if (!r["is_favorite"].isNull()) {
-            isFavorite_ = std::make_shared<int8_t>(r["is_favorite"].as<int8_t>());
+        if(!r["is_favorite"].isNull())
+        {
+            isFavorite_=std::make_shared<int8_t>(r["is_favorite"].as<int8_t>());
         }
-        if (!r["download_count"].isNull()) {
-            downloadCount_ = std::make_shared<uint32_t>(r["download_count"].as<uint32_t>());
+        if(!r["download_count"].isNull())
+        {
+            downloadCount_=std::make_shared<uint32_t>(r["download_count"].as<uint32_t>());
         }
-        if (!r["last_accessed_at"].isNull()) {
+        if(!r["last_accessed_at"].isNull())
+        {
             auto timeStr = r["last_accessed_at"].as<std::string>();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                lastAccessedAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                lastAccessedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
-        if (!r["created_at"].isNull()) {
+        if(!r["created_at"].isNull())
+        {
             auto timeStr = r["created_at"].as<std::string>();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                createdAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
-        if (!r["updated_at"].isNull()) {
+        if(!r["updated_at"].isNull())
+        {
             auto timeStr = r["updated_at"].as<std::string>();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                updatedAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                updatedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
-    } else {
+    }
+    else
+    {
         size_t offset = (size_t)indexOffset;
-        if (offset + 14 > r.size()) {
+        if(offset + 14 > r.size())
+        {
             LOG_FATAL << "Invalid SQL result for this model";
             return;
         }
         size_t index;
         index = offset + 0;
-        if (!r[index].isNull()) {
-            id_ = std::make_shared<uint64_t>(r[index].as<uint64_t>());
+        if(!r[index].isNull())
+        {
+            id_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
         }
         index = offset + 1;
-        if (!r[index].isNull()) {
-            userId_ = std::make_shared<uint64_t>(r[index].as<uint64_t>());
+        if(!r[index].isNull())
+        {
+            userId_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
         }
         index = offset + 2;
-        if (!r[index].isNull()) {
-            contentId_ = std::make_shared<uint64_t>(r[index].as<uint64_t>());
+        if(!r[index].isNull())
+        {
+            contentId_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
         }
         index = offset + 3;
-        if (!r[index].isNull()) {
-            folderId_ = std::make_shared<uint64_t>(r[index].as<uint64_t>());
+        if(!r[index].isNull())
+        {
+            folderId_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
         }
         index = offset + 4;
-        if (!r[index].isNull()) {
-            name_ = std::make_shared<std::string>(r[index].as<std::string>());
+        if(!r[index].isNull())
+        {
+            name_=std::make_shared<std::string>(r[index].as<std::string>());
         }
         index = offset + 5;
-        if (!r[index].isNull()) {
-            extension_ = std::make_shared<std::string>(r[index].as<std::string>());
+        if(!r[index].isNull())
+        {
+            extension_=std::make_shared<std::string>(r[index].as<std::string>());
         }
         index = offset + 6;
-        if (!r[index].isNull()) {
-            size_ = std::make_shared<uint64_t>(r[index].as<uint64_t>());
+        if(!r[index].isNull())
+        {
+            size_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
         }
         index = offset + 7;
-        if (!r[index].isNull()) {
-            mimeType_ = std::make_shared<std::string>(r[index].as<std::string>());
+        if(!r[index].isNull())
+        {
+            mimeType_=std::make_shared<std::string>(r[index].as<std::string>());
         }
         index = offset + 8;
-        if (!r[index].isNull()) {
-            path_ = std::make_shared<std::string>(r[index].as<std::string>());
+        if(!r[index].isNull())
+        {
+            path_=std::make_shared<std::string>(r[index].as<std::string>());
         }
         index = offset + 9;
-        if (!r[index].isNull()) {
-            isFavorite_ = std::make_shared<int8_t>(r[index].as<int8_t>());
+        if(!r[index].isNull())
+        {
+            isFavorite_=std::make_shared<int8_t>(r[index].as<int8_t>());
         }
         index = offset + 10;
-        if (!r[index].isNull()) {
-            downloadCount_ = std::make_shared<uint32_t>(r[index].as<uint32_t>());
+        if(!r[index].isNull())
+        {
+            downloadCount_=std::make_shared<uint32_t>(r[index].as<uint32_t>());
         }
         index = offset + 11;
-        if (!r[index].isNull()) {
+        if(!r[index].isNull())
+        {
             auto timeStr = r[index].as<std::string>();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                lastAccessedAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                lastAccessedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
         index = offset + 12;
-        if (!r[index].isNull()) {
+        if(!r[index].isNull())
+        {
             auto timeStr = r[index].as<std::string>();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                createdAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
         index = offset + 13;
-        if (!r[index].isNull()) {
+        if(!r[index].isNull())
+        {
             auto timeStr = r[index].as<std::string>();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                updatedAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                updatedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
+
 }
 
-Files::Files(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
-    if (pMasqueradingVector.size() != 14) {
+Files::Files(const Json::Value &pJson, const std::vector<std::string> &pMasqueradingVector) noexcept(false)
+{
+    if(pMasqueradingVector.size() != 14)
+    {
         LOG_ERROR << "Bad masquerading vector";
         return;
     }
-    if (!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0])) {
+    if(!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0]))
+    {
         dirtyFlag_[0] = true;
-        if (!pJson[pMasqueradingVector[0]].isNull()) {
-            id_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[0]].asUInt64());
+        if(!pJson[pMasqueradingVector[0]].isNull())
+        {
+            id_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[0]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1])) {
+    if(!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1]))
+    {
         dirtyFlag_[1] = true;
-        if (!pJson[pMasqueradingVector[1]].isNull()) {
-            userId_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[1]].asUInt64());
+        if(!pJson[pMasqueradingVector[1]].isNull())
+        {
+            userId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[1]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2])) {
+    if(!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2]))
+    {
         dirtyFlag_[2] = true;
-        if (!pJson[pMasqueradingVector[2]].isNull()) {
-            contentId_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[2]].asUInt64());
+        if(!pJson[pMasqueradingVector[2]].isNull())
+        {
+            contentId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[2]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3])) {
+    if(!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3]))
+    {
         dirtyFlag_[3] = true;
-        if (!pJson[pMasqueradingVector[3]].isNull()) {
-            folderId_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[3]].asUInt64());
+        if(!pJson[pMasqueradingVector[3]].isNull())
+        {
+            folderId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[3]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4])) {
+    if(!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4]))
+    {
         dirtyFlag_[4] = true;
-        if (!pJson[pMasqueradingVector[4]].isNull()) {
-            name_ = std::make_shared<std::string>(pJson[pMasqueradingVector[4]].asString());
+        if(!pJson[pMasqueradingVector[4]].isNull())
+        {
+            name_=std::make_shared<std::string>(pJson[pMasqueradingVector[4]].asString());
         }
     }
-    if (!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5])) {
+    if(!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5]))
+    {
         dirtyFlag_[5] = true;
-        if (!pJson[pMasqueradingVector[5]].isNull()) {
-            extension_ = std::make_shared<std::string>(pJson[pMasqueradingVector[5]].asString());
+        if(!pJson[pMasqueradingVector[5]].isNull())
+        {
+            extension_=std::make_shared<std::string>(pJson[pMasqueradingVector[5]].asString());
         }
     }
-    if (!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6])) {
+    if(!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6]))
+    {
         dirtyFlag_[6] = true;
-        if (!pJson[pMasqueradingVector[6]].isNull()) {
-            size_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[6]].asUInt64());
+        if(!pJson[pMasqueradingVector[6]].isNull())
+        {
+            size_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[6]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7])) {
+    if(!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7]))
+    {
         dirtyFlag_[7] = true;
-        if (!pJson[pMasqueradingVector[7]].isNull()) {
-            mimeType_ = std::make_shared<std::string>(pJson[pMasqueradingVector[7]].asString());
+        if(!pJson[pMasqueradingVector[7]].isNull())
+        {
+            mimeType_=std::make_shared<std::string>(pJson[pMasqueradingVector[7]].asString());
         }
     }
-    if (!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8])) {
+    if(!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8]))
+    {
         dirtyFlag_[8] = true;
-        if (!pJson[pMasqueradingVector[8]].isNull()) {
-            path_ = std::make_shared<std::string>(pJson[pMasqueradingVector[8]].asString());
+        if(!pJson[pMasqueradingVector[8]].isNull())
+        {
+            path_=std::make_shared<std::string>(pJson[pMasqueradingVector[8]].asString());
         }
     }
-    if (!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9])) {
+    if(!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9]))
+    {
         dirtyFlag_[9] = true;
-        if (!pJson[pMasqueradingVector[9]].isNull()) {
-            isFavorite_ = std::make_shared<int8_t>((int8_t)pJson[pMasqueradingVector[9]].asInt64());
+        if(!pJson[pMasqueradingVector[9]].isNull())
+        {
+            isFavorite_=std::make_shared<int8_t>((int8_t)pJson[pMasqueradingVector[9]].asInt64());
         }
     }
-    if (!pMasqueradingVector[10].empty() && pJson.isMember(pMasqueradingVector[10])) {
+    if(!pMasqueradingVector[10].empty() && pJson.isMember(pMasqueradingVector[10]))
+    {
         dirtyFlag_[10] = true;
-        if (!pJson[pMasqueradingVector[10]].isNull()) {
-            downloadCount_ = std::make_shared<uint32_t>((uint32_t)pJson[pMasqueradingVector[10]].asUInt64());
+        if(!pJson[pMasqueradingVector[10]].isNull())
+        {
+            downloadCount_=std::make_shared<uint32_t>((uint32_t)pJson[pMasqueradingVector[10]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[11].empty() && pJson.isMember(pMasqueradingVector[11])) {
+    if(!pMasqueradingVector[11].empty() && pJson.isMember(pMasqueradingVector[11]))
+    {
         dirtyFlag_[11] = true;
-        if (!pJson[pMasqueradingVector[11]].isNull()) {
+        if(!pJson[pMasqueradingVector[11]].isNull())
+        {
             auto timeStr = pJson[pMasqueradingVector[11]].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                lastAccessedAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                lastAccessedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
-    if (!pMasqueradingVector[12].empty() && pJson.isMember(pMasqueradingVector[12])) {
+    if(!pMasqueradingVector[12].empty() && pJson.isMember(pMasqueradingVector[12]))
+    {
         dirtyFlag_[12] = true;
-        if (!pJson[pMasqueradingVector[12]].isNull()) {
+        if(!pJson[pMasqueradingVector[12]].isNull())
+        {
             auto timeStr = pJson[pMasqueradingVector[12]].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                createdAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
-    if (!pMasqueradingVector[13].empty() && pJson.isMember(pMasqueradingVector[13])) {
+    if(!pMasqueradingVector[13].empty() && pJson.isMember(pMasqueradingVector[13]))
+    {
         dirtyFlag_[13] = true;
-        if (!pJson[pMasqueradingVector[13]].isNull()) {
+        if(!pJson[pMasqueradingVector[13]].isNull())
+        {
             auto timeStr = pJson[pMasqueradingVector[13]].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                updatedAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                updatedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
 }
 
-Files::Files(const Json::Value& pJson) noexcept(false) {
-    if (pJson.isMember("id")) {
-        dirtyFlag_[0] = true;
-        if (!pJson["id"].isNull()) {
-            id_ = std::make_shared<uint64_t>((uint64_t)pJson["id"].asUInt64());
+Files::Files(const Json::Value &pJson) noexcept(false)
+{
+    if(pJson.isMember("id"))
+    {
+        dirtyFlag_[0]=true;
+        if(!pJson["id"].isNull())
+        {
+            id_=std::make_shared<uint64_t>((uint64_t)pJson["id"].asUInt64());
         }
     }
-    if (pJson.isMember("user_id")) {
-        dirtyFlag_[1] = true;
-        if (!pJson["user_id"].isNull()) {
-            userId_ = std::make_shared<uint64_t>((uint64_t)pJson["user_id"].asUInt64());
+    if(pJson.isMember("user_id"))
+    {
+        dirtyFlag_[1]=true;
+        if(!pJson["user_id"].isNull())
+        {
+            userId_=std::make_shared<uint64_t>((uint64_t)pJson["user_id"].asUInt64());
         }
     }
-    if (pJson.isMember("content_id")) {
-        dirtyFlag_[2] = true;
-        if (!pJson["content_id"].isNull()) {
-            contentId_ = std::make_shared<uint64_t>((uint64_t)pJson["content_id"].asUInt64());
+    if(pJson.isMember("content_id"))
+    {
+        dirtyFlag_[2]=true;
+        if(!pJson["content_id"].isNull())
+        {
+            contentId_=std::make_shared<uint64_t>((uint64_t)pJson["content_id"].asUInt64());
         }
     }
-    if (pJson.isMember("folder_id")) {
-        dirtyFlag_[3] = true;
-        if (!pJson["folder_id"].isNull()) {
-            folderId_ = std::make_shared<uint64_t>((uint64_t)pJson["folder_id"].asUInt64());
+    if(pJson.isMember("folder_id"))
+    {
+        dirtyFlag_[3]=true;
+        if(!pJson["folder_id"].isNull())
+        {
+            folderId_=std::make_shared<uint64_t>((uint64_t)pJson["folder_id"].asUInt64());
         }
     }
-    if (pJson.isMember("name")) {
-        dirtyFlag_[4] = true;
-        if (!pJson["name"].isNull()) {
-            name_ = std::make_shared<std::string>(pJson["name"].asString());
+    if(pJson.isMember("name"))
+    {
+        dirtyFlag_[4]=true;
+        if(!pJson["name"].isNull())
+        {
+            name_=std::make_shared<std::string>(pJson["name"].asString());
         }
     }
-    if (pJson.isMember("extension")) {
-        dirtyFlag_[5] = true;
-        if (!pJson["extension"].isNull()) {
-            extension_ = std::make_shared<std::string>(pJson["extension"].asString());
+    if(pJson.isMember("extension"))
+    {
+        dirtyFlag_[5]=true;
+        if(!pJson["extension"].isNull())
+        {
+            extension_=std::make_shared<std::string>(pJson["extension"].asString());
         }
     }
-    if (pJson.isMember("size")) {
-        dirtyFlag_[6] = true;
-        if (!pJson["size"].isNull()) {
-            size_ = std::make_shared<uint64_t>((uint64_t)pJson["size"].asUInt64());
+    if(pJson.isMember("size"))
+    {
+        dirtyFlag_[6]=true;
+        if(!pJson["size"].isNull())
+        {
+            size_=std::make_shared<uint64_t>((uint64_t)pJson["size"].asUInt64());
         }
     }
-    if (pJson.isMember("mime_type")) {
-        dirtyFlag_[7] = true;
-        if (!pJson["mime_type"].isNull()) {
-            mimeType_ = std::make_shared<std::string>(pJson["mime_type"].asString());
+    if(pJson.isMember("mime_type"))
+    {
+        dirtyFlag_[7]=true;
+        if(!pJson["mime_type"].isNull())
+        {
+            mimeType_=std::make_shared<std::string>(pJson["mime_type"].asString());
         }
     }
-    if (pJson.isMember("path")) {
-        dirtyFlag_[8] = true;
-        if (!pJson["path"].isNull()) {
-            path_ = std::make_shared<std::string>(pJson["path"].asString());
+    if(pJson.isMember("path"))
+    {
+        dirtyFlag_[8]=true;
+        if(!pJson["path"].isNull())
+        {
+            path_=std::make_shared<std::string>(pJson["path"].asString());
         }
     }
-    if (pJson.isMember("is_favorite")) {
-        dirtyFlag_[9] = true;
-        if (!pJson["is_favorite"].isNull()) {
-            isFavorite_ = std::make_shared<int8_t>((int8_t)pJson["is_favorite"].asInt64());
+    if(pJson.isMember("is_favorite"))
+    {
+        dirtyFlag_[9]=true;
+        if(!pJson["is_favorite"].isNull())
+        {
+            isFavorite_=std::make_shared<int8_t>((int8_t)pJson["is_favorite"].asInt64());
         }
     }
-    if (pJson.isMember("download_count")) {
-        dirtyFlag_[10] = true;
-        if (!pJson["download_count"].isNull()) {
-            downloadCount_ = std::make_shared<uint32_t>((uint32_t)pJson["download_count"].asUInt64());
+    if(pJson.isMember("download_count"))
+    {
+        dirtyFlag_[10]=true;
+        if(!pJson["download_count"].isNull())
+        {
+            downloadCount_=std::make_shared<uint32_t>((uint32_t)pJson["download_count"].asUInt64());
         }
     }
-    if (pJson.isMember("last_accessed_at")) {
-        dirtyFlag_[11] = true;
-        if (!pJson["last_accessed_at"].isNull()) {
+    if(pJson.isMember("last_accessed_at"))
+    {
+        dirtyFlag_[11]=true;
+        if(!pJson["last_accessed_at"].isNull())
+        {
             auto timeStr = pJson["last_accessed_at"].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                lastAccessedAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                lastAccessedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
-    if (pJson.isMember("created_at")) {
-        dirtyFlag_[12] = true;
-        if (!pJson["created_at"].isNull()) {
+    if(pJson.isMember("created_at"))
+    {
+        dirtyFlag_[12]=true;
+        if(!pJson["created_at"].isNull())
+        {
             auto timeStr = pJson["created_at"].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                createdAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
-    if (pJson.isMember("updated_at")) {
-        dirtyFlag_[13] = true;
-        if (!pJson["updated_at"].isNull()) {
+    if(pJson.isMember("updated_at"))
+    {
+        dirtyFlag_[13]=true;
+        if(!pJson["updated_at"].isNull())
+        {
             auto timeStr = pJson["updated_at"].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                updatedAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                updatedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
 }
 
-void Files::updateByMasqueradedJson(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector) noexcept(false) {
-    if (pMasqueradingVector.size() != 14) {
+void Files::updateByMasqueradedJson(const Json::Value &pJson,
+                                            const std::vector<std::string> &pMasqueradingVector) noexcept(false)
+{
+    if(pMasqueradingVector.size() != 14)
+    {
         LOG_ERROR << "Bad masquerading vector";
         return;
     }
-    if (!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0])) {
-        if (!pJson[pMasqueradingVector[0]].isNull()) {
-            id_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[0]].asUInt64());
+    if(!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0]))
+    {
+        if(!pJson[pMasqueradingVector[0]].isNull())
+        {
+            id_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[0]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1])) {
+    if(!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1]))
+    {
         dirtyFlag_[1] = true;
-        if (!pJson[pMasqueradingVector[1]].isNull()) {
-            userId_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[1]].asUInt64());
+        if(!pJson[pMasqueradingVector[1]].isNull())
+        {
+            userId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[1]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2])) {
+    if(!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2]))
+    {
         dirtyFlag_[2] = true;
-        if (!pJson[pMasqueradingVector[2]].isNull()) {
-            contentId_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[2]].asUInt64());
+        if(!pJson[pMasqueradingVector[2]].isNull())
+        {
+            contentId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[2]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3])) {
+    if(!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3]))
+    {
         dirtyFlag_[3] = true;
-        if (!pJson[pMasqueradingVector[3]].isNull()) {
-            folderId_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[3]].asUInt64());
+        if(!pJson[pMasqueradingVector[3]].isNull())
+        {
+            folderId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[3]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4])) {
+    if(!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4]))
+    {
         dirtyFlag_[4] = true;
-        if (!pJson[pMasqueradingVector[4]].isNull()) {
-            name_ = std::make_shared<std::string>(pJson[pMasqueradingVector[4]].asString());
+        if(!pJson[pMasqueradingVector[4]].isNull())
+        {
+            name_=std::make_shared<std::string>(pJson[pMasqueradingVector[4]].asString());
         }
     }
-    if (!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5])) {
+    if(!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5]))
+    {
         dirtyFlag_[5] = true;
-        if (!pJson[pMasqueradingVector[5]].isNull()) {
-            extension_ = std::make_shared<std::string>(pJson[pMasqueradingVector[5]].asString());
+        if(!pJson[pMasqueradingVector[5]].isNull())
+        {
+            extension_=std::make_shared<std::string>(pJson[pMasqueradingVector[5]].asString());
         }
     }
-    if (!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6])) {
+    if(!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6]))
+    {
         dirtyFlag_[6] = true;
-        if (!pJson[pMasqueradingVector[6]].isNull()) {
-            size_ = std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[6]].asUInt64());
+        if(!pJson[pMasqueradingVector[6]].isNull())
+        {
+            size_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[6]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7])) {
+    if(!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7]))
+    {
         dirtyFlag_[7] = true;
-        if (!pJson[pMasqueradingVector[7]].isNull()) {
-            mimeType_ = std::make_shared<std::string>(pJson[pMasqueradingVector[7]].asString());
+        if(!pJson[pMasqueradingVector[7]].isNull())
+        {
+            mimeType_=std::make_shared<std::string>(pJson[pMasqueradingVector[7]].asString());
         }
     }
-    if (!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8])) {
+    if(!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8]))
+    {
         dirtyFlag_[8] = true;
-        if (!pJson[pMasqueradingVector[8]].isNull()) {
-            path_ = std::make_shared<std::string>(pJson[pMasqueradingVector[8]].asString());
+        if(!pJson[pMasqueradingVector[8]].isNull())
+        {
+            path_=std::make_shared<std::string>(pJson[pMasqueradingVector[8]].asString());
         }
     }
-    if (!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9])) {
+    if(!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9]))
+    {
         dirtyFlag_[9] = true;
-        if (!pJson[pMasqueradingVector[9]].isNull()) {
-            isFavorite_ = std::make_shared<int8_t>((int8_t)pJson[pMasqueradingVector[9]].asInt64());
+        if(!pJson[pMasqueradingVector[9]].isNull())
+        {
+            isFavorite_=std::make_shared<int8_t>((int8_t)pJson[pMasqueradingVector[9]].asInt64());
         }
     }
-    if (!pMasqueradingVector[10].empty() && pJson.isMember(pMasqueradingVector[10])) {
+    if(!pMasqueradingVector[10].empty() && pJson.isMember(pMasqueradingVector[10]))
+    {
         dirtyFlag_[10] = true;
-        if (!pJson[pMasqueradingVector[10]].isNull()) {
-            downloadCount_ = std::make_shared<uint32_t>((uint32_t)pJson[pMasqueradingVector[10]].asUInt64());
+        if(!pJson[pMasqueradingVector[10]].isNull())
+        {
+            downloadCount_=std::make_shared<uint32_t>((uint32_t)pJson[pMasqueradingVector[10]].asUInt64());
         }
     }
-    if (!pMasqueradingVector[11].empty() && pJson.isMember(pMasqueradingVector[11])) {
+    if(!pMasqueradingVector[11].empty() && pJson.isMember(pMasqueradingVector[11]))
+    {
         dirtyFlag_[11] = true;
-        if (!pJson[pMasqueradingVector[11]].isNull()) {
+        if(!pJson[pMasqueradingVector[11]].isNull())
+        {
             auto timeStr = pJson[pMasqueradingVector[11]].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                lastAccessedAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                lastAccessedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
-    if (!pMasqueradingVector[12].empty() && pJson.isMember(pMasqueradingVector[12])) {
+    if(!pMasqueradingVector[12].empty() && pJson.isMember(pMasqueradingVector[12]))
+    {
         dirtyFlag_[12] = true;
-        if (!pJson[pMasqueradingVector[12]].isNull()) {
+        if(!pJson[pMasqueradingVector[12]].isNull())
+        {
             auto timeStr = pJson[pMasqueradingVector[12]].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                createdAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
-    if (!pMasqueradingVector[13].empty() && pJson.isMember(pMasqueradingVector[13])) {
+    if(!pMasqueradingVector[13].empty() && pJson.isMember(pMasqueradingVector[13]))
+    {
         dirtyFlag_[13] = true;
-        if (!pJson[pMasqueradingVector[13]].isNull()) {
+        if(!pJson[pMasqueradingVector[13]].isNull())
+        {
             auto timeStr = pJson[pMasqueradingVector[13]].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                updatedAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                updatedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
 }
 
-void Files::updateByJson(const Json::Value& pJson) noexcept(false) {
-    if (pJson.isMember("id")) {
-        if (!pJson["id"].isNull()) {
-            id_ = std::make_shared<uint64_t>((uint64_t)pJson["id"].asUInt64());
+void Files::updateByJson(const Json::Value &pJson) noexcept(false)
+{
+    if(pJson.isMember("id"))
+    {
+        if(!pJson["id"].isNull())
+        {
+            id_=std::make_shared<uint64_t>((uint64_t)pJson["id"].asUInt64());
         }
     }
-    if (pJson.isMember("user_id")) {
+    if(pJson.isMember("user_id"))
+    {
         dirtyFlag_[1] = true;
-        if (!pJson["user_id"].isNull()) {
-            userId_ = std::make_shared<uint64_t>((uint64_t)pJson["user_id"].asUInt64());
+        if(!pJson["user_id"].isNull())
+        {
+            userId_=std::make_shared<uint64_t>((uint64_t)pJson["user_id"].asUInt64());
         }
     }
-    if (pJson.isMember("content_id")) {
+    if(pJson.isMember("content_id"))
+    {
         dirtyFlag_[2] = true;
-        if (!pJson["content_id"].isNull()) {
-            contentId_ = std::make_shared<uint64_t>((uint64_t)pJson["content_id"].asUInt64());
+        if(!pJson["content_id"].isNull())
+        {
+            contentId_=std::make_shared<uint64_t>((uint64_t)pJson["content_id"].asUInt64());
         }
     }
-    if (pJson.isMember("folder_id")) {
+    if(pJson.isMember("folder_id"))
+    {
         dirtyFlag_[3] = true;
-        if (!pJson["folder_id"].isNull()) {
-            folderId_ = std::make_shared<uint64_t>((uint64_t)pJson["folder_id"].asUInt64());
+        if(!pJson["folder_id"].isNull())
+        {
+            folderId_=std::make_shared<uint64_t>((uint64_t)pJson["folder_id"].asUInt64());
         }
     }
-    if (pJson.isMember("name")) {
+    if(pJson.isMember("name"))
+    {
         dirtyFlag_[4] = true;
-        if (!pJson["name"].isNull()) {
-            name_ = std::make_shared<std::string>(pJson["name"].asString());
+        if(!pJson["name"].isNull())
+        {
+            name_=std::make_shared<std::string>(pJson["name"].asString());
         }
     }
-    if (pJson.isMember("extension")) {
+    if(pJson.isMember("extension"))
+    {
         dirtyFlag_[5] = true;
-        if (!pJson["extension"].isNull()) {
-            extension_ = std::make_shared<std::string>(pJson["extension"].asString());
+        if(!pJson["extension"].isNull())
+        {
+            extension_=std::make_shared<std::string>(pJson["extension"].asString());
         }
     }
-    if (pJson.isMember("size")) {
+    if(pJson.isMember("size"))
+    {
         dirtyFlag_[6] = true;
-        if (!pJson["size"].isNull()) {
-            size_ = std::make_shared<uint64_t>((uint64_t)pJson["size"].asUInt64());
+        if(!pJson["size"].isNull())
+        {
+            size_=std::make_shared<uint64_t>((uint64_t)pJson["size"].asUInt64());
         }
     }
-    if (pJson.isMember("mime_type")) {
+    if(pJson.isMember("mime_type"))
+    {
         dirtyFlag_[7] = true;
-        if (!pJson["mime_type"].isNull()) {
-            mimeType_ = std::make_shared<std::string>(pJson["mime_type"].asString());
+        if(!pJson["mime_type"].isNull())
+        {
+            mimeType_=std::make_shared<std::string>(pJson["mime_type"].asString());
         }
     }
-    if (pJson.isMember("path")) {
+    if(pJson.isMember("path"))
+    {
         dirtyFlag_[8] = true;
-        if (!pJson["path"].isNull()) {
-            path_ = std::make_shared<std::string>(pJson["path"].asString());
+        if(!pJson["path"].isNull())
+        {
+            path_=std::make_shared<std::string>(pJson["path"].asString());
         }
     }
-    if (pJson.isMember("is_favorite")) {
+    if(pJson.isMember("is_favorite"))
+    {
         dirtyFlag_[9] = true;
-        if (!pJson["is_favorite"].isNull()) {
-            isFavorite_ = std::make_shared<int8_t>((int8_t)pJson["is_favorite"].asInt64());
+        if(!pJson["is_favorite"].isNull())
+        {
+            isFavorite_=std::make_shared<int8_t>((int8_t)pJson["is_favorite"].asInt64());
         }
     }
-    if (pJson.isMember("download_count")) {
+    if(pJson.isMember("download_count"))
+    {
         dirtyFlag_[10] = true;
-        if (!pJson["download_count"].isNull()) {
-            downloadCount_ = std::make_shared<uint32_t>((uint32_t)pJson["download_count"].asUInt64());
+        if(!pJson["download_count"].isNull())
+        {
+            downloadCount_=std::make_shared<uint32_t>((uint32_t)pJson["download_count"].asUInt64());
         }
     }
-    if (pJson.isMember("last_accessed_at")) {
+    if(pJson.isMember("last_accessed_at"))
+    {
         dirtyFlag_[11] = true;
-        if (!pJson["last_accessed_at"].isNull()) {
+        if(!pJson["last_accessed_at"].isNull())
+        {
             auto timeStr = pJson["last_accessed_at"].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                lastAccessedAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                lastAccessedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
-    if (pJson.isMember("created_at")) {
+    if(pJson.isMember("created_at"))
+    {
         dirtyFlag_[12] = true;
-        if (!pJson["created_at"].isNull()) {
+        if(!pJson["created_at"].isNull())
+        {
             auto timeStr = pJson["created_at"].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                createdAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
-    if (pJson.isMember("updated_at")) {
+    if(pJson.isMember("updated_at"))
+    {
         dirtyFlag_[13] = true;
-        if (!pJson["updated_at"].isNull()) {
+        if(!pJson["updated_at"].isNull())
+        {
             auto timeStr = pJson["updated_at"].asString();
             struct tm stm;
-            memset(&stm, 0, sizeof(stm));
-            auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
             time_t t = mktime(&stm);
             size_t decimalNum = 0;
-            if (p) {
-                if (*p == '.') {
-                    std::string decimals(p + 1, &timeStr[timeStr.length()]);
-                    while (decimals.length() < 6) {
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
                         decimals += "0";
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                updatedAt_ = std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+                updatedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
 }
 
-const uint64_t& Files::getValueOfId() const noexcept {
+const uint64_t &Files::getValueOfId() const noexcept
+{
     static const uint64_t defaultValue = uint64_t();
-    if (id_) {
+    if(id_)
         return *id_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<uint64_t>& Files::getId() const noexcept {
+const std::shared_ptr<uint64_t> &Files::getId() const noexcept
+{
     return id_;
 }
-
-void Files::setId(const uint64_t& pId) noexcept {
+void Files::setId(const uint64_t &pId) noexcept
+{
     id_ = std::make_shared<uint64_t>(pId);
     dirtyFlag_[0] = true;
 }
-
-const typename Files::PrimaryKeyType& Files::getPrimaryKey() const {
+const typename Files::PrimaryKeyType & Files::getPrimaryKey() const
+{
     assert(id_);
     return *id_;
 }
 
-const uint64_t& Files::getValueOfUserId() const noexcept {
+const uint64_t &Files::getValueOfUserId() const noexcept
+{
     static const uint64_t defaultValue = uint64_t();
-    if (userId_) {
+    if(userId_)
         return *userId_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<uint64_t>& Files::getUserId() const noexcept {
+const std::shared_ptr<uint64_t> &Files::getUserId() const noexcept
+{
     return userId_;
 }
-
-void Files::setUserId(const uint64_t& pUserId) noexcept {
+void Files::setUserId(const uint64_t &pUserId) noexcept
+{
     userId_ = std::make_shared<uint64_t>(pUserId);
     dirtyFlag_[1] = true;
 }
 
-const uint64_t& Files::getValueOfContentId() const noexcept {
+const uint64_t &Files::getValueOfContentId() const noexcept
+{
     static const uint64_t defaultValue = uint64_t();
-    if (contentId_) {
+    if(contentId_)
         return *contentId_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<uint64_t>& Files::getContentId() const noexcept {
+const std::shared_ptr<uint64_t> &Files::getContentId() const noexcept
+{
     return contentId_;
 }
-
-void Files::setContentId(const uint64_t& pContentId) noexcept {
+void Files::setContentId(const uint64_t &pContentId) noexcept
+{
     contentId_ = std::make_shared<uint64_t>(pContentId);
     dirtyFlag_[2] = true;
 }
 
-const uint64_t& Files::getValueOfFolderId() const noexcept {
+const uint64_t &Files::getValueOfFolderId() const noexcept
+{
     static const uint64_t defaultValue = uint64_t();
-    if (folderId_) {
+    if(folderId_)
         return *folderId_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<uint64_t>& Files::getFolderId() const noexcept {
+const std::shared_ptr<uint64_t> &Files::getFolderId() const noexcept
+{
     return folderId_;
 }
-
-void Files::setFolderId(const uint64_t& pFolderId) noexcept {
+void Files::setFolderId(const uint64_t &pFolderId) noexcept
+{
     folderId_ = std::make_shared<uint64_t>(pFolderId);
     dirtyFlag_[3] = true;
 }
 
-const std::string& Files::getValueOfName() const noexcept {
+const std::string &Files::getValueOfName() const noexcept
+{
     static const std::string defaultValue = std::string();
-    if (name_) {
+    if(name_)
         return *name_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<std::string>& Files::getName() const noexcept {
+const std::shared_ptr<std::string> &Files::getName() const noexcept
+{
     return name_;
 }
-
-void Files::setName(const std::string& pName) noexcept {
+void Files::setName(const std::string &pName) noexcept
+{
     name_ = std::make_shared<std::string>(pName);
     dirtyFlag_[4] = true;
 }
-
-void Files::setName(std::string&& pName) noexcept {
+void Files::setName(std::string &&pName) noexcept
+{
     name_ = std::make_shared<std::string>(std::move(pName));
     dirtyFlag_[4] = true;
 }
 
-const std::string& Files::getValueOfExtension() const noexcept {
+const std::string &Files::getValueOfExtension() const noexcept
+{
     static const std::string defaultValue = std::string();
-    if (extension_) {
+    if(extension_)
         return *extension_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<std::string>& Files::getExtension() const noexcept {
+const std::shared_ptr<std::string> &Files::getExtension() const noexcept
+{
     return extension_;
 }
-
-void Files::setExtension(const std::string& pExtension) noexcept {
+void Files::setExtension(const std::string &pExtension) noexcept
+{
     extension_ = std::make_shared<std::string>(pExtension);
     dirtyFlag_[5] = true;
 }
-
-void Files::setExtension(std::string&& pExtension) noexcept {
+void Files::setExtension(std::string &&pExtension) noexcept
+{
     extension_ = std::make_shared<std::string>(std::move(pExtension));
     dirtyFlag_[5] = true;
 }
-
-void Files::setExtensionToNull() noexcept {
+void Files::setExtensionToNull() noexcept
+{
     extension_.reset();
     dirtyFlag_[5] = true;
 }
 
-const uint64_t& Files::getValueOfSize() const noexcept {
+const uint64_t &Files::getValueOfSize() const noexcept
+{
     static const uint64_t defaultValue = uint64_t();
-    if (size_) {
+    if(size_)
         return *size_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<uint64_t>& Files::getSize() const noexcept {
+const std::shared_ptr<uint64_t> &Files::getSize() const noexcept
+{
     return size_;
 }
-
-void Files::setSize(const uint64_t& pSize) noexcept {
+void Files::setSize(const uint64_t &pSize) noexcept
+{
     size_ = std::make_shared<uint64_t>(pSize);
     dirtyFlag_[6] = true;
 }
 
-const std::string& Files::getValueOfMimeType() const noexcept {
+const std::string &Files::getValueOfMimeType() const noexcept
+{
     static const std::string defaultValue = std::string();
-    if (mimeType_) {
+    if(mimeType_)
         return *mimeType_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<std::string>& Files::getMimeType() const noexcept {
+const std::shared_ptr<std::string> &Files::getMimeType() const noexcept
+{
     return mimeType_;
 }
-
-void Files::setMimeType(const std::string& pMimeType) noexcept {
+void Files::setMimeType(const std::string &pMimeType) noexcept
+{
     mimeType_ = std::make_shared<std::string>(pMimeType);
     dirtyFlag_[7] = true;
 }
-
-void Files::setMimeType(std::string&& pMimeType) noexcept {
+void Files::setMimeType(std::string &&pMimeType) noexcept
+{
     mimeType_ = std::make_shared<std::string>(std::move(pMimeType));
     dirtyFlag_[7] = true;
 }
-
-void Files::setMimeTypeToNull() noexcept {
+void Files::setMimeTypeToNull() noexcept
+{
     mimeType_.reset();
     dirtyFlag_[7] = true;
 }
 
-const std::string& Files::getValueOfPath() const noexcept {
+const std::string &Files::getValueOfPath() const noexcept
+{
     static const std::string defaultValue = std::string();
-    if (path_) {
+    if(path_)
         return *path_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<std::string>& Files::getPath() const noexcept {
+const std::shared_ptr<std::string> &Files::getPath() const noexcept
+{
     return path_;
 }
-
-void Files::setPath(const std::string& pPath) noexcept {
+void Files::setPath(const std::string &pPath) noexcept
+{
     path_ = std::make_shared<std::string>(pPath);
     dirtyFlag_[8] = true;
 }
-
-void Files::setPath(std::string&& pPath) noexcept {
+void Files::setPath(std::string &&pPath) noexcept
+{
     path_ = std::make_shared<std::string>(std::move(pPath));
     dirtyFlag_[8] = true;
 }
 
-const int8_t& Files::getValueOfIsFavorite() const noexcept {
+const int8_t &Files::getValueOfIsFavorite() const noexcept
+{
     static const int8_t defaultValue = int8_t();
-    if (isFavorite_) {
+    if(isFavorite_)
         return *isFavorite_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<int8_t>& Files::getIsFavorite() const noexcept {
+const std::shared_ptr<int8_t> &Files::getIsFavorite() const noexcept
+{
     return isFavorite_;
 }
-
-void Files::setIsFavorite(const int8_t& pIsFavorite) noexcept {
+void Files::setIsFavorite(const int8_t &pIsFavorite) noexcept
+{
     isFavorite_ = std::make_shared<int8_t>(pIsFavorite);
     dirtyFlag_[9] = true;
 }
 
-const uint32_t& Files::getValueOfDownloadCount() const noexcept {
+const uint32_t &Files::getValueOfDownloadCount() const noexcept
+{
     static const uint32_t defaultValue = uint32_t();
-    if (downloadCount_) {
+    if(downloadCount_)
         return *downloadCount_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<uint32_t>& Files::getDownloadCount() const noexcept {
+const std::shared_ptr<uint32_t> &Files::getDownloadCount() const noexcept
+{
     return downloadCount_;
 }
-
-void Files::setDownloadCount(const uint32_t& pDownloadCount) noexcept {
+void Files::setDownloadCount(const uint32_t &pDownloadCount) noexcept
+{
     downloadCount_ = std::make_shared<uint32_t>(pDownloadCount);
     dirtyFlag_[10] = true;
 }
 
-const ::trantor::Date& Files::getValueOfLastAccessedAt() const noexcept {
+const ::trantor::Date &Files::getValueOfLastAccessedAt() const noexcept
+{
     static const ::trantor::Date defaultValue = ::trantor::Date();
-    if (lastAccessedAt_) {
+    if(lastAccessedAt_)
         return *lastAccessedAt_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<::trantor::Date>& Files::getLastAccessedAt() const noexcept {
+const std::shared_ptr<::trantor::Date> &Files::getLastAccessedAt() const noexcept
+{
     return lastAccessedAt_;
 }
-
-void Files::setLastAccessedAt(const ::trantor::Date& pLastAccessedAt) noexcept {
+void Files::setLastAccessedAt(const ::trantor::Date &pLastAccessedAt) noexcept
+{
     lastAccessedAt_ = std::make_shared<::trantor::Date>(pLastAccessedAt);
     dirtyFlag_[11] = true;
 }
-
-void Files::setLastAccessedAtToNull() noexcept {
+void Files::setLastAccessedAtToNull() noexcept
+{
     lastAccessedAt_.reset();
     dirtyFlag_[11] = true;
 }
 
-const ::trantor::Date& Files::getValueOfCreatedAt() const noexcept {
+const ::trantor::Date &Files::getValueOfCreatedAt() const noexcept
+{
     static const ::trantor::Date defaultValue = ::trantor::Date();
-    if (createdAt_) {
+    if(createdAt_)
         return *createdAt_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<::trantor::Date>& Files::getCreatedAt() const noexcept {
+const std::shared_ptr<::trantor::Date> &Files::getCreatedAt() const noexcept
+{
     return createdAt_;
 }
-
-void Files::setCreatedAt(const ::trantor::Date& pCreatedAt) noexcept {
+void Files::setCreatedAt(const ::trantor::Date &pCreatedAt) noexcept
+{
     createdAt_ = std::make_shared<::trantor::Date>(pCreatedAt);
     dirtyFlag_[12] = true;
 }
 
-const ::trantor::Date& Files::getValueOfUpdatedAt() const noexcept {
+const ::trantor::Date &Files::getValueOfUpdatedAt() const noexcept
+{
     static const ::trantor::Date defaultValue = ::trantor::Date();
-    if (updatedAt_) {
+    if(updatedAt_)
         return *updatedAt_;
-    }
     return defaultValue;
 }
-
-const std::shared_ptr<::trantor::Date>& Files::getUpdatedAt() const noexcept {
+const std::shared_ptr<::trantor::Date> &Files::getUpdatedAt() const noexcept
+{
     return updatedAt_;
 }
-
-void Files::setUpdatedAt(const ::trantor::Date& pUpdatedAt) noexcept {
+void Files::setUpdatedAt(const ::trantor::Date &pUpdatedAt) noexcept
+{
     updatedAt_ = std::make_shared<::trantor::Date>(pUpdatedAt);
     dirtyFlag_[13] = true;
 }
 
-void Files::updateId(const uint64_t id) {
+void Files::updateId(const uint64_t id)
+{
     id_ = std::make_shared<uint64_t>(id);
 }
 
-const std::vector<std::string>& Files::insertColumns() noexcept {
-    static const std::vector<std::string> inCols = {
+const std::vector<std::string> &Files::insertColumns() noexcept
+{
+    static const std::vector<std::string> inCols={
         "user_id",
         "content_id",
         "folder_id",
@@ -1090,1045 +1296,1382 @@ const std::vector<std::string>& Files::insertColumns() noexcept {
     return inCols;
 }
 
-void Files::outputArgs(drogon::orm::internal::SqlBinder& binder) const {
-    if (dirtyFlag_[1]) {
-        if (getUserId()) {
+void Files::outputArgs(drogon::orm::internal::SqlBinder &binder) const
+{
+    if(dirtyFlag_[1])
+    {
+        if(getUserId())
+        {
             binder << getValueOfUserId();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[2]) {
-        if (getContentId()) {
+    if(dirtyFlag_[2])
+    {
+        if(getContentId())
+        {
             binder << getValueOfContentId();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[3]) {
-        if (getFolderId()) {
+    if(dirtyFlag_[3])
+    {
+        if(getFolderId())
+        {
             binder << getValueOfFolderId();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[4]) {
-        if (getName()) {
+    if(dirtyFlag_[4])
+    {
+        if(getName())
+        {
             binder << getValueOfName();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[5]) {
-        if (getExtension()) {
+    if(dirtyFlag_[5])
+    {
+        if(getExtension())
+        {
             binder << getValueOfExtension();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[6]) {
-        if (getSize()) {
+    if(dirtyFlag_[6])
+    {
+        if(getSize())
+        {
             binder << getValueOfSize();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[7]) {
-        if (getMimeType()) {
+    if(dirtyFlag_[7])
+    {
+        if(getMimeType())
+        {
             binder << getValueOfMimeType();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[8]) {
-        if (getPath()) {
+    if(dirtyFlag_[8])
+    {
+        if(getPath())
+        {
             binder << getValueOfPath();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[9]) {
-        if (getIsFavorite()) {
+    if(dirtyFlag_[9])
+    {
+        if(getIsFavorite())
+        {
             binder << getValueOfIsFavorite();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[10]) {
-        if (getDownloadCount()) {
+    if(dirtyFlag_[10])
+    {
+        if(getDownloadCount())
+        {
             binder << getValueOfDownloadCount();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[11]) {
-        if (getLastAccessedAt()) {
+    if(dirtyFlag_[11])
+    {
+        if(getLastAccessedAt())
+        {
             binder << getValueOfLastAccessedAt();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[12]) {
-        if (getCreatedAt()) {
+    if(dirtyFlag_[12])
+    {
+        if(getCreatedAt())
+        {
             binder << getValueOfCreatedAt();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[13]) {
-        if (getUpdatedAt()) {
+    if(dirtyFlag_[13])
+    {
+        if(getUpdatedAt())
+        {
             binder << getValueOfUpdatedAt();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
 }
 
-const std::vector<std::string> Files::updateColumns() const {
+const std::vector<std::string> Files::updateColumns() const
+{
     std::vector<std::string> ret;
-    if (dirtyFlag_[1]) {
+    if(dirtyFlag_[1])
+    {
         ret.push_back(getColumnName(1));
     }
-    if (dirtyFlag_[2]) {
+    if(dirtyFlag_[2])
+    {
         ret.push_back(getColumnName(2));
     }
-    if (dirtyFlag_[3]) {
+    if(dirtyFlag_[3])
+    {
         ret.push_back(getColumnName(3));
     }
-    if (dirtyFlag_[4]) {
+    if(dirtyFlag_[4])
+    {
         ret.push_back(getColumnName(4));
     }
-    if (dirtyFlag_[5]) {
+    if(dirtyFlag_[5])
+    {
         ret.push_back(getColumnName(5));
     }
-    if (dirtyFlag_[6]) {
+    if(dirtyFlag_[6])
+    {
         ret.push_back(getColumnName(6));
     }
-    if (dirtyFlag_[7]) {
+    if(dirtyFlag_[7])
+    {
         ret.push_back(getColumnName(7));
     }
-    if (dirtyFlag_[8]) {
+    if(dirtyFlag_[8])
+    {
         ret.push_back(getColumnName(8));
     }
-    if (dirtyFlag_[9]) {
+    if(dirtyFlag_[9])
+    {
         ret.push_back(getColumnName(9));
     }
-    if (dirtyFlag_[10]) {
+    if(dirtyFlag_[10])
+    {
         ret.push_back(getColumnName(10));
     }
-    if (dirtyFlag_[11]) {
+    if(dirtyFlag_[11])
+    {
         ret.push_back(getColumnName(11));
     }
-    if (dirtyFlag_[12]) {
+    if(dirtyFlag_[12])
+    {
         ret.push_back(getColumnName(12));
     }
-    if (dirtyFlag_[13]) {
+    if(dirtyFlag_[13])
+    {
         ret.push_back(getColumnName(13));
     }
     return ret;
 }
 
-void Files::updateArgs(drogon::orm::internal::SqlBinder& binder) const {
-    if (dirtyFlag_[1]) {
-        if (getUserId()) {
+void Files::updateArgs(drogon::orm::internal::SqlBinder &binder) const
+{
+    if(dirtyFlag_[1])
+    {
+        if(getUserId())
+        {
             binder << getValueOfUserId();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[2]) {
-        if (getContentId()) {
+    if(dirtyFlag_[2])
+    {
+        if(getContentId())
+        {
             binder << getValueOfContentId();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[3]) {
-        if (getFolderId()) {
+    if(dirtyFlag_[3])
+    {
+        if(getFolderId())
+        {
             binder << getValueOfFolderId();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[4]) {
-        if (getName()) {
+    if(dirtyFlag_[4])
+    {
+        if(getName())
+        {
             binder << getValueOfName();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[5]) {
-        if (getExtension()) {
+    if(dirtyFlag_[5])
+    {
+        if(getExtension())
+        {
             binder << getValueOfExtension();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[6]) {
-        if (getSize()) {
+    if(dirtyFlag_[6])
+    {
+        if(getSize())
+        {
             binder << getValueOfSize();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[7]) {
-        if (getMimeType()) {
+    if(dirtyFlag_[7])
+    {
+        if(getMimeType())
+        {
             binder << getValueOfMimeType();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[8]) {
-        if (getPath()) {
+    if(dirtyFlag_[8])
+    {
+        if(getPath())
+        {
             binder << getValueOfPath();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[9]) {
-        if (getIsFavorite()) {
+    if(dirtyFlag_[9])
+    {
+        if(getIsFavorite())
+        {
             binder << getValueOfIsFavorite();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[10]) {
-        if (getDownloadCount()) {
+    if(dirtyFlag_[10])
+    {
+        if(getDownloadCount())
+        {
             binder << getValueOfDownloadCount();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[11]) {
-        if (getLastAccessedAt()) {
+    if(dirtyFlag_[11])
+    {
+        if(getLastAccessedAt())
+        {
             binder << getValueOfLastAccessedAt();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[12]) {
-        if (getCreatedAt()) {
+    if(dirtyFlag_[12])
+    {
+        if(getCreatedAt())
+        {
             binder << getValueOfCreatedAt();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
-    if (dirtyFlag_[13]) {
-        if (getUpdatedAt()) {
+    if(dirtyFlag_[13])
+    {
+        if(getUpdatedAt())
+        {
             binder << getValueOfUpdatedAt();
-        } else {
+        }
+        else
+        {
             binder << nullptr;
         }
     }
 }
-
-Json::Value Files::toJson() const {
+Json::Value Files::toJson() const
+{
     Json::Value ret;
-    if (getId()) {
-        ret["id"] = (Json::UInt64)getValueOfId();
-    } else {
-        ret["id"] = Json::Value();
+    if(getId())
+    {
+        ret["id"]=(Json::UInt64)getValueOfId();
     }
-    if (getUserId()) {
-        ret["user_id"] = (Json::UInt64)getValueOfUserId();
-    } else {
-        ret["user_id"] = Json::Value();
+    else
+    {
+        ret["id"]=Json::Value();
     }
-    if (getContentId()) {
-        ret["content_id"] = (Json::UInt64)getValueOfContentId();
-    } else {
-        ret["content_id"] = Json::Value();
+    if(getUserId())
+    {
+        ret["user_id"]=(Json::UInt64)getValueOfUserId();
     }
-    if (getFolderId()) {
-        ret["folder_id"] = (Json::UInt64)getValueOfFolderId();
-    } else {
-        ret["folder_id"] = Json::Value();
+    else
+    {
+        ret["user_id"]=Json::Value();
     }
-    if (getName()) {
-        ret["name"] = getValueOfName();
-    } else {
-        ret["name"] = Json::Value();
+    if(getContentId())
+    {
+        ret["content_id"]=(Json::UInt64)getValueOfContentId();
     }
-    if (getExtension()) {
-        ret["extension"] = getValueOfExtension();
-    } else {
-        ret["extension"] = Json::Value();
+    else
+    {
+        ret["content_id"]=Json::Value();
     }
-    if (getSize()) {
-        ret["size"] = (Json::UInt64)getValueOfSize();
-    } else {
-        ret["size"] = Json::Value();
+    if(getFolderId())
+    {
+        ret["folder_id"]=(Json::UInt64)getValueOfFolderId();
     }
-    if (getMimeType()) {
-        ret["mime_type"] = getValueOfMimeType();
-    } else {
-        ret["mime_type"] = Json::Value();
+    else
+    {
+        ret["folder_id"]=Json::Value();
     }
-    if (getPath()) {
-        ret["path"] = getValueOfPath();
-    } else {
-        ret["path"] = Json::Value();
+    if(getName())
+    {
+        ret["name"]=getValueOfName();
     }
-    if (getIsFavorite()) {
-        ret["is_favorite"] = getValueOfIsFavorite();
-    } else {
-        ret["is_favorite"] = Json::Value();
+    else
+    {
+        ret["name"]=Json::Value();
     }
-    if (getDownloadCount()) {
-        ret["download_count"] = getValueOfDownloadCount();
-    } else {
-        ret["download_count"] = Json::Value();
+    if(getExtension())
+    {
+        ret["extension"]=getValueOfExtension();
     }
-    if (getLastAccessedAt()) {
-        ret["last_accessed_at"] = getLastAccessedAt()->toDbStringLocal();
-    } else {
-        ret["last_accessed_at"] = Json::Value();
+    else
+    {
+        ret["extension"]=Json::Value();
     }
-    if (getCreatedAt()) {
-        ret["created_at"] = getCreatedAt()->toDbStringLocal();
-    } else {
-        ret["created_at"] = Json::Value();
+    if(getSize())
+    {
+        ret["size"]=(Json::UInt64)getValueOfSize();
     }
-    if (getUpdatedAt()) {
-        ret["updated_at"] = getUpdatedAt()->toDbStringLocal();
-    } else {
-        ret["updated_at"] = Json::Value();
+    else
+    {
+        ret["size"]=Json::Value();
+    }
+    if(getMimeType())
+    {
+        ret["mime_type"]=getValueOfMimeType();
+    }
+    else
+    {
+        ret["mime_type"]=Json::Value();
+    }
+    if(getPath())
+    {
+        ret["path"]=getValueOfPath();
+    }
+    else
+    {
+        ret["path"]=Json::Value();
+    }
+    if(getIsFavorite())
+    {
+        ret["is_favorite"]=getValueOfIsFavorite();
+    }
+    else
+    {
+        ret["is_favorite"]=Json::Value();
+    }
+    if(getDownloadCount())
+    {
+        ret["download_count"]=getValueOfDownloadCount();
+    }
+    else
+    {
+        ret["download_count"]=Json::Value();
+    }
+    if(getLastAccessedAt())
+    {
+        ret["last_accessed_at"]=getLastAccessedAt()->toDbStringLocal();
+    }
+    else
+    {
+        ret["last_accessed_at"]=Json::Value();
+    }
+    if(getCreatedAt())
+    {
+        ret["created_at"]=getCreatedAt()->toDbStringLocal();
+    }
+    else
+    {
+        ret["created_at"]=Json::Value();
+    }
+    if(getUpdatedAt())
+    {
+        ret["updated_at"]=getUpdatedAt()->toDbStringLocal();
+    }
+    else
+    {
+        ret["updated_at"]=Json::Value();
     }
     return ret;
 }
 
-std::string Files::toString() const {
+std::string Files::toString() const
+{
     return toJson().toStyledString();
 }
 
 Json::Value Files::toMasqueradedJson(
-    const std::vector<std::string>& pMasqueradingVector
-) const {
+    const std::vector<std::string> &pMasqueradingVector) const
+{
     Json::Value ret;
-    if (pMasqueradingVector.size() == 14) {
-        if (!pMasqueradingVector[0].empty()) {
-            if (getId()) {
-                ret[pMasqueradingVector[0]] = (Json::UInt64)getValueOfId();
-            } else {
-                ret[pMasqueradingVector[0]] = Json::Value();
+    if(pMasqueradingVector.size() == 14)
+    {
+        if(!pMasqueradingVector[0].empty())
+        {
+            if(getId())
+            {
+                ret[pMasqueradingVector[0]]=(Json::UInt64)getValueOfId();
+            }
+            else
+            {
+                ret[pMasqueradingVector[0]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[1].empty()) {
-            if (getUserId()) {
-                ret[pMasqueradingVector[1]] = (Json::UInt64)getValueOfUserId();
-            } else {
-                ret[pMasqueradingVector[1]] = Json::Value();
+        if(!pMasqueradingVector[1].empty())
+        {
+            if(getUserId())
+            {
+                ret[pMasqueradingVector[1]]=(Json::UInt64)getValueOfUserId();
+            }
+            else
+            {
+                ret[pMasqueradingVector[1]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[2].empty()) {
-            if (getContentId()) {
-                ret[pMasqueradingVector[2]] = (Json::UInt64)getValueOfContentId();
-            } else {
-                ret[pMasqueradingVector[2]] = Json::Value();
+        if(!pMasqueradingVector[2].empty())
+        {
+            if(getContentId())
+            {
+                ret[pMasqueradingVector[2]]=(Json::UInt64)getValueOfContentId();
+            }
+            else
+            {
+                ret[pMasqueradingVector[2]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[3].empty()) {
-            if (getFolderId()) {
-                ret[pMasqueradingVector[3]] = (Json::UInt64)getValueOfFolderId();
-            } else {
-                ret[pMasqueradingVector[3]] = Json::Value();
+        if(!pMasqueradingVector[3].empty())
+        {
+            if(getFolderId())
+            {
+                ret[pMasqueradingVector[3]]=(Json::UInt64)getValueOfFolderId();
+            }
+            else
+            {
+                ret[pMasqueradingVector[3]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[4].empty()) {
-            if (getName()) {
-                ret[pMasqueradingVector[4]] = getValueOfName();
-            } else {
-                ret[pMasqueradingVector[4]] = Json::Value();
+        if(!pMasqueradingVector[4].empty())
+        {
+            if(getName())
+            {
+                ret[pMasqueradingVector[4]]=getValueOfName();
+            }
+            else
+            {
+                ret[pMasqueradingVector[4]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[5].empty()) {
-            if (getExtension()) {
-                ret[pMasqueradingVector[5]] = getValueOfExtension();
-            } else {
-                ret[pMasqueradingVector[5]] = Json::Value();
+        if(!pMasqueradingVector[5].empty())
+        {
+            if(getExtension())
+            {
+                ret[pMasqueradingVector[5]]=getValueOfExtension();
+            }
+            else
+            {
+                ret[pMasqueradingVector[5]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[6].empty()) {
-            if (getSize()) {
-                ret[pMasqueradingVector[6]] = (Json::UInt64)getValueOfSize();
-            } else {
-                ret[pMasqueradingVector[6]] = Json::Value();
+        if(!pMasqueradingVector[6].empty())
+        {
+            if(getSize())
+            {
+                ret[pMasqueradingVector[6]]=(Json::UInt64)getValueOfSize();
+            }
+            else
+            {
+                ret[pMasqueradingVector[6]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[7].empty()) {
-            if (getMimeType()) {
-                ret[pMasqueradingVector[7]] = getValueOfMimeType();
-            } else {
-                ret[pMasqueradingVector[7]] = Json::Value();
+        if(!pMasqueradingVector[7].empty())
+        {
+            if(getMimeType())
+            {
+                ret[pMasqueradingVector[7]]=getValueOfMimeType();
+            }
+            else
+            {
+                ret[pMasqueradingVector[7]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[8].empty()) {
-            if (getPath()) {
-                ret[pMasqueradingVector[8]] = getValueOfPath();
-            } else {
-                ret[pMasqueradingVector[8]] = Json::Value();
+        if(!pMasqueradingVector[8].empty())
+        {
+            if(getPath())
+            {
+                ret[pMasqueradingVector[8]]=getValueOfPath();
+            }
+            else
+            {
+                ret[pMasqueradingVector[8]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[9].empty()) {
-            if (getIsFavorite()) {
-                ret[pMasqueradingVector[9]] = getValueOfIsFavorite();
-            } else {
-                ret[pMasqueradingVector[9]] = Json::Value();
+        if(!pMasqueradingVector[9].empty())
+        {
+            if(getIsFavorite())
+            {
+                ret[pMasqueradingVector[9]]=getValueOfIsFavorite();
+            }
+            else
+            {
+                ret[pMasqueradingVector[9]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[10].empty()) {
-            if (getDownloadCount()) {
-                ret[pMasqueradingVector[10]] = getValueOfDownloadCount();
-            } else {
-                ret[pMasqueradingVector[10]] = Json::Value();
+        if(!pMasqueradingVector[10].empty())
+        {
+            if(getDownloadCount())
+            {
+                ret[pMasqueradingVector[10]]=getValueOfDownloadCount();
+            }
+            else
+            {
+                ret[pMasqueradingVector[10]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[11].empty()) {
-            if (getLastAccessedAt()) {
-                ret[pMasqueradingVector[11]] = getLastAccessedAt()->toDbStringLocal();
-            } else {
-                ret[pMasqueradingVector[11]] = Json::Value();
+        if(!pMasqueradingVector[11].empty())
+        {
+            if(getLastAccessedAt())
+            {
+                ret[pMasqueradingVector[11]]=getLastAccessedAt()->toDbStringLocal();
+            }
+            else
+            {
+                ret[pMasqueradingVector[11]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[12].empty()) {
-            if (getCreatedAt()) {
-                ret[pMasqueradingVector[12]] = getCreatedAt()->toDbStringLocal();
-            } else {
-                ret[pMasqueradingVector[12]] = Json::Value();
+        if(!pMasqueradingVector[12].empty())
+        {
+            if(getCreatedAt())
+            {
+                ret[pMasqueradingVector[12]]=getCreatedAt()->toDbStringLocal();
+            }
+            else
+            {
+                ret[pMasqueradingVector[12]]=Json::Value();
             }
         }
-        if (!pMasqueradingVector[13].empty()) {
-            if (getUpdatedAt()) {
-                ret[pMasqueradingVector[13]] = getUpdatedAt()->toDbStringLocal();
-            } else {
-                ret[pMasqueradingVector[13]] = Json::Value();
+        if(!pMasqueradingVector[13].empty())
+        {
+            if(getUpdatedAt())
+            {
+                ret[pMasqueradingVector[13]]=getUpdatedAt()->toDbStringLocal();
+            }
+            else
+            {
+                ret[pMasqueradingVector[13]]=Json::Value();
             }
         }
         return ret;
     }
     LOG_ERROR << "Masquerade failed";
-    if (getId()) {
-        ret["id"] = (Json::UInt64)getValueOfId();
-    } else {
-        ret["id"] = Json::Value();
+    if(getId())
+    {
+        ret["id"]=(Json::UInt64)getValueOfId();
     }
-    if (getUserId()) {
-        ret["user_id"] = (Json::UInt64)getValueOfUserId();
-    } else {
-        ret["user_id"] = Json::Value();
+    else
+    {
+        ret["id"]=Json::Value();
     }
-    if (getContentId()) {
-        ret["content_id"] = (Json::UInt64)getValueOfContentId();
-    } else {
-        ret["content_id"] = Json::Value();
+    if(getUserId())
+    {
+        ret["user_id"]=(Json::UInt64)getValueOfUserId();
     }
-    if (getFolderId()) {
-        ret["folder_id"] = (Json::UInt64)getValueOfFolderId();
-    } else {
-        ret["folder_id"] = Json::Value();
+    else
+    {
+        ret["user_id"]=Json::Value();
     }
-    if (getName()) {
-        ret["name"] = getValueOfName();
-    } else {
-        ret["name"] = Json::Value();
+    if(getContentId())
+    {
+        ret["content_id"]=(Json::UInt64)getValueOfContentId();
     }
-    if (getExtension()) {
-        ret["extension"] = getValueOfExtension();
-    } else {
-        ret["extension"] = Json::Value();
+    else
+    {
+        ret["content_id"]=Json::Value();
     }
-    if (getSize()) {
-        ret["size"] = (Json::UInt64)getValueOfSize();
-    } else {
-        ret["size"] = Json::Value();
+    if(getFolderId())
+    {
+        ret["folder_id"]=(Json::UInt64)getValueOfFolderId();
     }
-    if (getMimeType()) {
-        ret["mime_type"] = getValueOfMimeType();
-    } else {
-        ret["mime_type"] = Json::Value();
+    else
+    {
+        ret["folder_id"]=Json::Value();
     }
-    if (getPath()) {
-        ret["path"] = getValueOfPath();
-    } else {
-        ret["path"] = Json::Value();
+    if(getName())
+    {
+        ret["name"]=getValueOfName();
     }
-    if (getIsFavorite()) {
-        ret["is_favorite"] = getValueOfIsFavorite();
-    } else {
-        ret["is_favorite"] = Json::Value();
+    else
+    {
+        ret["name"]=Json::Value();
     }
-    if (getDownloadCount()) {
-        ret["download_count"] = getValueOfDownloadCount();
-    } else {
-        ret["download_count"] = Json::Value();
+    if(getExtension())
+    {
+        ret["extension"]=getValueOfExtension();
     }
-    if (getLastAccessedAt()) {
-        ret["last_accessed_at"] = getLastAccessedAt()->toDbStringLocal();
-    } else {
-        ret["last_accessed_at"] = Json::Value();
+    else
+    {
+        ret["extension"]=Json::Value();
     }
-    if (getCreatedAt()) {
-        ret["created_at"] = getCreatedAt()->toDbStringLocal();
-    } else {
-        ret["created_at"] = Json::Value();
+    if(getSize())
+    {
+        ret["size"]=(Json::UInt64)getValueOfSize();
     }
-    if (getUpdatedAt()) {
-        ret["updated_at"] = getUpdatedAt()->toDbStringLocal();
-    } else {
-        ret["updated_at"] = Json::Value();
+    else
+    {
+        ret["size"]=Json::Value();
+    }
+    if(getMimeType())
+    {
+        ret["mime_type"]=getValueOfMimeType();
+    }
+    else
+    {
+        ret["mime_type"]=Json::Value();
+    }
+    if(getPath())
+    {
+        ret["path"]=getValueOfPath();
+    }
+    else
+    {
+        ret["path"]=Json::Value();
+    }
+    if(getIsFavorite())
+    {
+        ret["is_favorite"]=getValueOfIsFavorite();
+    }
+    else
+    {
+        ret["is_favorite"]=Json::Value();
+    }
+    if(getDownloadCount())
+    {
+        ret["download_count"]=getValueOfDownloadCount();
+    }
+    else
+    {
+        ret["download_count"]=Json::Value();
+    }
+    if(getLastAccessedAt())
+    {
+        ret["last_accessed_at"]=getLastAccessedAt()->toDbStringLocal();
+    }
+    else
+    {
+        ret["last_accessed_at"]=Json::Value();
+    }
+    if(getCreatedAt())
+    {
+        ret["created_at"]=getCreatedAt()->toDbStringLocal();
+    }
+    else
+    {
+        ret["created_at"]=Json::Value();
+    }
+    if(getUpdatedAt())
+    {
+        ret["updated_at"]=getUpdatedAt()->toDbStringLocal();
+    }
+    else
+    {
+        ret["updated_at"]=Json::Value();
     }
     return ret;
 }
 
-bool Files::validateJsonForCreation(const Json::Value& pJson, std::string& err) {
-    if (pJson.isMember("id")) {
-        if (!validJsonOfField(0, "id", pJson["id"], err, true)) {
+bool Files::validateJsonForCreation(const Json::Value &pJson, std::string &err)
+{
+    if(pJson.isMember("id"))
+    {
+        if(!validJsonOfField(0, "id", pJson["id"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("user_id")) {
-        if (!validJsonOfField(1, "user_id", pJson["user_id"], err, true)) {
+    if(pJson.isMember("user_id"))
+    {
+        if(!validJsonOfField(1, "user_id", pJson["user_id"], err, true))
             return false;
-        }
-    } else {
-        err = "The user_id column cannot be null";
+    }
+    else
+    {
+        err="The user_id column cannot be null";
         return false;
     }
-    if (pJson.isMember("content_id")) {
-        if (!validJsonOfField(2, "content_id", pJson["content_id"], err, true)) {
+    if(pJson.isMember("content_id"))
+    {
+        if(!validJsonOfField(2, "content_id", pJson["content_id"], err, true))
             return false;
-        }
-    } else {
-        err = "The content_id column cannot be null";
+    }
+    else
+    {
+        err="The content_id column cannot be null";
         return false;
     }
-    if (pJson.isMember("folder_id")) {
-        if (!validJsonOfField(3, "folder_id", pJson["folder_id"], err, true)) {
+    if(pJson.isMember("folder_id"))
+    {
+        if(!validJsonOfField(3, "folder_id", pJson["folder_id"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("name")) {
-        if (!validJsonOfField(4, "name", pJson["name"], err, true)) {
+    if(pJson.isMember("name"))
+    {
+        if(!validJsonOfField(4, "name", pJson["name"], err, true))
             return false;
-        }
-    } else {
-        err = "The name column cannot be null";
+    }
+    else
+    {
+        err="The name column cannot be null";
         return false;
     }
-    if (pJson.isMember("extension")) {
-        if (!validJsonOfField(5, "extension", pJson["extension"], err, true)) {
+    if(pJson.isMember("extension"))
+    {
+        if(!validJsonOfField(5, "extension", pJson["extension"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("size")) {
-        if (!validJsonOfField(6, "size", pJson["size"], err, true)) {
+    if(pJson.isMember("size"))
+    {
+        if(!validJsonOfField(6, "size", pJson["size"], err, true))
             return false;
-        }
-    } else {
-        err = "The size column cannot be null";
+    }
+    else
+    {
+        err="The size column cannot be null";
         return false;
     }
-    if (pJson.isMember("mime_type")) {
-        if (!validJsonOfField(7, "mime_type", pJson["mime_type"], err, true)) {
+    if(pJson.isMember("mime_type"))
+    {
+        if(!validJsonOfField(7, "mime_type", pJson["mime_type"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("path")) {
-        if (!validJsonOfField(8, "path", pJson["path"], err, true)) {
+    if(pJson.isMember("path"))
+    {
+        if(!validJsonOfField(8, "path", pJson["path"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("is_favorite")) {
-        if (!validJsonOfField(9, "is_favorite", pJson["is_favorite"], err, true)) {
+    if(pJson.isMember("is_favorite"))
+    {
+        if(!validJsonOfField(9, "is_favorite", pJson["is_favorite"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("download_count")) {
-        if (!validJsonOfField(10, "download_count", pJson["download_count"], err, true)) {
+    if(pJson.isMember("download_count"))
+    {
+        if(!validJsonOfField(10, "download_count", pJson["download_count"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("last_accessed_at")) {
-        if (!validJsonOfField(11, "last_accessed_at", pJson["last_accessed_at"], err, true)) {
+    if(pJson.isMember("last_accessed_at"))
+    {
+        if(!validJsonOfField(11, "last_accessed_at", pJson["last_accessed_at"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("created_at")) {
-        if (!validJsonOfField(12, "created_at", pJson["created_at"], err, true)) {
+    if(pJson.isMember("created_at"))
+    {
+        if(!validJsonOfField(12, "created_at", pJson["created_at"], err, true))
             return false;
-        }
     }
-    if (pJson.isMember("updated_at")) {
-        if (!validJsonOfField(13, "updated_at", pJson["updated_at"], err, true)) {
+    if(pJson.isMember("updated_at"))
+    {
+        if(!validJsonOfField(13, "updated_at", pJson["updated_at"], err, true))
             return false;
-        }
     }
     return true;
 }
-
-bool Files::validateMasqueradedJsonForCreation(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
-    if (pMasqueradingVector.size() != 14) {
+bool Files::validateMasqueradedJsonForCreation(const Json::Value &pJson,
+                                               const std::vector<std::string> &pMasqueradingVector,
+                                               std::string &err)
+{
+    if(pMasqueradingVector.size() != 14)
+    {
         err = "Bad masquerading vector";
         return false;
     }
     try {
-        if (!pMasqueradingVector[0].empty()) {
-            if (pJson.isMember(pMasqueradingVector[0])) {
-                if (!validJsonOfField(0, pMasqueradingVector[0], pJson[pMasqueradingVector[0]], err, true)) {
-                    return false;
-                }
-            }
+      if(!pMasqueradingVector[0].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[0]))
+          {
+              if(!validJsonOfField(0, pMasqueradingVector[0], pJson[pMasqueradingVector[0]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[1].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[1]))
+          {
+              if(!validJsonOfField(1, pMasqueradingVector[1], pJson[pMasqueradingVector[1]], err, true))
+                  return false;
+          }
+        else
+        {
+            err="The " + pMasqueradingVector[1] + " column cannot be null";
+            return false;
         }
-        if (!pMasqueradingVector[1].empty()) {
-            if (pJson.isMember(pMasqueradingVector[1])) {
-                if (!validJsonOfField(1, pMasqueradingVector[1], pJson[pMasqueradingVector[1]], err, true)) {
-                    return false;
-                }
-            } else {
-                err = "The " + pMasqueradingVector[1] + " column cannot be null";
-                return false;
-            }
+      }
+      if(!pMasqueradingVector[2].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[2]))
+          {
+              if(!validJsonOfField(2, pMasqueradingVector[2], pJson[pMasqueradingVector[2]], err, true))
+                  return false;
+          }
+        else
+        {
+            err="The " + pMasqueradingVector[2] + " column cannot be null";
+            return false;
         }
-        if (!pMasqueradingVector[2].empty()) {
-            if (pJson.isMember(pMasqueradingVector[2])) {
-                if (!validJsonOfField(2, pMasqueradingVector[2], pJson[pMasqueradingVector[2]], err, true)) {
-                    return false;
-                }
-            } else {
-                err = "The " + pMasqueradingVector[2] + " column cannot be null";
-                return false;
-            }
+      }
+      if(!pMasqueradingVector[3].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[3]))
+          {
+              if(!validJsonOfField(3, pMasqueradingVector[3], pJson[pMasqueradingVector[3]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[4].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[4]))
+          {
+              if(!validJsonOfField(4, pMasqueradingVector[4], pJson[pMasqueradingVector[4]], err, true))
+                  return false;
+          }
+        else
+        {
+            err="The " + pMasqueradingVector[4] + " column cannot be null";
+            return false;
         }
-        if (!pMasqueradingVector[3].empty()) {
-            if (pJson.isMember(pMasqueradingVector[3])) {
-                if (!validJsonOfField(3, pMasqueradingVector[3], pJson[pMasqueradingVector[3]], err, true)) {
-                    return false;
-                }
-            }
+      }
+      if(!pMasqueradingVector[5].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[5]))
+          {
+              if(!validJsonOfField(5, pMasqueradingVector[5], pJson[pMasqueradingVector[5]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[6].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[6]))
+          {
+              if(!validJsonOfField(6, pMasqueradingVector[6], pJson[pMasqueradingVector[6]], err, true))
+                  return false;
+          }
+        else
+        {
+            err="The " + pMasqueradingVector[6] + " column cannot be null";
+            return false;
         }
-        if (!pMasqueradingVector[4].empty()) {
-            if (pJson.isMember(pMasqueradingVector[4])) {
-                if (!validJsonOfField(4, pMasqueradingVector[4], pJson[pMasqueradingVector[4]], err, true)) {
-                    return false;
-                }
-            } else {
-                err = "The " + pMasqueradingVector[4] + " column cannot be null";
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[5].empty()) {
-            if (pJson.isMember(pMasqueradingVector[5])) {
-                if (!validJsonOfField(5, pMasqueradingVector[5], pJson[pMasqueradingVector[5]], err, true)) {
-                    return false;
-                }
-            }
-        }
-        if (!pMasqueradingVector[6].empty()) {
-            if (pJson.isMember(pMasqueradingVector[6])) {
-                if (!validJsonOfField(6, pMasqueradingVector[6], pJson[pMasqueradingVector[6]], err, true)) {
-                    return false;
-                }
-            } else {
-                err = "The " + pMasqueradingVector[6] + " column cannot be null";
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[7].empty()) {
-            if (pJson.isMember(pMasqueradingVector[7])) {
-                if (!validJsonOfField(7, pMasqueradingVector[7], pJson[pMasqueradingVector[7]], err, true)) {
-                    return false;
-                }
-            }
-        }
-        if (!pMasqueradingVector[8].empty()) {
-            if (pJson.isMember(pMasqueradingVector[8])) {
-                if (!validJsonOfField(8, pMasqueradingVector[8], pJson[pMasqueradingVector[8]], err, true)) {
-                    return false;
-                }
-            }
-        }
-        if (!pMasqueradingVector[9].empty()) {
-            if (pJson.isMember(pMasqueradingVector[9])) {
-                if (!validJsonOfField(9, pMasqueradingVector[9], pJson[pMasqueradingVector[9]], err, true)) {
-                    return false;
-                }
-            }
-        }
-        if (!pMasqueradingVector[10].empty()) {
-            if (pJson.isMember(pMasqueradingVector[10])) {
-                if (!validJsonOfField(10, pMasqueradingVector[10], pJson[pMasqueradingVector[10]], err, true)) {
-                    return false;
-                }
-            }
-        }
-        if (!pMasqueradingVector[11].empty()) {
-            if (pJson.isMember(pMasqueradingVector[11])) {
-                if (!validJsonOfField(11, pMasqueradingVector[11], pJson[pMasqueradingVector[11]], err, true)) {
-                    return false;
-                }
-            }
-        }
-        if (!pMasqueradingVector[12].empty()) {
-            if (pJson.isMember(pMasqueradingVector[12])) {
-                if (!validJsonOfField(12, pMasqueradingVector[12], pJson[pMasqueradingVector[12]], err, true)) {
-                    return false;
-                }
-            }
-        }
-        if (!pMasqueradingVector[13].empty()) {
-            if (pJson.isMember(pMasqueradingVector[13])) {
-                if (!validJsonOfField(13, pMasqueradingVector[13], pJson[pMasqueradingVector[13]], err, true)) {
-                    return false;
-                }
-            }
-        }
-    } catch (const Json::LogicError& e) {
-        err = e.what();
-        return false;
+      }
+      if(!pMasqueradingVector[7].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[7]))
+          {
+              if(!validJsonOfField(7, pMasqueradingVector[7], pJson[pMasqueradingVector[7]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[8].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[8]))
+          {
+              if(!validJsonOfField(8, pMasqueradingVector[8], pJson[pMasqueradingVector[8]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[9].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[9]))
+          {
+              if(!validJsonOfField(9, pMasqueradingVector[9], pJson[pMasqueradingVector[9]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[10].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[10]))
+          {
+              if(!validJsonOfField(10, pMasqueradingVector[10], pJson[pMasqueradingVector[10]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[11].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[11]))
+          {
+              if(!validJsonOfField(11, pMasqueradingVector[11], pJson[pMasqueradingVector[11]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[12].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[12]))
+          {
+              if(!validJsonOfField(12, pMasqueradingVector[12], pJson[pMasqueradingVector[12]], err, true))
+                  return false;
+          }
+      }
+      if(!pMasqueradingVector[13].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[13]))
+          {
+              if(!validJsonOfField(13, pMasqueradingVector[13], pJson[pMasqueradingVector[13]], err, true))
+                  return false;
+          }
+      }
+    }
+    catch(const Json::LogicError &e)
+    {
+      err = e.what();
+      return false;
     }
     return true;
 }
-
-bool Files::validateJsonForUpdate(const Json::Value& pJson, std::string& err) {
-    if (pJson.isMember("id")) {
-        if (!validJsonOfField(0, "id", pJson["id"], err, false)) {
+bool Files::validateJsonForUpdate(const Json::Value &pJson, std::string &err)
+{
+    if(pJson.isMember("id"))
+    {
+        if(!validJsonOfField(0, "id", pJson["id"], err, false))
             return false;
-        }
-    } else {
+    }
+    else
+    {
         err = "The value of primary key must be set in the json object for update";
         return false;
     }
-    if (pJson.isMember("user_id")) {
-        if (!validJsonOfField(1, "user_id", pJson["user_id"], err, false)) {
+    if(pJson.isMember("user_id"))
+    {
+        if(!validJsonOfField(1, "user_id", pJson["user_id"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("content_id")) {
-        if (!validJsonOfField(2, "content_id", pJson["content_id"], err, false)) {
+    if(pJson.isMember("content_id"))
+    {
+        if(!validJsonOfField(2, "content_id", pJson["content_id"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("folder_id")) {
-        if (!validJsonOfField(3, "folder_id", pJson["folder_id"], err, false)) {
+    if(pJson.isMember("folder_id"))
+    {
+        if(!validJsonOfField(3, "folder_id", pJson["folder_id"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("name")) {
-        if (!validJsonOfField(4, "name", pJson["name"], err, false)) {
+    if(pJson.isMember("name"))
+    {
+        if(!validJsonOfField(4, "name", pJson["name"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("extension")) {
-        if (!validJsonOfField(5, "extension", pJson["extension"], err, false)) {
+    if(pJson.isMember("extension"))
+    {
+        if(!validJsonOfField(5, "extension", pJson["extension"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("size")) {
-        if (!validJsonOfField(6, "size", pJson["size"], err, false)) {
+    if(pJson.isMember("size"))
+    {
+        if(!validJsonOfField(6, "size", pJson["size"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("mime_type")) {
-        if (!validJsonOfField(7, "mime_type", pJson["mime_type"], err, false)) {
+    if(pJson.isMember("mime_type"))
+    {
+        if(!validJsonOfField(7, "mime_type", pJson["mime_type"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("path")) {
-        if (!validJsonOfField(8, "path", pJson["path"], err, false)) {
+    if(pJson.isMember("path"))
+    {
+        if(!validJsonOfField(8, "path", pJson["path"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("is_favorite")) {
-        if (!validJsonOfField(9, "is_favorite", pJson["is_favorite"], err, false)) {
+    if(pJson.isMember("is_favorite"))
+    {
+        if(!validJsonOfField(9, "is_favorite", pJson["is_favorite"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("download_count")) {
-        if (!validJsonOfField(10, "download_count", pJson["download_count"], err, false)) {
+    if(pJson.isMember("download_count"))
+    {
+        if(!validJsonOfField(10, "download_count", pJson["download_count"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("last_accessed_at")) {
-        if (!validJsonOfField(11, "last_accessed_at", pJson["last_accessed_at"], err, false)) {
+    if(pJson.isMember("last_accessed_at"))
+    {
+        if(!validJsonOfField(11, "last_accessed_at", pJson["last_accessed_at"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("created_at")) {
-        if (!validJsonOfField(12, "created_at", pJson["created_at"], err, false)) {
+    if(pJson.isMember("created_at"))
+    {
+        if(!validJsonOfField(12, "created_at", pJson["created_at"], err, false))
             return false;
-        }
     }
-    if (pJson.isMember("updated_at")) {
-        if (!validJsonOfField(13, "updated_at", pJson["updated_at"], err, false)) {
+    if(pJson.isMember("updated_at"))
+    {
+        if(!validJsonOfField(13, "updated_at", pJson["updated_at"], err, false))
             return false;
-        }
     }
     return true;
 }
-
-bool Files::validateMasqueradedJsonForUpdate(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector, std::string& err) {
-    if (pMasqueradingVector.size() != 14) {
+bool Files::validateMasqueradedJsonForUpdate(const Json::Value &pJson,
+                                             const std::vector<std::string> &pMasqueradingVector,
+                                             std::string &err)
+{
+    if(pMasqueradingVector.size() != 14)
+    {
         err = "Bad masquerading vector";
         return false;
     }
     try {
-        if (!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0])) {
-            if (!validJsonOfField(0, pMasqueradingVector[0], pJson[pMasqueradingVector[0]], err, false)) {
-                return false;
-            }
-        } else {
-            err = "The value of primary key must be set in the json object for update";
-            return false;
-        }
-        if (!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1])) {
-            if (!validJsonOfField(1, pMasqueradingVector[1], pJson[pMasqueradingVector[1]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2])) {
-            if (!validJsonOfField(2, pMasqueradingVector[2], pJson[pMasqueradingVector[2]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3])) {
-            if (!validJsonOfField(3, pMasqueradingVector[3], pJson[pMasqueradingVector[3]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4])) {
-            if (!validJsonOfField(4, pMasqueradingVector[4], pJson[pMasqueradingVector[4]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5])) {
-            if (!validJsonOfField(5, pMasqueradingVector[5], pJson[pMasqueradingVector[5]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6])) {
-            if (!validJsonOfField(6, pMasqueradingVector[6], pJson[pMasqueradingVector[6]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7])) {
-            if (!validJsonOfField(7, pMasqueradingVector[7], pJson[pMasqueradingVector[7]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8])) {
-            if (!validJsonOfField(8, pMasqueradingVector[8], pJson[pMasqueradingVector[8]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9])) {
-            if (!validJsonOfField(9, pMasqueradingVector[9], pJson[pMasqueradingVector[9]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[10].empty() && pJson.isMember(pMasqueradingVector[10])) {
-            if (!validJsonOfField(10, pMasqueradingVector[10], pJson[pMasqueradingVector[10]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[11].empty() && pJson.isMember(pMasqueradingVector[11])) {
-            if (!validJsonOfField(11, pMasqueradingVector[11], pJson[pMasqueradingVector[11]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[12].empty() && pJson.isMember(pMasqueradingVector[12])) {
-            if (!validJsonOfField(12, pMasqueradingVector[12], pJson[pMasqueradingVector[12]], err, false)) {
-                return false;
-            }
-        }
-        if (!pMasqueradingVector[13].empty() && pJson.isMember(pMasqueradingVector[13])) {
-            if (!validJsonOfField(13, pMasqueradingVector[13], pJson[pMasqueradingVector[13]], err, false)) {
-                return false;
-            }
-        }
-    } catch (const Json::LogicError& e) {
-        err = e.what();
+      if(!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0]))
+      {
+          if(!validJsonOfField(0, pMasqueradingVector[0], pJson[pMasqueradingVector[0]], err, false))
+              return false;
+      }
+    else
+    {
+        err = "The value of primary key must be set in the json object for update";
         return false;
+    }
+      if(!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1]))
+      {
+          if(!validJsonOfField(1, pMasqueradingVector[1], pJson[pMasqueradingVector[1]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2]))
+      {
+          if(!validJsonOfField(2, pMasqueradingVector[2], pJson[pMasqueradingVector[2]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3]))
+      {
+          if(!validJsonOfField(3, pMasqueradingVector[3], pJson[pMasqueradingVector[3]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4]))
+      {
+          if(!validJsonOfField(4, pMasqueradingVector[4], pJson[pMasqueradingVector[4]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5]))
+      {
+          if(!validJsonOfField(5, pMasqueradingVector[5], pJson[pMasqueradingVector[5]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6]))
+      {
+          if(!validJsonOfField(6, pMasqueradingVector[6], pJson[pMasqueradingVector[6]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7]))
+      {
+          if(!validJsonOfField(7, pMasqueradingVector[7], pJson[pMasqueradingVector[7]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8]))
+      {
+          if(!validJsonOfField(8, pMasqueradingVector[8], pJson[pMasqueradingVector[8]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9]))
+      {
+          if(!validJsonOfField(9, pMasqueradingVector[9], pJson[pMasqueradingVector[9]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[10].empty() && pJson.isMember(pMasqueradingVector[10]))
+      {
+          if(!validJsonOfField(10, pMasqueradingVector[10], pJson[pMasqueradingVector[10]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[11].empty() && pJson.isMember(pMasqueradingVector[11]))
+      {
+          if(!validJsonOfField(11, pMasqueradingVector[11], pJson[pMasqueradingVector[11]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[12].empty() && pJson.isMember(pMasqueradingVector[12]))
+      {
+          if(!validJsonOfField(12, pMasqueradingVector[12], pJson[pMasqueradingVector[12]], err, false))
+              return false;
+      }
+      if(!pMasqueradingVector[13].empty() && pJson.isMember(pMasqueradingVector[13]))
+      {
+          if(!validJsonOfField(13, pMasqueradingVector[13], pJson[pMasqueradingVector[13]], err, false))
+              return false;
+      }
+    }
+    catch(const Json::LogicError &e)
+    {
+      err = e.what();
+      return false;
     }
     return true;
 }
-
-bool Files::validJsonOfField(size_t index, const std::string& fieldName, const Json::Value& pJson, std::string& err, bool isForCreation) {
-    switch (index) {
+bool Files::validJsonOfField(size_t index,
+                             const std::string &fieldName,
+                             const Json::Value &pJson,
+                             std::string &err,
+                             bool isForCreation)
+{
+    switch(index)
+    {
         case 0:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (isForCreation) {
-                err = "The automatic primary key cannot be set";
+            if(isForCreation)
+            {
+                err="The automatic primary key cannot be set";
                 return false;
             }
-            if (!pJson.isUInt64()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isUInt64())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         case 1:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isUInt64()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isUInt64())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         case 2:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isUInt64()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isUInt64())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         case 3:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isUInt64()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isUInt64())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         case 4:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if (pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                                            .from_bytes(pJson.asCString())
-                                            .size() > 255) {
-                err = "String length exceeds limit for the " +
-                      fieldName +
-                      " field (the maximum value is 255)";
+            if(pJson.isString() && std::string(pJson.asCString()).size() > 255)
+            {
+                err="String length exceeds limit for the " +
+                    fieldName +
+                    " field (the maximum value is 255)";
                 return false;
             }
             break;
         case 5:
-            if (pJson.isNull()) {
+            if(pJson.isNull())
+            {
                 return true;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if (pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                                            .from_bytes(pJson.asCString())
-                                            .size() > 32) {
-                err = "String length exceeds limit for the " +
-                      fieldName +
-                      " field (the maximum value is 32)";
+            if(pJson.isString() && std::string(pJson.asCString()).size() > 32)
+            {
+                err="String length exceeds limit for the " +
+                    fieldName +
+                    " field (the maximum value is 32)";
                 return false;
             }
             break;
         case 6:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isUInt64()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isUInt64())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         case 7:
-            if (pJson.isNull()) {
+            if(pJson.isNull())
+            {
                 return true;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if (pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                                            .from_bytes(pJson.asCString())
-                                            .size() > 128) {
-                err = "String length exceeds limit for the " +
-                      fieldName +
-                      " field (the maximum value is 128)";
+            if(pJson.isString() && std::string(pJson.asCString()).size() > 128)
+            {
+                err="String length exceeds limit for the " +
+                    fieldName +
+                    " field (the maximum value is 128)";
                 return false;
             }
             break;
         case 8:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if (pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                                            .from_bytes(pJson.asCString())
-                                            .size() > 4096) {
-                err = "String length exceeds limit for the " +
-                      fieldName +
-                      " field (the maximum value is 4096)";
+            if(pJson.isString() && std::string(pJson.asCString()).size() > 4096)
+            {
+                err="String length exceeds limit for the " +
+                    fieldName +
+                    " field (the maximum value is 4096)";
                 return false;
             }
             break;
         case 9:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isInt()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isInt())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         case 10:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isUInt()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isUInt())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         case 11:
-            if (pJson.isNull()) {
+            if(pJson.isNull())
+            {
                 return true;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         case 12:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         case 13:
-            if (pJson.isNull()) {
-                err = "The " + fieldName + " column cannot be null";
+            if(pJson.isNull())
+            {
+                err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if (!pJson.isString()) {
-                err = "Type error in the " + fieldName + " field";
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
                 return false;
             }
             break;
         default:
-            err = "Internal error in the server";
+            err="Internal error in the server";
             return false;
     }
     return true;

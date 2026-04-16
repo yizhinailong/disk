@@ -3088,8 +3088,7 @@ bool UploadTasks::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                .from_bytes(pJson.asCString()).size() > 64)
+            if(pJson.isString() && std::string(pJson.asCString()).size() > 64)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -3132,8 +3131,7 @@ bool UploadTasks::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                .from_bytes(pJson.asCString()).size() > 255)
+            if(pJson.isString() && std::string(pJson.asCString()).size() > 255)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -3223,8 +3221,7 @@ bool UploadTasks::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                .from_bytes(pJson.asCString()).size() > 512)
+            if(pJson.isString() && std::string(pJson.asCString()).size() > 512)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -3277,8 +3274,7 @@ bool UploadTasks::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                .from_bytes(pJson.asCString()).size() > 512)
+            if(pJson.isString() && std::string(pJson.asCString()).size() > 512)
             {
                 err="String length exceeds limit for the " +
                     fieldName +

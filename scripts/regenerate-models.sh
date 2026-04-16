@@ -120,9 +120,10 @@ regenerate_models() {
     log_info "Regenerating models using drogon_ctl..."
     log_info "Config: $MODELS_DIR/model.json"
 
-    drogon_ctl create model "$MODELS_DIR"
+    log_info "Cleaning stale generated files (.cc/.h)..."
+    rm -f "$MODELS_DIR"/*.cc "$MODELS_DIR"/*.h
 
-    if [[ $? -ne 0 ]]; then
+    if ! drogon_ctl create model "$MODELS_DIR"; then
         log_error "Model generation failed"
         return 1
     fi
@@ -130,14 +131,29 @@ regenerate_models() {
     log_info "✓ Models regenerated successfully"
 
     echo ""
-    log_info "Applying post-generation patch for deprecated UTF conversion"
+    log_info "Normalizing file extensions (.cc → .cpp, .h → .hpp)..."
+    for cc_file in "$MODELS_DIR"/*.cc; do
+        [[ -f "$cc_file" ]] || continue
+        cpp_file="${cc_file%.cc}.cpp"
+        mv -f "$cc_file" "$cpp_file"
+    done
+    for h_file in "$MODELS_DIR"/*.h; do
+        [[ -f "$h_file" ]] || continue
+        hpp_file="${h_file%.h}.hpp"
+        mv -f "$h_file" "$hpp_file"
+    done
 
-    local deprecated_pattern='if \(pJson\.isString\(\) && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>\{\}[[:space:]]*\.from_bytes\(pJson\.asCString\(\)\)[[:space:]]*\.size\(\) > ([0-9]+)\) \{'
-    local replacement='if (pJson.isString() \&\& std::string(pJson.asCString()).size() > \1) {'
+    log_info "Updating include directives (.h → .hpp)..."
+    for model_cpp in "$MODELS_DIR"/*.cpp; do
+        [[ -f "$model_cpp" ]] || continue
+        sed -i 's/#include "\(.*\)\.h"/#include "\1.hpp"/g' "$model_cpp"
+    done
+
+    log_info "Applying post-generation patch for deprecated UTF conversion"
 
     for model_cpp in "$MODELS_DIR"/*.cpp; do
         [[ -f "$model_cpp" ]] || continue
-        sed -z -E -i "s@${deprecated_pattern}@${replacement}@g" "$model_cpp"
+        perl -0777 -i -pe 's/if\(pJson\.isString\(\) && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>\{\}\n\s+\.from_bytes\(pJson\.asCString\(\)\)\.size\(\) > (\d+)\)/if(pJson.isString() \&\& std::string(pJson.asCString()).size() > $1)/g' "$model_cpp"
     done
 
     if grep -q -E 'wstring_convert|codecvt_utf8_utf16' "$MODELS_DIR"/*.cpp; then

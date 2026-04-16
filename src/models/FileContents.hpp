@@ -6,295 +6,332 @@
  */
 
 #pragma once
-#include <drogon/orm/BaseBuilder.h>
-#include <drogon/orm/Field.h>
-#include <drogon/orm/Mapper.h>
 #include <drogon/orm/Result.h>
 #include <drogon/orm/Row.h>
+#include <drogon/orm/Field.h>
 #include <drogon/orm/SqlBinder.h>
+#include <drogon/orm/Mapper.h>
+#include <drogon/orm/BaseBuilder.h>
 #ifdef __cpp_impl_coroutine
-    #include <drogon/orm/CoroMapper.h>
+#include <drogon/orm/CoroMapper.h>
 #endif
-#include <iostream>
-#include <memory>
-#include <string>
-#include <string_view>
-#include <tuple>
-#include <vector>
-
-#include <json/json.h>
-#include <stdint.h>
 #include <trantor/utils/Date.h>
 #include <trantor/utils/Logger.h>
+#include <json/json.h>
+#include <string>
+#include <string_view>
+#include <memory>
+#include <vector>
+#include <tuple>
+#include <stdint.h>
+#include <iostream>
 
-namespace drogon {
-    namespace orm {
-        class DbClient;
-        using DbClientPtr = std::shared_ptr<DbClient>;
-    } // namespace orm
-} // namespace drogon
+namespace drogon
+{
+namespace orm
+{
+class DbClient;
+using DbClientPtr = std::shared_ptr<DbClient>;
+}
+}
+namespace drogon_model
+{
+namespace disk
+{
 
-namespace drogon_model {
-    namespace disk {
+class FileContents
+{
+  public:
+    struct Cols
+    {
+        static const std::string _id;
+        static const std::string _hash_md5;
+        static const std::string _hash_sha256;
+        static const std::string _size;
+        static const std::string _storage_path;
+        static const std::string _mime_type;
+        static const std::string _ref_count;
+        static const std::string _created_at;
+    };
 
-        class FileContents {
-        public:
-            struct Cols {
-                static const std::string _id;
-                static const std::string _hash_md5;
-                static const std::string _hash_sha256;
-                static const std::string _size;
-                static const std::string _storage_path;
-                static const std::string _mime_type;
-                static const std::string _ref_count;
-                static const std::string _created_at;
-            };
+    static const int primaryKeyNumber;
+    static const std::string tableName;
+    static const bool hasPrimaryKey;
+    static const std::string primaryKeyName;
+    using PrimaryKeyType = uint64_t;
+    const PrimaryKeyType &getPrimaryKey() const;
 
-            static const int primaryKeyNumber;
-            static const std::string tableName;
-            static const bool hasPrimaryKey;
-            static const std::string primaryKeyName;
-            using PrimaryKeyType = uint64_t;
-            const PrimaryKeyType& getPrimaryKey() const;
+    /**
+     * @brief constructor
+     * @param r One row of records in the SQL query result.
+     * @param indexOffset Set the offset to -1 to access all columns by column names,
+     * otherwise access all columns by offsets.
+     * @note If the SQL is not a style of 'select * from table_name ...' (select all
+     * columns by an asterisk), please set the offset to -1.
+     */
+    explicit FileContents(const drogon::orm::Row &r, const ssize_t indexOffset = 0) noexcept;
 
-            /**
-             * @brief constructor
-             * @param r One row of records in the SQL query result.
-             * @param indexOffset Set the offset to -1 to access all columns by column names,
-             * otherwise access all columns by offsets.
-             * @note If the SQL is not a style of 'select * from table_name ...' (select all
-             * columns by an asterisk), please set the offset to -1.
-             */
-            explicit FileContents(const drogon::orm::Row& r, const ssize_t indexOffset = 0) noexcept;
+    /**
+     * @brief constructor
+     * @param pJson The json object to construct a new instance.
+     */
+    explicit FileContents(const Json::Value &pJson) noexcept(false);
 
-            /**
-             * @brief constructor
-             * @param pJson The json object to construct a new instance.
-             */
-            explicit FileContents(const Json::Value& pJson) noexcept(false);
+    /**
+     * @brief constructor
+     * @param pJson The json object to construct a new instance.
+     * @param pMasqueradingVector The aliases of table columns.
+     */
+    FileContents(const Json::Value &pJson, const std::vector<std::string> &pMasqueradingVector) noexcept(false);
 
-            /**
-             * @brief constructor
-             * @param pJson The json object to construct a new instance.
-             * @param pMasqueradingVector The aliases of table columns.
-             */
-            FileContents(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector) noexcept(false);
+    FileContents() = default;
 
-            FileContents() = default;
+    void updateByJson(const Json::Value &pJson) noexcept(false);
+    void updateByMasqueradedJson(const Json::Value &pJson,
+                                 const std::vector<std::string> &pMasqueradingVector) noexcept(false);
+    static bool validateJsonForCreation(const Json::Value &pJson, std::string &err);
+    static bool validateMasqueradedJsonForCreation(const Json::Value &,
+                                                const std::vector<std::string> &pMasqueradingVector,
+                                                    std::string &err);
+    static bool validateJsonForUpdate(const Json::Value &pJson, std::string &err);
+    static bool validateMasqueradedJsonForUpdate(const Json::Value &,
+                                          const std::vector<std::string> &pMasqueradingVector,
+                                          std::string &err);
+    static bool validJsonOfField(size_t index,
+                          const std::string &fieldName,
+                          const Json::Value &pJson,
+                          std::string &err,
+                          bool isForCreation);
 
-            void updateByJson(const Json::Value& pJson) noexcept(false);
-            void updateByMasqueradedJson(const Json::Value& pJson, const std::vector<std::string>& pMasqueradingVector) noexcept(false);
-            static bool validateJsonForCreation(const Json::Value& pJson, std::string& err);
-            static bool validateMasqueradedJsonForCreation(const Json::Value&, const std::vector<std::string>& pMasqueradingVector, std::string& err);
-            static bool validateJsonForUpdate(const Json::Value& pJson, std::string& err);
-            static bool validateMasqueradedJsonForUpdate(const Json::Value&, const std::vector<std::string>& pMasqueradingVector, std::string& err);
-            static bool validJsonOfField(size_t index, const std::string& fieldName, const Json::Value& pJson, std::string& err, bool isForCreation);
+    /**  For column id  */
+    ///Get the value of the column id, returns the default value if the column is null
+    const uint64_t &getValueOfId() const noexcept;
+    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
+    const std::shared_ptr<uint64_t> &getId() const noexcept;
+    ///Set the value of the column id
+    void setId(const uint64_t &pId) noexcept;
 
-            /**  For column id  */
-            /// Get the value of the column id, returns the default value if the column is null
-            const uint64_t& getValueOfId() const noexcept;
-            /// Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-            const std::shared_ptr<uint64_t>& getId() const noexcept;
-            /// Set the value of the column id
-            void setId(const uint64_t& pId) noexcept;
+    /**  For column hash_md5  */
+    ///Get the value of the column hash_md5, returns the default value if the column is null
+    const std::string &getValueOfHashMd5() const noexcept;
+    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
+    const std::shared_ptr<std::string> &getHashMd5() const noexcept;
+    ///Set the value of the column hash_md5
+    void setHashMd5(const std::string &pHashMd5) noexcept;
+    void setHashMd5(std::string &&pHashMd5) noexcept;
 
-            /**  For column hash_md5  */
-            /// Get the value of the column hash_md5, returns the default value if the column is null
-            const std::string& getValueOfHashMd5() const noexcept;
-            /// Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-            const std::shared_ptr<std::string>& getHashMd5() const noexcept;
-            /// Set the value of the column hash_md5
-            void setHashMd5(const std::string& pHashMd5) noexcept;
-            void setHashMd5(std::string&& pHashMd5) noexcept;
+    /**  For column hash_sha256  */
+    ///Get the value of the column hash_sha256, returns the default value if the column is null
+    const std::string &getValueOfHashSha256() const noexcept;
+    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
+    const std::shared_ptr<std::string> &getHashSha256() const noexcept;
+    ///Set the value of the column hash_sha256
+    void setHashSha256(const std::string &pHashSha256) noexcept;
+    void setHashSha256(std::string &&pHashSha256) noexcept;
 
-            /**  For column hash_sha256  */
-            /// Get the value of the column hash_sha256, returns the default value if the column is null
-            const std::string& getValueOfHashSha256() const noexcept;
-            /// Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-            const std::shared_ptr<std::string>& getHashSha256() const noexcept;
-            /// Set the value of the column hash_sha256
-            void setHashSha256(const std::string& pHashSha256) noexcept;
-            void setHashSha256(std::string&& pHashSha256) noexcept;
+    /**  For column size  */
+    ///Get the value of the column size, returns the default value if the column is null
+    const uint64_t &getValueOfSize() const noexcept;
+    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
+    const std::shared_ptr<uint64_t> &getSize() const noexcept;
+    ///Set the value of the column size
+    void setSize(const uint64_t &pSize) noexcept;
 
-            /**  For column size  */
-            /// Get the value of the column size, returns the default value if the column is null
-            const uint64_t& getValueOfSize() const noexcept;
-            /// Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-            const std::shared_ptr<uint64_t>& getSize() const noexcept;
-            /// Set the value of the column size
-            void setSize(const uint64_t& pSize) noexcept;
+    /**  For column storage_path  */
+    ///Get the value of the column storage_path, returns the default value if the column is null
+    const std::string &getValueOfStoragePath() const noexcept;
+    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
+    const std::shared_ptr<std::string> &getStoragePath() const noexcept;
+    ///Set the value of the column storage_path
+    void setStoragePath(const std::string &pStoragePath) noexcept;
+    void setStoragePath(std::string &&pStoragePath) noexcept;
 
-            /**  For column storage_path  */
-            /// Get the value of the column storage_path, returns the default value if the column is null
-            const std::string& getValueOfStoragePath() const noexcept;
-            /// Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-            const std::shared_ptr<std::string>& getStoragePath() const noexcept;
-            /// Set the value of the column storage_path
-            void setStoragePath(const std::string& pStoragePath) noexcept;
-            void setStoragePath(std::string&& pStoragePath) noexcept;
+    /**  For column mime_type  */
+    ///Get the value of the column mime_type, returns the default value if the column is null
+    const std::string &getValueOfMimeType() const noexcept;
+    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
+    const std::shared_ptr<std::string> &getMimeType() const noexcept;
+    ///Set the value of the column mime_type
+    void setMimeType(const std::string &pMimeType) noexcept;
+    void setMimeType(std::string &&pMimeType) noexcept;
+    void setMimeTypeToNull() noexcept;
 
-            /**  For column mime_type  */
-            /// Get the value of the column mime_type, returns the default value if the column is null
-            const std::string& getValueOfMimeType() const noexcept;
-            /// Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-            const std::shared_ptr<std::string>& getMimeType() const noexcept;
-            /// Set the value of the column mime_type
-            void setMimeType(const std::string& pMimeType) noexcept;
-            void setMimeType(std::string&& pMimeType) noexcept;
-            void setMimeTypeToNull() noexcept;
+    /**  For column ref_count  */
+    ///Get the value of the column ref_count, returns the default value if the column is null
+    const uint32_t &getValueOfRefCount() const noexcept;
+    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
+    const std::shared_ptr<uint32_t> &getRefCount() const noexcept;
+    ///Set the value of the column ref_count
+    void setRefCount(const uint32_t &pRefCount) noexcept;
 
-            /**  For column ref_count  */
-            /// Get the value of the column ref_count, returns the default value if the column is null
-            const uint32_t& getValueOfRefCount() const noexcept;
-            /// Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-            const std::shared_ptr<uint32_t>& getRefCount() const noexcept;
-            /// Set the value of the column ref_count
-            void setRefCount(const uint32_t& pRefCount) noexcept;
+    /**  For column created_at  */
+    ///Get the value of the column created_at, returns the default value if the column is null
+    const ::trantor::Date &getValueOfCreatedAt() const noexcept;
+    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
+    const std::shared_ptr<::trantor::Date> &getCreatedAt() const noexcept;
+    ///Set the value of the column created_at
+    void setCreatedAt(const ::trantor::Date &pCreatedAt) noexcept;
 
-            /**  For column created_at  */
-            /// Get the value of the column created_at, returns the default value if the column is null
-            const ::trantor::Date& getValueOfCreatedAt() const noexcept;
-            /// Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-            const std::shared_ptr<::trantor::Date>& getCreatedAt() const noexcept;
-            /// Set the value of the column created_at
-            void setCreatedAt(const ::trantor::Date& pCreatedAt) noexcept;
 
-            static size_t getColumnNumber() noexcept { return 8; }
+    static size_t getColumnNumber() noexcept {  return 8;  }
+    static const std::string &getColumnName(size_t index) noexcept(false);
 
-            static const std::string& getColumnName(size_t index) noexcept(false);
-
-            Json::Value toJson() const;
-            std::string toString() const;
-            Json::Value toMasqueradedJson(const std::vector<std::string>& pMasqueradingVector) const;
-            /// Relationship interfaces
-
-        private:
-            friend drogon::orm::Mapper<FileContents>;
-            friend drogon::orm::BaseBuilder<FileContents, true, true>;
-            friend drogon::orm::BaseBuilder<FileContents, true, false>;
-            friend drogon::orm::BaseBuilder<FileContents, false, true>;
-            friend drogon::orm::BaseBuilder<FileContents, false, false>;
+    Json::Value toJson() const;
+    std::string toString() const;
+    Json::Value toMasqueradedJson(const std::vector<std::string> &pMasqueradingVector) const;
+    /// Relationship interfaces
+  private:
+    friend drogon::orm::Mapper<FileContents>;
+    friend drogon::orm::BaseBuilder<FileContents, true, true>;
+    friend drogon::orm::BaseBuilder<FileContents, true, false>;
+    friend drogon::orm::BaseBuilder<FileContents, false, true>;
+    friend drogon::orm::BaseBuilder<FileContents, false, false>;
 #ifdef __cpp_impl_coroutine
-            friend drogon::orm::CoroMapper<FileContents>;
+    friend drogon::orm::CoroMapper<FileContents>;
 #endif
-            static const std::vector<std::string>& insertColumns() noexcept;
-            void outputArgs(drogon::orm::internal::SqlBinder& binder) const;
-            const std::vector<std::string> updateColumns() const;
-            void updateArgs(drogon::orm::internal::SqlBinder& binder) const;
-            /// For mysql or sqlite3
-            void updateId(const uint64_t id);
-            std::shared_ptr<uint64_t> id_;
-            std::shared_ptr<std::string> hashMd5_;
-            std::shared_ptr<std::string> hashSha256_;
-            std::shared_ptr<uint64_t> size_;
-            std::shared_ptr<std::string> storagePath_;
-            std::shared_ptr<std::string> mimeType_;
-            std::shared_ptr<uint32_t> refCount_;
-            std::shared_ptr<::trantor::Date> createdAt_;
+    static const std::vector<std::string> &insertColumns() noexcept;
+    void outputArgs(drogon::orm::internal::SqlBinder &binder) const;
+    const std::vector<std::string> updateColumns() const;
+    void updateArgs(drogon::orm::internal::SqlBinder &binder) const;
+    ///For mysql or sqlite3
+    void updateId(const uint64_t id);
+    std::shared_ptr<uint64_t> id_;
+    std::shared_ptr<std::string> hashMd5_;
+    std::shared_ptr<std::string> hashSha256_;
+    std::shared_ptr<uint64_t> size_;
+    std::shared_ptr<std::string> storagePath_;
+    std::shared_ptr<std::string> mimeType_;
+    std::shared_ptr<uint32_t> refCount_;
+    std::shared_ptr<::trantor::Date> createdAt_;
+    struct MetaData
+    {
+        const std::string colName_;
+        const std::string colType_;
+        const std::string colDatabaseType_;
+        const ssize_t colLength_;
+        const bool isAutoVal_;
+        const bool isPrimaryKey_;
+        const bool notNull_;
+    };
+    static const std::vector<MetaData> metaData_;
+    bool dirtyFlag_[8]={ false };
+  public:
+    static const std::string &sqlForFindingByPrimaryKey()
+    {
+        static const std::string sql="select * from " + tableName + " where id = ?";
+        return sql;
+    }
 
-            struct MetaData {
-                const std::string colName_;
-                const std::string colType_;
-                const std::string colDatabaseType_;
-                const ssize_t colLength_;
-                const bool isAutoVal_;
-                const bool isPrimaryKey_;
-                const bool notNull_;
-            };
+    static const std::string &sqlForDeletingByPrimaryKey()
+    {
+        static const std::string sql="delete from " + tableName + " where id = ?";
+        return sql;
+    }
+    std::string sqlForInserting(bool &needSelection) const
+    {
+        std::string sql="insert into " + tableName + " (";
+        size_t parametersCount = 0;
+        needSelection = false;
+            sql += "id,";
+            ++parametersCount;
+        if(dirtyFlag_[1])
+        {
+            sql += "hash_md5,";
+            ++parametersCount;
+        }
+        if(dirtyFlag_[2])
+        {
+            sql += "hash_sha256,";
+            ++parametersCount;
+        }
+        if(dirtyFlag_[3])
+        {
+            sql += "size,";
+            ++parametersCount;
+        }
+        if(dirtyFlag_[4])
+        {
+            sql += "storage_path,";
+            ++parametersCount;
+        }
+        if(dirtyFlag_[5])
+        {
+            sql += "mime_type,";
+            ++parametersCount;
+        }
+        sql += "ref_count,";
+        ++parametersCount;
+        if(!dirtyFlag_[6])
+        {
+            needSelection=true;
+        }
+        sql += "created_at,";
+        ++parametersCount;
+        if(!dirtyFlag_[7])
+        {
+            needSelection=true;
+        }
+        needSelection=true;
+        if(parametersCount > 0)
+        {
+            sql[sql.length()-1]=')';
+            sql += " values (";
+        }
+        else
+            sql += ") values (";
 
-            static const std::vector<MetaData> metaData_;
-            bool dirtyFlag_[8] = { false };
+        sql +="default,";
+        if(dirtyFlag_[1])
+        {
+            sql.append("?,");
 
-        public:
-            static const std::string& sqlForFindingByPrimaryKey() {
-                static const std::string sql = "select * from " + tableName + " where id = ?";
-                return sql;
-            }
+        }
+        if(dirtyFlag_[2])
+        {
+            sql.append("?,");
 
-            static const std::string& sqlForDeletingByPrimaryKey() {
-                static const std::string sql = "delete from " + tableName + " where id = ?";
-                return sql;
-            }
+        }
+        if(dirtyFlag_[3])
+        {
+            sql.append("?,");
 
-            std::string sqlForInserting(bool& needSelection) const {
-                std::string sql = "insert into " + tableName + " (";
-                size_t parametersCount = 0;
-                needSelection = false;
-                sql += "id,";
-                ++parametersCount;
-                if (dirtyFlag_[1]) {
-                    sql += "hash_md5,";
-                    ++parametersCount;
-                }
-                if (dirtyFlag_[2]) {
-                    sql += "hash_sha256,";
-                    ++parametersCount;
-                }
-                if (dirtyFlag_[3]) {
-                    sql += "size,";
-                    ++parametersCount;
-                }
-                if (dirtyFlag_[4]) {
-                    sql += "storage_path,";
-                    ++parametersCount;
-                }
-                if (dirtyFlag_[5]) {
-                    sql += "mime_type,";
-                    ++parametersCount;
-                }
-                sql += "ref_count,";
-                ++parametersCount;
-                if (!dirtyFlag_[6]) {
-                    needSelection = true;
-                }
-                sql += "created_at,";
-                ++parametersCount;
-                if (!dirtyFlag_[7]) {
-                    needSelection = true;
-                }
-                needSelection = true;
-                if (parametersCount > 0) {
-                    sql[sql.length() - 1] = ')';
-                    sql += " values (";
-                } else {
-                    sql += ") values (";
-                }
+        }
+        if(dirtyFlag_[4])
+        {
+            sql.append("?,");
 
-                sql += "default,";
-                if (dirtyFlag_[1]) {
-                    sql.append("?,");
-                }
-                if (dirtyFlag_[2]) {
-                    sql.append("?,");
-                }
-                if (dirtyFlag_[3]) {
-                    sql.append("?,");
-                }
-                if (dirtyFlag_[4]) {
-                    sql.append("?,");
-                }
-                if (dirtyFlag_[5]) {
-                    sql.append("?,");
-                }
-                if (dirtyFlag_[6]) {
-                    sql.append("?,");
+        }
+        if(dirtyFlag_[5])
+        {
+            sql.append("?,");
 
-                } else {
-                    sql += "default,";
-                }
-                if (dirtyFlag_[7]) {
-                    sql.append("?,");
+        }
+        if(dirtyFlag_[6])
+        {
+            sql.append("?,");
 
-                } else {
-                    sql += "default,";
-                }
-                if (parametersCount > 0) {
-                    sql.resize(sql.length() - 1);
-                }
-                sql.append(1, ')');
-                LOG_TRACE << sql;
-                return sql;
-            }
-        };
-    } // namespace disk
+        }
+        else
+        {
+            sql +="default,";
+        }
+        if(dirtyFlag_[7])
+        {
+            sql.append("?,");
+
+        }
+        else
+        {
+            sql +="default,";
+        }
+        if(parametersCount > 0)
+        {
+            sql.resize(sql.length() - 1);
+        }
+        sql.append(1, ')');
+        LOG_TRACE << sql;
+        return sql;
+    }
+};
+} // namespace disk
 } // namespace drogon_model
