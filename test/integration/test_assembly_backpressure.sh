@@ -24,7 +24,12 @@
 #   TEST_PASS   - Test password (default: Admin123)
 #
 
-set -e
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/http.sh"
+source "$SCRIPT_DIR/lib/auth.sh"
 
 # Configuration
 BASE_URL="${BASE_URL:-http://localhost:8080}"
@@ -32,137 +37,8 @@ TEST_USER="${TEST_USER:-admin}"
 TEST_PASS="${TEST_PASS:-Admin123}"
 EVIDENCE_DIR=".sisyphus/evidence"
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
+# ─── Upload helpers ───────────────────────────────────────────────────────────
 
-# Test counters
-TESTS_PASSED=0
-TESTS_FAILED=0
-
-# ─── Helper functions ────────────────────────────────────────────────────────
-
-log_info() {
-    echo -e "${YELLOW}[INFO]${NC} $1"
-}
-
-log_pass() {
-    echo -e "${GREEN}[PASS]${NC} $1"
-    ((TESTS_PASSED++))
-}
-
-log_fail() {
-    echo -e "${RED}[FAIL]${NC} $1"
-    ((TESTS_FAILED++))
-}
-
-log_section() {
-    echo ""
-    echo -e "${CYAN}━━━ $1 ━━━${NC}"
-}
-
-# Save evidence
-save_evidence() {
-    local name="$1"
-    local data="$2"
-    echo "$data" > "$EVIDENCE_DIR/$name.json"
-    log_info "Evidence saved: $name.json"
-}
-
-# Extract JSON field value without jq (uses python3 or grep+sed)
-json_value() {
-    local json="$1"
-    local key="$2"
-    # Prefer python3 for robust JSON parsing
-    if command -v python3 &>/dev/null; then
-        python3 -c "
-import json, sys
-data = json.loads('''$json''')
-val = data
-for k in '$key'.split('.'):
-    if isinstance(val, dict) and k in val:
-        val = val[k]
-    else:
-        val = None
-        break
-if val is None:
-    print('')
-else:
-    print(str(val).lower() if isinstance(val, bool) else str(val))
-" 2>/dev/null
-    else
-        # Fallback: crude grep/sed extraction
-        echo "$json" | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | sed "s/.*:.*\"\\([^\"]*\\)\".*/\\1/" | head -1
-    fi
-}
-
-# Extract numeric JSON field
-json_int() {
-    local json="$1"
-    local key="$2"
-    if command -v python3 &>/dev/null; then
-        python3 -c "
-import json
-data = json.loads('''$json''')
-val = data
-for k in '$key'.split('.'):
-    if isinstance(val, dict) and k in val:
-        val = val[k]
-    else:
-        val = None
-        break
-print(val if val is not None else '')
-" 2>/dev/null
-    else
-        echo "$json" | grep -o "\"$key\"[[:space:]]*:[[:space:]]*[0-9]*" | grep -o '[0-9]*' | head -1
-    fi
-}
-
-# ─── Check server health ─────────────────────────────────────────────────────
-
-check_server() {
-    log_info "Checking server at $BASE_URL..."
-    local code
-    code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/auth/login" 2>/dev/null || echo "000")
-    if echo "$code" | grep -qE "400|401|405"; then
-        log_pass "Server is running"
-        return 0
-    else
-        log_fail "Server not responding (HTTP $code)"
-        return 1
-    fi
-}
-
-# ─── Login ───────────────────────────────────────────────────────────────────
-
-login() {
-    log_info "Logging in as $TEST_USER..."
-
-    local response
-    response=$(curl -s -X POST "$BASE_URL/api/auth/login" \
-        -H "Content-Type: application/json" \
-        -d "{\"account\":\"$TEST_USER\",\"password\":\"$TEST_PASS\"}")
-
-    TOKEN=$(json_value "$response" "data.access_token")
-
-    if [ -z "$TOKEN" ] || [ "$TOKEN" = "None" ] || [ "$TOKEN" = "null" ]; then
-        log_fail "Login failed"
-        echo "$response"
-        return 1
-    fi
-
-    log_pass "Login successful"
-    save_evidence "backpressure-login" "$response"
-    return 0
-}
-
-# ─── Create upload task ─────────────────────────────────────────────────────
-
-# Creates an upload task and returns the upload_id
-# Usage: UPLOAD_ID=$(create_upload_task "testfile_$RANDOM.pdf" 1024 "abc123def456789012345678901234ab")
 create_upload_task() {
     local filename="$1"
     local file_size="$2"
@@ -180,9 +56,9 @@ create_upload_task() {
         }")
 
     local upload_id
-    upload_id=$(json_value "$response" "data.upload_id")
+    upload_id=$(json_field "$response" "data.upload_id")
     local instant
-    instant=$(json_value "$response" "data.instant_upload")
+    instant=$(json_field "$response" "data.instant_upload")
 
     if [ -z "$upload_id" ] || [ "$upload_id" = "None" ] || [ "$upload_id" = "null" ]; then
         echo "ERROR: Failed to create upload task" >&2
@@ -192,8 +68,6 @@ create_upload_task() {
 
     echo "$upload_id"
 }
-
-# ─── Upload a single chunk ──────────────────────────────────────────────────
 
 upload_chunk() {
     local upload_id="$1"
@@ -217,7 +91,7 @@ upload_chunk() {
     rm -f "$tmpfile"
 
     local uploaded
-    uploaded=$(json_value "$response" "data.uploaded")
+    uploaded=$(json_field "$response" "data.uploaded")
 
     if [ "$uploaded" = "true" ]; then
         return 0
@@ -227,10 +101,6 @@ upload_chunk() {
     fi
 }
 
-# ─── Complete upload ────────────────────────────────────────────────────────
-
-# Returns the HTTP status code and response body
-# Sets COMPLETE_HTTP_CODE and COMPLETE_RESPONSE global variables
 complete_upload() {
     local upload_id="$1"
 
@@ -252,10 +122,8 @@ test_normal_assembly_completes() {
     local upload_id
     upload_id=$(create_upload_task "backpressure_normal_$$.pdf" 14 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") || return 1
 
-    # Upload one chunk with exact same size as file_size
     upload_chunk "$upload_id" 0 "Hello, World!!" || return 1
 
-    # Complete the upload
     complete_upload "$upload_id"
 
     if [ "$COMPLETE_HTTP_CODE" = "200" ]; then
@@ -263,7 +131,7 @@ test_normal_assembly_completes() {
         code=$(json_int "$COMPLETE_RESPONSE" "code")
         if [ "$code" = "0" ]; then
             log_pass "Normal assembly completed successfully (HTTP 200, code=0)"
-            save_evidence "backpressure-normal-complete" "$COMPLETE_RESPONSE"
+            save_evidence "backpressure-normal-complete.json" "$COMPLETE_RESPONSE"
             return 0
         else
             log_fail "Normal assembly returned code=$code (expected 0)"
@@ -304,8 +172,8 @@ test_duplicate_finalize_after_completion() {
     local second_code="$COMPLETE_HTTP_CODE"
     local second_body="$COMPLETE_RESPONSE"
 
-    save_evidence "backpressure-dup-first" "$first_body"
-    save_evidence "backpressure-dup-second" "$second_body"
+    save_evidence "backpressure-dup-first.json" "$first_body"
+    save_evidence "backpressure-dup-second.json" "$second_body"
 
     if [ "$second_code" = "200" ]; then
         local code
@@ -382,7 +250,7 @@ test_concurrent_finalize_singleflight() {
 
     rm -rf "$results_dir"
 
-    save_evidence "backpressure-singleflight-results" "$(echo -e "$evidence_lines")"
+    save_evidence "backpressure-singleflight-results.txt" "$(echo -e "$evidence_lines")"
 
     log_info "Results: success=$success_count, 429=$conflict_or_429_count, other=$other_fail_count"
 
@@ -480,7 +348,7 @@ test_pool_saturation_overflow() {
 
     rm -rf "$results_dir"
 
-    save_evidence "backpressure-saturation-results" "$(echo -e "$evidence_lines")"
+    save_evidence "backpressure-saturation-results.txt" "$(echo -e "$evidence_lines")"
 
     log_info "Results: success=$success_count, 429=$rejected_429_count, other=$other_count"
 
@@ -524,7 +392,7 @@ test_no_duplicate_side_effects() {
 
     local first_file_id
     first_file_id=$(json_int "$COMPLETE_RESPONSE" "data.file.id")
-    save_evidence "backpressure-nodup-first" "$COMPLETE_RESPONSE"
+    save_evidence "backpressure-nodup-first.json" "$COMPLETE_RESPONSE"
 
     # Second complete (idempotent)
     complete_upload "$upload_id"
@@ -536,7 +404,7 @@ test_no_duplicate_side_effects() {
 
     local second_file_id
     second_file_id=$(json_int "$COMPLETE_RESPONSE" "data.file.id")
-    save_evidence "backpressure-nodup-second" "$COMPLETE_RESPONSE"
+    save_evidence "backpressure-nodup-second.json" "$COMPLETE_RESPONSE"
 
     # The idempotent response may or may not return the same file data,
     # but it should NOT create a new file record.
@@ -580,7 +448,7 @@ main() {
 
     # Check server and login
     check_server || exit 1
-    login || exit 1
+    do_login "$TEST_USER" "$TEST_PASS" || exit 1
 
     # Run tests (don't abort on individual test failure)
     set +e

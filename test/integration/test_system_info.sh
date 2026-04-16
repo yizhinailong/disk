@@ -17,6 +17,11 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/http.sh"
+source "$SCRIPT_DIR/lib/auth.sh"
+
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
 SERVER_BIN="${SERVER_BIN:-./build/linux-debug-clang/src/disk}"
 JWT_SECRET="${JWT_SECRET:-test_secret_key_for_share_token_32b}"
@@ -24,119 +29,7 @@ VALID_ACCOUNT="${VALID_ACCOUNT:-admin}"
 VALID_PASS="${VALID_PASS:-Admin123}"
 SERVER_LOG="${SERVER_LOG:-.sisyphus/evidence/system-info-server.log}"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-TESTS_PASSED=0
-TESTS_FAILED=0
-SERVER_PID=""
-MANAGED_SERVER=0
-
-log_info() {
-    printf "%b[INFO]%b %s\n" "$YELLOW" "$NC" "$1"
-}
-
-log_pass() {
-    printf "%b[PASS]%b %s\n" "$GREEN" "$NC" "$1"
-    TESTS_PASSED=$((TESTS_PASSED + 1))
-}
-
-log_fail() {
-    printf "%b[FAIL]%b %s\n" "$RED" "$NC" "$1"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-}
-
-cleanup() {
-    if [ "$MANAGED_SERVER" -eq 1 ] && [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
-        kill "$SERVER_PID" 2>/dev/null || true
-        wait "$SERVER_PID" 2>/dev/null || true
-    fi
-}
-
 trap cleanup EXIT
-
-json_field() {
-    local json="$1"
-    local path="$2"
-
-    JSON_INPUT="$json" python3 - "$path" <<'PY'
-import json
-import os
-import sys
-
-try:
-    data = json.loads(os.environ["JSON_INPUT"])
-except Exception:
-    print("")
-    raise SystemExit(0)
-
-value = data
-for part in sys.argv[1].split('.'):
-    if isinstance(value, dict) and part in value:
-        value = value[part]
-    else:
-        print("")
-        raise SystemExit(0)
-
-if isinstance(value, bool):
-    print("true" if value else "false")
-elif value is None:
-    print("")
-else:
-    print(value)
-PY
-}
-
-server_ready() {
-    local http_code
-    http_code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/auth/login" 2>/dev/null || printf "000")
-    case "$http_code" in
-        400|401|405)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-ensure_server() {
-    if server_ready; then
-        log_info "Using existing server at $BASE_URL"
-        return 0
-    fi
-
-    if [ ! -x "$SERVER_BIN" ] && [ -x "./build/linux-debug-clang/disk" ]; then
-        SERVER_BIN="./build/linux-debug-clang/disk"
-    fi
-
-    if [ ! -x "$SERVER_BIN" ]; then
-        log_fail "Server binary not found: $SERVER_BIN"
-        exit 1
-    fi
-
-    mkdir -p "$(dirname "$SERVER_LOG")"
-    log_info "Starting server with $SERVER_BIN"
-    JWT_SECRET="$JWT_SECRET" "$SERVER_BIN" >"$SERVER_LOG" 2>&1 &
-    SERVER_PID=$!
-    MANAGED_SERVER=1
-
-    for _ in $(seq 1 30); do
-        if server_ready; then
-            log_pass "Server started"
-            return 0
-        fi
-        sleep 1
-    done
-
-    log_fail "Server did not become ready"
-    if [ -f "$SERVER_LOG" ]; then
-        cat "$SERVER_LOG"
-    fi
-    exit 1
-}
 
 # Test 1: System info requires authentication
 test_system_info_requires_auth() {
@@ -162,29 +55,14 @@ test_system_info_success() {
     log_info "Testing GET /api/system/info with valid token..."
 
     # Login first
-    local body
-    body=$(python3 - "$VALID_ACCOUNT" "$VALID_PASS" <<'PY'
-import json
-import sys
-print(json.dumps({"account": sys.argv[1], "password": sys.argv[2]}))
-PY
-)
-
-    local login_response
-    login_response=$(curl -sS -w "\n%{http_code}" -X POST "$BASE_URL/api/auth/login" \
-        -H "Content-Type: application/json" \
-        -d "$body")
-
-    local login_http_code login_body
-    login_http_code=$(printf '%s\n' "$login_response" | tail -n 1)
-    login_body=$(printf '%s\n' "$login_response" | sed '$d')
+    do_login
 
     local access_token
-    access_token=$(json_field "$login_body" "data.access_token")
+    access_token=$(json_field "$LOGIN_BODY" "data.access_token")
 
     if [ -z "$access_token" ] || [ "$access_token" = "null" ]; then
         log_fail "Login failed for system info test"
-        printf '%s\n' "$login_body"
+        printf '%s\n' "$LOGIN_BODY"
         exit 1
     fi
 
@@ -215,24 +93,10 @@ test_system_info_has_storage_stats() {
     log_info "Testing /api/system/info contains storage stats (no SQL 1054)..."
 
     # Login first
-    local body
-    body=$(python3 - "$VALID_ACCOUNT" "$VALID_PASS" <<'PY'
-import json
-import sys
-print(json.dumps({"account": sys.argv[1], "password": sys.argv[2]}))
-PY
-)
-
-    local login_response
-    login_response=$(curl -sS -w "\n%{http_code}" -X POST "$BASE_URL/api/auth/login" \
-        -H "Content-Type: application/json" \
-        -d "$body")
-
-    local login_body
-    login_body=$(printf '%s\n' "$login_response" | sed '$d')
+    do_login
 
     local access_token
-    access_token=$(json_field "$login_body" "data.access_token")
+    access_token=$(json_field "$LOGIN_BODY" "data.access_token")
 
     local response
     response=$(curl -sS -X GET "$BASE_URL/api/system/info" \
@@ -270,24 +134,10 @@ test_system_info_fields() {
     log_info "Testing /api/system/info response field structure..."
 
     # Login first
-    local body
-    body=$(python3 - "$VALID_ACCOUNT" "$VALID_PASS" <<'PY'
-import json
-import sys
-print(json.dumps({"account": sys.argv[1], "password": sys.argv[2]}))
-PY
-)
-
-    local login_response
-    login_response=$(curl -sS -w "\n%{http_code}" -X POST "$BASE_URL/api/auth/login" \
-        -H "Content-Type: application/json" \
-        -d "$body")
-
-    local login_body
-    login_body=$(printf '%s\n' "$login_response" | sed '$d')
+    do_login
 
     local access_token
-    access_token=$(json_field "$login_body" "data.access_token")
+    access_token=$(json_field "$LOGIN_BODY" "data.access_token")
 
     local response
     response=$(curl -sS -X GET "$BASE_URL/api/system/info" \
@@ -352,19 +202,7 @@ main() {
     test_system_info_has_storage_stats
     test_system_info_fields
 
-    printf '\n==========================================\n'
-    printf 'Test Summary\n'
-    printf '==========================================\n'
-    printf 'Passed: %b%s%b\n' "$GREEN" "$TESTS_PASSED" "$NC"
-    printf 'Failed: %b%s%b\n' "$RED" "$TESTS_FAILED" "$NC"
-
-    if [ "$TESTS_FAILED" -eq 0 ]; then
-        printf '%bAll tests passed!%b\n' "$GREEN" "$NC"
-        exit 0
-    fi
-
-    printf '%bSome tests failed.%b\n' "$RED" "$NC"
-    exit 1
+    print_summary
 }
 
 main "$@"

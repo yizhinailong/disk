@@ -28,6 +28,12 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/http.sh"
+source "$SCRIPT_DIR/lib/auth.sh"
+source "$SCRIPT_DIR/lib/assert.sh"
+
 # ─── Configuration ────────────────────────────────────────────────────────────
 
 BASE_URL="${BASE_URL:-http://localhost:8080}"
@@ -35,69 +41,6 @@ TEST_USER="${TEST_USER:-admin}"
 TEST_PASS="${TEST_PASS:-Admin123}"
 EVIDENCE_DIR=".sisyphus/evidence"
 EVIDENCE_PREFIX="task-6"
-
-# ─── Colors ───────────────────────────────────────────────────────────────────
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-# ─── Counters ─────────────────────────────────────────────────────────────────
-
-TESTS_PASSED=0
-TESTS_FAILED=0
-
-# ─── Helpers ──────────────────────────────────────────────────────────────────
-
-log_info()  { echo -e "${YELLOW}[INFO]${NC} $1"; }
-log_pass()  { echo -e "${GREEN}[PASS]${NC} $1"; ((TESTS_PASSED++)); }
-log_fail()  { echo -e "${RED}[FAIL]${NC} $1"; ((TESTS_FAILED++)); }
-log_step()  { echo -e "${CYAN}[STEP]${NC} $1"; }
-
-save_evidence() {
-    local name="$1"
-    local data="$2"
-    echo "$data" > "$EVIDENCE_DIR/${name}"
-    log_info "Evidence saved: $name"
-}
-
-save_raw_evidence() {
-    local name="$1"
-    shift
-    "$@" > "$EVIDENCE_DIR/${name}" 2>&1
-    log_info "Evidence saved: $name"
-}
-
-# ─── curl helper: capture status + headers + body ─────────────────────────────
-# Usage: curl_fetch <output_var_prefix> <curl_args...>
-# Produces: ${prefix}_status, ${prefix}_headers, ${prefix}_body
-curl_fetch() {
-    local prefix="$1"
-    shift
-
-    local tmp_headers
-    tmp_headers=$(mktemp)
-    local tmp_body
-    tmp_body=$(mktemp)
-
-    local http_code
-    http_code=$(curl -s -o "$tmp_body" -w "%{http_code}" -D "$tmp_headers" "$@")
-
-    eval "${prefix}_status=\$http_code"
-    eval "${prefix}_headers=\$(cat \"\$tmp_headers\")"
-    eval "${prefix}_body=\$(cat \"\$tmp_body\")"
-
-    rm -f "$tmp_headers" "$tmp_body"
-}
-
-# Extract a single header value (case-insensitive) from a headers block
-header_value() {
-    local headers="$1"
-    local name="$2"
-    echo "$headers" | grep -i "^${name}:" | head -1 | sed "s/^[^:]*:[[:space:]]*//" | tr -d '\r'
-}
 
 # ─── Prerequisites ────────────────────────────────────────────────────────────
 
@@ -114,41 +57,6 @@ check_prereqs() {
         log_fail "md5sum is required but not installed"
         exit 1
     fi
-}
-
-check_server() {
-    log_info "Checking server at $BASE_URL..."
-    local code
-    code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/auth/login")
-    if [[ "$code" =~ ^(400|401|405)$ ]]; then
-        log_pass "Server is running"
-        return 0
-    else
-        log_fail "Server not responding (got HTTP $code)"
-        return 1
-    fi
-}
-
-# ─── Phase 1: Login ──────────────────────────────────────────────────────────
-
-do_login() {
-    log_step "Logging in as $TEST_USER..."
-
-    local response
-    response=$(curl -s -X POST "$BASE_URL/api/auth/login" \
-        -H "Content-Type: application/json" \
-        -d "{\"account\":\"$TEST_USER\",\"password\":\"$TEST_PASS\"}")
-
-    TOKEN=$(echo "$response" | jq -r '.data.access_token // empty')
-
-    if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-        log_fail "Login failed"
-        echo "$response"
-        return 1
-    fi
-
-    log_pass "Login successful"
-    save_evidence "${EVIDENCE_PREFIX}-login.json" "$response"
 }
 
 # ─── Phase 2: Upload a test file ──────────────────────────────────────────────
@@ -245,64 +153,6 @@ do_upload() {
 
     rm -f "$fixture"
     log_pass "File uploaded — file_id=$FILE_ID, size=$FILE_SIZE"
-}
-
-# ─── Assertions ───────────────────────────────────────────────────────────────
-
-assert_status() {
-    local label="$1"
-    local actual="$2"
-    local expected="$3"
-    if [ "$actual" = "$expected" ]; then
-        return 0
-    else
-        log_fail "$label: expected HTTP $expected, got HTTP $actual"
-        return 1
-    fi
-}
-
-assert_json_field() {
-    local label="$1"
-    local body="$2"
-    local field="$3"
-    local expected="$4"
-    local actual
-    actual=$(echo "$body" | jq -r ".$field // empty")
-    if [ "$actual" = "$expected" ]; then
-        return 0
-    else
-        log_fail "$label: expected .$field = '$expected', got '$actual'"
-        return 1
-    fi
-}
-
-assert_json_field_numeric_gt() {
-    local label="$1"
-    local body="$2"
-    local field="$3"
-    local min_value="$4"
-    local actual
-    actual=$(echo "$body" | jq -r ".$field // 0")
-    if [ "$actual" -gt "$min_value" ]; then
-        return 0
-    else
-        log_fail "$label: expected .$field > $min_value, got '$actual'"
-        return 1
-    fi
-}
-
-assert_json_array_not_empty() {
-    local label="$1"
-    local body="$2"
-    local field="$3"
-    local length
-    length=$(echo "$body" | jq -r ".$field | length // 0")
-    if [ "$length" -gt 0 ]; then
-        return 0
-    else
-        log_fail "$label: expected .$field array to be non-empty, got length=$length"
-        return 1
-    fi
 }
 
 # ─── Test: Happy-path Copy ────────────────────────────────────────────────────
@@ -606,7 +456,7 @@ main() {
     check_server || exit 1
 
     # Setup
-    do_login || exit 1
+    do_login "$TEST_USER" "$TEST_PASS" || exit 1
     do_upload || exit 1
 
     echo ""

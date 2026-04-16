@@ -18,113 +18,18 @@
 #   TEST_PASS   - Test password (default: Admin123)
 #
 
-set -e
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/http.sh"
+source "$SCRIPT_DIR/lib/auth.sh"
 
 # Configuration
 BASE_URL="${BASE_URL:-http://localhost:8080}"
 TEST_USER="${TEST_USER:-admin}"
 TEST_PASS="${TEST_PASS:-Admin123}"
 EVIDENCE_DIR=".sisyphus/evidence"
-
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-# Test counters
-TESTS_PASSED=0
-TESTS_FAILED=0
-
-# Helper functions
-log_info() {
-    echo -e "${YELLOW}[INFO]${NC} $1"
-}
-
-log_pass() {
-    echo -e "${GREEN}[PASS]${NC} $1"
-    ((TESTS_PASSED++))
-}
-
-log_fail() {
-    echo -e "${RED}[FAIL]${NC} $1"
-    ((TESTS_FAILED++))
-}
-
-# Save evidence
-save_evidence() {
-    local name="$1"
-    local data="$2"
-    echo "$data" > "$EVIDENCE_DIR/$name.json"
-    log_info "Evidence saved: $name.json"
-}
-
-# Parse JSON field using python3 (no jq dependency)
-json_field() {
-    local json="$1"
-    local path="$2"
-
-    JSON_INPUT="$json" python3 - "$path" <<'PY'
-import json
-import os
-import sys
-
-try:
-    data = json.loads(os.environ["JSON_INPUT"])
-except Exception:
-    print("")
-    raise SystemExit(0)
-
-value = data
-for part in sys.argv[1].split('.'):
-    if isinstance(value, dict) and part in value:
-        value = value[part]
-    else:
-        print("")
-        raise SystemExit(0)
-
-if isinstance(value, bool):
-    print("true" if value else "false")
-elif value is None:
-    print("")
-else:
-    print(value)
-PY
-}
-
-# Check server health
-check_server() {
-    log_info "Checking server at $BASE_URL..."
-    if curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/auth/login" | grep -q "400\|401\|405"; then
-        log_pass "Server is running"
-        return 0
-    else
-        log_fail "Server not responding"
-        return 1
-    fi
-}
-
-# Login and get token
-login() {
-    log_info "Logging in as $TEST_USER..."
-
-    local response
-    response=$(curl -s -X POST "$BASE_URL/api/auth/login" \
-        -H "Content-Type: application/json" \
-        -d "{\"account\":\"$TEST_USER\",\"password\":\"$TEST_PASS\"}")
-
-    TOKEN=$(json_field "$response" "data.access_token")
-
-    if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-        log_fail "Login failed"
-        echo "$response"
-        return 1
-    fi
-
-    log_pass "Login successful"
-    save_evidence "login" "$response"
-    return 0
-}
 
 test_happy_path_upload() {
     log_info "Testing Happy Path Upload Flow..."
@@ -173,7 +78,7 @@ test_happy_path_upload() {
     fi
 
     log_pass "Init Upload (happy path) - upload_id: $upload_id"
-    save_evidence "init-upload-normal" "$response"
+    save_evidence "init-upload-normal.json" "$response"
 
     response=$(curl -s -X POST "$BASE_URL/api/file/upload/chunk?upload_id=$upload_id&chunk_index=0&chunk_hash=$chunk_0_hash" \
         -H "Authorization: Bearer $TOKEN" \
@@ -191,7 +96,7 @@ test_happy_path_upload() {
     fi
 
     log_pass "Upload Chunk 0 (happy path)"
-    save_evidence "upload-chunk-0" "$response"
+    save_evidence "upload-chunk-0.json" "$response"
 
     response=$(curl -s -X POST "$BASE_URL/api/file/upload/chunk?upload_id=$upload_id&chunk_index=1&chunk_hash=$chunk_1_hash" \
         -H "Authorization: Bearer $TOKEN" \
@@ -209,7 +114,7 @@ test_happy_path_upload() {
     fi
 
     log_pass "Upload Chunk 1 (happy path)"
-    save_evidence "upload-chunk-1" "$response"
+    save_evidence "upload-chunk-1.json" "$response"
 
     response=$(curl -s -X POST "$BASE_URL/api/file/upload/complete" \
         -H "Authorization: Bearer $TOKEN" \
@@ -245,7 +150,7 @@ test_happy_path_upload() {
     fi
 
     log_pass "Complete Upload (happy path) - file_id: $file_id, hash verified"
-    save_evidence "complete-upload-success" "$response"
+    save_evidence "complete-upload-success.json" "$response"
 
     rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
 
@@ -297,7 +202,7 @@ test_missing_chunk_upload() {
     fi
 
     log_pass "Init Upload (missing chunk) - upload_id: $upload_id"
-    save_evidence "init-upload-missing" "$response"
+    save_evidence "init-upload-missing.json" "$response"
 
     response=$(curl -s -X POST "$BASE_URL/api/file/upload/chunk?upload_id=$upload_id&chunk_index=0&chunk_hash=$chunk_0_hash" \
         -H "Authorization: Bearer $TOKEN" \
@@ -315,7 +220,7 @@ test_missing_chunk_upload() {
     fi
 
     log_pass "Upload Chunk 0 (missing chunk) - deliberately not uploading chunk 1"
-    save_evidence "upload-chunk-missing-0" "$response"
+    save_evidence "upload-chunk-missing-0.json" "$response"
 
     response=$(curl -s -X POST "$BASE_URL/api/file/upload/complete" \
         -H "Authorization: Bearer $TOKEN" \
@@ -342,7 +247,7 @@ test_missing_chunk_upload() {
     fi
 
     log_pass "Complete Upload (missing chunk) - correctly failed with code $code and message: $message"
-    save_evidence "complete-upload-missing-chunk" "$response"
+    save_evidence "complete-upload-missing-chunk.json" "$response"
 
     rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
 
@@ -372,7 +277,7 @@ test_init_upload_quota() {
 
     if [ "$code" = "50004" ]; then
         log_pass "Init Upload (quota exceeded) - code: $code"
-        save_evidence "init-upload-quota" "$response"
+        save_evidence "init-upload-quota.json" "$response"
         return 0
     else
         log_fail "Init Upload (quota exceeded) - expected code 50004, got: $code"
@@ -401,7 +306,7 @@ main() {
     fi
 
     check_server || exit 1
-    login || exit 1
+    do_login "$TEST_USER" "$TEST_PASS" || exit 1
 
     test_happy_path_upload
     test_missing_chunk_upload
