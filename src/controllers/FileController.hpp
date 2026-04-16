@@ -1,7 +1,7 @@
 /**
  * @file FileController.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief 文件上传控制器
+ * @brief 文件控制器
  * @note Request 和 Response DTO 定义在 dtos/FileDto.hpp
  *
  * @copyright Copyright (c) 2026

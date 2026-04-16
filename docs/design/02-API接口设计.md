@@ -134,7 +134,7 @@
 #### 代码使用示例
 
 ```cpp
-#include "utils/ErroCode.hpp"
+#include "utils/ErrorCode.hpp"
 
 [[nodiscard]]
 auto GetUser(int id) -> Result<User> {
@@ -397,9 +397,9 @@ If-Match: <etag>（可选）
 }
 ```
 
-| 参数 | 类型 | 必填 | 说明 |
+ | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| nickname | string | 否 | 昵称，2-32字符 |
+| nickname | string | 否 | 昵称，1-64字符 |
 | avatar | string | 否 | 头像 URL，必须符合安全约束 |
 
 **更新规则**：

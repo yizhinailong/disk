@@ -23,7 +23,7 @@ namespace disk::user {
      * - 所有接口需要 JWT 认证（通过 JwtAuthFilter 自动处理）
      * - 用户信息从请求 attributes 中的 user_id 获取（由 JwtAuthFilter 设置）
      * - GetProfile: 获取用户基本信息（用户名、邮箱、存储配额等）
-     * - UpdateProfile: 更新用户基本信息（用户名、邮箱等）
+     * - UpdateProfile: 更新用户资料（昵称、头像等）
      * - UpdatePassword: 修改用户密码
      * - GetStorage: 获取用户存储空间使用统计
      */
@@ -97,7 +97,7 @@ namespace disk::user {
          *
          * 业务规则：
          * - 从请求 attributes 中提取 user_id（由 JwtAuthFilter 设置）
-         * - 解析请求 JSON 提取 username 和 email
+         * - 解析请求 JSON 通过 UpdateProfileRequest 提取 nickname 和 avatar
          * - 调用 UserService::UpdateProfile(user_id, request) 更新用户资料
          * - 处理服务层错误（返回 Response::Error）
          * - 成功时返回 HTTP 200 状态码和 Response::Success(data)

@@ -10,7 +10,7 @@
  * - FileItem: 文件项（共享响应组件）
  * - InitUploadRequest: 初始化上传请求
  * - InitUploadResponse: 初始化上传响应
- * - UploadChunkRequest: 上传分片请求
+ * - UploadChunkRequest: 上传分片请求（已废弃）
  * - UploadChunkResponse: 上传分片响应
  * - CompleteUploadRequest: 完成上传请求
  * - CompleteUploadResponse: 完成上传响应
@@ -20,6 +20,7 @@
  * - DownloadInfoRequest: 获取下载信息请求
  * - DownloadInfoResponse: 获取下载信息响应
  * - DownloadRequest: 下载文件请求
+ * - RangeRequest: Range 请求解析结果
  * - RenameRequest: 重命名请求
  * - RenameResponse: 重命名响应
  * - MoveRequest: 移动文件请求
@@ -29,6 +30,10 @@
  * - FileIdMapping: 文件ID映射
  * - DeleteRequest: 删除文件请求
  * - DeleteResponse: 删除文件响应
+ * - DownloadInfo: 下载信息结构（内部服务使用）
+ * - SearchRequest: 文件搜索请求
+ * - SearchResultItem: 搜索结果项
+ * - SearchResponse: 文件搜索响应
  *
  * DTO 用于在不同层（Controller、Service）之间传输数据，
  * 包含请求验证和响应序列化逻辑。

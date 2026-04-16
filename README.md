@@ -399,12 +399,8 @@ clang-format -i src/controllers/AuthController.cpp
 - [x] 文件详情 API (`GET /api/file/{file_id}`)
 - [x] 操作日志 API (`GET /api/logs`)
 
-
-- [ ] 桌面客户端 (QT/QML) - 部分实现：7 API 类、8 ViewModel、7 服务、11 QML 视图
-
 ### 📝 计划中
 
-- [ ] 操作日志
 - [ ] 性能优化
 - [ ] CDN 集成
 

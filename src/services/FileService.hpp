@@ -1,7 +1,7 @@
 /**
  * @file FileService.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief 文件上传服务
+ * @brief 文件服务
  *
  * @copyright Copyright (c) 2026
  *
@@ -32,13 +32,16 @@ namespace disk::storage {
 namespace disk::file {
 
     /**
-     * @brief 文件上传服务类
+     * @brief 文件服务类
      *
-     * 提供文件上传相关的业务逻辑：
+     * 提供文件管理相关的业务逻辑：
      * - 初始化上传（配额检查、秒传检测、断点续传）
      * - 上传分片（分片验证、临时文件写入）
      * - 完成上传（分片组装、去重、文件记录创建）
      * - 取消上传（清理临时文件、删除上传任务）
+     * - 文件列表、详情、下载
+     * - 文件重命名、移动、复制、删除（移入回收站）
+     * - 文件搜索
      */
     class FileService {
     public:

@@ -7,7 +7,11 @@
  *
  * @details
  * 本文件包含用户模块的所有数据传输对象（DTO）：
+ * - ChangePasswordRequest: 修改密码请求
+ * - UpdateProfileRequest: 更新用户资料请求
  * - UserProfileResponse: 用户信息响应
+ * - StorageCategory: 存储分类统计
+ * - StorageResponse: 存储空间统计响应
  */
 
 #pragma once

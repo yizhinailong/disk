@@ -305,7 +305,7 @@ namespace disk::file {
                 file.setExtension(ExtractExtension(request.filename));
                 file.setSize(request.file_size);
                 file.setMimeType(meta.mime_type);
-                file.setPath(""); // 路径由前端拼接
+                file.setPath(""); // 路径由调用方自行拼接
                 file.setIsFavorite(0);
                 file.setDownloadCount(0);
 

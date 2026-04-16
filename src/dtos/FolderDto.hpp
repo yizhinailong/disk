@@ -9,6 +9,11 @@
  * 本文件包含文件夹模块的所有数据传输对象（DTO）：
  * - CreateFolderRequest: 创建文件夹请求
  * - CreateFolderResponse: 创建文件夹响应
+ * - FolderTreeRequest: 获取文件夹树请求
+ * - FolderNodeData: 文件夹节点数据（内部结构）
+ * - FolderTreeNode: 文件夹树节点响应
+ * - BreadcrumbItem: 面包屑导航项
+ * - BreadcrumbResponse: 面包屑导航响应
  *
  * DTO 用于在不同层（Controller、Service）之间传输数据，
  * 包含请求验证和响应序列化逻辑。
