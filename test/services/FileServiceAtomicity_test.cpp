@@ -160,18 +160,21 @@ namespace disk::file {
             QuotaStateModel& quota,
             std::vector<FileRecordModel>& file_records
         ) -> Result<CompleteUploadResponse> {
-            if (uploaded_chunks.size() != task.total_chunks) {
+            const auto uploaded_count = uploaded_chunks.size();
+            const auto max_chunk_index = uploaded_chunks.empty() ? -1 : static_cast<int64_t>(uploaded_chunks.back());
+
+            bool chunks_valid = false;
+            if (task.total_chunks == 0) {
+                chunks_valid = (uploaded_count == 0);
+            } else {
+                chunks_valid = (uploaded_count == static_cast<uint64_t>(task.total_chunks)) &&
+                               (max_chunk_index == static_cast<int64_t>(task.total_chunks - 1));
+            }
+
+            if (!chunks_valid) {
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Not all chunks uploaded")
                 );
-            }
-
-            for (uint32_t expected_index = 0; expected_index < task.total_chunks; ++expected_index) {
-                if (uploaded_chunks[expected_index] != expected_index) {
-                    return std::unexpected(
-                        ErrorInfo(ErrorCode::ValidationFailed, "Not all chunks uploaded")
-                    );
-                }
             }
 
             auto assemble_result = drogon::sync_wait(storage.AssembleChunks(task.upload_id, task.total_chunks));
@@ -592,6 +595,39 @@ namespace disk::file {
             EXPECT_EQ(task.status, 0);
             EXPECT_TRUE(file_records.empty());
             EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
+        }
+
+        TEST_F(FileServiceUploadAtomicityModelTest, CompleteUploadZeroChunkFileSucceedsWithoutChunkRows) {
+            const std::string upload_id = "complete-upload-zero-chunk";
+
+            UploadTaskModel task{ .upload_id = upload_id,
+                                  .filename = "empty.txt",
+                                  .folder_id = 0,
+                                  .file_size = 0,
+                                  .file_hash = FileHashUtil::HashMd5(""),
+                                  .total_chunks = 0,
+                                  .reserved_bytes = 0,
+                                  .status = 0 };
+            QuotaStateModel quota{ .reserved = 0, .used = 0 };
+            std::vector<FileRecordModel> file_records;
+
+            std::vector<uint32_t> uploaded_chunks;
+
+            auto result = SimulateCompleteUpload(
+                *m_storage,
+                task,
+                uploaded_chunks,
+                false,
+                quota,
+                file_records
+            );
+
+            ASSERT_TRUE(result.has_value());
+            ASSERT_EQ(file_records.size(), 1U);
+            EXPECT_EQ(task.status, 1);
+            EXPECT_EQ(file_records[0].name, "empty.txt");
+            EXPECT_EQ(file_records[0].hash, FileHashUtil::HashMd5(""));
+            EXPECT_EQ(result->file.hash, FileHashUtil::HashMd5(""));
         }
 
         TEST_F(FileServiceUploadAtomicityModelTest, CompleteUploadDuplicateFilenameDeletesAssembledTempFile) {

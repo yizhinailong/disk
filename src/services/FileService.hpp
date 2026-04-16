@@ -288,6 +288,26 @@ namespace disk::file {
             std::chrono::steady_clock::time_point cache_expires_at;
         };
 
+        /**
+         * @brief 已有内容元数据
+         *
+         * 用于秒传/去重场景，缓存已存储文件内容的 ID 和 MIME 类型。
+         */
+        struct ExistingContentMetadata {
+            uint64_t id = 0;
+            std::string mime_type;
+        };
+
+        /**
+         * @brief 已上传分片覆盖信息
+         *
+         * 用于断点续传场景，描述当前上传任务已完成的分片情况。
+         */
+        struct UploadedChunkCoverage {
+            uint64_t uploaded_count = 0;
+            int64_t max_chunk_index = -1;
+        };
+
         static constexpr auto UPLOAD_TASK_CACHE_TTL = std::chrono::seconds(60);
         static constexpr double UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS = 60.0;
 
@@ -425,6 +445,26 @@ namespace disk::file {
             const drogon::orm::DbClientPtr& client,
             const std::vector<uint64_t>& file_ids
         ) -> drogon::Task<int>;
+
+        [[nodiscard]]
+        auto LookupExistingContentMetadata(
+            const drogon::orm::DbClientPtr& client,
+            const std::string& file_hash
+        ) const -> drogon::Task<std::optional<ExistingContentMetadata>>;
+
+        [[nodiscard]]
+        auto IsFilenameExists(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t folder_id,
+            const std::string& filename,
+            uint64_t user_id
+        ) const -> drogon::Task<bool>;
+
+        [[nodiscard]]
+        auto GetUploadedChunkCoverage(
+            const drogon::orm::DbClientPtr& client,
+            const std::string& upload_id
+        ) const -> drogon::Task<std::optional<UploadedChunkCoverage>>;
 
         drogon::orm::DbClientPtr m_db_client;                                      ///< 数据库客户端
         storage::IFileStorage* m_storage;                                          ///< 文件存储接口

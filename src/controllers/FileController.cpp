@@ -28,7 +28,7 @@ namespace disk::file {
     auto FileController::InitUpload(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "Received initialize upload request: " << request->getPeerAddr().toIpPort();
+        LOG_DEBUG << "Received initialize upload request: " << request->getPeerAddr().toIpPort();
 
         // 1. 解析并验证请求参数
         auto parse_result = InitUploadRequest::FromRequest(request);
@@ -53,15 +53,15 @@ namespace disk::file {
         }
 
         // 4. 构造响应
-        LOG_INFO << "Initialize upload successful: upload_id=" << result->upload_id
-                 << ", instant_upload=" << result->instant_upload << " (user_id=" << user_id << ")";
+        LOG_DEBUG << "Initialize upload successful: upload_id=" << result->upload_id
+                  << ", instant_upload=" << result->instant_upload << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
     auto FileController::UploadChunk(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "Received upload chunk request: " << request->getPeerAddr().toIpPort();
+        LOG_DEBUG << "Received upload chunk request: " << request->getPeerAddr().toIpPort();
 
         // 1. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -142,15 +142,15 @@ namespace disk::file {
         }
 
         // 5. 构造响应
-        LOG_INFO << "Upload chunk successful: chunk_index=" << result->chunk_index
-                 << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";
+        LOG_DEBUG << "Upload chunk successful: chunk_index=" << result->chunk_index
+                  << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
     auto FileController::CompleteUpload(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "Received complete upload request: " << request->getPeerAddr().toIpPort();
+        LOG_DEBUG << "Received complete upload request: " << request->getPeerAddr().toIpPort();
 
         // 1. 解析并验证请求参数
         auto parse_result = CompleteUploadRequest::FromRequest(request);
@@ -174,17 +174,17 @@ namespace disk::file {
         }
 
         // 4. 构造响应
-        LOG_INFO << "Complete upload successful: file_id=" << result->file.id << ", filename=\""
-                 << result->file.name << "\""
-                 << " (user_id=" << user_id << ")";
+        LOG_DEBUG << "Complete upload successful: file_id=" << result->file.id << ", filename=\""
+                  << result->file.name << "\""
+                  << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
     auto FileController::CancelUpload(drogon::HttpRequestPtr request, std::string upload_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "Received cancel upload request: " << request->getPeerAddr().toIpPort()
-                 << ", upload_id=" << upload_id;
+        LOG_DEBUG << "Received cancel upload request: " << request->getPeerAddr().toIpPort()
+                  << ", upload_id=" << upload_id;
 
         // 1. 验证 upload_id 非空
         if (upload_id.empty()) {
@@ -204,8 +204,8 @@ namespace disk::file {
         }
 
         // 4. 返回成功响应
-        LOG_INFO << "Cancel upload successful: upload_id=" << upload_id << " (user_id=" << user_id
-                 << ")";
+        LOG_DEBUG << "Cancel upload successful: upload_id=" << upload_id << " (user_id=" << user_id
+                  << ")";
         co_return Response::Success({});
     }
 

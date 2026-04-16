@@ -2,6 +2,16 @@
  * @file CompleteUploadSingleflight_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
  * @brief CompleteUpload 单飞语义与幂等性契约测试
+ *
+ * 测试覆盖 CompleteUpload 的并发安全与请求契约：
+ *  - 请求 DTO 验证（upload_id 必填/非空/字符串类型）
+ *  - 幂等性语义（已完成的任务跳过组装）
+ *  - 单飞互斥（相同 upload_id 仅允许一个并发组装）
+ *  - 池化背压（超出 MaxConcurrent 的请求被拒绝）
+ *
+ * 分片验证采用聚合语义（uploaded_count + max_chunk_index），
+ * 详见 FileServiceAtomicity_test.cpp 中 SimulateCompleteUpload。
+ *
  * @copyright Copyright (c) 2026
  */
 

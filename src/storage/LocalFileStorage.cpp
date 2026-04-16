@@ -203,9 +203,9 @@ namespace disk::storage {
         auto start = std::chrono::steady_clock::now();
         auto& pool = AssemblyWorkerPool::GetInstance();
 
-        LOG_INFO << "[assemble_chunks] start active_count=" << pool.ActiveCount()
-                 << " max_concurrent=" << pool.MaxConcurrent()
-                 << " upload_id=" << upload_id;
+        LOG_DEBUG << "[assemble_chunks] start active_count=" << pool.ActiveCount()
+                  << " max_concurrent=" << pool.MaxConcurrent()
+                  << " upload_id=" << upload_id;
 
         auto slot_guard = pool.TryAcquireGuard(upload_id);
         if (!slot_guard.has_value()) {
@@ -339,9 +339,9 @@ namespace disk::storage {
         auto end = std::chrono::steady_clock::now();
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        LOG_INFO << "[assemble_chunks] duration_us=" << duration_us
-                 << " outcome=success active_count=" << pool.ActiveCount()
-                 << " max_concurrent=" << pool.MaxConcurrent();
+        LOG_DEBUG << "[assemble_chunks] duration_us=" << duration_us
+                  << " outcome=success active_count=" << pool.ActiveCount()
+                  << " max_concurrent=" << pool.MaxConcurrent();
 
         co_return result;
     }

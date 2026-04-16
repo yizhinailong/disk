@@ -152,9 +152,11 @@ namespace disk::file {
         //  - Zone C failure: entire transaction rolls back; upload task remains pending.
         //  - All-or-nothing consistency: partial success is impossible.
         //
-        // Instant-upload path consistency note (FileService.cpp lines 70-102):
-        //  - ref_count increment + files insert executed without explicit transaction wrapper.
-        //  - Partial success can leave cross-table inconsistency in failure windows.
+        // Instant-upload path consistency note (optimized):
+        //  - ref_count increment + files insert now wrapped in newTransactionCoro().
+        //  - Transaction-aware IsFilenameExists used for duplicate check within transaction.
+        //  - Redundant content re-read eliminated; mime_type from LookupExistingContentMetadata.
+        //  - All-or-nothing consistency: rollback on any DB failure within the instant-upload branch.
 
         // ==================== Upload DTO Contract Tests ====================
 

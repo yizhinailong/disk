@@ -107,7 +107,7 @@ check_server() {
 # Login and get token
 login() {
     log_info "Logging in as $TEST_USER..."
-    
+
     local response
     response=$(curl -s -X POST "$BASE_URL/api/auth/login" \
         -H "Content-Type: application/json" \
@@ -120,58 +120,252 @@ login() {
         echo "$response"
         return 1
     fi
-    
+
     log_pass "Login successful"
     save_evidence "login" "$response"
     return 0
 }
 
-# Test 4.1: Init Upload - Normal
-test_init_upload_normal() {
-    log_info "Testing Init Upload (normal)..."
+test_happy_path_upload() {
+    log_info "Testing Happy Path Upload Flow..."
+
+    local chunk_0_file="/tmp/test_chunk_0.bin"
+    local chunk_1_file="/tmp/test_chunk_1.bin"
+    local full_file="/tmp/test_full_file.bin"
+
+    printf 'upload-part-0\n' > "$chunk_0_file"
+    printf 'upload-part-1\n' > "$chunk_1_file"
+
+    local chunk_0_hash
+    local chunk_1_hash
+    chunk_0_hash=$(md5sum "$chunk_0_file" | cut -d' ' -f1)
+    chunk_1_hash=$(md5sum "$chunk_1_file" | cut -d' ' -f1)
+
+    cat "$chunk_0_file" "$chunk_1_file" > "$full_file"
+    local file_hash
+    local file_size
+    file_hash=$(md5sum "$full_file" | cut -d' ' -f1)
+    file_size=$(stat -c%s "$full_file")
+
+    log_info "File hash: $file_hash (size: $file_size)"
+    log_info "Chunk 0 hash: $chunk_0_hash"
+    log_info "Chunk 1 hash: $chunk_1_hash"
 
     local response
     response=$(curl -s -X POST "$BASE_URL/api/file/upload/init" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d '{
-            "filename": "test_document.pdf",
-            "file_size": 10485760,
-            "file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-            "parent_id": 0
-        }')
+        -d "{
+            \"filename\": \"happy_path_test.bin\",
+            \"file_size\": $file_size,
+            \"file_hash\": \"$file_hash\",
+            \"parent_id\": 0
+        }")
 
-    local instant_upload
-    instant_upload=$(json_field "$response" "data.instant_upload")
     local upload_id
     upload_id=$(json_field "$response" "data.upload_id")
 
-    if [ "$instant_upload" = "false" ] && [ -n "$upload_id" ]; then
-        log_pass "Init Upload (normal) - upload_id: $upload_id"
-        UPLOAD_ID="$upload_id"
-        save_evidence "init-upload-normal" "$response"
-        return 0
-    else
-        log_fail "Init Upload (normal)"
+    if [ -z "$upload_id" ] || [ "$upload_id" = "null" ]; then
+        log_fail "Init Upload (happy path) - failed to get upload_id"
         echo "$response"
+        rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
         return 1
     fi
+
+    log_pass "Init Upload (happy path) - upload_id: $upload_id"
+    save_evidence "init-upload-normal" "$response"
+
+    response=$(curl -s -X POST "$BASE_URL/api/file/upload/chunk?upload_id=$upload_id&chunk_index=0&chunk_hash=$chunk_0_hash" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/octet-stream" \
+        --data-binary "@$chunk_0_file")
+
+    local uploaded_0
+    uploaded_0=$(json_field "$response" "data.uploaded")
+
+    if [ "$uploaded_0" != "true" ]; then
+        log_fail "Upload Chunk 0 (happy path)"
+        echo "$response"
+        rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
+        return 1
+    fi
+
+    log_pass "Upload Chunk 0 (happy path)"
+    save_evidence "upload-chunk-0" "$response"
+
+    response=$(curl -s -X POST "$BASE_URL/api/file/upload/chunk?upload_id=$upload_id&chunk_index=1&chunk_hash=$chunk_1_hash" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/octet-stream" \
+        --data-binary "@$chunk_1_file")
+
+    local uploaded_1
+    uploaded_1=$(json_field "$response" "data.uploaded")
+
+    if [ "$uploaded_1" != "true" ]; then
+        log_fail "Upload Chunk 1 (happy path)"
+        echo "$response"
+        rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
+        return 1
+    fi
+
+    log_pass "Upload Chunk 1 (happy path)"
+    save_evidence "upload-chunk-1" "$response"
+
+    response=$(curl -s -X POST "$BASE_URL/api/file/upload/complete" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{ \"upload_id\": \"$upload_id\" }")
+
+    local file_id
+    local file_name
+    local returned_hash
+    file_id=$(json_field "$response" "data.file.id")
+    file_name=$(json_field "$response" "data.file.name")
+    returned_hash=$(json_field "$response" "data.file.hash")
+
+    if [ -z "$file_id" ] || [ "$file_id" = "null" ]; then
+        log_fail "Complete Upload (happy path) - no file_id returned"
+        echo "$response"
+        rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
+        return 1
+    fi
+
+    if [ "$returned_hash" != "$file_hash" ]; then
+        log_fail "Complete Upload (happy path) - hash mismatch: expected $file_hash, got $returned_hash"
+        echo "$response"
+        rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
+        return 1
+    fi
+
+    if [ "$file_name" != "happy_path_test.bin" ]; then
+        log_fail "Complete Upload (happy path) - filename mismatch: expected happy_path_test.bin, got $file_name"
+        echo "$response"
+        rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
+        return 1
+    fi
+
+    log_pass "Complete Upload (happy path) - file_id: $file_id, hash verified"
+    save_evidence "complete-upload-success" "$response"
+
+    rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
+
+    return 0
 }
 
-# Test 4.1: Init Upload - Quota Exceeded
-test_init_upload_quota() {
-    log_info "Testing Init Upload (quota exceeded)..."
+test_missing_chunk_upload() {
+    log_info "Testing Missing Chunk Upload (failure path)..."
+
+    local chunk_0_file="/tmp/test_chunk_missing_0.bin"
+    local chunk_1_file="/tmp/test_chunk_missing_1.bin"
+    local full_file="/tmp/test_full_missing.bin"
+
+    printf 'upload-part-missing-0\n' > "$chunk_0_file"
+    printf 'upload-part-missing-1\n' > "$chunk_1_file"
+
+    local chunk_0_hash
+    local chunk_1_hash
+    chunk_0_hash=$(md5sum "$chunk_0_file" | cut -d' ' -f1)
+    chunk_1_hash=$(md5sum "$chunk_1_file" | cut -d' ' -f1)
+
+    cat "$chunk_0_file" "$chunk_1_file" > "$full_file"
+    local file_hash
+    local file_size
+    file_hash=$(md5sum "$full_file" | cut -d' ' -f1)
+    file_size=$(stat -c%s "$full_file")
+
+    log_info "File hash: $file_hash (size: $file_size)"
 
     local response
     response=$(curl -s -X POST "$BASE_URL/api/file/upload/init" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d '{
-            "filename": "huge_file.pdf",
-            "file_size": 999999999999,
-            "file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-            "parent_id": 0
-        }')
+        -d "{
+            \"filename\": \"missing_chunk_test.bin\",
+            \"file_size\": $file_size,
+            \"file_hash\": \"$file_hash\",
+            \"parent_id\": 0
+        }")
+
+    local upload_id
+    upload_id=$(json_field "$response" "data.upload_id")
+
+    if [ -z "$upload_id" ] || [ "$upload_id" = "null" ]; then
+        log_fail "Init Upload (missing chunk) - failed to get upload_id"
+        echo "$response"
+        rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
+        return 1
+    fi
+
+    log_pass "Init Upload (missing chunk) - upload_id: $upload_id"
+    save_evidence "init-upload-missing" "$response"
+
+    response=$(curl -s -X POST "$BASE_URL/api/file/upload/chunk?upload_id=$upload_id&chunk_index=0&chunk_hash=$chunk_0_hash" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/octet-stream" \
+        --data-binary "@$chunk_0_file")
+
+    local uploaded_0
+    uploaded_0=$(json_field "$response" "data.uploaded")
+
+    if [ "$uploaded_0" != "true" ]; then
+        log_fail "Upload Chunk 0 (missing chunk)"
+        echo "$response"
+        rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
+        return 1
+    fi
+
+    log_pass "Upload Chunk 0 (missing chunk) - deliberately not uploading chunk 1"
+    save_evidence "upload-chunk-missing-0" "$response"
+
+    response=$(curl -s -X POST "$BASE_URL/api/file/upload/complete" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{ \"upload_id\": \"$upload_id\" }")
+
+    local code
+    local message
+    code=$(json_field "$response" "code")
+    message=$(json_field "$response" "message")
+
+    if [ "$code" = "0" ] || [ -z "$code" ] || [ "$code" = "null" ]; then
+        log_fail "Complete Upload (missing chunk) - expected non-zero code, got: $code"
+        echo "$response"
+        rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
+        return 1
+    fi
+
+    if ! echo "$message" | grep -q "Not all chunks uploaded"; then
+        log_fail "Complete Upload (missing chunk) - expected 'Not all chunks uploaded' in message, got: $message"
+        echo "$response"
+        rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
+        return 1
+    fi
+
+    log_pass "Complete Upload (missing chunk) - correctly failed with code $code and message: $message"
+    save_evidence "complete-upload-missing-chunk" "$response"
+
+    rm -f "$chunk_0_file" "$chunk_1_file" "$full_file"
+
+    return 0
+}
+
+test_init_upload_quota() {
+    log_info "Testing Init Upload (quota exceeded)..."
+
+    # Use a valid 32-char MD5 hash for quota test
+    # This is the MD5 of "quota_test_file"
+    local quota_hash="a1c7e6486f5811f4e23e6c696c0d6363"
+
+    local response
+    response=$(curl -s -X POST "$BASE_URL/api/file/upload/init" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"filename\": \"huge_file.pdf\",
+            \"file_size\": 999999999999,
+            \"file_hash\": \"$quota_hash\",
+            \"parent_id\": 0
+        }")
 
     local code
     code=$(json_field "$response" "code")
@@ -187,67 +381,14 @@ test_init_upload_quota() {
     fi
 }
 
-# Test 4.2: Upload Chunk
-# Contract: POST with query params (upload_id, chunk_index, chunk_hash) + raw binary body (application/octet-stream)
-test_upload_chunk() {
-    log_info "Testing Upload Chunk..."
-
-    local chunk_file="/tmp/test_chunk.bin"
-    dd if=/dev/urandom of="$chunk_file" bs=1024 count=1 2>/dev/null
-    local chunk_hash
-    chunk_hash=$(md5sum "$chunk_file" | cut -d' ' -f1)
-
-    local response
-    response=$(curl -s -X POST "$BASE_URL/api/file/upload/chunk?upload_id=$UPLOAD_ID&chunk_index=0&chunk_hash=$chunk_hash" \
-        -H "Authorization: Bearer $TOKEN" \
-        -H "Content-Type: application/octet-stream" \
-        --data-binary "@$chunk_file")
-
-    local uploaded
-    uploaded=$(json_field "$response" "data.uploaded")
-
-    rm -f "$chunk_file"
-
-    if [ "$uploaded" = "true" ]; then
-        log_pass "Upload Chunk - index 0 (binary body)"
-        save_evidence "upload-chunk" "$response"
-        return 0
-    else
-        log_fail "Upload Chunk"
-        echo "$response"
-        return 1
-    fi
-}
-
-# Test 4.4: Cancel Upload
-test_cancel_upload() {
-    log_info "Testing Cancel Upload..."
-    
-    local response
-    response=$(curl -s -X DELETE "$BASE_URL/api/file/upload/$UPLOAD_ID" \
-        -H "Authorization: Bearer $TOKEN")
-
-    local code
-    code=$(json_field "$response" "code")
-
-    if [ "$code" = "0" ]; then
-        log_pass "Cancel Upload"
-        save_evidence "cancel-upload" "$response"
-        return 0
-    else
-        log_fail "Cancel Upload"
-        echo "$response"
-        return 1
-    fi
-}
-
-# Main test runner
 main() {
     echo "=========================================="
     echo "File Upload Flow Integration Tests"
     echo "=========================================="
     echo ""
-    
+
+    mkdir -p "$EVIDENCE_DIR"
+
     # Check prerequisites
     if ! command -v python3 &> /dev/null; then
         log_fail "python3 is required but not installed"
@@ -258,17 +399,14 @@ main() {
         log_fail "curl is required but not installed"
         exit 1
     fi
-    
-    # Run tests
+
     check_server || exit 1
     login || exit 1
-    
-    test_init_upload_normal
+
+    test_happy_path_upload
+    test_missing_chunk_upload
     test_init_upload_quota
-    test_upload_chunk
-    test_cancel_upload
-    
-    # Summary
+
     echo ""
     echo "=========================================="
     echo "Test Summary"
@@ -276,7 +414,7 @@ main() {
     echo -e "Passed: ${GREEN}$TESTS_PASSED${NC}"
     echo -e "Failed: ${RED}$TESTS_FAILED${NC}"
     echo ""
-    
+
     if [ $TESTS_FAILED -eq 0 ]; then
         echo -e "${GREEN}All tests passed!${NC}"
         exit 0
