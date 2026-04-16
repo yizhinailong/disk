@@ -97,3 +97,224 @@ set_tests_properties(
     TIMEOUT 120
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+
+add_test(
+    NAME AssemblyBackpressureIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_assembly_backpressure.sh"
+)
+
+set_tests_properties(
+    AssemblyBackpressureIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME AuthFlowIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_auth_flow.sh"
+)
+
+set_tests_properties(
+    AuthFlowIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME AuthLifecycleIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_auth_lifecycle.sh"
+)
+
+set_tests_properties(
+    AuthLifecycleIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME CopyDeleteAtomicityIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_copy_delete_atomicity.sh"
+)
+
+set_tests_properties(
+    CopyDeleteAtomicityIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME DownloadFlowIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_download_flow.sh"
+)
+
+set_tests_properties(
+    DownloadFlowIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME FileMetadataQueryIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_file_metadata_query.sh"
+)
+
+set_tests_properties(
+    FileMetadataQueryIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME FileMutationOpsIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_file_mutation_ops.sh"
+)
+
+set_tests_properties(
+    FileMutationOpsIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME FolderLifecycleIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_folder_lifecycle.sh"
+)
+
+set_tests_properties(
+    FolderLifecycleIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME HealthAndLogsIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_health_and_logs.sh"
+)
+
+set_tests_properties(
+    HealthAndLogsIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME PasswordUpdateIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_password_update.sh"
+)
+
+set_tests_properties(
+    PasswordUpdateIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME RefreshTokenIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_refresh_token.sh"
+)
+
+set_tests_properties(
+    RefreshTokenIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME ShareBrowseIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_share_browse.sh"
+)
+
+set_tests_properties(
+    ShareBrowseIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME ShareManagementIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_share_management.sh"
+)
+
+set_tests_properties(
+    ShareManagementIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME SystemInfoIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_system_info.sh"
+)
+
+set_tests_properties(
+    SystemInfoIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME TrashLifecycleIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_trash_lifecycle.sh"
+)
+
+set_tests_properties(
+    TrashLifecycleIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME UploadFlowIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_upload_flow.sh"
+)
+
+set_tests_properties(
+    UploadFlowIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME UserProfileUpdateIntegration
+    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_user_profile_update.sh"
+)
+
+set_tests_properties(
+    UserProfileUpdateIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
