@@ -87,7 +87,7 @@ set_tests_properties(
 
 add_test(
     NAME UserProfileStorageIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_user_profile_storage.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_user_profile_storage.py"
 )
 
 set_tests_properties(
@@ -113,7 +113,7 @@ set_tests_properties(
 
 add_test(
     NAME AuthFlowIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_auth_flow.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_auth_flow.py"
 )
 
 set_tests_properties(
@@ -126,7 +126,7 @@ set_tests_properties(
 
 add_test(
     NAME AuthLifecycleIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_auth_lifecycle.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_auth_lifecycle.py"
 )
 
 set_tests_properties(
@@ -217,7 +217,7 @@ set_tests_properties(
 
 add_test(
     NAME PasswordUpdateIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_password_update.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_password_update.py"
 )
 
 set_tests_properties(
@@ -230,7 +230,7 @@ set_tests_properties(
 
 add_test(
     NAME RefreshTokenIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_refresh_token.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_refresh_token.py"
 )
 
 set_tests_properties(
@@ -308,7 +308,7 @@ set_tests_properties(
 
 add_test(
     NAME UserProfileUpdateIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_user_profile_update.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_user_profile_update.py"
 )
 
 set_tests_properties(
