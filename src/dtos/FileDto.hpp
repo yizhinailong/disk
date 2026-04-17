@@ -901,6 +901,42 @@ namespace disk::file {
         }
     };
 
+    /**
+     * @brief 文件详情响应 DTO
+     *
+     * @details
+     * GET /api/file/{file_id} 返回的扁平文件详情字段。
+     */
+    struct FileDetailResponse {
+        uint64_t id{ 0 };
+        std::string name;
+        std::string type; ///< "file" 或 "folder"
+        int64_t size{ 0 };
+        std::string hash; ///< MD5 hash
+        std::string mime_type;
+        uint64_t parent_id{ 0 };
+        std::string path;
+        std::string created_at;
+        std::string updated_at;
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["id"] = static_cast<Json::UInt64>(id);
+            json["name"] = name;
+            json["type"] = type;
+            json["size"] = static_cast<Json::Int64>(size);
+            json["hash"] = hash;
+            json["mime_type"] = mime_type;
+            json["parent_id"] = static_cast<Json::UInt64>(parent_id);
+            json["path"] = path;
+            json["created_at"] = created_at;
+            json["updated_at"] = updated_at;
+            return json;
+        }
+    };
+
     // ==================== Download ====================
 
     /**

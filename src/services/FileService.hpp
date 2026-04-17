@@ -154,6 +154,17 @@ namespace disk::file {
             -> drogon::Task<Result<FileListResponse>>;
 
         /**
+         * @brief 获取文件详情
+         *
+         * @param file_id 文件 ID
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<FileDetailResponse>> 成功返回文件详情，失败返回错误
+         */
+        [[nodiscard]]
+        auto GetFileDetail(uint64_t file_id, uint64_t user_id)
+            -> drogon::Task<Result<FileDetailResponse>>;
+
+        /**
          * @brief 获取下载信息（元数据）
          *
          * 业务规则：

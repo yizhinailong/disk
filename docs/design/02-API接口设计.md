@@ -1375,13 +1375,16 @@ Authorization: Bearer <access_token>
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| file | object | 文件信息 |
-| file.file_id | integer | 文件 ID |
-| file.filename | string | 文件名 |
-| file.file_size | integer | 文件大小（字节） |
-| file.file_hash | string | 文件 MD5 哈希 |
-| file.mime_type | string | MIME 类型 |
-| file.supports_range | boolean | 是否支持断点续传 |
+| id | integer | 文件 ID |
+| name | string | 文件名 |
+| type | string | 类型（固定为 "file"） |
+| size | integer | 文件大小（字节） |
+| hash | string | 文件 MD5 哈希 |
+| mime_type | string | MIME 类型 |
+| parent_id | integer | 父文件夹 ID（0 表示根目录） |
+| path | string | 文件路径 |
+| created_at | string | 创建时间 |
+| updated_at | string | 更新时间 |
 
 #### 错误响应矩阵
 
@@ -1393,25 +1396,6 @@ Authorization: Bearer <access_token>
 | 404 | 50005 | `FileNotFound` | 文件不存在 | 指定的 file_id 不存在或不属于当前用户 |
 
 #### 成功响应示例
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "file": {
-      "file_id": 123,
-      "filename": "document.pdf",
-      "file_size": 1048576,
-      "file_hash": "abc123def456789...",
-      "mime_type": "application/pdf",
-      "supports_range": true
-    }
-  }
-}
-```
-
-#### 响应示例
 
 ```json
 {

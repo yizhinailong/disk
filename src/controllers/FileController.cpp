@@ -261,8 +261,8 @@ namespace disk::file {
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 调用 Service 层获取文件详情（复用 GetDownloadInfo）
-        auto result = co_await m_file_service->GetDownloadInfo(parse_result->file_id, user_id);
+        // 3. 调用 Service 层获取文件详情
+        auto result = co_await m_file_service->GetFileDetail(parse_result->file_id, user_id);
         if (!result) {
             LOG_ERROR << "Get file detail failed: " << result.error().message
                       << " (user_id=" << user_id << ", file_id=" << file_id << ")";
@@ -270,12 +270,9 @@ namespace disk::file {
         }
 
         // 4. 构造响应
-        Json::Value data;
-        data["file"] = result->ToJson();
-
-        LOG_INFO << "Get file detail successful: filename=" << result->filename
+        LOG_INFO << "Get file detail successful: name=" << result->name
                  << " (user_id=" << user_id << ", file_id=" << file_id << ")";
-        co_return Response::Success(data);
+        co_return Response::Success(result->ToJson());
     }
 
     auto FileController::DownloadInfo(drogon::HttpRequestPtr request, std::string file_id)

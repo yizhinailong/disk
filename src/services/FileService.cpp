@@ -1305,6 +1305,55 @@ namespace disk::file {
         co_return response;
     }
 
+    // ==================== GetFileDetail ====================
+
+    auto FileService::GetFileDetail(uint64_t file_id, uint64_t user_id)
+        -> drogon::Task<Result<FileDetailResponse>> {
+
+        LOG_DEBUG << "Starting get file detail: file_id=" << file_id << ", user_id=" << user_id;
+
+        try {
+            CoroMapper<Files> file_mapper(m_db_client);
+            auto file = co_await file_mapper.findOne(
+                Criteria(Files::Cols::_id, CompareOperator::EQ, file_id) &&
+                Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
+            );
+
+            std::string hash;
+            std::string mime_type = file.getValueOfMimeType();
+
+            if (file.getContentId()) {
+                CoroMapper<FileContents> content_mapper(m_db_client);
+                auto content = co_await content_mapper.findOne(
+                    Criteria(FileContents::Cols::_id, CompareOperator::EQ, *file.getContentId())
+                );
+                hash = content.getValueOfHashMd5();
+                if (mime_type.empty()) {
+                    mime_type = content.getValueOfMimeType();
+                }
+            }
+
+            FileDetailResponse response;
+            response.id = file.getValueOfId();
+            response.name = file.getValueOfName();
+            response.type = "file";
+            response.size = file.getValueOfSize();
+            response.hash = hash;
+            response.mime_type = mime_type;
+            response.parent_id = file.getValueOfFolderId();
+            response.path = file.getValueOfPath();
+            response.created_at = file.getValueOfCreatedAt().toDbStringLocal();
+            response.updated_at = file.getValueOfUpdatedAt().toDbStringLocal();
+
+            LOG_DEBUG << "File detail retrieved successfully: name=" << response.name;
+            co_return response;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "File not found or no permission: file_id=" << file_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
+        }
+    }
+
     // ==================== GetDownloadInfo ====================
 
     auto FileService::GetDownloadInfo(uint64_t file_id, uint64_t user_id)
