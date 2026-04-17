@@ -81,20 +81,44 @@ namespace disk::folder {
         co_return Response::Success(result->ToJson());
     }
 
-    auto FolderController::GetBreadcrumb(drogon::HttpRequestPtr request)
+    auto FolderController::GetBreadcrumb(drogon::HttpRequestPtr request, const std::string& folder_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "Received get breadcrumb request: " << request->getPeerAddr().toIpPort();
+        LOG_INFO << "Received get breadcrumb request: " << request->getPeerAddr().toIpPort()
+                 << ", folder_id=" << folder_id;
 
-        // 1. 从路径参数解析 folder_id
-        auto folder_id_str = request->getParameter("folder_id");
-        uint64_t folder_id = 0;
-        try {
-            folder_id = std::stoull(folder_id_str);
-        } catch (...) {
-            LOG_WARN << "Invalid folder_id format: " << folder_id_str;
+        // 1. 验证并解析 folder_id
+        if (folder_id.empty()) {
+            LOG_WARN << "Missing required parameter: folder_id";
             co_return Response::Error(
-                ErrorInfo(ErrorCode::InvalidParameter, "Invalid folder_id format")
+                ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: folder_id")
+            );
+        }
+
+        // 检查是否为负数（stoull 会将负数回绕）
+        if (folder_id[0] == '-') {
+            LOG_WARN << "Parameter 'folder_id' must be a positive integer: " << folder_id;
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::InvalidParameter,
+                "Parameter 'folder_id' must be a positive integer"
+            ));
+        }
+
+        uint64_t parsed_folder_id = 0;
+        try {
+            size_t pos = 0;
+            parsed_folder_id = std::stoull(folder_id, &pos);
+            if (pos != folder_id.length() || parsed_folder_id == 0) {
+                LOG_WARN << "Parameter 'folder_id' must be a positive integer: " << folder_id;
+                co_return Response::Error(ErrorInfo(
+                    ErrorCode::InvalidParameter,
+                    "Parameter 'folder_id' must be a positive integer"
+                ));
+            }
+        } catch (const std::exception& e) {
+            LOG_WARN << "Parameter 'folder_id' invalid format: " << folder_id;
+            co_return Response::Error(
+                ErrorInfo(ErrorCode::InvalidParameter, "Parameter 'folder_id' invalid format")
             );
         }
 
@@ -102,16 +126,16 @@ namespace disk::folder {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         // 3. 调用 Service 层获取面包屑
-        auto result = co_await m_folder_service->GetBreadcrumb(folder_id, user_id);
+        auto result = co_await m_folder_service->GetBreadcrumb(parsed_folder_id, user_id);
         if (!result) {
             LOG_ERROR << "Get breadcrumb failed: " << result.error().message
-                      << " (user_id=" << user_id << ", folder_id=" << folder_id << ")";
+                      << " (user_id=" << user_id << ", folder_id=" << parsed_folder_id << ")";
             co_return Response::Error(result.error());
         }
 
         // 4. 返回成功响应
-        LOG_INFO << "Get breadcrumb successful: user_id=" << user_id << ", folder_id=" << folder_id
-                 << ", path_count=" << result->path.size();
+        LOG_INFO << "Get breadcrumb successful: user_id=" << user_id
+                 << ", folder_id=" << parsed_folder_id << ", path_count=" << result->path.size();
         co_return Response::Success(result->ToJson());
     }
 

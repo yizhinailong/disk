@@ -294,6 +294,13 @@ namespace disk::share {
         }
         const auto& share = *share_result;
 
+        // 验证分享状态（必须是有效状态）
+        if (!IsShareActive(share)) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ShareExpired, "Share cancelled or expired")
+            );
+        }
+
         // 获取分享文件列表
         auto share_files = co_await GetShareFiles(share.getValueOfId());
 

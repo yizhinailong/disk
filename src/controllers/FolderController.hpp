@@ -60,10 +60,12 @@ namespace disk::folder {
         /**
          * @brief 获取面包屑路径
          * @param request HTTP请求对象
+         * @param folder_id 文件夹ID（路径参数）
          * @return drogon::Task<drogon::HttpResponsePtr> HTTP响应
          */
         [[nodiscard]]
-        auto GetBreadcrumb(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
+        auto GetBreadcrumb(drogon::HttpRequestPtr request, const std::string& folder_id)
+            -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
         std::unique_ptr<FolderService> m_folder_service;

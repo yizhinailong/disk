@@ -57,7 +57,7 @@
           "^/api/auth/refresh",
           "^/api/health",
           "^/api/share/access/.*",
-          "^/api/share-browse/.*",
+          "^/api/share/browse/.*",
           "^/api/share/download/.*"
         ]
       }
