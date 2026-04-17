@@ -204,7 +204,7 @@ set_tests_properties(
 
 add_test(
     NAME HealthAndLogsIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_health_and_logs.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_health_and_logs.py"
 )
 
 set_tests_properties(
@@ -269,7 +269,7 @@ set_tests_properties(
 
 add_test(
     NAME SystemInfoIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_system_info.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_system_info.py"
 )
 
 set_tests_properties(
