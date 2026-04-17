@@ -100,7 +100,7 @@ set_tests_properties(
 
 add_test(
     NAME AssemblyBackpressureIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_assembly_backpressure.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_assembly_backpressure.py"
 )
 
 set_tests_properties(
@@ -152,7 +152,7 @@ set_tests_properties(
 
 add_test(
     NAME DownloadFlowIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_download_flow.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_download_flow.py"
 )
 
 set_tests_properties(
@@ -165,7 +165,7 @@ set_tests_properties(
 
 add_test(
     NAME FileMetadataQueryIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_file_metadata_query.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_file_metadata_query.py"
 )
 
 set_tests_properties(
@@ -295,7 +295,7 @@ set_tests_properties(
 
 add_test(
     NAME UploadFlowIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_upload_flow.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_upload_flow.py"
 )
 
 set_tests_properties(
