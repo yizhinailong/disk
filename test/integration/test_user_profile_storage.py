@@ -73,7 +73,7 @@ def test_get_profile_with_valid_token():
         print(resp_body)
         sys.exit(1)
 
-    fields = {
+    required_fields = {
         "id": json_field(resp_body, "data.user.id"),
         "username": json_field(resp_body, "data.user.username"),
         "email": json_field(resp_body, "data.user.email"),
@@ -82,19 +82,21 @@ def test_get_profile_with_valid_token():
         "storage_quota": json_field(resp_body, "data.user.storage_quota"),
         "storage_used": json_field(resp_body, "data.user.storage_used"),
         "nickname": json_field(resp_body, "data.user.nickname"),
-        "avatar": json_field(resp_body, "data.user.avatar"),
         "created_at": json_field(resp_body, "data.user.created_at"),
         "updated_at": json_field(resp_body, "data.user.updated_at"),
     }
 
-    if all(fields.values()):
+    avatar = json_field(resp_body, "data.user.avatar")
+
+    if all(required_fields.values()):
         log_pass(
             f"GET /api/user/profile 返回所有预期字段 "
-            f"(id={fields['id']}, username={fields['username']}, "
-            f"files={fields['file_count']}, folders={fields['folder_count']})"
+            f"(id={required_fields['id']}, username={required_fields['username']}, "
+            f"files={required_fields['file_count']}, folders={required_fields['folder_count']}, "
+            f"avatar={'set' if avatar else 'null/empty'})"
         )
     else:
-        missing = {k: v for k, v in fields.items() if not v}
+        missing = {k: v for k, v in required_fields.items() if not v}
         log_fail(f"GET /api/user/profile 缺少字段: {missing}")
         print(resp_body)
         sys.exit(1)

@@ -8,7 +8,7 @@
 Integration tests for copy/delete/trash atomicity at API boundary.
 
 Covers:
-  - Happy-path copy: upload → copy to root → verify copied_count > 0 and new_files present
+  - Happy-path copy: upload → copy to dedicated folder → verify copied_count > 0 and new_files present
   - Happy-path delete: delete original → verify deleted_count > 0
   - Trash visibility: GET /api/trash → verify deleted file appears in trash list
   - Copy non-existent file_ids: POST /api/file/copy with invalid IDs → verify code != 0
@@ -64,6 +64,7 @@ FILE_ID = ""
 FILE_SIZE = 0
 FILE_HASH = ""
 COPIED_FILE_ID = ""
+DEST_FOLDER_ID = ""
 
 EVIDENCE_PREFIX = "copy-delete-atomicity"
 
@@ -168,7 +169,7 @@ def upload_fixture(
 def test_happy_copy() -> None:
     global COPIED_FILE_ID
 
-    log_step("Test: Copy file to root folder")
+    log_step("Test: Copy file to dedicated destination folder")
 
     resp = fetch(
         "/api/file/copy",
@@ -177,7 +178,7 @@ def test_happy_copy() -> None:
             "Authorization": f"Bearer {TOKEN}",
             "Content-Type": "application/json",
         },
-        json_body={"file_ids": [int(FILE_ID)], "target_folder_id": 0},
+        json_body={"file_ids": [int(FILE_ID)], "target_folder_id": int(DEST_FOLDER_ID)},
     )
 
     save_evidence(f"{EVIDENCE_PREFIX}-copy-happy.json", resp.text)
@@ -254,7 +255,7 @@ def test_trash_visibility() -> None:
         items = data.get("data", {}).get("items", [])
         file_id_int = int(FILE_ID)
         for item in items:
-            if item.get("item_id") == file_id_int:
+            if item.get("original_id") == file_id_int:
                 found_in_trash = True
                 break
     except Exception:
@@ -286,7 +287,7 @@ def test_copy_nonexistent() -> None:
             "Authorization": f"Bearer {TOKEN}",
             "Content-Type": "application/json",
         },
-        json_body={"file_ids": [99999999], "target_folder_id": 0},
+        json_body={"file_ids": [99999999], "target_folder_id": int(DEST_FOLDER_ID)},
     )
 
     save_evidence(f"{EVIDENCE_PREFIX}-copy-nonexistent.json", resp.text)
@@ -365,7 +366,10 @@ def test_copy_then_delete() -> None:
             "Authorization": f"Bearer {TOKEN}",
             "Content-Type": "application/json",
         },
-        json_body={"file_ids": [int(file_id2)], "target_folder_id": 0},
+        json_body={
+            "file_ids": [int(file_id2)],
+            "target_folder_id": int(DEST_FOLDER_ID),
+        },
     )
 
     save_evidence(f"{EVIDENCE_PREFIX}-copy-then-delete-copy.json", copy_resp.text)
@@ -415,7 +419,7 @@ def test_copy_then_delete() -> None:
 
 
 def main() -> None:
-    global TOKEN, FILE_ID
+    global TOKEN, FILE_ID, DEST_FOLDER_ID
 
     print("==========================================")
     print("Copy/Delete Atomicity Integration Tests")
@@ -431,6 +435,25 @@ def main() -> None:
     TOKEN = token
 
     FILE_ID = upload_fixture(TOKEN)
+
+    # Create a dedicated destination folder for copy operations
+    dest_folder_name = f"copy_dest_{unique_name()}"
+    folder_resp = fetch(
+        "/api/folder/create",
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "Content-Type": "application/json",
+        },
+        json_body={"name": dest_folder_name, "parent_id": 0},
+    )
+    DEST_FOLDER_ID = json_field(folder_resp.text, "data.id")
+    if not DEST_FOLDER_ID or DEST_FOLDER_ID == "null":
+        log_fail(f"Failed to create destination folder: {folder_resp.text}")
+        sys.exit(1)
+    log_pass(
+        f"Created destination folder: id={DEST_FOLDER_ID}, name='{dest_folder_name}'"
+    )
 
     print()
     print("==========================================")

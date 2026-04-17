@@ -128,13 +128,15 @@ def test_normal_assembly_completes():
     log_section("Test 1: Normal assembly completion")
     log_info("Creating a single-chunk upload and completing it...")
 
+    content = "NormalAssembly!"
+    file_hash = _md5_str(content)
     upload_id = create_upload_task(
-        f"backpressure_normal_{os.getpid()}.pdf", 14, "a" * 32
+        f"backpressure_normal_{os.getpid()}.pdf", len(content), file_hash
     )
     if not upload_id:
         return
 
-    if not upload_chunk(upload_id, 0, "Hello, World!!"):
+    if not upload_chunk(upload_id, 0, content):
         return
 
     http_code, body = complete_upload(upload_id)
@@ -159,11 +161,18 @@ def test_duplicate_finalize_after_completion():
     log_section("Test 2: Duplicate finalize after completion (idempotency)")
     log_info("Creating upload, completing it, then calling complete again...")
 
-    upload_id = create_upload_task(f"backpressure_dup_{os.getpid()}.pdf", 14, "b" * 32)
+    content = "DuplicateFinalize!"
+    file_hash = _md5_str(content)
+    upload_id = create_upload_task(
+        f"backpressure_dup_{os.getpid()}.pdf", len(content), file_hash
+    )
     if not upload_id:
         return
 
-    if not upload_chunk(upload_id, 0, "Hello, World!!"):
+    if not upload_chunk(upload_id, 0, content):
+        return
+
+    if not upload_chunk(upload_id, 0, content):
         return
 
     # First complete — should succeed
@@ -205,11 +214,18 @@ def test_concurrent_finalize_singleflight():
     log_section("Test 3: Concurrent finalize — same upload_id (singleflight)")
     log_info("Firing 6 concurrent complete requests for same upload_id...")
 
-    upload_id = create_upload_task(f"backpressure_sf_{os.getpid()}.pdf", 14, "c" * 32)
+    content = "ConcurrentSingleflight!"
+    file_hash = _md5_str(content)
+    upload_id = create_upload_task(
+        f"backpressure_sf_{os.getpid()}.pdf", len(content), file_hash
+    )
     if not upload_id:
         return
 
-    if not upload_chunk(upload_id, 0, "Hello, World!!"):
+    if not upload_chunk(upload_id, 0, content):
+        return
+
+    if not upload_chunk(upload_id, 0, content):
         return
 
     # Fire 6 concurrent complete requests
@@ -264,21 +280,30 @@ def test_pool_saturation_overflow():
         "Creating 8 uploads and firing all completes concurrently to saturate pool..."
     )
 
-    chunk_data = "SaturationTest!!"
+    content_templates = [
+        "SaturationTest1!",
+        "SaturationTest2!",
+        "SaturationTest3!",
+        "SaturationTest4!",
+        "SaturationTest5!",
+        "SaturationTest6!",
+        "SaturationTest7!",
+        "SaturationTest8!",
+    ]
     upload_ids: list[str] = []
 
     for i in range(1, 9):
-        # Use unique hash per file to avoid dedup/instant upload
-        hash_prefix = f"d{str(i).zfill(32)}"[:32]
+        content = content_templates[i - 1]
+        file_hash = _md5_str(content)
         upload_id = create_upload_task(
-            f"backpressure_sat_{i}_{os.getpid()}.pdf", 16, hash_prefix
+            f"backpressure_sat_{i}_{os.getpid()}.pdf", len(content), file_hash
         )
         if not upload_id:
             log_fail(f"Failed to create upload task #{i}")
             return
         upload_ids.append(upload_id)
 
-        if not upload_chunk(upload_id, 0, chunk_data):
+        if not upload_chunk(upload_id, 0, content):
             log_fail(f"Failed to upload chunk for task #{i}")
             return
 
@@ -335,13 +360,18 @@ def test_no_duplicate_side_effects():
         "Verifying that duplicate complete does not create duplicate file records..."
     )
 
+    content = "NoDuplicateSideEffects!"
+    file_hash = _md5_str(content)
     upload_id = create_upload_task(
-        f"backpressure_nodup_{os.getpid()}.pdf", 14, "e" * 32
+        f"backpressure_nodup_{os.getpid()}.pdf", len(content), file_hash
     )
     if not upload_id:
         return
 
-    if not upload_chunk(upload_id, 0, "Hello, World!!"):
+    if not upload_chunk(upload_id, 0, content):
+        return
+
+    if not upload_chunk(upload_id, 0, content):
         return
 
     # First complete
