@@ -360,27 +360,47 @@ namespace disk::file {
         auto existing_task = co_await FindExistingTask(user_id, request.file_hash);
         if (existing_task.has_value()) {
             const auto& task = existing_task.value();
-            LOG_DEBUG << "Resume upload check successful: upload_id=" << task.getValueOfId();
-            InvalidateUploadTaskCache(task.getValueOfId());
+            const auto& task_id = task.getValueOfId();
 
-            // 从 upload_task_chunks 表查询已上传分片
-            auto chunk_result = co_await m_db_client->execSqlCoro(
-                "SELECT chunk_index FROM upload_task_chunks WHERE task_id = ? ORDER BY chunk_index",
-                task.getValueOfId()
-            );
+            if (task.getValueOfExpiresAt() < trantor::Date::now()) {
+                LOG_INFO << "Expired upload task found, discarding: upload_id=" << task_id;
+                InvalidateUploadTaskCache(task_id);
 
-            InitUploadResponse response;
-            response.upload_id = task.getValueOfId();
-            response.chunk_size = task.getValueOfChunkSize();
-            response.total_chunks = task.getValueOfTotalChunks();
-            response.instant_upload = false;
+                try {
+                    co_await m_db_client->execSqlCoro(
+                        "DELETE FROM upload_tasks WHERE id = ? AND status = 0",
+                        task_id
+                    );
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_WARN << "Failed to delete expired upload task: " << e.base().what();
+                }
 
-            response.uploaded_chunks.clear();
-            for (const auto& row : chunk_result) {
-                response.uploaded_chunks.push_back(row["chunk_index"].as<uint32_t>());
+                auto cleanup_result = co_await m_storage->CleanupTemp(task_id);
+                if (!cleanup_result) {
+                    LOG_WARN << "Failed to cleanup temp for expired task: upload_id=" << task_id;
+                }
+            } else {
+                LOG_DEBUG << "Resume upload check successful: upload_id=" << task_id;
+                InvalidateUploadTaskCache(task_id);
+
+                auto chunk_result = co_await m_db_client->execSqlCoro(
+                    "SELECT chunk_index FROM upload_task_chunks WHERE task_id = ? ORDER BY chunk_index",
+                    task_id
+                );
+
+                InitUploadResponse response;
+                response.upload_id = task_id;
+                response.chunk_size = task.getValueOfChunkSize();
+                response.total_chunks = task.getValueOfTotalChunks();
+                response.instant_upload = false;
+
+                response.uploaded_chunks.clear();
+                for (const auto& row : chunk_result) {
+                    response.uploaded_chunks.push_back(row["chunk_index"].as<uint32_t>());
+                }
+
+                co_return response;
             }
-
-            co_return response;
         }
 
         // 3. 预留存储配额
