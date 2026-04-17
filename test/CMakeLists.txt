@@ -74,7 +74,7 @@ gtest_discover_tests(disk-test)
 
 add_test(
     NAME LoginRateLimitIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_login_rate_limit.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_login_rate_limit.py"
 )
 
 set_tests_properties(
