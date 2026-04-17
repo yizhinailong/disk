@@ -1689,7 +1689,7 @@ namespace disk::file {
 
             // 过滤 keyword 中的特殊字符（防止 SQL 注入）
             for (char c : keyword_str) {
-                if (c == '%' || c == '_' || c == '\\' || c == '\'' || c == '"') {
+                if (c == '%' || c == '\\' || c == '\'' || c == '"') {
                     LOG_WARN << "Parameter 'keyword' contains forbidden characters: " << c;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,

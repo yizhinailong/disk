@@ -2016,8 +2016,17 @@ namespace disk::file {
         const bool use_fulltext = IsFulltextEligible(request.keyword);
         const bool has_folder_filter = request.folder_id.has_value();
         const auto normalized_keyword = NormalizeFulltextKeyword(request.keyword);
+
+        // Escape underscore for LIKE pattern (treat it literally, not as wildcard)
+        std::string escaped_like_keyword = request.keyword;
+        size_t pos = 0;
+        while ((pos = escaped_like_keyword.find('_', pos)) != std::string::npos) {
+            escaped_like_keyword.replace(pos, 1, "\\_");
+            pos += 2; // Skip past the escaped character
+        }
+
         const std::string search_param =
-            use_fulltext ? normalized_keyword : "%" + request.keyword + "%";
+            use_fulltext ? normalized_keyword : "%" + escaped_like_keyword + "%";
         const std::string inner_order_by =
             BuildDeterministicOrderByClause("name", "ASC", request.type == "all");
         const std::string outer_order_by = BuildDeterministicOrderByClause(
