@@ -73,9 +73,12 @@ EVIDENCE_PREFIX = "copy-delete-atomicity"
 
 
 def upload_fixture(
-    token: str, file_size: int = 256, filename: str = "atomicity_test.bin"
+    token: str, file_size: int = 256, filename: str | None = None
 ) -> str:
     """Upload a test file via chunked upload flow. Returns file_id."""
+    if filename is None:
+        filename = f"{unique_name('atomicity')}.bin"
+
     path = create_temp_file(file_size)
     file_hash = md5_hash(path)
 
@@ -350,7 +353,11 @@ def test_copy_then_delete() -> None:
     log_step("Test: Copy another file, then delete the copy")
 
     # Upload a second file for this test
-    file_id2 = upload_fixture(TOKEN, file_size=128, filename="atomicity_test2.bin")
+    file_id2 = upload_fixture(
+        TOKEN,
+        file_size=128,
+        filename=f"{unique_name('atomicity_test2')}.bin",
+    )
 
     if not file_id2:
         log_fail("copy-then-delete: failed to upload second file")

@@ -160,10 +160,10 @@ def do_upload_fixture():
 
 
 def test_file_list():
-    log_step("Test: GET /api/file/list?parent_id=0")
+    log_step("Test: GET /api/file/list?parent_id=0&page_size=200")
 
     resp = fetch(
-        "/api/file/list?parent_id=0",
+        "/api/file/list?parent_id=0&page_size=200",
         method="GET",
         headers={"Authorization": f"Bearer {TOKEN}"},
     )
@@ -343,7 +343,7 @@ def test_download_info():
 
 
 def test_file_search():
-    keyword = f"metadata_test_{os.getpid()}"
+    keyword = FILE_NAME
     log_step(f"Test: GET /api/file/search?keyword={keyword}")
 
     resp = fetch(

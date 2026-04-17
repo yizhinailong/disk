@@ -69,6 +69,13 @@ namespace disk::utils {
                 m_assemble_buffer_size_bytes = static_cast<uint32_t>(app_config["assemble_buffer_size_bytes"].asUInt());
                 LOG_INFO << "Loaded assemble_buffer_size_bytes from config: " << m_assemble_buffer_size_bytes;
             }
+
+            // 从配置读取 upload_rate_limit_per_minute
+            if (app_config.isMember("upload_rate_limit_per_minute")) {
+                m_upload_rate_limit_per_minute = app_config["upload_rate_limit_per_minute"].asInt();
+                LOG_INFO << "Loaded upload_rate_limit_per_minute from config: "
+                         << m_upload_rate_limit_per_minute;
+            }
         } else {
             LOG_WARN << "'disk' section not found in custom config, using default values";
         }
@@ -150,6 +157,10 @@ namespace disk::utils {
 
     auto ConfigMgr::GetAssembleBufferSizeBytes() const noexcept -> uint32_t {
         return m_assemble_buffer_size_bytes;
+    }
+
+    auto ConfigMgr::GetUploadRateLimitPerMinute() const noexcept -> int {
+        return m_upload_rate_limit_per_minute;
     }
 
     // ==================== 数据库配置 ====================

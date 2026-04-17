@@ -9,6 +9,7 @@
 
 #include "UploadRateLimitFilter.hpp"
 
+#include "utils/ConfigMgr.hpp"
 #include "utils/ErrorCode.hpp"
 #include "utils/RedisKeyPrefix.hpp"
 #include "utils/Response.hpp"
@@ -41,6 +42,9 @@ namespace disk::filters {
         const auto user_id = attrs->get<uint64_t>("user_id");
         const auto window = GetCurrentWindow();
         const auto key = RedisKeyPrefix::BuildUploadRateLimitKey(user_id, window);
+        const auto configured_limit =
+            disk::utils::ConfigMgr::GetInstance()->GetUploadRateLimitPerMinute();
+        const auto limit = configured_limit > 0 ? configured_limit : DEFAULT_LIMIT;
 
         // 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
         auto incr_result = co_await m_redis_service->IncrWithExpire(key, WINDOW_SECONDS);
@@ -53,12 +57,12 @@ namespace disk::filters {
         const int64_t current_count = incr_result.value();
 
         // 检查是否超过限制
-        if (current_count > DEFAULT_LIMIT) {
+        if (current_count > limit) {
             LOG_WARN << "Upload rate limit: user_id=" << user_id
                      << ", count=" << current_count;
 
             auto response = disk::Response::Error(disk::error::Code::TooManyRequests);
-            response->addHeader("X-RateLimit-Limit", std::to_string(DEFAULT_LIMIT));
+            response->addHeader("X-RateLimit-Limit", std::to_string(limit));
             response->addHeader("X-RateLimit-Remaining", "0");
             response->addHeader("X-RateLimit-Reset", std::to_string(GetResetTime(window)));
 
@@ -66,7 +70,7 @@ namespace disk::filters {
         }
 
         LOG_DEBUG << "Upload rate limit check passed: user_id=" << user_id
-                  << ", count=" << current_count << "/" << DEFAULT_LIMIT;
+                  << ", count=" << current_count << "/" << limit;
 
         co_return nullptr;
     }

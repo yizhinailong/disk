@@ -18,6 +18,7 @@ Usage:
 """
 
 import hashlib
+import json
 import os
 import sys
 import tempfile
@@ -46,6 +47,26 @@ TEST_USER = os.environ.get("TEST_USER", "admin")
 TEST_PASS = os.environ.get("TEST_PASS", "Admin123")
 
 TOKEN = ""
+HAPPY_FILENAME = f"happy_path_test_{os.getpid()}.bin"
+MISSING_FILENAME = f"missing_chunk_test_{os.getpid()}.bin"
+
+
+def _configured_chunk_size() -> int:
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    config_path = os.path.join(repo_root, "config.json")
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            config = json.load(f)
+        return int(
+            config.get("custom_config", {})
+            .get("disk", {})
+            .get("chunk_size", 5 * 1024 * 1024)
+        )
+    except Exception:
+        return 5 * 1024 * 1024
+
+
+CHUNK_SIZE = _configured_chunk_size()
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -61,8 +82,8 @@ def _md5_bytes(data: bytes) -> str:
 def test_happy_path_upload():
     log_info("Testing Happy Path Upload Flow...")
 
-    chunk_0_data = b"upload-part-0\n"
-    chunk_1_data = b"upload-part-1\n"
+    chunk_0_data = b"A" * CHUNK_SIZE
+    chunk_1_data = b"B" * 17
     full_data = chunk_0_data + chunk_1_data
 
     chunk_0_hash = _md5_bytes(chunk_0_data)
@@ -83,7 +104,7 @@ def test_happy_path_upload():
             "Content-Type": "application/json",
         },
         json_body={
-            "filename": "happy_path_test.bin",
+            "filename": HAPPY_FILENAME,
             "file_size": file_size,
             "file_hash": file_hash,
             "parent_id": 0,
@@ -166,9 +187,9 @@ def test_happy_path_upload():
         print(resp.text)
         return
 
-    if file_name != "happy_path_test.bin":
+    if file_name != HAPPY_FILENAME:
         log_fail(
-            f"Complete Upload (happy path) - filename mismatch: expected happy_path_test.bin, got {file_name}"
+            f"Complete Upload (happy path) - filename mismatch: expected {HAPPY_FILENAME}, got {file_name}"
         )
         print(resp.text)
         return
@@ -183,9 +204,10 @@ def test_happy_path_upload():
 def test_missing_chunk_upload():
     log_info("Testing Missing Chunk Upload (failure path)...")
 
-    chunk_0_data = b"upload-part-missing-0\n"
-    chunk_1_data = b"upload-part-missing-1\n"
-    full_data = chunk_0_data + chunk_1_data
+    chunk_0_data = b"M" * CHUNK_SIZE
+    chunk_1_data = b"N" * CHUNK_SIZE
+    chunk_2_data = b"O" * 17
+    full_data = chunk_0_data + chunk_1_data + chunk_2_data
 
     chunk_0_hash = _md5_bytes(chunk_0_data)
     chunk_1_hash = _md5_bytes(chunk_1_data)
@@ -203,7 +225,7 @@ def test_missing_chunk_upload():
             "Content-Type": "application/json",
         },
         json_body={
-            "filename": "missing_chunk_test.bin",
+            "filename": MISSING_FILENAME,
             "file_size": file_size,
             "file_hash": file_hash,
             "parent_id": 0,

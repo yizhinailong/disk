@@ -375,12 +375,14 @@ def test_verify_active_after_restore() -> None:
     ok = True
     assert_json_field("file-a-active", resp.text, "code", "0") or (ok := False)
 
-    file_id_in_resp = json_field(resp.text, "data.file.id")
+    file_id_in_resp = json_field(resp.text, "data.id")
+    if not file_id_in_resp or file_id_in_resp == "null":
+        file_id_in_resp = json_field(resp.text, "data.file.id")
     if file_id_in_resp == FILE_A_ID:
         log_pass("file-a-active: file is accessible with correct id")
     else:
         log_fail(
-            f"file-a-active: expected file.id={FILE_A_ID}, got '{file_id_in_resp}'"
+            f"file-a-active: expected file id={FILE_A_ID}, got '{file_id_in_resp}'"
         )
         ok = False
 

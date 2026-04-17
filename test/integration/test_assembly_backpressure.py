@@ -26,6 +26,7 @@ Usage:
 import hashlib
 import os
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
@@ -61,6 +62,10 @@ TOKEN = ""
 
 def _md5_str(data: str) -> str:
     return hashlib.md5(data.encode()).hexdigest()
+
+
+def _unique_content(label: str) -> str:
+    return f"{label}-{os.getpid()}-{time.time_ns()}"
 
 
 def create_upload_task(filename: str, file_size: int, file_hash: str) -> str:
@@ -128,7 +133,7 @@ def test_normal_assembly_completes():
     log_section("Test 1: Normal assembly completion")
     log_info("Creating a single-chunk upload and completing it...")
 
-    content = "NormalAssembly!"
+    content = _unique_content("NormalAssembly")
     file_hash = _md5_str(content)
     upload_id = create_upload_task(
         f"backpressure_normal_{os.getpid()}.pdf", len(content), file_hash
@@ -161,15 +166,12 @@ def test_duplicate_finalize_after_completion():
     log_section("Test 2: Duplicate finalize after completion (idempotency)")
     log_info("Creating upload, completing it, then calling complete again...")
 
-    content = "DuplicateFinalize!"
+    content = _unique_content("DuplicateFinalize")
     file_hash = _md5_str(content)
     upload_id = create_upload_task(
         f"backpressure_dup_{os.getpid()}.pdf", len(content), file_hash
     )
     if not upload_id:
-        return
-
-    if not upload_chunk(upload_id, 0, content):
         return
 
     if not upload_chunk(upload_id, 0, content):
@@ -214,15 +216,12 @@ def test_concurrent_finalize_singleflight():
     log_section("Test 3: Concurrent finalize — same upload_id (singleflight)")
     log_info("Firing 6 concurrent complete requests for same upload_id...")
 
-    content = "ConcurrentSingleflight!"
+    content = _unique_content("ConcurrentSingleflight")
     file_hash = _md5_str(content)
     upload_id = create_upload_task(
         f"backpressure_sf_{os.getpid()}.pdf", len(content), file_hash
     )
     if not upload_id:
-        return
-
-    if not upload_chunk(upload_id, 0, content):
         return
 
     if not upload_chunk(upload_id, 0, content):
@@ -280,16 +279,7 @@ def test_pool_saturation_overflow():
         "Creating 8 uploads and firing all completes concurrently to saturate pool..."
     )
 
-    content_templates = [
-        "SaturationTest1!",
-        "SaturationTest2!",
-        "SaturationTest3!",
-        "SaturationTest4!",
-        "SaturationTest5!",
-        "SaturationTest6!",
-        "SaturationTest7!",
-        "SaturationTest8!",
-    ]
+    content_templates = [_unique_content(f"SaturationTest{i}") for i in range(1, 9)]
     upload_ids: list[str] = []
 
     for i in range(1, 9):
@@ -360,15 +350,12 @@ def test_no_duplicate_side_effects():
         "Verifying that duplicate complete does not create duplicate file records..."
     )
 
-    content = "NoDuplicateSideEffects!"
+    content = _unique_content("NoDuplicateSideEffects")
     file_hash = _md5_str(content)
     upload_id = create_upload_task(
         f"backpressure_nodup_{os.getpid()}.pdf", len(content), file_hash
     )
     if not upload_id:
-        return
-
-    if not upload_chunk(upload_id, 0, content):
         return
 
     if not upload_chunk(upload_id, 0, content):
@@ -394,18 +381,19 @@ def test_no_duplicate_side_effects():
     second_file_id = json_int(second_body, "data.file.id")
     save_evidence("backpressure-nodup-second.json", second_body)
 
-    if first_file_id and second_file_id:
-        if first_file_id == second_file_id:
-            log_pass(
-                f"No duplicate side effects: both completes returned same file_id={first_file_id}"
-            )
-        else:
-            log_fail(
-                f"Side effect detected: file_id changed ({first_file_id} → {second_file_id})"
-            )
-    else:
+    if not first_file_id or first_file_id == "0":
+        log_fail(f"First complete did not return a valid file_id: '{first_file_id}'")
+    elif not second_file_id or second_file_id in ("0", "null"):
         log_pass(
             "No duplicate side effects: second complete returned minimal response (idempotent)"
+        )
+    elif first_file_id == second_file_id:
+        log_pass(
+            f"No duplicate side effects: both completes returned same file_id={first_file_id}"
+        )
+    else:
+        log_fail(
+            f"Side effect detected: file_id changed ({first_file_id} → {second_file_id})"
         )
 
 

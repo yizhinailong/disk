@@ -1547,7 +1547,7 @@ namespace disk::file {
                 );
 
                 for (const auto& row : result) {
-                    auto file = Files(row);
+                    auto file = Files(row, -1);
                     file_map[file.getValueOfId()] = std::move(file);
                 }
             } catch (const drogon::orm::DrogonDbException& e) {
@@ -1690,7 +1690,7 @@ namespace disk::file {
                     );
 
                     for (const auto& row : result) {
-                        auto file = Files(row);
+                        auto file = Files(row, -1);
                         file_map[file.getValueOfId()] = std::move(file);
                     }
                 } catch (const drogon::orm::DrogonDbException& e) {
@@ -1952,7 +1952,7 @@ namespace disk::file {
                 );
 
                 for (const auto& row : result) {
-                    auto file = Files(row);
+                    auto file = Files(row, -1);
                     file_map[file.getValueOfId()] = std::move(file);
                 }
             } catch (const drogon::orm::DrogonDbException& e) {

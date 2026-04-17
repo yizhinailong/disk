@@ -137,6 +137,13 @@ namespace disk::utils {
         [[nodiscard]]
         auto GetAssembleBufferSizeBytes() const noexcept -> uint32_t;
 
+        /**
+         * @brief 获取上传接口每分钟限流阈值
+         * @return int 每分钟请求数上限（默认 60）
+         */
+        [[nodiscard]]
+        auto GetUploadRateLimitPerMinute() const noexcept -> int;
+
         // ==================== 数据库配置 ====================
 
         /**
@@ -187,6 +194,7 @@ namespace disk::utils {
         int m_upload_task_expiry_seconds{ 86400 };
         uint32_t m_assembly_max_concurrent{ 4 };
         uint32_t m_assemble_buffer_size_bytes{ 262144 };
+        int m_upload_rate_limit_per_minute{ 60 };
 
         int64_t m_db_pool_size{ 0 };
         int64_t m_redis_pool_size{ 0 };
