@@ -78,10 +78,10 @@ class _CaseInsensitiveDict(dict):
 
     def __init__(self, data: dict[str, str] | None = None) -> None:
         super().__init__()
+        self._keys: dict[str, str] = {}
         if data:
             for k, v in data.items():
                 self[k] = v
-        self._keys: dict[str, str] = {}
 
     def __setitem__(self, key: str, value: str) -> None:
         lower = key.lower()
