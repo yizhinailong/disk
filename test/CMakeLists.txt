@@ -139,7 +139,7 @@ set_tests_properties(
 
 add_test(
     NAME CopyDeleteAtomicityIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_copy_delete_atomicity.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_copy_delete_atomicity.py"
 )
 
 set_tests_properties(
@@ -178,7 +178,7 @@ set_tests_properties(
 
 add_test(
     NAME FileMutationOpsIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_file_mutation_ops.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_file_mutation_ops.py"
 )
 
 set_tests_properties(
@@ -191,7 +191,7 @@ set_tests_properties(
 
 add_test(
     NAME FolderLifecycleIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_folder_lifecycle.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_folder_lifecycle.py"
 )
 
 set_tests_properties(
