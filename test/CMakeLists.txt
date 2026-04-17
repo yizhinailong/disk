@@ -243,7 +243,7 @@ set_tests_properties(
 
 add_test(
     NAME ShareBrowseIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_share_browse.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_share_browse.py"
 )
 
 set_tests_properties(
@@ -256,7 +256,7 @@ set_tests_properties(
 
 add_test(
     NAME ShareManagementIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_share_management.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_share_management.py"
 )
 
 set_tests_properties(
@@ -282,7 +282,7 @@ set_tests_properties(
 
 add_test(
     NAME TrashLifecycleIntegration
-    COMMAND bash "${CMAKE_SOURCE_DIR}/test/integration/test_trash_lifecycle.sh"
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_trash_lifecycle.py"
 )
 
 set_tests_properties(
