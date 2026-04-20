@@ -1,0 +1,34 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "items": [
+            {
+                "id": 301,
+                "type": "file",
+                "name": "old_report.docx",
+                "size": 65536,
+                "original_id": 50,
+                "original_path": "/Documents/old_report.docx",
+                "deleted_at": "2026-03-15T16:00:00",
+                "expires_at": "2026-04-14T16:00:00"
+            },
+            {
+                "id": 302,
+                "type": "folder",
+                "name": "temp_folder",
+                "size": 0,
+                "original_id": 51,
+                "original_path": "/temp_folder",
+                "deleted_at": "2026-03-15T16:05:00",
+                "expires_at": "2026-04-14T16:05:00"
+            }
+        ],
+        "pagination": {
+            "page": 1,
+            "page_size": 20,
+            "total": 2,
+            "has_more": false
+        }
+    }
+}

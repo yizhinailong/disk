@@ -1,0 +1,27 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "items": [
+            {
+                "id": 201,
+                "type": "file",
+                "name": "presentation.pptx",
+                "size": 3145728,
+                "mime_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            },
+            {
+                "id": 202,
+                "type": "folder",
+                "name": "archive",
+                "size": 0
+            }
+        ],
+        "pagination": {
+            "page": 1,
+            "page_size": 20,
+            "total": 2,
+            "has_more": false
+        }
+    }
+}

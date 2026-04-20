@@ -1,0 +1,23 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "summary": {
+            "total": 2,
+            "success_count": 2,
+            "failure_count": 0
+        },
+        "results": [
+            {
+                "trash_id": 301,
+                "status": "success",
+                "freed_space": 65536
+            },
+            {
+                "trash_id": 302,
+                "status": "success",
+                "freed_space": 0
+            }
+        ]
+    }
+}

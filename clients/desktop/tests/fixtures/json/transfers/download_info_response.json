@@ -1,0 +1,12 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "file_id": 1,
+        "filename": "report.pdf",
+        "file_size": 1048576,
+        "file_hash": "d41d8cd98f00b204e9800998ecf8427e",
+        "mime_type": "application/pdf",
+        "supports_range": true
+    }
+}

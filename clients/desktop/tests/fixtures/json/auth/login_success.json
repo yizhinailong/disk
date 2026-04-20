@@ -1,0 +1,18 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxfQ.mocksig",
+        "refresh_token": "rt_abc123def456",
+        "token_type": "Bearer",
+        "expires_in": 7200,
+        "user": {
+            "id": 1,
+            "username": "testuser",
+            "email": "test@example.com",
+            "nickname": "Test User",
+            "storage_used": 1048576,
+            "storage_quota": 107374182400
+        }
+    }
+}

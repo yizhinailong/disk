@@ -1,0 +1,33 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "summary": {
+            "total": 3,
+            "succeeded": 1,
+            "failed": 2
+        },
+        "results": [
+            {
+                "share_id": "sh_abc123",
+                "status": "success"
+            },
+            {
+                "share_id": "sh_bad1",
+                "status": "failed",
+                "error": {
+                    "code": 60001,
+                    "message": "分享不存在"
+                }
+            },
+            {
+                "share_id": "sh_bad2",
+                "status": "failed",
+                "error": {
+                    "code": 60002,
+                    "message": "分享已过期"
+                }
+            }
+        ]
+    }
+}

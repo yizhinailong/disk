@@ -1,0 +1,23 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "share_token": "st_visitor123abc",
+        "expires_in": 3600,
+        "permission": "download",
+        "files": [
+            {
+                "id": 101,
+                "type": "file",
+                "name": "readme.txt",
+                "size": 2048
+            },
+            {
+                "id": 102,
+                "type": "folder",
+                "name": "documents",
+                "size": 0
+            }
+        ]
+    }
+}

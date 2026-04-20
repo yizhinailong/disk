@@ -1,0 +1,33 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "summary": {
+            "total": 3,
+            "success_count": 2,
+            "failure_count": 1
+        },
+        "results": [
+            {
+                "trash_id": 301,
+                "status": "success",
+                "file_id": 50,
+                "path": "/Documents/old_report.docx"
+            },
+            {
+                "trash_id": 302,
+                "status": "success",
+                "file_id": 51,
+                "path": "/temp_folder"
+            },
+            {
+                "trash_id": 303,
+                "status": "failed",
+                "error": {
+                    "code": 10003,
+                    "message": "资源不存在"
+                }
+            }
+        ]
+    }
+}

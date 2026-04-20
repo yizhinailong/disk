@@ -1,0 +1,10 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxfQ.refreshed_mocksig",
+        "refresh_token": "rt_refreshed789xyz",
+        "token_type": "Bearer",
+        "expires_in": 7200
+    }
+}

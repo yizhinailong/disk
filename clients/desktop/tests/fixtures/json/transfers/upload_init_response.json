@@ -1,0 +1,11 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "upload_id": "upload_abc123",
+        "chunk_size": 5242880,
+        "total_chunks": 3,
+        "uploaded_chunk_indices": [0, 1],
+        "instant_upload": false
+    }
+}

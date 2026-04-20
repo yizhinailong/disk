@@ -1,0 +1,8 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "deleted_count": 5,
+        "freed_space": 10485760
+    }
+}

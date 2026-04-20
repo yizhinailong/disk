@@ -1,0 +1,12 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "share_id": "sh_new001",
+        "share_link": "https://disk.example.com/s/sh_new001",
+        "password": "abc123",
+        "permission": "download",
+        "expires_at": "2026-05-01T10:00:00",
+        "created_at": "2026-04-19T10:00:00"
+    }
+}
