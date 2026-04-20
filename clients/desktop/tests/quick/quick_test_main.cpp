@@ -1,4 +1,4 @@
-#include <QQuickTest>
+#include <QtQuickTest/quicktest.h>
 
 int main(int argc, char** argv) {
     QTEST_SET_MAIN_SOURCE_PATH

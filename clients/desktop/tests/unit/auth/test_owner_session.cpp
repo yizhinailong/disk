@@ -225,3 +225,5 @@ private slots:
         QCOMPARE(login_spy.count(), 1);
     }
 };
+
+#include "test_owner_session.moc"

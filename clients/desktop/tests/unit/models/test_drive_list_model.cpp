@@ -207,3 +207,5 @@ private slots:
         QCOMPARE(model.rowCount(), 0);
     }
 };
+
+#include "test_drive_list_model.moc"

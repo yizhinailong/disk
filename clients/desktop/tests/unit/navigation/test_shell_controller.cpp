@@ -180,3 +180,5 @@ private slots:
         QCOMPARE(ctrl.GetCurrentShell(), QString("splash"));
     }
 };
+
+#include "test_shell_controller.moc"

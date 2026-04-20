@@ -1,3 +1,4 @@
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTest>
@@ -158,3 +159,5 @@ private slots:
         QVERIFY(mgr.metaObject()->indexOfSignal("refreshRequested(QString)") == -1);
     }
 };
+
+#include "test_visitor_session.moc"

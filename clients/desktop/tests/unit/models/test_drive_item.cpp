@@ -174,3 +174,5 @@ private slots:
         QCOMPARE(folder_item.name, QString("Projects"));
     }
 };
+
+#include "test_drive_item.moc"

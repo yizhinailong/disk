@@ -1,7 +1,14 @@
 cmake_minimum_required(VERSION 4.0)
+project(desktop-client LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+include(CTest)
 
 # Qt 6 Desktop Client
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Network Test)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Network Test QuickTest)
 
 qt_standard_project_setup()
 
@@ -101,4 +108,6 @@ set_target_properties(desktop-client PROPERTIES
 
 # ─── Tests ─────────────────────────────────────────────────────────────────────
 
-add_subdirectory(tests)
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()

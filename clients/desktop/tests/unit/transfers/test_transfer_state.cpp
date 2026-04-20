@@ -1,7 +1,5 @@
 #include <QTest>
 
-using namespace disk::desktop;
-
 class TestTransferState : public QObject {
     Q_OBJECT
 
@@ -26,3 +24,5 @@ private slots:
         QCOMPARE(modes.size(), 2);
     }
 };
+
+#include "test_transfer_state.moc"

@@ -12,11 +12,5 @@ find_package(GTest CONFIG REQUIRED)
 
 enable_testing()
 
-# Desktop client (optional, OFF by default)
-option(DISK_ENABLE_DESKTOP "Build the Qt 6 desktop client" OFF)
-if(DISK_ENABLE_DESKTOP)
-    add_subdirectory(clients/desktop)
-endif()
-
 add_subdirectory(src)
 add_subdirectory(test)

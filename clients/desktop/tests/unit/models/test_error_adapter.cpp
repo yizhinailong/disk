@@ -130,3 +130,5 @@ private slots:
         QVERIFY(err.retryable);
     }
 };
+
+#include "test_error_adapter.moc"

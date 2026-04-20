@@ -1,0 +1,159 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "displayName": "Desktop Base Configuration",
+      "description": "Base configuration for the standalone Qt desktop client",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON",
+        "CMAKE_CXX_EXTENSIONS": "OFF",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      },
+      "warnings": {
+        "dev": false
+      }
+    },
+    {
+      "name": "linux-base-clang",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
+      },
+      "environment": {
+        "CMAKE_BUILD_PARALLEL_LEVEL": "16"
+      }
+    },
+    {
+      "name": "desktop-linux-debug-clang",
+      "inherits": "linux-base-clang",
+      "displayName": "Desktop Linux Debug Clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "desktop-linux-release-clang",
+      "inherits": "linux-base-clang",
+      "displayName": "Desktop Linux Release Clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-base-clang-cl",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache",
+        "CMAKE_PREFIX_PATH": "$env{QT6_INSTALL_DIR}"
+      }
+    },
+    {
+      "name": "desktop-windows-debug-clang-cl",
+      "inherits": "windows-base-clang-cl",
+      "displayName": "Desktop Windows Debug Clang-Cl",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "desktop-windows-release-clang-cl",
+      "inherits": "windows-base-clang-cl",
+      "displayName": "Desktop Windows Release Clang-Cl",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "base-build",
+      "hidden": true,
+      "jobs": 16
+    },
+    {
+      "name": "condition-windows",
+      "hidden": true,
+      "inherits": "base-build",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "condition-linux",
+      "hidden": true,
+      "inherits": "base-build",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "desktop-linux-debug-clang",
+      "inherits": "condition-linux",
+      "configurePreset": "desktop-linux-debug-clang",
+      "displayName": "Build Desktop Linux Debug Clang",
+      "configuration": "Debug"
+    },
+    {
+      "name": "desktop-linux-release-clang",
+      "inherits": "condition-linux",
+      "configurePreset": "desktop-linux-release-clang",
+      "displayName": "Build Desktop Linux Release Clang",
+      "configuration": "Release"
+    },
+    {
+      "name": "desktop-windows-debug-clang-cl",
+      "inherits": "condition-windows",
+      "configurePreset": "desktop-windows-debug-clang-cl",
+      "displayName": "Build Desktop Windows Debug Clang-Cl",
+      "configuration": "Debug"
+    },
+    {
+      "name": "desktop-windows-release-clang-cl",
+      "inherits": "condition-windows",
+      "configurePreset": "desktop-windows-release-clang-cl",
+      "displayName": "Build Desktop Windows Release Clang-Cl",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "condition-linux",
+      "hidden": true,
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "desktop-linux-debug-clang",
+      "inherits": "condition-linux",
+      "configurePreset": "desktop-linux-debug-clang",
+      "displayName": "Test Desktop Linux Debug Clang"
+    }
+  ]
+}

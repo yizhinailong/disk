@@ -71,8 +71,7 @@
       },
       "cacheVariables": {
         "CMAKE_CXX_COMPILER": "clang-cl",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache",
-        "CMAKE_PREFIX_PATH": "$env{QT6_INSTALL_DIR}"
+        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache"
       },
       "environment": {
         "VCPKG_DEFAULT_TRIPLET": "x64-windows"
@@ -95,38 +94,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_CXX_FLAGS_RELEASE": "/O3 /DNDEBUG"
-      }
-    },
-    {
-      "name": "linux-debug-clang-desktop",
-      "displayName": "Linux Debug (Clang) + Desktop",
-      "inherits": "linux-debug-clang",
-      "cacheVariables": {
-        "DISK_ENABLE_DESKTOP": "ON"
-      }
-    },
-    {
-      "name": "linux-release-clang-desktop",
-      "displayName": "Linux Release (Clang) + Desktop",
-      "inherits": "linux-release-clang",
-      "cacheVariables": {
-        "DISK_ENABLE_DESKTOP": "ON"
-      }
-    },
-    {
-      "name": "windows-debug-clang-cl-desktop",
-      "displayName": "Windows Debug (Clang-Cl) + Desktop",
-      "inherits": "windows-debug-clang-cl",
-      "cacheVariables": {
-        "DISK_ENABLE_DESKTOP": "ON"
-      }
-    },
-    {
-      "name": "windows-release-clang-cl-desktop",
-      "displayName": "Windows Release (Clang-Cl) + Desktop",
-      "inherits": "windows-release-clang-cl",
-      "cacheVariables": {
-        "DISK_ENABLE_DESKTOP": "ON"
       }
     }
   ],
@@ -187,38 +154,6 @@
       "displayName": "Build Linux Release Clang",
       "description": "Build the project in Release mode on Linux with Clang",
       "configuration": "Release"
-    },
-    {
-      "name": "linux-debug-clang-desktop",
-      "inherits": "condition-linux",
-      "configurePreset": "linux-debug-clang-desktop",
-      "displayName": "Build Linux Debug Clang + Desktop",
-      "description": "Build the project with desktop client in Debug mode on Linux with Clang",
-      "configuration": "Debug"
-    },
-    {
-      "name": "linux-release-clang-desktop",
-      "inherits": "condition-linux",
-      "configurePreset": "linux-release-clang-desktop",
-      "displayName": "Build Linux Release Clang + Desktop",
-      "description": "Build the project with desktop client in Release mode on Linux with Clang",
-      "configuration": "Release"
-    },
-    {
-      "name": "windows-debug-clang-cl-desktop",
-      "inherits": "condition-windows",
-      "configurePreset": "windows-debug-clang-cl-desktop",
-      "displayName": "Build Windows Debug Clang-Cl + Desktop",
-      "description": "Build the project with desktop client in Debug mode on Windows with Clang-Cl",
-      "configuration": "Debug"
-    },
-    {
-      "name": "windows-release-clang-cl-desktop",
-      "inherits": "condition-windows",
-      "configurePreset": "windows-release-clang-cl-desktop",
-      "displayName": "Build Windows Release Clang-Cl + Desktop",
-      "description": "Build the project with desktop client in Release mode on Windows with Clang-Cl",
-      "configuration": "Release"
     }
   ],
   "testPresets": [
@@ -237,13 +172,6 @@
       "configurePreset": "linux-debug-clang",
       "displayName": "Test Linux Debug Clang",
       "description": "Run tests for Linux Debug build with Clang"
-    },
-    {
-      "name": "linux-debug-clang-desktop",
-      "inherits": "condition-linux",
-      "configurePreset": "linux-debug-clang-desktop",
-      "displayName": "Test Linux Debug Clang + Desktop",
-      "description": "Run all tests including desktop unit and QML tests for Linux Debug build"
     }
   ]
 }
