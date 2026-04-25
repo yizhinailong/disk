@@ -33,7 +33,6 @@ private slots:
         );
 
         NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
-        network_client.SetBaseUrl("http://127.0.0.1:8080/");
         RequestFactory request_factory;
         AuthService auth_service(&network_client, &request_factory);
 
@@ -44,6 +43,10 @@ private slots:
 
         QTRY_COMPARE(success_spy.count(), 1);
         QCOMPARE(failure_spy.count(), 0);
+        QCOMPARE(
+            mock_network.GetRequestLog().constFirst().url().toString(),
+            QString("http://127.0.0.1:8080/api/auth/login")
+        );
         QCOMPARE(mock_network.GetRequestBodyLog().size(), 1);
 
         auto body = QJsonDocument::fromJson(mock_network.GetRequestBodyLog().constFirst()).object();

@@ -13,14 +13,24 @@
 
 namespace disk::desktop {
 
+    namespace {
+
+        constexpr auto DEFAULT_BASE_URL = "http://127.0.0.1:8080/";
+
+    } // namespace
+
     NetworkClient::NetworkClient(QObject* parent)
-        : QObject(parent), m_owned_nam(this), m_nam(&m_owned_nam) {}
+        : QObject(parent), m_owned_nam(this), m_nam(&m_owned_nam) {
+        SetBaseUrl(DEFAULT_BASE_URL);
+    }
 
     NetworkClient::NetworkClient(
         QNetworkAccessManager* network_access_manager,
         QObject* parent
     )
-        : QObject(parent), m_owned_nam(this), m_nam(network_access_manager ? network_access_manager : &m_owned_nam) {}
+        : QObject(parent), m_owned_nam(this), m_nam(network_access_manager ? network_access_manager : &m_owned_nam) {
+        SetBaseUrl(DEFAULT_BASE_URL);
+    }
 
     void NetworkClient::SetBaseUrl(const QString& baseUrl) {
         m_base_url = baseUrl;
