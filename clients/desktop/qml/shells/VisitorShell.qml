@@ -30,8 +30,13 @@ ApplicationWindow {
 
         function onCurrentShellChanged() {
             if (shellController.currentShell === "visitor") {
-                stackView.replace(null, "ShareBrowsePage.qml", { shareId: root.activeShareId })
+                stackView.replace(null, shareBrowsePageComponent, { shareId: root.activeShareId })
             }
         }
+    }
+
+    Component {
+        id: shareBrowsePageComponent
+        ShareBrowsePage {}
     }
 }

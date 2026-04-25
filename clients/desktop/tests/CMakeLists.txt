@@ -26,9 +26,11 @@ qt_add_executable(desktop-unit-tests
     ${DESKTOP_SRC_DIR}/auth/SessionStore.cpp
     ${DESKTOP_SRC_DIR}/models/DriveItem.cpp
     ${DESKTOP_SRC_DIR}/models/DriveListModel.cpp
+    ${DESKTOP_SRC_DIR}/models/FolderTreeModel.cpp
     ${DESKTOP_SRC_DIR}/network/NetworkClient.cpp
     ${DESKTOP_SRC_DIR}/network/RequestFactory.cpp
     ${DESKTOP_SRC_DIR}/network/ErrorAdapter.cpp
+    ${DESKTOP_SRC_DIR}/managers/DriveManager.cpp
     ${DESKTOP_SRC_DIR}/app/ShellController.cpp
 )
 
@@ -39,6 +41,7 @@ target_include_directories(desktop-unit-tests PRIVATE
 
 target_compile_definitions(desktop-unit-tests PRIVATE
     QT_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    DESKTOP_QML_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../qml"
 )
 
 target_link_libraries(desktop-unit-tests PRIVATE

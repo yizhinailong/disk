@@ -51,10 +51,12 @@ namespace disk::desktop::managers {
         void breadcrumbLoaded(const QVariantList& breadcrumb);
         void operationSuccess(const QString& message);
         void paginationLoaded(int page, int totalPages, int total);
+        void listLoadFailed(const QString& message, int code);
 
     private:
         auto PrepareHeaders() -> QMap<QString, QString>;
         static auto ParseJsonResponse(QNetworkReply* reply) -> std::optional<QJsonObject>;
+        static auto BuildApiError(QNetworkReply* reply) -> disk::desktop::ApiError;
         void HandleListResponse(QNetworkReply* reply);
         void HandleSearchResponse(QNetworkReply* reply);
         void HandleDetailResponse(QNetworkReply* reply);

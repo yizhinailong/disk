@@ -6,7 +6,21 @@ import "../components"
 Page {
     id: root
     
-    property string currentFolderId: "root"
+    property string currentFolderId: "0"
+
+    function refreshCurrentFolder() {
+        shellController.setPageState("loading")
+        driveManager.loadFolderTree()
+        driveManager.listFiles(currentFolderId)
+        driveManager.loadBreadcrumb(currentFolderId)
+    }
+
+    function openFolder(folderId) {
+        currentFolderId = String(folderId)
+        shellController.setPageState("loading")
+        driveManager.listFiles(currentFolderId)
+        driveManager.loadBreadcrumb(currentFolderId)
+    }
     
     PageStateView {
         id: stateView
@@ -17,7 +31,7 @@ Page {
         errorText: "Failed to load folder contents"
         
         onRetryClicked: {
-            driveManager.listFiles(currentFolderId)
+            root.refreshCurrentFolder()
         }
         
         // Content state
@@ -40,9 +54,10 @@ Page {
                     Layout.preferredWidth: 200
                     onAccepted: {
                         if (text.trim() !== "") {
-                            driveManager.searchFiles(text)
+                            shellController.setPageState("loading")
+                            driveManager.searchFiles(text.trim())
                         } else {
-                            driveManager.listFiles(currentFolderId)
+                            root.refreshCurrentFolder()
                         }
                     }
                 }
@@ -76,10 +91,8 @@ Page {
                             text: model.name
                             
                             onClicked: {
-                                if (model.isDir) {
-                                    currentFolderId = model.id
-                                    driveManager.listFiles(currentFolderId)
-                                    driveManager.loadBreadcrumb(currentFolderId)
+                                if (model.kind === "folder") {
+                                    root.openFolder(model.id)
                                 } else {
                                     driveManager.getFileDetail(model.id)
                                 }
@@ -96,11 +109,17 @@ Page {
         function onBreadcrumbLoaded(breadcrumb) {
             breadcrumbBar.path = breadcrumb
         }
+
+        function onPaginationLoaded(page, totalPages, total) {
+            shellController.setPageState(total > 0 ? "content" : "empty")
+        }
+
+        function onListLoadFailed(message, code) {
+            shellController.setPageState("error")
+        }
     }
     
     Component.onCompleted: {
-        driveManager.loadFolderTree()
-        driveManager.listFiles(currentFolderId)
-        driveManager.loadBreadcrumb(currentFolderId)
+        root.refreshCurrentFolder()
     }
 }

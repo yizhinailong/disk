@@ -58,20 +58,28 @@ namespace disk::desktop::managers {
         return doc.object();
     }
 
-    void DriveManager::EmitApiError(QNetworkReply* reply) {
+    auto DriveManager::BuildApiError(QNetworkReply* reply) -> disk::desktop::ApiError {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
-            return;
+            disk::desktop::ApiError err;
+            err.code = 0;
+            err.message = "Network error: null reply";
+            return err;
         }
 
         auto json_opt = ParseJsonResponse(reply);
         if (json_opt.has_value() && json_opt->contains("error")) {
-            auto err = ErrorAdapter::FromJson(json_opt->value("error").toObject());
-            emit apiError(err.message, err.code);
-        } else {
-            auto err = ErrorAdapter::FromNetworkError(reply->error());
-            emit apiError(err.message, err.code);
+            return ErrorAdapter::FromJson(json_opt->value("error").toObject());
         }
+        if (json_opt.has_value() && json_opt->value("code").toInt(0) != 0) {
+            return ErrorAdapter::FromJson(*json_opt);
+        }
+
+        return ErrorAdapter::FromNetworkError(reply->error());
+    }
+
+    void DriveManager::EmitApiError(QNetworkReply* reply) {
+        auto err = BuildApiError(reply);
+        emit apiError(err.message, err.code);
     }
 
     void DriveManager::listFiles(const QString& parentId, int page, int pageSize, const QString& sort, const QString& typeFilter) {
@@ -82,7 +90,11 @@ namespace disk::desktop::managers {
         query.addQueryItem("page", QString::number(page));
         query.addQueryItem("page_size", QString::number(pageSize));
         if (!sort.isEmpty()) {
-            query.addQueryItem("sort", sort);
+            auto separator_index = sort.lastIndexOf('_');
+            auto sort_by = separator_index > 0 ? sort.left(separator_index) : sort;
+            auto sort_order = separator_index > 0 ? sort.mid(separator_index + 1) : QString("asc");
+            query.addQueryItem("sort_by", sort_by);
+            query.addQueryItem("sort_order", sort_order);
         }
         if (!typeFilter.isEmpty()) {
             query.addQueryItem("type", typeFilter);
@@ -275,6 +287,14 @@ namespace disk::desktop::managers {
     }
 
     void DriveManager::loadBreadcrumb(const QString& folderId) {
+        if (folderId.isEmpty() || folderId == "0") {
+            QVariantMap root;
+            root["id"] = 0.0;
+            root["name"] = QStringLiteral("根目录");
+            emit breadcrumbLoaded(QVariantList{ root });
+            return;
+        }
+
         QUrl url(QString("/api/folder/%1/breadcrumb").arg(folderId));
         auto headers = PrepareHeaders();
         auto* reply = m_networkClient->Get(url, headers);
@@ -291,18 +311,31 @@ namespace disk::desktop::managers {
 
     void DriveManager::HandleListResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            auto message = QStringLiteral("Network error: null reply");
+            emit apiError(message, 0);
+            emit listLoadFailed(message, 0);
             return;
         }
 
         if (reply->error() != QNetworkReply::NoError) {
-            EmitApiError(reply);
+            auto err = BuildApiError(reply);
+            emit apiError(err.message, err.code);
+            emit listLoadFailed(err.message, err.code);
             return;
         }
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            auto message = QStringLiteral("Invalid response format");
+            emit apiError(message, 0);
+            emit listLoadFailed(message, 0);
+            return;
+        }
+
+        if (json_opt->value("code").toInt(0) != 0) {
+            auto err = ErrorAdapter::FromJson(*json_opt);
+            emit apiError(err.message, err.code);
+            emit listLoadFailed(err.message, err.code);
             return;
         }
 
@@ -330,18 +363,31 @@ namespace disk::desktop::managers {
 
     void DriveManager::HandleSearchResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            auto message = QStringLiteral("Network error: null reply");
+            emit apiError(message, 0);
+            emit listLoadFailed(message, 0);
             return;
         }
 
         if (reply->error() != QNetworkReply::NoError) {
-            EmitApiError(reply);
+            auto err = BuildApiError(reply);
+            emit apiError(err.message, err.code);
+            emit listLoadFailed(err.message, err.code);
             return;
         }
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            auto message = QStringLiteral("Invalid response format");
+            emit apiError(message, 0);
+            emit listLoadFailed(message, 0);
+            return;
+        }
+
+        if (json_opt->value("code").toInt(0) != 0) {
+            auto err = ErrorAdapter::FromJson(*json_opt);
+            emit apiError(err.message, err.code);
+            emit listLoadFailed(err.message, err.code);
             return;
         }
 
@@ -536,7 +582,7 @@ namespace disk::desktop::managers {
         }
 
         auto data = json_opt->value("data").toObject();
-        auto items = data.value("items").toArray();
+        auto items = data.value("path").toArray();
 
         QVariantList breadcrumb;
         for (const auto& val : items) {

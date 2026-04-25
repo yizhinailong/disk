@@ -9,6 +9,10 @@ ApplicationWindow {
     width: 1024
     height: 768
     title: "Disk Desktop"
+
+    function showPage(pageComponent) {
+        stackView.replace(pageComponent)
+    }
     
     RowLayout {
         anchors.fill: parent
@@ -37,28 +41,28 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     text: "Files"
                     flat: true
-                    onClicked: stackView.replace("DriveBrowserPage.qml")
+                    onClicked: root.showPage(driveBrowserPageComponent)
                 }
                 
                 Button {
                     Layout.fillWidth: true
                     text: "Transfers"
                     flat: true
-                    onClicked: stackView.replace("TransferCenterPage.qml")
+                    onClicked: root.showPage(transferCenterPageComponent)
                 }
                 
                 Button {
                     Layout.fillWidth: true
                     text: "Shares"
                     flat: true
-                    onClicked: stackView.replace("ShareManagementPage.qml")
+                    onClicked: root.showPage(shareManagementPageComponent)
                 }
                 
                 Button {
                     Layout.fillWidth: true
                     text: "Trash"
                     flat: true
-                    onClicked: stackView.replace("TrashPage.qml")
+                    onClicked: root.showPage(trashPageComponent)
                 }
                 
                 Item {
@@ -69,6 +73,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     text: "Settings"
                     flat: true
+                    onClicked: root.showPage(settingsPageComponent)
                 }
                 
                 Button {
@@ -130,5 +135,30 @@ ApplicationWindow {
                 initialItem: DriveBrowserPage {}
             }
         }
+    }
+
+    Component {
+        id: driveBrowserPageComponent
+        DriveBrowserPage {}
+    }
+
+    Component {
+        id: transferCenterPageComponent
+        TransferCenterPage {}
+    }
+
+    Component {
+        id: shareManagementPageComponent
+        ShareManagementPage {}
+    }
+
+    Component {
+        id: trashPageComponent
+        TrashPage {}
+    }
+
+    Component {
+        id: settingsPageComponent
+        SettingsPage {}
     }
 }

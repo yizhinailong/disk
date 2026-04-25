@@ -35,6 +35,13 @@ namespace disk::desktop::testing {
         )
             : QNetworkReply(parent), m_buffer(this), m_http_status(http_status) {
             setOpenMode(QIODevice::ReadOnly);
+            setAttribute(QNetworkRequest::HttpStatusCodeAttribute, http_status);
+            if (http_status >= 400) {
+                setError(
+                    QNetworkReply::ProtocolInvalidOperationError,
+                    QString("HTTP %1").arg(http_status)
+                );
+            }
             m_buffer.setData(data);
             m_buffer.open(QIODevice::ReadOnly);
             setFinished(true);
@@ -132,6 +139,7 @@ namespace disk::desktop::testing {
             m_responses.clear();
             m_errors.clear();
             m_request_log.clear();
+            m_request_body_log.clear();
         }
 
         /**
