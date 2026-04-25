@@ -27,6 +27,7 @@ namespace disk::app {
         void navigateToOwner();
         void navigateToVisitor(const QString& shareId);
         void navigateToLogin();
+        void navigateToRegister();
         void navigateToSplash();
 
         void setPageState(const QString& state);

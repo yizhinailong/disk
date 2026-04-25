@@ -14,6 +14,7 @@ Item {
         switch (shellController.currentShell) {
             case "splash": return splashComponent;
             case "login": return loginComponent;
+            case "register": return registerComponent;
             case "owner": return ownerComponent;
             case "visitor": return visitorComponent;
             default: return splashComponent;
@@ -93,6 +94,21 @@ Item {
     Component {
         id: ownerComponent
         OwnerShell {}
+    }
+
+    Component {
+        id: registerComponent
+
+        ApplicationWindow {
+            visible: true
+            width: 1024
+            height: 768
+            title: "Disk Desktop - Register"
+
+            RegisterPage {
+                anchors.fill: parent
+            }
+        }
     }
 
     Component {

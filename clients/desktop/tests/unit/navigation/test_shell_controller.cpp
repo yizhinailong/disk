@@ -109,6 +109,17 @@ private slots:
         QCOMPARE(ctrl.GetCurrentShell(), QString("login"));
     }
 
+    void NavigateToRegister() {
+        NetworkClient nc;
+        RequestFactory rf;
+        SessionStore store(&nc, &rf);
+        ShellController ctrl(&store);
+
+        ctrl.navigateToRegister();
+
+        QCOMPARE(ctrl.GetCurrentShell(), QString("register"));
+    }
+
     void LogoutPendingRedirectsToLogin() {
         NetworkClient nc;
         RequestFactory rf;

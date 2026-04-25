@@ -29,6 +29,7 @@ namespace disk::app {
         QQmlContext* context = engine->rootContext();
 
         context->setContextProperty("shellController", m_shell_controller.get());
+        context->setContextProperty("authService", m_auth_service.get());
         context->setContextProperty("sessionStore", m_session_store.get());
         context->setContextProperty("driveManager", m_drive_manager.get());
         context->setContextProperty("profileManager", m_profile_manager.get());

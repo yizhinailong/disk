@@ -14,7 +14,13 @@
 namespace disk::desktop {
 
     NetworkClient::NetworkClient(QObject* parent)
-        : QObject(parent), m_nam(this) {}
+        : QObject(parent), m_owned_nam(this), m_nam(&m_owned_nam) {}
+
+    NetworkClient::NetworkClient(
+        QNetworkAccessManager* network_access_manager,
+        QObject* parent
+    )
+        : QObject(parent), m_owned_nam(this), m_nam(network_access_manager ? network_access_manager : &m_owned_nam) {}
 
     void NetworkClient::SetBaseUrl(const QString& baseUrl) {
         m_base_url = baseUrl;
@@ -30,7 +36,7 @@ namespace disk::desktop {
     auto NetworkClient::Get(const QUrl& url, const QMap<QString, QString>& headers)
         -> QNetworkReply* {
         QNetworkRequest request = BuildRequest(url, headers);
-        return m_nam.get(request);
+        return m_nam->get(request);
     }
 
     auto NetworkClient::Post(
@@ -40,7 +46,7 @@ namespace disk::desktop {
     ) -> QNetworkReply* {
         QNetworkRequest request = BuildRequest(url, headers);
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-        return m_nam.post(request, body);
+        return m_nam->post(request, body);
     }
 
     auto NetworkClient::Put(
@@ -50,7 +56,7 @@ namespace disk::desktop {
     ) -> QNetworkReply* {
         QNetworkRequest request = BuildRequest(url, headers);
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-        return m_nam.put(request, body);
+        return m_nam->put(request, body);
     }
 
     auto NetworkClient::Patch(
@@ -60,7 +66,7 @@ namespace disk::desktop {
     ) -> QNetworkReply* {
         QNetworkRequest request = BuildRequest(url, headers);
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-        return m_nam.sendCustomRequest(request, "PATCH", body);
+        return m_nam->sendCustomRequest(request, "PATCH", body);
     }
 
     auto NetworkClient::Delete(
@@ -68,7 +74,7 @@ namespace disk::desktop {
         const QMap<QString, QString>& headers
     ) -> QNetworkReply* {
         QNetworkRequest request = BuildRequest(url, headers);
-        return m_nam.deleteResource(request);
+        return m_nam->deleteResource(request);
     }
 
     auto NetworkClient::BuildRequest(

@@ -15,9 +15,13 @@ set(DESKTOP_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 
 qt_add_executable(desktop-unit-tests
     ${UNIT_TEST_SOURCES}
+    helpers/MockNetworkAccessManager.hpp
+    helpers/MockReplyFactory.hpp
+    helpers/TestJsonLoader.hpp
 
     # Source files under test (linked directly, same as backend test pattern)
     ${DESKTOP_SRC_DIR}/auth/OwnerSessionManager.cpp
+    ${DESKTOP_SRC_DIR}/auth/AuthService.cpp
     ${DESKTOP_SRC_DIR}/auth/VisitorSessionManager.cpp
     ${DESKTOP_SRC_DIR}/auth/SessionStore.cpp
     ${DESKTOP_SRC_DIR}/models/DriveItem.cpp

@@ -8,6 +8,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkReply>
@@ -79,6 +80,27 @@ namespace disk::desktop::testing {
                  { "email", "test@example.com" },
                  { "nickname", "Test User" },
                  { "storage_used", 1048576 },
+                 { "storage_quota", 107374182400 },
+                 } } }                }
+            };
+        }
+
+        /**
+         * @brief Create a successful register response
+         */
+        static auto RegisterSuccessResponse() -> QJsonObject {
+            return {
+                {    "code",0                            },
+                { "message", "success" },
+                {    "data",
+                 QJsonObject{
+                 { "user",
+                 QJsonObject{
+                 { "id", 2 },
+                 { "username", "newuser" },
+                 { "email", "newuser@example.com" },
+                 { "nickname", "" },
+                 { "storage_used", 0 },
                  { "storage_quota", 107374182400 },
                  } } }                }
             };

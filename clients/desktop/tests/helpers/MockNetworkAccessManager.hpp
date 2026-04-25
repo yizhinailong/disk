@@ -141,6 +141,10 @@ namespace disk::desktop::testing {
             return m_request_log;
         }
 
+        auto GetRequestBodyLog() const -> const QList<QByteArray>& {
+            return m_request_body_log;
+        }
+
     protected:
         auto createRequest(
             Operation op,
@@ -148,20 +152,21 @@ namespace disk::desktop::testing {
             QIODevice* outgoingData = nullptr
         ) -> QNetworkReply* override {
             m_request_log.append(request);
+            m_request_body_log.append(outgoingData ? outgoingData->readAll() : QByteArray());
 
             auto url = request.url().toString();
 
             // Check for registered errors first
             for (auto it = m_errors.constBegin(); it != m_errors.constEnd(); ++it) {
                 if (url.contains(it.key())) {
-                    return new MockNetworkReply(it.value().first, it.value().second, this);
+                    return new MockNetworkReply(it.value().error, it.value().error_string, this);
                 }
             }
 
             // Check for registered responses
             for (auto it = m_responses.constBegin(); it != m_responses.constEnd(); ++it) {
                 if (url.contains(it.key())) {
-                    return new MockNetworkReply(it.value().first, it.value().second, this);
+                    return new MockNetworkReply(it.value().data, it.value().http_status, this);
                 }
             }
 
@@ -183,6 +188,7 @@ namespace disk::desktop::testing {
         QMap<QString, MockResponse> m_responses;
         QMap<QString, MockError> m_errors;
         QList<QNetworkRequest> m_request_log;
+        QList<QByteArray> m_request_body_log;
     };
 
 } // namespace disk::desktop::testing

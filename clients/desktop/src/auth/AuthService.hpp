@@ -51,12 +51,7 @@ namespace disk::desktop {
         );
         void LoginFailure(int error_code, const QString& message);
 
-        void RegisterSuccess(
-            const QString& access_token,
-            const QString& refresh_token,
-            int expires_in,
-            const QJsonObject& user
-        );
+        void RegisterSuccess(const QJsonObject& user);
         void RegisterFailure(int error_code, const QString& message);
 
         void RefreshSuccess(
@@ -79,6 +74,7 @@ namespace disk::desktop {
 
     private:
         auto ParseAuthResponse(QNetworkReply* reply) -> void;
+        auto ParseRegisterResponse(QNetworkReply* reply) -> void;
         auto ParseRefreshResponse(QNetworkReply* reply) -> void;
         auto ParseLogoutResponse(QNetworkReply* reply) -> void;
         auto ParseShareAccessResponse(QNetworkReply* reply) -> void;

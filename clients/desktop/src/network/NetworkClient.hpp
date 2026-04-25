@@ -26,6 +26,10 @@ namespace disk::desktop {
 
     public:
         explicit NetworkClient(QObject* parent = nullptr);
+        explicit NetworkClient(
+            QNetworkAccessManager* network_access_manager,
+            QObject* parent = nullptr
+        );
 
         void SetBaseUrl(const QString& baseUrl);
         auto GetBaseUrl() const -> QString;
@@ -56,7 +60,8 @@ namespace disk::desktop {
             const QMap<QString, QString>& headers
         ) const -> QNetworkRequest;
 
-        QNetworkAccessManager m_nam;
+        QNetworkAccessManager m_owned_nam;
+        QNetworkAccessManager* m_nam;
         QString m_base_url;
     };
 

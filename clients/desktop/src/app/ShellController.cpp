@@ -72,6 +72,13 @@ namespace disk::app {
         }
     }
 
+    void ShellController::navigateToRegister() {
+        if (m_current_shell != "register") {
+            m_current_shell = "register";
+            emit currentShellChanged();
+        }
+    }
+
     void ShellController::navigateToSplash() {
         if (m_current_shell != "splash") {
             m_current_shell = "splash";

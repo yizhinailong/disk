@@ -1,0 +1,14 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "user": {
+            "id": 2,
+            "username": "newuser",
+            "email": "newuser@example.com",
+            "nickname": "",
+            "storage_used": 0,
+            "storage_quota": 107374182400
+        }
+    }
+}

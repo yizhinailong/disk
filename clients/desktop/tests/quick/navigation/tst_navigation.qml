@@ -15,8 +15,8 @@ TestCase {
     }
 
     function test_navigation_states_defined() {
-        var valid_shells = ["splash", "login", "owner", "visitor"]
-        verify(valid_shells.length === 4)
+        var valid_shells = ["splash", "login", "register", "owner", "visitor"]
+        verify(valid_shells.length === 5)
     }
 
     function test_page_states_defined() {

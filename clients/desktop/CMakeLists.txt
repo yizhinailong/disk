@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Quick)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Quick Test QuickTest)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -70,6 +70,7 @@ set(DESKTOP_QML_FILES
     qml/components/PageStateView.qml
     qml/pages/DriveBrowserPage.qml
     qml/pages/LoginPage.qml
+    qml/pages/RegisterPage.qml
     qml/pages/SettingsPage.qml
     qml/pages/ShareBrowsePage.qml
     qml/pages/ShareManagementPage.qml
@@ -118,3 +119,6 @@ install(TARGETS disk-desktop
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+
+enable_testing()
+add_subdirectory(tests)
