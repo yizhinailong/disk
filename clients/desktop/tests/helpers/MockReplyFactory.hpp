@@ -80,7 +80,7 @@ namespace disk::desktop::testing {
                  { "email", "test@example.com" },
                  { "nickname", "Test User" },
                  { "storage_used", 1048576 },
-                 { "storage_quota", 107374182400 },
+                 { "storage_quota", qint64{ 107374182400LL } },
                  } } }                }
             };
         }
@@ -101,7 +101,7 @@ namespace disk::desktop::testing {
                  { "email", "newuser@example.com" },
                  { "nickname", "" },
                  { "storage_used", 0 },
-                 { "storage_quota", 107374182400 },
+                 { "storage_quota", qint64{ 107374182400LL } },
                  } } }                }
             };
         }
