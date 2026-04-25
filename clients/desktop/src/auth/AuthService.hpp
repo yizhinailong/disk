@@ -43,34 +43,34 @@ namespace disk::desktop {
         );
 
     signals:
-        void LoginSuccess(
+        void loginSuccess(
             const QString& access_token,
             const QString& refresh_token,
             int expires_in,
             const QJsonObject& user
         );
-        void LoginFailure(int error_code, const QString& message);
+        void loginFailure(int error_code, const QString& message);
 
-        void RegisterSuccess(const QJsonObject& user);
-        void RegisterFailure(int error_code, const QString& message);
+        void registerSuccess(const QJsonObject& user);
+        void registerFailure(int error_code, const QString& message);
 
-        void RefreshSuccess(
+        void refreshSuccess(
             const QString& access_token,
             const QString& refresh_token,
             int expires_in
         );
-        void RefreshFailure(int error_code, const QString& message);
+        void refreshFailure(int error_code, const QString& message);
 
-        void LogoutSuccess();
-        void LogoutFailure();
+        void logoutSuccess();
+        void logoutFailure();
 
-        void ShareAccessSuccess(
+        void shareAccessSuccess(
             const QString& share_token,
             int expires_in,
             const QString& permission,
             const QJsonObject& files
         );
-        void ShareAccessFailure(int error_code, const QString& message);
+        void shareAccessFailure(int error_code, const QString& message);
 
     private:
         auto ParseAuthResponse(QNetworkReply* reply) -> void;

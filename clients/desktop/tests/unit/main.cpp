@@ -37,8 +37,8 @@ private slots:
         RequestFactory request_factory;
         AuthService auth_service(&network_client, &request_factory);
 
-        QSignalSpy success_spy(&auth_service, &AuthService::LoginSuccess);
-        QSignalSpy failure_spy(&auth_service, &AuthService::LoginFailure);
+        QSignalSpy success_spy(&auth_service, &AuthService::loginSuccess);
+        QSignalSpy failure_spy(&auth_service, &AuthService::loginFailure);
 
         auth_service.Login("testuser", "Password1");
 
@@ -64,8 +64,8 @@ private slots:
         RequestFactory request_factory;
         AuthService auth_service(&network_client, &request_factory);
 
-        QSignalSpy success_spy(&auth_service, &AuthService::RegisterSuccess);
-        QSignalSpy failure_spy(&auth_service, &AuthService::RegisterFailure);
+        QSignalSpy success_spy(&auth_service, &AuthService::registerSuccess);
+        QSignalSpy failure_spy(&auth_service, &AuthService::registerFailure);
 
         auth_service.Register("newuser", "newuser@example.com", "Password1");
 
@@ -96,8 +96,8 @@ private slots:
         RequestFactory request_factory;
         AuthService auth_service(&network_client, &request_factory);
 
-        QSignalSpy success_spy(&auth_service, &AuthService::RegisterSuccess);
-        QSignalSpy failure_spy(&auth_service, &AuthService::RegisterFailure);
+        QSignalSpy success_spy(&auth_service, &AuthService::registerSuccess);
+        QSignalSpy failure_spy(&auth_service, &AuthService::registerFailure);
 
         auth_service.Register("newuser", "newuser@example.com", "Password1");
 

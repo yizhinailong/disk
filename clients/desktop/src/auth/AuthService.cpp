@@ -179,19 +179,19 @@ namespace disk::desktop {
             if (!TryReadBackendFailure(reply, err)) {
                 err = ErrorAdapter::FromNetworkError(reply->error());
             }
-            emit LoginFailure(err.code, err.message);
+            emit loginFailure(err.code, err.message);
             return;
         }
 
         QJsonObject json;
         ApiError err;
         if (!TryReadJsonObject(reply, json, err)) {
-            emit LoginFailure(err.code, err.message);
+            emit loginFailure(err.code, err.message);
             return;
         }
 
         if (TryReadApiFailure(json, err)) {
-            emit LoginFailure(err.code, err.message);
+            emit loginFailure(err.code, err.message);
             return;
         }
 
@@ -200,11 +200,11 @@ namespace disk::desktop {
             data.value("refresh_token").toString().isEmpty() ||
             !data.value("user").isObject()) {
             err = MakeInvalidResponseError();
-            emit LoginFailure(err.code, err.message);
+            emit loginFailure(err.code, err.message);
             return;
         }
 
-        emit LoginSuccess(
+        emit loginSuccess(
             data.value("access_token").toString(),
             data.value("refresh_token").toString(),
             data.value("expires_in").toInt(7200),
@@ -218,30 +218,30 @@ namespace disk::desktop {
             if (!TryReadBackendFailure(reply, err)) {
                 err = ErrorAdapter::FromNetworkError(reply->error());
             }
-            emit RegisterFailure(err.code, err.message);
+            emit registerFailure(err.code, err.message);
             return;
         }
 
         QJsonObject json;
         ApiError err;
         if (!TryReadJsonObject(reply, json, err)) {
-            emit RegisterFailure(err.code, err.message);
+            emit registerFailure(err.code, err.message);
             return;
         }
 
         if (TryReadApiFailure(json, err)) {
-            emit RegisterFailure(err.code, err.message);
+            emit registerFailure(err.code, err.message);
             return;
         }
 
         auto data = json.value("data").toObject();
         if (!data.value("user").isObject()) {
             err = MakeInvalidResponseError();
-            emit RegisterFailure(err.code, err.message);
+            emit registerFailure(err.code, err.message);
             return;
         }
 
-        emit RegisterSuccess(data.value("user").toObject());
+        emit registerSuccess(data.value("user").toObject());
     }
 
     auto AuthService::ParseRefreshResponse(QNetworkReply* reply) -> void {
@@ -250,19 +250,19 @@ namespace disk::desktop {
             if (!TryReadBackendFailure(reply, err)) {
                 err = ErrorAdapter::FromNetworkError(reply->error());
             }
-            emit RefreshFailure(err.code, err.message);
+            emit refreshFailure(err.code, err.message);
             return;
         }
 
         QJsonObject json;
         ApiError err;
         if (!TryReadJsonObject(reply, json, err)) {
-            emit RefreshFailure(err.code, err.message);
+            emit refreshFailure(err.code, err.message);
             return;
         }
 
         if (TryReadApiFailure(json, err)) {
-            emit RefreshFailure(err.code, err.message);
+            emit refreshFailure(err.code, err.message);
             return;
         }
 
@@ -270,11 +270,11 @@ namespace disk::desktop {
         if (data.value("access_token").toString().isEmpty() ||
             data.value("refresh_token").toString().isEmpty()) {
             err = MakeInvalidResponseError();
-            emit RefreshFailure(err.code, err.message);
+            emit refreshFailure(err.code, err.message);
             return;
         }
 
-        emit RefreshSuccess(
+        emit refreshSuccess(
             data.value("access_token").toString(),
             data.value("refresh_token").toString(),
             data.value("expires_in").toInt(7200)
@@ -283,7 +283,7 @@ namespace disk::desktop {
 
     auto AuthService::ParseLogoutResponse(QNetworkReply* reply) -> void {
         reply->readAll();
-        emit LogoutSuccess();
+        emit logoutSuccess();
     }
 
     auto AuthService::ParseShareAccessResponse(QNetworkReply* reply) -> void {
@@ -292,30 +292,30 @@ namespace disk::desktop {
             if (!TryReadBackendFailure(reply, err)) {
                 err = ErrorAdapter::FromNetworkError(reply->error());
             }
-            emit ShareAccessFailure(err.code, err.message);
+            emit shareAccessFailure(err.code, err.message);
             return;
         }
 
         QJsonObject json;
         ApiError err;
         if (!TryReadJsonObject(reply, json, err)) {
-            emit ShareAccessFailure(err.code, err.message);
+            emit shareAccessFailure(err.code, err.message);
             return;
         }
 
         if (TryReadApiFailure(json, err)) {
-            emit ShareAccessFailure(err.code, err.message);
+            emit shareAccessFailure(err.code, err.message);
             return;
         }
 
         auto data = json.value("data").toObject();
         if (data.value("share_token").toString().isEmpty()) {
             err = MakeInvalidResponseError();
-            emit ShareAccessFailure(err.code, err.message);
+            emit shareAccessFailure(err.code, err.message);
             return;
         }
 
-        emit ShareAccessSuccess(
+        emit shareAccessSuccess(
             data.value("share_token").toString(),
             data.value("expires_in").toInt(3600),
             data.value("permission").toString(),
