@@ -175,4 +175,9 @@ private slots:
     }
 };
 
+int run_TestDriveItemMapping(int argc, char* argv[]) {
+    TestDriveItemMapping test;
+    return QTest::qExec(&test, argc, argv);
+}
+
 #include "test_drive_item.moc"

@@ -160,4 +160,9 @@ private slots:
     }
 };
 
+int run_TestVisitorSession(int argc, char* argv[]) {
+    TestVisitorSession test;
+    return QTest::qExec(&test, argc, argv);
+}
+
 #include "test_visitor_session.moc"

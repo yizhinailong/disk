@@ -226,4 +226,9 @@ private slots:
     }
 };
 
+int run_TestOwnerSession(int argc, char* argv[]) {
+    TestOwnerSession test;
+    return QTest::qExec(&test, argc, argv);
+}
+
 #include "test_owner_session.moc"

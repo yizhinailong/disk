@@ -4,11 +4,20 @@ set(UNIT_TEST_SOURCES
     unit/main.cpp
     unit/auth/test_owner_session.cpp
     unit/auth/test_visitor_session.cpp
+    unit/auth/test_auth_service_logout.cpp
+    unit/auth/test_auth_service_refresh.cpp
+    unit/auth/test_session_store.cpp
     unit/models/test_drive_item.cpp
     unit/models/test_drive_list_model.cpp
     unit/models/test_error_adapter.cpp
+    unit/models/test_folder_tree_model.cpp
+    unit/models/test_upload_task_model.cpp
+    unit/models/test_download_task_model.cpp
     unit/navigation/test_shell_controller.cpp
+    unit/network/test_request_factory.cpp
+    unit/managers/test_drive_manager.cpp
     unit/transfers/test_transfer_state.cpp
+    unit/transfers/test_transfer_manager.cpp
 )
 
 set(DESKTOP_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../src)
@@ -27,10 +36,13 @@ qt_add_executable(desktop-unit-tests
     ${DESKTOP_SRC_DIR}/models/DriveItem.cpp
     ${DESKTOP_SRC_DIR}/models/DriveListModel.cpp
     ${DESKTOP_SRC_DIR}/models/FolderTreeModel.cpp
+    ${DESKTOP_SRC_DIR}/models/UploadTaskModel.cpp
+    ${DESKTOP_SRC_DIR}/models/DownloadTaskModel.cpp
     ${DESKTOP_SRC_DIR}/network/NetworkClient.cpp
     ${DESKTOP_SRC_DIR}/network/RequestFactory.cpp
     ${DESKTOP_SRC_DIR}/network/ErrorAdapter.cpp
     ${DESKTOP_SRC_DIR}/managers/DriveManager.cpp
+    ${DESKTOP_SRC_DIR}/managers/TransferManager.cpp
     ${DESKTOP_SRC_DIR}/app/ShellController.cpp
 )
 
@@ -63,6 +75,16 @@ add_test(
     COMMAND desktop-unit-tests
 )
 
+# Derive Qt bin directory for ctest PATH (Windows needs Qt DLLs on PATH).
+# e.g. D:/TOOL/Qt/6.11.0/llvm-mingw_64/lib/cmake/Qt6Core -> D:/TOOL/Qt/6.11.0/llvm-mingw_64/bin
+get_filename_component(QT_BIN_DIR "${Qt6Core_DIR}/../../../bin" ABSOLUTE)
+
+if(WIN32)
+    set_tests_properties(desktop-unit-tests PROPERTIES
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${QT_BIN_DIR}"
+    )
+endif()
+
 # ─── Quick tests (QML with Qt Quick Test) ─────────────────────────────────────
 
 qt_add_executable(desktop-quick-tests
@@ -76,6 +98,8 @@ qt_add_qml_module(desktop-quick-tests
         quick/navigation/tst_navigation.qml
         quick/shells/tst_owner_shell.qml
         quick/shells/tst_visitor_shell.qml
+        quick/pages/tst_drive_browser.qml
+        quick/pages/tst_transfer_center.qml
     RESOURCE_PREFIX /qt/qml
 )
 
@@ -98,7 +122,27 @@ set_target_properties(desktop-quick-tests PROPERTIES
     QUICK_TEST_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/quick"
 )
 
+# Derive Qt QML import directory from Qt6QuickTest_DIR
+# e.g. D:/TOOL/Qt/6.11.0/llvm-mingw_64/lib/cmake/Qt6QuickTest -> D:/TOOL/Qt/6.11.0/llvm-mingw_64/qml
+get_filename_component(QT_QML_IMPORT_DIR "${Qt6QuickTest_DIR}/../../../qml" ABSOLUTE)
+
 add_test(
     NAME    desktop-quick-tests
-    COMMAND desktop-quick-tests -platform offscreen
+    COMMAND desktop-quick-tests
+            -platform offscreen
+            -input ${CMAKE_CURRENT_SOURCE_DIR}/quick
+            -import ${QT_QML_IMPORT_DIR}
 )
+
+# Qt 6.11+ blocks local file reads via XMLHttpRequest by default.
+# Our quick tests use XHR to read QML source files for contract verification.
+if(WIN32)
+    set_tests_properties(desktop-quick-tests PROPERTIES
+        ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1"
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${QT_BIN_DIR}"
+    )
+else()
+    set_tests_properties(desktop-quick-tests PROPERTIES
+        ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1"
+    )
+endif()

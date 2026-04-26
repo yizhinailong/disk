@@ -51,39 +51,15 @@ ApplicationWindow {
                     onClicked: root.showPage(transferCenterPageComponent)
                 }
                 
-                Button {
-                    Layout.fillWidth: true
-                    text: "Shares"
-                    flat: true
-                    onClicked: root.showPage(shareManagementPageComponent)
-                }
-                
-                Button {
-                    Layout.fillWidth: true
-                    text: "Trash"
-                    flat: true
-                    onClicked: root.showPage(trashPageComponent)
-                }
-                
                 Item {
                     Layout.fillHeight: true
                 }
                 
                 Button {
                     Layout.fillWidth: true
-                    text: "Settings"
-                    flat: true
-                    onClicked: root.showPage(settingsPageComponent)
-                }
-                
-                Button {
-                    Layout.fillWidth: true
                     text: "Logout"
                     flat: true
-                    onClicked: {
-                        // In a real app, this would call authService.Logout
-                        shellController.navigateToLogin()
-                    }
+                    onClicked: sessionStore.owner.StartLogout()
                 }
             }
         }
@@ -103,11 +79,6 @@ ApplicationWindow {
                 RowLayout {
                     anchors.fill: parent
                     anchors.margins: 16
-                    
-                    TextField {
-                        Layout.preferredWidth: 300
-                        placeholderText: "Search..."
-                    }
                     
                     Item {
                         Layout.fillWidth: true
@@ -145,20 +116,5 @@ ApplicationWindow {
     Component {
         id: transferCenterPageComponent
         TransferCenterPage {}
-    }
-
-    Component {
-        id: shareManagementPageComponent
-        ShareManagementPage {}
-    }
-
-    Component {
-        id: trashPageComponent
-        TrashPage {}
-    }
-
-    Component {
-        id: settingsPageComponent
-        SettingsPage {}
     }
 }

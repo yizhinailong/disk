@@ -282,7 +282,29 @@ namespace disk::desktop {
     }
 
     auto AuthService::ParseLogoutResponse(QNetworkReply* reply) -> void {
-        reply->readAll();
+        if (reply->error() != QNetworkReply::NoError) {
+            ApiError err;
+            if (TryReadBackendFailure(reply, err)) {
+                emit logoutFailure();
+                return;
+            }
+            // Network error without backend error: clear session regardless
+            emit logoutSuccess();
+            return;
+        }
+
+        QJsonObject json;
+        ApiError err;
+        if (!TryReadJsonObject(reply, json, err)) {
+            emit logoutSuccess();
+            return;
+        }
+
+        if (TryReadApiFailure(json, err)) {
+            emit logoutFailure();
+            return;
+        }
+
         emit logoutSuccess();
     }
 

@@ -1,9 +1,13 @@
+#include <cstdio>
+
+#include <QCoreApplication>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QFile>
 #include <QSignalSpy>
 #include <QString>
+#include <QStringList>
 #include <QTest>
 
 #include "auth/AuthService.hpp"
@@ -23,10 +27,6 @@ private slots:
 
     void initTestCase() {
         QVERIFY(true);
-    }
-
-    void stubTest() {
-        QCOMPARE(1 + 1, 2);
     }
 
     void loginRequestUsesBackendAccountField() {
@@ -92,7 +92,7 @@ private slots:
             "api/auth/register",
             QJsonObject{
                 { "code", 40001 },
-                { "message", "用户名已存在" },
+                { "message", QString::fromUtf8("用户名已存在") },
                 { "data", QJsonValue::Null },
             },
             409
@@ -113,7 +113,7 @@ private slots:
 
         auto arguments = failure_spy.takeFirst();
         QCOMPARE(arguments.at(0).toInt(), 40001);
-        QCOMPARE(arguments.at(1).toString(), QString("用户名已存在"));
+        QCOMPARE(arguments.at(1).toString(), QString::fromUtf8("用户名已存在"));
     }
 
     void driveListFilesEmitsPaginationForEmptyFolder() {
@@ -214,7 +214,7 @@ private slots:
         QCOMPARE(breadcrumb.size(), 1);
         auto root = breadcrumb.constFirst().toMap();
         QCOMPARE(root.value("id").toDouble(), 0.0);
-        QCOMPARE(root.value("name").toString(), QString("根目录"));
+        QCOMPARE(root.value("name").toString(), QString::fromUtf8("根目录"));
     }
 
     void driveBreadcrumbParsesBackendPath() {
@@ -228,7 +228,7 @@ private slots:
                  QJsonObject{
                      { "path",
                       QJsonArray{
-                          QJsonObject{ { "id", 0 }, { "name", "根目录" } },
+                          QJsonObject{ { "id", 0 }, { "name", QString::fromUtf8("根目录") } },
                           QJsonObject{ { "id", 42 }, { "name", "docs" } },
                       } },
                  } },
@@ -265,9 +265,20 @@ private slots:
         QVERIFY(!qml.contains(QStringLiteral("stackView.replace(\"TrashPage.qml\")")));
         QVERIFY(qml.contains(QStringLiteral("root.showPage(driveBrowserPageComponent)")));
         QVERIFY(qml.contains(QStringLiteral("root.showPage(transferCenterPageComponent)")));
-        QVERIFY(qml.contains(QStringLiteral("root.showPage(shareManagementPageComponent)")));
-        QVERIFY(qml.contains(QStringLiteral("root.showPage(trashPageComponent)")));
-        QVERIFY(qml.contains(QStringLiteral("root.showPage(settingsPageComponent)")));
+        QVERIFY(!qml.contains(QStringLiteral("root.showPage(shareManagementPageComponent)")));
+        QVERIFY(!qml.contains(QStringLiteral("root.showPage(trashPageComponent)")));
+        QVERIFY(!qml.contains(QStringLiteral("root.showPage(settingsPageComponent)")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"Files\"")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"Transfers\"")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"Logout\"")));
+        QVERIFY(!qml.contains(QStringLiteral("text: \"Shares\"")));
+        QVERIFY(!qml.contains(QStringLiteral("text: \"Trash\"")));
+        QVERIFY(!qml.contains(QStringLiteral("text: \"Settings\"")));
+        QVERIFY(qml.contains(QStringLiteral("id: driveBrowserPageComponent")));
+        QVERIFY(qml.contains(QStringLiteral("id: transferCenterPageComponent")));
+        QVERIFY(!qml.contains(QStringLiteral("id: shareManagementPageComponent")));
+        QVERIFY(!qml.contains(QStringLiteral("id: trashPageComponent")));
+        QVERIFY(!qml.contains(QStringLiteral("id: settingsPageComponent")));
     }
 
     void visitorShellUsesComponentNavigation() {
@@ -285,5 +296,82 @@ private slots:
     }
 };
 
-QTEST_MAIN(DesktopStubTest)
+// ── External test classes (each in their own .cpp with #include "*.moc") ──
+
+extern int run_TestAuthServiceLogout(int argc, char* argv[]);
+extern int run_TestAuthServiceRefresh(int argc, char* argv[]);
+extern int run_TestSessionStore(int argc, char* argv[]);
+extern int run_TestOwnerSession(int argc, char* argv[]);
+extern int run_TestVisitorSession(int argc, char* argv[]);
+extern int run_TestDriveItemMapping(int argc, char* argv[]);
+extern int run_TestDriveListModel(int argc, char* argv[]);
+extern int run_TestErrorAdapter(int argc, char* argv[]);
+extern int run_TestFolderTreeModel(int argc, char* argv[]);
+extern int run_TestUploadTaskModel(int argc, char* argv[]);
+extern int run_TestDownloadTaskModel(int argc, char* argv[]);
+extern int run_TestShellController(int argc, char* argv[]);
+extern int run_TestRequestFactory(int argc, char* argv[]);
+extern int run_TestDriveManager(int argc, char* argv[]);
+extern int run_TestTransferState(int argc, char* argv[]);
+extern int run_TestTransferManager(int argc, char* argv[]);
+
+static int run_and_report(const char* name, int result) {
+    if (result != 0) {
+        fprintf(stderr, "FAIL suite: %s (exit %d)\n", name, result);
+    }
+    fflush(stderr);
+    return result != 0 ? 1 : 0;
+}
+
+typedef int (*RunFn)(int, char**);
+
+static char prog_name_storage[4096];
+
+static int run_and_report(const char* name, RunFn fn, int, char**) {
+    QCoreApplication::processEvents();
+    char* solo_argv[] = { prog_name_storage, nullptr };
+    return run_and_report(name, fn(1, solo_argv));
+}
+
+static int run_and_report(const char* name, QObject* test, int, char**) {
+    QCoreApplication::processEvents();
+    char* solo_argv[] = { prog_name_storage, nullptr };
+    return run_and_report(name, QTest::qExec(test, 1, solo_argv));
+}
+
+int main(int argc, char* argv[]) {
+    QCoreApplication app(argc, argv);
+    snprintf(prog_name_storage, sizeof(prog_name_storage), "%s", argv[0]);
+    int failures = 0;
+
+    fprintf(stderr, "--- desktop-unit-tests: running 17 suites ---\n");
+    fflush(stderr);
+
+    {
+        DesktopStubTest test;
+        failures += run_and_report("DesktopStubTest", &test, argc, argv);
+    }
+
+    failures += run_and_report("TestAuthServiceLogout", run_TestAuthServiceLogout, argc, argv);
+    failures += run_and_report("TestAuthServiceRefresh", run_TestAuthServiceRefresh, argc, argv);
+    failures += run_and_report("TestSessionStore", run_TestSessionStore, argc, argv);
+    failures += run_and_report("TestOwnerSession", run_TestOwnerSession, argc, argv);
+    failures += run_and_report("TestVisitorSession", run_TestVisitorSession, argc, argv);
+    failures += run_and_report("TestDriveItemMapping", run_TestDriveItemMapping, argc, argv);
+    failures += run_and_report("TestDriveListModel", run_TestDriveListModel, argc, argv);
+    failures += run_and_report("TestErrorAdapter", run_TestErrorAdapter, argc, argv);
+    failures += run_and_report("TestFolderTreeModel", run_TestFolderTreeModel, argc, argv);
+    failures += run_and_report("TestUploadTaskModel", run_TestUploadTaskModel, argc, argv);
+    failures += run_and_report("TestDownloadTaskModel", run_TestDownloadTaskModel, argc, argv);
+    failures += run_and_report("TestShellController", run_TestShellController, argc, argv);
+    failures += run_and_report("TestRequestFactory", run_TestRequestFactory, argc, argv);
+    failures += run_and_report("TestDriveManager", run_TestDriveManager, argc, argv);
+    failures += run_and_report("TestTransferState", run_TestTransferState, argc, argv);
+    failures += run_and_report("TestTransferManager", run_TestTransferManager, argc, argv);
+
+    fprintf(stderr, "--- desktop-unit-tests: %d suite(s) failed ---\n", failures);
+    fflush(stderr);
+    return failures;
+}
+
 #include "main.moc"

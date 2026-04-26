@@ -208,4 +208,9 @@ private slots:
     }
 };
 
+int run_TestDriveListModel(int argc, char* argv[]) {
+    TestDriveListModel test;
+    return QTest::qExec(&test, argc, argv);
+}
+
 #include "test_drive_list_model.moc"

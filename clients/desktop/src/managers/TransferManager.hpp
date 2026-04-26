@@ -189,6 +189,14 @@ namespace disk::desktop::managers {
          */
         Q_INVOKABLE void ClearCompletedDownloads();
 
+        /**
+         * @brief Cancel all non-terminal owner transfer work locally
+         *
+         * Used during logout or forced reauthentication so active owner
+         * uploads/downloads do not continue after session teardown.
+         */
+        void ShutdownOwnerTransfers();
+
     signals:
         void localReservedChanged();
         void uploadProgressChanged(const QString& task_id, double progress);

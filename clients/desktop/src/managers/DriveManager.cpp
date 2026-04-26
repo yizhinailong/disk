@@ -470,6 +470,18 @@ namespace disk::desktop::managers {
             return;
         }
 
+        auto json_opt = ParseJsonResponse(reply);
+        if (!json_opt.has_value()) {
+            emit apiError("Invalid response format", 0);
+            return;
+        }
+
+        if (json_opt->value("code").toInt(0) != 0) {
+            auto err = ErrorAdapter::FromJson(*json_opt);
+            emit apiError(err.message, err.code);
+            return;
+        }
+
         emit operationSuccess("Folder created");
     }
 
@@ -481,6 +493,18 @@ namespace disk::desktop::managers {
 
         if (reply->error() != QNetworkReply::NoError) {
             EmitApiError(reply);
+            return;
+        }
+
+        auto json_opt = ParseJsonResponse(reply);
+        if (!json_opt.has_value()) {
+            emit apiError("Invalid response format", 0);
+            return;
+        }
+
+        if (json_opt->value("code").toInt(0) != 0) {
+            auto err = ErrorAdapter::FromJson(*json_opt);
+            emit apiError(err.message, err.code);
             return;
         }
 
@@ -523,6 +547,18 @@ namespace disk::desktop::managers {
 
         if (reply->error() != QNetworkReply::NoError) {
             EmitApiError(reply);
+            return;
+        }
+
+        auto json_opt = ParseJsonResponse(reply);
+        if (!json_opt.has_value()) {
+            emit apiError("Invalid response format", 0);
+            return;
+        }
+
+        if (json_opt->value("code").toInt(0) != 0) {
+            auto err = ErrorAdapter::FromJson(*json_opt);
+            emit apiError(err.message, err.code);
             return;
         }
 

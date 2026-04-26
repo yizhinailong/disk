@@ -330,6 +330,86 @@ namespace disk::desktop::managers {
         }
     }
 
+    void TransferManager::ShutdownOwnerTransfers() {
+        const auto is_terminal_upload = [](const QString& status) {
+            return status == "completed" || status == "cancelled" ||
+                   status == "expired" || status == "failed";
+        };
+        const auto is_terminal_download = [](const QString& status) {
+            return status == "completed" || status == "cancelled" ||
+                   status == "failed";
+        };
+
+        bool upload_state_changed{ false };
+        QVector<QString> upload_ids;
+        const auto upload_count = m_upload_model->rowCount();
+        for (int i = 0; i < upload_count; ++i) {
+            auto task_opt = m_upload_model->GetTask(i);
+            if (!task_opt.has_value() || is_terminal_upload(task_opt->status)) {
+                continue;
+            }
+            upload_ids.append(task_opt->task_id);
+        }
+
+        for (const auto& task_id : upload_ids) {
+            AbortActiveUpload(task_id);
+
+            const int row = m_upload_model->FindTask(task_id);
+            if (row < 0) {
+                continue;
+            }
+
+            auto task = *m_upload_model->GetTask(row);
+            task.status = "cancelled";
+            task.upload_id = std::nullopt;
+            task.chunk_size = std::nullopt;
+            task.total_chunks = std::nullopt;
+            task.uploaded_chunk_indices.clear();
+            task.error = std::nullopt;
+            m_upload_model->UpdateTask(task_id, task);
+            m_active_uploads.remove(task_id);
+            upload_state_changed = true;
+        }
+
+        QVector<QString> owner_download_ids;
+        const auto download_count = m_download_model->rowCount();
+        for (int i = 0; i < download_count; ++i) {
+            auto task_opt = m_download_model->GetTask(i);
+            if (!task_opt.has_value() || task_opt->auth_domain != "owner" ||
+                is_terminal_download(task_opt->status)) {
+                continue;
+            }
+            owner_download_ids.append(task_opt->task_id);
+        }
+
+        for (const auto& task_id : owner_download_ids) {
+            AbortActiveDownload(task_id);
+
+            const int row = m_download_model->FindTask(task_id);
+            if (row < 0) {
+                continue;
+            }
+
+            auto task = *m_download_model->GetTask(row);
+            if (!task.target_path.isEmpty()) {
+                QFile::remove(task.target_path);
+            }
+
+            task.status = "cancelled";
+            task.transfer_mode = "full";
+            task.range_start = std::nullopt;
+            task.range_end = std::nullopt;
+            task.received_bytes = 0;
+            task.error = std::nullopt;
+            m_download_model->UpdateTask(task_id, task);
+            m_active_downloads.remove(task_id);
+        }
+
+        if (upload_state_changed) {
+            emit localReservedChanged();
+        }
+    }
+
     // ── Upload Internal ──
 
     auto TransferManager::CreateUploadTask(
@@ -397,14 +477,20 @@ namespace disk::desktop::managers {
     }
 
     void TransferManager::StartUploadInit(const QString& task_id) {
-        SetUploadState(task_id, UploadState::Initializing);
-        emit localReservedChanged();
-
         int row = m_upload_model->FindTask(task_id);
         if (row < 0) {
             return;
         }
         auto task = *m_upload_model->GetTask(row);
+
+        if (task.status != "hashing" && task.status != "retrying") {
+            return;
+        }
+
+        SetUploadState(task_id, UploadState::Initializing);
+        emit localReservedChanged();
+
+        task = *m_upload_model->GetTask(row);
 
         QJsonObject body;
         body["filename"] = task.filename;
@@ -765,6 +851,10 @@ namespace disk::desktop::managers {
         }
         auto task = *m_upload_model->GetTask(row);
 
+        if (task.status != "cancelling") {
+            return;
+        }
+
         if (!task.upload_id.has_value()) {
             SetUploadState(task_id, UploadState::Cancelled);
             m_active_uploads.remove(task_id);
@@ -907,6 +997,10 @@ namespace disk::desktop::managers {
                     return;
                 }
                 auto t = *m_upload_model->GetTask(r);
+
+                if (t.status != "retrying") {
+                    return;
+                }
 
                 // Re-init if we don't have an upload_id (per §6.5: network drop
                 // after init → re-init)

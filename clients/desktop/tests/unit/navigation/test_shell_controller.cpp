@@ -167,6 +167,49 @@ private slots:
         QCOMPARE(ctrl.GetCurrentShell(), QString("owner"));
     }
 
+    void ReauthRequiredRedirectsToLogin() {
+        NetworkClient nc;
+        RequestFactory rf;
+        SessionStore store(&nc, &rf);
+        ShellController ctrl(&store);
+
+        QJsonObject user;
+        user["id"] = 1;
+        user["username"] = "alice";
+        store.GetOwnerManager()->StartLogin();
+        store.GetOwnerManager()->HandleLoginSuccess("access", "refresh", 7200, user);
+
+        ctrl.Initialize();
+        QCOMPARE(ctrl.GetCurrentShell(), QString("owner"));
+
+        store.GetOwnerManager()->HandleTokenExpired();
+        QCOMPARE(store.GetOwnerManager()->GetState(), OwnerSessionState::Refreshing);
+
+        store.GetOwnerManager()->HandleRefreshFailure();
+        QCOMPARE(store.GetOwnerManager()->GetState(), OwnerSessionState::ReauthRequired);
+        QCOMPARE(ctrl.GetCurrentShell(), QString("login"));
+    }
+
+    void ReauthRequiredClearsTokens() {
+        NetworkClient nc;
+        RequestFactory rf;
+        SessionStore store(&nc, &rf);
+
+        QJsonObject user;
+        user["id"] = 1;
+        user["username"] = "alice";
+        store.GetOwnerManager()->StartLogin();
+        store.GetOwnerManager()->HandleLoginSuccess("access", "refresh", 7200, user);
+        QCOMPARE(rf.GetOwnerAccessToken(), QString("access"));
+
+        store.GetOwnerManager()->HandleTokenExpired();
+        store.GetOwnerManager()->HandleRefreshFailure();
+
+        QVERIFY(store.GetOwnerManager()->GetAccessToken().isEmpty());
+        QVERIFY(store.GetOwnerManager()->GetRefreshToken().isEmpty());
+        QVERIFY(rf.GetOwnerAccessToken().isEmpty());
+    }
+
     void SetPageStateEmitsSignal() {
         NetworkClient nc;
         RequestFactory rf;
@@ -191,5 +234,10 @@ private slots:
         QCOMPARE(ctrl.GetCurrentShell(), QString("splash"));
     }
 };
+
+int run_TestShellController(int argc, char* argv[]) {
+    TestShellController test;
+    return QTest::qExec(&test, argc, argv);
+}
 
 #include "test_shell_controller.moc"

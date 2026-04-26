@@ -95,14 +95,10 @@ Page {
 
         function onLoginSuccess(accessToken, refreshToken, expiresIn, user) {
             root.isBusy = false
-            sessionStore.owner.HandleLoginSuccess(accessToken, refreshToken, expiresIn, user)
-            sessionStore.ActivateOwner()
-            shellController.navigateToOwner()
         }
 
         function onLoginFailure(errorCode, message) {
             root.isBusy = false
-            sessionStore.owner.HandleLoginFailure()
             errorLabel.text = message || "Login failed. Please try again."
         }
     }

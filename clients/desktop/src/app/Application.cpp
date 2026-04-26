@@ -4,6 +4,7 @@
 
 #include "ShellController.hpp"
 #include "auth/AuthService.hpp"
+#include "auth/OwnerSessionManager.hpp"
 #include "auth/SessionStore.hpp"
 #include "managers/DriveManager.hpp"
 #include "managers/ProfileManager.hpp"
@@ -36,6 +37,43 @@ namespace disk::app {
         context->setContextProperty("transferManager", m_transfer_manager.get());
         context->setContextProperty("shareManager", m_share_manager.get());
         context->setContextProperty("trashManager", m_trash_manager.get());
+
+        auto* owner_mgr = m_session_store->GetOwnerManager();
+
+        // Login
+        connect(m_auth_service.get(), &disk::desktop::AuthService::loginSuccess,
+                owner_mgr, &disk::desktop::OwnerSessionManager::HandleLoginSuccess);
+        connect(m_auth_service.get(), &disk::desktop::AuthService::loginFailure,
+                owner_mgr, &disk::desktop::OwnerSessionManager::HandleLoginFailure);
+
+        connect(owner_mgr, &disk::desktop::OwnerSessionManager::stateChanged,
+                this, [this](disk::desktop::OwnerSessionState state) {
+                    if (state == disk::desktop::OwnerSessionState::Active) {
+                        m_session_store->ActivateOwner();
+                        return;
+                    }
+
+                    if (state == disk::desktop::OwnerSessionState::LogoutPending ||
+                        state == disk::desktop::OwnerSessionState::ReauthRequired) {
+                        m_transfer_manager->ShutdownOwnerTransfers();
+                    }
+                });
+
+        // Refresh
+        connect(owner_mgr, &disk::desktop::OwnerSessionManager::refreshRequested,
+                m_auth_service.get(), &disk::desktop::AuthService::RefreshToken);
+        connect(m_auth_service.get(), &disk::desktop::AuthService::refreshSuccess,
+                owner_mgr, &disk::desktop::OwnerSessionManager::HandleRefreshSuccess);
+        connect(m_auth_service.get(), &disk::desktop::AuthService::refreshFailure,
+                owner_mgr, &disk::desktop::OwnerSessionManager::HandleRefreshFailure);
+
+        // Logout
+        connect(owner_mgr, &disk::desktop::OwnerSessionManager::logoutRequested,
+                m_auth_service.get(), &disk::desktop::AuthService::Logout);
+        connect(m_auth_service.get(), &disk::desktop::AuthService::logoutSuccess,
+                owner_mgr, &disk::desktop::OwnerSessionManager::CompleteLogout);
+        connect(m_auth_service.get(), &disk::desktop::AuthService::logoutFailure,
+                owner_mgr, &disk::desktop::OwnerSessionManager::CompleteLogout);
 
         m_shell_controller->Initialize();
     }

@@ -31,12 +31,12 @@ Page {
 
             Button {
                 text: qsTr("Clear Completed")
-                onClicked: transferManager.clearCompletedUploads()
+                onClicked: transferManager.ClearCompletedUploads()
                 visible: tabBar.currentIndex === 0
             }
             Button {
                 text: qsTr("Clear Completed")
-                onClicked: transferManager.clearCompletedDownloads()
+                onClicked: transferManager.ClearCompletedDownloads()
                 visible: tabBar.currentIndex === 1
             }
         }
@@ -150,7 +150,7 @@ Page {
                                 text: qsTr("Cancel")
                                 flat: true
                                 palette.buttonText: "#f44336"
-                                onClicked: transferManager.cancelUpload(model.taskId)
+                                onClicked: transferManager.CancelUpload(model.taskId)
                             }
                         }
 
@@ -163,13 +163,13 @@ Page {
                                 text: qsTr("Retry")
                                 flat: true
                                 palette.buttonText: "#1976d2"
-                                onClicked: transferManager.retryUpload(model.taskId)
+                                onClicked: transferManager.RetryUpload(model.taskId)
                             }
                             Button {
                                 visible: model.status !== "completed"
                                 text: qsTr("Dismiss")
                                 flat: true
-                                onClicked: transferManager.clearCompletedUploads()
+                                onClicked: transferManager.ClearCompletedUploads()
                             }
                         }
                     }
@@ -278,13 +278,13 @@ Page {
                                 text: qsTr("Pause")
                                 flat: true
                                 palette.buttonText: "#ff9800"
-                                onClicked: transferManager.pauseDownload(model.taskId)
+                                onClicked: transferManager.PauseDownload(model.taskId)
                             }
                             Button {
                                 text: qsTr("Cancel")
                                 flat: true
                                 palette.buttonText: "#f44336"
-                                onClicked: transferManager.cancelDownload(model.taskId)
+                                onClicked: transferManager.CancelDownload(model.taskId)
                             }
                         }
 
@@ -296,13 +296,13 @@ Page {
                                 text: qsTr("Resume")
                                 flat: true
                                 palette.buttonText: "#4caf50"
-                                onClicked: transferManager.resumeDownload(model.taskId)
+                                onClicked: transferManager.ResumeDownload(model.taskId)
                             }
                             Button {
                                 text: qsTr("Cancel")
                                 flat: true
                                 palette.buttonText: "#f44336"
-                                onClicked: transferManager.cancelDownload(model.taskId)
+                                onClicked: transferManager.CancelDownload(model.taskId)
                             }
                         }
 
@@ -314,12 +314,12 @@ Page {
                                 text: qsTr("Retry")
                                 flat: true
                                 palette.buttonText: "#1976d2"
-                                onClicked: transferManager.retryDownload(model.taskId)
+                                onClicked: transferManager.RetryDownload(model.taskId)
                             }
                             Button {
                                 text: qsTr("Dismiss")
                                 flat: true
-                                onClicked: transferManager.clearCompletedDownloads()
+                                onClicked: transferManager.ClearCompletedDownloads()
                             }
                         }
                     }

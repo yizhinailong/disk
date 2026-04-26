@@ -131,4 +131,9 @@ private slots:
     }
 };
 
+int run_TestErrorAdapter(int argc, char* argv[]) {
+    TestErrorAdapter test;
+    return QTest::qExec(&test, argc, argv);
+}
+
 #include "test_error_adapter.moc"
