@@ -241,6 +241,13 @@ TestCase {
                "Valid rename flow calls DriveManager.renameItem")
         verify(source.indexOf("driveManager.deleteItems([root.selectedItemId])") !== -1,
                "Delete flow calls DriveManager.deleteItems for one selected item")
+        verify(source.indexOf('if (root.selectedItemKind !== "file")') !== -1,
+               "Delete submit path checks item kind before using the file delete contract")
+        verify(source.indexOf('deleteErrorMessage = "Folder deletion is not supported in this build."') !== -1,
+               "Folder delete attempts surface deterministic local feedback")
+        verify(source.indexOf('deleteErrorMessage = "Folder deletion is not supported in this build."')
+               < source.indexOf("driveManager.deleteItems([root.selectedItemId])"),
+               "Folder delete feedback is assigned before any file delete request call")
 
         verify(source.indexOf("pendingMutationAction") !== -1,
                "Tracks the active mutation flow")

@@ -1,3 +1,4 @@
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTcpServer>
@@ -488,6 +489,17 @@ private slots:
         QCOMPARE(arguments.at(0).toString(), QString("File not found"));
         QCOMPARE(arguments.at(1).toInt(), 50005);
         QVERIFY(server.RequestData().contains("DELETE /api/file HTTP/1.1"));
+    }
+
+    void DeleteItemsSourceBuildsJsonFileIdsBody() {
+        QFile source_file(QStringLiteral(QT_TEST_SOURCE_DIR "/../src/managers/DriveManager.cpp"));
+        QVERIFY(source_file.open(QIODevice::ReadOnly | QIODevice::Text));
+
+        const QString source = QString::fromUtf8(source_file.readAll());
+        QVERIFY(source.contains("body[\"file_ids\"] = ids;"));
+        QVERIFY(source.contains("url = url.resolved(QUrl(\"api/file\"));"));
+        QVERIFY(!source.contains("base_url + \"api/file\""));
+        QVERIFY(source.contains("sendCustomRequest(request, \"DELETE\", json_body)"));
     }
 
     void ListFilesSendsAuthHeaders() {
