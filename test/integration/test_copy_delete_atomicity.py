@@ -11,8 +11,8 @@ Covers:
   - Happy-path copy: upload → copy to dedicated folder → verify copied_count > 0 and new_files present
   - Happy-path delete: delete original → verify deleted_count > 0
   - Trash visibility: GET /api/trash → verify deleted file appears in trash list
-  - Copy non-existent file_ids: POST /api/file/copy with invalid IDs → verify code != 0
-  - Delete non-existent file_ids: DELETE /api/file with invalid IDs → verify deleted_count = 0
+  - Copy non-existent file_ids: POST /api/file/copy with invalid IDs → verify copied_count=0 (vacuous success)
+  - Delete non-existent file_ids: DELETE /api/file with invalid IDs → verify code=50005 (FileNotFound error)
   - Copy then delete copied file: independent operations succeed
 
 Prerequisites:
@@ -281,7 +281,7 @@ def test_trash_visibility() -> None:
 
 
 def test_copy_nonexistent() -> None:
-    log_step("Test: Copy non-existent file_ids → verify error")
+    log_step("Test: Copy non-existent file_ids → verify zero-copy success (copied_count=0)")
 
     resp = fetch(
         "/api/file/copy",
@@ -296,33 +296,22 @@ def test_copy_nonexistent() -> None:
     save_evidence(f"{EVIDENCE_PREFIX}-copy-nonexistent.json", resp.text)
 
     ok = True
-
-    code = json_field(resp.text, "code")
-    if code != "0":
-        log_pass(f"copy-nonexistent: error response (code={code})")
-    else:
-        log_fail("copy-nonexistent: expected error (code != 0), got code=0")
-        ok = False
-
-    # Verify no partial state: copied_count should be 0 or absent
-    copied_count = json_field(resp.text, "data.copied_count")
-    if not copied_count or copied_count == "0":
-        log_info("copy-nonexistent: no partial state (copied_count=0)")
-    else:
-        log_fail(
-            f"copy-nonexistent: partial state detected (copied_count={copied_count})"
-        )
-        ok = False
+    # Copy API returns success (code=0) with copied_count=0 for non-existent IDs;
+    # unlike delete, the copy endpoint treats zero matches as a vacuous success.
+    assert_json_field("copy-nonexistent", resp.text, "code", "0") or (ok := False)
+    assert_json_field("copy-nonexistent", resp.text, "data.copied_count", "0") or (
+        ok := False
+    )
 
     if ok:
-        log_pass("copy-nonexistent: verification successful")
+        log_pass("copy-nonexistent: vacuous success with copied_count=0")
 
 
 # ─── Test 5: Delete non-existent file IDs ───────────────────────────────────
 
 
 def test_delete_nonexistent() -> None:
-    log_step("Test: Delete non-existent file_ids → verify deleted_count = 0")
+    log_step("Test: Delete non-existent file_ids → verify FileNotFound error (code=50005)")
 
     resp = fetch(
         "/api/file",
@@ -337,13 +326,14 @@ def test_delete_nonexistent() -> None:
     save_evidence(f"{EVIDENCE_PREFIX}-delete-nonexistent.json", resp.text)
 
     ok = True
-    assert_json_field("delete-nonexistent", resp.text, "code", "0") or (ok := False)
-    assert_json_field("delete-nonexistent", resp.text, "data.deleted_count", "0") or (
+    # After backend hardening (Task 3), zero-deletion returns a structured
+    # FileNotFound error (code=50005) instead of fake success with deleted_count=0.
+    assert_json_field("delete-nonexistent", resp.text, "code", "50005") or (
         ok := False
     )
 
     if ok:
-        log_pass("delete-nonexistent: idempotent delete verification successful")
+        log_pass("delete-nonexistent: FileNotFound error returned as expected")
 
 
 # ─── Test 6: Copy then delete copied file ───────────────────────────────────

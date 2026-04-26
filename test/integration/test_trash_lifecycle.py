@@ -11,7 +11,7 @@ Covers:
   - Upload file A -> soft-delete -> restore -> verify file is active again
   - Upload file B -> soft-delete -> permanent delete -> verify file is gone
   - File appears in trash after soft-delete
-  - Restore operation returns success status
+  - Restore operation returns success status (with new file_id — restore creates a new active row)
   - Permanent delete operation returns success status
   - Empty all trash clears remaining test data
   - Verify restored file is NOT in trash after restore
@@ -66,6 +66,7 @@ FILE_A_ID = ""
 FILE_B_ID = ""
 TRASH_A_ID = ""
 TRASH_B_ID = ""
+RESTORED_FILE_A_ID = ""
 
 EVIDENCE_PREFIX = "task-6-trash-lifecycle"
 
@@ -316,6 +317,8 @@ def test_save_trash_ids() -> None:
 
 
 def test_restore_file() -> None:
+    global RESTORED_FILE_A_ID
+
     log_section("Restore File A")
 
     log_step(f"Restore file A: trash_id={TRASH_A_ID}")
@@ -335,7 +338,6 @@ def test_restore_file() -> None:
     ok = True
     assert_json_field("restore-file-a", resp.text, "code", "0") or (ok := False)
 
-    # Verify results[0].status == "success"
     status = json_field(resp.text, "data.results.0.status")
     if status == "success":
         log_pass("restore-file-a: status = success")
@@ -343,14 +345,14 @@ def test_restore_file() -> None:
         log_fail(f"restore-file-a: expected status=success, got '{status}'")
         ok = False
 
-    # Verify returned file_id matches FILE_A_ID
+    # Restore creates a new active file row; the returned file_id is the new ID,
+    # not the original FILE_A_ID. Capture it for the subsequent active-file check.
     restored_file_id = json_field(resp.text, "data.results.0.file_id")
-    if restored_file_id == FILE_A_ID:
-        log_pass(f"restore-file-a: file_id matches ({FILE_A_ID})")
+    if restored_file_id and restored_file_id != "null":
+        RESTORED_FILE_A_ID = restored_file_id
+        log_pass(f"restore-file-a: new file_id = {restored_file_id}")
     else:
-        log_fail(
-            f"restore-file-a: expected file_id={FILE_A_ID}, got '{restored_file_id}'"
-        )
+        log_fail("restore-file-a: no file_id in restore response")
         ok = False
 
     if ok:
@@ -363,10 +365,14 @@ def test_restore_file() -> None:
 def test_verify_active_after_restore() -> None:
     log_section("Verify File A is Active After Restore")
 
-    log_step(f"Get file A details: file_id={FILE_A_ID}")
+    if not RESTORED_FILE_A_ID:
+        log_fail("file-a-active: no restored file ID available (restore failed?)")
+        raise SystemExit(1)
+
+    log_step(f"Get restored file details: file_id={RESTORED_FILE_A_ID}")
 
     resp = fetch(
-        f"/api/file/{FILE_A_ID}",
+        f"/api/file/{RESTORED_FILE_A_ID}",
         headers={"Authorization": f"Bearer {TOKEN}"},
     )
 
@@ -378,11 +384,11 @@ def test_verify_active_after_restore() -> None:
     file_id_in_resp = json_field(resp.text, "data.id")
     if not file_id_in_resp or file_id_in_resp == "null":
         file_id_in_resp = json_field(resp.text, "data.file.id")
-    if file_id_in_resp == FILE_A_ID:
-        log_pass("file-a-active: file is accessible with correct id")
+    if file_id_in_resp == RESTORED_FILE_A_ID:
+        log_pass("file-a-active: restored file is accessible with correct id")
     else:
         log_fail(
-            f"file-a-active: expected file id={FILE_A_ID}, got '{file_id_in_resp}'"
+            f"file-a-active: expected file id={RESTORED_FILE_A_ID}, got '{file_id_in_resp}'"
         )
         ok = False
 

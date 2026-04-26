@@ -1,5 +1,5 @@
 # test/integration/lib_py/http.py
-# HTTP utilities: JSON parsing, httpx-based fetch, Redis cleanup.
+# HTTP utilities: JSON parsing, httpx-based fetch (stdlib urllib fallback), Redis cleanup.
 #
 # Mirrors lib/http.sh behavior exactly.
 
@@ -10,7 +10,12 @@ import os
 import socket
 from typing import Any
 
-import httpx
+try:
+    import httpx
+
+    _HAS_HTTPX = True
+except ModuleNotFoundError:
+    _HAS_HTTPX = False
 
 BASE_URL: str = os.environ.get("BASE_URL", "http://127.0.0.1:8080")
 
@@ -115,25 +120,68 @@ def fetch(
     data: bytes | str | None = None,
     timeout: int = 30,
 ) -> Response:
-    """HTTP request using httpx. Returns a Response object with .status_code, .headers, .text."""
-    # Prepend BASE_URL if url is relative
+    """HTTP request. Uses httpx when available, otherwise stdlib urllib."""
     if url.startswith("/"):
         url = BASE_URL + url
 
+    if _HAS_HTTPX:
+        return _fetch_httpx(url, method=method, headers=headers, json_body=json_body, data=data, timeout=timeout)
+    return _fetch_urllib(url, method=method, headers=headers, json_body=json_body, data=data, timeout=timeout)
+
+
+def _fetch_httpx(
+    url: str,
+    *,
+    method: str = "GET",
+    headers: dict[str, str] | None = None,
+    json_body: Any = None,
+    data: bytes | str | None = None,
+    timeout: int = 30,
+) -> Response:
     with httpx.Client(timeout=timeout) as client:
-        resp = client.request(
-            method,
-            url,
-            headers=headers,
-            json=json_body,
-            content=data,
-        )
+        resp = client.request(method, url, headers=headers, json=json_body, content=data)
 
     resp_headers: dict[str, str] = {}
     for k, v in resp.headers.multi_items():
         resp_headers[k] = v
 
     return Response(resp.status_code, resp_headers, resp.text)
+
+
+def _fetch_urllib(
+    url: str,
+    *,
+    method: str = "GET",
+    headers: dict[str, str] | None = None,
+    json_body: Any = None,
+    data: bytes | str | None = None,
+    timeout: int = 30,
+) -> Response:
+    import urllib.request
+    import urllib.error
+
+    req_headers: dict[str, str] = dict(headers or {})
+
+    body: bytes | None = None
+    if json_body is not None:
+        body = json.dumps(json_body).encode("utf-8")
+        req_headers.setdefault("Content-Type", "application/json")
+    elif data is not None:
+        body = data.encode("utf-8") if isinstance(data, str) else data
+
+    req = urllib.request.Request(url, data=body, headers=req_headers, method=method)
+
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as raw_resp:
+            status = raw_resp.status
+            resp_headers = {k: v for k, v in raw_resp.getheaders()}
+            text = raw_resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+        resp_headers = {k: v for k, v in exc.headers.items()} if exc.headers else {}
+        text = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
+
+    return Response(status, resp_headers, text)
 
 
 def header_value(headers: dict[str, str], name: str) -> str:

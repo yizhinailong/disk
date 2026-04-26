@@ -318,3 +318,16 @@ set_tests_properties(
     TIMEOUT 120
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+
+add_test(
+    NAME FileDeleteRegressionIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_file_delete_regression.py"
+)
+
+set_tests_properties(
+    FileDeleteRegressionIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
