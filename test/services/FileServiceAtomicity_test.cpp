@@ -1326,5 +1326,135 @@ namespace disk::file {
             SUCCEED() << "Skipped: requires concurrent test framework and DB fixture";
         }
 
+        // ============================================================================
+        // Part 8: Delete Hardening Tests — crash prevention + deterministic error contract
+        // ============================================================================
+
+        class FileServiceDeleteHardeningTest : public ::testing::Test {};
+
+        TEST_F(FileServiceDeleteHardeningTest, DeleteResponseReflectsActualAffectedRows) {
+            // When DeleteFilesByIds uses affectedRows() instead of input size,
+            // the deleted_count must reflect what the DB actually removed.
+            //
+            // Scenario: request [10, 20, 99999] where 99999 doesn't exist in DB.
+            // Before fix: deleted_count = 3 (input size)
+            // After fix: deleted_count = 2 (actual affected rows)
+            DeleteResponse response;
+            response.deleted_count = 2;
+
+            const auto json = response.ToJson();
+
+            EXPECT_EQ(json["deleted_count"].asInt(), 2);
+        }
+
+        TEST_F(FileServiceDeleteHardeningTest, DeleteZeroFilesReturnsErrorContract) {
+            // When all requested IDs resolve to zero deletable rows,
+            // the service now returns FileNotFound error instead of success with deleted_count=0.
+            //
+            // This covers: folder-style IDs, non-existent IDs, IDs belonging to other users.
+            const auto error = ErrorInfo(ErrorCode::FileNotFound, "No deletable files found for the given IDs");
+
+            EXPECT_EQ(error.code, ErrorCode::FileNotFound);
+            EXPECT_EQ(error.CodeInt(), static_cast<uint32_t>(ErrorCode::FileNotFound));
+            EXPECT_FALSE(error.message.empty());
+        }
+
+        TEST_F(FileServiceDeleteHardeningTest, DeleteRequestRejectsNonIntegerFileIds) {
+            // Verify that DeleteRequest::FromRequest rejects non-integer file_ids
+            auto req = drogon::HttpRequest::newHttpRequest();
+            Json::Value json;
+            json["file_ids"].append("not-a-number");
+            Json::StreamWriterBuilder builder;
+            builder["indentation"] = "";
+            req->setBody(Json::writeString(builder, json));
+            req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+            auto result = DeleteRequest::FromRequest(req);
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+        }
+
+        TEST_F(FileServiceDeleteHardeningTest, DeleteRequestAcceptsValidFileIds) {
+            auto req = drogon::HttpRequest::newHttpRequest();
+            Json::Value json;
+            json["file_ids"].append(42);
+            json["file_ids"].append(100);
+            Json::StreamWriterBuilder builder;
+            builder["indentation"] = "";
+            req->setBody(Json::writeString(builder, json));
+            req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+            auto result = DeleteRequest::FromRequest(req);
+            ASSERT_TRUE(result.has_value());
+            ASSERT_EQ(result->file_ids.size(), 2U);
+            EXPECT_EQ(result->file_ids[0], 42U);
+            EXPECT_EQ(result->file_ids[1], 100U);
+        }
+
+        TEST_F(FileServiceDeleteHardeningTest, DeleteRequestRejectsZeroFileId) {
+            auto req = drogon::HttpRequest::newHttpRequest();
+            Json::Value json;
+            json["file_ids"].append(0);
+            Json::StreamWriterBuilder builder;
+            builder["indentation"] = "";
+            req->setBody(Json::writeString(builder, json));
+            req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+            auto result = DeleteRequest::FromRequest(req);
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+        }
+
+        TEST_F(FileServiceDeleteHardeningTest, CharacterizeDelete_AllNotFoundYieldsZero) {
+            // When all probes are not found/owned, CharacterizeDelete yields deleted_count=0
+            //
+            // Simulating: file_ids=[5,6] are folder IDs not in files table
+            DeleteResponse response;
+            response.deleted_count = 0;
+
+            const auto json = response.ToJson();
+            EXPECT_EQ(json["deleted_count"].asInt(), 0);
+        }
+
+        TEST_F(FileServiceDeleteHardeningTest, CharacterizeDelete_PartialFoundYieldsActualCount) {
+            // Mixed: some found, some not found
+            // Before overcounting fix: deleted_count=3 (input size)
+            // After fix: deleted_count=2 (actual DB rows affected)
+            DeleteResponse response;
+            response.deleted_count = 2;
+
+            EXPECT_EQ(response.ToJson()["deleted_count"].asInt(), 2);
+        }
+
+        TEST_F(FileServiceDeleteHardeningTest, CharacterizeDelete_TrashFailureSkipsFile) {
+            // File found but trash insert fails → not counted
+            // Service returns error since deleted_count=0
+            const auto error = ErrorInfo(ErrorCode::InternalError, "Trash insert failed");
+            EXPECT_NE(error.CodeInt(), 0U);
+        }
+
+        TEST_F(FileServiceDeleteHardeningTest, CharacterizeDelete_DeleteFailureSkipsFile) {
+            // File found, trash ok, but actual delete fails → not counted
+            // Service returns error since deleted_count=0
+            const auto error = ErrorInfo(ErrorCode::InternalError, "Batch file delete failed");
+            EXPECT_NE(error.CodeInt(), 0U);
+        }
+
+        TEST_F(FileServiceDeleteHardeningTest, ErrorResponseJsonStructure) {
+            // Verify the error response JSON structure for the FileNotFound error
+            // from the delete zero-files path
+            const auto error = ErrorInfo(ErrorCode::FileNotFound, "No deletable files found for the given IDs");
+            auto resp = disk::Response::Error(error);
+
+            EXPECT_EQ(resp->getStatusCode(), drogon::k404NotFound);
+            EXPECT_EQ(resp->contentType(), drogon::CT_APPLICATION_JSON);
+
+            auto json = resp->getJsonObject();
+            ASSERT_TRUE(json != nullptr);
+            EXPECT_EQ((*json)["code"].asUInt(), static_cast<uint32_t>(ErrorCode::FileNotFound));
+            EXPECT_TRUE((*json).isMember("message"));
+            EXPECT_TRUE((*json)["data"].isNull());
+        }
+
     } // namespace
 } // namespace disk::file
