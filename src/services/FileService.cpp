@@ -1542,7 +1542,7 @@ namespace disk::file {
 
             try {
                 auto result = co_await m_db_client->execSqlCoro(
-                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, " "       is_favorite, download_count, created_at, updated_at " "FROM files WHERE id IN (" + in_clause + ") AND user_id = ?",
+                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, " "       is_favorite, download_count, last_accessed_at, created_at, updated_at " "FROM files WHERE id IN (" + in_clause + ") AND user_id = ?",
                     user_id
                 );
 
@@ -1684,10 +1684,10 @@ namespace disk::file {
                 file_map.reserve(chunk.size());
 
                 try {
-                    auto result = co_await m_db_client->execSqlCoro(
-                        "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, " "       is_favorite, download_count, created_at, updated_at " "FROM files WHERE id IN (" + in_clause + ") AND user_id = ?",
-                        user_id
-                    );
+                auto result = co_await m_db_client->execSqlCoro(
+                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, " "       is_favorite, download_count, last_accessed_at, created_at, updated_at " "FROM files WHERE id IN (" + in_clause + ") AND user_id = ?",
+                    user_id
+                );
 
                     for (const auto& row : result) {
                         auto file = Files(row, -1);
@@ -1947,7 +1947,7 @@ namespace disk::file {
 
             try {
                 auto result = co_await m_db_client->execSqlCoro(
-                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, " "       is_favorite, download_count, created_at, updated_at " "FROM files WHERE id IN (" + in_clause + ") AND user_id = ?",
+                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, " "       is_favorite, download_count, last_accessed_at, created_at, updated_at " "FROM files WHERE id IN (" + in_clause + ") AND user_id = ?",
                     user_id
                 );
 
@@ -2041,6 +2041,12 @@ namespace disk::file {
         }
 
         LOG_INFO << "File delete completed: deleted_count=" << deleted_count;
+
+        if (deleted_count == 0) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::FileNotFound, "No deletable files found for the given IDs")
+            );
+        }
 
         DeleteResponse response;
         response.deleted_count = deleted_count;
@@ -2765,11 +2771,11 @@ namespace disk::file {
         }
 
         try {
-            co_await client->execSqlCoro(
+            auto result = co_await client->execSqlCoro(
                 "DELETE FROM files WHERE id IN (" +
                 BatchUtils::BuildSafeNumericInClause(file_ids) + ")"
             );
-            co_return static_cast<int>(file_ids.size());
+            co_return static_cast<int>(result.affectedRows());
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_WARN << "Batch file delete failed: " << e.base().what();
             co_return 0;

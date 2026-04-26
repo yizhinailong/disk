@@ -481,18 +481,26 @@ namespace disk::file {
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 调用 Service 层删除文件
-        auto result = co_await m_file_service->Delete(*parse_result, user_id);
-        if (!result) {
-            LOG_ERROR << "Delete file failed: " << result.error().message << " (user_id=" << user_id
-                      << ")";
-            co_return Response::Error(result.error());
-        }
+        // 3. 调用 Service 层删除文件（异常边界：防止未捕获异常导致连接中断）
+        try {
+            auto result = co_await m_file_service->Delete(*parse_result, user_id);
+            if (!result) {
+                LOG_ERROR << "Delete file failed: " << result.error().message << " (user_id=" << user_id
+                          << ")";
+                co_return Response::Error(result.error());
+            }
 
-        // 4. 构造响应
-        LOG_INFO << "Delete file successful: deleted_count=" << result->deleted_count
-                 << " (user_id=" << user_id << ")";
-        co_return Response::Success(result->ToJson());
+            // 4. 构造响应
+            LOG_INFO << "Delete file successful: deleted_count=" << result->deleted_count
+                     << " (user_id=" << user_id << ")";
+            co_return Response::Success(result->ToJson());
+        } catch (const std::exception& e) {
+            LOG_ERROR << "Unexpected exception in delete file: " << e.what()
+                      << " (user_id=" << user_id << ")";
+            co_return Response::Error(
+                ErrorInfo(ErrorCode::InternalError, "Internal error during file deletion")
+            );
+        }
     }
 
     auto FileController::Search(drogon::HttpRequestPtr request)
