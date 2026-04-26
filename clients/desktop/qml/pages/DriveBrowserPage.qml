@@ -404,7 +404,7 @@ Page {
                     BreadcrumbBar {
                         id: breadcrumbBar
                         Layout.fillWidth: true
-                        onPathClicked: root.openFolder(folderId)
+                        onPathClicked: function(folderId) { root.openFolder(folderId) }
                     }
                 }
 
@@ -420,7 +420,7 @@ Page {
                         Layout.preferredWidth: 220
                         Layout.fillHeight: true
                         model: driveManager.treeModel
-                        onFolderClicked: root.openFolder(folderId)
+                        onFolderClicked: function(folderId) { root.openFolder(folderId) }
                     }
 
                     Rectangle {

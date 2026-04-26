@@ -159,9 +159,9 @@ TestCase {
         verify(source.indexOf("model: driveManager.treeModel") !== -1,
                "FolderTreePanel uses driveManager.treeModel")
         verify(source.indexOf("BreadcrumbBar") !== -1, "Has BreadcrumbBar")
-        verify(source.indexOf("onFolderClicked: root.openFolder(folderId)") !== -1,
+        verify(source.indexOf("onFolderClicked: function(folderId) { root.openFolder(folderId) }") !== -1,
                "Folder tree clicks open folders through page flow")
-        verify(source.indexOf("onPathClicked: root.openFolder(folderId)") !== -1,
+        verify(source.indexOf("onPathClicked: function(folderId) { root.openFolder(folderId) }") !== -1,
                "Breadcrumb clicks open folders through page flow")
         verify(source.indexOf("function openFolder(folderId)") !== -1,
                "Has openFolder helper")
