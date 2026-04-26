@@ -266,8 +266,15 @@ Page {
         }
 
         clearMutationErrors()
-        mutationInFlight = true
         pendingMutationAction = "delete"
+
+        if (root.selectedItemKind !== "file") {
+            mutationInFlight = false
+            deleteErrorMessage = "Folder deletion is not supported in this build."
+            return
+        }
+
+        mutationInFlight = true
         driveManager.deleteItems([root.selectedItemId])
     }
 

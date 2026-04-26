@@ -251,9 +251,8 @@ namespace disk::desktop::managers {
 
         QByteArray json_body = QJsonDocument(body).toJson(QJsonDocument::Compact);
 
-        QString base_url = m_networkClient->GetBaseUrl();
-        QString path = base_url + "api/file";
-        QUrl url(path);
+        QUrl url(m_networkClient->GetBaseUrl());
+        url = url.resolved(QUrl("api/file"));
 
         QNetworkRequest request(url);
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
