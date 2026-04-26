@@ -7,6 +7,38 @@ import "../components"
 Page {
     id: root
 
+    readonly property int pagePadding: 16
+    readonly property int compactSpacing: 8
+    readonly property int panelSpacing: 12
+    readonly property int panelInset: 12
+    readonly property int contentInset: 14
+    readonly property int panelRadius: 10
+    readonly property int innerPanelRadius: 8
+    readonly property color pageBackgroundColor: "#f8fafb"
+    readonly property color panelBackgroundColor: "#ffffff"
+    readonly property color panelBorderColor: "#dfe5eb"
+    readonly property color panelMutedFillColor: "#f3f5f7"
+    readonly property color panelMutedTextColor: "#5f6b76"
+    readonly property color panelSecondaryTextColor: "#666666"
+    readonly property color panelTertiaryTextColor: "#888888"
+    readonly property color panelStrongTextColor: "#1f2933"
+    readonly property color panelAccentFillColor: "#dce8f5"
+    readonly property color panelAccentTextColor: "#4f6b8a"
+    readonly property color panelErrorTextColor: "#f44336"
+    readonly property int fileTypeColumnWidth: 160
+    readonly property int fileSizeColumnWidth: 120
+    readonly property int fileUpdatedColumnWidth: 152
+    readonly property int fileActionColumnWidth: 76
+    readonly property int currentFolderItemCount: driveManager.listModel ? driveManager.listModel.rowCount() : 0
+    readonly property string driveTitle: breadcrumbBar.path.length > 0
+                                         && breadcrumbBar.path[breadcrumbBar.path.length - 1].name
+                                         ? String(breadcrumbBar.path[breadcrumbBar.path.length - 1].name)
+                                         : "My Drive"
+
+    background: Rectangle {
+        color: root.pageBackgroundColor
+    }
+
     property string currentFolderId: "0"
     property string selectedItemId: ""
     property string selectedItemKind: ""
@@ -20,6 +52,42 @@ Page {
     property string downloadErrorMessage: ""
     property string pendingOwnerDownloadFileId: ""
     property string pendingOwnerDownloadFilename: ""
+
+    function folderScopeLabel() {
+        return currentFolderId === "0" ? "Root folder" : "Nested folder"
+    }
+
+    function pageStateLabel() {
+        switch (shellController.pageState) {
+        case "loading":
+            return "Refreshing"
+        case "empty":
+            return "Empty"
+        case "error":
+            return "Needs retry"
+        default:
+            return "Ready"
+        }
+    }
+
+    function driveStatusSummary() {
+        if (shellController.pageState === "loading") {
+            return "Refreshing folder contents and drive navigation."
+        }
+        if (shellController.pageState === "error") {
+            return "We could not load this folder. Retry to restore the drive view."
+        }
+        if (shellController.pageState === "empty") {
+            return "This folder is empty. Use the toolbar to add new content."
+        }
+        if (selectedItemId !== "") {
+            return 'Selected: "' + selectedItemName + '"'
+        }
+
+        return currentFolderItemCount === 1
+               ? "1 item in this folder"
+               : currentFolderItemCount + " items in this folder"
+    }
 
     function clearSelection() {
         selectedItemId = ""
@@ -104,6 +172,33 @@ Page {
         if (bytes < 1073741824)
             return (bytes / 1048576).toFixed(1) + " MB"
         return (bytes / 1073741824).toFixed(1) + " GB"
+    }
+
+    function formatItemType(kind, mimeType) {
+        if (kind === "folder") {
+            return "Folder"
+        }
+
+        var typeLabel = mimeType === undefined || mimeType === null ? "" : String(mimeType)
+        return typeLabel !== "" ? typeLabel : "File"
+    }
+
+    function formatItemSize(kind, size, itemCount) {
+        if (kind === "folder") {
+            var itemCountValue = itemCount === undefined || itemCount === null ? "" : String(itemCount)
+            return itemCountValue !== "" ? itemCountValue + " items" : "—"
+        }
+
+        return root.formatSize(size)
+    }
+
+    function formatUpdatedAtText(updatedAt) {
+        if (updatedAt === undefined || updatedAt === null || updatedAt === "") {
+            return "—"
+        }
+
+        var formattedValue = Qt.formatDateTime(updatedAt, "yyyy-MM-dd hh:mm")
+        return formattedValue !== "" ? formattedValue : String(updatedAt)
     }
 
     function openUploadFileChooser() {
@@ -322,72 +417,152 @@ Page {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 0
+        anchors.margins: root.pagePadding
+        spacing: root.panelSpacing
 
-        RowLayout {
+        Rectangle {
             Layout.fillWidth: true
-            Layout.margins: 10
-            spacing: 8
+            color: root.panelBackgroundColor
+            radius: root.panelRadius
+            border.color: root.panelBorderColor
+            implicitHeight: toolbarCardLayout.implicitHeight + 24
 
-            Button {
-                text: "Refresh"
-                highlighted: true
-                onClicked: root.refreshCurrentFolder()
-            }
+            ColumnLayout {
+                id: toolbarCardLayout
+                anchors.fill: parent
+                anchors.margins: root.panelInset
+                spacing: root.compactSpacing
 
-            Button {
-                text: "New Folder"
-                onClicked: root.openCreateFolderDialog()
-            }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: root.compactSpacing
 
-            Button {
-                id: uploadButton
-                text: "Upload"
-                onClicked: root.openUploadFileChooser()
-            }
+                    Button {
+                        text: "Refresh"
+                        highlighted: true
+                        onClicked: root.refreshCurrentFolder()
+                    }
 
-            Button {
-                text: "Rename"
-                enabled: root.selectedItemId !== ""
-                onClicked: root.openRenameDialog()
-            }
+                    Button {
+                        text: "New Folder"
+                        onClicked: root.openCreateFolderDialog()
+                    }
 
-            Button {
-                text: "Delete"
-                enabled: root.selectedItemId !== ""
-                onClicked: root.openDeleteDialog()
-            }
+                    Button {
+                        id: uploadButton
+                        text: "Upload"
+                        onClicked: root.openUploadFileChooser()
+                    }
 
-            Button {
-                id: downloadButton
-                text: "Download"
-                enabled: root.selectedItemKind === "file"
-                onClicked: root.openOwnerDownloadFileChooser(root.selectedItemId, root.selectedItemName)
-            }
+                    Button {
+                        text: "Rename"
+                        enabled: root.selectedItemId !== ""
+                        onClicked: root.openRenameDialog()
+                    }
 
-            Item {
-                Layout.fillWidth: true
+                    Button {
+                        text: "Delete"
+                        enabled: root.selectedItemId !== ""
+                        onClicked: root.openDeleteDialog()
+                    }
+
+                    Button {
+                        id: downloadButton
+                        text: "Download"
+                        enabled: root.selectedItemKind === "file"
+                        onClicked: root.openOwnerDownloadFileChooser(root.selectedItemId, root.selectedItemName)
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: root.uploadErrorMessage
+                    color: root.panelErrorTextColor
+                    visible: text !== ""
+                    wrapMode: Text.WordWrap
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: root.downloadErrorMessage
+                    color: root.panelErrorTextColor
+                    visible: text !== ""
+                    wrapMode: Text.WordWrap
+                }
             }
         }
 
-        Label {
+        Rectangle {
             Layout.fillWidth: true
-            Layout.leftMargin: 10
-            Layout.rightMargin: 10
-            text: root.uploadErrorMessage
-            color: "#f44336"
-            visible: text !== ""
-            wrapMode: Text.WordWrap
-        }
+            color: root.panelBackgroundColor
+            radius: root.panelRadius
+            border.color: root.panelBorderColor
+            implicitHeight: driveStatusRow.implicitHeight + 32
 
-        Label {
-            Layout.fillWidth: true
-            Layout.leftMargin: 10
-            Layout.rightMargin: 10
-            text: root.downloadErrorMessage
-            color: "#f44336"
-            visible: text !== ""
-            wrapMode: Text.WordWrap
+            RowLayout {
+                id: driveStatusRow
+                anchors.fill: parent
+                anchors.margins: root.pagePadding
+                spacing: root.panelSpacing
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+
+                    Label {
+                        text: "DRIVE"
+                        color: root.panelMutedTextColor
+                        font.pixelSize: 11
+                        font.bold: true
+                    }
+
+                    Label {
+                        text: root.driveTitle
+                        color: root.panelStrongTextColor
+                        font.pixelSize: 24
+                        font.bold: true
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: root.driveStatusSummary()
+                        color: root.panelMutedTextColor
+                        wrapMode: Text.WordWrap
+                    }
+                }
+
+                ColumnLayout {
+                    spacing: root.compactSpacing
+
+                    Rectangle {
+                        Layout.alignment: Qt.AlignRight
+                        implicitWidth: stateChipLabel.implicitWidth + 20
+                        implicitHeight: stateChipLabel.implicitHeight + 10
+                        radius: implicitHeight / 2
+                        color: root.panelAccentFillColor
+
+                        Label {
+                            id: stateChipLabel
+                            anchors.centerIn: parent
+                            text: root.pageStateLabel()
+                            color: root.panelAccentTextColor
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        text: root.folderScopeLabel()
+                        color: root.panelMutedTextColor
+                        font.pixelSize: 12
+                    }
+                }
+            }
         }
 
         PageStateView {
@@ -401,90 +576,200 @@ Page {
 
             onRetryClicked: root.refreshCurrentFolder()
 
-            ColumnLayout {
+            RowLayout {
                 anchors.fill: parent
+                spacing: root.panelSpacing
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.margins: 10
-
-                    BreadcrumbBar {
-                        id: breadcrumbBar
-                        Layout.fillWidth: true
-                        onPathClicked: function(folderId) { root.openFolder(folderId) }
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
+                Rectangle {
+                    Layout.preferredWidth: 248
                     Layout.fillHeight: true
-                    Layout.leftMargin: 10
-                    Layout.rightMargin: 10
-                    Layout.bottomMargin: 10
-                    spacing: 10
+                    color: root.panelBackgroundColor
+                    radius: root.panelRadius
+                    border.color: root.panelBorderColor
+                    clip: true
 
                     FolderTreePanel {
-                        Layout.preferredWidth: 220
-                        Layout.fillHeight: true
+                        anchors.fill: parent
                         model: driveManager.treeModel
                         onFolderClicked: function(folderId) { root.openFolder(folderId) }
                     }
+                }
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        color: "#f5f5f5"
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    color: root.panelBackgroundColor
+                    radius: root.panelRadius
+                    border.color: root.panelBorderColor
 
-                        ListView {
-                            id: fileListView
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            model: driveManager.listModel
-                            clip: true
-                            spacing: 1
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: root.contentInset
+                        spacing: 12
 
-                            delegate: ItemDelegate {
-                                width: ListView.view.width
-                                highlighted: root.selectedItemId === String(model.id)
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
 
-                                onClicked: root.selectItem(model.id, model.kind, model.name)
+                            BreadcrumbBar {
+                                id: breadcrumbBar
+                                Layout.fillWidth: true
+                                onPathClicked: function(folderId) { root.openFolder(folderId) }
+                            }
 
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 12
-                                    anchors.rightMargin: 12
-                                    spacing: 12
+                            Label {
+                                text: root.selectedItemId !== ""
+                                      ? "Selected: " + root.selectedItemName
+                                      : (root.currentFolderItemCount === 1 ? "1 item" : root.currentFolderItemCount + " items")
+                                color: root.panelMutedTextColor
+                                font.pixelSize: 12
+                            }
+                        }
 
-                                    Label {
-                                        text: model.kind === "folder" ? "📁" : "📄"
-                                        font.pixelSize: 18
-                                    }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            color: root.panelMutedFillColor
+                            radius: root.innerPanelRadius
+                            border.color: root.panelBorderColor
 
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 2
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: root.compactSpacing
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    color: root.pageBackgroundColor
+                                    radius: root.innerPanelRadius
+                                    border.color: root.panelBorderColor
+                                    implicitHeight: fileTableHeaderRow.implicitHeight + 16
+
+                                    RowLayout {
+                                        id: fileTableHeaderRow
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 12
+                                        anchors.rightMargin: 12
+                                        spacing: 12
 
                                         Label {
-                                            text: model.name
-                                            font.pixelSize: 14
-                                            elide: Text.ElideRight
                                             Layout.fillWidth: true
+                                            text: "Name"
+                                            color: root.panelMutedTextColor
+                                            font.pixelSize: 12
+                                            font.bold: true
                                         }
 
                                         Label {
-                                            text: model.kind === "folder"
-                                                  ? ((model.itemCount || 0) + " items")
-                                                  : root.formatSize(model.size)
-                                            font.pixelSize: 11
-                                            color: "#888"
+                                            Layout.preferredWidth: root.fileTypeColumnWidth
+                                            text: "Type"
+                                            color: root.panelMutedTextColor
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                        }
+
+                                        Label {
+                                            Layout.preferredWidth: root.fileSizeColumnWidth
+                                            text: "Size"
+                                            color: root.panelMutedTextColor
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                        }
+
+                                        Label {
+                                            Layout.preferredWidth: root.fileUpdatedColumnWidth
+                                            text: "Updated"
+                                            color: root.panelMutedTextColor
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                        }
+
+                                        Item {
+                                            Layout.preferredWidth: root.fileActionColumnWidth
                                         }
                                     }
+                                }
 
-                                    Button {
-                                        text: "Open"
-                                        flat: true
-                                        visible: model.kind === "folder"
-                                        onClicked: root.openFolder(model.id)
+                                ListView {
+                                    id: fileListView
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    model: driveManager.listModel
+                                    clip: true
+                                    spacing: 1
+
+                                    delegate: ItemDelegate {
+                                        id: fileRowDelegate
+                                        width: ListView.view.width
+                                        implicitHeight: 52
+                                        highlighted: root.selectedItemId === String(model.id)
+
+                                        onClicked: root.selectItem(model.id, model.kind, model.name)
+
+                                        background: Rectangle {
+                                            radius: root.innerPanelRadius
+                                            color: fileRowDelegate.highlighted
+                                                   ? root.panelAccentFillColor
+                                                   : (fileRowDelegate.hovered ? root.panelBackgroundColor : "transparent")
+                                            border.color: fileRowDelegate.highlighted ? root.panelBorderColor : "transparent"
+                                        }
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 12
+                                            anchors.rightMargin: 12
+                                            spacing: 12
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 10
+
+                                                Label {
+                                                    text: model.kind === "folder" ? "📁" : "📄"
+                                                    font.pixelSize: 18
+                                                }
+
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    text: model.name
+                                                    font.pixelSize: 14
+                                                    color: root.panelStrongTextColor
+                                                    elide: Text.ElideRight
+                                                }
+                                            }
+
+                                            Label {
+                                                Layout.preferredWidth: root.fileTypeColumnWidth
+                                                text: root.formatItemType(model.kind, model.mimeType)
+                                                font.pixelSize: 12
+                                                color: root.panelSecondaryTextColor
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Label {
+                                                Layout.preferredWidth: root.fileSizeColumnWidth
+                                                text: root.formatItemSize(model.kind, model.size, model.itemCount)
+                                                font.pixelSize: 12
+                                                color: root.panelSecondaryTextColor
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Label {
+                                                Layout.preferredWidth: root.fileUpdatedColumnWidth
+                                                text: root.formatUpdatedAtText(model.updatedAt)
+                                                font.pixelSize: 12
+                                                color: root.panelTertiaryTextColor
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Button {
+                                                Layout.preferredWidth: root.fileActionColumnWidth
+                                                text: "Open"
+                                                flat: true
+                                                visible: model.kind === "folder"
+                                                onClicked: root.openFolder(model.id)
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -556,7 +841,7 @@ Page {
             Label {
                 Layout.fillWidth: true
                 text: "Enter a name for the new folder."
-                color: "#666"
+                color: root.panelSecondaryTextColor
                 wrapMode: Text.WordWrap
             }
 
@@ -572,7 +857,7 @@ Page {
             Label {
                 Layout.fillWidth: true
                 text: root.createFolderErrorMessage
-                color: "#f44336"
+                color: root.panelErrorTextColor
                 visible: text !== ""
                 wrapMode: Text.WordWrap
             }
@@ -617,12 +902,12 @@ Page {
 
         ColumnLayout {
             width: parent.width
-            spacing: 12
+                spacing: root.panelSpacing
 
             Label {
                 Layout.fillWidth: true
                 text: "Enter a new name for the selected item."
-                color: "#666"
+                color: root.panelSecondaryTextColor
                 wrapMode: Text.WordWrap
             }
 
@@ -638,7 +923,7 @@ Page {
             Label {
                 Layout.fillWidth: true
                 text: root.renameErrorMessage
-                color: "#f44336"
+                color: root.panelErrorTextColor
                 visible: text !== ""
                 wrapMode: Text.WordWrap
             }
@@ -683,19 +968,19 @@ Page {
 
         ColumnLayout {
             width: parent.width
-            spacing: 12
+                spacing: root.panelSpacing
 
             Label {
                 Layout.fillWidth: true
                 text: "Delete \"" + root.selectedItemName + "\"? This moves the selected item to trash."
-                color: "#666"
+                color: root.panelSecondaryTextColor
                 wrapMode: Text.WordWrap
             }
 
             Label {
                 Layout.fillWidth: true
                 text: root.deleteErrorMessage
-                color: "#f44336"
+                color: root.panelErrorTextColor
                 visible: text !== ""
                 wrapMode: Text.WordWrap
             }
