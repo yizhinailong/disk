@@ -265,20 +265,41 @@ private slots:
         QVERIFY(!qml.contains(QStringLiteral("stackView.replace(\"TrashPage.qml\")")));
         QVERIFY(qml.contains(QStringLiteral("root.showPage(driveBrowserPageComponent)")));
         QVERIFY(qml.contains(QStringLiteral("root.showPage(transferCenterPageComponent)")));
-        QVERIFY(!qml.contains(QStringLiteral("root.showPage(shareManagementPageComponent)")));
-        QVERIFY(!qml.contains(QStringLiteral("root.showPage(trashPageComponent)")));
-        QVERIFY(!qml.contains(QStringLiteral("root.showPage(settingsPageComponent)")));
+        QVERIFY(qml.contains(QStringLiteral("root.showPage(shareManagementPageComponent)")));
+        QVERIFY(qml.contains(QStringLiteral("root.showPage(trashPageComponent)")));
+        QVERIFY(qml.contains(QStringLiteral("root.showPage(settingsPageComponent)")));
         QVERIFY(qml.contains(QStringLiteral("text: \"Files\"")));
         QVERIFY(qml.contains(QStringLiteral("text: \"Transfers\"")));
         QVERIFY(qml.contains(QStringLiteral("text: \"Logout\"")));
-        QVERIFY(!qml.contains(QStringLiteral("text: \"Shares\"")));
-        QVERIFY(!qml.contains(QStringLiteral("text: \"Trash\"")));
-        QVERIFY(!qml.contains(QStringLiteral("text: \"Settings\"")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"Shares\"")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"Trash\"")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"Settings\"")));
+        QVERIFY(qml.contains(QStringLiteral("property string activeDestination: \"files\"")));
+        QVERIFY(qml.contains(QStringLiteral("function destinationForPageComponent(pageComponent)")));
+        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = root.destinationForPageComponent(pageComponent)")));
+        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"files\"")));
+        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"transfers\"")));
+        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"shares\"")));
+        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"trash\"")));
+        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"settings\"")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"Navigation\"")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"Session\"")));
         QVERIFY(qml.contains(QStringLiteral("id: driveBrowserPageComponent")));
         QVERIFY(qml.contains(QStringLiteral("id: transferCenterPageComponent")));
-        QVERIFY(!qml.contains(QStringLiteral("id: shareManagementPageComponent")));
-        QVERIFY(!qml.contains(QStringLiteral("id: trashPageComponent")));
-        QVERIFY(!qml.contains(QStringLiteral("id: settingsPageComponent")));
+        QVERIFY(qml.contains(QStringLiteral("id: shareManagementPageComponent")));
+        QVERIFY(qml.contains(QStringLiteral("id: trashPageComponent")));
+        QVERIFY(qml.contains(QStringLiteral("id: settingsPageComponent")));
+        QVERIFY(!qml.contains(QStringLiteral("PageStateView")));
+        QVERIFY(!qml.contains(QStringLiteral("BreadcrumbBar")));
+        QVERIFY(!qml.contains(QStringLiteral("FolderTreePanel")));
+
+        QFile drive_browser_page(QStringLiteral(DESKTOP_QML_SOURCE_DIR "/pages/DriveBrowserPage.qml"));
+        QVERIFY(drive_browser_page.open(QIODevice::ReadOnly));
+
+        const auto drive_qml = QString::fromUtf8(drive_browser_page.readAll());
+        QVERIFY(drive_qml.contains(QStringLiteral("PageStateView")));
+        QVERIFY(drive_qml.contains(QStringLiteral("BreadcrumbBar")));
+        QVERIFY(drive_qml.contains(QStringLiteral("FolderTreePanel")));
     }
 
     void visitorShellUsesComponentNavigation() {

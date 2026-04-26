@@ -12,16 +12,16 @@ TestCase {
         var source = xhr.responseText
 
         verify(source.length > 0, "OwnerShell.qml was read")
-        // P0 owner shell exposes only approved surface + logout.
+        // Owner shell exposes the approved owner surfaces + logout.
         verify(source.indexOf("Files") !== -1, "Has Files button")
         verify(source.indexOf("Transfers") !== -1, "Has Transfers button")
+        verify(source.indexOf("Shares") !== -1, "Has Shares button")
+        verify(source.indexOf("Trash") !== -1, "Has Trash button")
+        verify(source.indexOf("Settings") !== -1, "Has Settings button")
         verify(source.indexOf("Logout") !== -1, "Has Logout button")
-        verify(source.indexOf("Shares") === -1, "Does not expose Shares button")
-        verify(source.indexOf("Trash") === -1, "Does not expose Trash button")
-        verify(source.indexOf("Settings") === -1, "Does not expose Settings button")
     }
 
-    function test_owner_shell_uses_only_p0_component_navigation() {
+    function test_owner_shell_uses_approved_component_navigation() {
         var xhr = new XMLHttpRequest()
         xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/OwnerShell.qml"), false)
         xhr.send()
@@ -34,12 +34,12 @@ TestCase {
                "Navigates to drive browser via component")
         verify(source.indexOf("root.showPage(transferCenterPageComponent)") !== -1,
                "Navigates to transfer center via component")
-        verify(source.indexOf("root.showPage(shareManagementPageComponent)") === -1,
-               "Does not navigate to share management")
-        verify(source.indexOf("root.showPage(trashPageComponent)") === -1,
-               "Does not navigate to trash")
-        verify(source.indexOf("root.showPage(settingsPageComponent)") === -1,
-               "Does not navigate to settings")
+        verify(source.indexOf("root.showPage(shareManagementPageComponent)") !== -1,
+               "Navigates to share management via component")
+        verify(source.indexOf("root.showPage(trashPageComponent)") !== -1,
+               "Navigates to trash via component")
+        verify(source.indexOf("root.showPage(settingsPageComponent)") !== -1,
+               "Navigates to settings via component")
     }
 
     function test_owner_shell_no_string_based_navigation() {
@@ -62,7 +62,7 @@ TestCase {
                "No string-based SettingsPage navigation")
     }
 
-    function test_owner_shell_defines_only_p0_page_components() {
+    function test_owner_shell_defines_approved_page_components() {
         var xhr = new XMLHttpRequest()
         xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/OwnerShell.qml"), false)
         xhr.send()
@@ -71,9 +71,9 @@ TestCase {
         verify(source.length > 0, "OwnerShell.qml was read")
         verify(source.indexOf("id: driveBrowserPageComponent") !== -1, "Has driveBrowserPageComponent")
         verify(source.indexOf("id: transferCenterPageComponent") !== -1, "Has transferCenterPageComponent")
-        verify(source.indexOf("id: shareManagementPageComponent") === -1, "Has no shareManagementPageComponent")
-        verify(source.indexOf("id: trashPageComponent") === -1, "Has no trashPageComponent")
-        verify(source.indexOf("id: settingsPageComponent") === -1, "Has no settingsPageComponent")
+        verify(source.indexOf("id: shareManagementPageComponent") !== -1, "Has shareManagementPageComponent")
+        verify(source.indexOf("id: trashPageComponent") !== -1, "Has trashPageComponent")
+        verify(source.indexOf("id: settingsPageComponent") !== -1, "Has settingsPageComponent")
     }
 
     function test_owner_shell_default_page_is_drive_browser() {
@@ -132,9 +132,76 @@ TestCase {
         var source = xhr.responseText
 
         verify(source.length > 0, "OwnerShell.qml was read")
+        verify(source.indexOf("function destinationForPageComponent(pageComponent)") !== -1,
+               "Has a component-to-destination helper for shell-owned labeling")
         verify(source.indexOf("function showPage(pageComponent)") !== -1,
                "Has showPage function taking a component parameter")
+        verify(source.indexOf("root.activeDestination = root.destinationForPageComponent(pageComponent)") !== -1,
+               "showPage keeps the active destination aligned with the shown component")
         verify(source.indexOf("stackView.replace(pageComponent)") !== -1,
                "showPage replaces StackView content")
+    }
+
+    function test_owner_shell_tracks_active_destination_in_shell_state() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/OwnerShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "OwnerShell.qml was read")
+        verify(source.indexOf('property string activeDestination: "files"') !== -1,
+               "Shell owns the default active destination state")
+        verify(source.indexOf('root.activeDestination = "files"') !== -1,
+               "Files button updates active destination")
+        verify(source.indexOf('root.activeDestination = "transfers"') !== -1,
+               "Transfers button updates active destination")
+        verify(source.indexOf('root.activeDestination = "shares"') !== -1,
+               "Shares button updates active destination")
+        verify(source.indexOf('root.activeDestination = "trash"') !== -1,
+               "Trash button updates active destination")
+        verify(source.indexOf('root.activeDestination = "settings"') !== -1,
+               "Settings button updates active destination")
+    }
+
+    function test_owner_shell_keeps_drive_specific_chrome_inside_drive_page() {
+        var ownerXhr = new XMLHttpRequest()
+        ownerXhr.open("GET", Qt.resolvedUrl("../../../qml/shells/OwnerShell.qml"), false)
+        ownerXhr.send()
+        var ownerSource = ownerXhr.responseText
+
+        var driveXhr = new XMLHttpRequest()
+        driveXhr.open("GET", Qt.resolvedUrl("../../../qml/pages/DriveBrowserPage.qml"), false)
+        driveXhr.send()
+        var driveSource = driveXhr.responseText
+
+        verify(ownerSource.length > 0, "OwnerShell.qml was read")
+        verify(driveSource.length > 0, "DriveBrowserPage.qml was read")
+        verify(ownerSource.indexOf("PageStateView") === -1,
+               "Owner shell does not own the drive page state view")
+        verify(ownerSource.indexOf("BreadcrumbBar") === -1,
+               "Owner shell does not own drive breadcrumbs")
+        verify(ownerSource.indexOf("FolderTreePanel") === -1,
+               "Owner shell does not own the drive folder tree")
+        verify(driveSource.indexOf("PageStateView") !== -1,
+               "Drive browser page owns the page state view")
+        verify(driveSource.indexOf("BreadcrumbBar") !== -1,
+               "Drive browser page owns breadcrumbs")
+        verify(driveSource.indexOf("FolderTreePanel") !== -1,
+               "Drive browser page owns the folder tree")
+    }
+
+    function test_owner_shell_visually_separates_navigation_and_logout_areas() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/OwnerShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "OwnerShell.qml was read")
+        verify(source.indexOf('text: "Workspace"') !== -1,
+               "Brand area has a secondary label")
+        verify(source.indexOf('text: "Navigation"') !== -1,
+               "Navigation section is explicitly labeled")
+        verify(source.indexOf('text: "Session"') !== -1,
+               "Logout area is explicitly separated")
     }
 }

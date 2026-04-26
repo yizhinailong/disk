@@ -184,6 +184,37 @@ TestCase {
                "Row click no longer triggers file detail loading")
     }
 
+    function test_drive_browser_file_list_uses_static_table_header_and_role_fallbacks() {
+        var source = readDriveBrowserSource()
+        var nameHeaderIndex = source.indexOf('text: "Name"')
+        var typeHeaderIndex = source.indexOf('text: "Type"')
+        var sizeHeaderIndex = source.indexOf('text: "Size"')
+        var updatedHeaderIndex = source.indexOf('text: "Updated"')
+
+        verify(nameHeaderIndex !== -1, "Has static Name header")
+        verify(typeHeaderIndex !== -1, "Has static Type header")
+        verify(sizeHeaderIndex !== -1, "Has static Size header")
+        verify(updatedHeaderIndex !== -1, "Has static Updated header")
+        verify(nameHeaderIndex < typeHeaderIndex && typeHeaderIndex < sizeHeaderIndex && sizeHeaderIndex < updatedHeaderIndex,
+               "Header columns stay ordered as Name, Type, Size, Updated")
+        verify(source.indexOf("function formatItemType(kind, mimeType)") !== -1,
+               "Uses a dedicated helper for the Type column")
+        verify(source.indexOf('return typeLabel !== "" ? typeLabel : "File"') !== -1,
+               "Files fall back to File when mimeType is missing")
+        verify(source.indexOf("function formatItemSize(kind, size, itemCount)") !== -1,
+               "Uses a dedicated helper for the Size column")
+        verify(source.indexOf('return itemCountValue !== "" ? itemCountValue + " items" : "—"') !== -1,
+               "Folders render item counts or an em dash when unavailable")
+        verify(source.indexOf("return root.formatSize(size)") !== -1,
+               "Files render size via the existing formatSize helper")
+        verify(source.indexOf("function formatUpdatedAtText(updatedAt)") !== -1,
+               "Uses a dedicated helper for the Updated column")
+        verify(source.indexOf('if (updatedAt === undefined || updatedAt === null || updatedAt === "")') !== -1,
+               "Missing updatedAt values fall back to an em dash")
+        verify(source.indexOf("TableView") === -1,
+               "Keeps ListView instead of introducing TableView")
+    }
+
     function test_drive_browser_refreshes_on_complete_and_handles_pagination() {
         var source = readDriveBrowserSource()
 
