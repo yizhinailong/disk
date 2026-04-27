@@ -89,6 +89,8 @@ endif()
 
 qt_add_executable(desktop-quick-tests
     quick/quick_test_main.cpp
+    ${DESKTOP_SRC_DIR}/models/DriveListModel.cpp
+    ${DESKTOP_SRC_DIR}/models/FolderTreeModel.cpp
 )
 
 qt_add_qml_module(desktop-quick-tests
@@ -104,6 +106,8 @@ qt_add_qml_module(desktop-quick-tests
         quick/pages/tst_transfer_center.qml
         quick/pages/tst_login_page.qml
         quick/pages/tst_register_page.qml
+        quick/components/tst_folder_tree_panel.qml
+        quick/pages/tst_drive_browser_navigation.qml
     RESOURCE_PREFIX /qt/qml
 )
 

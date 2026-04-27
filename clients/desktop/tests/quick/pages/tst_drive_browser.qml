@@ -159,14 +159,14 @@ TestCase {
         verify(source.indexOf("model: driveManager.treeModel") !== -1,
                "FolderTreePanel uses driveManager.treeModel")
         verify(source.indexOf("BreadcrumbBar") !== -1, "Has BreadcrumbBar")
-        verify(source.indexOf("onFolderClicked: function(folderId) { root.openFolder(folderId) }") !== -1,
-               "Folder tree clicks open folders through page flow")
-        verify(source.indexOf("onPathClicked: function(folderId) { root.openFolder(folderId) }") !== -1,
-               "Breadcrumb clicks open folders through page flow")
-        verify(source.indexOf("function openFolder(folderId)") !== -1,
-               "Has openFolder helper")
+        verify(source.indexOf("onFolderClicked: function(folderId) { root.navigateToFolder(folderId) }") !== -1,
+               "Folder tree clicks navigate through page flow")
+        verify(source.indexOf("onPathClicked: function(folderId) { root.navigateToFolder(folderId) }") !== -1,
+               "Breadcrumb clicks navigate through page flow")
+        verify(source.indexOf("function navigateToFolder(folderId)") !== -1,
+               "Has navigateToFolder helper")
         verify(source.indexOf("refreshCurrentFolder()") !== -1,
-               "Folder open reuses refresh flow")
+               "Folder navigation reuses refresh flow")
     }
 
     function test_drive_browser_row_click_is_selection_only() {
@@ -180,6 +180,8 @@ TestCase {
                "Folder rows expose dedicated Open control")
         verify(source.indexOf('visible: model.kind === "folder"') !== -1,
                "Open control is only shown for folder rows")
+        verify(source.indexOf("root.navigateToFolder(model.id)") !== -1,
+               "Folder Open button navigates through the shared flow")
         verify(source.indexOf("driveManager.getFileDetail(") === -1,
                "Row click no longer triggers file detail loading")
     }
@@ -211,8 +213,45 @@ TestCase {
                "Uses a dedicated helper for the Updated column")
         verify(source.indexOf('if (updatedAt === undefined || updatedAt === null || updatedAt === "")') !== -1,
                "Missing updatedAt values fall back to an em dash")
+        verify(source.indexOf('objectName: "fileTableHeaderRow"') !== -1,
+               "Exposes a stable header-row hook for runtime checks")
+        verify(source.indexOf('objectName: "fileTableHeaderName"') !== -1,
+               "Name header keeps a stable hook")
+        verify(source.indexOf('objectName: "fileTableHeaderType"') !== -1,
+               "Type header keeps a stable hook")
+        verify(source.indexOf('objectName: "fileTableHeaderSize"') !== -1,
+               "Size header keeps a stable hook")
+        verify(source.indexOf('objectName: "fileTableHeaderUpdated"') !== -1,
+               "Updated header keeps a stable hook")
+        verify(source.indexOf('spacing: root.tableColumnSpacing') !== -1,
+               "Header and rows share one explicit column-spacing contract")
+        verify(source.indexOf('wrapMode: Text.NoWrap') !== -1,
+               "Header labels and row metadata stay single-line for alignment")
         verify(source.indexOf("TableView") === -1,
                "Keeps ListView instead of introducing TableView")
+    }
+
+    function test_drive_browser_file_list_long_names_use_deterministic_elision_and_disclosure() {
+        var source = readDriveBrowserSource()
+
+        verify(source.indexOf('objectName: "fileListView"') !== -1,
+               "Exposes a stable file list hook")
+        verify(source.indexOf('objectName: "fileRowDelegate_" + String(model.id)') !== -1,
+               "Each file row exposes a deterministic delegate hook")
+        verify(source.indexOf('objectName: "fileNameLabel_" + String(model.id)') !== -1,
+               "Each file name label exposes a deterministic hook")
+        verify(source.indexOf('Layout.minimumWidth: 0') !== -1,
+               "The flexible name column explicitly allows shrinking without collisions")
+        verify(source.indexOf('elide: Text.ElideRight') !== -1,
+               "Long file names use right-side elision")
+        verify(source.indexOf('wrapMode: Text.NoWrap') !== -1,
+               "Long file names stay on one line")
+        verify(source.indexOf('maximumLineCount: 1') !== -1,
+               "Long file names are constrained to one line")
+        verify(source.indexOf('ToolTip.visible: truncated && fileRowDelegate.hovered') !== -1,
+               "Hover disclosure appears only when the file name is actually truncated")
+        verify(source.indexOf('ToolTip.text: text') !== -1,
+               "The disclosure reveals the full file name text")
     }
 
     function test_drive_browser_refreshes_on_complete_and_handles_pagination() {
@@ -304,5 +343,201 @@ TestCase {
                "Closes delete dialog on success")
         verify(source.indexOf("root.refreshCurrentFolder()") !== -1,
                "Refreshes current folder after successful mutation")
+    }
+
+    function test_drive_browser_navigateToFolder_sets_currentFolderId_and_refreshes() {
+        var source = readDriveBrowserSource()
+
+        verify(source.indexOf("function navigateToFolder(folderId)") !== -1,
+               "Has navigateToFolder helper")
+
+        var navStart = source.indexOf("function navigateToFolder(folderId)")
+        var navBody = source.substring(navStart, navStart + 200)
+
+        verify(navBody.indexOf("currentFolderId") !== -1,
+               "navigateToFolder assigns currentFolderId")
+        verify(navBody.indexOf("refreshCurrentFolder") !== -1,
+               "navigateToFolder calls refreshCurrentFolder")
+        verify(navBody.indexOf('String(folderId)') !== -1,
+               "navigateToFolder normalizes folderId to string")
+        verify(navBody.indexOf('"0"') !== -1,
+               "navigateToFolder falls back to root when folderId is falsy")
+    }
+
+    function test_drive_browser_refreshCurrentFolder_loads_tree_list_and_breadcrumb() {
+        var source = readDriveBrowserSource()
+
+        var refreshStart = source.indexOf("function refreshCurrentFolder()")
+        verify(refreshStart !== -1, "Has refreshCurrentFolder helper")
+
+        var refreshBody = source.substring(refreshStart, refreshStart + 400)
+
+        verify(refreshBody.indexOf("clearSelection()") !== -1,
+               "refreshCurrentFolder clears selection first")
+        verify(refreshBody.indexOf('setPageState("loading")') !== -1,
+               "refreshCurrentFolder sets loading state")
+        verify(refreshBody.indexOf("driveManager.loadFolderTree()") !== -1,
+               "refreshCurrentFolder loads the folder tree")
+        verify(refreshBody.indexOf("driveManager.listFiles(currentFolderId)") !== -1,
+               "refreshCurrentFolder loads the file list for currentFolderId")
+        verify(refreshBody.indexOf("driveManager.loadBreadcrumb(currentFolderId)") !== -1,
+               "refreshCurrentFolder loads the breadcrumb for currentFolderId")
+    }
+
+    function test_drive_browser_tree_breadcrumb_and_folderRow_share_navigateToFolder_flow() {
+        var source = readDriveBrowserSource()
+
+        verify(source.indexOf("onFolderClicked: function(folderId) { root.navigateToFolder(folderId) }") !== -1,
+               "FolderTreePanel routes clicks through navigateToFolder")
+        verify(source.indexOf("onPathClicked: function(folderId) { root.navigateToFolder(folderId) }") !== -1,
+               "BreadcrumbBar routes clicks through navigateToFolder")
+        verify(source.indexOf("root.navigateToFolder(model.id)") !== -1,
+               "Folder Open button routes through navigateToFolder")
+
+        var firstNav = source.indexOf("root.navigateToFolder(")
+        var secondNav = source.indexOf("root.navigateToFolder(", firstNav + 1)
+        var thirdNav = source.indexOf("root.navigateToFolder(", secondNav + 1)
+        verify(firstNav !== -1, "First navigateToFolder call exists")
+        verify(secondNav !== -1, "Second navigateToFolder call exists")
+        verify(thirdNav !== -1, "Third navigateToFolder call exists (folder row Open button)")
+    }
+
+    function test_drive_browser_currentFolderId_initializes_to_root() {
+        var source = readDriveBrowserSource()
+
+        verify(source.indexOf('property string currentFolderId: "0"') !== -1,
+               "currentFolderId initializes to root \"0\"")
+    }
+
+    function test_drive_browser_clearSelection_resets_all_selection_state() {
+        var source = readDriveBrowserSource()
+
+        var clearStart = source.indexOf("function clearSelection()")
+        verify(clearStart !== -1, "Has clearSelection helper")
+
+        var clearBody = source.substring(clearStart, clearStart + 200)
+
+        verify(clearBody.indexOf('selectedItemId = ""') !== -1,
+               "clearSelection resets selectedItemId")
+        verify(clearBody.indexOf('selectedItemKind = ""') !== -1,
+               "clearSelection resets selectedItemKind")
+        verify(clearBody.indexOf('selectedItemName = ""') !== -1,
+               "clearSelection resets selectedItemName")
+    }
+
+    function test_drive_browser_selectItem_sets_all_selection_state() {
+        var source = readDriveBrowserSource()
+
+        var selectStart = source.indexOf("function selectItem(itemId, itemKind, itemName)")
+        verify(selectStart !== -1, "Has selectItem helper")
+
+        var selectBody = source.substring(selectStart, selectStart + 300)
+
+        verify(selectBody.indexOf("selectedItemId = String(itemId)") !== -1,
+               "selectItem sets selectedItemId from itemId")
+        verify(selectBody.indexOf("selectedItemKind = String(itemKind") !== -1,
+               "selectItem sets selectedItemKind from itemKind")
+        verify(selectBody.indexOf("selectedItemName = String(itemName") !== -1,
+               "selectItem sets selectedItemName from itemName")
+    }
+
+    function test_drive_browser_navigateToFolder_preserves_currentFolderId_binding() {
+        var source = readDriveBrowserSource()
+
+        verify(source.indexOf("currentFolderId: root.currentFolderId") !== -1,
+               "FolderTreePanel binds currentFolderId to page state")
+        verify(source.indexOf("function navigateToFolder(folderId)") !== -1,
+               "Has navigateToFolder helper")
+
+        var navStart = source.indexOf("function navigateToFolder(folderId)")
+        var navBody = source.substring(navStart, navStart + 200)
+
+        verify(navBody.indexOf("currentFolderId =") !== -1,
+               "navigateToFolder assigns currentFolderId before refresh")
+        verify(navBody.indexOf("refreshCurrentFolder") !== -1,
+               "navigateToFolder triggers refresh after setting currentFolderId")
+    }
+
+    function test_drive_browser_finishMutationSuccess_restores_current_path() {
+        var source = readDriveBrowserSource()
+
+        var finishStart = source.indexOf("function finishMutationSuccess()")
+        verify(finishStart !== -1, "Has finishMutationSuccess handler")
+
+        var finishBody = source.substring(finishStart, finishStart + 400)
+
+        verify(finishBody.indexOf("pendingMutationAction =") !== -1,
+               "finishMutationSuccess clears pendingMutationAction")
+        verify(finishBody.indexOf("refreshCurrentFolder") !== -1,
+               "finishMutationSuccess calls refreshCurrentFolder to reload tree, list, and breadcrumb")
+    }
+
+    function test_drive_browser_onOperationSuccess_only_fires_for_mutations() {
+        var source = readDriveBrowserSource()
+
+        var successHandlerStart = source.indexOf("function onOperationSuccess(message)")
+        verify(successHandlerStart !== -1, "Has onOperationSuccess handler")
+
+        var successBody = source.substring(successHandlerStart, successHandlerStart + 300)
+
+        verify(successBody.indexOf("pendingMutationAction") !== -1,
+               "onOperationSuccess checks pendingMutationAction before acting")
+        verify(successBody.indexOf("finishMutationSuccess") !== -1,
+               "onOperationSuccess delegates to finishMutationSuccess for mutations")
+    }
+
+    function test_drive_browser_refreshCurrentFolder_does_not_set_mutation_state() {
+        var source = readDriveBrowserSource()
+
+        var refreshStart = source.indexOf("function refreshCurrentFolder()")
+        verify(refreshStart !== -1, "Has refreshCurrentFolder")
+
+        var refreshBody = source.substring(refreshStart, refreshStart + 400)
+
+        verify(refreshBody.indexOf("mutationInFlight") === -1,
+               "refreshCurrentFolder does not touch mutationInFlight")
+        verify(refreshBody.indexOf("pendingMutationAction") === -1,
+               "refreshCurrentFolder does not touch pendingMutationAction")
+        verify(refreshBody.indexOf("loadFolderTree") !== -1,
+               "refreshCurrentFolder loads the folder tree")
+        verify(refreshBody.indexOf("loadBreadcrumb") !== -1,
+               "refreshCurrentFolder loads the breadcrumb for the current folder")
+    }
+
+    function test_drive_browser_tree_click_navigation_routes_through_navigateToFolder() {
+        var source = readDriveBrowserSource()
+
+        var treePanelStart = source.indexOf("FolderTreePanel {")
+        verify(treePanelStart !== -1, "Has FolderTreePanel instance")
+        var treePanelEnd = source.indexOf("}", treePanelStart + 1)
+        var treePanelBlock = source.substring(treePanelStart, treePanelEnd)
+
+        verify(treePanelBlock.indexOf("root.navigateToFolder") !== -1,
+               "FolderTreePanel click routes through navigateToFolder")
+        verify(treePanelBlock.indexOf("currentFolderId: root.currentFolderId") !== -1,
+               "FolderTreePanel receives currentFolderId from page state")
+    }
+
+    function test_drive_browser_breadcrumb_click_navigation_routes_through_navigateToFolder() {
+        var source = readDriveBrowserSource()
+
+        var breadcrumbStart = source.indexOf("BreadcrumbBar {")
+        verify(breadcrumbStart !== -1, "Has BreadcrumbBar instance")
+        var breadcrumbEnd = source.indexOf("}", breadcrumbStart + 1)
+        var breadcrumbBlock = source.substring(breadcrumbStart, breadcrumbEnd)
+
+        verify(breadcrumbBlock.indexOf("root.navigateToFolder") !== -1,
+               "BreadcrumbBar click routes through navigateToFolder")
+    }
+
+    function test_drive_browser_folder_open_button_routes_through_navigateToFolder() {
+        var source = readDriveBrowserSource()
+
+        var openBtnIndex = source.indexOf('text: "Open"')
+        verify(openBtnIndex !== -1, "Has Open button")
+
+        var openBtnBlock = source.substring(openBtnIndex, openBtnIndex + 400)
+        verify(openBtnBlock.indexOf("root.navigateToFolder(model.id)") !== -1,
+               "Open button navigates through navigateToFolder")
     }
 }
