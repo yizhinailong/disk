@@ -713,16 +713,183 @@ private slots:
         request_factory.SetOwnerAccessToken("test_token");
         DriveManager mgr(&network_client, &request_factory);
 
+        QSignalSpy tree_loaded_spy(&mgr, &DriveManager::treeLoaded);
         QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
 
         mgr.loadFolderTree();
 
-        QTRY_COMPARE(success_spy.count(), 1);
+        QTRY_COMPARE(tree_loaded_spy.count(), 1);
+        QCOMPARE(success_spy.count(), 0);
 
         QCOMPARE(mgr.treeModel()->rowCount(), 2);
         auto idx = mgr.treeModel()->index(0, 0);
         QCOMPARE(mgr.treeModel()->data(idx, FolderTreeModel::NameRole).toString(), QString("Documents"));
         QCOMPARE(mgr.treeModel()->rowCount(idx), 1);
+    }
+
+    void LoadFolderTreeDoesNotEmitOperationSuccess() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/folder/tree",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{ { "children", QJsonArray{} } } },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+        QSignalSpy tree_loaded_spy(&mgr, &DriveManager::treeLoaded);
+
+        mgr.loadFolderTree();
+
+        QTRY_COMPARE(tree_loaded_spy.count(), 1);
+        QCOMPARE(success_spy.count(), 0);
+    }
+
+    void ListFilesDoesNotEmitOperationSuccessOnEmpty() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file/list",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data",
+                  QJsonObject{
+                      { "items", QJsonArray{} },
+                      { "pagination",
+                       QJsonObject{
+                           { "page", 1 },
+                           { "page_size", 50 },
+                           { "total", 0 },
+                           { "total_pages", 0 },
+                       } },
+                  } },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+        QSignalSpy pagination_spy(&mgr, &DriveManager::paginationLoaded);
+
+        mgr.listFiles("0");
+
+        QTRY_COMPARE(pagination_spy.count(), 1);
+        QCOMPARE(success_spy.count(), 0);
+    }
+
+    void LoadFolderTreeWithEmptyChildrenClearsTreeModel() {
+        MockNetworkAccessManager mock_network;
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        // First load: populate tree
+        mock_network.RegisterResponse(
+            "api/folder/tree",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data",
+                  QJsonObject{
+                      { "children",
+                       QJsonArray{
+                           QJsonObject{ { "id", 1.0 }, { "name", "Docs" } },
+                       } },
+                  } },
+            }
+        );
+
+        QSignalSpy tree_loaded_spy(&mgr, &DriveManager::treeLoaded);
+        mgr.loadFolderTree();
+        QTRY_COMPARE(tree_loaded_spy.count(), 1);
+        QCOMPARE(mgr.treeModel()->rowCount(), 1);
+
+        // Second load: empty tree payload should clear the model
+        mock_network.RegisterResponse(
+            "api/folder/tree",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{ { "children", QJsonArray{} } } },
+            }
+        );
+
+        tree_loaded_spy.clear();
+        mgr.loadFolderTree();
+        QTRY_COMPARE(tree_loaded_spy.count(), 1);
+        QCOMPARE(mgr.treeModel()->rowCount(), 0);
+    }
+
+    void LoadBreadcrumbEmitsBreadcrumbLoaded() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/folder/10/breadcrumb",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data",
+                  QJsonObject{
+                      { "path",
+                       QJsonArray{
+                           QJsonObject{ { "id", 0.0 }, { "name", "Root" } },
+                           QJsonObject{ { "id", 10.0 }, { "name", "Documents" } },
+                       } },
+                  } },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy breadcrumb_spy(&mgr, &DriveManager::breadcrumbLoaded);
+
+        mgr.loadBreadcrumb("10");
+
+        QTRY_COMPARE(breadcrumb_spy.count(), 1);
+
+        auto args = breadcrumb_spy.takeFirst().at(0).toList();
+        QCOMPARE(args.size(), 2);
+        QCOMPARE(args[0].toMap().value("name").toString(), QString("Root"));
+        QCOMPARE(args[1].toMap().value("name").toString(), QString("Documents"));
+    }
+
+    void LoadBreadcrumbRootEmitsImmediatelyWithoutNetwork() {
+        MockNetworkAccessManager mock_network;
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy breadcrumb_spy(&mgr, &DriveManager::breadcrumbLoaded);
+
+        mgr.loadBreadcrumb("0");
+
+        QCOMPARE(breadcrumb_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestLog().size(), 0);
+
+        auto args = breadcrumb_spy.takeFirst().at(0).toList();
+        QCOMPARE(args.size(), 1);
+        QCOMPARE(args[0].toMap().value("id").toDouble(), 0.0);
     }
 };
 

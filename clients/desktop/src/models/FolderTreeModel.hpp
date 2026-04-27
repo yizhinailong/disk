@@ -29,6 +29,7 @@ namespace disk::desktop {
         enum Roles {
             IdRole = Qt::UserRole + 1,
             NameRole,
+            DepthRole,
         };
 
         explicit FolderTreeModel(QObject* parent = nullptr);
@@ -45,11 +46,15 @@ namespace disk::desktop {
         auto GetNode(const QModelIndex& index) const -> const FolderNode*;
 
         Q_INVOKABLE QModelIndex indexOf(quint64 id) const;
+        Q_INVOKABLE bool hasChildren(const QModelIndex& parent = {}) const;
+        Q_INVOKABLE QVector<quint64> ancestorPath(quint64 id) const;
+        Q_INVOKABLE bool isAncestor(quint64 ancestorId, quint64 descendantId) const;
 
     private:
         auto NodeFromIndex(const QModelIndex& index) const -> const FolderNode*;
         auto IndexOfNode(const FolderNode* node, quint64 id) const -> QModelIndex;
         auto FindParentOf(const FolderNode* target, const FolderNode& root) const -> std::pair<const FolderNode*, int>;
+        auto CollectAncestorPath(const FolderNode* node, quint64 targetId, QVector<quint64>& path) const -> bool;
 
         FolderNode m_root;
     };

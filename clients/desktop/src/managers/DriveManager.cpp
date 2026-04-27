@@ -365,10 +365,6 @@ namespace disk::desktop::managers {
         int total_pages = pagination.value("total_pages").toInt(1);
         int total = pagination.value("total").toInt(0);
         emit paginationLoaded(page, total_pages, total);
-
-        if (items.isEmpty()) {
-            emit operationSuccess("Empty folder");
-        }
     }
 
     void DriveManager::HandleSearchResponse(QNetworkReply* reply) {
@@ -607,7 +603,7 @@ namespace disk::desktop::managers {
         }
 
         m_treeModel->SetRoot(root);
-        emit operationSuccess("Folder tree loaded");
+        emit treeLoaded();
     }
 
     void DriveManager::HandleBreadcrumbResponse(QNetworkReply* reply) {

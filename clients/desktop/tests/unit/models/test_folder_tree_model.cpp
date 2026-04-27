@@ -17,12 +17,23 @@ private slots:
         QCOMPARE(model.rowCount(), 0);
     }
 
-    void RoleNamesHasTwoEntries() {
+    void RoleNamesHasThreeEntries() {
         FolderTreeModel model;
         auto roles = model.roleNames();
-        QCOMPARE(roles.size(), 2);
+        QCOMPARE(roles.size(), 3);
         QVERIFY(roles.contains(FolderTreeModel::IdRole));
         QVERIFY(roles.contains(FolderTreeModel::NameRole));
+        QVERIFY(roles.contains(FolderTreeModel::DepthRole));
+    }
+
+    void RoleNamesMatchQmlExpectations() {
+        FolderTreeModel model;
+        auto roles = model.roleNames();
+
+        // QML FolderTreePanel delegate reads: model.id, model.name, model.depth
+        QCOMPARE(roles.value(FolderTreeModel::IdRole), QByteArray("id"));
+        QCOMPARE(roles.value(FolderTreeModel::NameRole), QByteArray("name"));
+        QCOMPARE(roles.value(FolderTreeModel::DepthRole), QByteArray("depth"));
     }
 
     void ColumnCountIsOne() {
@@ -242,6 +253,643 @@ private slots:
         second.name = "Second";
         model.SetRoot(second);
         QCOMPARE(model.rowCount(), 0);
+    }
+
+    void DepthRoleIsZeroForTopLevelNodes() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "My Drive";
+
+        FolderNode a;
+        a.id = 10;
+        a.name = "A";
+        FolderNode b;
+        b.id = 20;
+        b.name = "B";
+
+        root.children.append(a);
+        root.children.append(b);
+        model.SetRoot(root);
+
+        QCOMPARE(model.data(model.index(0, 0), FolderTreeModel::DepthRole).toInt(), 0);
+        QCOMPARE(model.data(model.index(1, 0), FolderTreeModel::DepthRole).toInt(), 0);
+    }
+
+    void DepthRoleIsOneForSecondLevelNodes() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "My Drive";
+
+        FolderNode docs;
+        docs.id = 1;
+        docs.name = "Docs";
+
+        FolderNode sub;
+        sub.id = 2;
+        sub.name = "Projects";
+        docs.children.append(sub);
+
+        root.children.append(docs);
+        model.SetRoot(root);
+
+        auto docs_idx = model.index(0, 0);
+        QCOMPARE(model.data(docs_idx, FolderTreeModel::DepthRole).toInt(), 0);
+
+        auto sub_idx = model.index(0, 0, docs_idx);
+        QCOMPARE(model.data(sub_idx, FolderTreeModel::DepthRole).toInt(), 1);
+    }
+
+    void DepthRoleIsTwoForThirdLevelNodes() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "My Drive";
+
+        FolderNode docs;
+        docs.id = 1;
+        docs.name = "Docs";
+
+        FolderNode work;
+        work.id = 2;
+        work.name = "Work";
+
+        FolderNode project;
+        project.id = 3;
+        project.name = "ProjectAlpha";
+        work.children.append(project);
+
+        docs.children.append(work);
+        root.children.append(docs);
+        model.SetRoot(root);
+
+        auto docs_idx = model.index(0, 0);
+        auto work_idx = model.index(0, 0, docs_idx);
+        auto project_idx = model.index(0, 0, work_idx);
+
+        QCOMPARE(model.data(docs_idx, FolderTreeModel::DepthRole).toInt(), 0);
+        QCOMPARE(model.data(work_idx, FolderTreeModel::DepthRole).toInt(), 1);
+        QCOMPARE(model.data(project_idx, FolderTreeModel::DepthRole).toInt(), 2);
+    }
+
+    void DepthRoleReturnsZeroForInvalidIndex() {
+        FolderTreeModel model;
+
+        auto invalid = QModelIndex();
+        QCOMPARE(model.data(invalid, FolderTreeModel::DepthRole), QVariant());
+    }
+
+    void HasChildrenReturnsFalseForEmptyModel() {
+        FolderTreeModel model;
+        QVERIFY(!model.hasChildren());
+    }
+
+    void HasChildrenReturnsTrueWhenTopLevelNodesExist() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+
+        FolderNode a;
+        a.id = 10;
+        a.name = "A";
+        root.children.append(a);
+
+        model.SetRoot(root);
+
+        QVERIFY(model.hasChildren());
+        QVERIFY(model.hasChildren({}));
+    }
+
+    void HasChildrenReturnsTrueForParentWithChildren() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+
+        FolderNode docs;
+        docs.id = 1;
+        docs.name = "Docs";
+
+        FolderNode sub;
+        sub.id = 2;
+        sub.name = "Projects";
+        docs.children.append(sub);
+
+        root.children.append(docs);
+        model.SetRoot(root);
+
+        auto docs_idx = model.index(0, 0);
+        QVERIFY(model.hasChildren(docs_idx));
+    }
+
+    void HasChildrenReturnsFalseForLeafNode() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+
+        FolderNode leaf;
+        leaf.id = 10;
+        leaf.name = "Leaf";
+        root.children.append(leaf);
+
+        model.SetRoot(root);
+
+        auto leaf_idx = model.index(0, 0);
+        QVERIFY(!model.hasChildren(leaf_idx));
+    }
+
+    void AncestorPathReturnsEmptyForMissingId() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+        model.SetRoot(root);
+
+        auto path = model.ancestorPath(999);
+        QVERIFY(path.isEmpty());
+    }
+
+    void AncestorPathReturnsSingleIdForTopLevelNode() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+
+        FolderNode a;
+        a.id = 10;
+        a.name = "A";
+        root.children.append(a);
+
+        model.SetRoot(root);
+
+        auto path = model.ancestorPath(10);
+        QCOMPARE(path.size(), 1);
+        QCOMPARE(path[0], quint64(10));
+    }
+
+    void AncestorPathReturnsFullChainForDeeplyNestedNode() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+
+        FolderNode docs;
+        docs.id = 1;
+        docs.name = "Docs";
+
+        FolderNode work;
+        work.id = 2;
+        work.name = "Work";
+
+        FolderNode project;
+        project.id = 3;
+        project.name = "Project";
+        work.children.append(project);
+
+        docs.children.append(work);
+        root.children.append(docs);
+        model.SetRoot(root);
+
+        auto path = model.ancestorPath(3);
+        QCOMPARE(path.size(), 3);
+        QCOMPARE(path[0], quint64(1));
+        QCOMPARE(path[1], quint64(2));
+        QCOMPARE(path[2], quint64(3));
+    }
+
+    void AncestorPathExcludesVirtualRoot() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "My Drive";
+
+        FolderNode child;
+        child.id = 42;
+        child.name = "Child";
+        root.children.append(child);
+
+        model.SetRoot(root);
+
+        auto path = model.ancestorPath(42);
+        QCOMPARE(path.size(), 1);
+        QCOMPARE(path[0], quint64(42));
+    }
+
+    void IsAncestorReturnsTrueForDirectParent() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+
+        FolderNode parent;
+        parent.id = 10;
+        parent.name = "Parent";
+
+        FolderNode child;
+        child.id = 20;
+        child.name = "Child";
+        parent.children.append(child);
+
+        root.children.append(parent);
+        model.SetRoot(root);
+
+        QVERIFY(model.isAncestor(10, 20));
+    }
+
+    void IsAncestorReturnsTrueForGrandparent() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+
+        FolderNode docs;
+        docs.id = 1;
+        docs.name = "Docs";
+
+        FolderNode work;
+        work.id = 2;
+        work.name = "Work";
+
+        FolderNode project;
+        project.id = 3;
+        project.name = "Project";
+        work.children.append(project);
+
+        docs.children.append(work);
+        root.children.append(docs);
+        model.SetRoot(root);
+
+        QVERIFY(model.isAncestor(1, 3));
+        QVERIFY(model.isAncestor(2, 3));
+    }
+
+    void IsAncestorReturnsFalseForUnrelatedNodes() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+
+        FolderNode a;
+        a.id = 10;
+        a.name = "A";
+
+        FolderNode b;
+        b.id = 20;
+        b.name = "B";
+
+        root.children.append(a);
+        root.children.append(b);
+        model.SetRoot(root);
+
+        QVERIFY(!model.isAncestor(10, 20));
+        QVERIFY(!model.isAncestor(20, 10));
+    }
+
+    void IsAncestorReturnsFalseForSameNode() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+
+        FolderNode a;
+        a.id = 10;
+        a.name = "A";
+        root.children.append(a);
+
+        model.SetRoot(root);
+
+        QVERIFY(!model.isAncestor(10, 10));
+    }
+
+    void IsAncestorReturnsFalseForMissingDescendant() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+        model.SetRoot(root);
+
+        QVERIFY(!model.isAncestor(0, 999));
+    }
+
+    void IndexOfFindsDeeplyNestedNode() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+
+        FolderNode a;
+        a.id = 10;
+        a.name = "A";
+
+        FolderNode b;
+        b.id = 20;
+        b.name = "B";
+
+        FolderNode c;
+        c.id = 30;
+        c.name = "C";
+        b.children.append(c);
+
+        a.children.append(b);
+        root.children.append(a);
+        model.SetRoot(root);
+
+        auto idx = model.indexOf(30);
+        QVERIFY(idx.isValid());
+        QCOMPARE(model.data(idx, FolderTreeModel::IdRole).toULongLong(), quint64(30));
+        QCOMPARE(model.data(idx, FolderTreeModel::NameRole).toString(), QString("C"));
+        QCOMPARE(model.data(idx, FolderTreeModel::DepthRole).toInt(), 2);
+
+        auto parent = model.parent(idx);
+        QVERIFY(parent.isValid());
+        QCOMPARE(model.data(parent, FolderTreeModel::IdRole).toULongLong(), quint64(20));
+    }
+
+    void IndexOfReturnsInvalidForEmptyModel() {
+        FolderTreeModel model;
+        auto idx = model.indexOf(1);
+        QVERIFY(!idx.isValid());
+    }
+
+    void IndexOfStableAfterSetRootReload() {
+        FolderTreeModel model;
+
+        FolderNode first;
+        first.id = 0;
+        first.name = "First";
+
+        FolderNode a;
+        a.id = 10;
+        a.name = "A";
+
+        FolderNode b;
+        b.id = 20;
+        b.name = "B";
+        a.children.append(b);
+
+        first.children.append(a);
+        model.SetRoot(first);
+
+        QVERIFY(model.indexOf(20).isValid());
+
+        FolderNode second;
+        second.id = 0;
+        second.name = "Second";
+
+        FolderNode a2;
+        a2.id = 10;
+        a2.name = "A2";
+
+        FolderNode b2;
+        b2.id = 20;
+        b2.name = "B2";
+        a2.children.append(b2);
+
+        second.children.append(a2);
+        model.SetRoot(second);
+
+        auto idx_after = model.indexOf(20);
+        QVERIFY(idx_after.isValid());
+        QCOMPARE(model.data(idx_after, FolderTreeModel::NameRole).toString(), QString("B2"));
+        QCOMPARE(model.data(idx_after, FolderTreeModel::DepthRole).toInt(), 1);
+    }
+
+    void OldIndexesMustNotBeUsedAfterSetRootReload() {
+        FolderTreeModel model;
+
+        FolderNode first;
+        first.id = 0;
+        first.name = "First";
+
+        FolderNode a;
+        a.id = 10;
+        a.name = "A";
+        first.children.append(a);
+        model.SetRoot(first);
+
+        model.SetRoot(FolderNode{});
+
+        QCOMPARE(model.rowCount(), 0);
+
+        auto fresh_idx = model.indexOf(10);
+        QVERIFY(!fresh_idx.isValid());
+    }
+
+    void SetRootEmitsModelReset() {
+        FolderTreeModel model;
+
+        QSignalSpy about_to_reset(&model, &QAbstractItemModel::modelAboutToBeReset);
+        QSignalSpy reset_done(&model, &QAbstractItemModel::modelReset);
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+        model.SetRoot(root);
+
+        QCOMPARE(about_to_reset.count(), 1);
+        QCOMPARE(reset_done.count(), 1);
+    }
+
+    void SetRootMultipleReloadsPreserveLookup() {
+        FolderTreeModel model;
+
+        for (int i = 0; i < 5; ++i) {
+            FolderNode root;
+            root.id = 0;
+            root.name = "Root";
+
+            FolderNode child;
+            child.id = 100;
+            child.name = "Child";
+            root.children.append(child);
+
+            model.SetRoot(root);
+
+            auto idx = model.indexOf(100);
+            QVERIFY(idx.isValid());
+            QCOMPARE(model.data(idx, FolderTreeModel::IdRole).toULongLong(), quint64(100));
+            QCOMPARE(model.data(idx, FolderTreeModel::DepthRole).toInt(), 0);
+            QVERIFY(model.hasChildren());
+        }
+    }
+
+    void SetRootWithEmptyRootHasNoTopLevelChildren() {
+        FolderTreeModel model;
+
+        FolderNode emptyRoot;
+        emptyRoot.id = 0;
+        emptyRoot.name = "Root";
+        model.SetRoot(emptyRoot);
+
+        QCOMPARE(model.rowCount(), 0);
+        QVERIFY(!model.hasChildren());
+    }
+
+    void SetRootAlternatingEmptyAndPopulated() {
+        FolderTreeModel model;
+
+        // Start empty
+        FolderNode empty;
+        empty.id = 0;
+        empty.name = "Empty";
+        model.SetRoot(empty);
+        QCOMPARE(model.rowCount(), 0);
+        QVERIFY(!model.hasChildren());
+        QVERIFY(!model.indexOf(10).isValid());
+        QVERIFY(model.ancestorPath(10).isEmpty());
+        QVERIFY(!model.isAncestor(10, 20));
+
+        // Populate
+        FolderNode populated;
+        populated.id = 0;
+        populated.name = "Populated";
+        FolderNode a;
+        a.id = 10;
+        a.name = "A";
+        FolderNode b;
+        b.id = 20;
+        b.name = "B";
+        a.children.append(b);
+        populated.children.append(a);
+        model.SetRoot(populated);
+
+        QCOMPARE(model.rowCount(), 1);
+        QVERIFY(model.hasChildren());
+        QVERIFY(model.indexOf(20).isValid());
+        QCOMPARE(model.ancestorPath(20).size(), 2);
+        QVERIFY(model.isAncestor(10, 20));
+
+        // Clear again
+        model.SetRoot(empty);
+        QCOMPARE(model.rowCount(), 0);
+        QVERIFY(!model.hasChildren());
+        QVERIFY(!model.indexOf(10).isValid());
+        QVERIFY(model.ancestorPath(10).isEmpty());
+        QVERIFY(!model.isAncestor(10, 20));
+    }
+
+    void AncestorPathReturnsEmptyForEmptyModel() {
+        FolderTreeModel model;
+        QVERIFY(model.ancestorPath(1).isEmpty());
+        QVERIFY(model.ancestorPath(0).isEmpty());
+    }
+
+    void IsAncestorReturnsFalseForEmptyModel() {
+        FolderTreeModel model;
+        QVERIFY(!model.isAncestor(0, 1));
+        QVERIFY(!model.isAncestor(1, 2));
+    }
+
+    void HasChildrenReturnsFalseAfterClearingTree() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+        FolderNode child;
+        child.id = 10;
+        child.name = "Child";
+        root.children.append(child);
+        model.SetRoot(root);
+
+        QVERIFY(model.hasChildren());
+
+        model.SetRoot(FolderNode{});
+        QVERIFY(!model.hasChildren());
+        QCOMPARE(model.rowCount(), 0);
+    }
+
+    void GetNodeReturnsCorrectNodeForNestedIndex() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+
+        FolderNode docs;
+        docs.id = 1;
+        docs.name = "Docs";
+
+        FolderNode sub;
+        sub.id = 2;
+        sub.name = "Projects";
+        docs.children.append(sub);
+
+        root.children.append(docs);
+        model.SetRoot(root);
+
+        auto docs_idx = model.index(0, 0);
+        auto* docs_node = model.GetNode(docs_idx);
+        QVERIFY(docs_node != nullptr);
+        QCOMPARE(docs_node->id, quint64(1));
+        QCOMPARE(docs_node->children.size(), 1);
+
+        auto sub_idx = model.index(0, 0, docs_idx);
+        auto* sub_node = model.GetNode(sub_idx);
+        QVERIFY(sub_node != nullptr);
+        QCOMPARE(sub_node->id, quint64(2));
+        QVERIFY(sub_node->children.isEmpty());
+    }
+
+    void ParentRoundTripAtMultipleDepths() {
+        FolderTreeModel model;
+
+        FolderNode root;
+        root.id = 0;
+        root.name = "Root";
+
+        FolderNode l1;
+        l1.id = 10;
+        l1.name = "L1";
+
+        FolderNode l2;
+        l2.id = 20;
+        l2.name = "L2";
+
+        FolderNode l3;
+        l3.id = 30;
+        l3.name = "L3";
+
+        l2.children.append(l3);
+        l1.children.append(l2);
+        root.children.append(l1);
+        model.SetRoot(root);
+
+        auto l1_idx = model.index(0, 0);
+        auto l2_idx = model.index(0, 0, l1_idx);
+        auto l3_idx = model.index(0, 0, l2_idx);
+
+        QVERIFY(l3_idx.isValid());
+
+        auto l3_parent = model.parent(l3_idx);
+        QVERIFY(l3_parent.isValid());
+        QCOMPARE(model.data(l3_parent, FolderTreeModel::IdRole).toULongLong(), quint64(20));
+
+        auto l2_parent = model.parent(l3_parent);
+        QVERIFY(l2_parent.isValid());
+        QCOMPARE(model.data(l2_parent, FolderTreeModel::IdRole).toULongLong(), quint64(10));
+
+        auto l1_parent = model.parent(l2_parent);
+        QVERIFY(!l1_parent.isValid());
     }
 };
 

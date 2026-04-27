@@ -108,16 +108,26 @@ namespace disk::desktop {
         }
 
         switch (role) {
-            case IdRole  : return node->id;
-            case NameRole: return node->name;
-            default      : return {};
+            case IdRole   : return node->id;
+            case NameRole : return node->name;
+            case DepthRole: {
+                int depth = 0;
+                auto current = index.parent();
+                while (current.isValid()) {
+                    ++depth;
+                    current = current.parent();
+                }
+                return depth;
+            }
+            default       : return {};
         }
     }
 
     auto FolderTreeModel::roleNames() const -> QHash<int, QByteArray> {
         return {
-            {   IdRole,   "folderId" },
-            { NameRole, "folderName" },
+            {    IdRole,    "id" },
+            {  NameRole,  "name" },
+            { DepthRole, "depth" },
         };
     }
 
@@ -136,6 +146,50 @@ namespace disk::desktop {
 
     auto FolderTreeModel::indexOf(quint64 id) const -> QModelIndex {
         return IndexOfNode(&m_root, id);
+    }
+
+    auto FolderTreeModel::hasChildren(const QModelIndex& parent) const -> bool {
+        const auto* node = parent.isValid() ? NodeFromIndex(parent) : &m_root;
+        return node && !node->children.isEmpty();
+    }
+
+    auto FolderTreeModel::ancestorPath(quint64 id) const -> QVector<quint64> {
+        QVector<quint64> path;
+        CollectAncestorPath(&m_root, id, path);
+        return path;
+    }
+
+    auto FolderTreeModel::isAncestor(quint64 ancestorId, quint64 descendantId) const -> bool {
+        if (ancestorId == descendantId) {
+            return false;
+        }
+        auto desc_idx = indexOf(descendantId);
+        if (!desc_idx.isValid()) {
+            return false;
+        }
+        auto current = desc_idx.parent();
+        while (current.isValid()) {
+            const auto* node = NodeFromIndex(current);
+            if (node && node->id == ancestorId) {
+                return true;
+            }
+            current = current.parent();
+        }
+        return false;
+    }
+
+    auto FolderTreeModel::CollectAncestorPath(const FolderNode* node, quint64 targetId, QVector<quint64>& path) const -> bool {
+        for (int i = 0; i < node->children.size(); ++i) {
+            if (node->children[i].id == targetId) {
+                path.prepend(node->children[i].id);
+                return true;
+            }
+            if (CollectAncestorPath(&node->children[i], targetId, path)) {
+                path.prepend(node->children[i].id);
+                return true;
+            }
+        }
+        return false;
     }
 
     auto FolderTreeModel::NodeFromIndex(const QModelIndex& index) const -> const FolderNode* {

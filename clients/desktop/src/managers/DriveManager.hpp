@@ -52,6 +52,7 @@ namespace disk::desktop::managers {
         void operationSuccess(const QString& message);
         void paginationLoaded(int page, int totalPages, int total);
         void listLoadFailed(const QString& message, int code);
+        void treeLoaded();
 
     private:
         auto PrepareHeaders() -> QMap<QString, QString>;
