@@ -1,6 +1,7 @@
 #include <QtQuickTest/quicktest.h>
 #include <QQmlEngine>
 #include <QQmlContext>
+#include <QQuickStyle>
 
 // ── Minimal stub objects matching the auth context property API ────────────
 // These are injected as QML context properties so that runtime-instantiated
@@ -81,6 +82,8 @@ private:
 };
 
 int main(int argc, char **argv) {
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
+
     QTEST_SET_MAIN_SOURCE_PATH
     static QuickTestSetup setup;
     return quick_test_main_with_setup(argc, argv, "desktop-quick-tests",
