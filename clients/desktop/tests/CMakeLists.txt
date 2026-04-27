@@ -98,8 +98,12 @@ qt_add_qml_module(desktop-quick-tests
         quick/navigation/tst_navigation.qml
         quick/shells/tst_owner_shell.qml
         quick/shells/tst_visitor_shell.qml
+        quick/shells/tst_auth_shell.qml
+        quick/auth/tst_auth_runtime.qml
         quick/pages/tst_drive_browser.qml
         quick/pages/tst_transfer_center.qml
+        quick/pages/tst_login_page.qml
+        quick/pages/tst_register_page.qml
     RESOURCE_PREFIX /qt/qml
 )
 
@@ -113,6 +117,7 @@ target_compile_definitions(desktop-quick-tests PRIVATE
 
 target_link_libraries(desktop-quick-tests PRIVATE
     Qt6::Core
+    Qt6::Qml
     Qt6::Quick
     Qt6::QuickTest
     Qt6::Test
