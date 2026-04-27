@@ -1,92 +1,196 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "../components/auth"
 
-Page {
+Item {
     id: root
+    objectName: "authLoginPage"
 
     property bool isBusy: false
-    
-    ColumnLayout {
-        anchors.centerIn: parent
-        width: 300
-        spacing: 16
-        
-        Label {
-            Layout.alignment: Qt.AlignHCenter
-            text: "Login"
-            font.pixelSize: 24
-            font.bold: true
-        }
 
-        Label {
-            Layout.alignment: Qt.AlignHCenter
-            Layout.fillWidth: true
-            text: "Sign in to access your cloud drive"
-            color: "#666"
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
-        }
-        
-        TextField {
-            id: usernameField
-            Layout.fillWidth: true
-            placeholderText: "Username"
-            enabled: !root.isBusy
-            onAccepted: passwordField.forceActiveFocus()
-        }
-        
-        TextField {
-            id: passwordField
-            Layout.fillWidth: true
-            placeholderText: "Password"
-            echoMode: TextInput.Password
-            enabled: !root.isBusy
-            onAccepted: loginButton.clicked()
-        }
+    function resetState() {
+        usernameField.text = ""
+        passwordField.text = ""
+        errorLabel.text = ""
+        root.isBusy = false
+        usernameField.forceActiveFocus()
+    }
 
-        Label {
-            id: errorLabel
-            Layout.fillWidth: true
-            color: "#f44336"
-            visible: text !== ""
-            wrapMode: Text.WordWrap
-        }
-        
-        Button {
-            id: loginButton
-            Layout.fillWidth: true
-            text: root.isBusy ? "Signing in..." : "Login"
-            enabled: !root.isBusy
-            highlighted: true
-            onClicked: {
-                errorLabel.text = ""
+    AuthTheme {
+        id: theme
+    }
 
-                var username = usernameField.text.trim()
-                if (username === "") {
-                    errorLabel.text = "Please enter your username"
-                    usernameField.forceActiveFocus()
-                    return
+    implicitWidth: loginCard.implicitWidth
+    implicitHeight: loginCard.implicitHeight
+    width: implicitWidth
+    height: implicitHeight
+
+    Component.onCompleted: resetState()
+
+    AuthCard {
+        id: loginCard
+
+        anchors.fill: parent
+        theme: theme
+        eyebrowText: "Disk desktop"
+        titleText: "Welcome back"
+        subtitleText: "Use your username and password to continue."
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: theme.fieldSpacing
+
+            TextField {
+                id: usernameField
+                objectName: "authUsernameField"
+                Layout.fillWidth: true
+                implicitHeight: theme.primaryCtaHeight
+                placeholderText: "Username"
+                placeholderTextColor: theme.fieldPlaceholderColor
+                color: theme.fieldTextColor
+                enabled: !root.isBusy
+                leftPadding: theme.helperSpacing
+                rightPadding: theme.helperSpacing
+                selectByMouse: true
+
+                background: Rectangle {
+                    radius: theme.primaryCtaRadius
+                    color: theme.fieldBackgroundColor
+                    border.width: 1
+                    border.color: usernameField.activeFocus ? theme.fieldFocusBorderColor : theme.fieldBorderColor
                 }
 
-                if (passwordField.text === "") {
-                    errorLabel.text = "Please enter your password"
-                    passwordField.forceActiveFocus()
-                    return
-                }
-
-                root.isBusy = true
-                sessionStore.owner.StartLogin()
-                authService.Login(username, passwordField.text)
+                onAccepted: passwordField.forceActiveFocus()
             }
-        }
-        
-        Button {
-            Layout.fillWidth: true
-            text: "Register"
-            flat: true
-            enabled: !root.isBusy
-            onClicked: shellController.navigateToRegister()
+
+            TextField {
+                id: passwordField
+                objectName: "authPasswordField"
+                Layout.fillWidth: true
+                implicitHeight: theme.primaryCtaHeight
+                placeholderText: "Password"
+                placeholderTextColor: theme.fieldPlaceholderColor
+                color: theme.fieldTextColor
+                echoMode: TextInput.Password
+                enabled: !root.isBusy
+                leftPadding: theme.helperSpacing
+                rightPadding: theme.helperSpacing
+                selectByMouse: true
+
+                background: Rectangle {
+                    radius: theme.primaryCtaRadius
+                    color: theme.fieldBackgroundColor
+                    border.width: 1
+                    border.color: passwordField.activeFocus ? theme.fieldFocusBorderColor : theme.fieldBorderColor
+                }
+
+                onAccepted: loginButton.clicked()
+            }
+
+            Label {
+                id: errorLabel
+                objectName: "authErrorLabel"
+                Layout.fillWidth: true
+                color: theme.errorTextColor
+                visible: text !== ""
+                wrapMode: Text.WordWrap
+            }
+
+            Button {
+                id: loginButton
+                objectName: "authSubmitButton"
+                Layout.fillWidth: true
+                implicitHeight: theme.primaryCtaHeight
+                text: root.isBusy ? "Signing in..." : "Login"
+                enabled: !root.isBusy
+
+                contentItem: Text {
+                    text: loginButton.text
+                    color: theme.primaryCtaTextColor
+                    font.pixelSize: 15
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    radius: theme.primaryCtaRadius
+                    border.width: theme.primaryCtaBorderWidth
+                    border.color: theme.primaryCtaEndColor
+                    opacity: loginButton.enabled ? 1.0 : 0.65
+
+                    gradient: Gradient {
+                        GradientStop {
+                            position: 0.0
+                            color: theme.primaryCtaStartColor
+                        }
+
+                        GradientStop {
+                            position: 1.0
+                            color: theme.primaryCtaEndColor
+                        }
+                    }
+                }
+
+                onClicked: {
+                    errorLabel.text = ""
+
+                    var username = usernameField.text.trim()
+                    if (username === "") {
+                        errorLabel.text = "Please enter your username"
+                        usernameField.forceActiveFocus()
+                        return
+                    }
+
+                    if (passwordField.text === "") {
+                        errorLabel.text = "Please enter your password"
+                        passwordField.forceActiveFocus()
+                        return
+                    }
+
+                    root.isBusy = true
+                    sessionStore.owner.StartLogin()
+                    authService.Login(username, passwordField.text)
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: theme.helperSpacing
+
+                Label {
+                    Layout.fillWidth: true
+                    text: "Need an account?"
+                    color: theme.bodyTextColor
+                    font.pixelSize: 13
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                Button {
+                    id: registerModeCta
+                    objectName: "authModeSwitchCta"
+                    text: "Register"
+                    flat: true
+                    enabled: !root.isBusy
+
+                    contentItem: Text {
+                        text: registerModeCta.text
+                        color: theme.secondaryCtaTextColor
+                        font.pixelSize: 13
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: theme.primaryCtaRadius
+                        color: registerModeCta.down || registerModeCta.hovered ? theme.secondaryCtaHoverColor : "transparent"
+                    }
+
+                    onClicked: shellController.navigateToRegister()
+                }
+            }
         }
     }
 

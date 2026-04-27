@@ -68,6 +68,8 @@ set(DESKTOP_QML_FILES
     qml/components/BreadcrumbBar.qml
     qml/components/FolderTreePanel.qml
     qml/components/PageStateView.qml
+    qml/components/auth/AuthCard.qml
+    qml/components/auth/AuthTheme.qml
     qml/pages/DriveBrowserPage.qml
     qml/pages/LoginPage.qml
     qml/pages/RegisterPage.qml
@@ -78,6 +80,7 @@ set(DESKTOP_QML_FILES
     qml/pages/SplashPage.qml
     qml/pages/TransferCenterPage.qml
     qml/pages/TrashPage.qml
+    qml/shells/AuthShell.qml
     qml/shells/OwnerShell.qml
     qml/shells/VisitorShell.qml
 )

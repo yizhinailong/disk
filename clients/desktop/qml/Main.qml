@@ -13,8 +13,8 @@ Item {
     readonly property Component selectedShellComponent: {
         switch (shellController.currentShell) {
             case "splash": return splashComponent;
-            case "login": return loginComponent;
-            case "register": return registerComponent;
+            case "login": return authShellComponent;
+            case "register": return authShellComponent;
             case "owner": return ownerComponent;
             case "visitor": return visitorComponent;
             default: return splashComponent;
@@ -22,6 +22,15 @@ Item {
     }
 
     function presentShell() {
+        const nextShell = shellController.currentShell;
+
+        // Auth-to-auth transition: reuse existing auth window by switching mode
+        const isAuthTarget = (nextShell === "login" || nextShell === "register");
+        if (isAuthTarget && currentWindow !== null && currentWindow.authMode !== undefined) {
+            currentWindow.authMode = nextShell;
+            return;
+        }
+
         const nextComponent = selectedShellComponent;
         if (!nextComponent) {
             return;
@@ -32,6 +41,11 @@ Item {
         if (!nextWindow) {
             console.error("Failed to create shell window for", shellController.currentShell);
             return;
+        }
+
+        // Set initial auth mode for auth shell
+        if (isAuthTarget && nextWindow.authMode !== undefined) {
+            nextWindow.authMode = nextShell;
         }
 
         currentWindow = nextWindow;
@@ -77,38 +91,13 @@ Item {
     }
 
     Component {
-        id: loginComponent
-
-        ApplicationWindow {
-            visible: true
-            width: 1024
-            height: 768
-            title: "Disk Desktop - Login"
-
-            LoginPage {
-                anchors.fill: parent
-            }
-        }
+        id: authShellComponent
+        AuthShell {}
     }
 
     Component {
         id: ownerComponent
         OwnerShell {}
-    }
-
-    Component {
-        id: registerComponent
-
-        ApplicationWindow {
-            visible: true
-            width: 1024
-            height: 768
-            title: "Disk Desktop - Register"
-
-            RegisterPage {
-                anchors.fill: parent
-            }
-        }
     }
 
     Component {

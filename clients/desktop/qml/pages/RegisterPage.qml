@@ -1,11 +1,25 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "../components/auth"
 
-Page {
+Item {
     id: root
+    objectName: "authRegisterPage"
 
     property bool isBusy: false
+
+    function resetState() {
+        usernameField.text = ""
+        emailField.text = ""
+        passwordField.text = ""
+        confirmPasswordField.text = ""
+        messageLabel.text = ""
+        messageLabel.color = theme.errorTextColor
+        root.isBusy = false
+        returnToLoginTimer.stop()
+        usernameField.forceActiveFocus()
+    }
 
     function validateUsername(username) {
         if (username.length < 4 || username.length > 32) {
@@ -40,126 +54,249 @@ Page {
         return ""
     }
 
-    ColumnLayout {
-        anchors.centerIn: parent
-        width: 360
-        spacing: 16
+    AuthTheme {
+        id: theme
+    }
 
-        Label {
-            Layout.alignment: Qt.AlignHCenter
-            text: "Create Account"
-            font.pixelSize: 24
-            font.bold: true
-        }
+    implicitWidth: registerCard.implicitWidth
+    implicitHeight: registerCard.implicitHeight
+    width: implicitWidth
+    height: implicitHeight
 
-        Label {
-            Layout.alignment: Qt.AlignHCenter
+    Component.onCompleted: resetState()
+
+    AuthCard {
+        id: registerCard
+
+        anchors.fill: parent
+        theme: theme
+        eyebrowText: "Disk desktop"
+        titleText: "Create account"
+        subtitleText: "Register first, then sign in with your new account"
+
+        ColumnLayout {
             Layout.fillWidth: true
-            text: "Register first, then sign in with your new account"
-            color: "#666"
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
-        }
+            spacing: theme.fieldSpacing
 
-        TextField {
-            id: usernameField
-            Layout.fillWidth: true
-            placeholderText: "Username"
-            maximumLength: 32
-            enabled: !root.isBusy
-            onAccepted: emailField.forceActiveFocus()
-        }
+            TextField {
+                id: usernameField
+                objectName: "authUsernameField"
+                Layout.fillWidth: true
+                implicitHeight: theme.primaryCtaHeight
+                placeholderText: "Username"
+                placeholderTextColor: theme.fieldPlaceholderColor
+                color: theme.fieldTextColor
+                maximumLength: 32
+                enabled: !root.isBusy
+                leftPadding: theme.helperSpacing
+                rightPadding: theme.helperSpacing
+                selectByMouse: true
 
-        TextField {
-            id: emailField
-            Layout.fillWidth: true
-            placeholderText: "Email"
-            inputMethodHints: Qt.ImhEmailCharactersOnly
-            enabled: !root.isBusy
-            onAccepted: passwordField.forceActiveFocus()
-        }
-
-        TextField {
-            id: passwordField
-            Layout.fillWidth: true
-            placeholderText: "Password"
-            echoMode: TextInput.Password
-            maximumLength: 64
-            enabled: !root.isBusy
-            onAccepted: confirmPasswordField.forceActiveFocus()
-        }
-
-        TextField {
-            id: confirmPasswordField
-            Layout.fillWidth: true
-            placeholderText: "Confirm password"
-            echoMode: TextInput.Password
-            maximumLength: 64
-            enabled: !root.isBusy
-            onAccepted: registerButton.clicked()
-        }
-
-        Label {
-            id: messageLabel
-            Layout.fillWidth: true
-            color: "#f44336"
-            visible: text !== ""
-            wrapMode: Text.WordWrap
-        }
-
-        Button {
-            id: registerButton
-            Layout.fillWidth: true
-            text: root.isBusy ? "Creating account..." : "Create account"
-            enabled: !root.isBusy
-            highlighted: true
-
-            onClicked: {
-                messageLabel.color = "#f44336"
-                messageLabel.text = ""
-
-                var username = usernameField.text.trim()
-                var email = emailField.text.trim()
-                var password = passwordField.text
-
-                var validationMessage = root.validateUsername(username)
-                if (validationMessage !== "") {
-                    messageLabel.text = validationMessage
-                    usernameField.forceActiveFocus()
-                    return
+                background: Rectangle {
+                    radius: theme.primaryCtaRadius
+                    color: theme.fieldBackgroundColor
+                    border.width: 1
+                    border.color: usernameField.activeFocus ? theme.fieldFocusBorderColor : theme.fieldBorderColor
                 }
 
-                validationMessage = root.validateEmail(email)
-                if (validationMessage !== "") {
-                    messageLabel.text = validationMessage
-                    emailField.forceActiveFocus()
-                    return
-                }
-
-                validationMessage = root.validatePassword(password)
-                if (validationMessage !== "") {
-                    messageLabel.text = validationMessage
-                    passwordField.forceActiveFocus()
-                    return
-                }
-
-                if (password !== confirmPasswordField.text) {
-                    messageLabel.text = "The two passwords do not match"
-                    confirmPasswordField.forceActiveFocus()
-                    return
-                }
-
-                root.isBusy = true
-                authService.Register(username, email, password)
+                onAccepted: emailField.forceActiveFocus()
             }
-        }
 
-        Button {
-            Layout.fillWidth: true
-            text: "Back to login"
-            flat: true
-            enabled: !root.isBusy
-            onClicked: shellController.navigateToLogin()
+            TextField {
+                id: emailField
+                objectName: "authEmailField"
+                Layout.fillWidth: true
+                implicitHeight: theme.primaryCtaHeight
+                placeholderText: "Email"
+                placeholderTextColor: theme.fieldPlaceholderColor
+                color: theme.fieldTextColor
+                inputMethodHints: Qt.ImhEmailCharactersOnly
+                enabled: !root.isBusy
+                leftPadding: theme.helperSpacing
+                rightPadding: theme.helperSpacing
+                selectByMouse: true
+
+                background: Rectangle {
+                    radius: theme.primaryCtaRadius
+                    color: theme.fieldBackgroundColor
+                    border.width: 1
+                    border.color: emailField.activeFocus ? theme.fieldFocusBorderColor : theme.fieldBorderColor
+                }
+
+                onAccepted: passwordField.forceActiveFocus()
+            }
+
+            TextField {
+                id: passwordField
+                objectName: "authPasswordField"
+                Layout.fillWidth: true
+                implicitHeight: theme.primaryCtaHeight
+                placeholderText: "Password"
+                placeholderTextColor: theme.fieldPlaceholderColor
+                color: theme.fieldTextColor
+                echoMode: TextInput.Password
+                maximumLength: 64
+                enabled: !root.isBusy
+                leftPadding: theme.helperSpacing
+                rightPadding: theme.helperSpacing
+                selectByMouse: true
+
+                background: Rectangle {
+                    radius: theme.primaryCtaRadius
+                    color: theme.fieldBackgroundColor
+                    border.width: 1
+                    border.color: passwordField.activeFocus ? theme.fieldFocusBorderColor : theme.fieldBorderColor
+                }
+
+                onAccepted: confirmPasswordField.forceActiveFocus()
+            }
+
+            TextField {
+                id: confirmPasswordField
+                objectName: "authConfirmPasswordField"
+                Layout.fillWidth: true
+                implicitHeight: theme.primaryCtaHeight
+                placeholderText: "Confirm password"
+                placeholderTextColor: theme.fieldPlaceholderColor
+                color: theme.fieldTextColor
+                echoMode: TextInput.Password
+                maximumLength: 64
+                enabled: !root.isBusy
+                leftPadding: theme.helperSpacing
+                rightPadding: theme.helperSpacing
+                selectByMouse: true
+
+                background: Rectangle {
+                    radius: theme.primaryCtaRadius
+                    color: theme.fieldBackgroundColor
+                    border.width: 1
+                    border.color: confirmPasswordField.activeFocus ? theme.fieldFocusBorderColor : theme.fieldBorderColor
+                }
+
+                onAccepted: registerButton.clicked()
+            }
+
+            Label {
+                id: messageLabel
+                objectName: "authErrorLabel"
+                Layout.fillWidth: true
+                color: theme.errorTextColor
+                visible: text !== ""
+                wrapMode: Text.WordWrap
+            }
+
+            Button {
+                id: registerButton
+                objectName: "authSubmitButton"
+                Layout.fillWidth: true
+                implicitHeight: theme.primaryCtaHeight
+                text: root.isBusy ? "Creating account..." : "Create account"
+                enabled: !root.isBusy
+
+                contentItem: Text {
+                    text: registerButton.text
+                    color: theme.primaryCtaTextColor
+                    font.pixelSize: 15
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    radius: theme.primaryCtaRadius
+                    border.width: theme.primaryCtaBorderWidth
+                    border.color: theme.primaryCtaEndColor
+                    opacity: registerButton.enabled ? 1.0 : 0.65
+
+                    gradient: Gradient {
+                        GradientStop {
+                            position: 0.0
+                            color: theme.primaryCtaStartColor
+                        }
+
+                        GradientStop {
+                            position: 1.0
+                            color: theme.primaryCtaEndColor
+                        }
+                    }
+                }
+
+                onClicked: {
+                    messageLabel.color = theme.errorTextColor
+                    messageLabel.text = ""
+
+                    var username = usernameField.text.trim()
+                    var email = emailField.text.trim()
+                    var password = passwordField.text
+
+                    var validationMessage = root.validateUsername(username)
+                    if (validationMessage !== "") {
+                        messageLabel.text = validationMessage
+                        usernameField.forceActiveFocus()
+                        return
+                    }
+
+                    validationMessage = root.validateEmail(email)
+                    if (validationMessage !== "") {
+                        messageLabel.text = validationMessage
+                        emailField.forceActiveFocus()
+                        return
+                    }
+
+                    validationMessage = root.validatePassword(password)
+                    if (validationMessage !== "") {
+                        messageLabel.text = validationMessage
+                        passwordField.forceActiveFocus()
+                        return
+                    }
+
+                    if (password !== confirmPasswordField.text) {
+                        messageLabel.text = "The two passwords do not match"
+                        confirmPasswordField.forceActiveFocus()
+                        return
+                    }
+
+                    root.isBusy = true
+                    authService.Register(username, email, password)
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: theme.helperSpacing
+
+                Label {
+                    Layout.fillWidth: true
+                    text: "Already registered?"
+                    color: theme.bodyTextColor
+                    font.pixelSize: 13
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                Button {
+                    id: loginModeCta
+                    objectName: "authModeSwitchCta"
+                    text: "Back to login"
+                    flat: true
+                    enabled: !root.isBusy
+
+                    contentItem: Text {
+                        text: loginModeCta.text
+                        color: theme.secondaryCtaTextColor
+                        font.pixelSize: 13
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: theme.primaryCtaRadius
+                        color: loginModeCta.down || loginModeCta.hovered ? theme.secondaryCtaHoverColor : "transparent"
+                    }
+
+                    onClicked: shellController.navigateToLogin()
+                }
+            }
         }
     }
 
@@ -168,20 +305,21 @@ Page {
 
         function onRegisterSuccess(user) {
             root.isBusy = false
-            messageLabel.color = "#2e7d32"
+            messageLabel.color = theme.successTextColor
             messageLabel.text = "Account created for " + (user.username || usernameField.text.trim()) + ". Please sign in."
             returnToLoginTimer.start()
         }
 
         function onRegisterFailure(errorCode, message) {
             root.isBusy = false
-            messageLabel.color = "#f44336"
+            messageLabel.color = theme.errorTextColor
             messageLabel.text = message || "Registration failed. Please check your input."
         }
     }
 
     Timer {
         id: returnToLoginTimer
+        objectName: "authRegisterSuccessTimer"
         interval: 1200
         repeat: false
         onTriggered: shellController.navigateToLogin()
