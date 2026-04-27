@@ -324,6 +324,146 @@ private slots:
         QCOMPARE(arguments.at(1).toInt(), 50002);
     }
 
+    void CreateFolderSendsNumericParentIdZero() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/folder/create",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.createFolder("0", "TestFolder");
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(error_spy.count(), 0);
+
+        QCOMPARE(mock_network.GetRequestBodyLog().size(), 1);
+        auto json_body = mock_network.GetRequestBodyLog().constFirst();
+
+        QJsonParseError parse_error;
+        auto doc = QJsonDocument::fromJson(json_body, &parse_error);
+        QCOMPARE(parse_error.error, QJsonParseError::NoError);
+
+        // Regression: parent_id must be a numeric integer (0), not a string ("0")
+        QCOMPARE(doc.object().value("parent_id").type(), QJsonValue::Double);
+        QCOMPARE(doc.object().value("parent_id").toInt(), 0);
+    }
+
+    void CreateFolderSendsNumericParentIdNonZero() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/folder/create",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.createFolder("42", "SubFolder");
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(error_spy.count(), 0);
+
+        QCOMPARE(mock_network.GetRequestBodyLog().size(), 1);
+        auto json_body = mock_network.GetRequestBodyLog().constFirst();
+
+        QJsonParseError parse_error;
+        auto doc = QJsonDocument::fromJson(json_body, &parse_error);
+        QCOMPARE(parse_error.error, QJsonParseError::NoError);
+
+        // Regression: parent_id must be a numeric integer (42), not a string ("42")
+        QCOMPARE(doc.object().value("parent_id").type(), QJsonValue::Double);
+        QCOMPARE(doc.object().value("parent_id").toInt(), 42);
+    }
+
+    // --- malformed / empty parentId contract tests (TDD: define desired behavior) ---
+
+    void CreateFolderRejectsMalformedParentId() {
+        // Contract: non-empty, non-numeric parentId must be rejected client-side.
+        // No HTTP request should be sent; a deterministic apiError must be emitted.
+        MockNetworkAccessManager mock_network;
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.createFolder("abc", "BadFolder");
+
+        QTRY_COMPARE(error_spy.count(), 1);
+        QCOMPARE(success_spy.count(), 0);
+
+        // Verify no network request was sent for the malformed parentId
+        QCOMPARE(mock_network.GetRequestLog().size(), 0);
+
+        auto arguments = error_spy.takeFirst();
+        QCOMPARE(arguments.at(0).toString(), QString("Invalid parentId"));
+    }
+
+    void CreateFolderMapsEmptyParentIdToRoot() {
+        // Contract: empty-string parentId is equivalent to root "0".
+        // The request must be sent with parent_id "0" and succeed normally.
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/folder/create",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.createFolder("", "RootFolder");
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(error_spy.count(), 0);
+
+        // Verify the request body contains numeric parent_id 0, not string "0"
+        QCOMPARE(mock_network.GetRequestBodyLog().size(), 1);
+        QJsonParseError parse_error;
+        auto doc = QJsonDocument::fromJson(
+            mock_network.GetRequestBodyLog().constFirst(), &parse_error
+        );
+        QCOMPARE(parse_error.error, QJsonParseError::NoError);
+        QCOMPARE(doc.object().value("parent_id").type(), QJsonValue::Double);
+        QCOMPARE(doc.object().value("parent_id").toInt(), 0);
+    }
+
     void RenameItemEmitsSuccess() {
         MockNetworkAccessManager mock_network;
         mock_network.RegisterResponse(
