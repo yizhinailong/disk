@@ -14,6 +14,8 @@ Page {
     readonly property int contentInset: 14
     readonly property int panelRadius: 10
     readonly property int innerPanelRadius: 8
+    readonly property int fileRowHeight: 56
+    readonly property int tableColumnSpacing: 12
     readonly property color pageBackgroundColor: "#f8fafb"
     readonly property color panelBackgroundColor: "#ffffff"
     readonly property color panelBorderColor: "#dfe5eb"
@@ -25,6 +27,10 @@ Page {
     readonly property color panelAccentFillColor: "#dce8f5"
     readonly property color panelAccentTextColor: "#4f6b8a"
     readonly property color panelErrorTextColor: "#f44336"
+    readonly property color tableHeaderTextColor: "#4d5c6b"
+    readonly property color tableBodyPrimaryTextColor: "#1b2a38"
+    readonly property color tableBodySecondaryTextColor: "#4d5c6b"
+    readonly property color tableBodyTertiaryTextColor: "#667585"
     readonly property int fileTypeColumnWidth: 160
     readonly property int fileSizeColumnWidth: 120
     readonly property int fileUpdatedColumnWidth: 152
@@ -410,9 +416,13 @@ Page {
         driveManager.loadBreadcrumb(currentFolderId)
     }
 
-    function openFolder(folderId) {
+    function navigateToFolder(folderId) {
         currentFolderId = folderId ? String(folderId) : "0"
         refreshCurrentFolder()
+    }
+
+    function openFolder(folderId) {
+        root.navigateToFolder(folderId)
     }
 
     ColumnLayout {
@@ -591,7 +601,8 @@ Page {
                     FolderTreePanel {
                         anchors.fill: parent
                         model: driveManager.treeModel
-                        onFolderClicked: function(folderId) { root.openFolder(folderId) }
+                        currentFolderId: root.currentFolderId
+                        onFolderClicked: function(folderId) { root.navigateToFolder(folderId) }
                     }
                 }
 
@@ -613,8 +624,9 @@ Page {
 
                             BreadcrumbBar {
                                 id: breadcrumbBar
+                                objectName: "breadcrumbBar"
                                 Layout.fillWidth: true
-                                onPathClicked: function(folderId) { root.openFolder(folderId) }
+                                onPathClicked: function(folderId) { root.navigateToFolder(folderId) }
                             }
 
                             Label {
@@ -639,49 +651,76 @@ Page {
                                 spacing: root.compactSpacing
 
                                 Rectangle {
+                                    objectName: "fileTableHeaderSurface"
                                     Layout.fillWidth: true
                                     color: root.pageBackgroundColor
                                     radius: root.innerPanelRadius
                                     border.color: root.panelBorderColor
                                     implicitHeight: fileTableHeaderRow.implicitHeight + 16
+                                    clip: true
 
                                     RowLayout {
                                         id: fileTableHeaderRow
+                                        objectName: "fileTableHeaderRow"
                                         anchors.fill: parent
                                         anchors.leftMargin: 12
                                         anchors.rightMargin: 12
-                                        spacing: 12
+                                        spacing: root.tableColumnSpacing
 
                                         Label {
+                                            objectName: "fileTableHeaderName"
                                             Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
                                             text: "Name"
-                                            color: root.panelMutedTextColor
+                                            color: root.tableHeaderTextColor
                                             font.pixelSize: 12
                                             font.bold: true
+                                            elide: Text.ElideRight
+                                            wrapMode: Text.NoWrap
+                                            maximumLineCount: 1
+                                            verticalAlignment: Text.AlignVCenter
                                         }
 
                                         Label {
+                                            objectName: "fileTableHeaderType"
                                             Layout.preferredWidth: root.fileTypeColumnWidth
+                                            Layout.minimumWidth: 0
                                             text: "Type"
-                                            color: root.panelMutedTextColor
+                                            color: root.tableHeaderTextColor
                                             font.pixelSize: 12
                                             font.bold: true
+                                            elide: Text.ElideRight
+                                            wrapMode: Text.NoWrap
+                                            maximumLineCount: 1
+                                            verticalAlignment: Text.AlignVCenter
                                         }
 
                                         Label {
+                                            objectName: "fileTableHeaderSize"
                                             Layout.preferredWidth: root.fileSizeColumnWidth
+                                            Layout.minimumWidth: 0
                                             text: "Size"
-                                            color: root.panelMutedTextColor
+                                            color: root.tableHeaderTextColor
                                             font.pixelSize: 12
                                             font.bold: true
+                                            elide: Text.ElideRight
+                                            wrapMode: Text.NoWrap
+                                            maximumLineCount: 1
+                                            verticalAlignment: Text.AlignVCenter
                                         }
 
                                         Label {
+                                            objectName: "fileTableHeaderUpdated"
                                             Layout.preferredWidth: root.fileUpdatedColumnWidth
+                                            Layout.minimumWidth: 0
                                             text: "Updated"
-                                            color: root.panelMutedTextColor
+                                            color: root.tableHeaderTextColor
                                             font.pixelSize: 12
                                             font.bold: true
+                                            elide: Text.ElideRight
+                                            wrapMode: Text.NoWrap
+                                            maximumLineCount: 1
+                                            verticalAlignment: Text.AlignVCenter
                                         }
 
                                         Item {
@@ -692,6 +731,7 @@ Page {
 
                                 ListView {
                                     id: fileListView
+                                    objectName: "fileListView"
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
                                     model: driveManager.listModel
@@ -700,9 +740,11 @@ Page {
 
                                     delegate: ItemDelegate {
                                         id: fileRowDelegate
+                                        objectName: "fileRowDelegate_" + String(model.id)
                                         width: ListView.view.width
-                                        implicitHeight: 52
+                                        implicitHeight: root.fileRowHeight
                                         highlighted: root.selectedItemId === String(model.id)
+                                        hoverEnabled: true
 
                                         onClicked: root.selectItem(model.id, model.kind, model.name)
 
@@ -718,48 +760,81 @@ Page {
                                             anchors.fill: parent
                                             anchors.leftMargin: 12
                                             anchors.rightMargin: 12
-                                            spacing: 12
+                                            spacing: root.tableColumnSpacing
 
-                                            RowLayout {
+                                            Item {
                                                 Layout.fillWidth: true
-                                                spacing: 10
+                                                Layout.minimumWidth: 0
+                                                implicitHeight: fileNameRow.implicitHeight
 
-                                                Label {
-                                                    text: model.kind === "folder" ? "📁" : "📄"
-                                                    font.pixelSize: 18
-                                                }
+                                                RowLayout {
+                                                    id: fileNameRow
+                                                    anchors.fill: parent
+                                                    spacing: 10
 
-                                                Label {
-                                                    Layout.fillWidth: true
-                                                    text: model.name
-                                                    font.pixelSize: 14
-                                                    color: root.panelStrongTextColor
-                                                    elide: Text.ElideRight
+                                                    Label {
+                                                        text: model.kind === "folder" ? "📁" : "📄"
+                                                        font.pixelSize: 18
+                                                    }
+
+                                                    Label {
+                                                        id: fileNameLabel
+                                                        objectName: "fileNameLabel_" + String(model.id)
+                                                        Layout.fillWidth: true
+                                                        Layout.minimumWidth: 0
+                                                        text: model.name
+                                                        font.pixelSize: 14
+                                                        font.weight: fileRowDelegate.highlighted ? Font.DemiBold : Font.Medium
+                                                        color: root.tableBodyPrimaryTextColor
+                                                        elide: Text.ElideRight
+                                                        wrapMode: Text.NoWrap
+                                                        maximumLineCount: 1
+                                                        verticalAlignment: Text.AlignVCenter
+                                                        ToolTip.visible: truncated && fileRowDelegate.hovered
+                                                        ToolTip.delay: 350
+                                                        ToolTip.timeout: 5000
+                                                        ToolTip.text: text
+                                                    }
                                                 }
                                             }
 
                                             Label {
+                                                objectName: "fileTypeLabel_" + String(model.id)
                                                 Layout.preferredWidth: root.fileTypeColumnWidth
+                                                Layout.minimumWidth: 0
                                                 text: root.formatItemType(model.kind, model.mimeType)
-                                                font.pixelSize: 12
-                                                color: root.panelSecondaryTextColor
+                                                font.pixelSize: 13
+                                                color: root.tableBodySecondaryTextColor
                                                 elide: Text.ElideRight
+                                                wrapMode: Text.NoWrap
+                                                maximumLineCount: 1
+                                                verticalAlignment: Text.AlignVCenter
                                             }
 
                                             Label {
+                                                objectName: "fileSizeLabel_" + String(model.id)
                                                 Layout.preferredWidth: root.fileSizeColumnWidth
+                                                Layout.minimumWidth: 0
                                                 text: root.formatItemSize(model.kind, model.size, model.itemCount)
-                                                font.pixelSize: 12
-                                                color: root.panelSecondaryTextColor
+                                                font.pixelSize: 13
+                                                color: root.tableBodySecondaryTextColor
                                                 elide: Text.ElideRight
+                                                wrapMode: Text.NoWrap
+                                                maximumLineCount: 1
+                                                verticalAlignment: Text.AlignVCenter
                                             }
 
                                             Label {
+                                                objectName: "fileUpdatedLabel_" + String(model.id)
                                                 Layout.preferredWidth: root.fileUpdatedColumnWidth
+                                                Layout.minimumWidth: 0
                                                 text: root.formatUpdatedAtText(model.updatedAt)
-                                                font.pixelSize: 12
-                                                color: root.panelTertiaryTextColor
+                                                font.pixelSize: 13
+                                                color: root.tableBodyTertiaryTextColor
                                                 elide: Text.ElideRight
+                                                wrapMode: Text.NoWrap
+                                                maximumLineCount: 1
+                                                verticalAlignment: Text.AlignVCenter
                                             }
 
                                             Button {
@@ -767,7 +842,7 @@ Page {
                                                 text: "Open"
                                                 flat: true
                                                 visible: model.kind === "folder"
-                                                onClicked: root.openFolder(model.id)
+                                                onClicked: root.navigateToFolder(model.id)
                                             }
                                         }
                                     }
