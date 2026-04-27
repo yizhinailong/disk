@@ -620,6 +620,249 @@ TestCase {
                "Name label stays single-line")
     }
 
+    function test_screenshot_helper_is_available() {
+        verify(screenshotHelper !== null,
+               "screenshotHelper context property should be injected")
+    }
+
+    function test_screenshot_capture_root_page() {
+        verify(screenshotHelper !== null, "screenshotHelper available")
+        verify(screenshotHelper.available,
+               "DESKTOP_QML_EVIDENCE_DIR must be set and valid for screenshot tests")
+
+        var page = createPage()
+        compare(page.currentFolderId, "0", "Page starts at root")
+
+        var dm = driveManager
+        dm.paginationLoaded(1, 1, 3)
+        wait(100)
+
+        var saved = screenshotHelper.saveScreenshot(page, "task-5-homepage-root.png")
+        verify(saved, "Root page screenshot saved successfully")
+    }
+
+    function test_screenshot_capture_nested_page() {
+        verify(screenshotHelper !== null, "screenshotHelper available")
+        verify(screenshotHelper.available,
+               "DESKTOP_QML_EVIDENCE_DIR must be set and valid for screenshot tests")
+
+        var page = createPage()
+        var dm = driveManager
+
+        page.navigateToFolder("10")
+
+        var breadcrumb = [
+            { id: 0, name: "Root" },
+            { id: 10, name: "Documents" }
+        ]
+        dm.breadcrumbLoaded(breadcrumb)
+        dm.paginationLoaded(1, 1, 2)
+        wait(100)
+
+        var saved = screenshotHelper.saveScreenshot(page, "task-5-homepage-nested.png")
+        verify(saved, "Nested page screenshot saved successfully")
+    }
+
+    function test_screenshot_fails_when_evidence_dir_invalid() {
+        var helper = screenshotHelper
+        verify(helper !== null, "screenshotHelper available")
+
+        if (helper.available) {
+            skip("This test validates failure when DESKTOP_QML_EVIDENCE_DIR is invalid; " +
+                 "skipped because the variable is currently valid")
+        }
+
+        var page = createPage()
+        var saved = helper.saveScreenshot(page, "should-not-exist.png")
+        verify(!saved,
+               "saveScreenshot must fail when DESKTOP_QML_EVIDENCE_DIR is missing or invalid")
+    }
+
+    // ── Homepage interaction contract (Task 2) ────────────────────────
+
+    function test_homepage_up_button_exists_at_runtime() {
+        var page = createPage()
+
+        var upBtn = findByObjectName(page, "homepageUpButton")
+        verify(upBtn !== null,
+               "homepageUpButton is present at runtime")
+    }
+
+    function test_homepage_up_button_disabled_at_root() {
+        var page = createPage()
+
+        compare(page.currentFolderId, "0", "Page starts at root")
+        verify(!page.canNavigateUp,
+               "canNavigateUp is false at root because breadcrumb has no parent")
+
+        var upBtn = findByObjectName(page, "homepageUpButton")
+        verify(upBtn !== null, "homepageUpButton found")
+        verify(!upBtn.enabled,
+               "homepageUpButton is disabled at root")
+    }
+
+    function test_homepage_up_button_enabled_in_nested_folder_with_breadcrumb_parent() {
+        var page = createPage()
+
+        var dm = driveManager
+        verify(dm !== null, "driveManager available")
+
+        page.navigateToFolder("10")
+        var breadcrumb = [
+            { id: 0, name: "Root" },
+            { id: 10, name: "Documents" }
+        ]
+        dm.breadcrumbLoaded(breadcrumb)
+        wait(50)
+
+        verify(page.canNavigateUp,
+               "canNavigateUp is true when breadcrumb has a parent entry")
+        compare(page.resolvedParentFolderId, "0",
+                "resolvedParentFolderId is the second-to-last breadcrumb entry")
+
+        var upBtn = findByObjectName(page, "homepageUpButton")
+        verify(upBtn !== null, "homepageUpButton found")
+        verify(upBtn.enabled,
+               "homepageUpButton is enabled when breadcrumb parent exists")
+    }
+
+    function test_homepage_up_button_navigates_to_breadcrumb_parent() {
+        var page = createPage()
+
+        var dm = driveManager
+        verify(dm !== null, "driveManager available")
+
+        page.navigateToFolder("20")
+        var breadcrumb = [
+            { id: 0, name: "Root" },
+            { id: 10, name: "Documents" },
+            { id: 20, name: "Projects" }
+        ]
+        dm.breadcrumbLoaded(breadcrumb)
+        wait(50)
+
+        compare(page.resolvedParentFolderId, "10",
+                "resolvedParentFolderId is Documents (second-to-last breadcrumb)")
+
+        var upBtn = findByObjectName(page, "homepageUpButton")
+        verify(upBtn !== null, "homepageUpButton found")
+        verify(upBtn.enabled, "Up button enabled in nested folder")
+
+        dm.resetCounts()
+        upBtn.clicked()
+        wait(50)
+
+        compare(page.currentFolderId, "10",
+                "Up button navigates to breadcrumb parent, not history")
+    }
+
+    function test_folder_navigator_toggle_button_exists_at_runtime() {
+        var page = createPage()
+
+        var toggleBtn = findByObjectName(page, "folderNavigatorToggleButton")
+        verify(toggleBtn !== null,
+               "folderNavigatorToggleButton is present at runtime")
+    }
+
+    function test_folder_navigator_panel_hidden_by_default() {
+        var page = createPage()
+
+        verify(!page.folderNavigatorExpanded,
+               "folderNavigatorExpanded property is false by default")
+
+        var navPanel = findByObjectName(page, "folderNavigatorPanel")
+        verify(navPanel !== null,
+               "folderNavigatorPanel element exists at runtime")
+        verify(!navPanel.visible,
+               "folderNavigatorPanel is hidden when folderNavigatorExpanded is false")
+    }
+
+    function test_folder_navigator_toggle_opens_panel() {
+        var page = createPage()
+
+        verify(!page.folderNavigatorExpanded, "Navigator starts collapsed")
+
+        var toggleBtn = findByObjectName(page, "folderNavigatorToggleButton")
+        verify(toggleBtn !== null, "Toggle button found")
+
+        toggleBtn.clicked()
+        wait(50)
+
+        verify(page.folderNavigatorExpanded,
+               "folderNavigatorExpanded is true after toggle click")
+
+        var navPanel = findByObjectName(page, "folderNavigatorPanel")
+        verify(navPanel !== null, "Navigator panel found")
+        verify(navPanel.visible,
+               "folderNavigatorPanel is visible after toggle click")
+    }
+
+    function test_folder_navigator_toggle_closes_panel() {
+        var page = createPage()
+
+        var toggleBtn = findByObjectName(page, "folderNavigatorToggleButton")
+        verify(toggleBtn !== null, "Toggle button found")
+
+        toggleBtn.clicked()
+        wait(50)
+        verify(page.folderNavigatorExpanded, "Navigator opened")
+
+        toggleBtn.clicked()
+        wait(50)
+
+        verify(!page.folderNavigatorExpanded,
+               "folderNavigatorExpanded is false after second toggle click")
+
+        var navPanel = findByObjectName(page, "folderNavigatorPanel")
+        verify(navPanel !== null, "Navigator panel found")
+        verify(!navPanel.visible,
+               "folderNavigatorPanel is hidden after second toggle click")
+    }
+
+    function test_folder_navigator_stays_open_on_nested_navigation() {
+        var page = createPage()
+
+        var toggleBtn = findByObjectName(page, "folderNavigatorToggleButton")
+        verify(toggleBtn !== null, "Toggle button found")
+
+        toggleBtn.clicked()
+        wait(50)
+        verify(page.folderNavigatorExpanded, "Navigator opened")
+
+        page.navigateToFolder("10")
+        wait(50)
+
+        verify(page.folderNavigatorExpanded,
+               "Navigating to a nested folder keeps the folder navigator open")
+
+        var navPanel = findByObjectName(page, "folderNavigatorPanel")
+        verify(navPanel !== null, "Navigator panel found")
+        verify(navPanel.visible,
+               "folderNavigatorPanel stays visible after non-root navigation")
+    }
+
+    function test_folder_navigator_hides_on_root_navigation() {
+        var page = createPage()
+
+        var toggleBtn = findByObjectName(page, "folderNavigatorToggleButton")
+        verify(toggleBtn !== null, "Toggle button found")
+
+        toggleBtn.clicked()
+        wait(50)
+        verify(page.folderNavigatorExpanded, "Navigator opened")
+
+        page.navigateToFolder("0")
+        wait(50)
+
+        verify(!page.folderNavigatorExpanded,
+               "Navigating to root collapses the folder navigator")
+
+        var navPanel = findByObjectName(page, "folderNavigatorPanel")
+        verify(navPanel !== null, "Navigator panel found")
+        verify(!navPanel.visible,
+               "folderNavigatorPanel is hidden after root navigation")
+    }
+
     function findByObjectName(item, objectName) {
         if (!item) return null
         if (item.objectName === objectName) return item
