@@ -2,6 +2,11 @@
 #include <QQmlEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QQuickItemGrabResult>
+#include <QQuickItem>
+#include <QImage>
+#include <QDir>
+#include <QStandardPaths>
 #include <qqml.h>
 
 #include "models/DriveListModel.hpp"
@@ -291,6 +296,65 @@ private:
     StubDownloadModel *m_downloadModel;
 };
 
+// ── Screenshot helper for deterministic evidence capture ──────────────────
+// Reads DESKTOP_QML_EVIDENCE_DIR from the environment.  If the variable is
+// unset or the directory does not exist, every saveScreenshot() call returns
+// false so that the QML test layer can fail deterministically.
+
+class ScreenshotHelper : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(bool available READ available CONSTANT)
+public:
+    explicit ScreenshotHelper(QObject *parent = nullptr)
+        : QObject(parent), m_valid(false) {
+        auto envDir = qEnvironmentVariable("DESKTOP_QML_EVIDENCE_DIR");
+        if (!envDir.isEmpty()) {
+            QDir candidate(envDir);
+            if (candidate.exists()) {
+                m_dir = candidate;
+                m_valid = true;
+            }
+        }
+    }
+
+    bool available() const { return m_valid; }
+
+    Q_INVOKABLE bool saveScreenshot(QQuickItem *item, const QString &filename) {
+        if (!item || !m_valid) {
+            return false;
+        }
+
+        auto grab = item->grabToImage(QSize(item->width(), item->height()));
+        if (!grab) {
+            return false;
+        }
+
+        // Block until the grab completes (offscreen rendering is synchronous).
+        QEventLoop loop;
+        QObject::connect(grab.data(), &QQuickItemGrabResult::ready, &loop, &QEventLoop::quit);
+        loop.exec();
+
+        QString path = m_dir.absoluteFilePath(filename);
+        if (!grab->image().save(path, "png")) {
+            return false;
+        }
+
+        m_savedFiles.append(path);
+        return true;
+    }
+
+    Q_INVOKABLE QStringList savedFiles() const { return m_savedFiles; }
+
+    Q_INVOKABLE QString evidenceDir() const {
+        return m_valid ? m_dir.absolutePath() : QString();
+    }
+
+private:
+    QDir m_dir;
+    bool m_valid;
+    QStringList m_savedFiles;
+};
+
 class QuickTestSetup : public QObject {
     Q_OBJECT
 public:
@@ -301,6 +365,7 @@ public:
         m_folderTreeTestHarness = new FolderTreeTestHarness(this);
         m_driveManager = new StubDriveManager(this);
         m_transferManager = new StubTransferManager(this);
+        m_screenshotHelper = new ScreenshotHelper(this);
     }
 
     Q_INVOKABLE void qmlEngineAvailable(QQmlEngine *engine) {
@@ -311,6 +376,7 @@ public:
         ctx->setContextProperty("folderTreeTestHarness", m_folderTreeTestHarness);
         ctx->setContextProperty("driveManager", m_driveManager);
         ctx->setContextProperty("transferManager", m_transferManager);
+        ctx->setContextProperty("screenshotHelper", m_screenshotHelper);
     }
 
 private:
@@ -320,6 +386,7 @@ private:
     FolderTreeTestHarness *m_folderTreeTestHarness;
     StubDriveManager *m_driveManager;
     StubTransferManager *m_transferManager;
+    ScreenshotHelper *m_screenshotHelper;
 };
 
 int main(int argc, char **argv) {

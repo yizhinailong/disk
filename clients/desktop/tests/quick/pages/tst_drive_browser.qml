@@ -352,16 +352,16 @@ TestCase {
                "Has navigateToFolder helper")
 
         var navStart = source.indexOf("function navigateToFolder(folderId)")
-        var navBody = source.substring(navStart, navStart + 200)
+        var navBody = source.substring(navStart, navStart + 280)
 
-        verify(navBody.indexOf("currentFolderId") !== -1,
-               "navigateToFolder assigns currentFolderId")
+        verify(navBody.indexOf("currentFolderId = nextFolderId") !== -1,
+                "navigateToFolder assigns currentFolderId")
         verify(navBody.indexOf("refreshCurrentFolder") !== -1,
-               "navigateToFolder calls refreshCurrentFolder")
-        verify(navBody.indexOf('String(folderId)') !== -1,
-               "navigateToFolder normalizes folderId to string")
+                "navigateToFolder calls refreshCurrentFolder")
+        verify(navBody.indexOf('var nextFolderId = folderId ? String(folderId) : "0"') !== -1,
+                "navigateToFolder normalizes folderId to string")
         verify(navBody.indexOf('"0"') !== -1,
-               "navigateToFolder falls back to root when folderId is falsy")
+                "navigateToFolder falls back to root when folderId is falsy")
     }
 
     function test_drive_browser_refreshCurrentFolder_loads_tree_list_and_breadcrumb() {
@@ -450,12 +450,12 @@ TestCase {
                "Has navigateToFolder helper")
 
         var navStart = source.indexOf("function navigateToFolder(folderId)")
-        var navBody = source.substring(navStart, navStart + 200)
+        var navBody = source.substring(navStart, navStart + 260)
 
-        verify(navBody.indexOf("currentFolderId =") !== -1,
-               "navigateToFolder assigns currentFolderId before refresh")
+        verify(navBody.indexOf("currentFolderId = nextFolderId") !== -1,
+                "navigateToFolder assigns currentFolderId before refresh")
         verify(navBody.indexOf("refreshCurrentFolder") !== -1,
-               "navigateToFolder triggers refresh after setting currentFolderId")
+                "navigateToFolder triggers refresh after setting currentFolderId")
     }
 
     function test_drive_browser_finishMutationSuccess_restores_current_path() {
@@ -539,5 +539,117 @@ TestCase {
         var openBtnBlock = source.substring(openBtnIndex, openBtnIndex + 400)
         verify(openBtnBlock.indexOf("root.navigateToFolder(model.id)") !== -1,
                "Open button navigates through navigateToFolder")
+    }
+
+    // ── Homepage interaction contract (Task 2) ────────────────────────
+
+    function test_drive_browser_has_homepage_up_button() {
+        var source = readDriveBrowserSource()
+
+        verify(source.indexOf('objectName: "homepageUpButton"') !== -1,
+               "Exposes a stable homepageUpButton hook for runtime checks")
+    }
+
+    function test_drive_browser_homepage_up_button_enabled_depends_on_canNavigateUp() {
+        var source = readDriveBrowserSource()
+
+        var upBtnIndex = source.indexOf('objectName: "homepageUpButton"')
+        verify(upBtnIndex !== -1, "Has homepageUpButton")
+
+        var upBtnBlock = source.substring(upBtnIndex, upBtnIndex + 600)
+
+        verify(upBtnBlock.indexOf("root.canNavigateUp") !== -1,
+               "homepageUpButton enabled state is bound to canNavigateUp")
+    }
+
+    function test_drive_browser_defines_canNavigateUp_from_breadcrumb() {
+        var source = readDriveBrowserSource()
+
+        verify(source.indexOf("canNavigateUp") !== -1,
+               "Defines canNavigateUp derived state")
+
+        verify(source.indexOf("resolvedParentFolderId") !== -1,
+               "Defines resolvedParentFolderId derived from breadcrumb parent")
+
+        verify(source.indexOf("breadcrumbBar.path") !== -1,
+               "canNavigateUp resolves parent from breadcrumbBar.path")
+    }
+
+    function test_drive_browser_homepage_up_button_navigates_to_resolved_parent() {
+        var source = readDriveBrowserSource()
+
+        var upBtnIndex = source.indexOf('objectName: "homepageUpButton"')
+        verify(upBtnIndex !== -1, "Has homepageUpButton")
+
+        var upBtnBlock = source.substring(upBtnIndex, upBtnIndex + 600)
+
+        verify(upBtnBlock.indexOf("root.navigateToFolder(root.resolvedParentFolderId)") !== -1,
+               "homepageUpButton click navigates to resolvedParentFolderId")
+    }
+
+    function test_drive_browser_has_folder_navigator_toggle_button() {
+        var source = readDriveBrowserSource()
+
+        verify(source.indexOf('objectName: "folderNavigatorToggleButton"') !== -1,
+               "Exposes a stable folderNavigatorToggleButton hook for runtime checks")
+    }
+
+    function test_drive_browser_folder_navigator_hidden_by_default() {
+        var source = readDriveBrowserSource()
+
+        verify(source.indexOf('objectName: "folderNavigatorPanel"') !== -1,
+               "Exposes a stable folderNavigatorPanel hook")
+
+        var panelIndex = source.indexOf('objectName: "folderNavigatorPanel"')
+        var panelBlock = source.substring(panelIndex, panelIndex + 600)
+
+        verify(panelBlock.indexOf("root.folderNavigatorExpanded") !== -1,
+               "folderNavigatorPanel visibility is bound to folderNavigatorExpanded property")
+
+        var propIndex = source.indexOf("property bool folderNavigatorExpanded: false")
+        verify(propIndex !== -1,
+               "folderNavigatorExpanded property initializes to false (hidden by default)")
+    }
+
+    function test_drive_browser_folder_navigator_toggle_flips_visibility() {
+        var source = readDriveBrowserSource()
+
+        var toggleIndex = source.indexOf('objectName: "folderNavigatorToggleButton"')
+        verify(toggleIndex !== -1, "Has folderNavigatorToggleButton")
+
+        var toggleBlock = source.substring(toggleIndex, toggleIndex + 600)
+
+        verify(toggleBlock.indexOf("!root.folderNavigatorExpanded") !== -1,
+               "folderNavigatorToggleButton toggles folderNavigatorExpanded")
+    }
+
+    function test_drive_browser_folder_navigator_resets_on_root_navigation() {
+        var source = readDriveBrowserSource()
+
+        var navStart = source.indexOf("function navigateToFolder(folderId)")
+        verify(navStart !== -1, "Has navigateToFolder helper")
+
+        var navBody = source.substring(navStart, navStart + 400)
+
+        verify(navBody.indexOf('nextFolderId === "0"') !== -1,
+               "navigateToFolder only hides the folder navigator when navigation resolves to root")
+        verify(navBody.indexOf("folderNavigatorExpanded = false") !== -1,
+               "navigateToFolder still hides the folder navigator for root navigation")
+    }
+
+    function test_drive_browser_folder_navigator_panel_has_folder_tree() {
+        var source = readDriveBrowserSource()
+
+        var panelIndex = source.indexOf('objectName: "folderNavigatorPanel"')
+        verify(panelIndex !== -1, "Has folderNavigatorPanel")
+
+        var panelBlock = source.substring(panelIndex, panelIndex + 800)
+
+        verify(panelBlock.indexOf("FolderTreePanel") !== -1,
+               "folderNavigatorPanel contains a FolderTreePanel")
+        verify(panelBlock.indexOf("model: driveManager.treeModel") !== -1,
+               "Navigator folder tree uses driveManager.treeModel")
+        verify(panelBlock.indexOf("currentFolderId: root.currentFolderId") !== -1,
+               "Navigator folder tree tracks page currentFolderId")
     }
 }

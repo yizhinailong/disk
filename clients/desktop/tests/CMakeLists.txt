@@ -121,6 +121,7 @@ target_compile_definitions(desktop-quick-tests PRIVATE
 
 target_link_libraries(desktop-quick-tests PRIVATE
     Qt6::Core
+    Qt6::Gui
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickControls2
