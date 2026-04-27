@@ -40,6 +40,22 @@ Page {
                                          && breadcrumbBar.path[breadcrumbBar.path.length - 1].name
                                          ? String(breadcrumbBar.path[breadcrumbBar.path.length - 1].name)
                                          : "My Drive"
+    readonly property bool isRootFolder: root.currentFolderId === "0"
+    readonly property string resolvedParentFolderId: {
+        var breadcrumbPath = breadcrumbBar.path
+        if (!breadcrumbPath || breadcrumbPath.length < 2) {
+            return ""
+        }
+
+        var parentEntry = breadcrumbPath[breadcrumbPath.length - 2]
+        if (parentEntry === undefined || parentEntry === null
+                || parentEntry.id === undefined || parentEntry.id === null) {
+            return ""
+        }
+
+        return String(parentEntry.id)
+    }
+    readonly property bool canNavigateUp: !root.isRootFolder && root.resolvedParentFolderId !== ""
 
     background: Rectangle {
         color: root.pageBackgroundColor
@@ -58,9 +74,10 @@ Page {
     property string downloadErrorMessage: ""
     property string pendingOwnerDownloadFileId: ""
     property string pendingOwnerDownloadFilename: ""
+    property bool folderNavigatorExpanded: false
 
     function folderScopeLabel() {
-        return currentFolderId === "0" ? "Root folder" : "Nested folder"
+        return root.isRootFolder ? "Root folder" : "Nested folder"
     }
 
     function pageStateLabel() {
@@ -417,7 +434,11 @@ Page {
     }
 
     function navigateToFolder(folderId) {
-        currentFolderId = folderId ? String(folderId) : "0"
+        var nextFolderId = folderId ? String(folderId) : "0"
+        if (nextFolderId === "0") {
+            folderNavigatorExpanded = false
+        }
+        currentFolderId = nextFolderId
         refreshCurrentFolder()
     }
 
@@ -446,6 +467,19 @@ Page {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: root.compactSpacing
+
+                    Button {
+                        objectName: "homepageUpButton"
+                        text: "Up"
+                        enabled: root.canNavigateUp
+                        onClicked: root.navigateToFolder(root.resolvedParentFolderId)
+                    }
+
+                    Button {
+                        objectName: "folderNavigatorToggleButton"
+                        text: root.folderNavigatorExpanded ? "Hide folders" : "Folders"
+                        onClicked: root.folderNavigatorExpanded = !root.folderNavigatorExpanded
+                    }
 
                     Button {
                         text: "Refresh"
@@ -586,264 +620,242 @@ Page {
 
             onRetryClicked: root.refreshCurrentFolder()
 
-            RowLayout {
+            Rectangle {
                 anchors.fill: parent
-                spacing: root.panelSpacing
+                color: root.panelBackgroundColor
+                radius: root.panelRadius
+                border.color: root.panelBorderColor
 
-                Rectangle {
-                    Layout.preferredWidth: 248
-                    Layout.fillHeight: true
-                    color: root.panelBackgroundColor
-                    radius: root.panelRadius
-                    border.color: root.panelBorderColor
-                    clip: true
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: root.contentInset
+                    spacing: 12
 
-                    FolderTreePanel {
-                        anchors.fill: parent
-                        model: driveManager.treeModel
-                        currentFolderId: root.currentFolderId
-                        onFolderClicked: function(folderId) { root.navigateToFolder(folderId) }
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    color: root.panelBackgroundColor
-                    radius: root.panelRadius
-                    border.color: root.panelBorderColor
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: root.contentInset
+                    RowLayout {
+                        Layout.fillWidth: true
                         spacing: 12
 
-                        RowLayout {
+                        BreadcrumbBar {
+                            id: breadcrumbBar
+                            objectName: "breadcrumbBar"
                             Layout.fillWidth: true
-                            spacing: 12
-
-                            BreadcrumbBar {
-                                id: breadcrumbBar
-                                objectName: "breadcrumbBar"
-                                Layout.fillWidth: true
-                                onPathClicked: function(folderId) { root.navigateToFolder(folderId) }
-                            }
-
-                            Label {
-                                text: root.selectedItemId !== ""
-                                      ? "Selected: " + root.selectedItemName
-                                      : (root.currentFolderItemCount === 1 ? "1 item" : root.currentFolderItemCount + " items")
-                                color: root.panelMutedTextColor
-                                font.pixelSize: 12
-                            }
+                            onPathClicked: function(folderId) { root.navigateToFolder(folderId) }
                         }
 
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            color: root.panelMutedFillColor
-                            radius: root.innerPanelRadius
-                            border.color: root.panelBorderColor
+                        Label {
+                            text: root.selectedItemId !== ""
+                                  ? "Selected: " + root.selectedItemName
+                                  : (root.currentFolderItemCount === 1 ? "1 item" : root.currentFolderItemCount + " items")
+                            color: root.panelMutedTextColor
+                            font.pixelSize: 12
+                        }
+                    }
 
-                            ColumnLayout {
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: root.compactSpacing
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        color: root.panelMutedFillColor
+                        radius: root.innerPanelRadius
+                        border.color: root.panelBorderColor
 
-                                Rectangle {
-                                    objectName: "fileTableHeaderSurface"
-                                    Layout.fillWidth: true
-                                    color: root.pageBackgroundColor
-                                    radius: root.innerPanelRadius
-                                    border.color: root.panelBorderColor
-                                    implicitHeight: fileTableHeaderRow.implicitHeight + 16
-                                    clip: true
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: root.compactSpacing
+
+                            Rectangle {
+                                objectName: "fileTableHeaderSurface"
+                                Layout.fillWidth: true
+                                color: root.pageBackgroundColor
+                                radius: root.innerPanelRadius
+                                border.color: root.panelBorderColor
+                                implicitHeight: fileTableHeaderRow.implicitHeight + 16
+                                clip: true
+
+                                RowLayout {
+                                    id: fileTableHeaderRow
+                                    objectName: "fileTableHeaderRow"
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 12
+                                    spacing: root.tableColumnSpacing
+
+                                    Label {
+                                        objectName: "fileTableHeaderName"
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                        text: "Name"
+                                        color: root.tableHeaderTextColor
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                        wrapMode: Text.NoWrap
+                                        maximumLineCount: 1
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+
+                                    Label {
+                                        objectName: "fileTableHeaderType"
+                                        Layout.preferredWidth: root.fileTypeColumnWidth
+                                        Layout.minimumWidth: 0
+                                        text: "Type"
+                                        color: root.tableHeaderTextColor
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                        wrapMode: Text.NoWrap
+                                        maximumLineCount: 1
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+
+                                    Label {
+                                        objectName: "fileTableHeaderSize"
+                                        Layout.preferredWidth: root.fileSizeColumnWidth
+                                        Layout.minimumWidth: 0
+                                        text: "Size"
+                                        color: root.tableHeaderTextColor
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                        wrapMode: Text.NoWrap
+                                        maximumLineCount: 1
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+
+                                    Label {
+                                        objectName: "fileTableHeaderUpdated"
+                                        Layout.preferredWidth: root.fileUpdatedColumnWidth
+                                        Layout.minimumWidth: 0
+                                        text: "Updated"
+                                        color: root.tableHeaderTextColor
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                        wrapMode: Text.NoWrap
+                                        maximumLineCount: 1
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+
+                                    Item {
+                                        Layout.preferredWidth: root.fileActionColumnWidth
+                                    }
+                                }
+                            }
+
+                            ListView {
+                                id: fileListView
+                                objectName: "fileListView"
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                model: driveManager.listModel
+                                clip: true
+                                spacing: 1
+
+                                delegate: ItemDelegate {
+                                    id: fileRowDelegate
+                                    objectName: "fileRowDelegate_" + String(model.id)
+                                    width: ListView.view.width
+                                    implicitHeight: root.fileRowHeight
+                                    highlighted: root.selectedItemId === String(model.id)
+                                    hoverEnabled: true
+
+                                    onClicked: root.selectItem(model.id, model.kind, model.name)
+
+                                    background: Rectangle {
+                                        radius: root.innerPanelRadius
+                                        color: fileRowDelegate.highlighted
+                                               ? root.panelAccentFillColor
+                                               : (fileRowDelegate.hovered ? root.panelBackgroundColor : "transparent")
+                                        border.color: fileRowDelegate.highlighted ? root.panelBorderColor : "transparent"
+                                    }
 
                                     RowLayout {
-                                        id: fileTableHeaderRow
-                                        objectName: "fileTableHeaderRow"
                                         anchors.fill: parent
                                         anchors.leftMargin: 12
                                         anchors.rightMargin: 12
                                         spacing: root.tableColumnSpacing
 
-                                        Label {
-                                            objectName: "fileTableHeaderName"
+                                        Item {
                                             Layout.fillWidth: true
                                             Layout.minimumWidth: 0
-                                            text: "Name"
-                                            color: root.tableHeaderTextColor
-                                            font.pixelSize: 12
-                                            font.bold: true
-                                            elide: Text.ElideRight
-                                            wrapMode: Text.NoWrap
-                                            maximumLineCount: 1
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
+                                            implicitHeight: fileNameRow.implicitHeight
 
-                                        Label {
-                                            objectName: "fileTableHeaderType"
-                                            Layout.preferredWidth: root.fileTypeColumnWidth
-                                            Layout.minimumWidth: 0
-                                            text: "Type"
-                                            color: root.tableHeaderTextColor
-                                            font.pixelSize: 12
-                                            font.bold: true
-                                            elide: Text.ElideRight
-                                            wrapMode: Text.NoWrap
-                                            maximumLineCount: 1
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
+                                            RowLayout {
+                                                id: fileNameRow
+                                                anchors.fill: parent
+                                                spacing: 10
 
-                                        Label {
-                                            objectName: "fileTableHeaderSize"
-                                            Layout.preferredWidth: root.fileSizeColumnWidth
-                                            Layout.minimumWidth: 0
-                                            text: "Size"
-                                            color: root.tableHeaderTextColor
-                                            font.pixelSize: 12
-                                            font.bold: true
-                                            elide: Text.ElideRight
-                                            wrapMode: Text.NoWrap
-                                            maximumLineCount: 1
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
+                                                Label {
+                                                    text: model.kind === "folder" ? "📁" : "📄"
+                                                    font.pixelSize: 18
+                                                }
 
-                                        Label {
-                                            objectName: "fileTableHeaderUpdated"
-                                            Layout.preferredWidth: root.fileUpdatedColumnWidth
-                                            Layout.minimumWidth: 0
-                                            text: "Updated"
-                                            color: root.tableHeaderTextColor
-                                            font.pixelSize: 12
-                                            font.bold: true
-                                            elide: Text.ElideRight
-                                            wrapMode: Text.NoWrap
-                                            maximumLineCount: 1
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-
-                                        Item {
-                                            Layout.preferredWidth: root.fileActionColumnWidth
-                                        }
-                                    }
-                                }
-
-                                ListView {
-                                    id: fileListView
-                                    objectName: "fileListView"
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    model: driveManager.listModel
-                                    clip: true
-                                    spacing: 1
-
-                                    delegate: ItemDelegate {
-                                        id: fileRowDelegate
-                                        objectName: "fileRowDelegate_" + String(model.id)
-                                        width: ListView.view.width
-                                        implicitHeight: root.fileRowHeight
-                                        highlighted: root.selectedItemId === String(model.id)
-                                        hoverEnabled: true
-
-                                        onClicked: root.selectItem(model.id, model.kind, model.name)
-
-                                        background: Rectangle {
-                                            radius: root.innerPanelRadius
-                                            color: fileRowDelegate.highlighted
-                                                   ? root.panelAccentFillColor
-                                                   : (fileRowDelegate.hovered ? root.panelBackgroundColor : "transparent")
-                                            border.color: fileRowDelegate.highlighted ? root.panelBorderColor : "transparent"
-                                        }
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: 12
-                                            anchors.rightMargin: 12
-                                            spacing: root.tableColumnSpacing
-
-                                            Item {
-                                                Layout.fillWidth: true
-                                                Layout.minimumWidth: 0
-                                                implicitHeight: fileNameRow.implicitHeight
-
-                                                RowLayout {
-                                                    id: fileNameRow
-                                                    anchors.fill: parent
-                                                    spacing: 10
-
-                                                    Label {
-                                                        text: model.kind === "folder" ? "📁" : "📄"
-                                                        font.pixelSize: 18
-                                                    }
-
-                                                    Label {
-                                                        id: fileNameLabel
-                                                        objectName: "fileNameLabel_" + String(model.id)
-                                                        Layout.fillWidth: true
-                                                        Layout.minimumWidth: 0
-                                                        text: model.name
-                                                        font.pixelSize: 14
-                                                        font.weight: fileRowDelegate.highlighted ? Font.DemiBold : Font.Medium
-                                                        color: root.tableBodyPrimaryTextColor
-                                                        elide: Text.ElideRight
-                                                        wrapMode: Text.NoWrap
-                                                        maximumLineCount: 1
-                                                        verticalAlignment: Text.AlignVCenter
-                                                        ToolTip.visible: truncated && fileRowDelegate.hovered
-                                                        ToolTip.delay: 350
-                                                        ToolTip.timeout: 5000
-                                                        ToolTip.text: text
-                                                    }
+                                                Label {
+                                                    id: fileNameLabel
+                                                    objectName: "fileNameLabel_" + String(model.id)
+                                                    Layout.fillWidth: true
+                                                    Layout.minimumWidth: 0
+                                                    text: model.name
+                                                    font.pixelSize: 14
+                                                    font.weight: fileRowDelegate.highlighted ? Font.DemiBold : Font.Medium
+                                                    color: root.tableBodyPrimaryTextColor
+                                                    elide: Text.ElideRight
+                                                    wrapMode: Text.NoWrap
+                                                    maximumLineCount: 1
+                                                    verticalAlignment: Text.AlignVCenter
+                                                    ToolTip.visible: truncated && fileRowDelegate.hovered
+                                                    ToolTip.delay: 350
+                                                    ToolTip.timeout: 5000
+                                                    ToolTip.text: text
                                                 }
                                             }
+                                        }
 
-                                            Label {
-                                                objectName: "fileTypeLabel_" + String(model.id)
-                                                Layout.preferredWidth: root.fileTypeColumnWidth
-                                                Layout.minimumWidth: 0
-                                                text: root.formatItemType(model.kind, model.mimeType)
-                                                font.pixelSize: 13
-                                                color: root.tableBodySecondaryTextColor
-                                                elide: Text.ElideRight
-                                                wrapMode: Text.NoWrap
-                                                maximumLineCount: 1
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
+                                        Label {
+                                            objectName: "fileTypeLabel_" + String(model.id)
+                                            Layout.preferredWidth: root.fileTypeColumnWidth
+                                            Layout.minimumWidth: 0
+                                            text: root.formatItemType(model.kind, model.mimeType)
+                                            font.pixelSize: 13
+                                            color: root.tableBodySecondaryTextColor
+                                            elide: Text.ElideRight
+                                            wrapMode: Text.NoWrap
+                                            maximumLineCount: 1
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
 
-                                            Label {
-                                                objectName: "fileSizeLabel_" + String(model.id)
-                                                Layout.preferredWidth: root.fileSizeColumnWidth
-                                                Layout.minimumWidth: 0
-                                                text: root.formatItemSize(model.kind, model.size, model.itemCount)
-                                                font.pixelSize: 13
-                                                color: root.tableBodySecondaryTextColor
-                                                elide: Text.ElideRight
-                                                wrapMode: Text.NoWrap
-                                                maximumLineCount: 1
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
+                                        Label {
+                                            objectName: "fileSizeLabel_" + String(model.id)
+                                            Layout.preferredWidth: root.fileSizeColumnWidth
+                                            Layout.minimumWidth: 0
+                                            text: root.formatItemSize(model.kind, model.size, model.itemCount)
+                                            font.pixelSize: 13
+                                            color: root.tableBodySecondaryTextColor
+                                            elide: Text.ElideRight
+                                            wrapMode: Text.NoWrap
+                                            maximumLineCount: 1
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
 
-                                            Label {
-                                                objectName: "fileUpdatedLabel_" + String(model.id)
-                                                Layout.preferredWidth: root.fileUpdatedColumnWidth
-                                                Layout.minimumWidth: 0
-                                                text: root.formatUpdatedAtText(model.updatedAt)
-                                                font.pixelSize: 13
-                                                color: root.tableBodyTertiaryTextColor
-                                                elide: Text.ElideRight
-                                                wrapMode: Text.NoWrap
-                                                maximumLineCount: 1
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
+                                        Label {
+                                            objectName: "fileUpdatedLabel_" + String(model.id)
+                                            Layout.preferredWidth: root.fileUpdatedColumnWidth
+                                            Layout.minimumWidth: 0
+                                            text: root.formatUpdatedAtText(model.updatedAt)
+                                            font.pixelSize: 13
+                                            color: root.tableBodyTertiaryTextColor
+                                            elide: Text.ElideRight
+                                            wrapMode: Text.NoWrap
+                                            maximumLineCount: 1
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
 
-                                            Button {
-                                                Layout.preferredWidth: root.fileActionColumnWidth
-                                                text: "Open"
-                                                flat: true
-                                                visible: model.kind === "folder"
-                                                onClicked: root.navigateToFolder(model.id)
-                                            }
+                                        Button {
+                                            Layout.preferredWidth: root.fileActionColumnWidth
+                                            text: "Open"
+                                            flat: true
+                                            visible: model.kind === "folder"
+                                            onClicked: root.navigateToFolder(model.id)
                                         }
                                     }
                                 }
@@ -852,6 +864,42 @@ Page {
                     }
                 }
             }
+        }
+
+    }
+
+    FolderTreePanel {
+        visible: false
+        width: 0
+        height: 0
+        model: driveManager.treeModel
+        currentFolderId: root.currentFolderId
+        onFolderClicked: function(folderId) { root.navigateToFolder(folderId) }
+    }
+
+    Popup {
+        id: folderNavigatorOverlay
+        objectName: "folderNavigatorPanel"
+        x: root.pagePadding
+        y: root.pagePadding
+        width: 248
+        height: Math.max(0, root.height - (root.pagePadding * 2))
+        visible: root.folderNavigatorExpanded
+        modal: false
+        padding: 0
+        closePolicy: Popup.NoAutoClose
+
+        background: Rectangle {
+            color: root.panelBackgroundColor
+            radius: root.panelRadius
+            border.color: root.panelBorderColor
+        }
+
+        FolderTreePanel {
+            anchors.fill: parent
+            model: driveManager.treeModel
+            currentFolderId: root.currentFolderId
+            onFolderClicked: function(folderId) { root.navigateToFolder(folderId) }
         }
     }
 
