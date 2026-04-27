@@ -146,8 +146,19 @@ namespace disk::desktop::managers {
     }
 
     void DriveManager::createFolder(const QString& parentId, const QString& name) {
+        auto trimmed = parentId.trimmed();
+        bool ok = true;
+        auto numericId = quint64(0);
+        if (!trimmed.isEmpty()) {
+            numericId = trimmed.toULongLong(&ok);
+        }
+        if (!ok) {
+            emit apiError("Invalid parentId", 0);
+            return;
+        }
+
         QJsonObject body;
-        body["parent_id"] = parentId.isEmpty() ? QString("0") : parentId;
+        body["parent_id"] = static_cast<qint64>(numericId);
         body["name"] = name;
 
         QJsonDocument doc(body);
