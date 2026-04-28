@@ -526,4 +526,31 @@ TestCase {
         verify(source.indexOf("enabled: !root.isBusy") !== -1,
                "Register submit button is disabled during busy state")
     }
+
+    // ── heroWidth / split-layout source contract ────────────────────────────
+    // AuthTheme.heroWidth must remain 461 and AuthShell must continue binding
+    // the left panel width to theme.heroWidth.  These guards prevent accidental
+    // layout drift that would shift the auth card off-center.
+
+    function test_authTheme_heroWidth_is_461() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/components/auth/AuthTheme.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "AuthTheme.qml was read")
+        verify(source.indexOf("readonly property int heroWidth: 461") !== -1,
+               "AuthTheme declares heroWidth as exactly 461")
+    }
+
+    function test_authShell_left_panel_binds_to_theme_heroWidth() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/AuthShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "AuthShell.qml was read")
+        verify(source.indexOf("Layout.preferredWidth: theme.heroWidth") !== -1,
+               "AuthShell left panel uses Layout.preferredWidth: theme.heroWidth")
+    }
 }

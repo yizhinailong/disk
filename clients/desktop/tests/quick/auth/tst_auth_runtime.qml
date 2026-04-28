@@ -411,4 +411,172 @@ TestCase {
         var regPage = findChildByName(shell, "authRegisterPage")
         verify(regPage !== null, "Found loaded RegisterPage after mode switch")
     }
+
+    // ── AuthCard geometry helpers ───────────────────────────────────────────
+
+    /**
+     * Walk the visual children of item and return the first child whose
+     * .z property equals the requested value.  Returns null if not found.
+     */
+    function _findChildByZ(item, zValue) {
+        if (!item || !item.children) return null
+        for (var i = 0; i < item.children.length; i++) {
+            var child = item.children[i]
+            if (child && child.z === zValue) return child
+        }
+        return null
+    }
+
+    /**
+     * Find the shadow rectangle inside an AuthCard instance.
+     * The shadow is the Rectangle with z === 0 inside the root Item.
+     */
+    function _findShadowSurface(authCard) {
+        return _findChildByZ(authCard, 0)
+    }
+
+    /**
+     * Find the card surface rectangle inside an AuthCard instance.
+     * The card surface is the Rectangle with z === 1 inside the root Item.
+     */
+    function _findCardSurface(authCard) {
+        return _findChildByZ(authCard, 1)
+    }
+
+    // ── AuthCard geometry assertions ────────────────────────────────────────
+
+    function test_authcard_instantiates() {
+        var card = createPage("components/auth/AuthCard.qml")
+        verify(card !== null, "AuthCard instance created")
+    }
+
+    function test_authcard_has_shadow_surface() {
+        var card = createPage("components/auth/AuthCard.qml")
+        var shadow = _findShadowSurface(card)
+        verify(shadow !== null,
+               "Found shadow surface (z===0 child) inside AuthCard")
+    }
+
+    function test_authcard_has_card_surface() {
+        var card = createPage("components/auth/AuthCard.qml")
+        var surface = _findCardSurface(card)
+        verify(surface !== null,
+               "Found card surface (z===1 child) inside AuthCard")
+    }
+
+    function test_authcard_shadow_envelope_centered_x() {
+        var card = createPage("components/auth/AuthCard.qml")
+        var shadow = _findShadowSurface(card)
+        verify(shadow !== null,
+               "Found shadow surface for x-centering check")
+
+        // Force layout pass so geometry is settled
+        wait(100)
+
+        // Root centerline
+        var rootCenterX = card.x + card.width / 2
+
+        // Shadow envelope centerline (its x + width / 2 in root's coords)
+        var shadowCenterX = shadow.x + shadow.width / 2
+
+        var deltaX = Math.abs(shadowCenterX - rootCenterX)
+        verify(deltaX <= 1,
+               "Shadow envelope horizontal centerline within 1px of root centerline"
+               + " — rootCenterX=" + rootCenterX
+               + " shadowCenterX=" + shadowCenterX
+               + " deltaX=" + deltaX)
+    }
+
+    function test_authcard_shadow_envelope_centered_y() {
+        var card = createPage("components/auth/AuthCard.qml")
+        var shadow = _findShadowSurface(card)
+        verify(shadow !== null,
+               "Found shadow surface for y-centering check")
+
+        wait(100)
+
+        var rootCenterY = card.y + card.height / 2
+        var shadowCenterY = shadow.y + shadow.height / 2
+
+        var deltaY = Math.abs(shadowCenterY - rootCenterY)
+        verify(deltaY <= 1,
+               "Shadow envelope vertical centerline within 1px of root centerline"
+               + " — rootCenterY=" + rootCenterY
+               + " shadowCenterY=" + shadowCenterY
+               + " deltaY=" + deltaY)
+    }
+
+    function test_authcard_surface_centered_x() {
+        var card = createPage("components/auth/AuthCard.qml")
+        var surface = _findCardSurface(card)
+        verify(surface !== null,
+               "Found card surface for x-centering check")
+
+        wait(100)
+
+        var rootCenterX = card.x + card.width / 2
+        var surfaceCenterX = surface.x + surface.width / 2
+
+        var deltaX = Math.abs(surfaceCenterX - rootCenterX)
+        verify(deltaX <= 1,
+               "Card surface horizontal centerline within 1px of root centerline"
+               + " — rootCenterX=" + rootCenterX
+               + " surfaceCenterX=" + surfaceCenterX
+               + " deltaX=" + deltaX)
+    }
+
+    function test_authcard_surface_centered_y() {
+        var card = createPage("components/auth/AuthCard.qml")
+        var surface = _findCardSurface(card)
+        verify(surface !== null,
+               "Found card surface for y-centering check")
+
+        wait(100)
+
+        var rootCenterY = card.y + card.height / 2
+        var surfaceCenterY = surface.y + surface.height / 2
+
+        var deltaY = Math.abs(surfaceCenterY - rootCenterY)
+        verify(deltaY <= 1,
+               "Card surface vertical centerline within 1px of root centerline"
+               + " — rootCenterY=" + rootCenterY
+               + " surfaceCenterY=" + surfaceCenterY
+               + " deltaY=" + deltaY)
+    }
+
+    // ── Shell centering contract ──────────────────────────────────────────────
+    // Login and Register pages must remain centered within their direct host
+    // container (the Item wrapper inside each Component in AuthShell.qml).
+    // Tolerance: <= 1px to account for sub-pixel rounding.
+
+    function _assertCentered(page, label) {
+        verify(page !== null, label + " found for centering check")
+        var parent = page.parent
+        verify(parent !== null, label + " has a parent container")
+        var cx = parent.width / 2
+        var cy = parent.height / 2
+        var pcx = page.x + page.width / 2
+        var pcy = page.y + page.height / 2
+        verify(Math.abs(pcx - cx) <= 1,
+               label + " horizontally centered in parent (parentCx=" + cx
+               + " pageCx=" + pcx + " delta=" + Math.abs(pcx - cx) + ")")
+        verify(Math.abs(pcy - cy) <= 1,
+               label + " vertically centered in parent (parentCy=" + cy
+               + " pageCy=" + pcy + " delta=" + Math.abs(pcy - cy) + ")")
+    }
+
+    function test_login_page_centered_in_host_container() {
+        var shell = createPage("shells/AuthShell.qml")
+        wait(200)
+        var loginPage = findChildByName(shell, "authLoginPage")
+        _assertCentered(loginPage, "LoginPage")
+    }
+
+    function test_register_page_centered_in_host_container() {
+        var shell = createPage("shells/AuthShell.qml")
+        shell.authMode = "register"
+        wait(200)
+        var regPage = findChildByName(shell, "authRegisterPage")
+        _assertCentered(regPage, "RegisterPage")
+    }
 }

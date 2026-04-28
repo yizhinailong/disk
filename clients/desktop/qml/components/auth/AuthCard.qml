@@ -4,6 +4,7 @@ import QtQuick.Layouts
 
 Item {
     id: root
+    objectName: "authCardRoot"
 
     AuthTheme {
         id: defaultTheme
@@ -14,25 +15,21 @@ Item {
     property string titleText: ""
     property string subtitleText: ""
     property int contentSpacing: theme.fieldSpacing
+    readonly property int cardShadowInsetX: theme.cardShadowSpread
+    readonly property real cardShadowInsetY: theme.cardShadowSpread + (theme.cardShadowOffsetY / 2)
 
     default property alias contentData: bodyColumn.data
 
-    implicitWidth: theme.cardWidth
-    implicitHeight: cardSurface.implicitHeight + theme.cardShadowOffsetY + theme.cardShadowSpread
+    implicitWidth: theme.cardWidth + (cardShadowInsetX * 2)
+    implicitHeight: cardSurface.implicitHeight + (cardShadowInsetY * 2)
 
     Layout.preferredWidth: implicitWidth
 
     Rectangle {
         id: shadowSurface
+        objectName: "authCardShadowSurface"
 
-        anchors.left: cardSurface.left
-        anchors.right: cardSurface.right
-        anchors.top: cardSurface.top
-        anchors.bottom: cardSurface.bottom
-        anchors.leftMargin: -theme.cardShadowSpread
-        anchors.rightMargin: -theme.cardShadowSpread
-        anchors.topMargin: theme.cardShadowOffsetY / 2
-        anchors.bottomMargin: -(theme.cardShadowOffsetY + theme.cardShadowSpread)
+        anchors.fill: parent
 
         radius: theme.cardRadius + theme.cardShadowSpread
         color: theme.cardShadowColor
@@ -41,10 +38,11 @@ Item {
 
     Rectangle {
         id: cardSurface
+        objectName: "authCardSurface"
 
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
+        anchors.centerIn: parent
+        width: theme.cardWidth
+        height: implicitHeight
 
         implicitHeight: contentLayout.implicitHeight + (theme.contentVerticalPadding * 2)
 
