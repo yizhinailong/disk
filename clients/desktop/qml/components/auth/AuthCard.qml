@@ -15,26 +15,12 @@ Item {
     property string titleText: ""
     property string subtitleText: ""
     property int contentSpacing: theme.fieldSpacing
-    readonly property int cardShadowInsetX: theme.cardShadowSpread
-    readonly property real cardShadowInsetY: theme.cardShadowSpread + (theme.cardShadowOffsetY / 2)
-
     default property alias contentData: bodyColumn.data
 
-    implicitWidth: theme.cardWidth + (cardShadowInsetX * 2)
-    implicitHeight: cardSurface.implicitHeight + (cardShadowInsetY * 2)
+    implicitWidth: theme.cardWidth
+    implicitHeight: cardSurface.implicitHeight
 
     Layout.preferredWidth: implicitWidth
-
-    Rectangle {
-        id: shadowSurface
-        objectName: "authCardShadowSurface"
-
-        anchors.fill: parent
-
-        radius: theme.cardRadius + theme.cardShadowSpread
-        color: theme.cardShadowColor
-        z: 0
-    }
 
     Rectangle {
         id: cardSurface

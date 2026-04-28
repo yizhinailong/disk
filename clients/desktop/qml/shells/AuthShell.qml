@@ -60,26 +60,6 @@ ApplicationWindow {
                 }
             }
 
-            Rectangle {
-                width: theme.heroWidth * 0.72
-                height: width
-                radius: width / 2
-                x: -theme.contentHorizontalPadding
-                y: parent.height - height * 0.64
-                color: theme.heroAccentColor
-                opacity: 0.36
-            }
-
-            Rectangle {
-                width: theme.heroWidth * 0.38
-                height: width
-                radius: width / 2
-                x: parent.width - width * 0.74
-                y: theme.contentVerticalPadding
-                color: theme.cardBackgroundColor
-                opacity: 0.54
-            }
-
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: theme.contentHorizontalPadding

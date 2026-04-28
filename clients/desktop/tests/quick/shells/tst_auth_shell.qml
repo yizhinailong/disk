@@ -553,4 +553,102 @@ TestCase {
         verify(source.indexOf("Layout.preferredWidth: theme.heroWidth") !== -1,
                "AuthShell left panel uses Layout.preferredWidth: theme.heroWidth")
     }
+
+    // ── Hero gradient token preservation ────────────────────────────────────
+    // The hero panel must use the theme gradient tokens (heroGradientStartColor,
+    // heroGradientEndColor) for its background.  These guards ensure the gradient
+    // is never accidentally replaced with a flat colour or removed entirely.
+
+    function test_authShell_hero_uses_gradientStartColor() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/AuthShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "AuthShell.qml was read")
+        verify(source.indexOf("theme.heroGradientStartColor") !== -1,
+               "AuthShell hero gradient references heroGradientStartColor token")
+    }
+
+    function test_authShell_hero_uses_gradientEndColor() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/AuthShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "AuthShell.qml was read")
+        verify(source.indexOf("theme.heroGradientEndColor") !== -1,
+               "AuthShell hero gradient references heroGradientEndColor token")
+    }
+
+    function test_authShell_hero_gradient_has_two_stops() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/AuthShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "AuthShell.qml was read")
+        verify(source.indexOf("gradient: Gradient") !== -1,
+               "AuthShell hero panel declares a Gradient element")
+        var stops = source.match(/GradientStop\s*\{/g)
+        verify(stops !== null && stops.length === 2,
+               "AuthShell hero gradient has exactly two GradientStop entries")
+    }
+
+    // ── Decorative overlay absence ──────────────────────────────────────────
+    // The hero panel must NOT contain decorative overlay rectangles/circles.
+    // These were the overlapping shapes (heroAccentColor circle at ~0.72x width,
+    // cardBackgroundColor circle at ~0.38x width) that cluttered the hero area.
+    // Source-contract tests below ensure they stay removed.
+
+    function test_authShell_hero_has_no_heroAccentColor_overlay() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/AuthShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "AuthShell.qml was read")
+        // heroAccentColor was used exclusively by the large decorative circle
+        verify(source.indexOf("heroAccentColor") === -1,
+               "AuthShell has no heroAccentColor overlay rectangle")
+    }
+
+    function test_authShell_hero_has_no_cardBackgroundColor_overlay_circle() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/AuthShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "AuthShell.qml was read")
+        // The small decorative circle used cardBackgroundColor with opacity
+        // inside the hero Rectangle. After cleanup, the only cardBackgroundColor
+        // reference should be in the card/form area — not inside a circle child.
+        // We check for the specific pattern: Rectangle with radius: width/2
+        // which indicates a circle shape.
+        var circlePattern = /Rectangle\s*\{[^}]*radius:\s*width\s*\/\s*2/
+        verify(!circlePattern.test(source),
+               "AuthShell has no circle-shaped decorative overlay rectangles")
+    }
+
+    function test_authShell_hero_has_no_overlay_opacity_shapes() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/AuthShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "AuthShell.qml was read")
+        // The decorative overlays used fractional opacity (0.36, 0.54).
+        // Any Rectangle inside the hero that sets opacity < 1.0 is a decorative overlay.
+        // Extract the hero panel section and verify no Rectangle children with opacity.
+        var heroStart = source.indexOf("gradient: Gradient")
+        verify(heroStart !== -1, "Found hero gradient section")
+        // Find the ColumnLayout that holds the text content — anything between
+        // gradient and ColumnLayout should be clean of decorative Rectangles.
+        var colStart = source.indexOf("ColumnLayout", heroStart)
+        verify(colStart !== -1, "Found hero ColumnLayout section")
+        var heroBody = source.substring(heroStart, colStart)
+        var overlayRects = heroBody.match(/Rectangle\s*\{/g)
+        verify(overlayRects === null,
+               "No Rectangle overlays between gradient and ColumnLayout in hero panel")
+    }
 }

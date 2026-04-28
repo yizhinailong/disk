@@ -6,13 +6,11 @@ QtObject {
     readonly property color pageBackgroundColor: "#f6f4ef"
     readonly property color heroGradientStartColor: "#dfe9ff"
     readonly property color heroGradientEndColor: "#f1ebff"
-    readonly property color heroAccentColor: "#c6d9ff"
     readonly property color heroTextColor: "#153153"
     readonly property color heroMutedTextColor: "#5d7087"
 
     readonly property color cardBackgroundColor: "#ffffff"
     readonly property color cardBorderColor: "#dce4f0"
-    readonly property color cardShadowColor: Qt.rgba(0.09, 0.20, 0.35, 0.10)
     readonly property color cardAccentStartColor: "#7fb8ff"
     readonly property color cardAccentEndColor: "#99a8ff"
 
@@ -36,9 +34,6 @@ QtObject {
     readonly property int cardWidth: 400
     readonly property int cardRadius: 24
     readonly property int cardAccentHeight: 6
-    readonly property int cardShadowSpread: 12
-    readonly property int cardShadowOffsetY: 20
-
     readonly property int pageOuterPadding: 32
     readonly property int panelGap: 40
     readonly property int contentHorizontalPadding: 40

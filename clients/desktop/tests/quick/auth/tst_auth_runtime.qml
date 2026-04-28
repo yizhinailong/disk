@@ -415,32 +415,23 @@ TestCase {
     // ── AuthCard geometry helpers ───────────────────────────────────────────
 
     /**
-     * Walk the visual children of item and return the first child whose
-     * .z property equals the requested value.  Returns null if not found.
-     */
-    function _findChildByZ(item, zValue) {
-        if (!item || !item.children) return null
-        for (var i = 0; i < item.children.length; i++) {
-            var child = item.children[i]
-            if (child && child.z === zValue) return child
-        }
-        return null
-    }
-
-    /**
-     * Find the shadow rectangle inside an AuthCard instance.
-     * The shadow is the Rectangle with z === 0 inside the root Item.
-     */
-    function _findShadowSurface(authCard) {
-        return _findChildByZ(authCard, 0)
-    }
-
-    /**
      * Find the card surface rectangle inside an AuthCard instance.
-     * The card surface is the Rectangle with z === 1 inside the root Item.
+     * The card surface is identified by its objectName "authCardSurface".
      */
     function _findCardSurface(authCard) {
-        return _findChildByZ(authCard, 1)
+        return findChildByName(authCard, "authCardSurface")
+    }
+
+    /**
+     * Read AuthCard.qml source via synchronous XHR.
+     * Uses the same Qt.resolvedUrl path pattern proven in other quick tests.
+     */
+    function readAuthCardSource() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/components/auth/AuthCard.qml"), false)
+        xhr.send()
+        verify(xhr.responseText.length > 0, "AuthCard.qml was read")
+        return xhr.responseText
     }
 
     // ── AuthCard geometry assertions ────────────────────────────────────────
@@ -450,60 +441,52 @@ TestCase {
         verify(card !== null, "AuthCard instance created")
     }
 
-    function test_authcard_has_shadow_surface() {
+    function test_authcard_no_shadow_surface() {
         var card = createPage("components/auth/AuthCard.qml")
-        var shadow = _findShadowSurface(card)
-        verify(shadow !== null,
-               "Found shadow surface (z===0 child) inside AuthCard")
+        var shadow = findChildByName(card, "authCardShadowSurface")
+        verify(shadow === null,
+               "AuthCard must not contain a shadow surface (authCardShadowSurface)")
     }
 
     function test_authcard_has_card_surface() {
         var card = createPage("components/auth/AuthCard.qml")
         var surface = _findCardSurface(card)
         verify(surface !== null,
-               "Found card surface (z===1 child) inside AuthCard")
+               "Found card surface (authCardSurface) inside AuthCard")
     }
 
-    function test_authcard_shadow_envelope_centered_x() {
-        var card = createPage("components/auth/AuthCard.qml")
-        var shadow = _findShadowSurface(card)
-        verify(shadow !== null,
-               "Found shadow surface for x-centering check")
+    function test_authcard_has_accent_bar() {
+        var source = readAuthCardSource()
 
-        // Force layout pass so geometry is settled
-        wait(100)
+        // The accent bar is a Rectangle inside cardSurface, anchored to the top,
+        // with a gradient referencing theme accent colors and a themed height.
+        verify(source.indexOf("anchors.top: parent.top") !== -1,
+               "AuthCard has a child anchored to parent top (accent bar position)")
+        verify(source.indexOf("cardAccentHeight") !== -1,
+               "AuthCard references cardAccentHeight for accent bar sizing")
+        verify(source.indexOf("gradient:") !== -1,
+               "AuthCard has a gradient element (accent bar fill)")
+        verify(source.indexOf("cardAccentStartColor") !== -1,
+               "Accent bar gradient references cardAccentStartColor theme token")
+        verify(source.indexOf("cardAccentEndColor") !== -1,
+               "Accent bar gradient references cardAccentEndColor theme token")
 
-        // Root centerline
-        var rootCenterX = card.x + card.width / 2
+        // Structural guard: the accent bar sits inside cardSurface (between
+        // cardSurface's opening and the contentLayout ColumnLayout).  Extract
+        // the cardSurface block to verify these tokens co-occur inside it.
+        var cardSurfaceStart = source.indexOf('objectName: "authCardSurface"')
+        verify(cardSurfaceStart !== -1, "Found cardSurface objectName in source")
 
-        // Shadow envelope centerline (its x + width / 2 in root's coords)
-        var shadowCenterX = shadow.x + shadow.width / 2
+        var contentLayoutIdx = source.indexOf("id: contentLayout")
+        verify(contentLayoutIdx !== -1, "Found contentLayout id in source")
+        verify(contentLayoutIdx > cardSurfaceStart,
+               "contentLayout appears after cardSurface declaration")
 
-        var deltaX = Math.abs(shadowCenterX - rootCenterX)
-        verify(deltaX <= 1,
-               "Shadow envelope horizontal centerline within 1px of root centerline"
-               + " — rootCenterX=" + rootCenterX
-               + " shadowCenterX=" + shadowCenterX
-               + " deltaX=" + deltaX)
-    }
-
-    function test_authcard_shadow_envelope_centered_y() {
-        var card = createPage("components/auth/AuthCard.qml")
-        var shadow = _findShadowSurface(card)
-        verify(shadow !== null,
-               "Found shadow surface for y-centering check")
-
-        wait(100)
-
-        var rootCenterY = card.y + card.height / 2
-        var shadowCenterY = shadow.y + shadow.height / 2
-
-        var deltaY = Math.abs(shadowCenterY - rootCenterY)
-        verify(deltaY <= 1,
-               "Shadow envelope vertical centerline within 1px of root centerline"
-               + " — rootCenterY=" + rootCenterY
-               + " shadowCenterY=" + shadowCenterY
-               + " deltaY=" + deltaY)
+        var betweenSurfaceAndLayout = source.substring(cardSurfaceStart, contentLayoutIdx)
+        verify(betweenSurfaceAndLayout.indexOf("anchors.top: parent.top") !== -1,
+               "Top-anchored Rectangle sits inside cardSurface before contentLayout")
+        verify(betweenSurfaceAndLayout.indexOf("gradient:") !== -1,
+               "Gradient sits inside cardSurface before contentLayout")
     }
 
     function test_authcard_surface_centered_x() {
