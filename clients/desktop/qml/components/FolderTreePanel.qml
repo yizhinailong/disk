@@ -9,24 +9,26 @@ Item {
     property var model: null
     property string currentFolderId: ""
 
-    readonly property int panelPadding: 12
+    WorkspaceTheme { id: theme }
+
+    readonly property int panelPadding: theme.panelInset
     readonly property int rowHeight: 38
-    readonly property int rowRadius: 8
+    readonly property int rowRadius: theme.innerPanelRadius
     readonly property int rowSpacing: 2
     readonly property int rowIndentation: 18
     readonly property int disclosureWidth: 18
-    readonly property int disclosureSpacing: 8
+    readonly property int disclosureSpacing: theme.compactSpacing
     readonly property int rowHorizontalPadding: 10
-    readonly property color titleTextColor: "#182532"
-    readonly property color idleTextColor: "#243240"
-    readonly property color mutedTextColor: "#526170"
-    readonly property color ancestorTextColor: "#3f5b77"
-    readonly property color hoverRowColor: "#f3f5f7"
+    readonly property color titleTextColor: theme.strongTextColor
+    readonly property color idleTextColor: theme.strongTextColor
+    readonly property color mutedTextColor: theme.mutedTextColor
+    readonly property color ancestorTextColor: theme.accentTextColor
+    readonly property color hoverRowColor: theme.panelMutedFillColor
     readonly property color currentRowColor: "#eef4fb"
     readonly property color currentRowBorderColor: "#c7d6e6"
-    readonly property color activeRowColor: "#dce8f5"
+    readonly property color activeRowColor: theme.accentFillColor
     readonly property color activeRowBorderColor: "#9fb8d3"
-    readonly property color activeTextColor: "#25496e"
+    readonly property color activeTextColor: theme.accentTextColor
     readonly property color ancestorMarkerColor: "#c9d9ea"
 
     signal folderClicked(string folderId)
@@ -122,7 +124,7 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: root.panelPadding
-        spacing: 12
+        spacing: theme.panelSpacing
 
         Label {
             text: "Folders"

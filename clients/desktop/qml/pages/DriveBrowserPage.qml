@@ -3,46 +3,53 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Qt.labs.platform as Platform
 import "../components"
+import "../components/drive"
+import "../components/FormatUtils.js" as FormatUtils
 
 Page {
     id: root
 
-    readonly property int pagePadding: 16
-    readonly property int compactSpacing: 8
-    readonly property int panelSpacing: 12
-    readonly property int panelInset: 12
-    readonly property int contentInset: 14
-    readonly property int panelRadius: 10
-    readonly property int innerPanelRadius: 8
-    readonly property int fileRowHeight: 56
-    readonly property int tableColumnSpacing: 12
-    readonly property color pageBackgroundColor: "#f8fafb"
-    readonly property color panelBackgroundColor: "#ffffff"
-    readonly property color panelBorderColor: "#dfe5eb"
-    readonly property color panelMutedFillColor: "#f3f5f7"
-    readonly property color panelMutedTextColor: "#5f6b76"
-    readonly property color panelSecondaryTextColor: "#666666"
-    readonly property color panelTertiaryTextColor: "#888888"
-    readonly property color panelStrongTextColor: "#1f2933"
-    readonly property color panelAccentFillColor: "#dce8f5"
-    readonly property color panelAccentTextColor: "#4f6b8a"
-    readonly property color panelErrorTextColor: "#f44336"
-    readonly property color tableHeaderTextColor: "#4d5c6b"
-    readonly property color tableBodyPrimaryTextColor: "#1b2a38"
-    readonly property color tableBodySecondaryTextColor: "#4d5c6b"
-    readonly property color tableBodyTertiaryTextColor: "#667585"
-    readonly property int fileTypeColumnWidth: 160
-    readonly property int fileSizeColumnWidth: 120
-    readonly property int fileUpdatedColumnWidth: 152
-    readonly property int fileActionColumnWidth: 76
+    WorkspaceTheme { id: workspaceTheme }
+
+    readonly property int pagePadding: workspaceTheme.pagePadding
+    readonly property int compactSpacing: workspaceTheme.compactSpacing
+    readonly property int panelSpacing: workspaceTheme.panelSpacing
+    readonly property int panelInset: workspaceTheme.panelInset
+    readonly property int contentInset: workspaceTheme.contentInset
+    readonly property int panelRadius: workspaceTheme.panelRadius
+    readonly property int innerPanelRadius: workspaceTheme.innerPanelRadius
+    readonly property int fileRowHeight: workspaceTheme.fileRowHeight
+    readonly property int tableColumnSpacing: workspaceTheme.tableColumnSpacing
+    readonly property color pageBackgroundColor: workspaceTheme.pageBackgroundColor
+    readonly property color panelBackgroundColor: workspaceTheme.panelBackgroundColor
+    readonly property color panelBorderColor: workspaceTheme.panelBorderColor
+    readonly property color panelMutedFillColor: workspaceTheme.panelMutedFillColor
+    readonly property color panelMutedTextColor: workspaceTheme.mutedTextColor
+    readonly property color panelSecondaryTextColor: workspaceTheme.secondaryTextColor
+    readonly property color panelTertiaryTextColor: workspaceTheme.tertiaryTextColor
+    readonly property color panelStrongTextColor: workspaceTheme.strongTextColor
+    readonly property color panelAccentFillColor: workspaceTheme.accentFillColor
+    readonly property color panelAccentTextColor: workspaceTheme.accentTextColor
+    readonly property color panelErrorTextColor: workspaceTheme.errorTextColor
+    readonly property color panelSuccessTextColor: workspaceTheme.successTextColor
+    readonly property color tableHeaderTextColor: workspaceTheme.tableHeaderTextColor
+    readonly property color tableBodyPrimaryTextColor: workspaceTheme.tableBodyPrimaryTextColor
+    readonly property color tableBodySecondaryTextColor: workspaceTheme.tableBodySecondaryTextColor
+    readonly property color tableBodyTertiaryTextColor: workspaceTheme.tableBodyTertiaryTextColor
+    readonly property int fileTypeColumnWidth: workspaceTheme.fileTypeColumnWidth
+    readonly property int fileSizeColumnWidth: workspaceTheme.fileSizeColumnWidth
+    readonly property int fileUpdatedColumnWidth: workspaceTheme.fileUpdatedColumnWidth
+    readonly property int fileActionColumnWidth: workspaceTheme.fileActionColumnWidth
     readonly property int currentFolderItemCount: driveManager.listModel ? driveManager.listModel.rowCount() : 0
-    readonly property string driveTitle: breadcrumbBar.path.length > 0
-                                         && breadcrumbBar.path[breadcrumbBar.path.length - 1].name
-                                         ? String(breadcrumbBar.path[breadcrumbBar.path.length - 1].name)
+    readonly property int currentShareItemCount: shareManager.listModel ? shareManager.listModel.rowCount() : 0
+    readonly property int currentTrashItemCount: trashManager.listModel ? trashManager.listModel.rowCount() : 0
+    readonly property string driveTitle: root.breadcrumbPath.length > 0
+                                         && root.breadcrumbPath[root.breadcrumbPath.length - 1].name
+                                         ? String(root.breadcrumbPath[root.breadcrumbPath.length - 1].name)
                                          : "My Drive"
     readonly property bool isRootFolder: root.currentFolderId === "0"
     readonly property string resolvedParentFolderId: {
-        var breadcrumbPath = breadcrumbBar.path
+        var breadcrumbPath = root.breadcrumbPath
         if (!breadcrumbPath || breadcrumbPath.length < 2) {
             return ""
         }
@@ -65,16 +72,84 @@ Page {
     property string selectedItemId: ""
     property string selectedItemKind: ""
     property string selectedItemName: ""
+    property var selectedShareIds: []
+    property var selectedTrashIds: []
+    property string currentShareId: ""
     property bool mutationInFlight: false
     property string pendingMutationAction: ""
+    property bool shareMutationInFlight: false
+    property string pendingShareMutationAction: ""
     property string createFolderErrorMessage: ""
     property string renameErrorMessage: ""
     property string deleteErrorMessage: ""
+    property string createShareErrorMessage: ""
+    property string editShareErrorMessage: ""
     property string uploadErrorMessage: ""
     property string downloadErrorMessage: ""
     property string pendingOwnerDownloadFileId: ""
     property string pendingOwnerDownloadFilename: ""
     property bool folderNavigatorExpanded: false
+    property string currentViewMode: "myfiles"
+    property var breadcrumbPath: []
+    readonly property bool isMyFilesMode: root.currentViewMode === "myfiles"
+    readonly property bool isSharedMode: root.currentViewMode === "shared"
+    readonly property bool isTrashMode: root.currentViewMode === "trash"
+    readonly property bool isRecentMode: root.currentViewMode === "recent"
+    readonly property bool isFavoritesMode: root.currentViewMode === "favorites"
+    property var selectedItemIds: []
+    property string searchQuery: ""
+    property string currentSort: "name_asc"
+    property string currentViewLayout: "list"
+    property string toastMessage: ""
+    property bool toastVisible: false
+    readonly property bool isSearchActive: root.searchQuery !== ""
+    readonly property bool hasMultiSelection: root.selectedItemIds.length > 1
+
+    function viewModeLabel() {
+        switch (root.currentViewMode) {
+        case "shared": return "SHARES"
+        case "trash": return "TRASH"
+        case "recent": return "RECENT"
+        case "favorites": return "FAVORITES"
+        default: return "DRIVE"
+        }
+    }
+
+    function viewModeTitleText() {
+        if (root.isMyFilesMode) {
+            return root.driveTitle
+        }
+        switch (root.currentViewMode) {
+        case "shared": return "Shares"
+        case "trash": return "Trash"
+        case "recent": return "Recent"
+        case "favorites": return "Favorites"
+        default: return "My Drive"
+        }
+    }
+
+    function viewModeStatusText() {
+        if (root.isMyFilesMode) {
+            return root.driveStatusSummary()
+        }
+        if (root.isSharedMode) {
+            return root.sharedStatusSummary()
+        }
+        switch (root.currentViewMode) {
+        case "trash": return root.trashStatusSummary()
+        case "recent": return "Recently accessed files. Coming soon."
+        case "favorites": return "Bookmarked items. Coming soon."
+        default: return ""
+        }
+    }
+
+    function seamDescription() {
+        switch (root.currentViewMode) {
+        case "recent": return "This feature is not yet available."
+        case "favorites": return "This feature is not yet available."
+        default: return ""
+        }
+    }
 
     function folderScopeLabel() {
         return root.isRootFolder ? "Root folder" : "Nested folder"
@@ -112,16 +187,220 @@ Page {
                : currentFolderItemCount + " items in this folder"
     }
 
+    function sharedStatusSummary() {
+        if (shellController.pageState === "loading") {
+            return "Refreshing your shared links and access controls."
+        }
+        if (shellController.pageState === "error") {
+            return "We could not load your shares. Retry to restore the shared view."
+        }
+        if (shellController.pageState === "batchResult") {
+            return shareManager.batchResultModel.successCount + " of "
+                   + shareManager.batchResultModel.totalCount + " share updates succeeded."
+        }
+        if (shellController.pageState === "empty") {
+            return "You have not created any shares yet."
+        }
+        if (root.selectedShareIds.length > 0) {
+            return root.selectedShareIds.length === 1
+                   ? "1 share selected"
+                   : root.selectedShareIds.length + " shares selected"
+        }
+
+        return root.currentShareItemCount === 1
+               ? "1 share available"
+               : root.currentShareItemCount + " shares available"
+    }
+
+    function shareBatchResultTitle() {
+        return "Batch Cancel Results"
+    }
+
+    function trashStatusSummary() {
+        if (shellController.pageState === "loading") {
+            return "Refreshing deleted items and trash actions."
+        }
+        if (shellController.pageState === "error") {
+            return "We could not load the trash view. Retry to restore deleted items."
+        }
+        if (shellController.pageState === "batchResult") {
+            var actionLabel = trashManager.batchResultModel.operation === "trash_restore"
+                              ? "restore"
+                              : "delete"
+            return trashManager.batchResultModel.successCount + " of "
+                   + trashManager.batchResultModel.totalCount + " trash " + actionLabel + " actions succeeded."
+        }
+        if (shellController.pageState === "empty") {
+            return "Trash is empty."
+        }
+        if (root.selectedTrashIds.length > 0) {
+            return root.selectedTrashIds.length === 1
+                   ? "1 trash item selected"
+                   : root.selectedTrashIds.length + " trash items selected"
+        }
+
+        return root.currentTrashItemCount === 1
+               ? "1 item in trash"
+               : root.currentTrashItemCount + " items in trash"
+    }
+
+    function trashBatchResultTitle() {
+        return trashManager.batchResultModel.operation === "trash_restore"
+               ? "Restore Results"
+               : "Delete Results"
+    }
+
+    function shareBatchResultSummaryColor(failureCount) {
+        return failureCount > 0 ? root.panelErrorTextColor : root.panelMutedTextColor
+    }
+
+    function formatSharePermission(permission) {
+        return permission === "view" ? "View only" : "View and download"
+    }
+
+    function formatShareStatus(status) {
+        switch (String(status || "active")) {
+        case "expired":
+            return "Expired"
+        case "cancelled":
+            return "Cancelled"
+        default:
+            return "Active"
+        }
+    }
+
+    function shareStatusColor(status) {
+        switch (String(status || "active")) {
+        case "expired":
+            return root.panelErrorTextColor
+        case "cancelled":
+            return root.panelTertiaryTextColor
+        default:
+            return root.panelSuccessTextColor
+        }
+    }
+
+    function formatShareDateTime(value, fallbackText) {
+        if (value === undefined || value === null || value === "") {
+            return fallbackText
+        }
+
+        var formattedValue = Qt.formatDateTime(value, "yyyy-MM-dd hh:mm")
+        return formattedValue !== "" ? formattedValue : String(value)
+    }
+
+    function isShareSelected(shareId) {
+        return root.selectedShareIds.indexOf(String(shareId || "")) >= 0
+    }
+
     function clearSelection() {
         selectedItemId = ""
         selectedItemKind = ""
         selectedItemName = ""
+        root.selectedItemIds = []
+    }
+
+    function clearSharedSelection() {
+        root.selectedShareIds = []
+    }
+
+    function clearTrashSelection() {
+        root.selectedTrashIds = []
     }
 
     function selectItem(itemId, itemKind, itemName) {
         selectedItemId = String(itemId)
         selectedItemKind = String(itemKind || "")
         selectedItemName = String(itemName || "")
+        root.selectedItemIds = [String(itemId)]
+    }
+
+    function isItemSelected(itemId) {
+        return root.selectedItemIds.indexOf(String(itemId || "")) >= 0
+    }
+
+    function toggleItemSelection(itemId, itemKind, itemName) {
+        var id = String(itemId || "")
+        var copy = root.selectedItemIds.slice()
+        var index = copy.indexOf(id)
+        if (index >= 0) {
+            copy.splice(index, 1)
+            root.selectedItemIds = copy
+            if (copy.length > 0) {
+                root.selectedItemId = copy[copy.length - 1]
+            } else {
+                root.selectedItemId = ""
+                root.selectedItemKind = ""
+                root.selectedItemName = ""
+            }
+        } else {
+            copy.push(id)
+            root.selectedItemIds = copy
+            root.selectedItemId = id
+            root.selectedItemKind = String(itemKind || "")
+            root.selectedItemName = String(itemName || "")
+        }
+    }
+
+    function submitSearch() {
+        if (root.searchQuery === "") {
+            root.refreshCurrentFolder()
+            return
+        }
+        root.refreshCurrentFolder()
+    }
+
+    function clearSearch() {
+        root.searchQuery = ""
+        root.refreshCurrentFolder()
+    }
+
+    function applySort(sortKey) {
+        root.currentSort = String(sortKey || "name_asc")
+        root.refreshCurrentFolder()
+    }
+
+    function toggleViewLayout() {
+        root.currentViewLayout = root.currentViewLayout === "list" ? "grid" : "list"
+    }
+
+    function showToast(message) {
+        root.toastMessage = String(message || "")
+        root.toastVisible = true
+        toastDismissTimer.restart()
+    }
+
+    function hideToast() {
+        root.toastVisible = false
+        root.toastMessage = ""
+    }
+
+    function toggleShareSelection(shareId) {
+        var shareIdValue = String(shareId || "")
+        var copy = root.selectedShareIds.slice()
+        var index = copy.indexOf(shareIdValue)
+        if (index >= 0) {
+            copy.splice(index, 1)
+        } else {
+            copy.push(shareIdValue)
+        }
+        root.selectedShareIds = copy
+    }
+
+    function isTrashSelected(trashId) {
+        return root.selectedTrashIds.indexOf(String(trashId || "")) >= 0
+    }
+
+    function toggleTrashSelection(trashId) {
+        var trashIdValue = String(trashId || "")
+        var copy = root.selectedTrashIds.slice()
+        var index = copy.indexOf(trashIdValue)
+        if (index >= 0) {
+            copy.splice(index, 1)
+        } else {
+            copy.push(trashIdValue)
+        }
+        root.selectedTrashIds = copy
     }
 
     function clearMutationErrors() {
@@ -130,10 +409,21 @@ Page {
         deleteErrorMessage = ""
     }
 
+    function clearShareMutationErrors() {
+        createShareErrorMessage = ""
+        editShareErrorMessage = ""
+    }
+
     function resetMutationState() {
         mutationInFlight = false
         pendingMutationAction = ""
         clearMutationErrors()
+    }
+
+    function resetShareMutationState() {
+        shareMutationInFlight = false
+        pendingShareMutationAction = ""
+        clearShareMutationErrors()
     }
 
     function validateDriveItemName(name) {
@@ -188,13 +478,7 @@ Page {
     }
 
     function formatSize(bytes) {
-        if (!bytes || bytes < 1024)
-            return (bytes || 0) + " B"
-        if (bytes < 1048576)
-            return (bytes / 1024).toFixed(1) + " KB"
-        if (bytes < 1073741824)
-            return (bytes / 1048576).toFixed(1) + " MB"
-        return (bytes / 1073741824).toFixed(1) + " GB"
+        return FormatUtils.formatSize(bytes)
     }
 
     function formatItemType(kind, mimeType) {
@@ -247,7 +531,7 @@ Page {
         var localPath = root.normalizeUploadPath(path)
         if (localPath === "") {
             uploadErrorMessage = "Please choose one local file."
-            uploadButton.forceActiveFocus()
+            toolbarCard.uploadButton.forceActiveFocus()
             return false
         }
 
@@ -262,7 +546,7 @@ Page {
         transferManager.StartUpload(localPath, parentFolderId)
         if (transferManager.uploadModel.rowCount() === uploadCountBefore) {
             uploadErrorMessage = "Please choose an existing local file."
-            uploadButton.forceActiveFocus()
+            toolbarCard.uploadButton.forceActiveFocus()
             return false
         }
 
@@ -294,14 +578,14 @@ Page {
         var ownerFileId = Number(fileId)
         if (!isFinite(ownerFileId) || ownerFileId <= 0) {
             downloadErrorMessage = "Please select one file to download."
-            downloadButton.forceActiveFocus()
+            toolbarCard.downloadButton.forceActiveFocus()
             return false
         }
 
         var localPath = root.normalizeDownloadPath(targetPath)
         if (localPath === "") {
             downloadErrorMessage = "Please choose one download destination."
-            downloadButton.forceActiveFocus()
+            toolbarCard.downloadButton.forceActiveFocus()
             return false
         }
 
@@ -311,7 +595,7 @@ Page {
         transferManager.StartDownload(ownerFileId, localPath, "owner")
         if (transferManager.downloadModel.rowCount() === downloadCountBefore) {
             downloadErrorMessage = "Failed to create the download task."
-            downloadButton.forceActiveFocus()
+            toolbarCard.downloadButton.forceActiveFocus()
             return false
         }
 
@@ -417,20 +701,164 @@ Page {
 
     function finishMutationSuccess() {
         mutationInFlight = false
+        var finishedAction = pendingMutationAction
         pendingMutationAction = ""
         clearMutationErrors()
         newFolderDialog.close()
         renameDialog.close()
         deleteDialog.close()
+        if (finishedAction === "create") {
+            root.showToast("Folder created successfully")
+        } else if (finishedAction === "rename") {
+            root.showToast("Item renamed successfully")
+        } else if (finishedAction === "delete") {
+            root.showToast("Item deleted successfully")
+        }
         root.refreshCurrentFolder()
+    }
+
+    function openCreateShareDialog() {
+        root.resetShareMutationState()
+        createSharePasswordField.text = ""
+        createShareExpireSpin.value = 7
+        createShareDialog.open()
+    }
+
+    function openEditShareDialog(shareId, permission) {
+        root.resetShareMutationState()
+        root.currentShareId = String(shareId || "")
+        editSharePermissionCombo.currentIndex = permission === "view" ? 1 : 0
+        editSharePasswordField.text = ""
+        editShareDialog.open()
+    }
+
+    function submitCreateShare() {
+        root.clearShareMutationErrors()
+        root.shareMutationInFlight = true
+        root.pendingShareMutationAction = "create"
+        shareManager.createShare(
+            createShareDialog.selectedFileIds,
+            createSharePermissionCombo.currentText,
+            createSharePasswordField.text,
+            createShareExpireSpin.value
+        )
+    }
+
+    function submitUpdateShare() {
+        if (root.currentShareId === "") {
+            return
+        }
+
+        root.clearShareMutationErrors()
+        root.shareMutationInFlight = true
+        root.pendingShareMutationAction = "edit"
+        shareManager.updateShare(
+            root.currentShareId,
+            editSharePermissionCombo.currentText,
+            editSharePasswordField.text
+        )
+    }
+
+    function submitCancelSelectedShares() {
+        if (root.selectedShareIds.length === 0) {
+            return
+        }
+
+        root.clearShareMutationErrors()
+        root.shareMutationInFlight = true
+        root.pendingShareMutationAction = "cancel"
+        shareManager.cancelShares(root.selectedShareIds)
+        root.clearSharedSelection()
+    }
+
+    function submitCancelShare(shareId) {
+        var shareIdValue = String(shareId || "")
+        if (shareIdValue === "") {
+            return
+        }
+
+        root.clearShareMutationErrors()
+        root.shareMutationInFlight = true
+        root.pendingShareMutationAction = "cancel"
+        shareManager.cancelShares([shareIdValue])
+        root.clearSharedSelection()
+    }
+
+    function applyShareMutationError(message) {
+        var errorMessage = message || "Request failed. Please try again."
+        root.shareMutationInFlight = false
+
+        if (root.pendingShareMutationAction === "create") {
+            root.createShareErrorMessage = errorMessage
+            createSharePasswordField.forceActiveFocus()
+            return
+        }
+        if (root.pendingShareMutationAction === "edit") {
+            root.editShareErrorMessage = errorMessage
+            editSharePasswordField.forceActiveFocus()
+            return
+        }
+
+        root.pendingShareMutationAction = ""
+        shellController.setPageState("error")
+    }
+
+    function finishShareMutationSuccess() {
+        root.shareMutationInFlight = false
+        var finishedAction = root.pendingShareMutationAction
+        root.pendingShareMutationAction = ""
+        root.clearShareMutationErrors()
+        if (finishedAction === "create") {
+            createShareDialog.close()
+        } else if (finishedAction === "edit") {
+            editShareDialog.close()
+        }
+
+        if (shellController.pageState !== "batchResult") {
+            root.refreshSharedList()
+        }
+    }
+
+    function refreshCurrentView() {
+        if (root.isMyFilesMode) {
+            root.refreshCurrentFolder()
+            return
+        }
+        if (root.isSharedMode) {
+            root.refreshSharedList()
+            return
+        }
+        if (root.isTrashMode) {
+            root.refreshTrashList()
+        }
     }
 
     function refreshCurrentFolder() {
         clearSelection()
         shellController.setPageState("loading")
         driveManager.loadFolderTree()
-        driveManager.listFiles(currentFolderId)
         driveManager.loadBreadcrumb(currentFolderId)
+        if (root.isSearchActive) {
+            driveManager.searchFiles(root.searchQuery)
+        } else {
+            driveManager.listFiles(currentFolderId, 1, 50, root.currentSort)
+        }
+    }
+
+    function refreshSharedList() {
+        root.clearSelection()
+        root.clearSharedSelection()
+        root.clearTrashSelection()
+        shellController.setPageState("loading")
+        shareManager.listShares()
+    }
+
+    function refreshTrashList() {
+        root.clearSelection()
+        root.clearSharedSelection()
+        root.clearTrashSelection()
+        shellController.setPageState("loading")
+        trashManager.listTrash()
     }
 
     function navigateToFolder(folderId) {
@@ -439,7 +867,72 @@ Page {
             folderNavigatorExpanded = false
         }
         currentFolderId = nextFolderId
+        root.searchQuery = ""
         refreshCurrentFolder()
+    }
+
+    function activateViewMode(mode) {
+        var nextMode = String(mode || "myfiles")
+        if (root.currentViewMode === nextMode) {
+            return
+        }
+        root.currentViewMode = nextMode
+        root.clearSelection()
+        root.clearSharedSelection()
+        root.clearTrashSelection()
+        root.folderNavigatorExpanded = false
+        root.searchQuery = ""
+        if (nextMode === "myfiles") {
+            root.currentFolderId = "0"
+            root.refreshCurrentFolder()
+            return
+        }
+        if (nextMode === "shared") {
+            root.refreshSharedList()
+            return
+        }
+        if (nextMode === "trash") {
+            root.refreshTrashList()
+            return
+        }
+        // VIEW-RECENT and VIEW-FAVORITES are placeholder seams (backend not yet available).
+    }
+
+    function submitRestoreSelectedTrash() {
+        if (root.selectedTrashIds.length === 0) {
+            return
+        }
+        trashManager.restoreItems(root.selectedTrashIds)
+        root.clearTrashSelection()
+    }
+
+    function submitDeleteSelectedTrash() {
+        if (root.selectedTrashIds.length === 0) {
+            return
+        }
+        trashManager.deleteItems(root.selectedTrashIds)
+        root.clearTrashSelection()
+    }
+
+    function submitRestoreTrash(trashId) {
+        var trashIdValue = String(trashId || "")
+        if (trashIdValue === "") {
+            return
+        }
+        trashManager.restoreItems([trashIdValue])
+    }
+
+    function submitDeleteTrash(trashId) {
+        var trashIdValue = String(trashId || "")
+        if (trashIdValue === "") {
+            return
+        }
+        trashManager.deleteItems([trashIdValue])
+    }
+
+    function submitClearTrash() {
+        root.clearTrashSelection()
+        trashManager.clearAll()
     }
 
     function openFolder(folderId) {
@@ -451,419 +944,41 @@ Page {
         anchors.margins: root.pagePadding
         spacing: root.panelSpacing
 
-        Rectangle {
+        DriveToolbarCard {
+            id: toolbarCard
             Layout.fillWidth: true
-            color: root.panelBackgroundColor
-            radius: root.panelRadius
-            border.color: root.panelBorderColor
-            implicitHeight: toolbarCardLayout.implicitHeight + 24
-
-            ColumnLayout {
-                id: toolbarCardLayout
-                anchors.fill: parent
-                anchors.margins: root.panelInset
-                spacing: root.compactSpacing
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: root.compactSpacing
-
-                    Button {
-                        objectName: "homepageUpButton"
-                        text: "Up"
-                        enabled: root.canNavigateUp
-                        onClicked: root.navigateToFolder(root.resolvedParentFolderId)
-                    }
-
-                    Button {
-                        objectName: "folderNavigatorToggleButton"
-                        text: root.folderNavigatorExpanded ? "Hide folders" : "Folders"
-                        onClicked: root.folderNavigatorExpanded = !root.folderNavigatorExpanded
-                    }
-
-                    Button {
-                        text: "Refresh"
-                        highlighted: true
-                        onClicked: root.refreshCurrentFolder()
-                    }
-
-                    Button {
-                        text: "New Folder"
-                        onClicked: root.openCreateFolderDialog()
-                    }
-
-                    Button {
-                        id: uploadButton
-                        text: "Upload"
-                        onClicked: root.openUploadFileChooser()
-                    }
-
-                    Button {
-                        text: "Rename"
-                        enabled: root.selectedItemId !== ""
-                        onClicked: root.openRenameDialog()
-                    }
-
-                    Button {
-                        text: "Delete"
-                        enabled: root.selectedItemId !== ""
-                        onClicked: root.openDeleteDialog()
-                    }
-
-                    Button {
-                        id: downloadButton
-                        text: "Download"
-                        enabled: root.selectedItemKind === "file"
-                        onClicked: root.openOwnerDownloadFileChooser(root.selectedItemId, root.selectedItemName)
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: root.uploadErrorMessage
-                    color: root.panelErrorTextColor
-                    visible: text !== ""
-                    wrapMode: Text.WordWrap
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: root.downloadErrorMessage
-                    color: root.panelErrorTextColor
-                    visible: text !== ""
-                    wrapMode: Text.WordWrap
-                }
-            }
+            page: root
         }
 
-        Rectangle {
+        DriveStatusCard {
             Layout.fillWidth: true
-            color: root.panelBackgroundColor
-            radius: root.panelRadius
-            border.color: root.panelBorderColor
-            implicitHeight: driveStatusRow.implicitHeight + 32
-
-            RowLayout {
-                id: driveStatusRow
-                anchors.fill: parent
-                anchors.margins: root.pagePadding
-                spacing: root.panelSpacing
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 4
-
-                    Label {
-                        text: "DRIVE"
-                        color: root.panelMutedTextColor
-                        font.pixelSize: 11
-                        font.bold: true
-                    }
-
-                    Label {
-                        text: root.driveTitle
-                        color: root.panelStrongTextColor
-                        font.pixelSize: 24
-                        font.bold: true
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: root.driveStatusSummary()
-                        color: root.panelMutedTextColor
-                        wrapMode: Text.WordWrap
-                    }
-                }
-
-                ColumnLayout {
-                    spacing: root.compactSpacing
-
-                    Rectangle {
-                        Layout.alignment: Qt.AlignRight
-                        implicitWidth: stateChipLabel.implicitWidth + 20
-                        implicitHeight: stateChipLabel.implicitHeight + 10
-                        radius: implicitHeight / 2
-                        color: root.panelAccentFillColor
-
-                        Label {
-                            id: stateChipLabel
-                            anchors.centerIn: parent
-                            text: root.pageStateLabel()
-                            color: root.panelAccentTextColor
-                            font.pixelSize: 11
-                            font.bold: true
-                        }
-                    }
-
-                    Label {
-                        Layout.alignment: Qt.AlignRight
-                        text: root.folderScopeLabel()
-                        color: root.panelMutedTextColor
-                        font.pixelSize: 12
-                    }
-                }
-            }
+            page: root
         }
 
-        PageStateView {
-            id: stateView
+        DriveMyFilesView {
+            id: myFilesView
             Layout.fillWidth: true
             Layout.fillHeight: true
-            pageState: shellController.pageState
+            page: root
+            breadcrumbPath: root.breadcrumbPath
+        }
 
-            emptyText: "This folder is empty"
-            errorText: "Failed to load folder contents"
+        DriveSharedView {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            page: root
+        }
 
-            onRetryClicked: root.refreshCurrentFolder()
+        DriveTrashView {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            page: root
+        }
 
-            Rectangle {
-                anchors.fill: parent
-                color: root.panelBackgroundColor
-                radius: root.panelRadius
-                border.color: root.panelBorderColor
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: root.contentInset
-                    spacing: 12
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 12
-
-                        BreadcrumbBar {
-                            id: breadcrumbBar
-                            objectName: "breadcrumbBar"
-                            Layout.fillWidth: true
-                            onPathClicked: function(folderId) { root.navigateToFolder(folderId) }
-                        }
-
-                        Label {
-                            text: root.selectedItemId !== ""
-                                  ? "Selected: " + root.selectedItemName
-                                  : (root.currentFolderItemCount === 1 ? "1 item" : root.currentFolderItemCount + " items")
-                            color: root.panelMutedTextColor
-                            font.pixelSize: 12
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        color: root.panelMutedFillColor
-                        radius: root.innerPanelRadius
-                        border.color: root.panelBorderColor
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: root.compactSpacing
-
-                            Rectangle {
-                                objectName: "fileTableHeaderSurface"
-                                Layout.fillWidth: true
-                                color: root.pageBackgroundColor
-                                radius: root.innerPanelRadius
-                                border.color: root.panelBorderColor
-                                implicitHeight: fileTableHeaderRow.implicitHeight + 16
-                                clip: true
-
-                                RowLayout {
-                                    id: fileTableHeaderRow
-                                    objectName: "fileTableHeaderRow"
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 12
-                                    anchors.rightMargin: 12
-                                    spacing: root.tableColumnSpacing
-
-                                    Label {
-                                        objectName: "fileTableHeaderName"
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 0
-                                        text: "Name"
-                                        color: root.tableHeaderTextColor
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        elide: Text.ElideRight
-                                        wrapMode: Text.NoWrap
-                                        maximumLineCount: 1
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-
-                                    Label {
-                                        objectName: "fileTableHeaderType"
-                                        Layout.preferredWidth: root.fileTypeColumnWidth
-                                        Layout.minimumWidth: 0
-                                        text: "Type"
-                                        color: root.tableHeaderTextColor
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        elide: Text.ElideRight
-                                        wrapMode: Text.NoWrap
-                                        maximumLineCount: 1
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-
-                                    Label {
-                                        objectName: "fileTableHeaderSize"
-                                        Layout.preferredWidth: root.fileSizeColumnWidth
-                                        Layout.minimumWidth: 0
-                                        text: "Size"
-                                        color: root.tableHeaderTextColor
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        elide: Text.ElideRight
-                                        wrapMode: Text.NoWrap
-                                        maximumLineCount: 1
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-
-                                    Label {
-                                        objectName: "fileTableHeaderUpdated"
-                                        Layout.preferredWidth: root.fileUpdatedColumnWidth
-                                        Layout.minimumWidth: 0
-                                        text: "Updated"
-                                        color: root.tableHeaderTextColor
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        elide: Text.ElideRight
-                                        wrapMode: Text.NoWrap
-                                        maximumLineCount: 1
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-
-                                    Item {
-                                        Layout.preferredWidth: root.fileActionColumnWidth
-                                    }
-                                }
-                            }
-
-                            ListView {
-                                id: fileListView
-                                objectName: "fileListView"
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                model: driveManager.listModel
-                                clip: true
-                                spacing: 1
-
-                                delegate: ItemDelegate {
-                                    id: fileRowDelegate
-                                    objectName: "fileRowDelegate_" + String(model.id)
-                                    width: ListView.view.width
-                                    implicitHeight: root.fileRowHeight
-                                    highlighted: root.selectedItemId === String(model.id)
-                                    hoverEnabled: true
-
-                                    onClicked: root.selectItem(model.id, model.kind, model.name)
-
-                                    background: Rectangle {
-                                        radius: root.innerPanelRadius
-                                        color: fileRowDelegate.highlighted
-                                               ? root.panelAccentFillColor
-                                               : (fileRowDelegate.hovered ? root.panelBackgroundColor : "transparent")
-                                        border.color: fileRowDelegate.highlighted ? root.panelBorderColor : "transparent"
-                                    }
-
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 12
-                                        anchors.rightMargin: 12
-                                        spacing: root.tableColumnSpacing
-
-                                        Item {
-                                            Layout.fillWidth: true
-                                            Layout.minimumWidth: 0
-                                            implicitHeight: fileNameRow.implicitHeight
-
-                                            RowLayout {
-                                                id: fileNameRow
-                                                anchors.fill: parent
-                                                spacing: 10
-
-                                                Label {
-                                                    text: model.kind === "folder" ? "📁" : "📄"
-                                                    font.pixelSize: 18
-                                                }
-
-                                                Label {
-                                                    id: fileNameLabel
-                                                    objectName: "fileNameLabel_" + String(model.id)
-                                                    Layout.fillWidth: true
-                                                    Layout.minimumWidth: 0
-                                                    text: model.name
-                                                    font.pixelSize: 14
-                                                    font.weight: fileRowDelegate.highlighted ? Font.DemiBold : Font.Medium
-                                                    color: root.tableBodyPrimaryTextColor
-                                                    elide: Text.ElideRight
-                                                    wrapMode: Text.NoWrap
-                                                    maximumLineCount: 1
-                                                    verticalAlignment: Text.AlignVCenter
-                                                    ToolTip.visible: truncated && fileRowDelegate.hovered
-                                                    ToolTip.delay: 350
-                                                    ToolTip.timeout: 5000
-                                                    ToolTip.text: text
-                                                }
-                                            }
-                                        }
-
-                                        Label {
-                                            objectName: "fileTypeLabel_" + String(model.id)
-                                            Layout.preferredWidth: root.fileTypeColumnWidth
-                                            Layout.minimumWidth: 0
-                                            text: root.formatItemType(model.kind, model.mimeType)
-                                            font.pixelSize: 13
-                                            color: root.tableBodySecondaryTextColor
-                                            elide: Text.ElideRight
-                                            wrapMode: Text.NoWrap
-                                            maximumLineCount: 1
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-
-                                        Label {
-                                            objectName: "fileSizeLabel_" + String(model.id)
-                                            Layout.preferredWidth: root.fileSizeColumnWidth
-                                            Layout.minimumWidth: 0
-                                            text: root.formatItemSize(model.kind, model.size, model.itemCount)
-                                            font.pixelSize: 13
-                                            color: root.tableBodySecondaryTextColor
-                                            elide: Text.ElideRight
-                                            wrapMode: Text.NoWrap
-                                            maximumLineCount: 1
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-
-                                        Label {
-                                            objectName: "fileUpdatedLabel_" + String(model.id)
-                                            Layout.preferredWidth: root.fileUpdatedColumnWidth
-                                            Layout.minimumWidth: 0
-                                            text: root.formatUpdatedAtText(model.updatedAt)
-                                            font.pixelSize: 13
-                                            color: root.tableBodyTertiaryTextColor
-                                            elide: Text.ElideRight
-                                            wrapMode: Text.NoWrap
-                                            maximumLineCount: 1
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-
-                                        Button {
-                                            Layout.preferredWidth: root.fileActionColumnWidth
-                                            text: "Open"
-                                            flat: true
-                                            visible: model.kind === "folder"
-                                            onClicked: root.navigateToFolder(model.id)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        DriveSeamView {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            page: root
         }
 
     }
@@ -884,7 +999,7 @@ Page {
         y: root.pagePadding
         width: 248
         height: Math.max(0, root.height - (root.pagePadding * 2))
-        visible: root.folderNavigatorExpanded
+        visible: root.folderNavigatorExpanded && root.isMyFilesMode
         modal: false
         padding: 0
         closePolicy: Popup.NoAutoClose
@@ -1132,6 +1247,262 @@ Page {
         }
     }
 
+    Dialog {
+        id: createShareDialog
+        modal: true
+        width: 360
+        title: "Create Share"
+        standardButtons: Dialog.NoButton
+        closePolicy: Popup.NoAutoClose
+
+        property var selectedFileIds: []
+
+        onClosed: {
+            if (!root.shareMutationInFlight) {
+                root.resetShareMutationState()
+            }
+        }
+
+        ColumnLayout {
+            width: parent.width
+            spacing: root.panelSpacing
+
+            Label {
+                Layout.fillWidth: true
+                text: createShareDialog.selectedFileIds.length > 0
+                      ? (createShareDialog.selectedFileIds.length === 1
+                             ? "1 file id is queued for this share."
+                             : createShareDialog.selectedFileIds.length + " file ids are queued for this share.")
+                      : "No file ids are currently queued for this share."
+                color: root.panelSecondaryTextColor
+                wrapMode: Text.WordWrap
+            }
+
+            Label {
+                text: "Permission:"
+                color: root.panelStrongTextColor
+            }
+
+            ComboBox {
+                id: createSharePermissionCombo
+                Layout.fillWidth: true
+                enabled: !root.shareMutationInFlight
+                model: ["download", "view"]
+            }
+
+            Label {
+                text: "Password (optional, 4-8 chars):"
+                color: root.panelStrongTextColor
+            }
+
+            TextField {
+                id: createSharePasswordField
+                Layout.fillWidth: true
+                enabled: !root.shareMutationInFlight
+                placeholderText: "No password"
+                echoMode: TextInput.Password
+                maximumLength: 8
+                onAccepted: root.submitCreateShare()
+            }
+
+            Label {
+                text: "Expire (days, 0 = permanent):"
+                color: root.panelStrongTextColor
+            }
+
+            SpinBox {
+                id: createShareExpireSpin
+                Layout.fillWidth: true
+                enabled: !root.shareMutationInFlight
+                from: 0
+                to: 365
+                value: 7
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: root.createShareErrorMessage
+                color: root.panelErrorTextColor
+                visible: text !== ""
+                wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Button {
+                    text: "Cancel"
+                    enabled: !root.shareMutationInFlight
+                    onClicked: createShareDialog.close()
+                }
+
+                Button {
+                    text: root.pendingShareMutationAction === "create" && root.shareMutationInFlight
+                          ? "Creating..." : "Create"
+                    highlighted: true
+                    enabled: !root.shareMutationInFlight
+                    onClicked: root.submitCreateShare()
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: editShareDialog
+        modal: true
+        width: 360
+        title: "Edit Share"
+        standardButtons: Dialog.NoButton
+        closePolicy: Popup.NoAutoClose
+
+        onClosed: {
+            if (!root.shareMutationInFlight) {
+                root.resetShareMutationState()
+            }
+        }
+
+        ColumnLayout {
+            width: parent.width
+            spacing: root.panelSpacing
+
+            Label {
+                Layout.fillWidth: true
+                text: "Update the permission or password for the selected share."
+                color: root.panelSecondaryTextColor
+                wrapMode: Text.WordWrap
+            }
+
+            Label {
+                text: "Permission:"
+                color: root.panelStrongTextColor
+            }
+
+            ComboBox {
+                id: editSharePermissionCombo
+                Layout.fillWidth: true
+                enabled: !root.shareMutationInFlight
+                model: ["download", "view"]
+            }
+
+            Label {
+                text: "New Password (empty to remove):"
+                color: root.panelStrongTextColor
+            }
+
+            TextField {
+                id: editSharePasswordField
+                Layout.fillWidth: true
+                enabled: !root.shareMutationInFlight
+                placeholderText: "Leave empty to keep current"
+                echoMode: TextInput.Password
+                maximumLength: 8
+                onAccepted: root.submitUpdateShare()
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: root.editShareErrorMessage
+                color: root.panelErrorTextColor
+                visible: text !== ""
+                wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Button {
+                    text: "Cancel"
+                    enabled: !root.shareMutationInFlight
+                    onClicked: editShareDialog.close()
+                }
+
+                Button {
+                    text: root.pendingShareMutationAction === "edit" && root.shareMutationInFlight
+                          ? "Saving..." : "Save"
+                    highlighted: true
+                    enabled: !root.shareMutationInFlight
+                    onClicked: root.submitUpdateShare()
+                }
+            }
+        }
+    }
+
+    Connections {
+        target: trashManager
+
+        function onApiError(message, code) {
+            if (root.isTrashMode) {
+                shellController.setPageState("error")
+            }
+        }
+
+        function onOperationSuccess(message) {
+            if (root.isTrashMode && shellController.pageState !== "batchResult") {
+                root.refreshTrashList()
+            }
+        }
+
+        function onPaginationLoaded(page, totalPages, total) {
+            if (root.isTrashMode) {
+                shellController.setPageState(total > 0 ? "content" : "empty")
+            }
+        }
+
+        function onBatchResultReady() {
+            root.clearTrashSelection()
+            if (root.isTrashMode) {
+                shellController.setPageState("batchResult")
+            }
+        }
+
+        function onClearAllCompleted(deletedCount, freedSpace) {
+            root.clearTrashSelection()
+        }
+    }
+
+    Connections {
+        target: shareManager
+
+        function onApiError(message, code) {
+            if (root.pendingShareMutationAction !== "") {
+                root.applyShareMutationError(message)
+                return
+            }
+            if (root.isSharedMode) {
+                shellController.setPageState("error")
+            }
+        }
+
+        function onOperationSuccess(message) {
+            if (root.pendingShareMutationAction !== "") {
+                root.finishShareMutationSuccess()
+            }
+        }
+
+        function onPaginationLoaded(page, totalPages, total) {
+            if (root.isSharedMode) {
+                shellController.setPageState(total > 0 ? "content" : "empty")
+            }
+        }
+
+        function onBatchResultReady() {
+            root.shareMutationInFlight = false
+            root.pendingShareMutationAction = ""
+            root.clearShareMutationErrors()
+            if (root.isSharedMode) {
+                shellController.setPageState("batchResult")
+            }
+        }
+    }
+
     Connections {
         target: driveManager
 
@@ -1148,19 +1519,53 @@ Page {
         }
 
         function onBreadcrumbLoaded(breadcrumb) {
-            breadcrumbBar.path = breadcrumb
+            if (root.isMyFilesMode) {
+                root.breadcrumbPath = breadcrumb
+            }
         }
 
         function onPaginationLoaded(page, totalPages, total) {
-            shellController.setPageState(total > 0 ? "content" : "empty")
+            if (root.isMyFilesMode) {
+                shellController.setPageState(total > 0 ? "content" : "empty")
+            }
         }
 
         function onListLoadFailed(message, code) {
-            shellController.setPageState("error")
+            if (root.isMyFilesMode) {
+                shellController.setPageState("error")
+            }
         }
     }
     
+    Rectangle {
+        id: toastOverlay
+        objectName: "driveToast"
+        visible: root.toastVisible && root.toastMessage !== ""
+        color: "#323232"
+        radius: 8
+        implicitWidth: toastLabel.implicitWidth + 32
+        implicitHeight: toastLabel.implicitHeight + 16
+        z: 100
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 20
+        anchors.horizontalCenter: parent.horizontalCenter
+
+        Label {
+            id: toastLabel
+            anchors.centerIn: parent
+            text: root.toastMessage
+            color: "#ffffff"
+            font.pixelSize: 13
+        }
+    }
+
+    Timer {
+        id: toastDismissTimer
+        interval: 3000
+        onTriggered: root.hideToast()
+    }
+
     Component.onCompleted: {
-        root.refreshCurrentFolder()
+        root.refreshCurrentView()
     }
 }
