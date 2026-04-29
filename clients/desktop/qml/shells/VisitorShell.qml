@@ -10,28 +10,33 @@ ApplicationWindow {
     height: 600
     title: "Disk Share"
 
-    property string activeShareId: ""
+    property string activeShareId: sessionStore.visitor.shareId
 
     StackView {
         id: stackView
         anchors.fill: parent
-
-        initialItem: ShareVerifyPage {
-            id: verifyPage
-
-            Component.onCompleted: {
-                verifyPage.shareId = root.activeShareId
-            }
-        }
+        initialItem: shareVerifyPageComponent
     }
 
     Connections {
         target: shellController
 
-        function onCurrentShellChanged() {
-            if (shellController.currentShell === "visitor") {
-                stackView.replace(null, shareBrowsePageComponent, { shareId: root.activeShareId })
+        function onPageStateChanged() {
+            if (shellController.currentShell !== "visitor") return
+
+            if (shellController.pageState === "content") {
+                stackView.replace(null, shareBrowsePageComponent,
+                                  { shareId: root.activeShareId })
+            } else if (shellController.pageState === "verify") {
+                stackView.replace(null, shareVerifyPageComponent)
             }
+        }
+    }
+
+    Component {
+        id: shareVerifyPageComponent
+        ShareVerifyPage {
+            shareId: root.activeShareId
         }
     }
 
