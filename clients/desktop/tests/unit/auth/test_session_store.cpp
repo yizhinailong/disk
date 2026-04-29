@@ -139,6 +139,105 @@ private slots:
         QCOMPARE(store.GetActiveDomain(), QString("visitor"));
         QCOMPARE(store.GetVisitorManager()->GetShareId(), QString("sh_new"));
     }
+
+    // ── Task 11: Token domain isolation regression tests ───────────────────
+
+    void ActivateVisitorDoesNotClearOwnerTokens() {
+        NetworkClient nc;
+        RequestFactory rf;
+        SessionStore store(&nc, &rf);
+
+        QJsonObject user;
+        user["id"] = 1;
+        user["username"] = "alice";
+        store.GetOwnerManager()->StartLogin();
+        store.GetOwnerManager()->HandleLoginSuccess("access_tok", "refresh_tok", 7200, user);
+        QCOMPARE(rf.GetOwnerAccessToken(), QString("access_tok"));
+
+        store.ActivateVisitor("sh_isolated");
+        QCOMPARE(store.GetActiveDomain(), QString("visitor"));
+
+        QCOMPARE(rf.GetOwnerAccessToken(), QString("access_tok"));
+        QCOMPARE(store.GetOwnerManager()->GetAccessToken(), QString("access_tok"));
+        QCOMPARE(store.GetOwnerManager()->GetRefreshToken(), QString("refresh_tok"));
+        QCOMPARE(store.GetOwnerManager()->GetState(), OwnerSessionState::Active);
+    }
+
+    void ActivateOwnerFromVisitorClearsVisitorTokens() {
+        NetworkClient nc;
+        RequestFactory rf;
+        SessionStore store(&nc, &rf);
+
+        store.ActivateVisitor("sh_cleanup");
+        store.GetVisitorManager()->StartVerify();
+        QJsonObject root_files;
+        store.GetVisitorManager()->HandleVerifySuccess("st_tok", 3600, "view", root_files);
+        QCOMPARE(rf.GetVisitorShareToken(), QString("st_tok"));
+
+        store.ActivateOwner();
+
+        QVERIFY(rf.GetVisitorShareToken().isEmpty());
+        QVERIFY(store.GetVisitorManager()->GetShareToken().isEmpty());
+        QCOMPARE(store.GetVisitorManager()->GetState(), VisitorSessionState::Idle);
+    }
+
+    void DeactivateAllStartsOwnerLogoutButTokensClearOnComplete() {
+        NetworkClient nc;
+        RequestFactory rf;
+        SessionStore store(&nc, &rf);
+
+        QJsonObject user;
+        user["id"] = 1;
+        user["username"] = "alice";
+        store.GetOwnerManager()->StartLogin();
+        store.GetOwnerManager()->HandleLoginSuccess("owner_access", "owner_refresh", 7200, user);
+
+        store.ActivateVisitor("sh_both");
+        store.GetVisitorManager()->StartVerify();
+        QJsonObject root_files;
+        store.GetVisitorManager()->HandleVerifySuccess("visitor_st", 3600, "download", root_files);
+
+        QCOMPARE(rf.GetOwnerAccessToken(), QString("owner_access"));
+        QCOMPARE(rf.GetVisitorShareToken(), QString("visitor_st"));
+
+        store.DeactivateAll();
+
+        QCOMPARE(store.GetOwnerManager()->GetState(), OwnerSessionState::LogoutPending);
+        QVERIFY(rf.GetVisitorShareToken().isEmpty());
+
+        store.GetOwnerManager()->CompleteLogout();
+
+        QVERIFY(rf.GetOwnerAccessToken().isEmpty());
+        QVERIFY(store.GetOwnerManager()->GetAccessToken().isEmpty());
+    }
+
+    void OwnerAndVisitorTokensCoexistWithoutCrossContamination() {
+        NetworkClient nc;
+        RequestFactory rf;
+        SessionStore store(&nc, &rf);
+
+        QJsonObject user;
+        user["id"] = 1;
+        user["username"] = "alice";
+        store.GetOwnerManager()->StartLogin();
+        store.GetOwnerManager()->HandleLoginSuccess("owner_tok", "owner_ref", 7200, user);
+
+        store.ActivateVisitor("sh_cross");
+        store.GetVisitorManager()->StartVerify();
+        QJsonObject root_files;
+        store.GetVisitorManager()->HandleVerifySuccess("visitor_tok", 3600, "view", root_files);
+
+        QCOMPARE(rf.GetOwnerAccessToken(), QString("owner_tok"));
+        QCOMPARE(rf.GetVisitorShareToken(), QString("visitor_tok"));
+
+        auto owner_headers = rf.PrepareHeaders(AuthDomain::Owner);
+        QVERIFY(owner_headers.contains("Authorization"));
+        QVERIFY(!owner_headers.contains("X-Share-Token"));
+
+        auto visitor_headers = rf.PrepareHeaders(AuthDomain::Visitor);
+        QVERIFY(visitor_headers.contains("X-Share-Token"));
+        QVERIFY(!visitor_headers.contains("Authorization"));
+    }
 };
 
 int run_TestSessionStore(int argc, char* argv[]) {

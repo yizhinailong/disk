@@ -67,9 +67,22 @@ set(DESKTOP_QML_FILES
     qml/Main.qml
     qml/components/BreadcrumbBar.qml
     qml/components/FolderTreePanel.qml
+    qml/components/FormatUtils.js
+    qml/components/OwnerSidebarNavButton.qml
+    qml/components/OwnerSidebarSection.qml
     qml/components/PageStateView.qml
+    qml/components/WorkspaceTheme.qml
+    qml/components/drive/DriveMyFilesView.qml
+    qml/components/drive/DriveContextMenu.qml
+    qml/components/drive/DriveSeamView.qml
+    qml/components/drive/DriveSharedView.qml
+    qml/components/drive/DriveStatusCard.qml
+    qml/components/drive/DriveToolbarCard.qml
+    qml/components/drive/DriveTrashView.qml
     qml/components/auth/AuthCard.qml
     qml/components/auth/AuthTheme.qml
+    qml/components/owner/OwnerAccountCard.qml
+    qml/components/owner/OwnerStorageCard.qml
     qml/pages/DriveBrowserPage.qml
     qml/pages/LoginPage.qml
     qml/pages/RegisterPage.qml

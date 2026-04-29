@@ -263,43 +263,96 @@ private slots:
         QVERIFY(!qml.contains(QStringLiteral("stackView.replace(\"TransferCenterPage.qml\")")));
         QVERIFY(!qml.contains(QStringLiteral("stackView.replace(\"ShareManagementPage.qml\")")));
         QVERIFY(!qml.contains(QStringLiteral("stackView.replace(\"TrashPage.qml\")")));
-        QVERIFY(qml.contains(QStringLiteral("root.showPage(driveBrowserPageComponent)")));
-        QVERIFY(qml.contains(QStringLiteral("root.showPage(transferCenterPageComponent)")));
-        QVERIFY(qml.contains(QStringLiteral("root.showPage(shareManagementPageComponent)")));
-        QVERIFY(qml.contains(QStringLiteral("root.showPage(trashPageComponent)")));
-        QVERIFY(qml.contains(QStringLiteral("root.showPage(settingsPageComponent)")));
-        QVERIFY(qml.contains(QStringLiteral("text: \"Files\"")));
-        QVERIFY(qml.contains(QStringLiteral("text: \"Transfers\"")));
-        QVERIFY(qml.contains(QStringLiteral("text: \"Logout\"")));
-        QVERIFY(qml.contains(QStringLiteral("text: \"Shares\"")));
-        QVERIFY(qml.contains(QStringLiteral("text: \"Trash\"")));
-        QVERIFY(qml.contains(QStringLiteral("text: \"Settings\"")));
-        QVERIFY(qml.contains(QStringLiteral("property string activeDestination: \"files\"")));
-        QVERIFY(qml.contains(QStringLiteral("function destinationForPageComponent(pageComponent)")));
-        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = root.destinationForPageComponent(pageComponent)")));
-        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"files\"")));
-        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"transfers\"")));
-        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"shares\"")));
-        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"trash\"")));
-        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"settings\"")));
-        QVERIFY(qml.contains(QStringLiteral("text: \"Navigation\"")));
-        QVERIFY(qml.contains(QStringLiteral("text: \"Session\"")));
+
+        // DOC-01 §4, DOC-03 §2.2: three top-level pages only
         QVERIFY(qml.contains(QStringLiteral("id: driveBrowserPageComponent")));
         QVERIFY(qml.contains(QStringLiteral("id: transferCenterPageComponent")));
-        QVERIFY(qml.contains(QStringLiteral("id: shareManagementPageComponent")));
-        QVERIFY(qml.contains(QStringLiteral("id: trashPageComponent")));
         QVERIFY(qml.contains(QStringLiteral("id: settingsPageComponent")));
+        QVERIFY(!qml.contains(QStringLiteral("id: shareManagementPageComponent")));
+        QVERIFY(!qml.contains(QStringLiteral("id: trashPageComponent")));
+
+        QVERIFY(qml.contains(QStringLiteral("root.showPage(transferCenterPageComponent)")));
+        QVERIFY(qml.contains(QStringLiteral("root.showPage(settingsPageComponent)")));
+        QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"myfiles\")")));
+        QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"shared\")")));
+        QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"trash\")")));
+        QVERIFY(!qml.contains(QStringLiteral("root.showDriveViewMode(\"recent\")")));
+        QVERIFY(!qml.contains(QStringLiteral("root.showDriveViewMode(\"favorites\")")));
+        QVERIFY(qml.contains(QStringLiteral("id: \"myfiles\"")));
+        QVERIFY(qml.contains(QStringLiteral("id: \"recent\"")));
+        QVERIFY(qml.contains(QStringLiteral("id: \"shared\"")));
+        QVERIFY(qml.contains(QStringLiteral("id: \"trash\"")));
+        QVERIFY(qml.contains(QStringLiteral("id: \"favorites\"")));
+        QVERIFY(qml.contains(QStringLiteral("enabled: false")));
+
+        QVERIFY(qml.contains(QStringLiteral("property string activeDestination: \"drive\"")));
+        QVERIFY(qml.contains(QStringLiteral("property string activeDriveViewMode: \"myfiles\"")));
+        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"drive\"")));
+        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"transfers\"")));
+        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"settings\"")));
+        QVERIFY(!qml.contains(QStringLiteral("root.activeDestination = \"shares\"")));
+        QVERIFY(!qml.contains(QStringLiteral("root.activeDestination = \"trash\"")));
+        QVERIFY(!qml.contains(QStringLiteral("root.activeDestination = \"files\"")));
+
+        QVERIFY(qml.contains(QStringLiteral("title: \"File Views\"")));
+        QVERIFY(qml.contains(QStringLiteral("title: \"Independent Pages\"")));
+        QVERIFY(qml.contains(QStringLiteral("label: \"My Files\"")));
+        QVERIFY(qml.contains(QStringLiteral("label: \"Recent (coming soon)\"")));
+        QVERIFY(qml.contains(QStringLiteral("label: \"Transfers\"")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"Logout\"")));
+        QVERIFY(qml.contains(QStringLiteral("label: \"Shares\"")));
+        QVERIFY(qml.contains(QStringLiteral("label: \"Trash\"")));
+        QVERIFY(qml.contains(QStringLiteral("label: \"Favorites (coming soon)\"")));
+        QVERIFY(qml.contains(QStringLiteral("label: \"Settings\"")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"Navigation\"")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"Session\"")));
+        QVERIFY(qml.contains(QStringLiteral("function showPage(pageComponent)")));
+        QVERIFY(qml.contains(QStringLiteral("function showDriveViewMode(viewMode)")));
+
         QVERIFY(!qml.contains(QStringLiteral("PageStateView")));
         QVERIFY(!qml.contains(QStringLiteral("BreadcrumbBar")));
         QVERIFY(!qml.contains(QStringLiteral("FolderTreePanel")));
 
-        QFile drive_browser_page(QStringLiteral(DESKTOP_QML_SOURCE_DIR "/pages/DriveBrowserPage.qml"));
-        QVERIFY(drive_browser_page.open(QIODevice::ReadOnly));
+        const auto read_qml = [](const QString& relative_path) -> QString {
+            QFile qml_file(QStringLiteral(DESKTOP_QML_SOURCE_DIR "/") + relative_path);
+            if (!qml_file.open(QIODevice::ReadOnly)) {
+                return {};
+            }
+            return QString::fromUtf8(qml_file.readAll());
+        };
 
-        const auto drive_qml = QString::fromUtf8(drive_browser_page.readAll());
+        const auto drive_browser_page_qml = read_qml(QStringLiteral("pages/DriveBrowserPage.qml"));
+        const auto drive_toolbar_qml = read_qml(QStringLiteral("components/drive/DriveToolbarCard.qml"));
+        const auto drive_status_qml = read_qml(QStringLiteral("components/drive/DriveStatusCard.qml"));
+        const auto drive_my_files_qml = read_qml(QStringLiteral("components/drive/DriveMyFilesView.qml"));
+        const auto drive_shared_qml = read_qml(QStringLiteral("components/drive/DriveSharedView.qml"));
+        const auto drive_trash_qml = read_qml(QStringLiteral("components/drive/DriveTrashView.qml"));
+        const auto drive_seam_qml = read_qml(QStringLiteral("components/drive/DriveSeamView.qml"));
+
+        QVERIFY(!drive_browser_page_qml.isEmpty());
+        QVERIFY(!drive_toolbar_qml.isEmpty());
+        QVERIFY(!drive_status_qml.isEmpty());
+        QVERIFY(!drive_my_files_qml.isEmpty());
+        QVERIFY(!drive_shared_qml.isEmpty());
+        QVERIFY(!drive_trash_qml.isEmpty());
+        QVERIFY(!drive_seam_qml.isEmpty());
+
+        QStringList drive_sources;
+        drive_sources << drive_browser_page_qml
+                      << drive_toolbar_qml
+                      << drive_status_qml
+                      << drive_my_files_qml
+                      << drive_shared_qml
+                      << drive_trash_qml
+                      << drive_seam_qml;
+
+        const auto drive_qml = drive_sources.join(QStringLiteral("\n"));
+
         QVERIFY(drive_qml.contains(QStringLiteral("PageStateView")));
         QVERIFY(drive_qml.contains(QStringLiteral("BreadcrumbBar")));
         QVERIFY(drive_qml.contains(QStringLiteral("FolderTreePanel")));
+        QVERIFY(drive_qml.contains(QStringLiteral("property string currentViewMode: \"myfiles\"")));
+        QVERIFY(drive_qml.contains(QStringLiteral("function activateViewMode(mode)")));
     }
 
     void visitorShellUsesComponentNavigation() {
@@ -310,6 +363,22 @@ private slots:
         QVERIFY(!qml.contains(QStringLiteral("\"ShareBrowsePage.qml\"")));
         QVERIFY(qml.contains(QStringLiteral("stackView.replace(null, shareBrowsePageComponent")));
         QVERIFY(qml.contains(QStringLiteral("id: shareBrowsePageComponent")));
+        QVERIFY(qml.contains(QStringLiteral("onPageStateChanged")));
+        QVERIFY(!qml.contains(QStringLiteral("onCurrentShellChanged")));
+        QVERIFY(qml.contains(QStringLiteral("sessionStore.visitor.shareId")));
+    }
+
+    void shareVerifyPageDrivesVisitorStateMachine() {
+        QFile verify_page(QStringLiteral(DESKTOP_QML_SOURCE_DIR "/pages/ShareVerifyPage.qml"));
+        QVERIFY(verify_page.open(QIODevice::ReadOnly));
+
+        const auto qml = QString::fromUtf8(verify_page.readAll());
+        QVERIFY(qml.contains(QStringLiteral("sessionStore.visitor.StartVerify")));
+        QVERIFY(!qml.contains(QStringLiteral("authService.AccessShare")));
+        QVERIFY(qml.contains(QStringLiteral("sessionStore.ActivateVisitor")));
+        QVERIFY(qml.contains(QStringLiteral("onShareAccessFailure")));
+        QVERIFY(!qml.contains(QStringLiteral("onShareAccessSuccess")));
+        QVERIFY(!qml.contains(QStringLiteral("navigateToVisitor")));
     }
 
     void cleanupTestCase() {
@@ -324,6 +393,7 @@ extern int run_TestAuthServiceRefresh(int argc, char* argv[]);
 extern int run_TestSessionStore(int argc, char* argv[]);
 extern int run_TestOwnerSession(int argc, char* argv[]);
 extern int run_TestVisitorSession(int argc, char* argv[]);
+extern int run_TestVisitorFlow(int argc, char* argv[]);
 extern int run_TestDriveItemMapping(int argc, char* argv[]);
 extern int run_TestDriveListModel(int argc, char* argv[]);
 extern int run_TestErrorAdapter(int argc, char* argv[]);
@@ -365,7 +435,7 @@ int main(int argc, char* argv[]) {
     snprintf(prog_name_storage, sizeof(prog_name_storage), "%s", argv[0]);
     int failures = 0;
 
-    fprintf(stderr, "--- desktop-unit-tests: running 17 suites ---\n");
+    fprintf(stderr, "--- desktop-unit-tests: running 18 suites ---\n");
     fflush(stderr);
 
     {
@@ -378,6 +448,7 @@ int main(int argc, char* argv[]) {
     failures += run_and_report("TestSessionStore", run_TestSessionStore, argc, argv);
     failures += run_and_report("TestOwnerSession", run_TestOwnerSession, argc, argv);
     failures += run_and_report("TestVisitorSession", run_TestVisitorSession, argc, argv);
+    failures += run_and_report("TestVisitorFlow", run_TestVisitorFlow, argc, argv);
     failures += run_and_report("TestDriveItemMapping", run_TestDriveItemMapping, argc, argv);
     failures += run_and_report("TestDriveListModel", run_TestDriveListModel, argc, argv);
     failures += run_and_report("TestErrorAdapter", run_TestErrorAdapter, argc, argv);

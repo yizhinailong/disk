@@ -2,6 +2,7 @@
 
 set(UNIT_TEST_SOURCES
     unit/main.cpp
+    unit/app/test_visitor_flow.cpp
     unit/auth/test_owner_session.cpp
     unit/auth/test_visitor_session.cpp
     unit/auth/test_auth_service_logout.cpp
@@ -108,6 +109,8 @@ qt_add_qml_module(desktop-quick-tests
         quick/pages/tst_register_page.qml
         quick/components/tst_folder_tree_panel.qml
         quick/pages/tst_drive_browser_navigation.qml
+        quick/navigation/tst_route_taxonomy.qml
+        quick/pages/tst_drive_interactions.qml
     RESOURCE_PREFIX /qt/qml
 )
 
@@ -145,15 +148,20 @@ add_test(
             -import ${QT_QML_IMPORT_DIR}
 )
 
+# Create a default evidence output directory so that screenshot tests
+# work out-of-the-box without requiring the user to export the env var.
+set(DESKTOP_QML_EVIDENCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/qml-evidence")
+file(MAKE_DIRECTORY "${DESKTOP_QML_EVIDENCE_DIR}")
+
 # Qt 6.11+ blocks local file reads via XMLHttpRequest by default.
 # Our quick tests use XHR to read QML source files for contract verification.
 if(WIN32)
     set_tests_properties(desktop-quick-tests PROPERTIES
-        ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1"
+        ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1;DESKTOP_QML_EVIDENCE_DIR=${DESKTOP_QML_EVIDENCE_DIR}"
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${QT_BIN_DIR}"
     )
 else()
     set_tests_properties(desktop-quick-tests PROPERTIES
-        ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1"
+        ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1;DESKTOP_QML_EVIDENCE_DIR=${DESKTOP_QML_EVIDENCE_DIR}"
     )
 endif()
