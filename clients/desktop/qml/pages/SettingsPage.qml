@@ -2,9 +2,12 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../components"
+import "../components/FormatUtils.js" as FormatUtils
 
 Page {
     id: root
+
+    WorkspaceTheme { id: theme }
     
     PageStateView {
         id: stateView
@@ -56,8 +59,8 @@ Page {
                     anchors.fill: parent
                     
                     Label {
-                        text: "Used: " + formatBytes(profileManager.storageStats.used || 0) + 
-                              " / " + formatBytes(profileManager.storageStats.total || 0)
+                        text: "Used: " + FormatUtils.formatStorageSize(profileManager.storageStats.used || 0) + 
+                              " / " + FormatUtils.formatStorageSize(profileManager.storageStats.total || 0)
                     }
                     
                     ProgressBar {
@@ -102,14 +105,6 @@ Page {
             
             Item { Layout.fillHeight: true } // Spacer
         }
-    }
-    
-    function formatBytes(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
     
     Component.onCompleted: {

@@ -1,15 +1,28 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "../components"
+import "../components/FormatUtils.js" as FormatUtils
 
 Page {
     id: root
 
-    background: Rectangle { color: "#ffffff" }
+    WorkspaceTheme { id: theme }
+
+    readonly property color pageBackground: theme.panelBackgroundColor
+    readonly property color rowAltColor: theme.panelMutedFillColor
+    readonly property color successColor: theme.successChipColor
+    readonly property color errorColor: theme.errorTextColor
+    readonly property color disabledColor: theme.disabledChipColor
+    readonly property color warningColor: theme.warningChipColor
+    readonly property color secondaryColor: theme.secondaryTextColor
+    readonly property color tertiaryColor: theme.tertiaryTextColor
+
+    background: Rectangle { color: root.pageBackground }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 16
+        anchors.margins: theme.pagePadding
         spacing: 12
 
         RowLayout {
@@ -56,14 +69,14 @@ Page {
                 delegate: Rectangle {
                     width: uploadList.width
                     height: 72
-                    color: index % 2 === 0 ? "#fafafa" : "#ffffff"
-                    radius: 4
+                    color: index % 2 === 0 ? root.rowAltColor : root.pageBackground
+                    radius: theme.innerPanelRadius
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 12
+                        anchors.leftMargin: theme.panelSpacing
+                        anchors.rightMargin: theme.panelSpacing
+                        spacing: theme.panelSpacing
 
                         ColumnLayout {
                             Layout.fillWidth: true
@@ -95,11 +108,11 @@ Page {
                                 }
 
                                 function statusColor(s) {
-                                    if (s === "completed") return "#4caf50"
-                                    if (s === "failed" || s === "expired") return "#f44336"
-                                    if (s === "cancelled") return "#9e9e9e"
-                                    if (s === "cancelling") return "#ff9800"
-                                    return "#666666"
+                                    if (s === "completed") return root.successColor
+                                    if (s === "failed" || s === "expired") return root.errorColor
+                                    if (s === "cancelled") return root.disabledColor
+                                    if (s === "cancelling") return root.warningColor
+                                    return root.secondaryColor
                                 }
 
                                 text: statusText(model.status) +
@@ -129,15 +142,9 @@ Page {
                         }
 
                         Text {
-                            function formatSize(bytes) {
-                                if (bytes < 1024) return bytes + " B"
-                                if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"
-                                if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + " MB"
-                                return (bytes / 1073741824).toFixed(2) + " GB"
-                            }
-                            text: formatSize(model.fileSize)
+                            text: FormatUtils.formatSize(model.fileSize, 2)
                             font.pixelSize: 12
-                            color: "#999"
+                            color: root.tertiaryColor
                         }
 
                         Row {
@@ -149,7 +156,7 @@ Page {
                             Button {
                                 text: qsTr("Cancel")
                                 flat: true
-                                palette.buttonText: "#f44336"
+                                palette.buttonText: root.errorColor
                                 onClicked: transferManager.CancelUpload(model.taskId)
                             }
                         }
@@ -178,7 +185,7 @@ Page {
                 Label {
                     anchors.centerIn: parent
                     text: qsTr("No uploads")
-                    color: "#999"
+                    color: root.tertiaryColor
                     visible: uploadList.count === 0
                 }
             }
@@ -193,14 +200,14 @@ Page {
                 delegate: Rectangle {
                     width: downloadList.width
                     height: 72
-                    color: index % 2 === 0 ? "#fafafa" : "#ffffff"
-                    radius: 4
+                    color: index % 2 === 0 ? root.rowAltColor : root.pageBackground
+                    radius: theme.innerPanelRadius
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 12
+                        anchors.leftMargin: theme.panelSpacing
+                        anchors.rightMargin: theme.panelSpacing
+                        spacing: theme.panelSpacing
 
                         ColumnLayout {
                             Layout.fillWidth: true
@@ -230,11 +237,11 @@ Page {
                                 }
 
                                 function statusColor(s) {
-                                    if (s === "completed") return "#4caf50"
-                                    if (s === "failed") return "#f44336"
-                                    if (s === "cancelled") return "#9e9e9e"
-                                    if (s === "paused") return "#ff9800"
-                                    return "#666666"
+                                    if (s === "completed") return root.successColor
+                                    if (s === "failed") return root.errorColor
+                                    if (s === "cancelled") return root.disabledColor
+                                    if (s === "paused") return root.warningColor
+                                    return root.secondaryColor
                                 }
 
                                 text: statusText(model.status) +
@@ -258,15 +265,9 @@ Page {
                         }
 
                         Text {
-                            function formatSize(bytes) {
-                                if (bytes < 1024) return bytes + " B"
-                                if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"
-                                if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + " MB"
-                                return (bytes / 1073741824).toFixed(2) + " GB"
-                            }
-                            text: formatSize(model.fileSize)
+                            text: FormatUtils.formatSize(model.fileSize, 2)
                             font.pixelSize: 12
-                            color: "#999"
+                            color: root.tertiaryColor
                         }
 
                         Row {
@@ -277,13 +278,13 @@ Page {
                             Button {
                                 text: qsTr("Pause")
                                 flat: true
-                                palette.buttonText: "#ff9800"
+                                palette.buttonText: root.warningColor
                                 onClicked: transferManager.PauseDownload(model.taskId)
                             }
                             Button {
                                 text: qsTr("Cancel")
                                 flat: true
-                                palette.buttonText: "#f44336"
+                                palette.buttonText: root.errorColor
                                 onClicked: transferManager.CancelDownload(model.taskId)
                             }
                         }
@@ -295,13 +296,13 @@ Page {
                             Button {
                                 text: qsTr("Resume")
                                 flat: true
-                                palette.buttonText: "#4caf50"
+                                palette.buttonText: root.successColor
                                 onClicked: transferManager.ResumeDownload(model.taskId)
                             }
                             Button {
                                 text: qsTr("Cancel")
                                 flat: true
-                                palette.buttonText: "#f44336"
+                                palette.buttonText: root.errorColor
                                 onClicked: transferManager.CancelDownload(model.taskId)
                             }
                         }
@@ -328,7 +329,7 @@ Page {
                 Label {
                     anchors.centerIn: parent
                     text: qsTr("No downloads")
-                    color: "#999"
+                    color: root.tertiaryColor
                     visible: downloadList.count === 0
                 }
             }

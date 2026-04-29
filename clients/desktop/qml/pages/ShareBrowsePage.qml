@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../components"
+import "../components/FormatUtils.js" as FormatUtils
 
 Page {
     id: root
@@ -9,6 +10,10 @@ Page {
     property string shareId: ""
     property string currentFolderId: ""
     property string permission: "download"
+
+    WorkspaceTheme { id: theme }
+
+    readonly property color tertiaryColor: theme.tertiaryTextColor
 
     header: RowLayout {
         spacing: 12
@@ -31,7 +36,7 @@ Page {
         Label {
             text: "Permission: " + root.permission
             font.pixelSize: 12
-            color: "#888"
+            color: root.tertiaryColor
             Layout.rightMargin: 16
         }
     }
@@ -98,14 +103,10 @@ Page {
                                     if (model.isDir) {
                                         return (model.itemCount || 0) + " items"
                                     }
-                                    var sz = model.size || 0
-                                    if (sz < 1024) return sz + " B"
-                                    if (sz < 1048576) return (sz / 1024).toFixed(1) + " KB"
-                                    if (sz < 1073741824) return (sz / 1048576).toFixed(1) + " MB"
-                                    return (sz / 1073741824).toFixed(1) + " GB"
+                                    return FormatUtils.formatSize(model.size || 0)
                                 }
                                 font.pixelSize: 11
-                                color: "#888"
+                                color: root.tertiaryColor
                             }
                         }
 

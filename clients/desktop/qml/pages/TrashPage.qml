@@ -2,11 +2,19 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../components"
+import "../components/FormatUtils.js" as FormatUtils
 
 Page {
     id: root
 
     property var selectedTrashIds: []
+
+    WorkspaceTheme { id: theme }
+
+    readonly property color successColor: theme.successChipColor
+    readonly property color errorColor: theme.errorTextColor
+    readonly property color secondaryColor: theme.secondaryTextColor
+    readonly property color tertiaryColor: theme.tertiaryTextColor
 
     header: RowLayout {
         spacing: 12
@@ -72,15 +80,15 @@ Page {
                     spacing: 24
                     Label {
                         text: "Total: " + trashManager.batchResultModel.totalCount
-                        color: "#666"
+                        color: root.secondaryColor
                     }
                     Label {
                         text: "Succeeded: " + trashManager.batchResultModel.successCount
-                        color: "#4caf50"
+                        color: root.successColor
                     }
                     Label {
                         text: "Failed: " + trashManager.batchResultModel.failureCount
-                        color: trashManager.batchResultModel.failureCount > 0 ? "#f44336" : "#666"
+                        color: trashManager.batchResultModel.failureCount > 0 ? root.errorColor : root.secondaryColor
                     }
                 }
 
@@ -101,7 +109,7 @@ Page {
 
                             Label {
                                 text: status === "success" ? "✓" : "✗"
-                                color: status === "success" ? "#4caf50" : "#f44336"
+                                color: status === "success" ? root.successColor : root.errorColor
                                 font.pixelSize: 16
                                 font.bold: true
                             }
@@ -114,20 +122,20 @@ Page {
                             Label {
                                 text: status
                                 font.pixelSize: 12
-                                color: "#888"
+                                color: root.tertiaryColor
                             }
 
                             Label {
                                 text: resolvedPath ? ("→ " + resolvedPath) : ""
                                 font.pixelSize: 12
-                                color: "#666"
+                                color: root.secondaryColor
                                 visible: resolvedPath !== undefined && resolvedPath !== ""
                             }
 
                             Label {
                                 text: freedSpace ? ("Freed: " + freedSpace + " bytes") : ""
                                 font.pixelSize: 12
-                                color: "#666"
+                                color: root.secondaryColor
                                 visible: freedSpace !== undefined && freedSpace > 0
                             }
 
@@ -137,7 +145,7 @@ Page {
                                     return ""
                                 }
                                 font.pixelSize: 12
-                                color: "#f44336"
+                                color: root.errorColor
                                 visible: text !== ""
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
@@ -213,22 +221,16 @@ Page {
                             Label {
                                 text: model.originalPath
                                 font.pixelSize: 11
-                                color: "#888"
+                                color: root.tertiaryColor
                                 elide: Text.ElideLeft
                                 Layout.fillWidth: true
                             }
                         }
 
                         Label {
-                            text: {
-                                var sz = model.size
-                                if (sz < 1024) return sz + " B"
-                                if (sz < 1048576) return (sz / 1024).toFixed(1) + " KB"
-                                if (sz < 1073741824) return (sz / 1048576).toFixed(1) + " MB"
-                                return (sz / 1073741824).toFixed(1) + " GB"
-                            }
+                            text: FormatUtils.formatSize(model.size)
                             font.pixelSize: 12
-                            color: "#888"
+                            color: root.tertiaryColor
                         }
 
                         Label {
@@ -237,7 +239,7 @@ Page {
                                 return d ? Qt.formatDateTime(d, "yyyy-MM-dd") : ""
                             }
                             font.pixelSize: 11
-                            color: "#aaa"
+                            color: root.tertiaryColor
                         }
 
                         Button {

@@ -72,17 +72,16 @@ Page {
                     return
                 }
                 var pwd = passwordField.text.trim()
-                authService.AccessShare(sid, pwd)
+                if (sessionStore.visitor.shareId !== sid) {
+                    sessionStore.ActivateVisitor(sid)
+                }
+                sessionStore.visitor.StartVerify(pwd)
             }
         }
     }
 
     Connections {
         target: authService
-
-        function onShareAccessSuccess(shareToken, expiresIn, permission, files) {
-            shellController.navigateToVisitor(root.shareId || shareIdField.text.trim())
-        }
 
         function onShareAccessFailure(errorCode, message) {
             errorLabel.text = message
@@ -92,9 +91,9 @@ Page {
         }
     }
 
-    Component.onCompleted: {
+    onShareIdChanged: {
         if (root.shareId !== "" && !root.needsPassword) {
-            authService.AccessShare(root.shareId)
+            sessionStore.visitor.StartVerify()
         }
     }
 }
