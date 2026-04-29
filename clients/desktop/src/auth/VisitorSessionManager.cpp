@@ -17,7 +17,9 @@ namespace disk::desktop {
         RequestFactory* request_factory,
         QObject* parent
     )
-        : QObject(parent), m_network_client(network_client), m_request_factory(request_factory), m_token_expiry_timer(this) {}
+        : QObject(parent), m_network_client(network_client), m_request_factory(request_factory), m_token_expiry_timer(this) {
+        connect(&m_token_expiry_timer, &QTimer::timeout, this, &VisitorSessionManager::HandleTokenExpired);
+    }
 
     auto VisitorSessionManager::GetState() const -> VisitorSessionState {
         return m_state;

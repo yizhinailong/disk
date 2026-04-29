@@ -106,6 +106,9 @@ namespace disk::app {
             if (m_current_shell == "login" || m_current_shell == "splash") {
                 navigateToOwner();
             }
+        } else if (state == disk::desktop::OwnerSessionState::Authenticating ||
+                   state == disk::desktop::OwnerSessionState::Refreshing) {
+            setPageState("loading");
         }
     }
 
@@ -116,7 +119,33 @@ namespace disk::app {
 
         auto state = m_session_store->GetVisitorManager()->GetState();
         if (state == disk::desktop::VisitorSessionState::Idle) {
-            onOwnerSessionStateChanged();
+            if (m_current_shell == "visitor") {
+                auto owner_state = m_session_store->GetOwnerManager()->GetState();
+                if (owner_state == disk::desktop::OwnerSessionState::Active ||
+                    owner_state == disk::desktop::OwnerSessionState::Refreshing) {
+                    navigateToOwner();
+                } else {
+                    navigateToLogin();
+                }
+            } else {
+                onOwnerSessionStateChanged();
+            }
+        } else if (state == disk::desktop::VisitorSessionState::Unverified) {
+            if (m_current_shell == "visitor") {
+                setPageState("verify");
+            }
+        } else if (state == disk::desktop::VisitorSessionState::ReverifyRequired) {
+            if (m_current_shell == "visitor") {
+                setPageState("loading");
+            }
+        } else if (state == disk::desktop::VisitorSessionState::Verifying) {
+            if (m_current_shell == "visitor") {
+                setPageState("loading");
+            }
+        } else if (state == disk::desktop::VisitorSessionState::Active) {
+            if (m_current_shell == "visitor") {
+                setPageState("content");
+            }
         }
     }
 

@@ -6,6 +6,7 @@
 #include "auth/AuthService.hpp"
 #include "auth/OwnerSessionManager.hpp"
 #include "auth/SessionStore.hpp"
+#include "auth/VisitorSessionManager.hpp"
 #include "managers/DriveManager.hpp"
 #include "managers/ProfileManager.hpp"
 #include "managers/ShareManager.hpp"
@@ -74,6 +75,20 @@ namespace disk::app {
                 owner_mgr, &disk::desktop::OwnerSessionManager::CompleteLogout);
         connect(m_auth_service.get(), &disk::desktop::AuthService::logoutFailure,
                 owner_mgr, &disk::desktop::OwnerSessionManager::CompleteLogout);
+
+        auto* visitor_mgr = m_session_store->GetVisitorManager();
+
+        connect(visitor_mgr, &disk::desktop::VisitorSessionManager::verifyRequested,
+                m_auth_service.get(), &disk::desktop::AuthService::AccessShare);
+        connect(visitor_mgr, &disk::desktop::VisitorSessionManager::reverifyRequested,
+                m_auth_service.get(), &disk::desktop::AuthService::AccessShare);
+
+        connect(m_auth_service.get(), &disk::desktop::AuthService::shareAccessSuccess,
+                visitor_mgr, &disk::desktop::VisitorSessionManager::HandleVerifySuccess);
+        connect(m_auth_service.get(), &disk::desktop::AuthService::shareAccessFailure,
+                visitor_mgr, [visitor_mgr](int error_code, const QString&) {
+                    visitor_mgr->HandleVerifyFailure(error_code);
+                });
 
         m_shell_controller->Initialize();
     }
