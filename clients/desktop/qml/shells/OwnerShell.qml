@@ -1,86 +1,189 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "../components"
+import "../components/owner"
+import "../components/FormatUtils.js" as FormatUtils
 import "../pages"
 
 ApplicationWindow {
     id: root
+    objectName: "ownerShellWindow"
     visible: true
     width: 1024
     height: 768
     title: "Disk Desktop"
 
-    readonly property int railWidth: 220
-    readonly property int railSectionSpacing: 12
-    readonly property int railOuterPadding: 16
-    readonly property color railBackgroundColor: "#f3f5f7"
-    readonly property color railBorderColor: "#d6dde5"
-    readonly property color railPanelColor: "#ffffff"
-    readonly property color railTextColor: "#1f2933"
-    readonly property color railMutedTextColor: "#6b7785"
-    readonly property color railHoverColor: "#eef2f6"
-    readonly property color railActiveColor: "#dce8f5"
-    readonly property color railActiveStripeColor: "#4f6b8a"
-    readonly property color railLogoutColor: "#8a4f4f"
-    readonly property color headerMutedTextColor: "#5f6b76"
-    readonly property color contentBackgroundColor: "#f8fafb"
-    readonly property color contentBorderColor: "#dfe5eb"
-    readonly property color storageTrackColor: "#e5ebf1"
+    WorkspaceTheme { id: workspaceTheme }
+
+    readonly property int railWidth: workspaceTheme.railWidth
+    readonly property int railSectionSpacing: workspaceTheme.railSectionSpacing
+    readonly property int railOuterPadding: workspaceTheme.railOuterPadding
+    readonly property color railBackgroundColor: workspaceTheme.railBackgroundColor
+    readonly property color railBorderColor: workspaceTheme.railBorderColor
+    readonly property color railPanelColor: workspaceTheme.railPanelColor
+    readonly property color railTextColor: workspaceTheme.railTextColor
+    readonly property color railMutedTextColor: workspaceTheme.railMutedTextColor
+    readonly property color railHoverColor: workspaceTheme.railHoverColor
+    readonly property color railActiveColor: workspaceTheme.railActiveColor
+    readonly property color railActiveStripeColor: workspaceTheme.railActiveStripeColor
+    readonly property color railLogoutColor: workspaceTheme.railLogoutColor
+    readonly property color headerMutedTextColor: workspaceTheme.headerMutedTextColor
+    readonly property color contentBackgroundColor: workspaceTheme.pageBackgroundColor
+    readonly property color contentBorderColor: workspaceTheme.contentBorderColor
+    readonly property color storageTrackColor: workspaceTheme.storageTrackColor
     readonly property real storageUsedBytes: Number(profileManager.storageStats.used || 0)
     readonly property real storageTotalBytes: Number((profileManager.storageStats.total || profileManager.storageStats.quota) || 0)
     readonly property real storageUsageRatio: root.storageTotalBytes > 0
                                              ? Math.min(1, root.storageUsedBytes / root.storageTotalBytes)
                                              : 0
-    readonly property string currentPageTitle: root.destinationTitle(root.activeDestination)
-    readonly property string currentPageSubtitle: root.destinationSubtitle(root.activeDestination)
+    readonly property string currentPageTitle: root.destinationTitle(root.activeDestination, root.activeDriveViewMode)
+    readonly property string currentPageSubtitle: root.destinationSubtitle(root.activeDestination, root.activeDriveViewMode)
     readonly property string accountDisplayName: profileManager.userProfile.nickname
                                                  || profileManager.userProfile.username
                                                  || "Owner account"
     readonly property string accountSecondaryText: profileManager.userProfile.username
-                                                   ? "@" + profileManager.userProfile.username
-                                                   : "Signed in workspace"
-    property string activeDestination: "files"
+                                                    ? "@" + profileManager.userProfile.username
+                                                    : "Signed in workspace"
+    readonly property var fileViewNavItems: [
+        {
+            id: "myfiles",
+            label: "My Files",
+            objectName: "ownerNavMyFilesButton"
+        },
+        {
+            id: "recent",
+            label: "Recent (coming soon)",
+            objectName: "ownerNavRecentButton",
+            enabled: false
+        },
+        {
+            id: "shared",
+            label: "Shares",
+            objectName: "ownerNavSharesButton"
+        },
+        {
+            id: "trash",
+            label: "Trash",
+            objectName: "ownerNavTrashButton"
+        },
+        {
+            id: "favorites",
+            label: "Favorites (coming soon)",
+            objectName: "ownerNavFavoritesButton",
+            enabled: false
+        }
+    ]
+    readonly property var independentPageNavItems: [
+        {
+            id: "transfers",
+            label: "Transfers",
+            objectName: "ownerNavTransfersButton"
+        },
+        {
+            id: "settings",
+            label: "Settings",
+            objectName: "ownerNavSettingsButton"
+        }
+    ]
+    property string activeDestination: "drive"
+    property string activeDriveViewMode: "myfiles"
 
     function destinationForPageComponent(pageComponent) {
         if (pageComponent === transferCenterPageComponent)
             return "transfers"
-        if (pageComponent === shareManagementPageComponent)
-            return "shares"
-        if (pageComponent === trashPageComponent)
-            return "trash"
         if (pageComponent === settingsPageComponent)
             return "settings"
-        return "files"
+        return "drive"
     }
 
     function showPage(pageComponent) {
         root.activeDestination = root.destinationForPageComponent(pageComponent)
+        root.activeDriveViewMode = ""
         stackView.replace(pageComponent)
     }
 
-    function destinationTitle(destination) {
-        switch (destination) {
-        case "transfers":
-            return "Transfers"
-        case "shares":
-            return "Shares"
-        case "trash":
-            return "Trash"
-        case "settings":
-            return "Settings"
-        default:
-            return "Files"
+    function showDriveViewMode(viewMode) {
+        root.activeDriveViewMode = viewMode || "myfiles"
+        root.activeDestination = "drive"
+        // Reuse the mounted drive host when the current page already supports
+        // internal view-mode switching (i.e. we are already on PAGE-DRIVE).
+        if (stackView.currentItem
+            && typeof stackView.currentItem.activateViewMode === "function") {
+            stackView.currentItem.activateViewMode(root.activeDriveViewMode)
+            return
+        }
+        // Entering Drive from a non-drive page (Transfers / Settings).
+        stackView.replace(driveBrowserPageComponent)
+        if (stackView.currentItem && typeof stackView.currentItem.activateViewMode === "function") {
+            stackView.currentItem.activateViewMode(root.activeDriveViewMode)
         }
     }
 
-    function destinationSubtitle(destination) {
+    function activateFileView(itemId) {
+        switch (itemId) {
+        case "recent":
+            return
+        case "favorites":
+            return
+        case "shared":
+            root.showDriveViewMode("shared")
+            return
+        case "trash":
+            root.showDriveViewMode("trash")
+            return
+        default:
+            root.showDriveViewMode("myfiles")
+            return
+        }
+    }
+
+    function activateIndependentPage(itemId) {
+        switch (itemId) {
+        case "transfers":
+            root.activeDestination = "transfers"
+            root.showPage(transferCenterPageComponent)
+            return
+        case "settings":
+            root.activeDestination = "settings"
+            root.showPage(settingsPageComponent)
+            return
+        }
+    }
+
+    function destinationTitle(destination, viewMode) {
+        if (destination === "drive") {
+            switch (viewMode) {
+            case "shared": return "Shares"
+            case "trash": return "Trash"
+            case "recent": return "Recent"
+            case "favorites": return "Favorites"
+            default: return "My Files"
+            }
+        }
+        switch (destination) {
+        case "transfers":
+            return "Transfers"
+        case "settings":
+            return "Settings"
+        default:
+            return "My Files"
+        }
+    }
+
+    function destinationSubtitle(destination, viewMode) {
+        if (destination === "drive") {
+            switch (viewMode) {
+            case "shared": return "Manage outbound file access"
+            case "trash": return "Review recently deleted items"
+            case "recent": return "Recently accessed files"
+            case "favorites": return "Your bookmarked items"
+            default: return "Browse and manage your drive"
+            }
+        }
         switch (destination) {
         case "transfers":
             return "Track uploads and downloads"
-        case "shares":
-            return "Manage outbound file access"
-        case "trash":
-            return "Review recently deleted items"
         case "settings":
             return "Profile, password, and storage"
         default:
@@ -89,12 +192,7 @@ ApplicationWindow {
     }
 
     function formatBytes(bytes) {
-        if (bytes === 0)
-            return "0 Bytes"
-        const k = 1024
-        const sizes = ["Bytes", "KB", "MB", "GB", "TB"]
-        const i = Math.floor(Math.log(bytes) / Math.log(k))
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+        return FormatUtils.formatStorageSize(bytes)
     }
 
     Component.onCompleted: {
@@ -146,6 +244,7 @@ ApplicationWindow {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    objectName: "ownerNavigationPanel"
                     color: root.railPanelColor
                     radius: 10
                     border.color: root.railBorderColor
@@ -166,218 +265,37 @@ ApplicationWindow {
                             bottomPadding: 8
                         }
 
-                        Button {
+                        OwnerSidebarSection {
                             Layout.fillWidth: true
-                            text: "Files"
-                            flat: true
-                            leftPadding: 18
-                            rightPadding: 12
-                            topPadding: 10
-                            bottomPadding: 10
-                            hoverEnabled: true
-
-                            background: Rectangle {
-                                radius: 8
-                                color: root.activeDestination === "files"
-                                       ? root.railActiveColor
-                                       : (parent.hovered ? root.railHoverColor : "transparent")
-
-                                Rectangle {
-                                    anchors.left: parent.left
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    width: 4
-                                    radius: 2
-                                    color: root.railActiveStripeColor
-                                    visible: root.activeDestination === "files"
-                                }
-                            }
-
-                            contentItem: Text {
-                                text: parent.text
-                                color: root.activeDestination === "files"
-                                       ? root.railTextColor
-                                       : root.railMutedTextColor
-                                font.pixelSize: 14
-                                font.bold: root.activeDestination === "files"
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            onClicked: {
-                                root.activeDestination = "files"
-                                root.showPage(driveBrowserPageComponent)
+                            sectionObjectName: "ownerFileViewGroup"
+                            title: "File Views"
+                            items: root.fileViewNavItems
+                            activeItemId: root.activeDestination === "drive" ? root.activeDriveViewMode : ""
+                            titleTextColor: root.railMutedTextColor
+                            activeFillColor: root.railActiveColor
+                            hoverFillColor: root.railHoverColor
+                            activeStripeColor: root.railActiveStripeColor
+                            activeTextColor: root.railTextColor
+                            idleTextColor: root.railMutedTextColor
+                            onItemActivated: function(itemId) {
+                                root.activateFileView(itemId)
                             }
                         }
 
-                        Button {
+                        OwnerSidebarSection {
                             Layout.fillWidth: true
-                            text: "Transfers"
-                            flat: true
-                            leftPadding: 18
-                            rightPadding: 12
-                            topPadding: 10
-                            bottomPadding: 10
-                            hoverEnabled: true
-
-                            background: Rectangle {
-                                radius: 8
-                                color: root.activeDestination === "transfers"
-                                       ? root.railActiveColor
-                                       : (parent.hovered ? root.railHoverColor : "transparent")
-
-                                Rectangle {
-                                    anchors.left: parent.left
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    width: 4
-                                    radius: 2
-                                    color: root.railActiveStripeColor
-                                    visible: root.activeDestination === "transfers"
-                                }
-                            }
-
-                            contentItem: Text {
-                                text: parent.text
-                                color: root.activeDestination === "transfers"
-                                       ? root.railTextColor
-                                       : root.railMutedTextColor
-                                font.pixelSize: 14
-                                font.bold: root.activeDestination === "transfers"
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            onClicked: {
-                                root.activeDestination = "transfers"
-                                root.showPage(transferCenterPageComponent)
-                            }
-                        }
-
-                        Button {
-                            Layout.fillWidth: true
-                            text: "Shares"
-                            flat: true
-                            leftPadding: 18
-                            rightPadding: 12
-                            topPadding: 10
-                            bottomPadding: 10
-                            hoverEnabled: true
-
-                            background: Rectangle {
-                                radius: 8
-                                color: root.activeDestination === "shares"
-                                       ? root.railActiveColor
-                                       : (parent.hovered ? root.railHoverColor : "transparent")
-
-                                Rectangle {
-                                    anchors.left: parent.left
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    width: 4
-                                    radius: 2
-                                    color: root.railActiveStripeColor
-                                    visible: root.activeDestination === "shares"
-                                }
-                            }
-
-                            contentItem: Text {
-                                text: parent.text
-                                color: root.activeDestination === "shares"
-                                       ? root.railTextColor
-                                       : root.railMutedTextColor
-                                font.pixelSize: 14
-                                font.bold: root.activeDestination === "shares"
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            onClicked: {
-                                root.activeDestination = "shares"
-                                root.showPage(shareManagementPageComponent)
-                            }
-                        }
-
-                        Button {
-                            Layout.fillWidth: true
-                            text: "Trash"
-                            flat: true
-                            leftPadding: 18
-                            rightPadding: 12
-                            topPadding: 10
-                            bottomPadding: 10
-                            hoverEnabled: true
-
-                            background: Rectangle {
-                                radius: 8
-                                color: root.activeDestination === "trash"
-                                       ? root.railActiveColor
-                                       : (parent.hovered ? root.railHoverColor : "transparent")
-
-                                Rectangle {
-                                    anchors.left: parent.left
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    width: 4
-                                    radius: 2
-                                    color: root.railActiveStripeColor
-                                    visible: root.activeDestination === "trash"
-                                }
-                            }
-
-                            contentItem: Text {
-                                text: parent.text
-                                color: root.activeDestination === "trash"
-                                       ? root.railTextColor
-                                       : root.railMutedTextColor
-                                font.pixelSize: 14
-                                font.bold: root.activeDestination === "trash"
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            onClicked: {
-                                root.activeDestination = "trash"
-                                root.showPage(trashPageComponent)
-                            }
-                        }
-
-                        Button {
-                            Layout.fillWidth: true
-                            text: "Settings"
-                            flat: true
-                            leftPadding: 18
-                            rightPadding: 12
-                            topPadding: 10
-                            bottomPadding: 10
-                            hoverEnabled: true
-
-                            background: Rectangle {
-                                radius: 8
-                                color: root.activeDestination === "settings"
-                                       ? root.railActiveColor
-                                       : (parent.hovered ? root.railHoverColor : "transparent")
-
-                                Rectangle {
-                                    anchors.left: parent.left
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    width: 4
-                                    radius: 2
-                                    color: root.railActiveStripeColor
-                                    visible: root.activeDestination === "settings"
-                                }
-                            }
-
-                            contentItem: Text {
-                                text: parent.text
-                                color: root.activeDestination === "settings"
-                                       ? root.railTextColor
-                                       : root.railMutedTextColor
-                                font.pixelSize: 14
-                                font.bold: root.activeDestination === "settings"
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            onClicked: {
-                                root.activeDestination = "settings"
-                                root.showPage(settingsPageComponent)
+                            sectionObjectName: "ownerIndependentPageGroup"
+                            title: "Independent Pages"
+                            items: root.independentPageNavItems
+                            activeItemId: root.activeDestination === "drive" ? "" : root.activeDestination
+                            titleTextColor: root.railMutedTextColor
+                            activeFillColor: root.railActiveColor
+                            hoverFillColor: root.railHoverColor
+                            activeStripeColor: root.railActiveStripeColor
+                            activeTextColor: root.railTextColor
+                            idleTextColor: root.railMutedTextColor
+                            onItemActivated: function(itemId) {
+                                root.activateIndependentPage(itemId)
                             }
                         }
                     }
@@ -387,67 +305,17 @@ ApplicationWindow {
                     Layout.fillHeight: true
                 }
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 104
-                    color: root.railPanelColor
-                    radius: 10
-                    border.color: root.railBorderColor
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 12
-                        spacing: 8
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: "Storage"
-                            color: root.railMutedTextColor
-                            font.pixelSize: 11
-                            font.bold: true
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: root.formatBytes(root.storageUsedBytes) + " / "
-                                  + root.formatBytes(root.storageTotalBytes)
-                            color: root.railTextColor
-                            font.pixelSize: 14
-                            font.bold: true
-                            wrapMode: Text.WordWrap
-                        }
-
-                        ProgressBar {
-                            Layout.fillWidth: true
-                            value: root.storageUsageRatio
-
-                            background: Rectangle {
-                                implicitHeight: 8
-                                radius: 4
-                                color: root.storageTrackColor
-                            }
-
-                            contentItem: Item {
-                                implicitHeight: 8
-
-                                Rectangle {
-                                    width: parent.width * root.storageUsageRatio
-                                    height: parent.height
-                                    radius: 4
-                                    color: root.railActiveStripeColor
-                                }
-                            }
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: root.storageTotalBytes > 0
-                                  ? Math.round(root.storageUsageRatio * 100) + "% in use"
-                                  : "Loading account storage"
-                            color: root.railMutedTextColor
-                            font.pixelSize: 11
-                        }
-                    }
+                OwnerStorageCard {
+                    usageText: root.formatBytes(root.storageUsedBytes) + " / "
+                               + root.formatBytes(root.storageTotalBytes)
+                    usageRatio: root.storageUsageRatio
+                    totalBytes: root.storageTotalBytes
+                    panelColor: root.railPanelColor
+                    borderColor: root.railBorderColor
+                    titleTextColor: root.railMutedTextColor
+                    bodyTextColor: root.railTextColor
+                    trackColor: root.storageTrackColor
+                    accentColor: root.railActiveStripeColor
                 }
 
                 Rectangle {
@@ -545,32 +413,13 @@ ApplicationWindow {
                         }
                     }
 
-                    Rectangle {
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.preferredWidth: 188
-                        Layout.preferredHeight: 56
-                        color: root.contentBackgroundColor
-                        radius: 10
-                        border.color: root.contentBorderColor
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 12
-                            spacing: 2
-
-                            Label {
-                                text: root.accountDisplayName
-                                color: root.railTextColor
-                                font.pixelSize: 14
-                                font.bold: true
-                            }
-
-                            Label {
-                                text: root.accountSecondaryText
-                                color: root.headerMutedTextColor
-                                font.pixelSize: 11
-                            }
-                        }
+                    OwnerAccountCard {
+                        backgroundColor: root.contentBackgroundColor
+                        borderColor: root.contentBorderColor
+                        primaryTextColor: root.railTextColor
+                        secondaryTextColor: root.headerMutedTextColor
+                        primaryText: root.accountDisplayName
+                        secondaryText: root.accountSecondaryText
                     }
                 }
                  
@@ -585,6 +434,7 @@ ApplicationWindow {
             // StackView for pages
             StackView {
                 id: stackView
+                objectName: "ownerStackView"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 
@@ -601,16 +451,6 @@ ApplicationWindow {
     Component {
         id: transferCenterPageComponent
         TransferCenterPage {}
-    }
-
-    Component {
-        id: shareManagementPageComponent
-        ShareManagementPage {}
-    }
-
-    Component {
-        id: trashPageComponent
-        TrashPage {}
     }
 
     Component {
