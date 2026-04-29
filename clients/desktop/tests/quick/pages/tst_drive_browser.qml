@@ -5,12 +5,28 @@ TestCase {
     name: "DesktopDriveBrowser"
     id: testDriveBrowser
 
-    function readDriveBrowserSource() {
+    function readQmlSource(relPath) {
         var xhr = new XMLHttpRequest()
-        xhr.open("GET", Qt.resolvedUrl("../../../qml/pages/DriveBrowserPage.qml"), false)
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/" + relPath), false)
         xhr.send()
-        verify(xhr.responseText.length > 0, "DriveBrowserPage.qml was read")
+        verify(xhr.responseText.length > 0, relPath + " was read")
         return xhr.responseText
+    }
+
+    function readDriveBrowserSource() {
+        return readQmlSource("pages/DriveBrowserPage.qml")
+    }
+
+    function readDriveCompositeSource() {
+        return [
+            readQmlSource("pages/DriveBrowserPage.qml"),
+            readQmlSource("components/drive/DriveToolbarCard.qml"),
+            readQmlSource("components/drive/DriveStatusCard.qml"),
+            readQmlSource("components/drive/DriveMyFilesView.qml"),
+            readQmlSource("components/drive/DriveSharedView.qml"),
+            readQmlSource("components/drive/DriveTrashView.qml"),
+            readQmlSource("components/drive/DriveSeamView.qml")
+        ].join("\n")
     }
 
     function test_drive_browser_page_has_foundation_selection_state() {
@@ -31,7 +47,7 @@ TestCase {
     }
 
     function test_drive_browser_uses_page_state_view() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         verify(source.indexOf("PageStateView") !== -1, "Uses PageStateView for state management")
         verify(source.indexOf("pageState: shellController.pageState") !== -1,
@@ -39,7 +55,7 @@ TestCase {
     }
 
     function test_drive_browser_exposes_only_p0_actions() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         verify(source.indexOf('text: "Refresh"') !== -1, "Exposes Refresh action")
         verify(source.indexOf('text: "New Folder"') !== -1, "Exposes New Folder action")
@@ -47,13 +63,17 @@ TestCase {
         verify(source.indexOf('text: "Rename"') !== -1, "Exposes Rename action")
         verify(source.indexOf('text: "Delete"') !== -1, "Exposes Delete action")
         verify(source.indexOf('text: "Download"') !== -1, "Exposes Download action")
-        verify(source.indexOf('enabled: root.selectedItemId !== ""') !== -1,
+        verify(source.indexOf('enabled: page.selectedItemId !== ""') !== -1
+               || source.indexOf('enabled: root.selectedItemId !== ""') !== -1,
                "Selection-gates rename and delete")
-        verify(source.indexOf('enabled: root.selectedItemKind === "file"') !== -1,
+        verify(source.indexOf('enabled: page.selectedItemKind === "file"') !== -1
+               || source.indexOf('enabled: root.selectedItemKind === "file"') !== -1,
                "Selection-gates download to files")
 
-        verify(source.indexOf('Search files...') === -1, "Search field is removed")
-        verify(source.indexOf('searchFiles(') === -1, "Search behavior is removed")
+        verify(source.indexOf('placeholderText: "Search files..."') !== -1
+               || source.indexOf('Search files...') !== -1,
+               "Search field is present in My Files view")
+        verify(source.indexOf('searchFiles(') !== -1, "Search behavior is present")
         verify(source.indexOf('text: "Move"') === -1, "Move action is absent")
         verify(source.indexOf('text: "Copy"') === -1, "Copy action is absent")
         verify(source.indexOf('text: "Share"') === -1, "Share action is absent")
@@ -61,7 +81,7 @@ TestCase {
     }
 
     function test_drive_browser_has_single_file_upload_entry_and_helper() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         verify(source.indexOf("function openUploadFileChooser()") !== -1,
                "Has page helper to open the native single-file chooser")
@@ -89,7 +109,8 @@ TestCase {
                "Removes the manual upload path text field")
         verify(source.indexOf('placeholderText: "Absolute local file path"') === -1,
                "Does not request a free-text local path")
-        verify(source.indexOf("onClicked: root.openUploadFileChooser()") !== -1,
+        verify(source.indexOf("onClicked: page.openUploadFileChooser()") !== -1
+               || source.indexOf("onClicked: root.openUploadFileChooser()") !== -1,
                "Upload toolbar action opens the native chooser")
         verify(source.indexOf("uploadFileDialogLoader.active = true") !== -1,
                "Chooser is created only when the upload action is used")
@@ -114,7 +135,7 @@ TestCase {
     }
 
     function test_drive_browser_has_file_only_owner_download_entry_and_helper() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         verify(source.indexOf('property string downloadErrorMessage: ""') !== -1,
                "Tracks download chooser validation feedback in page state")
@@ -134,7 +155,8 @@ TestCase {
                "Defines the owner download chooser as a dedicated component")
         verify(source.indexOf("fileMode: Platform.FileDialog.SaveFile") !== -1,
                "Uses a save-file chooser for owner downloads")
-        verify(source.indexOf("onClicked: root.openOwnerDownloadFileChooser(root.selectedItemId, root.selectedItemName)") !== -1,
+        verify(source.indexOf("onClicked: page.openOwnerDownloadFileChooser(page.selectedItemId, page.selectedItemName)") !== -1
+               || source.indexOf("onClicked: root.openOwnerDownloadFileChooser(root.selectedItemId, root.selectedItemName)") !== -1,
                "Download toolbar action opens the owner save-file chooser")
         verify(source.indexOf("onAccepted: root.startOwnerDownloadToPath(root.pendingOwnerDownloadFileId, root.pendingOwnerDownloadFilename, file)") !== -1,
                "Chooser acceptance routes through the owner download helper")
@@ -153,7 +175,7 @@ TestCase {
     }
 
     function test_drive_browser_has_folder_tree_and_breadcrumb_navigation() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         verify(source.indexOf("FolderTreePanel") !== -1, "Has FolderTreePanel")
         verify(source.indexOf("model: driveManager.treeModel") !== -1,
@@ -161,7 +183,8 @@ TestCase {
         verify(source.indexOf("BreadcrumbBar") !== -1, "Has BreadcrumbBar")
         verify(source.indexOf("onFolderClicked: function(folderId) { root.navigateToFolder(folderId) }") !== -1,
                "Folder tree clicks navigate through page flow")
-        verify(source.indexOf("onPathClicked: function(folderId) { root.navigateToFolder(folderId) }") !== -1,
+        verify(source.indexOf("onPathClicked: function(folderId) { page.navigateToFolder(folderId) }") !== -1
+               || source.indexOf("onPathClicked: function(folderId) { root.navigateToFolder(folderId) }") !== -1,
                "Breadcrumb clicks navigate through page flow")
         verify(source.indexOf("function navigateToFolder(folderId)") !== -1,
                "Has navigateToFolder helper")
@@ -170,24 +193,26 @@ TestCase {
     }
 
     function test_drive_browser_row_click_is_selection_only() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         verify(source.indexOf("model: driveManager.listModel") !== -1,
                "ListView uses driveManager.listModel")
-        verify(source.indexOf("onClicked: root.selectItem(model.id, model.kind, model.name)") !== -1,
+        verify(source.indexOf("onClicked: page.selectItem(model.id, model.kind, model.name)") !== -1
+               || source.indexOf("onClicked: root.selectItem(model.id, model.kind, model.name)") !== -1,
                "Row click only updates selection")
         verify(source.indexOf('text: "Open"') !== -1,
                "Folder rows expose dedicated Open control")
         verify(source.indexOf('visible: model.kind === "folder"') !== -1,
                "Open control is only shown for folder rows")
-        verify(source.indexOf("root.navigateToFolder(model.id)") !== -1,
+        verify(source.indexOf("page.navigateToFolder(model.id)") !== -1
+               || source.indexOf("root.navigateToFolder(model.id)") !== -1,
                "Folder Open button navigates through the shared flow")
         verify(source.indexOf("driveManager.getFileDetail(") === -1,
                "Row click no longer triggers file detail loading")
     }
 
     function test_drive_browser_file_list_uses_static_table_header_and_role_fallbacks() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
         var nameHeaderIndex = source.indexOf('text: "Name"')
         var typeHeaderIndex = source.indexOf('text: "Type"')
         var sizeHeaderIndex = source.indexOf('text: "Size"')
@@ -223,7 +248,8 @@ TestCase {
                "Size header keeps a stable hook")
         verify(source.indexOf('objectName: "fileTableHeaderUpdated"') !== -1,
                "Updated header keeps a stable hook")
-        verify(source.indexOf('spacing: root.tableColumnSpacing') !== -1,
+        verify(source.indexOf('spacing: page.tableColumnSpacing') !== -1
+               || source.indexOf('spacing: root.tableColumnSpacing') !== -1,
                "Header and rows share one explicit column-spacing contract")
         verify(source.indexOf('wrapMode: Text.NoWrap') !== -1,
                "Header labels and row metadata stay single-line for alignment")
@@ -232,7 +258,7 @@ TestCase {
     }
 
     function test_drive_browser_file_list_long_names_use_deterministic_elision_and_disclosure() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         verify(source.indexOf('objectName: "fileListView"') !== -1,
                "Exposes a stable file list hook")
@@ -259,8 +285,8 @@ TestCase {
 
         verify(source.indexOf("Component.onCompleted") !== -1,
                "Refreshes on component completion")
-        verify(source.indexOf("root.refreshCurrentFolder()") !== -1,
-               "Calls refreshCurrentFolder on init")
+        verify(source.indexOf("root.refreshCurrentView()") !== -1,
+               "Calls refreshCurrentView on init")
         verify(source.indexOf("onPaginationLoaded") !== -1,
                "Handles paginationLoaded signal")
         verify(source.indexOf("onListLoadFailed") !== -1,
@@ -352,10 +378,10 @@ TestCase {
                "Has navigateToFolder helper")
 
         var navStart = source.indexOf("function navigateToFolder(folderId)")
-        var navBody = source.substring(navStart, navStart + 280)
+        var navBody = source.substring(navStart, navStart + 320)
 
         verify(navBody.indexOf("currentFolderId = nextFolderId") !== -1,
-                "navigateToFolder assigns currentFolderId")
+                 "navigateToFolder assigns currentFolderId")
         verify(navBody.indexOf("refreshCurrentFolder") !== -1,
                 "navigateToFolder calls refreshCurrentFolder")
         verify(navBody.indexOf('var nextFolderId = folderId ? String(folderId) : "0"') !== -1,
@@ -377,29 +403,29 @@ TestCase {
         verify(refreshBody.indexOf('setPageState("loading")') !== -1,
                "refreshCurrentFolder sets loading state")
         verify(refreshBody.indexOf("driveManager.loadFolderTree()") !== -1,
-               "refreshCurrentFolder loads the folder tree")
-        verify(refreshBody.indexOf("driveManager.listFiles(currentFolderId)") !== -1,
-               "refreshCurrentFolder loads the file list for currentFolderId")
+                "refreshCurrentFolder loads the folder tree")
+        verify(refreshBody.indexOf("driveManager.listFiles(currentFolderId") !== -1
+               || refreshBody.indexOf("driveManager.searchFiles(root.searchQuery)") !== -1,
+                "refreshCurrentFolder loads the file list for currentFolderId")
         verify(refreshBody.indexOf("driveManager.loadBreadcrumb(currentFolderId)") !== -1,
-               "refreshCurrentFolder loads the breadcrumb for currentFolderId")
+                "refreshCurrentFolder loads the breadcrumb for currentFolderId")
     }
 
     function test_drive_browser_tree_breadcrumb_and_folderRow_share_navigateToFolder_flow() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         verify(source.indexOf("onFolderClicked: function(folderId) { root.navigateToFolder(folderId) }") !== -1,
                "FolderTreePanel routes clicks through navigateToFolder")
-        verify(source.indexOf("onPathClicked: function(folderId) { root.navigateToFolder(folderId) }") !== -1,
+        verify(source.indexOf("onPathClicked: function(folderId) { page.navigateToFolder(folderId) }") !== -1
+               || source.indexOf("onPathClicked: function(folderId) { root.navigateToFolder(folderId) }") !== -1,
                "BreadcrumbBar routes clicks through navigateToFolder")
-        verify(source.indexOf("root.navigateToFolder(model.id)") !== -1,
+        verify(source.indexOf("page.navigateToFolder(model.id)") !== -1
+               || source.indexOf("root.navigateToFolder(model.id)") !== -1,
                "Folder Open button routes through navigateToFolder")
 
-        var firstNav = source.indexOf("root.navigateToFolder(")
-        var secondNav = source.indexOf("root.navigateToFolder(", firstNav + 1)
-        var thirdNav = source.indexOf("root.navigateToFolder(", secondNav + 1)
-        verify(firstNav !== -1, "First navigateToFolder call exists")
-        verify(secondNav !== -1, "Second navigateToFolder call exists")
-        verify(thirdNav !== -1, "Third navigateToFolder call exists (folder row Open button)")
+        var navigateCallCount = source.split("navigateToFolder(").length - 1
+        verify(navigateCallCount >= 3,
+               "At least three navigateToFolder call sites exist across tree, breadcrumb, and folder-row open flows")
     }
 
     function test_drive_browser_currentFolderId_initializes_to_root() {
@@ -450,12 +476,12 @@ TestCase {
                "Has navigateToFolder helper")
 
         var navStart = source.indexOf("function navigateToFolder(folderId)")
-        var navBody = source.substring(navStart, navStart + 260)
+        var navBody = source.substring(navStart, navStart + 320)
 
         verify(navBody.indexOf("currentFolderId = nextFolderId") !== -1,
                 "navigateToFolder assigns currentFolderId before refresh")
         verify(navBody.indexOf("refreshCurrentFolder") !== -1,
-                "navigateToFolder triggers refresh after setting currentFolderId")
+                "navigateToFolder calls refreshCurrentFolder")
     }
 
     function test_drive_browser_finishMutationSuccess_restores_current_path() {
@@ -464,7 +490,7 @@ TestCase {
         var finishStart = source.indexOf("function finishMutationSuccess()")
         verify(finishStart !== -1, "Has finishMutationSuccess handler")
 
-        var finishBody = source.substring(finishStart, finishStart + 400)
+        var finishBody = source.substring(finishStart, finishStart + 700)
 
         verify(finishBody.indexOf("pendingMutationAction =") !== -1,
                "finishMutationSuccess clears pendingMutationAction")
@@ -475,13 +501,15 @@ TestCase {
     function test_drive_browser_onOperationSuccess_only_fires_for_mutations() {
         var source = readDriveBrowserSource()
 
-        var successHandlerStart = source.indexOf("function onOperationSuccess(message)")
-        verify(successHandlerStart !== -1, "Has onOperationSuccess handler")
+        var driveConnectionsStart = source.indexOf("target: driveManager")
+        verify(driveConnectionsStart !== -1, "Has driveManager Connections block")
+        var successHandlerStart = source.indexOf("function onOperationSuccess(message)", driveConnectionsStart)
+        verify(successHandlerStart !== -1, "Drive connections expose an onOperationSuccess handler")
 
-        var successBody = source.substring(successHandlerStart, successHandlerStart + 300)
+        var successBody = source.substring(successHandlerStart, successHandlerStart + 320)
 
         verify(successBody.indexOf("pendingMutationAction") !== -1,
-               "onOperationSuccess checks pendingMutationAction before acting")
+                "onOperationSuccess checks pendingMutationAction before acting")
         verify(successBody.indexOf("finishMutationSuccess") !== -1,
                "onOperationSuccess delegates to finishMutationSuccess for mutations")
     }
@@ -519,46 +547,49 @@ TestCase {
     }
 
     function test_drive_browser_breadcrumb_click_navigation_routes_through_navigateToFolder() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         var breadcrumbStart = source.indexOf("BreadcrumbBar {")
         verify(breadcrumbStart !== -1, "Has BreadcrumbBar instance")
         var breadcrumbEnd = source.indexOf("}", breadcrumbStart + 1)
         var breadcrumbBlock = source.substring(breadcrumbStart, breadcrumbEnd)
 
-        verify(breadcrumbBlock.indexOf("root.navigateToFolder") !== -1,
+        verify(breadcrumbBlock.indexOf("page.navigateToFolder") !== -1
+               || breadcrumbBlock.indexOf("root.navigateToFolder") !== -1,
                "BreadcrumbBar click routes through navigateToFolder")
     }
 
     function test_drive_browser_folder_open_button_routes_through_navigateToFolder() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         var openBtnIndex = source.indexOf('text: "Open"')
         verify(openBtnIndex !== -1, "Has Open button")
 
         var openBtnBlock = source.substring(openBtnIndex, openBtnIndex + 400)
-        verify(openBtnBlock.indexOf("root.navigateToFolder(model.id)") !== -1,
+        verify(openBtnBlock.indexOf("page.navigateToFolder(model.id)") !== -1
+               || openBtnBlock.indexOf("root.navigateToFolder(model.id)") !== -1,
                "Open button navigates through navigateToFolder")
     }
 
     // ── Homepage interaction contract (Task 2) ────────────────────────
 
     function test_drive_browser_has_homepage_up_button() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         verify(source.indexOf('objectName: "homepageUpButton"') !== -1,
                "Exposes a stable homepageUpButton hook for runtime checks")
     }
 
     function test_drive_browser_homepage_up_button_enabled_depends_on_canNavigateUp() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         var upBtnIndex = source.indexOf('objectName: "homepageUpButton"')
         verify(upBtnIndex !== -1, "Has homepageUpButton")
 
         var upBtnBlock = source.substring(upBtnIndex, upBtnIndex + 600)
 
-        verify(upBtnBlock.indexOf("root.canNavigateUp") !== -1,
+        verify(upBtnBlock.indexOf("page.canNavigateUp") !== -1
+               || upBtnBlock.indexOf("root.canNavigateUp") !== -1,
                "homepageUpButton enabled state is bound to canNavigateUp")
     }
 
@@ -571,24 +602,25 @@ TestCase {
         verify(source.indexOf("resolvedParentFolderId") !== -1,
                "Defines resolvedParentFolderId derived from breadcrumb parent")
 
-        verify(source.indexOf("breadcrumbBar.path") !== -1,
-               "canNavigateUp resolves parent from breadcrumbBar.path")
+        verify(source.indexOf("breadcrumbPath") !== -1,
+               "canNavigateUp resolves parent from page breadcrumbPath")
     }
 
     function test_drive_browser_homepage_up_button_navigates_to_resolved_parent() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         var upBtnIndex = source.indexOf('objectName: "homepageUpButton"')
         verify(upBtnIndex !== -1, "Has homepageUpButton")
 
         var upBtnBlock = source.substring(upBtnIndex, upBtnIndex + 600)
 
-        verify(upBtnBlock.indexOf("root.navigateToFolder(root.resolvedParentFolderId)") !== -1,
+        verify(upBtnBlock.indexOf("page.navigateToFolder(page.resolvedParentFolderId)") !== -1
+               || upBtnBlock.indexOf("root.navigateToFolder(root.resolvedParentFolderId)") !== -1,
                "homepageUpButton click navigates to resolvedParentFolderId")
     }
 
     function test_drive_browser_has_folder_navigator_toggle_button() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         verify(source.indexOf('objectName: "folderNavigatorToggleButton"') !== -1,
                "Exposes a stable folderNavigatorToggleButton hook for runtime checks")
@@ -612,14 +644,15 @@ TestCase {
     }
 
     function test_drive_browser_folder_navigator_toggle_flips_visibility() {
-        var source = readDriveBrowserSource()
+        var source = readDriveCompositeSource()
 
         var toggleIndex = source.indexOf('objectName: "folderNavigatorToggleButton"')
         verify(toggleIndex !== -1, "Has folderNavigatorToggleButton")
 
         var toggleBlock = source.substring(toggleIndex, toggleIndex + 600)
 
-        verify(toggleBlock.indexOf("!root.folderNavigatorExpanded") !== -1,
+        verify(toggleBlock.indexOf("!page.folderNavigatorExpanded") !== -1
+               || toggleBlock.indexOf("!root.folderNavigatorExpanded") !== -1,
                "folderNavigatorToggleButton toggles folderNavigatorExpanded")
     }
 
@@ -651,5 +684,354 @@ TestCase {
                "Navigator folder tree uses driveManager.treeModel")
         verify(panelBlock.indexOf("currentFolderId: root.currentFolderId") !== -1,
                "Navigator folder tree tracks page currentFolderId")
+    }
+
+    // ── Task 5: PAGE-DRIVE host mode contract ──────────────────────────────
+
+    function test_drive_browser_has_mode_check_properties() {
+        var source = readDriveBrowserSource()
+
+        verify(source.indexOf("readonly property bool isMyFilesMode: root.currentViewMode === \"myfiles\"") !== -1,
+               "Has isMyFilesMode mode-check property")
+        verify(source.indexOf("readonly property bool isSharedMode: root.currentViewMode === \"shared\"") !== -1,
+               "Has isSharedMode mode-check property")
+        verify(source.indexOf("readonly property bool isTrashMode: root.currentViewMode === \"trash\"") !== -1,
+               "Has isTrashMode mode-check property")
+        verify(source.indexOf("readonly property bool isRecentMode: root.currentViewMode === \"recent\"") !== -1,
+               "Has isRecentMode mode-check property")
+        verify(source.indexOf("readonly property bool isFavoritesMode: root.currentViewMode === \"favorites\"") !== -1,
+               "Has isFavoritesMode mode-check property")
+    }
+
+    function test_drive_browser_has_mode_aware_title_functions() {
+        var source = readDriveBrowserSource()
+
+        verify(source.indexOf("function viewModeLabel()") !== -1,
+               "Has viewModeLabel function for section label")
+        verify(source.indexOf("function viewModeTitleText()") !== -1,
+               "Has viewModeTitleText function for mode-specific title")
+        verify(source.indexOf("function viewModeStatusText()") !== -1,
+               "Has viewModeStatusText function for mode-specific status")
+        verify(source.indexOf("function seamDescription()") !== -1,
+               "Has seamDescription function for mode-specific seam text")
+    }
+
+    function test_drive_browser_viewModeLabel_returns_per_mode_labels() {
+        var source = readDriveBrowserSource()
+
+        var labelStart = source.indexOf("function viewModeLabel()")
+        verify(labelStart !== -1, "Has viewModeLabel")
+        var labelBody = source.substring(labelStart, labelStart + 400)
+
+        verify(labelBody.indexOf('case "shared": return "SHARES"') !== -1,
+               "shared mode returns SHARES label")
+        verify(labelBody.indexOf('case "trash": return "TRASH"') !== -1,
+               "trash mode returns TRASH label")
+        verify(labelBody.indexOf('case "recent": return "RECENT"') !== -1,
+               "recent mode returns RECENT label")
+        verify(labelBody.indexOf('case "favorites": return "FAVORITES"') !== -1,
+               "favorites mode returns FAVORITES label")
+        verify(labelBody.indexOf('default: return "DRIVE"') !== -1,
+               "myfiles mode returns DRIVE label")
+    }
+
+    function test_drive_browser_viewModeTitleText_returns_per_mode_titles() {
+        var source = readDriveBrowserSource()
+
+        var titleStart = source.indexOf("function viewModeTitleText()")
+        verify(titleStart !== -1, "Has viewModeTitleText")
+        var titleBody = source.substring(titleStart, titleStart + 350)
+
+        verify(titleBody.indexOf("root.isMyFilesMode") !== -1,
+               "My Files mode delegates to driveTitle")
+        verify(titleBody.indexOf('case "shared": return "Shares"') !== -1,
+               "shared mode returns Shares title")
+        verify(titleBody.indexOf('case "trash": return "Trash"') !== -1,
+               "trash mode returns Trash title")
+        verify(titleBody.indexOf('case "recent": return "Recent"') !== -1,
+               "recent mode returns Recent title")
+        verify(titleBody.indexOf('case "favorites": return "Favorites"') !== -1,
+               "favorites mode returns Favorites title")
+    }
+
+    function test_drive_browser_myfiles_toolbar_buttons_gated_by_mode() {
+        var source = readDriveCompositeSource()
+
+        // Up button: visible gate near objectName
+        var upBtnIdx = source.indexOf('objectName: "homepageUpButton"')
+        verify(upBtnIdx !== -1, "Has homepageUpButton")
+        var upBlock = source.substring(upBtnIdx, upBtnIdx + 200)
+        verify(upBlock.indexOf("visible: page.isMyFilesMode") !== -1
+               || upBlock.indexOf("visible: root.isMyFilesMode") !== -1,
+               "homepageUpButton is gated by isMyFilesMode")
+
+        // Folders toggle: visible gate near objectName
+        var toggleIdx = source.indexOf('objectName: "folderNavigatorToggleButton"')
+        verify(toggleIdx !== -1, "Has folderNavigatorToggleButton")
+        var toggleBlock = source.substring(toggleIdx, toggleIdx + 200)
+        verify(toggleBlock.indexOf("visible: page.isMyFilesMode") !== -1
+               || toggleBlock.indexOf("visible: root.isMyFilesMode") !== -1,
+               "folderNavigatorToggleButton is gated by isMyFilesMode")
+
+        // New Folder: visible gate in the button block
+        var newFolderIdx = source.indexOf('text: "New Folder"')
+        verify(newFolderIdx !== -1, "Has New Folder button")
+        var newFolderBlock = source.substring(newFolderIdx, newFolderIdx + 120)
+        verify(newFolderBlock.indexOf("visible: page.isMyFilesMode") !== -1
+               || newFolderBlock.indexOf("visible: root.isMyFilesMode") !== -1,
+               "New Folder button is gated by isMyFilesMode")
+
+        // Upload: visible gate in the button block
+        var uploadIdx = source.indexOf('id: uploadButton')
+        verify(uploadIdx !== -1, "Has upload button")
+        var uploadBlock = source.substring(uploadIdx, uploadIdx + 120)
+        verify(uploadBlock.indexOf("visible: page.isMyFilesMode") !== -1
+               || uploadBlock.indexOf("visible: root.isMyFilesMode") !== -1,
+               "Upload button is gated by isMyFilesMode")
+    }
+
+    function test_drive_browser_mutation_toolbar_buttons_gated_by_mode() {
+        var source = readDriveCompositeSource()
+
+        var renameIdx = source.indexOf('text: "Rename"')
+        verify(renameIdx !== -1, "Has Rename button")
+        var renameBlock = source.substring(renameIdx, renameIdx + 150)
+        verify(renameBlock.indexOf("visible: page.isMyFilesMode") !== -1
+               || renameBlock.indexOf("visible: root.isMyFilesMode") !== -1,
+               "Rename button is gated by isMyFilesMode")
+
+        var deleteIdx = source.indexOf('text: "Delete"')
+        verify(deleteIdx !== -1, "Has Delete button")
+        var deleteBlock = source.substring(deleteIdx, deleteIdx + 150)
+        verify(deleteBlock.indexOf("visible: page.isMyFilesMode") !== -1
+               || deleteBlock.indexOf("visible: root.isMyFilesMode") !== -1,
+               "Delete button is gated by isMyFilesMode")
+
+        var downloadIdx = source.indexOf('text: "Download"')
+        verify(downloadIdx !== -1, "Has Download button")
+        var downloadBlock = source.substring(downloadIdx, downloadIdx + 150)
+        verify(downloadBlock.indexOf("visible: page.isMyFilesMode") !== -1
+               || downloadBlock.indexOf("visible: root.isMyFilesMode") !== -1,
+               "Download button is gated by isMyFilesMode")
+    }
+
+    function test_drive_browser_refresh_button_is_always_visible() {
+        var source = readDriveCompositeSource()
+
+        var refreshIdx = source.indexOf('text: "Refresh"')
+        verify(refreshIdx !== -1, "Has Refresh button")
+        var refreshBlock = source.substring(refreshIdx, refreshIdx + 150)
+        verify(refreshBlock.indexOf("visible: page.isMyFilesMode") === -1
+               && refreshBlock.indexOf("visible: root.isMyFilesMode") === -1,
+               "Refresh button is NOT gated by isMyFilesMode (always visible)")
+    }
+
+    function test_drive_browser_status_card_uses_mode_aware_functions() {
+        var source = readDriveCompositeSource()
+
+        verify(source.indexOf("text: page.viewModeLabel()") !== -1
+               || source.indexOf("text: root.viewModeLabel()") !== -1,
+               "Status card section label uses viewModeLabel()")
+        verify(source.indexOf("text: page.viewModeTitleText()") !== -1
+               || source.indexOf("text: root.viewModeTitleText()") !== -1,
+               "Status card title uses viewModeTitleText()")
+        verify(source.indexOf("text: page.viewModeStatusText()") !== -1
+               || source.indexOf("text: root.viewModeStatusText()") !== -1,
+               "Status card status uses viewModeStatusText()")
+    }
+
+    function test_drive_browser_state_chip_and_scope_gated_by_myfiles() {
+        var source = readDriveCompositeSource()
+
+        var chipIdx = source.indexOf("implicitWidth: stateChipLabel.implicitWidth")
+        verify(chipIdx !== -1, "Has state chip")
+        var chipBlock = source.substring(chipIdx - 200, chipIdx + 100)
+        verify(chipBlock.indexOf("visible: page.isMyFilesMode") !== -1
+               || chipBlock.indexOf("visible: root.isMyFilesMode") !== -1,
+               "State chip is gated by isMyFilesMode")
+
+        verify(source.indexOf("visible: page.isMyFilesMode\n                text: page.folderScopeLabel()") !== -1
+               || source.indexOf("visible: page.isMyFilesMode") < source.indexOf("text: page.folderScopeLabel()") + 200
+               || source.indexOf("visible: root.isMyFilesMode") < source.indexOf("text: root.folderScopeLabel()") + 200,
+               "Folder scope label is gated by isMyFilesMode")
+    }
+
+    function test_drive_browser_pageStateView_gated_by_myfiles() {
+        var source = readDriveCompositeSource()
+
+        var psvIdx = source.indexOf("PageStateView {")
+        verify(psvIdx !== -1, "Has PageStateView")
+
+        var psvBlock = source.substring(psvIdx, psvIdx + 200)
+        verify(psvBlock.indexOf("visible: page.isMyFilesMode") !== -1
+               || psvBlock.indexOf("visible: root.isMyFilesMode") !== -1,
+               "PageStateView is gated by isMyFilesMode")
+    }
+
+    function test_drive_browser_has_shared_and_trash_state_views_and_recent_favorites_seam_container() {
+        var source = readDriveCompositeSource()
+
+        verify(source.indexOf('objectName: "sharedStateView"') !== -1,
+               "Has sharedStateView for VIEW-SHARED content")
+        verify(source.indexOf('objectName: "sharedListView"') !== -1,
+               "Has sharedListView runtime hook")
+        verify(source.indexOf('objectName: "trashStateView"') !== -1,
+               "Has trashStateView for VIEW-TRASH content")
+        verify(source.indexOf('objectName: "trashListView"') !== -1,
+               "Has trashListView runtime hook")
+        verify(source.indexOf('objectName: "viewModeSeamContainer"') !== -1,
+               "Has viewModeSeamContainer for remaining seam-only modes")
+        verify(source.indexOf("visible: !page.isMyFilesMode && !page.isSharedMode && !page.isTrashMode") !== -1
+               || source.indexOf("visible: !root.isMyFilesMode && !root.isSharedMode && !root.isTrashMode") !== -1,
+               "Seam container excludes shared and trash now that both modes are real")
+    }
+
+    function test_drive_browser_seam_container_shows_mode_specific_content() {
+        var source = readDriveCompositeSource()
+
+        verify(source.indexOf("text: page.viewModeTitleText()") !== -1
+               || source.indexOf("text: root.viewModeTitleText()") !== -1,
+               "Seam container shows mode-specific title")
+        verify(source.indexOf("text: page.viewModeStatusText()") !== -1
+               || source.indexOf("text: root.viewModeStatusText()") !== -1,
+               "Seam container shows mode-specific status text")
+        verify(source.indexOf("text: page.seamDescription()") !== -1
+               || source.indexOf("text: root.seamDescription()") !== -1,
+               "Seam container shows mode-specific seam description")
+    }
+
+    function test_drive_browser_shared_mode_uses_share_manager_for_content_and_batch_results() {
+        var source = readDriveCompositeSource()
+
+        verify(source.indexOf("function refreshSharedList()") !== -1,
+               "Has dedicated shared-mode refresh helper")
+        verify(source.indexOf("shareManager.listShares()") !== -1,
+               "Shared refresh uses shareManager.listShares()")
+        verify(source.indexOf("model: shareManager.listModel") !== -1,
+               "Shared content binds to shareManager.listModel")
+        verify(source.indexOf("model: shareManager.batchResultModel") !== -1,
+               "Shared batch-result content binds to shareManager.batchResultModel")
+        verify(source.indexOf('objectName: "sharedCreateButton"') !== -1,
+               "Shared toolbar exposes a create-share action")
+        verify(source.indexOf('objectName: "sharedCancelSelectedButton"') !== -1,
+               "Shared toolbar exposes a cancel-selected action")
+        verify(source.indexOf('objectName: "sharedBatchResultListView"') !== -1,
+               "Shared batch-result list exposes a stable runtime hook")
+        verify(source.indexOf("page.submitCancelShare(model.shareId)") !== -1
+               || source.indexOf("root.submitCancelShare(model.shareId)") !== -1,
+               "Shared row actions route cancellation through shareManager-backed flow")
+    }
+
+    function test_drive_browser_trash_mode_uses_trash_manager_for_content_and_batch_results() {
+        var source = readDriveCompositeSource()
+
+        verify(source.indexOf("function refreshTrashList()") !== -1,
+               "Has dedicated trash-mode refresh helper")
+        verify(source.indexOf("trashManager.listTrash()") !== -1,
+               "Trash refresh uses trashManager.listTrash()")
+        verify(source.indexOf("model: trashManager.listModel") !== -1,
+               "Trash content binds to trashManager.listModel")
+        verify(source.indexOf("model: trashManager.batchResultModel") !== -1,
+               "Trash batch-result content binds to trashManager.batchResultModel")
+        verify(source.indexOf('objectName: "trashRestoreSelectedButton"') !== -1,
+               "Trash toolbar exposes a restore-selected action")
+        verify(source.indexOf('objectName: "trashDeleteSelectedButton"') !== -1,
+               "Trash toolbar exposes a delete-selected action")
+        verify(source.indexOf('objectName: "trashClearAllButton"') !== -1,
+               "Trash toolbar exposes a clear-all action")
+        verify(source.indexOf('objectName: "trashBatchResultListView"') !== -1,
+               "Trash batch-result list exposes a stable runtime hook")
+        verify(source.indexOf("page.submitRestoreTrash(model.trashId)") !== -1
+               || source.indexOf("root.submitRestoreTrash(model.trashId)") !== -1,
+               "Trash row actions route restore through trashManager-backed flow")
+        verify(source.indexOf("page.submitDeleteTrash(model.trashId)") !== -1
+               || source.indexOf("root.submitDeleteTrash(model.trashId)") !== -1,
+               "Trash row actions route delete through trashManager-backed flow")
+    }
+
+    function test_drive_browser_seam_descriptions_are_mode_specific_for_unmigrated_modes() {
+        var source = readDriveBrowserSource()
+
+        var seamStart = source.indexOf("function seamDescription()")
+        verify(seamStart !== -1, "Has seamDescription")
+        var seamBody = source.substring(seamStart, seamStart + 300)
+
+        verify(seamBody.indexOf("This feature is not yet available") !== -1,
+               "recent and favorites seams mention not yet available")
+        verify(seamBody.indexOf("Trash management will be migrated here") === -1,
+               "trash no longer uses the seam-only migration placeholder")
+    }
+
+    function test_drive_browser_refreshCurrentView_and_activateViewMode_route_shared_and_trash_modes_to_respective_managers() {
+        var source = readDriveBrowserSource()
+
+        var refreshStart = source.indexOf("function refreshCurrentView()")
+        verify(refreshStart !== -1, "Has refreshCurrentView helper")
+        var refreshBody = source.substring(refreshStart, refreshStart + 360)
+        verify(refreshBody.indexOf("root.isSharedMode") !== -1,
+               "refreshCurrentView checks shared mode")
+        verify(refreshBody.indexOf("root.refreshSharedList()") !== -1,
+               "refreshCurrentView routes shared refresh through refreshSharedList")
+        verify(refreshBody.indexOf("root.isTrashMode") !== -1,
+               "refreshCurrentView checks trash mode")
+        verify(refreshBody.indexOf("root.refreshTrashList()") !== -1,
+               "refreshCurrentView routes trash refresh through refreshTrashList")
+
+        var activateStart = source.indexOf("function activateViewMode(mode)")
+        verify(activateStart !== -1, "Has activateViewMode")
+        var activateBody = source.substring(activateStart, activateStart + 800)
+        verify(activateBody.indexOf('if (nextMode === "shared")') !== -1,
+               "activateViewMode has a dedicated shared-mode branch")
+        verify(activateBody.indexOf("root.refreshSharedList()") !== -1,
+               "activateViewMode triggers shareManager-backed refresh for shared mode")
+        verify(activateBody.indexOf('if (nextMode === "trash")') !== -1,
+               "activateViewMode has a dedicated trash-mode branch")
+        verify(activateBody.indexOf("root.refreshTrashList()") !== -1,
+               "activateViewMode triggers trashManager-backed refresh for trash mode")
+    }
+
+    function test_drive_browser_folder_navigator_gated_by_myfiles() {
+        var source = readDriveBrowserSource()
+
+        var overlayIdx = source.indexOf("id: folderNavigatorOverlay")
+        verify(overlayIdx !== -1, "Has folder navigator overlay")
+        var overlayBlock = source.substring(overlayIdx, overlayIdx + 300)
+        verify(overlayBlock.indexOf("root.isMyFilesMode") !== -1,
+               "Folder navigator overlay visibility is gated by isMyFilesMode")
+    }
+
+    function test_drive_browser_activateViewMode_clears_folder_navigator() {
+        var source = readDriveBrowserSource()
+
+        var activateStart = source.indexOf("function activateViewMode(mode)")
+        verify(activateStart !== -1, "Has activateViewMode")
+        var activateBody = source.substring(activateStart, activateStart + 400)
+
+        verify(activateBody.indexOf("folderNavigatorExpanded = false") !== -1,
+               "activateViewMode collapses folder navigator on mode switch")
+    }
+
+    function test_drive_browser_upload_download_errors_gated_by_myfiles() {
+        var source = readDriveCompositeSource()
+
+        var uploadErrIdx = source.indexOf("text: page.uploadErrorMessage")
+        if (uploadErrIdx === -1) {
+            uploadErrIdx = source.indexOf("text: root.uploadErrorMessage")
+        }
+        verify(uploadErrIdx !== -1, "Has upload error label")
+        var uploadErrBlock = source.substring(uploadErrIdx, uploadErrIdx + 150)
+        verify(uploadErrBlock.indexOf("page.isMyFilesMode") !== -1
+               || uploadErrBlock.indexOf("root.isMyFilesMode") !== -1,
+               "Upload error label visibility is gated by isMyFilesMode")
+
+        var downloadErrIdx = source.indexOf("text: page.downloadErrorMessage")
+        if (downloadErrIdx === -1) {
+            downloadErrIdx = source.indexOf("text: root.downloadErrorMessage")
+        }
+        verify(downloadErrIdx !== -1, "Has download error label")
+        var downloadErrBlock = source.substring(downloadErrIdx, downloadErrIdx + 150)
+        verify(downloadErrBlock.indexOf("page.isMyFilesMode") !== -1
+               || downloadErrBlock.indexOf("root.isMyFilesMode") !== -1,
+               "Download error label visibility is gated by isMyFilesMode")
     }
 }

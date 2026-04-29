@@ -627,8 +627,9 @@ TestCase {
 
     function test_screenshot_capture_root_page() {
         verify(screenshotHelper !== null, "screenshotHelper available")
-        verify(screenshotHelper.available,
-               "DESKTOP_QML_EVIDENCE_DIR must be set and valid for screenshot tests")
+        if (!screenshotHelper.available) {
+            skip("DESKTOP_QML_EVIDENCE_DIR not set; skipping screenshot capture test")
+        }
 
         var page = createPage()
         compare(page.currentFolderId, "0", "Page starts at root")
@@ -643,8 +644,9 @@ TestCase {
 
     function test_screenshot_capture_nested_page() {
         verify(screenshotHelper !== null, "screenshotHelper available")
-        verify(screenshotHelper.available,
-               "DESKTOP_QML_EVIDENCE_DIR must be set and valid for screenshot tests")
+        if (!screenshotHelper.available) {
+            skip("DESKTOP_QML_EVIDENCE_DIR not set; skipping screenshot capture test")
+        }
 
         var page = createPage()
         var dm = driveManager
@@ -863,9 +865,528 @@ TestCase {
                "folderNavigatorPanel is hidden after root navigation")
     }
 
+    // ── Task 5: PAGE-DRIVE host mode runtime contract ─────────────────────
+
+    function test_activateViewMode_switches_currentViewMode() {
+        var page = createPage()
+
+        compare(page.currentViewMode, "myfiles", "Default mode is myfiles")
+        verify(page.isMyFilesMode, "isMyFilesMode is true by default")
+
+        page.activateViewMode("shared")
+        compare(page.currentViewMode, "shared", "Mode switched to shared")
+        verify(page.isSharedMode, "isSharedMode is true after switch")
+        verify(!page.isMyFilesMode, "isMyFilesMode is false after switch")
+
+        page.activateViewMode("trash")
+        compare(page.currentViewMode, "trash", "Mode switched to trash")
+        verify(page.isTrashMode, "isTrashMode is true after switch")
+
+        page.activateViewMode("myfiles")
+        compare(page.currentViewMode, "myfiles", "Mode switched back to myfiles")
+        verify(page.isMyFilesMode, "isMyFilesMode is true after switch back")
+    }
+
+    function test_activateViewMode_clears_selection() {
+        var page = createPage()
+
+        page.selectItem("99", "file", "report.pdf")
+        compare(page.selectedItemId, "99", "Selection set")
+
+        page.activateViewMode("shared")
+        compare(page.selectedItemId, "", "Selection cleared on mode switch")
+        compare(page.selectedItemKind, "", "Kind cleared on mode switch")
+        compare(page.selectedItemName, "", "Name cleared on mode switch")
+    }
+
+    function test_activateViewMode_is_idempotent() {
+        var page = createPage()
+
+        compare(page.currentViewMode, "myfiles", "Starts as myfiles")
+
+        page.activateViewMode("myfiles")
+        compare(page.currentViewMode, "myfiles", "Still myfiles after idempotent call")
+    }
+
+    function test_activateViewMode_collapses_folder_navigator() {
+        var page = createPage()
+
+        var toggleBtn = findByObjectName(page, "folderNavigatorToggleButton")
+        verify(toggleBtn !== null, "Toggle button found")
+        toggleBtn.clicked()
+        wait(50)
+        verify(page.folderNavigatorExpanded, "Navigator opened")
+
+        page.activateViewMode("shared")
+        verify(!page.folderNavigatorExpanded,
+               "Folder navigator collapsed on mode switch to non-myfiles")
+    }
+
+    function test_myfiles_mode_shows_file_table_and_breadcrumb() {
+        var page = createPage()
+
+        verify(page.isMyFilesMode, "Page starts in myfiles mode")
+
+        var breadcrumbBar = findByObjectName(page, "breadcrumbBar")
+        verify(breadcrumbBar !== null, "BreadcrumbBar found in myfiles mode")
+
+        var fileListView = findByObjectName(page, "fileListView")
+        verify(fileListView !== null, "FileListView found in myfiles mode")
+    }
+
+    function test_shared_mode_refreshes_through_share_manager_not_drive_manager() {
+        var page = createPage()
+        var sm = shareManager
+        var dm = driveManager
+
+        verify(sm !== null, "shareManager available")
+        verify(dm !== null, "driveManager available")
+
+        sm.resetCounts()
+        dm.resetCounts()
+
+        page.activateViewMode("shared")
+        wait(50)
+
+        verify(page.isSharedMode, "Page is in shared mode")
+        verify(!page.isMyFilesMode, "Page is not in myfiles mode")
+        compare(sm.listSharesCallCount(), 1,
+                "Entering shared mode loads shares through shareManager")
+        compare(dm.listFilesCalls().length, 0,
+                "Entering shared mode does not request driveManager listFiles")
+
+        page.refreshCurrentView()
+        wait(50)
+
+        compare(sm.listSharesCallCount(), 2,
+                "Shared refresh continues to use shareManager")
+        compare(dm.listFilesCalls().length, 0,
+                "Shared refresh still does not touch driveManager")
+    }
+
+    function test_shared_mode_renders_share_manager_content_inside_drive_host() {
+        var page = createPage()
+        var sm = shareManager
+
+        verify(sm !== null, "shareManager available")
+        sm.clearShareListModel()
+        sm.addShareItem("shr-1", "Quarterly Report.pdf", "download", "active", true,
+                        12, 4, "https://disk.example/shares/shr-1",
+                        "2026-04-28T14:30:00Z", "2026-05-05T14:30:00Z", 1)
+
+        page.activateViewMode("shared")
+        sm.paginationLoaded(1, 1, 1)
+        wait(100)
+
+        var sharedStateView = findByObjectName(page, "sharedStateView")
+        var sharedListView = findByObjectName(page, "sharedListView")
+        var sharedRow = findByObjectName(page, "sharedRowDelegate_shr-1")
+        var primaryLabel = findByObjectName(page, "sharedPrimaryItemLabel_shr-1")
+
+        verify(sharedStateView !== null, "Shared mode renders sharedStateView inside DriveBrowserPage")
+        verify(sharedListView !== null, "Shared mode exposes sharedListView")
+        verify(sharedRow !== null, "Shared mode renders a share row from shareManager.listModel")
+        verify(primaryLabel !== null, "Shared mode exposes the share primary item label")
+        compare(primaryLabel.text, "Quarterly Report.pdf",
+                "Rendered share row uses shareManager-backed model data")
+    }
+
+    function test_shared_mode_empty_error_and_batch_result_follow_share_manager_signals() {
+        var page = createPage()
+        var sm = shareManager
+        var sc = shellController
+
+        verify(sm !== null, "shareManager available")
+        verify(sc !== null, "shellController available")
+
+        page.activateViewMode("shared")
+        sm.paginationLoaded(1, 0, 0)
+        wait(50)
+        compare(sc.pageState, "empty", "Shared empty response sets page state to empty")
+
+        sm.apiError("share load failed", 500)
+        wait(50)
+        compare(sc.pageState, "error", "Shared API failures set page state to error")
+
+        sm.clearBatchResultModel()
+        sm.batchResultModel.setResults("share_cancel", 2, 1, 1)
+        sm.addBatchResultEntry("shr-1", "success")
+        sm.addBatchResultEntry("shr-2", "failed", "", 0, "Link already expired")
+        sm.batchResultReady()
+        wait(50)
+
+        compare(sc.pageState, "batchResult", "Shared batch result signal switches the page state")
+        compare(sm.batchResultModel.totalCount, 2, "Batch-result summary keeps the total count")
+        compare(sm.batchResultModel.failureCount, 1, "Batch-result summary keeps the failure count")
+    }
+
+    function test_shared_mode_cancel_selected_uses_share_manager_and_not_drive_manager() {
+        var page = createPage()
+        var sm = shareManager
+        var dm = driveManager
+
+        verify(sm !== null, "shareManager available")
+        verify(dm !== null, "driveManager available")
+
+        sm.clearShareListModel()
+        sm.resetCounts()
+        dm.resetCounts()
+        sm.addShareItem("shr-9", "Design Review Deck.pptx", "view", "active", false, 3, 1,
+                        "https://disk.example/shares/shr-9")
+
+        page.activateViewMode("shared")
+        sm.paginationLoaded(1, 1, 1)
+        wait(100)
+
+        var shareRow = findByObjectName(page, "sharedRowDelegate_shr-9")
+        verify(shareRow !== null, "Share row rendered for selection")
+        shareRow.clicked()
+        wait(50)
+        compare(page.selectedShareIds.length, 1, "Selecting a shared row updates shared selection state")
+
+        var cancelSelectedButton = findByObjectName(page, "sharedCancelSelectedButton")
+        verify(cancelSelectedButton !== null, "Cancel Selected button appears after selecting a share")
+        cancelSelectedButton.clicked()
+        wait(50)
+
+        compare(sm.cancelSharesCalls().length, 1,
+                "Shared batch cancellation routes through shareManager.cancelShares")
+        compare(dm.deleteItemsCalls().length, 0,
+                "Shared cancellation does not route through driveManager.deleteItems")
+    }
+
+    function test_trash_mode_refreshes_through_trash_manager_not_drive_manager() {
+        var page = createPage()
+        var tm = trashManager
+        var dm = driveManager
+
+        verify(tm !== null, "trashManager available")
+        verify(dm !== null, "driveManager available")
+
+        tm.resetCounts()
+        dm.resetCounts()
+
+        page.activateViewMode("trash")
+        wait(50)
+
+        verify(page.isTrashMode, "Page is in trash mode")
+        verify(!page.isMyFilesMode, "Page is not in myfiles mode")
+        compare(tm.listTrashCallCount(), 1,
+                "Entering trash mode loads deleted items through trashManager")
+        compare(dm.listFilesCalls().length, 0,
+                "Entering trash mode does not request driveManager listFiles")
+
+        page.refreshCurrentView()
+        wait(50)
+
+        compare(tm.listTrashCallCount(), 2,
+                "Trash refresh continues to use trashManager")
+        compare(dm.listFilesCalls().length, 0,
+                "Trash refresh still does not touch driveManager")
+    }
+
+    function test_trash_mode_renders_trash_manager_content_inside_drive_host() {
+        var page = createPage()
+        var tm = trashManager
+
+        verify(tm !== null, "trashManager available")
+        tm.clearTrashListModel()
+        tm.addTrashItem("17", "file", "Quarterly Budget.xlsx", 4096,
+                        "/Finance/Quarterly Budget.xlsx", "2026-04-28T14:30:00Z")
+
+        page.activateViewMode("trash")
+        tm.paginationLoaded(1, 1, 1)
+        wait(100)
+
+        var trashStateView = findByObjectName(page, "trashStateView")
+        var trashListView = findByObjectName(page, "trashListView")
+        var trashRow = findByObjectName(page, "trashRowDelegate_17")
+        var trashNameLabel = findByObjectName(page, "trashNameLabel_17")
+        var trashPathLabel = findByObjectName(page, "trashOriginalPathLabel_17")
+
+        verify(trashStateView !== null, "Trash mode renders trashStateView inside DriveBrowserPage")
+        verify(trashListView !== null, "Trash mode exposes trashListView")
+        verify(trashRow !== null, "Trash mode renders a trash row from trashManager.listModel")
+        verify(trashNameLabel !== null, "Trash mode exposes the trash name label")
+        verify(trashPathLabel !== null, "Trash mode exposes the original path label")
+        compare(trashNameLabel.text, "Quarterly Budget.xlsx",
+                "Rendered trash row uses trashManager-backed model data")
+        compare(trashPathLabel.text, "/Finance/Quarterly Budget.xlsx",
+                "Rendered trash row keeps the original path from trashManager")
+    }
+
+    function test_trash_mode_empty_error_and_batch_result_follow_trash_manager_signals() {
+        var page = createPage()
+        var tm = trashManager
+        var sc = shellController
+
+        verify(tm !== null, "trashManager available")
+        verify(sc !== null, "shellController available")
+
+        page.activateViewMode("trash")
+        tm.paginationLoaded(1, 0, 0)
+        wait(50)
+        compare(sc.pageState, "empty", "Trash empty response sets page state to empty")
+
+        tm.apiError("trash load failed", 500)
+        wait(50)
+        compare(sc.pageState, "error", "Trash API failures set page state to error")
+
+        tm.clearBatchResultModel()
+        tm.batchResultModel.setResults("trash_restore", 2, 1, 1)
+        tm.addBatchResultEntry("Quarterly Budget.xlsx", "success", "/Finance/Quarterly Budget.xlsx")
+        tm.addBatchResultEntry("Archive", "failed", "", 0, "Already restored")
+        tm.batchResultReady()
+        wait(50)
+
+        compare(sc.pageState, "batchResult", "Trash batch result signal switches the page state")
+        compare(tm.batchResultModel.totalCount, 2, "Trash batch result keeps the total count")
+        compare(tm.batchResultModel.failureCount, 1, "Trash batch result keeps the failure count")
+        compare(page.viewModeStatusText(), "1 of 2 trash restore actions succeeded.",
+                "Trash batch result summary is rendered through the drive host status contract")
+    }
+
+    function test_trash_mode_restore_delete_and_clear_use_trash_manager_not_drive_manager() {
+        var page = createPage()
+        var tm = trashManager
+        var dm = driveManager
+
+        verify(tm !== null, "trashManager available")
+        verify(dm !== null, "driveManager available")
+
+        tm.clearTrashListModel()
+        tm.resetCounts()
+        dm.resetCounts()
+        tm.addTrashItem("17", "file", "Quarterly Budget.xlsx", 4096,
+                        "/Finance/Quarterly Budget.xlsx", "2026-04-28T14:30:00Z")
+
+        page.activateViewMode("trash")
+        tm.paginationLoaded(1, 1, 1)
+        wait(100)
+
+        var trashRow = findByObjectName(page, "trashRowDelegate_17")
+        verify(trashRow !== null, "Trash row rendered for selection")
+        trashRow.clicked()
+        wait(50)
+        compare(page.selectedTrashIds.length, 1, "Selecting a trash row updates trash selection state")
+
+        var restoreSelectedButton = findByObjectName(page, "trashRestoreSelectedButton")
+        verify(restoreSelectedButton !== null, "Restore Selected button appears after selecting a trash row")
+        restoreSelectedButton.clicked()
+        wait(50)
+        compare(tm.restoreItemsCalls().length, 1,
+                "Restore Selected routes through trashManager.restoreItems")
+        compare(dm.deleteItemsCalls().length, 0,
+                "Trash restore does not route through driveManager.deleteItems")
+
+        var deleteButton = findByObjectName(page, "trashDeleteButton_17")
+        verify(deleteButton !== null, "Trash row exposes a Delete button")
+        deleteButton.clicked()
+        wait(50)
+        compare(tm.deleteItemsCalls().length, 1,
+                "Trash row delete routes through trashManager.deleteItems")
+
+        var clearAllButton = findByObjectName(page, "trashClearAllButton")
+        verify(clearAllButton !== null, "Trash toolbar exposes a Clear All button")
+        clearAllButton.clicked()
+        wait(50)
+        compare(tm.clearAllCallCount(), 1,
+                "Trash clear-all routes through trashManager.clearAll")
+        compare(dm.listFilesCalls().length, 0,
+                "Trash actions do not route through driveManager file listing")
+    }
+
+    function test_recent_mode_shows_seam_container() {
+        var page = createPage()
+
+        page.activateViewMode("recent")
+        wait(50)
+
+        verify(page.isRecentMode, "Page is in recent mode")
+
+        var seamContainer = findByObjectName(page, "viewModeSeamContainer")
+        verify(seamContainer !== null, "Seam container found in item tree")
+    }
+
+    function test_favorites_mode_shows_seam_container() {
+        var page = createPage()
+
+        page.activateViewMode("favorites")
+        wait(50)
+
+        verify(page.isFavoritesMode, "Page is in favorites mode")
+
+        var seamContainer = findByObjectName(page, "viewModeSeamContainer")
+        verify(seamContainer !== null, "Seam container found in item tree")
+    }
+
+    function test_myfiles_mode_seam_container_exists_but_not_rendered() {
+        var page = createPage()
+
+        verify(page.isMyFilesMode, "Page starts in myfiles mode")
+
+        var seamContainer = findByObjectName(page, "viewModeSeamContainer")
+        verify(seamContainer !== null, "Seam container exists in item tree")
+    }
+
+    function test_mode_switch_cycles_through_all_modes() {
+        var page = createPage()
+        var modes = ["shared", "trash", "recent", "favorites", "myfiles"]
+
+        for (var i = 0; i < modes.length; ++i) {
+            page.activateViewMode(modes[i])
+            compare(page.currentViewMode, modes[i],
+                    "Mode is " + modes[i] + " after activation")
+
+            if (modes[i] === "shared") {
+                verify(findByObjectName(page, "sharedStateView") !== null,
+                       "Shared mode uses the shared content host")
+            } else if (modes[i] === "trash") {
+                verify(findByObjectName(page, "trashStateView") !== null,
+                       "Trash mode uses the trash content host")
+            } else if (modes[i] === "myfiles") {
+                verify(findByObjectName(page, "fileListView") !== null,
+                       "My Files mode still uses the file list host")
+            } else {
+                verify(findByObjectName(page, "viewModeSeamContainer") !== null,
+                       "Unmigrated mode keeps the seam container")
+            }
+        }
+    }
+
+    function test_switching_myfiles_trash_myfiles_preserves_mode_specific_content_state() {
+        var page = createPage()
+        var tm = trashManager
+
+        verify(page.isMyFilesMode, "Page starts in myfiles mode")
+        verify(findByObjectName(page, "fileListView") !== null,
+               "My Files content is mounted before entering trash mode")
+
+        tm.clearTrashListModel()
+        tm.addTrashItem("88", "folder", "Archive", 0, "/Projects/Archive", "2026-04-29T09:00:00Z")
+
+        page.activateViewMode("trash")
+        tm.paginationLoaded(1, 1, 1)
+        wait(100)
+
+        compare(page.currentViewMode, "trash", "Page enters trash mode")
+        verify(findByObjectName(page, "trashRowDelegate_88") !== null,
+               "Trash content appears inside the same drive page instance")
+
+        page.activateViewMode("myfiles")
+        wait(100)
+
+        compare(page.currentViewMode, "myfiles", "Page returns to myfiles mode")
+        compare(page.selectedTrashIds.length, 0, "Trash selection is cleared after leaving trash mode")
+        verify(findByObjectName(page, "fileListView") !== null,
+               "My Files content returns after leaving trash mode")
+    }
+
+    function test_switching_shared_trash_shared_preserves_mode_specific_content_state() {
+        var page = createPage()
+        var sm = shareManager
+        var tm = trashManager
+
+        sm.clearShareListModel()
+        tm.clearTrashListModel()
+        sm.addShareItem("shr-33", "Partner Contract.pdf", "download", "active", false,
+                        2, 1, "https://disk.example/shares/shr-33")
+        tm.addTrashItem("44", "file", "Old Contract.pdf", 3072,
+                        "/Legal/Old Contract.pdf", "2026-04-26T12:00:00Z")
+
+        page.activateViewMode("shared")
+        sm.paginationLoaded(1, 1, 1)
+        wait(100)
+        verify(findByObjectName(page, "sharedRowDelegate_shr-33") !== null,
+               "Shared content appears before switching to trash")
+
+        page.activateViewMode("trash")
+        tm.paginationLoaded(1, 1, 1)
+        wait(100)
+        compare(page.currentViewMode, "trash", "Page enters trash mode")
+        verify(findByObjectName(page, "trashRowDelegate_44") !== null,
+               "Trash content replaces shared content inside the drive page")
+
+        page.activateViewMode("shared")
+        sm.paginationLoaded(1, 1, 1)
+        wait(100)
+        compare(page.currentViewMode, "shared", "Page returns to shared mode")
+        compare(page.selectedTrashIds.length, 0, "Trash selection stays cleared after leaving trash mode")
+        verify(findByObjectName(page, "sharedRowDelegate_shr-33") !== null,
+               "Shared content returns after leaving trash mode")
+    }
+
+    function test_viewModeTitleText_returns_correct_titles() {
+        var page = createPage()
+
+        compare(page.viewModeTitleText(), page.driveTitle,
+                "myfiles title matches driveTitle")
+
+        page.activateViewMode("shared")
+        compare(page.viewModeTitleText(), "Shares", "shared title is Shares")
+
+        page.activateViewMode("trash")
+        compare(page.viewModeTitleText(), "Trash", "trash title is Trash")
+
+        page.activateViewMode("recent")
+        compare(page.viewModeTitleText(), "Recent", "recent title is Recent")
+
+        page.activateViewMode("favorites")
+        compare(page.viewModeTitleText(), "Favorites", "favorites title is Favorites")
+    }
+
+    function test_viewModeLabel_returns_correct_labels() {
+        var page = createPage()
+
+        compare(page.viewModeLabel(), "DRIVE", "myfiles label is DRIVE")
+
+        page.activateViewMode("shared")
+        compare(page.viewModeLabel(), "SHARES", "shared label is SHARES")
+
+        page.activateViewMode("trash")
+        compare(page.viewModeLabel(), "TRASH", "trash label is TRASH")
+
+        page.activateViewMode("recent")
+        compare(page.viewModeLabel(), "RECENT", "recent label is RECENT")
+
+        page.activateViewMode("favorites")
+        compare(page.viewModeLabel(), "FAVORITES", "favorites label is FAVORITES")
+    }
+
+    function test_myfiles_toolbar_buttons_exist_in_myfiles_mode() {
+        var page = createPage()
+
+        verify(page.isMyFilesMode, "Starts in myfiles mode")
+
+        var upBtn = findByObjectName(page, "homepageUpButton")
+        verify(upBtn !== null, "Up button exists in item tree")
+
+        var toggleBtn = findByObjectName(page, "folderNavigatorToggleButton")
+        verify(toggleBtn !== null, "Toggle button exists in item tree")
+    }
+
+    function test_myfiles_toolbar_buttons_exist_in_non_myfiles_mode() {
+        var page = createPage()
+
+        page.activateViewMode("shared")
+        wait(50)
+
+        // Buttons exist in the item tree even when gated by visible: root.isMyFilesMode
+        var upBtn = findByObjectName(page, "homepageUpButton")
+        verify(upBtn !== null, "Up button still exists in item tree in shared mode")
+
+        var toggleBtn = findByObjectName(page, "folderNavigatorToggleButton")
+        verify(toggleBtn !== null, "Toggle button still exists in item tree in shared mode")
+    }
+
     function findByObjectName(item, objectName) {
         if (!item) return null
         if (item.objectName === objectName) return item
+
+        if (item.item !== undefined && item.item !== null && typeof item.item === "object") {
+            var loaded = findByObjectName(item.item, objectName)
+            if (loaded) return loaded
+        }
 
         if (item.contentItem !== undefined && item.contentItem !== null && item.contentItem !== item) {
             var found = findByObjectName(item.contentItem, objectName)
