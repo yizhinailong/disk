@@ -71,4 +71,61 @@ TestCase {
         // The owner shell is gated on OwnerSessionManager::Active state
         verify(source.indexOf("OwnerSessionState::Active") !== -1, "References Active state")
     }
+
+    // ── Task 11: Route guard regression source contracts ───────────────────
+
+    function test_shell_controller_handles_visitor_reverifyRequired() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../src/app/ShellController.cpp"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "ShellController.cpp was read")
+        verify(source.indexOf("VisitorSessionState::ReverifyRequired") !== -1,
+               "ShellController handles ReverifyRequired visitor state")
+    }
+
+    function test_shell_controller_handles_visitor_verifying_state() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../src/app/ShellController.cpp"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "ShellController.cpp was read")
+        verify(source.indexOf("VisitorSessionState::Verifying") !== -1,
+               "ShellController handles Verifying visitor state")
+    }
+
+    function test_shell_controller_handles_visitor_active_state() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../src/app/ShellController.cpp"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "ShellController.cpp was read")
+        verify(source.indexOf("VisitorSessionState::Active") !== -1,
+               "ShellController handles Active visitor state for pageState coordination")
+    }
+
+    function test_shell_controller_sets_loading_on_authenticating() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../src/app/ShellController.cpp"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "ShellController.cpp was read")
+        verify(source.indexOf("OwnerSessionState::Authenticating") !== -1,
+               "ShellController references Authenticating state for loading coordination")
+    }
+
+    function test_shell_controller_sets_loading_on_refreshing() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../src/app/ShellController.cpp"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "ShellController.cpp was read")
+        verify(source.indexOf("OwnerSessionState::Refreshing") !== -1,
+               "ShellController references Refreshing state for loading coordination")
+    }
 }
