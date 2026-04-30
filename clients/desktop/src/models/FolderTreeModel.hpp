@@ -46,7 +46,7 @@ namespace disk::desktop {
         auto GetNode(const QModelIndex& index) const -> const FolderNode*;
 
         Q_INVOKABLE QModelIndex indexOf(quint64 id) const;
-        Q_INVOKABLE bool hasChildren(const QModelIndex& parent = {}) const;
+        Q_INVOKABLE bool hasChildren(const QModelIndex& parent = {}) const override;
         Q_INVOKABLE QVector<quint64> ancestorPath(quint64 id) const;
         Q_INVOKABLE bool isAncestor(quint64 ancestorId, quint64 descendantId) const;
 
