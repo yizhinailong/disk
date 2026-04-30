@@ -65,6 +65,8 @@ target_link_libraries(desktop-unit-tests PRIVATE
     Qt6::Test
 )
 
+desktop_add_advisory_warnings(desktop-unit-tests)
+
 # Copy fixtures to build directory for runtime access
 file(COPY
     ${CMAKE_CURRENT_SOURCE_DIR}/fixtures
@@ -131,6 +133,8 @@ target_link_libraries(desktop-quick-tests PRIVATE
     Qt6::QuickTest
     Qt6::Test
 )
+
+desktop_add_advisory_warnings(desktop-quick-tests)
 
 set_target_properties(desktop-quick-tests PROPERTIES
     QUICK_TEST_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/quick"

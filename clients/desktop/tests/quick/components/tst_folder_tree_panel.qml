@@ -85,7 +85,8 @@ TestCase {
             }
         }
 
-        return prefix + stack.join("/")
+        var leadingSlash = path.charAt(0) === "/" ? "/" : ""
+        return prefix + leadingSlash + stack.join("/")
     }
 
     function loadComponent(relPath) {

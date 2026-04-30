@@ -10,6 +10,57 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Quick QuickControls2 Test 
 
 qt_standard_project_setup(REQUIRES 6.8)
 
+# ---------------------------------------------------------------------------
+# Advisory warning helper (desktop-only, target-scoped, never -Werror)
+# ---------------------------------------------------------------------------
+include(CheckCXXCompilerFlag)
+
+# Internal: append to a per-target flag list if the compiler accepts the flag.
+# Usage: _desktop_check_flag(<flag> <out-list-var>)
+function(_desktop_check_flag FLAG OUT_LIST_VAR)
+  string(MAKE_C_IDENTIFIER "has_flag_${FLAG}" _varname)
+  check_cxx_compiler_flag("${FLAG}" ${_varname})
+  if(${_varname})
+    list(APPEND ${OUT_LIST_VAR} "${FLAG}")
+    set(${OUT_LIST_VAR} ${${OUT_LIST_VAR}} PARENT_SCOPE)
+  endif()
+endfunction()
+
+# desktop_add_advisory_warnings(<target>)
+# Adds advisory (non-fatal) warning flags appropriate for the current compiler.
+# Override-specific flags are feature-gated via CheckCXXCompilerFlag.
+function(desktop_add_advisory_warnings TARGET)
+  set(_flags "")
+
+  # ── GCC / Clang baseline ──────────────────────────────────────────────
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    list(APPEND _flags
+      -Wall
+      -Wextra
+      -Wpedantic
+    )
+    # Optional: -Winconsistent-missing-override (Clang / AppleClang only)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+      _desktop_check_flag("-Winconsistent-missing-override" _flags)
+    endif()
+    # Optional: -Wsuggest-override (GCC only)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      _desktop_check_flag("-Wsuggest-override" _flags)
+    endif()
+  endif()
+
+  # ── MSVC baseline ─────────────────────────────────────────────────────
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    list(APPEND _flags
+      /W4
+    )
+  endif()
+
+  if(_flags)
+    target_compile_options("${TARGET}" PRIVATE ${_flags})
+  endif()
+endfunction()
+
 set(DESKTOP_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 set(DESKTOP_APP_SOURCES
@@ -136,6 +187,9 @@ install(TARGETS disk-desktop
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+
+# Advisory warnings for the desktop app target (PRIVATE scope, never -Werror)
+desktop_add_advisory_warnings(disk-desktop)
 
 enable_testing()
 add_subdirectory(tests)
