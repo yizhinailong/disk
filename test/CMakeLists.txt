@@ -331,3 +331,29 @@ set_tests_properties(
     TIMEOUT 120
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+
+add_test(
+    NAME BrowseBurstRegressionIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_browse_burst_regression.py"
+)
+
+set_tests_properties(
+    BrowseBurstRegressionIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME UploadRateLimitIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_upload_rate_limit.py"
+)
+
+set_tests_properties(
+    UploadRateLimitIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 300
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
