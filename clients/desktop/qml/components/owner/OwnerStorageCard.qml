@@ -5,6 +5,9 @@ import QtQuick.Layouts
 Rectangle {
     id: root
 
+    property string cardObjectName: ""
+    objectName: root.cardObjectName
+
     required property color panelColor
     required property color borderColor
     required property color titleTextColor

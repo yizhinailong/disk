@@ -107,6 +107,21 @@ TestCase {
         return shell
     }
 
+    function createCompressedOwnerShell() {
+        var component = loadComponent("shells/OwnerShell.qml")
+        var shell = component.createObject(testOwnerShell, {
+            visible: true,
+            x: 0,
+            y: 0,
+            width: 1024,
+            height: 640
+        })
+        verify(shell !== null, "Compressed OwnerShell instance created")
+        _created.push(shell)
+        wait(100)
+        return shell
+    }
+
     function findByObjectName(item, objectName) {
         if (!item) {
             return null
@@ -208,6 +223,26 @@ TestCase {
         verify(waitForObject(shell, "ownerNavFavoritesButton") !== null, "Favorites button is in the shell")
         verify(waitForObject(shell, "ownerNavTransfersButton") !== null, "Transfers button is in the shell")
         verify(waitForObject(shell, "ownerNavSettingsButton") !== null, "Settings button is in the shell")
+    }
+
+    function test_owner_shell_sidebar_has_stable_runtime_selectors() {
+        var shell = createCompressedOwnerShell()
+
+        // Navigation panel (pre-existing, verify still present)
+        var navPanel = waitForObject(shell, "ownerNavigationPanel")
+        verify(navPanel !== null, "ownerNavigationPanel exists")
+
+        // Storage card
+        var storageCard = waitForObject(shell, "ownerStorageCard")
+        verify(storageCard !== null, "ownerStorageCard exists")
+
+        // Session card
+        var sessionCard = waitForObject(shell, "ownerSessionCard")
+        verify(sessionCard !== null, "ownerSessionCard exists")
+
+        // All three must be distinct
+        verify(navPanel !== storageCard, "Nav panel and storage card are distinct")
+        verify(storageCard !== sessionCard, "Storage card and session card are distinct")
     }
 
     function test_owner_shell_recent_and_favorites_are_disabled_placeholders() {

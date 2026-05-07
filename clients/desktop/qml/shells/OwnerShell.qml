@@ -306,6 +306,7 @@ ApplicationWindow {
                 }
 
                 OwnerStorageCard {
+                    objectName: "ownerStorageCard"
                     usageText: root.formatBytes(root.storageUsedBytes) + " / "
                                + root.formatBytes(root.storageTotalBytes)
                     usageRatio: root.storageUsageRatio
@@ -319,6 +320,7 @@ ApplicationWindow {
                 }
 
                 Rectangle {
+                    objectName: "ownerSessionCard"
                     Layout.fillWidth: true
                     color: root.railPanelColor
                     radius: 10
