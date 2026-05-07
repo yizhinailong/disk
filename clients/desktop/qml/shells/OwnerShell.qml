@@ -244,65 +244,69 @@ ApplicationWindow {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Layout.minimumHeight: 200
                     objectName: "ownerNavigationPanel"
                     color: root.railPanelColor
                     radius: 10
                     border.color: root.railBorderColor
 
-                    ColumnLayout {
+                    ScrollView {
+                        objectName: "ownerNavigationScrollView"
                         anchors.fill: parent
-                        anchors.margins: 8
-                        spacing: 4
+                        clip: true
+                        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
-                        Label {
-                            Layout.fillWidth: true
-                            text: "Navigation"
-                            color: root.railMutedTextColor
-                            font.pixelSize: 11
-                            font.bold: true
-                            leftPadding: 8
-                            topPadding: 4
-                            bottomPadding: 8
-                        }
+                        ColumnLayout {
+                            objectName: "ownerNavigationContent"
+                            width: parent.parent.width - 16
+                            spacing: 4
 
-                        OwnerSidebarSection {
-                            Layout.fillWidth: true
-                            sectionObjectName: "ownerFileViewGroup"
-                            title: "File Views"
-                            items: root.fileViewNavItems
-                            activeItemId: root.activeDestination === "drive" ? root.activeDriveViewMode : ""
-                            titleTextColor: root.railMutedTextColor
-                            activeFillColor: root.railActiveColor
-                            hoverFillColor: root.railHoverColor
-                            activeStripeColor: root.railActiveStripeColor
-                            activeTextColor: root.railTextColor
-                            idleTextColor: root.railMutedTextColor
-                            onItemActivated: function(itemId) {
-                                root.activateFileView(itemId)
+                            Label {
+                                Layout.fillWidth: true
+                                text: "Navigation"
+                                color: root.railMutedTextColor
+                                font.pixelSize: 11
+                                font.bold: true
+                                leftPadding: 8
+                                topPadding: 4
+                                bottomPadding: 8
                             }
-                        }
 
-                        OwnerSidebarSection {
-                            Layout.fillWidth: true
-                            sectionObjectName: "ownerIndependentPageGroup"
-                            title: "Independent Pages"
-                            items: root.independentPageNavItems
-                            activeItemId: root.activeDestination === "drive" ? "" : root.activeDestination
-                            titleTextColor: root.railMutedTextColor
-                            activeFillColor: root.railActiveColor
-                            hoverFillColor: root.railHoverColor
-                            activeStripeColor: root.railActiveStripeColor
-                            activeTextColor: root.railTextColor
-                            idleTextColor: root.railMutedTextColor
-                            onItemActivated: function(itemId) {
-                                root.activateIndependentPage(itemId)
+                            OwnerSidebarSection {
+                                Layout.fillWidth: true
+                                sectionObjectName: "ownerFileViewGroup"
+                                title: "File Views"
+                                items: root.fileViewNavItems
+                                activeItemId: root.activeDestination === "drive" ? root.activeDriveViewMode : ""
+                                titleTextColor: root.railMutedTextColor
+                                activeFillColor: root.railActiveColor
+                                hoverFillColor: root.railHoverColor
+                                activeStripeColor: root.railActiveStripeColor
+                                activeTextColor: root.railTextColor
+                                idleTextColor: root.railMutedTextColor
+                                onItemActivated: function(itemId) {
+                                    root.activateFileView(itemId)
+                                }
+                            }
+
+                            OwnerSidebarSection {
+                                Layout.fillWidth: true
+                                sectionObjectName: "ownerIndependentPageGroup"
+                                title: "Independent Pages"
+                                items: root.independentPageNavItems
+                                activeItemId: root.activeDestination === "drive" ? "" : root.activeDestination
+                                titleTextColor: root.railMutedTextColor
+                                activeFillColor: root.railActiveColor
+                                hoverFillColor: root.railHoverColor
+                                activeStripeColor: root.railActiveStripeColor
+                                activeTextColor: root.railTextColor
+                                idleTextColor: root.railMutedTextColor
+                                onItemActivated: function(itemId) {
+                                    root.activateIndependentPage(itemId)
+                                }
                             }
                         }
                     }
-                }
-
-                Item {
-                    Layout.fillHeight: true
                 }
 
                 OwnerStorageCard {

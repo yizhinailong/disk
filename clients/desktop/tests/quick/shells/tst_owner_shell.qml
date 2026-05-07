@@ -245,6 +245,40 @@ TestCase {
         verify(storageCard !== sessionCard, "Storage card and session card are distinct")
     }
 
+    function test_owner_shell_nav_panel_has_scrollview() {
+        var shell = createOwnerShell()
+        var scrollView = waitForObject(shell, "ownerNavigationScrollView")
+        verify(scrollView !== null, "Navigation ScrollView exists")
+    }
+
+    function test_owner_shell_nav_panel_encloses_all_buttons_at_default_height() {
+        var shell = createOwnerShell()
+        var navPanel = waitForObject(shell, "ownerNavigationPanel")
+
+        var navButtons = [
+            "ownerNavMyFilesButton", "ownerNavRecentButton",
+            "ownerNavSharesButton", "ownerNavTrashButton",
+            "ownerNavFavoritesButton", "ownerNavTransfersButton",
+            "ownerNavSettingsButton"
+        ]
+
+        for (var i = 0; i < navButtons.length; ++i) {
+            var btn = waitForObject(shell, navButtons[i])
+            verify(btn !== null, navButtons[i] + " found")
+            var btnPos = btn.mapToItem(navPanel, 0, 0)
+            verify(btnPos.y >= 0, navButtons[i] + " within nav panel top")
+            verify(btnPos.y + btn.height <= navPanel.height, navButtons[i] + " within nav panel bottom")
+        }
+    }
+
+    function test_owner_shell_bottom_cards_pinned_at_compressed_height() {
+        var shell = createCompressedOwnerShell()
+        var storageCard = waitForObject(shell, "ownerStorageCard")
+        var sessionCard = waitForObject(shell, "ownerSessionCard")
+        verify(storageCard.visible, "Storage card visible")
+        verify(sessionCard.visible, "Session card visible")
+    }
+
     function test_owner_shell_recent_and_favorites_are_disabled_placeholders() {
         var shell = createOwnerShell()
         var recentButton = waitForObject(shell, "ownerNavRecentButton")
