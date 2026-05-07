@@ -297,12 +297,13 @@ private slots:
         QVERIFY(qml.contains(QStringLiteral("title: \"File Views\"")));
         QVERIFY(qml.contains(QStringLiteral("title: \"Independent Pages\"")));
         QVERIFY(qml.contains(QStringLiteral("label: \"My Files\"")));
-        QVERIFY(qml.contains(QStringLiteral("label: \"Recent (coming soon)\"")));
+        QVERIFY(qml.contains(QStringLiteral("label: \"Recent\"")));
+        QVERIFY(qml.contains(QStringLiteral("statusBadge: \"Soon\"")));
         QVERIFY(qml.contains(QStringLiteral("label: \"Transfers\"")));
         QVERIFY(qml.contains(QStringLiteral("text: \"Logout\"")));
         QVERIFY(qml.contains(QStringLiteral("label: \"Shares\"")));
         QVERIFY(qml.contains(QStringLiteral("label: \"Trash\"")));
-        QVERIFY(qml.contains(QStringLiteral("label: \"Favorites (coming soon)\"")));
+        QVERIFY(qml.contains(QStringLiteral("label: \"Favorites\"")));
         QVERIFY(qml.contains(QStringLiteral("label: \"Settings\"")));
         QVERIFY(qml.contains(QStringLiteral("text: \"Navigation\"")));
         QVERIFY(qml.contains(QStringLiteral("text: \"Session\"")));
