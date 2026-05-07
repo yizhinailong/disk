@@ -53,9 +53,10 @@ ApplicationWindow {
         },
         {
             id: "recent",
-            label: "Recent (coming soon)",
+            label: "Recent",
             objectName: "ownerNavRecentButton",
-            enabled: false
+            enabled: false,
+            statusBadge: "Soon"
         },
         {
             id: "shared",
@@ -69,9 +70,10 @@ ApplicationWindow {
         },
         {
             id: "favorites",
-            label: "Favorites (coming soon)",
+            label: "Favorites",
             objectName: "ownerNavFavoritesButton",
-            enabled: false
+            enabled: false,
+            statusBadge: "Soon"
         }
     ]
     readonly property var independentPageNavItems: [
