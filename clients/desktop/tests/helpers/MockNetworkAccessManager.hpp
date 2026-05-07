@@ -159,6 +159,7 @@ namespace disk::desktop::testing {
             const QNetworkRequest& request,
             QIODevice* outgoingData = nullptr
         ) -> QNetworkReply* override {
+            Q_UNUSED(op);
             m_request_log.append(request);
             m_request_body_log.append(outgoingData ? outgoingData->readAll() : QByteArray());
 

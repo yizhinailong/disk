@@ -250,6 +250,9 @@ public:
 
     Q_INVOKABLE void listFiles(const QString &parentId, int page = 1, int pageSize = 50,
                                 const QString &sort = "name_asc", const QString &typeFilter = "") {
+        Q_UNUSED(page);
+        Q_UNUSED(pageSize);
+        Q_UNUSED(typeFilter);
         m_listFilesCalls.append(parentId);
         m_listFilesSortCalls.append(sort);
     }

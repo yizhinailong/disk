@@ -533,8 +533,6 @@ namespace disk::desktop::managers {
         m_active_uploads[task_id].reply = nullptr;
 
         if (reply->error() != QNetworkReply::NoError) {
-            auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-
             auto json_opt = ParseJsonResponse(reply);
             if (json_opt.has_value() && json_opt->contains("error")) {
                 auto err = ErrorAdapter::FromJson(json_opt->value("error").toObject());
