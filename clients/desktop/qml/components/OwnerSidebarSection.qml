@@ -42,6 +42,7 @@ ColumnLayout {
 
             buttonObjectName: modelData.objectName || ""
             buttonText: modelData.label || ""
+            statusBadge: modelData.statusBadge || ""
             active: sectionRoot.activeItemId === (modelData.id || "")
             enabled: modelData.enabled === undefined ? true : Boolean(modelData.enabled)
             activeFillColor: sectionRoot.activeFillColor

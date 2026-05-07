@@ -299,6 +299,30 @@ TestCase {
         verify(favoritesText.indexOf("(coming soon)") === -1, "Favorites label has no (coming soon)")
     }
 
+    function test_owner_shell_placeholder_buttons_show_soon_badge() {
+        var shell = createOwnerShell()
+        var recentButton = waitForObject(shell, "ownerNavRecentButton")
+        var favoritesButton = waitForObject(shell, "ownerNavFavoritesButton")
+        var myFilesButton = waitForObject(shell, "ownerNavMyFilesButton")
+
+        // Placeholder buttons should have the statusBadge property set to "Soon"
+        compare(recentButton.statusBadge, "Soon", "Recent has Soon badge")
+        compare(favoritesButton.statusBadge, "Soon", "Favorites has Soon badge")
+
+        // Active non-placeholder button should NOT have a badge
+        compare(myFilesButton.statusBadge, "", "My Files has no badge")
+    }
+
+    function test_owner_shell_active_button_still_has_stripe() {
+        var shell = createOwnerShell()
+        var myFilesButton = waitForObject(shell, "ownerNavMyFilesButton")
+
+        // My Files is the default active destination
+        verify(myFilesButton.active, "My Files button is active")
+        verify(myFilesButton.enabled, "My Files button is enabled")
+        compare(myFilesButton.statusBadge, "", "Active button has no status badge")
+    }
+
     function test_owner_shell_recent_and_favorites_are_disabled_placeholders() {
         var shell = createOwnerShell()
         var recentButton = waitForObject(shell, "ownerNavRecentButton")

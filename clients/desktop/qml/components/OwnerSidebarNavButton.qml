@@ -1,11 +1,13 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 
 Button {
     id: root
 
     property string buttonText: ""
     property string buttonObjectName: ""
+    property string statusBadge: ""
     property bool active: false
     property color activeFillColor: "#dce8f5"
     property color hoverFillColor: "#eef2f6"
@@ -42,13 +44,35 @@ Button {
         }
     }
 
-    contentItem: Text {
-        text: root.text
-        color: root.active ? root.activeTextColor : root.idleTextColor
-        opacity: root.enabled ? 1 : 0.7
-        font.pixelSize: 14
-        font.bold: root.active
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
+    contentItem: RowLayout {
+        spacing: 4
+
+        Text {
+            text: root.text
+            color: root.active ? root.activeTextColor : root.idleTextColor
+            opacity: root.enabled ? 1 : 0.7
+            font.pixelSize: 14
+            font.bold: root.active
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+            Layout.fillWidth: true
+        }
+
+        Rectangle {
+            visible: root.statusBadge !== ""
+            radius: 4
+            color: "#e8ecf0"
+            implicitWidth: badgeText.implicitWidth + 8
+            implicitHeight: badgeText.implicitHeight + 4
+
+            Text {
+                id: badgeText
+                anchors.centerIn: parent
+                text: root.statusBadge
+                color: "#6b7785"
+                font.pixelSize: 10
+                font.bold: true
+            }
+        }
     }
 }
