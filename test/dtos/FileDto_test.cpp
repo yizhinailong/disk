@@ -35,7 +35,7 @@ using disk::file::RenameRequest;
 using disk::file::SearchRequest;
 using disk::file::SearchResponse;
 using disk::file::SearchResultItem;
-using disk::file::UploadChunkRequest;
+
 using disk::file::UploadChunkResponse;
 
 // ==================== Helper Functions ====================
@@ -63,19 +63,6 @@ static auto CreateInitUploadRequest(
     json["file_size"] = static_cast<Json::UInt64>(file_size);
     json["file_hash"] = file_hash;
     json["parent_id"] = static_cast<Json::UInt64>(parent_id);
-
-    return CreateJsonRequest(json);
-}
-
-static auto CreateUploadChunkRequest(
-    const std::string& upload_id,
-    uint32_t chunk_index,
-    const std::string& chunk_hash
-) -> drogon::HttpRequestPtr {
-    Json::Value json;
-    json["upload_id"] = upload_id;
-    json["chunk_index"] = chunk_index;
-    json["chunk_hash"] = chunk_hash;
 
     return CreateJsonRequest(json);
 }
@@ -421,92 +408,6 @@ TEST(InitUploadResponse, ToJsonResumeUpload) {
     EXPECT_EQ(json["uploaded_chunks"].size(), 5);
     EXPECT_EQ(json["uploaded_chunks"][0].asUInt(), 0);
     EXPECT_EQ(json["uploaded_chunks"][4].asUInt(), 4);
-}
-
-// ==================== UploadChunkRequest Tests ====================
-
-TEST(UploadChunkRequest, ValidParameters) {
-    auto req = CreateUploadChunkRequest(
-        "up_abc123def456",
-        5,
-        "e99a18c428cb38d5f260853678922e03"
-    );
-    auto result = UploadChunkRequest::FromRequest(req);
-
-    ASSERT_TRUE(result.has_value()) << "Valid parameters should pass";
-    EXPECT_EQ(result->upload_id, "up_abc123def456");
-    EXPECT_EQ(result->chunk_index, 5);
-    EXPECT_EQ(result->chunk_hash, "e99a18c428cb38d5f260853678922e03");
-}
-
-TEST(UploadChunkRequest, MissingUploadId) {
-    Json::Value json;
-    json["chunk_index"] = 0;
-    json["chunk_hash"] = "d41d8cd98f00b204e9800998ecf8427e";
-
-    auto req = CreateJsonRequest(json);
-    auto result = UploadChunkRequest::FromRequest(req);
-
-    EXPECT_FALSE(result.has_value()) << "Missing upload_id should fail";
-    if (!result.has_value()) {
-        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
-    }
-}
-
-TEST(UploadChunkRequest, MissingChunkHash) {
-    Json::Value json;
-    json["upload_id"] = "up_abc123";
-    json["chunk_index"] = 0;
-
-    auto req = CreateJsonRequest(json);
-    auto result = UploadChunkRequest::FromRequest(req);
-
-    EXPECT_FALSE(result.has_value()) << "Missing chunk_hash should fail";
-    if (!result.has_value()) {
-        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
-    }
-}
-
-TEST(UploadChunkRequest, InvalidChunkHashLength) {
-    auto req = CreateUploadChunkRequest(
-        "up_abc123",
-        0,
-        "abc123" // 过短
-    );
-    auto result = UploadChunkRequest::FromRequest(req);
-
-    EXPECT_FALSE(result.has_value()) << "Invalid chunk_hash length should fail";
-    if (!result.has_value()) {
-        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
-    }
-}
-
-TEST(UploadChunkRequest, InvalidChunkHashNonHex) {
-    auto req = CreateUploadChunkRequest(
-        "up_abc123",
-        0,
-        "ghijklmnopqrstuvwxijklmnopqrstuv" // 非十六进制
-    );
-    auto result = UploadChunkRequest::FromRequest(req);
-
-    EXPECT_FALSE(result.has_value()) << "Non-hex chunk_hash should fail";
-    if (!result.has_value()) {
-        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
-    }
-}
-
-TEST(UploadChunkRequest, EmptyUploadId) {
-    auto req = CreateUploadChunkRequest(
-        "", // 空
-        0,
-        "d41d8cd98f00b204e9800998ecf8427e"
-    );
-    auto result = UploadChunkRequest::FromRequest(req);
-
-    EXPECT_FALSE(result.has_value()) << "Empty upload_id should fail";
-    if (!result.has_value()) {
-        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
-    }
 }
 
 // ==================== UploadChunkResponse Tests ====================

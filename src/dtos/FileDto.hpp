@@ -10,7 +10,6 @@
  * - FileItem: 文件项（共享响应组件）
  * - InitUploadRequest: 初始化上传请求
  * - InitUploadResponse: 初始化上传响应
- * - UploadChunkRequest: 上传分片请求（已废弃）
  * - UploadChunkResponse: 上传分片响应
  * - CompleteUploadRequest: 完成上传请求
  * - CompleteUploadResponse: 完成上传响应
@@ -364,125 +363,6 @@ namespace disk::file {
     };
 
     // ==================== Upload Chunk ====================
-
-    /**
-     * @brief 上传分片请求 DTO
-     *
-     * @details
-     * 验证规则：
-     * - upload_id: 非空字符串
-     * - chunk_index: 非负整数
-     * - chunk_hash: 32字符的十六进制字符串（MD5）
-     *
-     * 注意：实际请求使用查询参数 (upload_id, chunk_index, chunk_hash) + 原始二进制请求体 (application/octet-stream)，
-     * 此 DTO 已废弃，仅供遗留代码参考。
-     */
-    struct UploadChunkRequest {
-        std::string upload_id;
-        uint32_t chunk_index{ 0 };
-        std::string chunk_hash;
-
-        /// 从 HTTP 请求解析并验证，返回 Result
-        [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<UploadChunkRequest> {
-            LOG_DEBUG << "Start parsing upload chunk request parameters";
-
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
-
-            const auto& json = *json_ptr;
-
-            // 检查必填字段
-            if (!json.isMember("upload_id")) {
-                LOG_WARN << "Missing required parameter: upload_id";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: upload_id")
-                );
-            }
-            if (!json.isMember("chunk_hash")) {
-                LOG_WARN << "Missing required parameter: chunk_hash";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: chunk_hash")
-                );
-            }
-
-            // 检查字段类型
-            if (!json["upload_id"].isString()) {
-                LOG_WARN << "Parameter 'upload_id' type error: expected string";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'upload_id' type error: expected string"
-                ));
-            }
-            if (!json["chunk_hash"].isString()) {
-                LOG_WARN << "Parameter 'chunk_hash' type error: expected string";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'chunk_hash' type error: expected string"
-                ));
-            }
-
-            UploadChunkRequest request;
-            request.upload_id = json["upload_id"].asString();
-            request.chunk_hash = json["chunk_hash"].asString();
-
-            // 处理可选参数 chunk_index
-            if (json.isMember("chunk_index")) {
-                if (!json["chunk_index"].isIntegral()) {
-                    LOG_WARN << "Parameter 'chunk_index' type error: expected integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'chunk_index' type error: expected integer"
-                    ));
-                }
-                request.chunk_index = json["chunk_index"].asUInt();
-            }
-
-            LOG_DEBUG << "Parsed upload chunk request: upload_id=" << request.upload_id
-                      << ", chunk_index=" << request.chunk_index
-                      << ", chunk_hash=" << request.chunk_hash;
-
-            // 验证 upload_id 非空
-            if (request.upload_id.empty()) {
-                LOG_WARN << "upload_id cannot be empty";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "upload_id cannot be empty")
-                );
-            }
-
-            // 验证分片哈希
-            if (!request.ValidateChunkHash()) {
-                LOG_WARN << "Invalid chunk hash format: " << request.chunk_hash;
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Chunk hash must be a 32-character lowercase hexadecimal string"
-                ));
-            }
-
-            LOG_DEBUG << "Request parameters validation passed";
-            return request;
-        }
-
-    private:
-        /// 验证分片哈希（32字符小写十六进制 MD5）
-        [[nodiscard]]
-        auto ValidateChunkHash() const -> bool {
-            if (chunk_hash.length() != 32) {
-                return false;
-            }
-            for (char c : chunk_hash) {
-                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
-                    return false;
-                }
-            }
-            return true;
-        }
-    };
 
     /**
      * @brief 上传分片响应 DTO
