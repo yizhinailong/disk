@@ -54,16 +54,6 @@ namespace disk::utils {
         StageTimer(StageTimer&&) = delete;
         auto operator=(StageTimer&&) -> StageTimer& = delete;
 
-        /**
-         * @brief 获取自构造以来经过的毫秒数（不含析构日志）
-         * @return 经过的毫秒数
-         */
-        [[nodiscard]]
-        auto ElapsedMs() const noexcept -> int64_t {
-            const auto now = std::chrono::steady_clock::now();
-            return std::chrono::duration_cast<std::chrono::milliseconds>(now - m_start).count();
-        }
-
     private:
         std::string m_stage_name;
         std::chrono::steady_clock::time_point m_start;

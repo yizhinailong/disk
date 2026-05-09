@@ -25,60 +25,6 @@ namespace disk::utils {
     constexpr size_t DEFAULT_BATCH_CHUNK_SIZE = 500;
 
     /**
-     * @brief 分块范围视图
-     *
-     * 表示容器的一个连续分片，用于批量操作的分块处理。
-     * 支持范围遍历，适用于 std::span、迭代器对等范围类型。
-     *
-     * @tparam RangeType 范围类型（如 std::span<T>、std::vector<T>）
-     */
-    template <typename RangeType>
-    struct ChunkRange {
-        RangeType range;
-
-        /// 迭代器类型
-        using iterator = decltype(std::begin(range));
-        using const_iterator = decltype(std::cbegin(range));
-        using value_type = typename std::iterator_traits<iterator>::value_type;
-
-        /// 获取分块大小
-        [[nodiscard]]
-        auto Size() const noexcept -> size_t {
-            return std::ranges::size(range);
-        }
-
-        /// 起始迭代器
-        [[nodiscard]]
-        auto begin() const -> iterator {
-            return std::begin(range);
-        }
-
-        /// 结束迭代器
-        [[nodiscard]]
-        auto end() const -> iterator {
-            return std::end(range);
-        }
-
-        /// 常量起始迭代器
-        [[nodiscard]]
-        auto CBegin() const -> const_iterator {
-            return std::cbegin(range);
-        }
-
-        /// 常量结束迭代器
-        [[nodiscard]]
-        auto CEnd() const -> const_iterator {
-            return std::cend(range);
-        }
-
-        /// 访问指定索引的元素
-        [[nodiscard]]
-        auto At(size_t index) const -> const value_type& {
-            return range[index];
-        }
-    };
-
-    /**
      * @brief 批量操作工具类
      *
      * 提供批量操作的辅助功能：
@@ -119,42 +65,6 @@ namespace disk::utils {
             }
 
             return chunks;
-        }
-
-        /**
-         * @brief 创建分块范围视图（零拷贝）
-         *
-         * 返回分块范围的视图，不复制数据。
-         * 适用于只读遍历和批量处理场景。
-         *
-         * @tparam T 元素类型
-         * @param items 要分块的向量
-         * @param chunk_size 每个分块的大小
-         * @return std::vector<ChunkRange<std::span<const T>>> 分块视图集合
-         *
-         * @code
-         * std::vector<uint64_t> file_ids = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-         * auto chunk_views = BatchUtils::ChunkViews(file_ids, 3);
-         * for (const auto& chunk : chunk_views) {
-         *     for (const auto& id : chunk) {
-         *         // 处理每个 ID
-         *     }
-         * }
-         * @endcode
-         */
-        template <typename T>
-        [[nodiscard]]
-        static auto ChunkViews(const std::vector<T>& items, size_t chunk_size = DEFAULT_BATCH_CHUNK_SIZE)
-            -> std::vector<ChunkRange<std::span<const T>>> {
-            std::vector<ChunkRange<std::span<const T>>> chunk_views;
-            chunk_views.reserve((items.size() + chunk_size - 1) / chunk_size);
-
-            for (size_t i = 0; i < items.size(); i += chunk_size) {
-                auto last = std::min(i + chunk_size, items.size());
-                chunk_views.emplace_back(std::span<const T>{ items.data() + i, items.data() + last });
-            }
-
-            return chunk_views;
         }
 
         // ==================== SQL 占位符生成 ====================
@@ -244,19 +154,6 @@ namespace disk::utils {
             return oss.str();
         }
 
-        /**
-         * @brief BuildSafeNumericInClause 的旧名称别名
-         *
-         * 保持向后兼容，新代码应优先使用 BuildSafeNumericInClause。
-         *
-         * @param ids 要嵌入的 ID 列表
-         * @return std::string 逗号分隔的 ID 字符串
-         */
-        [[nodiscard]]
-        static auto BuildNumericInClause(const std::vector<uint64_t>& ids) -> std::string {
-            return BuildSafeNumericInClause(ids);
-        }
-
         // ==================== 批量验证 ====================
 
         /**
@@ -273,21 +170,6 @@ namespace disk::utils {
         [[nodiscard]]
         static auto ValidateBatchInput(const std::vector<T>& items, size_t max_limit = 10000) -> bool {
             return !items.empty() && items.size() <= max_limit;
-        }
-
-        /**
-         * @brief 计算需要的分块数量
-         *
-         * @param total_items 总项目数
-         * @param chunk_size 每个分块的大小
-         * @return size_t 分块数量
-         */
-        [[nodiscard]]
-        static auto CalculateChunkCount(size_t total_items, size_t chunk_size) noexcept -> size_t {
-            if (chunk_size == 0) {
-                return 0;
-            }
-            return (total_items + chunk_size - 1) / chunk_size;
         }
     };
 

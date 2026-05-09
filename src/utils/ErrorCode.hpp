@@ -51,8 +51,6 @@ namespace disk::error {
         UsernameExists = 40001,
         /// 邮箱已存在
         EmailExists = 40002,
-        /// 参数格式不正确
-        InvalidFormat = 40003,
         /// 用户不存在
         UserNotFound = 40100,
         /// 用户名或密码错误
@@ -81,10 +79,6 @@ namespace disk::error {
         // ==================== 文件错误码 (50xxx) ====================
         /// 文件名无效
         InvalidFilename = 50001,
-        /// 文件类型不允许
-        FileTypeNotAllowed = 50002,
-        /// 文件大小超出限制
-        FileSizeExceeded = 50003,
         /// 存储空间不足
         StorageQuotaExceeded = 50004,
         /// 文件不存在
@@ -113,8 +107,6 @@ namespace disk::error {
         ShareAccessDenied = 60004,
 
         // ==================== Redis错误码 (70xxx) ====================
-        /// Redis连接失败
-        RedisConnectionFailed = 70001,
         /// Redis操作失败
         RedisOperationFailed = 70002,
         /// Redis key不存在
@@ -143,7 +135,6 @@ namespace disk::error {
             // 认证错误
             {          Code::UsernameExists,          drogon::k400BadRequest },
             {             Code::EmailExists,          drogon::k400BadRequest },
-            {           Code::InvalidFormat,          drogon::k400BadRequest },
             {            Code::UserNotFound,            drogon::k404NotFound },
             {      Code::InvalidCredentials,        drogon::k401Unauthorized },
             {           Code::AccountLocked,        drogon::k401Unauthorized },
@@ -159,8 +150,6 @@ namespace disk::error {
 
             // 文件错误
             {         Code::InvalidFilename,          drogon::k400BadRequest },
-            {      Code::FileTypeNotAllowed,          drogon::k400BadRequest },
-            {        Code::FileSizeExceeded,          drogon::k400BadRequest },
             {    Code::StorageQuotaExceeded,          drogon::k400BadRequest },
             {            Code::FileNotFound,            drogon::k404NotFound },
             {          Code::FolderNotFound,            drogon::k404NotFound },
@@ -177,7 +166,6 @@ namespace disk::error {
             {       Code::ShareAccessDenied,           drogon::k403Forbidden },
 
             // Redis错误
-            {   Code::RedisConnectionFailed, drogon::k500InternalServerError },
             {    Code::RedisOperationFailed, drogon::k500InternalServerError },
             {        Code::RedisKeyNotFound,            drogon::k404NotFound },
         };
@@ -210,7 +198,6 @@ namespace disk::error {
             // 认证错误
             {          Code::UsernameExists,            "Username already registered" },
             {             Code::EmailExists,               "Email already registered" },
-            {           Code::InvalidFormat,               "Invalid parameter format" },
             {            Code::UserNotFound,                         "User not found" },
             {      Code::InvalidCredentials,           "Invalid username or password" },
             {           Code::AccountLocked, "Account locked, please try again later" },
@@ -226,8 +213,6 @@ namespace disk::error {
 
             // 文件错误
             {         Code::InvalidFilename,                       "Invalid filename" },
-            {      Code::FileTypeNotAllowed,                  "File type not allowed" },
-            {        Code::FileSizeExceeded,                "File size exceeds limit" },
             {    Code::StorageQuotaExceeded,             "Insufficient storage space" },
             {            Code::FileNotFound,                         "File not found" },
             {          Code::FolderNotFound,                       "Folder not found" },
@@ -244,7 +229,6 @@ namespace disk::error {
             {       Code::ShareAccessDenied,                          "Access denied" },
 
             // Redis错误
-            {   Code::RedisConnectionFailed,                "Redis connection failed" },
             {    Code::RedisOperationFailed,                 "Redis operation failed" },
             {        Code::RedisKeyNotFound,                    "Redis key not found" },
         };
@@ -263,35 +247,6 @@ namespace disk::error {
      */
     inline auto ToInt(Code code) -> std::uint32_t {
         return static_cast<std::uint32_t>(code);
-    }
-
-    /**
-     * @brief 判断是否为成功状态
-     * @param code 错误码
-     * @return 是否成功
-     */
-    inline auto IsSuccess(Code code) -> bool {
-        return code == Code::Success;
-    }
-
-    /**
-     * @brief 判断是否为客户端错误 (4xx)
-     * @param code 错误码
-     * @return 是否为客户端错误
-     */
-    inline auto IsClientError(Code code) -> bool {
-        auto status = GetHttpStatus(code);
-        return status >= drogon::k400BadRequest && status < drogon::k500InternalServerError;
-    }
-
-    /**
-     * @brief 判断是否为服务器错误 (5xx)
-     * @param code 错误码
-     * @return 是否为服务器错误
-     */
-    inline auto IsServerError(Code code) -> bool {
-        auto status = GetHttpStatus(code);
-        return status >= drogon::k500InternalServerError;
     }
 
     // ==================== ErrorInfo 结构体定义 ====================
@@ -364,19 +319,6 @@ namespace disk::error {
      * }
      * @endcode
      */
-
-    /**
-     * @brief 将一种错误类型的 Result 转换为另一种类型（保留错误信息）
-     * @tparam T 目标类型
-     * @tparam U 源类型
-     * @param result 源 Result
-     * @return 转换后的 Result（仅当源为错误时有效）
-     */
-    template <typename T, typename U>
-    [[nodiscard]]
-    auto PropagateError(const Result<U>& result) -> Result<T> {
-        return std::unexpected(result.error());
-    }
 
 } // namespace disk::error
 
