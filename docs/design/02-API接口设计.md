@@ -84,7 +84,6 @@
 |--------|----------|------------|------|
 | 40001 | `UsernameExists` | 400 | 用户名已存在 |
 | 40002 | `EmailExists` | 400 | 邮箱已存在 |
-| 40003 | `InvalidFormat` | 400 | 参数格式不正确 |
 | 40101 | `InvalidCredentials` | 401 | 用户名或密码错误 |
 | 40102 | `AccountLocked` | 401 | 账户已锁定 |
 | 40103 | `AccountDisabled` | 401 | 账户已禁用 |
@@ -103,8 +102,6 @@
 | 错误码 | 枚举名称 | HTTP状态码 | 说明 |
 |--------|----------|------------|------|
 | 50001 | `InvalidFilename` | 400 | 文件名无效 |
-| 50002 | `FileTypeNotAllowed` | 400 | 文件类型不允许 |
-| 50003 | `FileSizeExceeded` | 400 | 文件大小超出限制 |
 | 50004 | `StorageQuotaExceeded` | 400 | 存储空间不足 |
 | 50005 | `FileNotFound` | 404 | 文件不存在 |
 | 50006 | `FolderNotFound` | 404 | 文件夹不存在 |
@@ -127,7 +124,6 @@
 
 | 错误码 | 枚举名称 | HTTP状态码 | 说明 |
 |--------|----------|------------|------|
-| 70001 | `RedisConnectionFailed` | 500 | Redis连接失败 |
 | 70002 | `RedisOperationFailed` | 500 | Redis操作失败 |
 | 70003 | `RedisKeyNotFound` | 404 | Redis key不存在 |
 
