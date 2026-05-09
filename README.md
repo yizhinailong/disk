@@ -242,7 +242,7 @@ flowchart TD
     C5 --> C5a[AuthDto.hpp]
 
     D --> D1[utils/<br/>工具类测试]
-    D --> D2[requests/<br/>请求验证测试]
+    D --> D2[dtos/<br/>DTO验证测试]
 
     E --> E1[init.sql<br/>初始化脚本]
 ```
@@ -291,8 +291,8 @@ ctest --preset linux-debug-clang -R PasswdHash -V
 
 | 模块 | 测试用例 | 覆盖率 |
 |------|----------|--------|
-| PasswdHash | 8 | ✅ 密码哈希/验证 |
-| AuthRequest | 25 | ✅ 请求验证 |
+| PasswdHash | 9 | ✅ 密码哈希/验证 |
+| AuthDto | 39 | ✅ 请求验证 |
 
 ## 🛠️ 开发指南
 
