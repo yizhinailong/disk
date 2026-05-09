@@ -35,9 +35,6 @@ namespace disk::desktop {
         void ClearOwnerToken();
         void ClearVisitorToken();
 
-        auto GetOwnerAccessToken() const -> QString;
-        auto GetVisitorShareToken() const -> QString;
-
     private:
         QString m_owner_access_token;
         QString m_visitor_share_token;

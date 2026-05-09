@@ -183,7 +183,6 @@ namespace disk::user {
             response.percentage = 50.0;
             response.file_count = 100;
             response.folder_count = 10;
-            response.categories = {};
 
             auto json = response.ToJson();
 
@@ -192,9 +191,6 @@ namespace disk::user {
             EXPECT_DOUBLE_EQ(json["percentage"].asDouble(), 50.0);
             EXPECT_EQ(json["file_count"].asUInt(), 100u);
             EXPECT_EQ(json["folder_count"].asUInt(), 10u);
-            EXPECT_TRUE(json["categories"].isArray());
-            EXPECT_EQ(json["categories"].size(), 0u);
         }
-
     } // namespace
 } // namespace disk::user

@@ -51,10 +51,6 @@ namespace disk::desktop {
         );
 
         auto GetState() const -> OwnerSessionState;
-        auto GetAccessToken() const -> QString;
-        auto GetRefreshToken() const -> QString;
-        auto GetUserId() const -> quint64;
-        auto GetUsername() const -> QString;
 
         void SetTokens(
             const QString& access_token,
@@ -62,7 +58,6 @@ namespace disk::desktop {
             int expires_in_seconds
         );
         void ClearSession();
-        auto ShouldRetryAfterRefresh() const -> bool;
 
     public slots:
         void StartLogin();

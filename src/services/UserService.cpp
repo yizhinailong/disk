@@ -266,8 +266,7 @@ namespace disk::user {
                                       .quota = quota,
                                       .percentage = percentage,
                                       .file_count = file_count,
-                                      .folder_count = folder_count,
-                                      .categories = {} };
+                                      .folder_count = folder_count };
 
             LOG_DEBUG << "Storage stats: used=" << used << ", quota=" << quota
                       << ", percentage=" << percentage << "%"

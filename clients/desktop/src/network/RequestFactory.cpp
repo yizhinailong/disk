@@ -50,12 +50,4 @@ namespace disk::desktop {
         m_visitor_share_token.clear();
     }
 
-    auto RequestFactory::GetOwnerAccessToken() const -> QString {
-        return m_owner_access_token;
-    }
-
-    auto RequestFactory::GetVisitorShareToken() const -> QString {
-        return m_visitor_share_token;
-    }
-
-} // namespace disk::desktop
+    } // namespace disk::desktop

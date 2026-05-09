@@ -27,22 +27,6 @@ namespace disk::desktop {
         return m_state;
     }
 
-    auto OwnerSessionManager::GetAccessToken() const -> QString {
-        return m_access_token;
-    }
-
-    auto OwnerSessionManager::GetRefreshToken() const -> QString {
-        return m_refresh_token;
-    }
-
-    auto OwnerSessionManager::GetUserId() const -> quint64 {
-        return m_user_id;
-    }
-
-    auto OwnerSessionManager::GetUsername() const -> QString {
-        return m_username;
-    }
-
     void OwnerSessionManager::SetTokens(
         const QString& access_token,
         const QString& refresh_token,
@@ -70,10 +54,6 @@ namespace disk::desktop {
         m_refresh_promise.reset();
 
         emit sessionCleared();
-    }
-
-    auto OwnerSessionManager::ShouldRetryAfterRefresh() const -> bool {
-        return m_replay_count < MAX_REPLAY;
     }
 
     void OwnerSessionManager::StartLogin() {
