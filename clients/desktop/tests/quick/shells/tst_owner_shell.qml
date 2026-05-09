@@ -348,10 +348,6 @@ TestCase {
         verify(source.indexOf("id: settingsPageComponent") !== -1,
                "Has settingsPageComponent (PAGE-SETTINGS)")
 
-        verify(source.indexOf("id: shareManagementPageComponent") === -1,
-               "ShareManagementPage is NOT a top-level StackView component (now VIEW-SHARED)")
-        verify(source.indexOf("id: trashPageComponent") === -1,
-               "TrashPage is NOT a top-level StackView component (now VIEW-TRASH)")
     }
 
     function test_owner_shell_transfers_and_settings_use_showPage() {

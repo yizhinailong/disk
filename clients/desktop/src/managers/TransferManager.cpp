@@ -91,23 +91,6 @@ namespace disk::desktop::managers {
         return m_download_model;
     }
 
-    auto TransferManager::GetLocalReservedBytes() const -> quint64 {
-        quint64 total{ 0 };
-        const auto count = m_upload_model->rowCount();
-        for (int i = 0; i < count; ++i) {
-            auto task_opt = m_upload_model->GetTask(i);
-            if (!task_opt.has_value()) {
-                continue;
-            }
-            const auto& task = *task_opt;
-            if (task.status == "initializing" || task.status == "uploading" ||
-                task.status == "completing" || task.status == "cancelling") {
-                total += task.file_size;
-            }
-        }
-        return total;
-    }
-
     // ── Upload Operations ──
 
     void TransferManager::StartUpload(const QString& local_path, quint64 parent_id) {
@@ -164,7 +147,7 @@ namespace disk::desktop::managers {
             // No server-side task yet, just mark cancelled locally
             SetUploadState(task_id, UploadState::Cancelled);
             m_active_uploads.remove(task_id);
-            emit localReservedChanged();
+
         }
     }
 
@@ -180,38 +163,6 @@ namespace disk::desktop::managers {
             SetDownloadState(task_id, DownloadState::FetchingMetadata);
             FetchDownloadMetadata(task_id);
         }
-    }
-
-    void TransferManager::StartVisitorDownload(
-        quint64 file_id,
-        const QString& target_path,
-        const QString& share_id,
-        const QString& filename,
-        quint64 file_size
-    ) {
-        auto task_id = CreateDownloadTask(
-            file_id,
-            target_path,
-            "visitor",
-            filename,
-            file_size
-        );
-        if (task_id.isEmpty()) {
-            return;
-        }
-
-        int row = m_download_model->FindTask(task_id);
-        if (row < 0) {
-            return;
-        }
-
-        auto task = *m_download_model->GetTask(row);
-        task.share_id = share_id;
-        m_download_model->UpdateTask(task_id, task);
-
-        // Visitor downloads skip metadata fetch — no /info endpoint
-        SetDownloadState(task_id, DownloadState::Ready);
-        StartDownloadTransfer(task_id);
     }
 
     void TransferManager::PauseDownload(const QString& task_id) {
@@ -406,7 +357,7 @@ namespace disk::desktop::managers {
         }
 
         if (upload_state_changed) {
-            emit localReservedChanged();
+
         }
     }
 
@@ -488,7 +439,6 @@ namespace disk::desktop::managers {
         }
 
         SetUploadState(task_id, UploadState::Initializing);
-        emit localReservedChanged();
 
         task = *m_upload_model->GetTask(row);
 
@@ -580,7 +530,7 @@ namespace disk::desktop::managers {
             m_upload_model->UpdateTask(task_id, task);
             SetUploadState(task_id, UploadState::InstantUploaded);
             m_active_uploads.remove(task_id);
-            emit localReservedChanged();
+
             return;
         }
 
@@ -838,7 +788,6 @@ namespace disk::desktop::managers {
         // §6.2: complete success → Completed (reserved → used conversion happens server-side)
         SetUploadState(task_id, UploadState::Completed);
         m_active_uploads.remove(task_id);
-        emit localReservedChanged();
         emit uploadProgressChanged(task_id, 1.0);
     }
 
@@ -856,7 +805,7 @@ namespace disk::desktop::managers {
         if (!task.upload_id.has_value()) {
             SetUploadState(task_id, UploadState::Cancelled);
             m_active_uploads.remove(task_id);
-            emit localReservedChanged();
+
             return;
         }
 
@@ -893,7 +842,7 @@ namespace disk::desktop::managers {
             if (status == 404) {
                 SetUploadState(task_id, UploadState::Cancelled);
                 m_active_uploads.remove(task_id);
-                emit localReservedChanged();
+    
                 return;
             }
 
@@ -912,7 +861,6 @@ namespace disk::desktop::managers {
 
         SetUploadState(task_id, UploadState::Cancelled);
         m_active_uploads.remove(task_id);
-        emit localReservedChanged();
     }
 
     void TransferManager::SetUploadState(
@@ -941,7 +889,6 @@ namespace disk::desktop::managers {
         task.error = error;
         m_upload_model->UpdateTask(task_id, task);
         m_active_uploads.remove(task_id);
-        emit localReservedChanged();
         emit taskError(task_id, error.message);
     }
 
@@ -963,7 +910,6 @@ namespace disk::desktop::managers {
         task.upload_id = std::nullopt;
         m_upload_model->UpdateTask(task_id, task);
         m_active_uploads.remove(task_id);
-        emit localReservedChanged();
         emit taskError(task_id, err.message);
     }
 

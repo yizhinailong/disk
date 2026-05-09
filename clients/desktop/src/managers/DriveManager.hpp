@@ -36,11 +36,8 @@ namespace disk::desktop::managers {
 
         Q_INVOKABLE void listFiles(const QString& parentId, int page = 1, int pageSize = 50, const QString& sort = "name_asc", const QString& typeFilter = "");
         Q_INVOKABLE void searchFiles(const QString& query);
-        Q_INVOKABLE void getFileDetail(const QString& fileId);
         Q_INVOKABLE void createFolder(const QString& parentId, const QString& name);
         Q_INVOKABLE void renameItem(const QString& fileId, const QString& newName);
-        Q_INVOKABLE void moveItems(const QStringList& fileIds, const QString& targetParentId);
-        Q_INVOKABLE void copyItems(const QStringList& fileIds, const QString& targetParentId);
         Q_INVOKABLE void deleteItems(const QStringList& fileIds);
         Q_INVOKABLE void loadFolderTree();
         Q_INVOKABLE void loadBreadcrumb(const QString& folderId);

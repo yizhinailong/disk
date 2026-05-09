@@ -39,10 +39,6 @@ namespace disk::desktop {
         }
     }
 
-    auto NetworkClient::GetBaseUrl() const -> QString {
-        return m_base_url;
-    }
-
     auto NetworkClient::Get(const QUrl& url, const QMap<QString, QString>& headers)
         -> QNetworkReply* {
         QNetworkRequest request = BuildRequest(url, headers);

@@ -364,39 +364,4 @@ TestCase {
         verify(screenshotHelper !== null, "screenshotHelper available")
     }
 
-    // ── Shares and Trash pages still exist for future migration ─────────────
-    // These verify the standalone page files are still present (for Tasks 5-7)
-    // but are NOT used as top-level OwnerShell destinations.
-
-    function test_share_and_trash_page_files_still_exist() {
-        var shareXhr = new XMLHttpRequest()
-        shareXhr.open("GET", Qt.resolvedUrl("../../../qml/pages/ShareManagementPage.qml"), false)
-        shareXhr.send()
-        verify(shareXhr.responseText.length > 0,
-               "ShareManagementPage.qml exists (will become VIEW-SHARED content in Tasks 5-7)")
-
-        var trashXhr = new XMLHttpRequest()
-        trashXhr.open("GET", Qt.resolvedUrl("../../../qml/pages/TrashPage.qml"), false)
-        trashXhr.send()
-        verify(trashXhr.responseText.length > 0,
-               "TrashPage.qml exists (will become VIEW-TRASH content in Tasks 5-7)")
-    }
-
-    function test_share_and_trash_pages_use_own_managers() {
-        var shareXhr = new XMLHttpRequest()
-        shareXhr.open("GET", Qt.resolvedUrl("../../../qml/pages/ShareManagementPage.qml"), false)
-        shareXhr.send()
-        var shareSource = shareXhr.responseText
-        verify(shareSource.length > 0, "ShareManagementPage.qml was read")
-        verify(shareSource.indexOf("shareManager.") !== -1,
-               "ShareManagementPage uses shareManager")
-
-        var trashXhr = new XMLHttpRequest()
-        trashXhr.open("GET", Qt.resolvedUrl("../../../qml/pages/TrashPage.qml"), false)
-        trashXhr.send()
-        var trashSource = trashXhr.responseText
-        verify(trashSource.length > 0, "TrashPage.qml was read")
-        verify(trashSource.indexOf("trashManager.") !== -1,
-               "TrashPage uses trashManager")
-    }
 }

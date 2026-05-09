@@ -32,7 +32,7 @@ namespace disk::desktop {
         );
 
         void SetBaseUrl(const QString& baseUrl);
-        auto GetBaseUrl() const -> QString;
+        [[nodiscard]] auto GetBaseUrl() const -> const QString& { return m_base_url; }
 
         auto Get(const QUrl& url, const QMap<QString, QString>& headers = {})
             -> QNetworkReply*;

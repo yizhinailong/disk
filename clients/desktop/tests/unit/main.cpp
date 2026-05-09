@@ -261,15 +261,11 @@ private slots:
         const auto qml = QString::fromUtf8(owner_shell.readAll());
         QVERIFY(!qml.contains(QStringLiteral("stackView.replace(\"DriveBrowserPage.qml\")")));
         QVERIFY(!qml.contains(QStringLiteral("stackView.replace(\"TransferCenterPage.qml\")")));
-        QVERIFY(!qml.contains(QStringLiteral("stackView.replace(\"ShareManagementPage.qml\")")));
-        QVERIFY(!qml.contains(QStringLiteral("stackView.replace(\"TrashPage.qml\")")));
 
         // DOC-01 §4, DOC-03 §2.2: three top-level pages only
         QVERIFY(qml.contains(QStringLiteral("id: driveBrowserPageComponent")));
         QVERIFY(qml.contains(QStringLiteral("id: transferCenterPageComponent")));
         QVERIFY(qml.contains(QStringLiteral("id: settingsPageComponent")));
-        QVERIFY(!qml.contains(QStringLiteral("id: shareManagementPageComponent")));
-        QVERIFY(!qml.contains(QStringLiteral("id: trashPageComponent")));
 
         QVERIFY(qml.contains(QStringLiteral("root.showPage(transferCenterPageComponent)")));
         QVERIFY(qml.contains(QStringLiteral("root.showPage(settingsPageComponent)")));

@@ -143,19 +143,6 @@ namespace disk::desktop::managers {
         });
     }
 
-    void ShareManager::getShareDetail(const QString& shareId) {
-        QUrl url(QString("/api/share/%1").arg(shareId));
-        auto headers = PrepareOwnerHeaders();
-        auto* reply = m_networkClient->Get(url, headers);
-        m_active_replies.append(reply);
-
-        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-            m_active_replies.removeOne(reply);
-            reply->deleteLater();
-            HandleDetailResponse(reply);
-        });
-    }
-
     void ShareManager::updateShare(
         const QString& shareId,
         const QString& permission,
@@ -240,19 +227,6 @@ namespace disk::desktop::managers {
             m_active_replies.removeOne(reply);
             reply->deleteLater();
             HandleBrowseResponse(reply, shareId);
-        });
-    }
-
-    void ShareManager::getShareDetailVisitor(const QString& shareId) {
-        QUrl url(QString("/api/share/%1").arg(shareId));
-        auto headers = PrepareVisitorHeaders();
-        auto* reply = m_networkClient->Get(url, headers);
-        m_active_replies.append(reply);
-
-        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-            m_active_replies.removeOne(reply);
-            reply->deleteLater();
-            HandleDetailVisitorResponse(reply);
         });
     }
 

@@ -139,11 +139,9 @@ set(DESKTOP_QML_FILES
     qml/pages/RegisterPage.qml
     qml/pages/SettingsPage.qml
     qml/pages/ShareBrowsePage.qml
-    qml/pages/ShareManagementPage.qml
     qml/pages/ShareVerifyPage.qml
     qml/pages/SplashPage.qml
     qml/pages/TransferCenterPage.qml
-    qml/pages/TrashPage.qml
     qml/shells/AuthShell.qml
     qml/shells/OwnerShell.qml
     qml/shells/VisitorShell.qml

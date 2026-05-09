@@ -132,19 +132,6 @@ namespace disk::desktop::managers {
         });
     }
 
-    void DriveManager::getFileDetail(const QString& fileId) {
-        QUrl url(QString("/api/file/%1").arg(fileId));
-        auto headers = PrepareHeaders();
-        auto* reply = m_networkClient->Get(url, headers);
-        m_active_replies.append(reply);
-
-        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-            m_active_replies.removeOne(reply);
-            reply->deleteLater();
-            HandleDetailResponse(reply);
-        });
-    }
-
     void DriveManager::createFolder(const QString& parentId, const QString& name) {
         auto trimmed = parentId.trimmed();
         bool ok = true;
@@ -191,60 +178,6 @@ namespace disk::desktop::managers {
             m_active_replies.removeOne(reply);
             reply->deleteLater();
             HandleRenameResponse(reply);
-        });
-    }
-
-    void DriveManager::moveItems(const QStringList& fileIds, const QString& targetParentId) {
-        QJsonObject body;
-        QJsonArray ids;
-        for (const auto& id : fileIds) {
-            bool ok = false;
-            auto val = id.toULongLong(&ok);
-            if (ok) {
-                ids.append(static_cast<double>(val));
-            }
-        }
-        body["file_ids"] = ids;
-        body["target_parent_id"] = targetParentId.isEmpty() ? QString("0") : targetParentId;
-
-        QJsonDocument doc(body);
-        auto headers = PrepareHeaders();
-        headers["Content-Type"] = "application/json";
-
-        auto* reply = m_networkClient->Put(QUrl("/api/file/move"), doc.toJson(QJsonDocument::Compact), headers);
-        m_active_replies.append(reply);
-
-        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-            m_active_replies.removeOne(reply);
-            reply->deleteLater();
-            HandleMoveResponse(reply);
-        });
-    }
-
-    void DriveManager::copyItems(const QStringList& fileIds, const QString& targetParentId) {
-        QJsonObject body;
-        QJsonArray ids;
-        for (const auto& id : fileIds) {
-            bool ok = false;
-            auto val = id.toULongLong(&ok);
-            if (ok) {
-                ids.append(static_cast<double>(val));
-            }
-        }
-        body["file_ids"] = ids;
-        body["target_parent_id"] = targetParentId.isEmpty() ? QString("0") : targetParentId;
-
-        QJsonDocument doc(body);
-        auto headers = PrepareHeaders();
-        headers["Content-Type"] = "application/json";
-
-        auto* reply = m_networkClient->Post(QUrl("/api/file/copy"), doc.toJson(QJsonDocument::Compact), headers);
-        m_active_replies.append(reply);
-
-        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-            m_active_replies.removeOne(reply);
-            reply->deleteLater();
-            HandleCopyResponse(reply);
         });
     }
 

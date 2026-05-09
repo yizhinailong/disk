@@ -44,7 +44,6 @@ namespace disk::desktop::managers {
             const QString& password = {},
             int expireDays = 7
         );
-        Q_INVOKABLE void getShareDetail(const QString& shareId);
         Q_INVOKABLE void updateShare(
             const QString& shareId,
             const QString& permission = {},
@@ -55,7 +54,6 @@ namespace disk::desktop::managers {
 
         // Visitor operations (Share Token auth)
         Q_INVOKABLE void browseShare(const QString& shareId, const QString& parentId = {});
-        Q_INVOKABLE void getShareDetailVisitor(const QString& shareId);
 
     signals:
         void apiError(const QString& message, int code);

@@ -82,7 +82,6 @@ namespace disk::desktop::managers {
 
         Q_PROPERTY(UploadTaskModel* uploadModel READ GetUploadModel CONSTANT)
         Q_PROPERTY(DownloadTaskModel* downloadModel READ GetDownloadModel CONSTANT)
-        Q_PROPERTY(quint64 localReservedBytes READ GetLocalReservedBytes NOTIFY localReservedChanged)
 
     public:
         explicit TransferManager(
@@ -94,7 +93,6 @@ namespace disk::desktop::managers {
 
         auto GetUploadModel() -> UploadTaskModel*;
         auto GetDownloadModel() -> DownloadTaskModel*;
-        auto GetLocalReservedBytes() const -> quint64;
 
         // ── Upload operations ──
 
@@ -133,22 +131,6 @@ namespace disk::desktop::managers {
             quint64 file_id,
             const QString& target_path,
             const QString& auth_domain = "owner"
-        );
-
-        /**
-         * @brief Start a visitor download
-         * @param file_id Remote file ID
-         * @param target_path Local save path
-         * @param share_id Share ID for visitor context
-         * @param filename Display filename
-         * @param file_size Expected file size
-         */
-        Q_INVOKABLE void StartVisitorDownload(
-            quint64 file_id,
-            const QString& target_path,
-            const QString& share_id,
-            const QString& filename,
-            quint64 file_size
         );
 
         /**
@@ -198,7 +180,6 @@ namespace disk::desktop::managers {
         void ShutdownOwnerTransfers();
 
     signals:
-        void localReservedChanged();
         void uploadProgressChanged(const QString& task_id, double progress);
         void downloadProgressChanged(const QString& task_id, double progress);
         void uploadSpeedChanged(const QString& task_id, qint64 bytes_per_sec);
