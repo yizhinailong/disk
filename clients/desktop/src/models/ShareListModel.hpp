@@ -62,10 +62,7 @@ namespace disk::desktop {
         auto AddItem(const ShareItem& item) -> void;
         auto RemoveItem(const QString& share_id) -> bool;
         auto Clear() -> void;
-        auto GetItem(int row) const -> std::optional<ShareItem>;
         auto SetItems(const QVector<ShareItem>& items) -> void;
-
-        Q_INVOKABLE int indexOf(const QString& share_id) const;
 
     private:
         QVector<ShareItem> m_items;

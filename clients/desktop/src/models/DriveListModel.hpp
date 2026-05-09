@@ -43,10 +43,7 @@ namespace disk::desktop {
         auto AddItems(const QVector<DriveItem>& items) -> void;
         auto RemoveItem(quint64 id) -> bool;
         auto Clear() -> void;
-        auto GetItem(int row) const -> std::optional<DriveItem>;
         auto SetItems(const QVector<DriveItem>& items) -> void;
-
-        Q_INVOKABLE int indexOf(quint64 id) const;
 
     private:
         QVector<DriveItem> m_items;

@@ -159,26 +159,10 @@ namespace disk::desktop {
         endResetModel();
     }
 
-    auto ShareListModel::GetItem(int row) const -> std::optional<ShareItem> {
-        if (row < 0 || row >= m_items.size()) {
-            return std::nullopt;
-        }
-        return m_items.at(row);
-    }
-
     auto ShareListModel::SetItems(const QVector<ShareItem>& items) -> void {
         beginResetModel();
         m_items = items;
         endResetModel();
     }
 
-    auto ShareListModel::indexOf(const QString& share_id) const -> int {
-        for (int i = 0; i < m_items.size(); ++i) {
-            if (m_items[i].share_id == share_id) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-} // namespace disk::desktop
+    } // namespace disk::desktop

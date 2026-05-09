@@ -113,26 +113,10 @@ namespace disk::desktop {
         endResetModel();
     }
 
-    auto TrashListModel::GetItem(int row) const -> std::optional<TrashItem> {
-        if (row < 0 || row >= m_items.size()) {
-            return std::nullopt;
-        }
-        return m_items.at(row);
-    }
-
     auto TrashListModel::SetItems(const QVector<TrashItem>& items) -> void {
         beginResetModel();
         m_items = items;
         endResetModel();
-    }
-
-    auto TrashListModel::indexOf(quint64 trash_id) const -> int {
-        for (int i = 0; i < m_items.size(); ++i) {
-            if (m_items[i].trash_id == trash_id) {
-                return i;
-            }
-        }
-        return -1;
     }
 
 } // namespace disk::desktop

@@ -51,10 +51,7 @@ namespace disk::desktop {
         auto AddItem(const TrashItem& item) -> void;
         auto RemoveItem(quint64 trash_id) -> bool;
         auto Clear() -> void;
-        auto GetItem(int row) const -> std::optional<TrashItem>;
         auto SetItems(const QVector<TrashItem>& items) -> void;
-
-        Q_INVOKABLE int indexOf(quint64 trash_id) const;
 
     private:
         QVector<TrashItem> m_items;

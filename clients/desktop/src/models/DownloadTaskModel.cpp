@@ -203,8 +203,4 @@ namespace disk::desktop {
         return -1;
     }
 
-    auto DownloadTaskModel::indexOf(const QString& task_id) const -> int {
-        return FindTask(task_id);
-    }
-
 } // namespace disk::desktop

@@ -73,8 +73,6 @@ namespace disk::desktop {
         auto GetTask(int row) const -> std::optional<DownloadTask>;
         auto FindTask(const QString& task_id) const -> int;
 
-        Q_INVOKABLE int indexOf(const QString& task_id) const;
-
     private:
         QVector<DownloadTask> m_tasks;
     };

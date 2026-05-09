@@ -220,16 +220,6 @@ private slots:
         QCOMPARE(model.FindTask("missing"), -1);
     }
 
-    void IndexOfMatchesFindTask() {
-        UploadTaskModel model;
-        UploadTask a;
-        a.task_id = "my_task";
-        model.AddTask(a);
-
-        QCOMPARE(model.indexOf("my_task"), 0);
-        QCOMPARE(model.indexOf("nope"), -1);
-    }
-
     void GetTaskReturnsCorrectItem() {
         UploadTaskModel model;
         UploadTask task;
