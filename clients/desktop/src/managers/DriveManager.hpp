@@ -41,6 +41,7 @@ namespace disk::desktop::managers {
         Q_INVOKABLE void deleteItems(const QStringList& fileIds);
         Q_INVOKABLE void loadFolderTree();
         Q_INVOKABLE void loadBreadcrumb(const QString& folderId);
+        Q_INVOKABLE void getFileDetail(const QString& fileId);
 
     signals:
         void apiError(const QString& message, int code);

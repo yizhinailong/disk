@@ -59,6 +59,12 @@ namespace disk::desktop {
         );
         void ClearSession();
 
+        auto GetAccessToken() const -> QString;
+        auto GetRefreshToken() const -> QString;
+        auto GetUserId() const -> quint64;
+        auto GetUsername() const -> QString;
+        auto ShouldRetryAfterRefresh() const -> bool;
+
     public slots:
         void StartLogin();
         void HandleLoginSuccess(

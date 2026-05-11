@@ -102,4 +102,20 @@ namespace disk::desktop {
         endResetModel();
     }
 
+    auto DriveListModel::indexOf(quint64 id) const -> int {
+        for (int i = 0; i < m_items.size(); ++i) {
+            if (m_items[i].id == id) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    auto DriveListModel::GetItem(int row) const -> std::optional<DriveItem> {
+        if (row >= 0 && row < m_items.size()) {
+            return m_items[row];
+        }
+        return std::nullopt;
+    }
+
 } // namespace disk::desktop

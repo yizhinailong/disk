@@ -361,6 +361,22 @@ namespace disk::desktop::managers {
         }
     }
 
+    auto TransferManager::GetLocalReservedBytes() const -> quint64 {
+        quint64 total{ 0 };
+        const auto count = m_upload_model->rowCount();
+        for (int i = 0; i < count; ++i) {
+            auto task_opt = m_upload_model->GetTask(i);
+            if (!task_opt.has_value()) {
+                continue;
+            }
+            const auto& status = task_opt->status;
+            if (status == "uploading" || status == "initializing" || status == "completing") {
+                total += task_opt->file_size;
+            }
+        }
+        return total;
+    }
+
     // ── Upload Internal ──
 
     auto TransferManager::CreateUploadTask(

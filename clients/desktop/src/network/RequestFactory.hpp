@@ -34,6 +34,8 @@ namespace disk::desktop {
         void SetVisitorShareToken(const QString& token);
         void ClearOwnerToken();
         void ClearVisitorToken();
+        auto GetOwnerAccessToken() const -> QString;
+        auto GetVisitorShareToken() const -> QString;
 
     private:
         QString m_owner_access_token;

@@ -250,6 +250,19 @@ namespace disk::desktop::managers {
         });
     }
 
+    void DriveManager::getFileDetail(const QString& fileId) {
+        QUrl url(QString("/api/file/%1").arg(fileId));
+        auto headers = PrepareHeaders();
+        auto* reply = m_networkClient->Get(url, headers);
+        m_active_replies.append(reply);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            m_active_replies.removeOne(reply);
+            reply->deleteLater();
+            HandleDetailResponse(reply);
+        });
+    }
+
     // ── Response handlers ──
 
     void DriveManager::HandleListResponse(QNetworkReply* reply) {

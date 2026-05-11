@@ -56,6 +56,26 @@ namespace disk::desktop {
         emit sessionCleared();
     }
 
+    auto OwnerSessionManager::GetAccessToken() const -> QString {
+        return m_access_token;
+    }
+
+    auto OwnerSessionManager::GetRefreshToken() const -> QString {
+        return m_refresh_token;
+    }
+
+    auto OwnerSessionManager::GetUserId() const -> quint64 {
+        return m_user_id;
+    }
+
+    auto OwnerSessionManager::GetUsername() const -> QString {
+        return m_username;
+    }
+
+    auto OwnerSessionManager::ShouldRetryAfterRefresh() const -> bool {
+        return m_replay_count < MAX_REPLAY;
+    }
+
     void OwnerSessionManager::StartLogin() {
         SetState(OwnerSessionState::Authenticating);
     }

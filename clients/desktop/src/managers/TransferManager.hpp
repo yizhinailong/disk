@@ -179,6 +179,12 @@ namespace disk::desktop::managers {
          */
         void ShutdownOwnerTransfers();
 
+        /**
+         * @brief Get total bytes reserved by active upload tasks
+         * @return Sum of file_size for tasks with status "uploading", "initializing", or "completing"
+         */
+        auto GetLocalReservedBytes() const -> quint64;
+
     signals:
         void uploadProgressChanged(const QString& task_id, double progress);
         void downloadProgressChanged(const QString& task_id, double progress);
