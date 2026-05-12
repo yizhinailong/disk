@@ -18,8 +18,7 @@ namespace disk::desktop::managers {
           m_listModel(new disk::desktop::DriveListModel(this)),
           m_treeModel(new disk::desktop::FolderTreeModel(this)),
           m_networkClient(networkClient),
-          m_requestFactory(requestFactory),
-          m_delete_nam(this) {}
+          m_requestFactory(requestFactory) {}
 
     DriveManager::~DriveManager() {
         for (auto* reply : m_active_replies) {
@@ -181,7 +180,7 @@ namespace disk::desktop::managers {
         });
     }
 
-    void DriveManager::deleteItems(const QStringList& fileIds) {
+void DriveManager::deleteItems(const QStringList& fileIds) {
         QJsonObject body;
         QJsonArray ids;
         for (const auto& id : fileIds) {
@@ -195,19 +194,8 @@ namespace disk::desktop::managers {
 
         QByteArray json_body = QJsonDocument(body).toJson(QJsonDocument::Compact);
 
-        QUrl url(m_networkClient->GetBaseUrl());
-        url = url.resolved(QUrl("api/file"));
-
-        QNetworkRequest request(url);
-        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-        request.setHeader(QNetworkRequest::UserAgentHeader, "DiskDesktop/1.0");
-
         auto headers = PrepareHeaders();
-        for (auto it = headers.constBegin(); it != headers.constEnd(); ++it) {
-            request.setRawHeader(it.key().toUtf8(), it.value().toUtf8());
-        }
-
-        auto* reply = m_delete_nam.sendCustomRequest(request, "DELETE", json_body);
+        auto* reply = m_networkClient->Delete(QUrl("/api/file"), json_body, headers);
         m_active_replies.append(reply);
 
         connect(reply, &QNetworkReply::finished, this, [this, reply]() {

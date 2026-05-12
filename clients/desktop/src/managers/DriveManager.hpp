@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QMap>
-#include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QObject>
 #include <QString>
@@ -72,7 +71,6 @@ namespace disk::desktop::managers {
         disk::desktop::FolderTreeModel* m_treeModel;
         disk::desktop::NetworkClient* m_networkClient;
         disk::desktop::RequestFactory* m_requestFactory;
-        QNetworkAccessManager m_delete_nam; // for DELETE with body
         QVector<QNetworkReply*> m_active_replies;
     };
 
