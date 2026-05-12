@@ -18,8 +18,7 @@ namespace disk::desktop::managers {
           m_listModel(new disk::desktop::TrashListModel(this)),
           m_batchResultModel(new disk::desktop::BatchResultModel(this)),
           m_networkClient(networkClient),
-          m_requestFactory(requestFactory),
-          m_delete_nam(this) {}
+          m_requestFactory(requestFactory) {}
 
     TrashManager::~TrashManager() {
         for (auto* reply : m_active_replies) {
@@ -137,20 +136,8 @@ namespace disk::desktop::managers {
 
         QByteArray json_body = QJsonDocument(body).toJson(QJsonDocument::Compact);
 
-        QString base_url = m_networkClient->GetBaseUrl();
-        QString path = base_url + "api/trash";
-        QUrl url(path);
-
-        QNetworkRequest request(url);
-        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-        request.setHeader(QNetworkRequest::UserAgentHeader, "DiskDesktop/1.0");
-
         auto headers = PrepareHeaders();
-        for (auto it = headers.constBegin(); it != headers.constEnd(); ++it) {
-            request.setRawHeader(it.key().toUtf8(), it.value().toUtf8());
-        }
-
-        auto* reply = m_delete_nam.sendCustomRequest(request, "DELETE", json_body);
+        auto* reply = m_networkClient->Delete(QUrl("/api/trash"), json_body, headers);
         m_active_replies.append(reply);
 
         connect(reply, &QNetworkReply::finished, this, [this, reply]() {
@@ -161,19 +148,8 @@ namespace disk::desktop::managers {
     }
 
     void TrashManager::clearAll() {
-        QString base_url = m_networkClient->GetBaseUrl();
-        QString path = base_url + "api/trash/all";
-        QUrl url(path);
-
-        QNetworkRequest request(url);
-        request.setHeader(QNetworkRequest::UserAgentHeader, "DiskDesktop/1.0");
-
         auto headers = PrepareHeaders();
-        for (auto it = headers.constBegin(); it != headers.constEnd(); ++it) {
-            request.setRawHeader(it.key().toUtf8(), it.value().toUtf8());
-        }
-
-        auto* reply = m_delete_nam.sendCustomRequest(request, "DELETE", QByteArray());
+        auto* reply = m_networkClient->Delete(QUrl("/api/trash/all"), QByteArray(), headers);
         m_active_replies.append(reply);
 
         connect(reply, &QNetworkReply::finished, this, [this, reply]() {
