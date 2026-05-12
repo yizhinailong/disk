@@ -218,10 +218,6 @@ namespace disk::desktop::managers {
         int total_pages = pagination.value("total_pages").toInt(1);
         int total = pagination.value("total").toInt(0);
         emit paginationLoaded(page, total_pages, total);
-
-        if (items.isEmpty()) {
-            emit operationSuccess("Trash is empty");
-        }
     }
 
     void TrashManager::HandleRestoreResponse(QNetworkReply* reply) {
