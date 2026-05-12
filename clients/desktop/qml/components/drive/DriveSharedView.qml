@@ -211,7 +211,7 @@ PageStateView {
 
                             CheckBox {
                                 checked: page.isShareSelected(model.shareId)
-                                onClicked: mouse.accepted = false
+                                onClicked: page.toggleShareSelection(model.shareId)
                             }
 
                             ColumnLayout {
