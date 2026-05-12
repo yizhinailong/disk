@@ -53,6 +53,11 @@ namespace disk::desktop {
         ) -> QNetworkReply*;
         auto Delete(const QUrl& url, const QMap<QString, QString>& headers = {})
             -> QNetworkReply*;
+        auto Delete(
+            const QUrl& url,
+            const QByteArray& body,
+            const QMap<QString, QString>& headers = {}
+        ) -> QNetworkReply*;
 
     private:
         auto BuildRequest(

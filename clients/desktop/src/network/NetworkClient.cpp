@@ -75,12 +75,22 @@ namespace disk::desktop {
         return m_nam->sendCustomRequest(request, "PATCH", body);
     }
 
-    auto NetworkClient::Delete(
+auto NetworkClient::Delete(
         const QUrl& url,
         const QMap<QString, QString>& headers
     ) -> QNetworkReply* {
         QNetworkRequest request = BuildRequest(url, headers);
         return m_nam->deleteResource(request);
+    }
+
+    auto NetworkClient::Delete(
+        const QUrl& url,
+        const QByteArray& body,
+        const QMap<QString, QString>& headers
+    ) -> QNetworkReply* {
+        QNetworkRequest request = BuildRequest(url, headers);
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        return m_nam->sendCustomRequest(request, "DELETE", body);
     }
 
     auto NetworkClient::BuildRequest(
