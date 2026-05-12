@@ -45,18 +45,11 @@ ApplicationWindow {
     readonly property string accountSecondaryText: profileManager.userProfile.username
                                                     ? "@" + profileManager.userProfile.username
                                                     : "Signed in workspace"
-    readonly property var fileViewNavItems: [
+readonly property var fileViewNavItems: [
         {
             id: "myfiles",
             label: "My Files",
             objectName: "ownerNavMyFilesButton"
-        },
-        {
-            id: "recent",
-            label: "Recent",
-            objectName: "ownerNavRecentButton",
-            enabled: false,
-            statusBadge: "Soon"
         },
         {
             id: "shared",
@@ -67,13 +60,6 @@ ApplicationWindow {
             id: "trash",
             label: "Trash",
             objectName: "ownerNavTrashButton"
-        },
-        {
-            id: "favorites",
-            label: "Favorites",
-            objectName: "ownerNavFavoritesButton",
-            enabled: false,
-            statusBadge: "Soon"
         }
     ]
     readonly property var independentPageNavItems: [
@@ -122,12 +108,8 @@ ApplicationWindow {
         }
     }
 
-    function activateFileView(itemId) {
+function activateFileView(itemId) {
         switch (itemId) {
-        case "recent":
-            return
-        case "favorites":
-            return
         case "shared":
             root.showDriveViewMode("shared")
             return
@@ -158,8 +140,6 @@ ApplicationWindow {
             switch (viewMode) {
             case "shared": return "Shares"
             case "trash": return "Trash"
-            case "recent": return "Recent"
-            case "favorites": return "Favorites"
             default: return "My Files"
             }
         }
@@ -178,8 +158,6 @@ ApplicationWindow {
             switch (viewMode) {
             case "shared": return "Manage outbound file access"
             case "trash": return "Review recently deleted items"
-            case "recent": return "Recently accessed files"
-            case "favorites": return "Your bookmarked items"
             default: return "Browse and manage your drive"
             }
         }

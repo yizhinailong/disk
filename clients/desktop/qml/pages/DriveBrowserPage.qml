@@ -94,8 +94,6 @@ Page {
     readonly property bool isMyFilesMode: root.currentViewMode === "myfiles"
     readonly property bool isSharedMode: root.currentViewMode === "shared"
     readonly property bool isTrashMode: root.currentViewMode === "trash"
-    readonly property bool isRecentMode: root.currentViewMode === "recent"
-    readonly property bool isFavoritesMode: root.currentViewMode === "favorites"
     property var selectedItemIds: []
     property string searchQuery: ""
     property string currentSort: "name_asc"
@@ -109,8 +107,6 @@ Page {
         switch (root.currentViewMode) {
         case "shared": return "SHARES"
         case "trash": return "TRASH"
-        case "recent": return "RECENT"
-        case "favorites": return "FAVORITES"
         default: return "DRIVE"
         }
     }
@@ -122,8 +118,6 @@ Page {
         switch (root.currentViewMode) {
         case "shared": return "Shares"
         case "trash": return "Trash"
-        case "recent": return "Recent"
-        case "favorites": return "Favorites"
         default: return "My Drive"
         }
     }
@@ -137,16 +131,6 @@ Page {
         }
         switch (root.currentViewMode) {
         case "trash": return root.trashStatusSummary()
-        case "recent": return "Recently accessed files. Coming soon."
-        case "favorites": return "Bookmarked items. Coming soon."
-        default: return ""
-        }
-    }
-
-    function seamDescription() {
-        switch (root.currentViewMode) {
-        case "recent": return "This feature is not yet available."
-        case "favorites": return "This feature is not yet available."
         default: return ""
         }
     }
@@ -895,7 +879,6 @@ Page {
             root.refreshTrashList()
             return
         }
-        // VIEW-RECENT and VIEW-FAVORITES are placeholder seams (backend not yet available).
     }
 
     function submitRestoreSelectedTrash() {
@@ -970,12 +953,6 @@ Page {
         }
 
         DriveTrashView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            page: root
-        }
-
-        DriveSeamView {
             Layout.fillWidth: true
             Layout.fillHeight: true
             page: root

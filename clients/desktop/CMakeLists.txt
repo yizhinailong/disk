@@ -125,7 +125,6 @@ set(DESKTOP_QML_FILES
     qml/components/WorkspaceTheme.qml
     qml/components/drive/DriveMyFilesView.qml
     qml/components/drive/DriveContextMenu.qml
-    qml/components/drive/DriveSeamView.qml
     qml/components/drive/DriveSharedView.qml
     qml/components/drive/DriveStatusCard.qml
     qml/components/drive/DriveToolbarCard.qml
