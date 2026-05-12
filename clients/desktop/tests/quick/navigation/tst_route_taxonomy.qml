@@ -133,10 +133,6 @@ TestCase {
                "Shares button uses showDriveViewMode (VIEW-SHARED)")
         verify(source.indexOf('root.showDriveViewMode("trash")') !== -1,
                "Trash button uses showDriveViewMode (VIEW-TRASH)")
-        verify(source.indexOf('root.showDriveViewMode("recent")') === -1,
-               "Recent is not exposed as a live view-mode route before implementation")
-        verify(source.indexOf('root.showDriveViewMode("favorites")') === -1,
-               "Favorites is not exposed as a live view-mode route before implementation")
 
         // Verify no showPage for shares/trash
         verify(source.indexOf("root.showPage(shareManagementPageComponent)") === -1,

@@ -24,8 +24,7 @@ TestCase {
             readQmlSource("components/drive/DriveStatusCard.qml"),
             readQmlSource("components/drive/DriveMyFilesView.qml"),
             readQmlSource("components/drive/DriveSharedView.qml"),
-            readQmlSource("components/drive/DriveTrashView.qml"),
-            readQmlSource("components/drive/DriveSeamView.qml")
+            readQmlSource("components/drive/DriveTrashView.qml")
         ].join("\n")
     }
 
@@ -697,10 +696,6 @@ TestCase {
                "Has isSharedMode mode-check property")
         verify(source.indexOf("readonly property bool isTrashMode: root.currentViewMode === \"trash\"") !== -1,
                "Has isTrashMode mode-check property")
-        verify(source.indexOf("readonly property bool isRecentMode: root.currentViewMode === \"recent\"") !== -1,
-               "Has isRecentMode mode-check property")
-        verify(source.indexOf("readonly property bool isFavoritesMode: root.currentViewMode === \"favorites\"") !== -1,
-               "Has isFavoritesMode mode-check property")
     }
 
     function test_drive_browser_has_mode_aware_title_functions() {
@@ -712,8 +707,6 @@ TestCase {
                "Has viewModeTitleText function for mode-specific title")
         verify(source.indexOf("function viewModeStatusText()") !== -1,
                "Has viewModeStatusText function for mode-specific status")
-        verify(source.indexOf("function seamDescription()") !== -1,
-               "Has seamDescription function for mode-specific seam text")
     }
 
     function test_drive_browser_viewModeLabel_returns_per_mode_labels() {
@@ -727,10 +720,6 @@ TestCase {
                "shared mode returns SHARES label")
         verify(labelBody.indexOf('case "trash": return "TRASH"') !== -1,
                "trash mode returns TRASH label")
-        verify(labelBody.indexOf('case "recent": return "RECENT"') !== -1,
-               "recent mode returns RECENT label")
-        verify(labelBody.indexOf('case "favorites": return "FAVORITES"') !== -1,
-               "favorites mode returns FAVORITES label")
         verify(labelBody.indexOf('default: return "DRIVE"') !== -1,
                "myfiles mode returns DRIVE label")
     }
@@ -748,10 +737,6 @@ TestCase {
                "shared mode returns Shares title")
         verify(titleBody.indexOf('case "trash": return "Trash"') !== -1,
                "trash mode returns Trash title")
-        verify(titleBody.indexOf('case "recent": return "Recent"') !== -1,
-               "recent mode returns Recent title")
-        verify(titleBody.indexOf('case "favorites": return "Favorites"') !== -1,
-               "favorites mode returns Favorites title")
     }
 
     function test_drive_browser_myfiles_toolbar_buttons_gated_by_mode() {
@@ -868,38 +853,6 @@ TestCase {
                "PageStateView is gated by isMyFilesMode")
     }
 
-    function test_drive_browser_has_shared_and_trash_state_views_and_recent_favorites_seam_container() {
-        var source = readDriveCompositeSource()
-
-        verify(source.indexOf('objectName: "sharedStateView"') !== -1,
-               "Has sharedStateView for VIEW-SHARED content")
-        verify(source.indexOf('objectName: "sharedListView"') !== -1,
-               "Has sharedListView runtime hook")
-        verify(source.indexOf('objectName: "trashStateView"') !== -1,
-               "Has trashStateView for VIEW-TRASH content")
-        verify(source.indexOf('objectName: "trashListView"') !== -1,
-               "Has trashListView runtime hook")
-        verify(source.indexOf('objectName: "viewModeSeamContainer"') !== -1,
-               "Has viewModeSeamContainer for remaining seam-only modes")
-        verify(source.indexOf("visible: !page.isMyFilesMode && !page.isSharedMode && !page.isTrashMode") !== -1
-               || source.indexOf("visible: !root.isMyFilesMode && !root.isSharedMode && !root.isTrashMode") !== -1,
-               "Seam container excludes shared and trash now that both modes are real")
-    }
-
-    function test_drive_browser_seam_container_shows_mode_specific_content() {
-        var source = readDriveCompositeSource()
-
-        verify(source.indexOf("text: page.viewModeTitleText()") !== -1
-               || source.indexOf("text: root.viewModeTitleText()") !== -1,
-               "Seam container shows mode-specific title")
-        verify(source.indexOf("text: page.viewModeStatusText()") !== -1
-               || source.indexOf("text: root.viewModeStatusText()") !== -1,
-               "Seam container shows mode-specific status text")
-        verify(source.indexOf("text: page.seamDescription()") !== -1
-               || source.indexOf("text: root.seamDescription()") !== -1,
-               "Seam container shows mode-specific seam description")
-    }
-
     function test_drive_browser_shared_mode_uses_share_manager_for_content_and_batch_results() {
         var source = readDriveCompositeSource()
 
@@ -947,19 +900,6 @@ TestCase {
         verify(source.indexOf("page.submitDeleteTrash(model.trashId)") !== -1
                || source.indexOf("root.submitDeleteTrash(model.trashId)") !== -1,
                "Trash row actions route delete through trashManager-backed flow")
-    }
-
-    function test_drive_browser_seam_descriptions_are_mode_specific_for_unmigrated_modes() {
-        var source = readDriveBrowserSource()
-
-        var seamStart = source.indexOf("function seamDescription()")
-        verify(seamStart !== -1, "Has seamDescription")
-        var seamBody = source.substring(seamStart, seamStart + 300)
-
-        verify(seamBody.indexOf("This feature is not yet available") !== -1,
-               "recent and favorites seams mention not yet available")
-        verify(seamBody.indexOf("Trash management will be migrated here") === -1,
-               "trash no longer uses the seam-only migration placeholder")
     }
 
     function test_drive_browser_refreshCurrentView_and_activateViewMode_route_shared_and_trash_modes_to_respective_managers() {

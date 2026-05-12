@@ -271,14 +271,10 @@ private slots:
         QVERIFY(qml.contains(QStringLiteral("root.showPage(settingsPageComponent)")));
         QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"myfiles\")")));
         QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"shared\")")));
-        QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"trash\")")));
-        QVERIFY(!qml.contains(QStringLiteral("root.showDriveViewMode(\"recent\")")));
-        QVERIFY(!qml.contains(QStringLiteral("root.showDriveViewMode(\"favorites\")")));
+QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"trash\")")));
         QVERIFY(qml.contains(QStringLiteral("id: \"myfiles\"")));
-        QVERIFY(qml.contains(QStringLiteral("id: \"recent\"")));
         QVERIFY(qml.contains(QStringLiteral("id: \"shared\"")));
-        QVERIFY(qml.contains(QStringLiteral("id: \"trash\"")));
-        QVERIFY(qml.contains(QStringLiteral("id: \"favorites\"")));
+QVERIFY(qml.contains(QStringLiteral("id: \"trash\"")));
         QVERIFY(qml.contains(QStringLiteral("enabled: false")));
 
         QVERIFY(qml.contains(QStringLiteral("property string activeDestination: \"drive\"")));
@@ -292,14 +288,10 @@ private slots:
 
         QVERIFY(qml.contains(QStringLiteral("title: \"File Views\"")));
         QVERIFY(qml.contains(QStringLiteral("title: \"Independent Pages\"")));
-        QVERIFY(qml.contains(QStringLiteral("label: \"My Files\"")));
-        QVERIFY(qml.contains(QStringLiteral("label: \"Recent\"")));
-        QVERIFY(qml.contains(QStringLiteral("statusBadge: \"Soon\"")));
+QVERIFY(qml.contains(QStringLiteral("label: \"My Files\"")));
         QVERIFY(qml.contains(QStringLiteral("label: \"Transfers\"")));
         QVERIFY(qml.contains(QStringLiteral("text: \"Logout\"")));
-        QVERIFY(qml.contains(QStringLiteral("label: \"Shares\"")));
-        QVERIFY(qml.contains(QStringLiteral("label: \"Trash\"")));
-        QVERIFY(qml.contains(QStringLiteral("label: \"Favorites\"")));
+QVERIFY(qml.contains(QStringLiteral("label: \"Shares\"")));
         QVERIFY(qml.contains(QStringLiteral("label: \"Settings\"")));
         QVERIFY(qml.contains(QStringLiteral("text: \"Navigation\"")));
         QVERIFY(qml.contains(QStringLiteral("text: \"Session\"")));
@@ -323,8 +315,7 @@ private slots:
         const auto drive_status_qml = read_qml(QStringLiteral("components/drive/DriveStatusCard.qml"));
         const auto drive_my_files_qml = read_qml(QStringLiteral("components/drive/DriveMyFilesView.qml"));
         const auto drive_shared_qml = read_qml(QStringLiteral("components/drive/DriveSharedView.qml"));
-        const auto drive_trash_qml = read_qml(QStringLiteral("components/drive/DriveTrashView.qml"));
-        const auto drive_seam_qml = read_qml(QStringLiteral("components/drive/DriveSeamView.qml"));
+const auto drive_trash_qml = read_qml(QStringLiteral("components/drive/DriveTrashView.qml"));
 
         QVERIFY(!drive_browser_page_qml.isEmpty());
         QVERIFY(!drive_toolbar_qml.isEmpty());
@@ -332,7 +323,6 @@ private slots:
         QVERIFY(!drive_my_files_qml.isEmpty());
         QVERIFY(!drive_shared_qml.isEmpty());
         QVERIFY(!drive_trash_qml.isEmpty());
-        QVERIFY(!drive_seam_qml.isEmpty());
 
         QStringList drive_sources;
         drive_sources << drive_browser_page_qml
@@ -340,8 +330,7 @@ private slots:
                       << drive_status_qml
                       << drive_my_files_qml
                       << drive_shared_qml
-                      << drive_trash_qml
-                      << drive_seam_qml;
+                      << drive_trash_qml;
 
         const auto drive_qml = drive_sources.join(QStringLiteral("\n"));
 

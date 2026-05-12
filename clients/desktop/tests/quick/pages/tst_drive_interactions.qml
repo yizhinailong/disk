@@ -25,7 +25,6 @@ TestCase {
             readQmlSource("components/drive/DriveMyFilesView.qml"),
             readQmlSource("components/drive/DriveSharedView.qml"),
             readQmlSource("components/drive/DriveTrashView.qml"),
-            readQmlSource("components/drive/DriveSeamView.qml"),
             readQmlSource("components/drive/DriveContextMenu.qml")
         ].join("\n")
     }

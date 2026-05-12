@@ -52,8 +52,7 @@ TestCase {
             readSource("components/drive/DriveStatusCard.qml"),
             readSource("components/drive/DriveMyFilesView.qml"),
             readSource("components/drive/DriveSharedView.qml"),
-            readSource("components/drive/DriveTrashView.qml"),
-            readSource("components/drive/DriveSeamView.qml")
+            readSource("components/drive/DriveTrashView.qml")
         ].join("\n")
     }
 
@@ -197,14 +196,9 @@ TestCase {
         verify(source.indexOf("File Views") !== -1, "Has file-view group label")
         verify(source.indexOf("Independent Pages") !== -1, "Has independent-page group label")
         verify(source.indexOf("My Files") !== -1, "Has My Files button")
-        verify(source.indexOf("Recent") !== -1, "Has Recent placeholder button")
-        verify(source.indexOf("Recent (coming soon)") === -1, "Old long Recent label removed")
-        verify(source.indexOf('statusBadge: "Soon"') !== -1, "Placeholder items have explicit Soon badge metadata")
         verify(source.indexOf("Transfers") !== -1, "Has Transfers button")
         verify(source.indexOf("Shares") !== -1, "Has Shares button")
         verify(source.indexOf("Trash") !== -1, "Has Trash button")
-        verify(source.indexOf("Favorites") !== -1, "Has Favorites placeholder button")
-        verify(source.indexOf("Favorites (coming soon)") === -1, "Old long Favorites label removed")
         verify(source.indexOf("Settings") !== -1, "Has Settings button")
         verify(source.indexOf("Logout") !== -1, "Has Logout button")
     }
@@ -220,10 +214,8 @@ TestCase {
         verify(fileViewGroup !== independentPageGroup, "Groups are distinct sections")
 
         verify(waitForObject(shell, "ownerNavMyFilesButton") !== null, "My Files button is in the shell")
-        verify(waitForObject(shell, "ownerNavRecentButton") !== null, "Recent button is in the shell")
         verify(waitForObject(shell, "ownerNavSharesButton") !== null, "Shares button is in the shell")
         verify(waitForObject(shell, "ownerNavTrashButton") !== null, "Trash button is in the shell")
-        verify(waitForObject(shell, "ownerNavFavoritesButton") !== null, "Favorites button is in the shell")
         verify(waitForObject(shell, "ownerNavTransfersButton") !== null, "Transfers button is in the shell")
         verify(waitForObject(shell, "ownerNavSettingsButton") !== null, "Settings button is in the shell")
     }
@@ -259,9 +251,9 @@ TestCase {
         var navPanel = waitForObject(shell, "ownerNavigationPanel")
 
         var navButtons = [
-            "ownerNavMyFilesButton", "ownerNavRecentButton",
+            "ownerNavMyFilesButton",
             "ownerNavSharesButton", "ownerNavTrashButton",
-            "ownerNavFavoritesButton", "ownerNavTransfersButton",
+            "ownerNavTransfersButton",
             "ownerNavSettingsButton"
         ]
 
@@ -282,37 +274,6 @@ TestCase {
         verify(sessionCard.visible, "Session card visible")
     }
 
-    function test_owner_shell_placeholders_have_short_labels_and_remain_disabled() {
-        var shell = createOwnerShell()
-        var recentButton = waitForObject(shell, "ownerNavRecentButton")
-        var favoritesButton = waitForObject(shell, "ownerNavFavoritesButton")
-
-        verify(recentButton !== null, "Recent button exists")
-        verify(favoritesButton !== null, "Favorites button exists")
-        compare(recentButton.enabled, false, "Recent remains disabled")
-        compare(favoritesButton.enabled, false, "Favorites remains disabled")
-
-        // Verify short labels (no "(coming soon)" suffix)
-        var recentText = recentButton.text
-        var favoritesText = favoritesButton.text
-        verify(recentText.indexOf("(coming soon)") === -1, "Recent label has no (coming soon)")
-        verify(favoritesText.indexOf("(coming soon)") === -1, "Favorites label has no (coming soon)")
-    }
-
-    function test_owner_shell_placeholder_buttons_show_soon_badge() {
-        var shell = createOwnerShell()
-        var recentButton = waitForObject(shell, "ownerNavRecentButton")
-        var favoritesButton = waitForObject(shell, "ownerNavFavoritesButton")
-        var myFilesButton = waitForObject(shell, "ownerNavMyFilesButton")
-
-        // Placeholder buttons should have the statusBadge property set to "Soon"
-        compare(recentButton.statusBadge, "Soon", "Recent has Soon badge")
-        compare(favoritesButton.statusBadge, "Soon", "Favorites has Soon badge")
-
-        // Active non-placeholder button should NOT have a badge
-        compare(myFilesButton.statusBadge, "", "My Files has no badge")
-    }
-
     function test_owner_shell_active_button_still_has_stripe() {
         var shell = createOwnerShell()
         var myFilesButton = waitForObject(shell, "ownerNavMyFilesButton")
@@ -321,21 +282,6 @@ TestCase {
         verify(myFilesButton.active, "My Files button is active")
         verify(myFilesButton.enabled, "My Files button is enabled")
         compare(myFilesButton.statusBadge, "", "Active button has no status badge")
-    }
-
-    function test_owner_shell_recent_and_favorites_are_disabled_placeholders() {
-        var shell = createOwnerShell()
-        var recentButton = waitForObject(shell, "ownerNavRecentButton")
-        var favoritesButton = waitForObject(shell, "ownerNavFavoritesButton")
-        var stackView = waitForObject(shell, "ownerStackView")
-
-        verify(recentButton !== null, "Recent placeholder button exists")
-        verify(favoritesButton !== null, "Favorites placeholder button exists")
-        compare(recentButton.enabled, false, "Recent is disabled until its drive mode is implemented")
-        compare(favoritesButton.enabled, false, "Favorites is disabled until its drive mode is implemented")
-        compare(shell.activeDestination, "drive", "Shell remains on drive by default")
-        compare(shell.activeDriveViewMode, "myfiles", "Shell remains on My Files by default")
-        compare(stackView.depth, 1, "Placeholder entries do not add stack depth")
     }
 
     function test_owner_shell_has_exactly_three_top_level_page_components() {
@@ -368,10 +314,6 @@ TestCase {
                "Shares button routes through showDriveViewMode('shared')")
         verify(source.indexOf('root.showDriveViewMode("trash")') !== -1,
                "Trash button routes through showDriveViewMode('trash')")
-        verify(source.indexOf('root.showDriveViewMode("recent")') === -1,
-               "Recent is not routed as a live drive mode yet")
-        verify(source.indexOf('root.showDriveViewMode("favorites")') === -1,
-               "Favorites is not routed as a live drive mode yet")
     }
 
     function test_owner_shell_live_file_view_group_reuses_drive_host_for_supported_modes() {
@@ -745,22 +687,6 @@ TestCase {
     }
 
     // ── DriveBrowserPage view-mode seam ─────────────────────────────────────
-
-    function test_drive_browser_has_view_mode_seam() {
-        var source = readSource("pages/DriveBrowserPage.qml")
-
-        verify(source.indexOf('property string currentViewMode: "myfiles"') !== -1,
-               "PAGE-DRIVE has currentViewMode property defaulting to VIEW-MYFILES")
-        verify(source.indexOf("function activateViewMode(mode)") !== -1,
-               "PAGE-DRIVE has activateViewMode function for VIEW-SWITCH")
-    }
-
-    function test_drive_browser_view_mode_seam_is_idempotent() {
-        var source = readSource("pages/DriveBrowserPage.qml")
-
-        verify(source.indexOf("if (root.currentViewMode === nextMode)") !== -1,
-               "activateViewMode is idempotent: returns early if mode unchanged")
-    }
 
     function test_drive_browser_does_not_use_stackview() {
         var source = readSource("pages/DriveBrowserPage.qml")

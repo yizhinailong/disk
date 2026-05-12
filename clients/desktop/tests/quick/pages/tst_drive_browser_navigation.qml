@@ -1197,42 +1197,9 @@ TestCase {
                 "Trash actions do not route through driveManager file listing")
     }
 
-    function test_recent_mode_shows_seam_container() {
-        var page = createPage()
-
-        page.activateViewMode("recent")
-        wait(50)
-
-        verify(page.isRecentMode, "Page is in recent mode")
-
-        var seamContainer = findByObjectName(page, "viewModeSeamContainer")
-        verify(seamContainer !== null, "Seam container found in item tree")
-    }
-
-    function test_favorites_mode_shows_seam_container() {
-        var page = createPage()
-
-        page.activateViewMode("favorites")
-        wait(50)
-
-        verify(page.isFavoritesMode, "Page is in favorites mode")
-
-        var seamContainer = findByObjectName(page, "viewModeSeamContainer")
-        verify(seamContainer !== null, "Seam container found in item tree")
-    }
-
-    function test_myfiles_mode_seam_container_exists_but_not_rendered() {
-        var page = createPage()
-
-        verify(page.isMyFilesMode, "Page starts in myfiles mode")
-
-        var seamContainer = findByObjectName(page, "viewModeSeamContainer")
-        verify(seamContainer !== null, "Seam container exists in item tree")
-    }
-
     function test_mode_switch_cycles_through_all_modes() {
         var page = createPage()
-        var modes = ["shared", "trash", "recent", "favorites", "myfiles"]
+        var modes = ["shared", "trash", "myfiles"]
 
         for (var i = 0; i < modes.length; ++i) {
             page.activateViewMode(modes[i])
@@ -1248,9 +1215,6 @@ TestCase {
             } else if (modes[i] === "myfiles") {
                 verify(findByObjectName(page, "fileListView") !== null,
                        "My Files mode still uses the file list host")
-            } else {
-                verify(findByObjectName(page, "viewModeSeamContainer") !== null,
-                       "Unmigrated mode keeps the seam container")
             }
         }
     }
@@ -1328,12 +1292,6 @@ TestCase {
 
         page.activateViewMode("trash")
         compare(page.viewModeTitleText(), "Trash", "trash title is Trash")
-
-        page.activateViewMode("recent")
-        compare(page.viewModeTitleText(), "Recent", "recent title is Recent")
-
-        page.activateViewMode("favorites")
-        compare(page.viewModeTitleText(), "Favorites", "favorites title is Favorites")
     }
 
     function test_viewModeLabel_returns_correct_labels() {
@@ -1346,12 +1304,6 @@ TestCase {
 
         page.activateViewMode("trash")
         compare(page.viewModeLabel(), "TRASH", "trash label is TRASH")
-
-        page.activateViewMode("recent")
-        compare(page.viewModeLabel(), "RECENT", "recent label is RECENT")
-
-        page.activateViewMode("favorites")
-        compare(page.viewModeLabel(), "FAVORITES", "favorites label is FAVORITES")
     }
 
     function test_myfiles_toolbar_buttons_exist_in_myfiles_mode() {
