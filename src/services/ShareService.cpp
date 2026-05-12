@@ -521,6 +521,7 @@ namespace disk::share {
 
                 valid_codes_to_cancel.insert(share_id);
                 result.status = "success";
+                response.summary.succeeded++;
                 response.results.push_back(result);
             }
 
@@ -555,16 +556,6 @@ namespace disk::share {
                                                              .reason = "internal_error" };
                         }
                     }
-                }
-            }
-
-            response.summary.succeeded = 0;
-            response.summary.failed = 0;
-            for (const auto& result : response.results) {
-                if (result.status == "success") {
-                    response.summary.succeeded++;
-                } else {
-                    response.summary.failed++;
                 }
             }
         }
