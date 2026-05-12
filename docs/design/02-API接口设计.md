@@ -2113,6 +2113,26 @@ Authorization: Bearer <access_token>
 }
 ```
 
+#### 空回收站响应示例
+
+当回收站为空时，`items` 返回空数组，`pagination.total` 为 0：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "items": [],
+    "pagination": {
+      "page": 1,
+      "page_size": 20,
+      "total": 0,
+      "total_pages": 0
+    }
+  }
+}
+```
+
 ---
 
 ### 6.2 恢复文件
