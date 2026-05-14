@@ -193,14 +193,14 @@ TestCase {
     function test_owner_shell_source_has_grouped_sidebar_buttons() {
         var source = readSource("shells/OwnerShell.qml")
 
-        verify(source.indexOf("File Views") !== -1, "Has file-view group label")
-        verify(source.indexOf("Independent Pages") !== -1, "Has independent-page group label")
-        verify(source.indexOf("My Files") !== -1, "Has My Files button")
-        verify(source.indexOf("Transfers") !== -1, "Has Transfers button")
-        verify(source.indexOf("Shares") !== -1, "Has Shares button")
-        verify(source.indexOf("Trash") !== -1, "Has Trash button")
-        verify(source.indexOf("Settings") !== -1, "Has Settings button")
-        verify(source.indexOf("Logout") !== -1, "Has Logout button")
+        verify(source.indexOf("文件视图") !== -1, "Has file-view group label")
+        verify(source.indexOf("独立页面") !== -1, "Has independent-page group label")
+        verify(source.indexOf("我的文件") !== -1, "Has My Files button")
+        verify(source.indexOf("传输") !== -1, "Has Transfers button")
+        verify(source.indexOf("分享") !== -1, "Has Shares button")
+        verify(source.indexOf("回收站") !== -1, "Has Trash button")
+        verify(source.indexOf("设置") !== -1, "Has Settings button")
+        verify(source.indexOf("退出登录") !== -1, "Has Logout button")
     }
 
     function test_owner_shell_runtime_has_distinct_navigation_groups() {
@@ -674,15 +674,15 @@ TestCase {
     function test_owner_shell_visually_separates_navigation_and_logout_areas() {
         var source = readSource("shells/OwnerShell.qml")
 
-        verify(source.indexOf('text: "Workspace"') !== -1,
+        verify(source.indexOf('text: "工作空间"') !== -1,
                "Brand area has a secondary label")
-        verify(source.indexOf('text: "Navigation"') !== -1,
+        verify(source.indexOf('text: "导航"') !== -1,
                "Navigation section is explicitly labeled")
-        verify(source.indexOf('title: "File Views"') !== -1,
+        verify(source.indexOf('title: "文件视图"') !== -1,
                "File-view section is explicitly labeled")
-        verify(source.indexOf('title: "Independent Pages"') !== -1,
+        verify(source.indexOf('title: "独立页面"') !== -1,
                "Independent-page section is explicitly labeled")
-        verify(source.indexOf('text: "Session"') !== -1,
+        verify(source.indexOf('text: "会话"') !== -1,
                "Logout area is explicitly separated")
     }
 

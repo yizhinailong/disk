@@ -8,7 +8,7 @@ ApplicationWindow {
     visible: true
     width: 800
     height: 600
-    title: "Disk Share"
+    title: "Disk 分享"
 
     property string activeShareId: sessionStore.visitor.shareId
 

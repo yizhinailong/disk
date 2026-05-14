@@ -12,7 +12,7 @@ ApplicationWindow {
     visible: true
     width: 1024
     height: 768
-    title: "Disk Desktop"
+    title: "Disk 桌面端"
 
     WorkspaceTheme { id: workspaceTheme }
 
@@ -48,29 +48,29 @@ ApplicationWindow {
 readonly property var fileViewNavItems: [
         {
             id: "myfiles",
-            label: "My Files",
+            label: "我的文件",
             objectName: "ownerNavMyFilesButton"
         },
         {
             id: "shared",
-            label: "Shares",
+            label: "分享",
             objectName: "ownerNavSharesButton"
         },
         {
             id: "trash",
-            label: "Trash",
+            label: "回收站",
             objectName: "ownerNavTrashButton"
         }
     ]
     readonly property var independentPageNavItems: [
         {
             id: "transfers",
-            label: "Transfers",
+            label: "传输",
             objectName: "ownerNavTransfersButton"
         },
         {
             id: "settings",
-            label: "Settings",
+            label: "设置",
             objectName: "ownerNavSettingsButton"
         }
     ]
@@ -138,36 +138,36 @@ function activateFileView(itemId) {
     function destinationTitle(destination, viewMode) {
         if (destination === "drive") {
             switch (viewMode) {
-            case "shared": return "Shares"
-            case "trash": return "Trash"
-            default: return "My Files"
+            case "shared": return "分享"
+            case "trash": return "回收站"
+            default: return "我的文件"
             }
         }
         switch (destination) {
         case "transfers":
-            return "Transfers"
+            return "传输"
         case "settings":
-            return "Settings"
+            return "设置"
         default:
-            return "My Files"
+            return "我的文件"
         }
     }
 
     function destinationSubtitle(destination, viewMode) {
         if (destination === "drive") {
             switch (viewMode) {
-            case "shared": return "Manage outbound file access"
-            case "trash": return "Review recently deleted items"
-            default: return "Browse and manage your drive"
+            case "shared": return "管理对外分享访问"
+            case "trash": return "查看最近删除的项目"
+            default: return "浏览和管理您的网盘"
             }
         }
         switch (destination) {
         case "transfers":
-            return "Track uploads and downloads"
+            return "跟踪上传和下载"
         case "settings":
-            return "Profile, password, and storage"
+            return "个人资料、密码和存储"
         default:
-            return "Browse and manage your drive"
+            return "浏览和管理您的网盘"
         }
     }
 
@@ -214,7 +214,7 @@ function activateFileView(itemId) {
                         }
 
                         Label {
-                            text: "Workspace"
+                            text: "工作空间"
                             color: root.railMutedTextColor
                             font.pixelSize: 12
                         }
@@ -243,7 +243,7 @@ function activateFileView(itemId) {
 
                             Label {
                                 Layout.fillWidth: true
-                                text: "Navigation"
+                                text: "导航"
                                 color: root.railMutedTextColor
                                 font.pixelSize: 11
                                 font.bold: true
@@ -255,7 +255,7 @@ function activateFileView(itemId) {
                             OwnerSidebarSection {
                                 Layout.fillWidth: true
                                 sectionObjectName: "ownerFileViewGroup"
-                                title: "File Views"
+                                title: "文件视图"
                                 items: root.fileViewNavItems
                                 activeItemId: root.activeDestination === "drive" ? root.activeDriveViewMode : ""
                                 titleTextColor: root.railMutedTextColor
@@ -272,7 +272,7 @@ function activateFileView(itemId) {
                             OwnerSidebarSection {
                                 Layout.fillWidth: true
                                 sectionObjectName: "ownerIndependentPageGroup"
-                                title: "Independent Pages"
+                                title: "独立页面"
                                 items: root.independentPageNavItems
                                 activeItemId: root.activeDestination === "drive" ? "" : root.activeDestination
                                 titleTextColor: root.railMutedTextColor
@@ -317,7 +317,7 @@ function activateFileView(itemId) {
 
                         Label {
                             Layout.fillWidth: true
-                            text: "Session"
+                             text: "会话"
                             color: root.railMutedTextColor
                             font.pixelSize: 11
                             font.bold: true
@@ -328,7 +328,7 @@ function activateFileView(itemId) {
 
                         Button {
                             Layout.fillWidth: true
-                            text: "Logout"
+                            text: "退出登录"
                             flat: true
                             leftPadding: 18
                             rightPadding: 12
@@ -377,7 +377,7 @@ function activateFileView(itemId) {
                         spacing: 2
 
                         Label {
-                            text: "Owner workspace"
+                            text: "所有者工作空间"
                             color: root.headerMutedTextColor
                             font.pixelSize: 11
                             font.bold: true
