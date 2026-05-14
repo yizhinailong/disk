@@ -9,11 +9,11 @@ Item {
     property string pageState: "loading"
     
     // Content to show in empty state
-    property string emptyText: "No items found"
+    property string emptyText: "未找到项目"
     property string emptyIcon: "qrc:/icons/empty.svg"
-    
+
     // Content to show in error state
-    property string errorText: "An error occurred"
+    property string errorText: "发生错误"
     property string errorIcon: "qrc:/icons/error.svg"
     
     // Signals
@@ -76,7 +76,7 @@ Item {
             
             Button {
                 Layout.alignment: Qt.AlignHCenter
-                text: "Action"
+                text: "操作"
                 visible: false // Show only if needed
                 onClicked: root.actionClicked()
             }
@@ -119,7 +119,7 @@ Item {
             
             Button {
                 Layout.alignment: Qt.AlignHCenter
-                text: "Retry"
+                text: "重试"
                 onClicked: root.retryClicked()
             }
         }

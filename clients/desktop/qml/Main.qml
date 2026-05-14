@@ -82,7 +82,7 @@ Item {
             visible: true
             width: 1024
             height: 768
-            title: "Disk Desktop"
+            title: "Disk 桌面端"
 
             SplashPage {
                 anchors.fill: parent

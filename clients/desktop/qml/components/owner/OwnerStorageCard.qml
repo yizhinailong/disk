@@ -31,7 +31,7 @@ Rectangle {
 
         Label {
             Layout.fillWidth: true
-            text: "Storage"
+            text: "存储空间"
             color: root.titleTextColor
             font.pixelSize: 11
             font.bold: true
@@ -71,8 +71,8 @@ Rectangle {
         Label {
             Layout.fillWidth: true
             text: root.totalBytes > 0
-                  ? Math.round(root.usageRatio * 100) + "% in use"
-                  : "Loading account storage"
+                  ? Math.round(root.usageRatio * 100) + "% 已使用"
+                  : "加载账户存储中"
             color: root.titleTextColor
             font.pixelSize: 11
         }

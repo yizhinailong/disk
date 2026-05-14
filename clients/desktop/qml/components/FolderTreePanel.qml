@@ -127,7 +127,7 @@ Item {
         spacing: theme.panelSpacing
 
         Label {
-            text: "Folders"
+            text: "文件夹"
             color: root.titleTextColor
             font.pixelSize: 14
             font.bold: true
@@ -163,7 +163,7 @@ Item {
                 required property int depth
 
                 readonly property string folderId: root.normalizeFolderId(model.id)
-                readonly property string folderName: model.name && String(model.name).length > 0 ? String(model.name) : "Folder"
+                readonly property string folderName: model.name && String(model.name).length > 0 ? String(model.name) : "文件夹"
                 readonly property int folderDepth: model.depth !== undefined ? Number(model.depth) : depth
                 readonly property bool activeFolder: folderId !== "" && folderId === root.currentFolderId
                 readonly property bool ancestorFolder: folderId !== "" && root.folderNumber(root.currentFolderId) >= 0
