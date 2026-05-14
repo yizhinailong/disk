@@ -1,0 +1,13 @@
+{
+    "method": "POST",
+    "header": {
+        "Authorization": "Bearer __TOKEN__",
+        "Content-Type": "application/json"
+    },
+    "body": {
+        "filename": "bench_test.dat",
+        "file_size": 10485760,
+        "file_hash": "d41d8cd98f00b204e9800998ecf8427e",
+        "parent_id": ""
+    }
+}

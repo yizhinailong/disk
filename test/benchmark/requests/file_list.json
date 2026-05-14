@@ -1,0 +1,6 @@
+{
+    "method": "GET",
+    "header": {
+        "Authorization": "Bearer __TOKEN__"
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "method": "POST",
+    "header": {
+        "Content-Type": "application/json"
+    },
+    "body": {
+        "account": "admin",
+        "password": "Admin123"
+    }
+}
