@@ -61,7 +61,7 @@ TestCase {
         var source = readLoginSource()
         verify(source.indexOf("id: usernameField") !== -1,
                "Has usernameField with id")
-        verify(source.indexOf('placeholderText: "Username"') !== -1,
+        verify(source.indexOf('placeholderText: "用户名"') !== -1,
                "Username field has standard placeholder")
     }
 
@@ -77,13 +77,13 @@ TestCase {
         var source = readLoginSource()
         verify(source.indexOf("id: loginButton") !== -1,
                "Has loginButton with id")
-        verify(source.indexOf('"Login"') !== -1 || source.indexOf("Signing in") !== -1,
+        verify(source.indexOf('"登录"') !== -1 || source.indexOf("正在登录") !== -1,
                "Login button has appropriate label text")
     }
 
     function test_login_has_mode_switch_cta() {
         var source = readLoginSource()
-        verify(source.indexOf('"Register"') !== -1,
+        verify(source.indexOf('"注册"') !== -1,
                "Has Register CTA for mode switch")
         verify(source.indexOf("shellController.navigateToRegister()") !== -1,
                "Register CTA routes through shellController")
@@ -225,9 +225,9 @@ TestCase {
 
     function test_login_validates_empty_fields() {
         var source = readLoginSource()
-        verify(source.indexOf('errorLabel.text = "Please enter your username"') !== -1,
+        verify(source.indexOf('errorLabel.text = "请输入用户名"') !== -1,
                "Validates empty username with specific message")
-        verify(source.indexOf('errorLabel.text = "Please enter your password"') !== -1,
+        verify(source.indexOf('errorLabel.text = "请输入密码"') !== -1,
                "Validates empty password with specific message")
     }
 }

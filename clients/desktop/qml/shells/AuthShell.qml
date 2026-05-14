@@ -10,7 +10,7 @@ ApplicationWindow {
     visible: true
     width: 1024
     height: 768
-    title: root.authMode === "login" ? "Disk Desktop - Login" : "Disk Desktop - Register"
+    title: root.authMode === "login" ? "Disk 桌面端 - 登录" : "Disk 桌面端 - 注册"
 
     property string authMode: "login"
     readonly property bool busy: pageLoader.item && pageLoader.item.isBusy || false
@@ -79,7 +79,7 @@ ApplicationWindow {
 
                 Label {
                     Layout.fillWidth: true
-                    text: root.authMode === "login" ? "Calm entry for your desktop workspace." : "A quieter way to start your desktop workspace."
+                    text: root.authMode === "login" ? "平静的桌面工作台入口。" : "更安静的方式开启您的桌面工作空间。"
                     color: theme.heroTextColor
                     font.pixelSize: 38
                     font.bold: true
@@ -88,7 +88,7 @@ ApplicationWindow {
 
                 Label {
                     Layout.fillWidth: true
-                    text: root.authMode === "login" ? "Sign in on the right and continue with the focused desktop flow." : "Create your account on the right, then return here to sign in."
+                    text: root.authMode === "login" ? "在右侧登录，继续专注的桌面流程。" : "在右侧创建您的账号，然后返回此处登录。"
                     color: theme.heroMutedTextColor
                     font.pixelSize: 15
                     wrapMode: Text.WordWrap

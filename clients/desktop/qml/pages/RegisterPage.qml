@@ -23,33 +23,33 @@ Item {
 
     function validateUsername(username) {
         if (username.length < 4 || username.length > 32) {
-            return "Username must be 4-32 characters"
+            return "用户名必须为 4-32 个字符"
         }
         if (!/^[A-Za-z0-9_]+$/.test(username)) {
-            return "Username may contain only letters, digits, and underscores"
+            return "用户名只能包含字母、数字和下划线"
         }
         return ""
     }
 
     function validateEmail(email) {
         if (email === "") {
-            return "Please enter your email"
+            return "请输入邮箱"
         }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            return "Please enter a valid email address"
+            return "请输入有效的邮箱地址"
         }
         return ""
     }
 
     function validatePassword(password) {
         if (password.length < 8 || password.length > 64) {
-            return "Password must be 8-64 characters"
+            return "密码必须为 8-64 个字符"
         }
         if (!/^[A-Za-z0-9]+$/.test(password)) {
-            return "Password may contain only letters and digits"
+            return "密码只能包含字母和数字"
         }
         if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
-            return "Password must include uppercase, lowercase, and digits"
+            return "密码必须包含大写字母、小写字母和数字"
         }
         return ""
     }
@@ -70,9 +70,9 @@ Item {
 
         anchors.fill: parent
         theme: theme
-        eyebrowText: "Disk desktop"
-        titleText: "Create account"
-        subtitleText: "Register first, then sign in with your new account"
+        eyebrowText: "Disk 桌面端"
+        titleText: "创建账户"
+        subtitleText: "先注册，然后使用新账号登录"
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -83,7 +83,7 @@ Item {
                 objectName: "authUsernameField"
                 Layout.fillWidth: true
                 implicitHeight: theme.primaryCtaHeight
-                placeholderText: "Username"
+                placeholderText: "用户名"
                 placeholderTextColor: theme.fieldPlaceholderColor
                 color: theme.fieldTextColor
                 maximumLength: 32
@@ -107,7 +107,7 @@ Item {
                 objectName: "authEmailField"
                 Layout.fillWidth: true
                 implicitHeight: theme.primaryCtaHeight
-                placeholderText: "Email"
+                placeholderText: "邮箱"
                 placeholderTextColor: theme.fieldPlaceholderColor
                 color: theme.fieldTextColor
                 inputMethodHints: Qt.ImhEmailCharactersOnly
@@ -131,7 +131,7 @@ Item {
                 objectName: "authPasswordField"
                 Layout.fillWidth: true
                 implicitHeight: theme.primaryCtaHeight
-                placeholderText: "Password"
+                placeholderText: "密码"
                 placeholderTextColor: theme.fieldPlaceholderColor
                 color: theme.fieldTextColor
                 echoMode: TextInput.Password
@@ -156,7 +156,7 @@ Item {
                 objectName: "authConfirmPasswordField"
                 Layout.fillWidth: true
                 implicitHeight: theme.primaryCtaHeight
-                placeholderText: "Confirm password"
+                placeholderText: "确认密码"
                 placeholderTextColor: theme.fieldPlaceholderColor
                 color: theme.fieldTextColor
                 echoMode: TextInput.Password
@@ -190,7 +190,7 @@ Item {
                 objectName: "authSubmitButton"
                 Layout.fillWidth: true
                 implicitHeight: theme.primaryCtaHeight
-                text: root.isBusy ? "Creating account..." : "Create account"
+                text: root.isBusy ? "正在创建账户..." : "创建账户"
                 enabled: !root.isBusy
 
                 contentItem: Text {
@@ -251,7 +251,7 @@ Item {
                     }
 
                     if (password !== confirmPasswordField.text) {
-                        messageLabel.text = "The two passwords do not match"
+                        messageLabel.text = "两次输入的密码不一致"
                         confirmPasswordField.forceActiveFocus()
                         return
                     }
@@ -267,7 +267,7 @@ Item {
 
                 Label {
                     Layout.fillWidth: true
-                    text: "Already registered?"
+                    text: "已有账号？"
                     color: theme.bodyTextColor
                     font.pixelSize: 13
                     verticalAlignment: Text.AlignVCenter
@@ -276,7 +276,7 @@ Item {
                 Button {
                     id: loginModeCta
                     objectName: "authModeSwitchCta"
-                    text: "Back to login"
+                    text: "返回登录"
                     flat: true
                     enabled: !root.isBusy
 
@@ -306,14 +306,14 @@ Item {
         function onRegisterSuccess(user) {
             root.isBusy = false
             messageLabel.color = theme.successTextColor
-            messageLabel.text = "Account created for " + (user.username || usernameField.text.trim()) + ". Please sign in."
+            messageLabel.text = "已为 " + (user.username || usernameField.text.trim()) + " 创建账户。请登录。"
             returnToLoginTimer.start()
         }
 
         function onRegisterFailure(errorCode, message) {
             root.isBusy = false
             messageLabel.color = theme.errorTextColor
-            messageLabel.text = message || "Registration failed. Please check your input."
+            messageLabel.text = message || "注册失败。请检查您的输入。"
         }
     }
 

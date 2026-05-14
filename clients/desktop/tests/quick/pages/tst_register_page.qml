@@ -79,7 +79,7 @@ TestCase {
         var source = readRegisterSource()
         verify(source.indexOf("id: usernameField") !== -1,
                "Has usernameField with id")
-        verify(source.indexOf('placeholderText: "Username"') !== -1,
+        verify(source.indexOf('placeholderText: "用户名"') !== -1,
                "Username field has standard placeholder")
         verify(source.indexOf("maximumLength: 32") !== -1,
                "Username field has maximum length constraint")
@@ -89,7 +89,7 @@ TestCase {
         var source = readRegisterSource()
         verify(source.indexOf("id: emailField") !== -1,
                "Has emailField with id")
-        verify(source.indexOf('placeholderText: "Email"') !== -1,
+        verify(source.indexOf('placeholderText: "邮箱"') !== -1,
                "Email field has standard placeholder")
         verify(source.indexOf("Qt.ImhEmailCharactersOnly") !== -1,
                "Email field uses email input method hints")
@@ -109,7 +109,7 @@ TestCase {
         var source = readRegisterSource()
         verify(source.indexOf("id: confirmPasswordField") !== -1,
                "Has confirmPasswordField with id")
-        verify(source.indexOf('placeholderText: "Confirm password"') !== -1,
+        verify(source.indexOf('placeholderText: "确认密码"') !== -1,
                "Confirm password field has standard placeholder")
         verify(source.indexOf("echoMode: TextInput.Password") !== -1,
                "Confirm password field masks input")
@@ -119,13 +119,13 @@ TestCase {
         var source = readRegisterSource()
         verify(source.indexOf("id: registerButton") !== -1,
                "Has registerButton with id")
-        verify(source.indexOf('"Create account"') !== -1 || source.indexOf("Creating account") !== -1,
+        verify(source.indexOf('"创建账户"') !== -1 || source.indexOf("正在创建账户") !== -1,
                "Register button has appropriate label text")
     }
 
     function test_register_has_mode_switch_cta() {
         var source = readRegisterSource()
-        verify(source.indexOf('"Back to login"') !== -1,
+        verify(source.indexOf('"返回登录"') !== -1,
                "Has Back-to-login CTA for mode switch")
         verify(source.indexOf("shellController.navigateToLogin()") !== -1,
                "Back-to-login CTA routes through shellController")
@@ -206,7 +206,7 @@ TestCase {
         var source = readRegisterSource()
         verify(source.indexOf("function validateUsername(") !== -1,
                "Has validateUsername function")
-        verify(source.indexOf("4-32 characters") !== -1,
+        verify(source.indexOf("4-32 个字符") !== -1,
                "Username validation specifies 4-32 character range")
         verify(source.indexOf("/^[A-Za-z0-9_]+$/") !== -1,
                "Username validation restricts to alphanumeric + underscore")
@@ -224,11 +224,11 @@ TestCase {
         var source = readRegisterSource()
         verify(source.indexOf("function validatePassword(") !== -1,
                "Has validatePassword function")
-        verify(source.indexOf("8-64 characters") !== -1,
+        verify(source.indexOf("8-64 个字符") !== -1,
                "Password validation specifies 8-64 character range")
-        verify(source.indexOf("uppercase") !== -1,
+        verify(source.indexOf("大写字母") !== -1,
                "Password validation requires uppercase")
-        verify(source.indexOf("lowercase") !== -1,
+        verify(source.indexOf("小写字母") !== -1,
                "Password validation requires lowercase")
     }
 
@@ -236,7 +236,7 @@ TestCase {
         var source = readRegisterSource()
         verify(source.indexOf("password !== confirmPasswordField.text") !== -1,
                "Validates that password and confirm password match")
-        verify(source.indexOf("do not match") !== -1,
+        verify(source.indexOf("两次输入的密码不一致") !== -1,
                "Provides mismatch error message")
     }
 
@@ -331,7 +331,7 @@ TestCase {
 
     function test_register_success_shows_confirmation_message() {
         var source = readRegisterSource()
-        verify(source.indexOf("Account created") !== -1,
+        verify(source.indexOf("创建账户") !== -1,
                "Shows account-created confirmation message on success")
         verify(source.indexOf("theme.successTextColor") !== -1,
                "Success message uses shared success color token")

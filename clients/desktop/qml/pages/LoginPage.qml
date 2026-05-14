@@ -33,9 +33,9 @@ Item {
 
         anchors.fill: parent
         theme: theme
-        eyebrowText: "Disk desktop"
-        titleText: "Welcome back"
-        subtitleText: "Use your username and password to continue."
+        eyebrowText: "Disk 桌面端"
+        titleText: "欢迎回来"
+        subtitleText: "使用用户名和密码继续。"
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -46,7 +46,7 @@ Item {
                 objectName: "authUsernameField"
                 Layout.fillWidth: true
                 implicitHeight: theme.primaryCtaHeight
-                placeholderText: "Username"
+                placeholderText: "用户名"
                 placeholderTextColor: theme.fieldPlaceholderColor
                 color: theme.fieldTextColor
                 enabled: !root.isBusy
@@ -69,7 +69,7 @@ Item {
                 objectName: "authPasswordField"
                 Layout.fillWidth: true
                 implicitHeight: theme.primaryCtaHeight
-                placeholderText: "Password"
+                placeholderText: "密码"
                 placeholderTextColor: theme.fieldPlaceholderColor
                 color: theme.fieldTextColor
                 echoMode: TextInput.Password
@@ -102,7 +102,7 @@ Item {
                 objectName: "authSubmitButton"
                 Layout.fillWidth: true
                 implicitHeight: theme.primaryCtaHeight
-                text: root.isBusy ? "Signing in..." : "Login"
+                text: root.isBusy ? "正在登录..." : "登录"
                 enabled: !root.isBusy
 
                 contentItem: Text {
@@ -138,13 +138,13 @@ Item {
 
                     var username = usernameField.text.trim()
                     if (username === "") {
-                        errorLabel.text = "Please enter your username"
+                        errorLabel.text = "请输入用户名"
                         usernameField.forceActiveFocus()
                         return
                     }
 
                     if (passwordField.text === "") {
-                        errorLabel.text = "Please enter your password"
+                        errorLabel.text = "请输入密码"
                         passwordField.forceActiveFocus()
                         return
                     }
@@ -161,7 +161,7 @@ Item {
 
                 Label {
                     Layout.fillWidth: true
-                    text: "Need an account?"
+                    text: "没有账号？"
                     color: theme.bodyTextColor
                     font.pixelSize: 13
                     verticalAlignment: Text.AlignVCenter
@@ -170,7 +170,7 @@ Item {
                 Button {
                     id: registerModeCta
                     objectName: "authModeSwitchCta"
-                    text: "Register"
+                    text: "注册"
                     flat: true
                     enabled: !root.isBusy
 
@@ -203,7 +203,7 @@ Item {
 
         function onLoginFailure(errorCode, message) {
             root.isBusy = false
-            errorLabel.text = message || "Login failed. Please try again."
+            errorLabel.text = message || "登录失败。请重试。"
         }
     }
 }

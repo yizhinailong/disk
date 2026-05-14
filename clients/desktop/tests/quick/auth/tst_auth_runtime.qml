@@ -216,11 +216,11 @@ TestCase {
         var btn = findChildByName(page, "authSubmitButton")
         verify(btn !== null, "Found submit button by objectName")
         var idleText = btn.text
-        verify(idleText.indexOf("Login") !== -1, "Idle text contains Login: " + idleText)
+        verify(idleText.indexOf("登录") !== -1, "Idle text contains 登录: " + idleText)
         page.isBusy = true
         var busyText = btn.text
         verify(busyText !== idleText, "Button text changes when busy")
-        verify(busyText.indexOf("Signing in") !== -1,
+        verify(busyText.indexOf("正在登录") !== -1,
                "Busy text indicates signing in: " + busyText)
         page.isBusy = false
         verify(btn.text === idleText, "Button text restores when not busy")
@@ -318,12 +318,12 @@ TestCase {
         var btn = findChildByName(page, "authSubmitButton")
         verify(btn !== null, "Found submit button by objectName")
         var idleText = btn.text
-        verify(idleText.indexOf("Create account") !== -1,
+        verify(idleText.indexOf("创建账户") !== -1,
                "Idle text contains Create account: " + idleText)
         page.isBusy = true
         var busyText = btn.text
         verify(busyText !== idleText, "Button text changes when busy")
-        verify(busyText.indexOf("Creating account") !== -1,
+        verify(busyText.indexOf("正在创建账户") !== -1,
                "Busy text indicates creating: " + busyText)
         page.isBusy = false
         verify(btn.text === idleText, "Button text restores when not busy")
@@ -350,23 +350,23 @@ TestCase {
 
     function test_authshell_title_is_login_by_default() {
         var shell = createPage("shells/AuthShell.qml")
-        verify(shell.title.indexOf("Login") !== -1,
-               "Default title contains Login: " + shell.title)
+        verify(shell.title.indexOf("登录") !== -1,
+               "Default title contains 登录: " + shell.title)
     }
 
     function test_authshell_title_syncs_to_register() {
         var shell = createPage("shells/AuthShell.qml")
         shell.authMode = "register"
-        verify(shell.title.indexOf("Register") !== -1,
-               "Title contains Register after mode switch: " + shell.title)
+        verify(shell.title.indexOf("注册") !== -1,
+               "Title contains 注册 after mode switch: " + shell.title)
     }
 
     function test_authshell_title_syncs_back_to_login() {
         var shell = createPage("shells/AuthShell.qml")
         shell.authMode = "register"
         shell.authMode = "login"
-        verify(shell.title.indexOf("Login") !== -1,
-               "Title contains Login after switching back: " + shell.title)
+        verify(shell.title.indexOf("登录") !== -1,
+               "Title contains 登录 after switching back: " + shell.title)
     }
 
     function test_authshell_busy_tracks_loaded_page() {

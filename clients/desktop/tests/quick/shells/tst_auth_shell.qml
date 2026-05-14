@@ -381,7 +381,7 @@ TestCase {
         var source = xhr.responseText
 
         verify(source.length > 0, "AuthShell.qml was read")
-        verify(source.indexOf('root.authMode === "login" ? "Disk Desktop - Login" : "Disk Desktop - Register"') !== -1,
+        verify(source.indexOf('root.authMode === "login" ? "Disk 桌面端 - 登录" : "Disk 桌面端 - 注册"') !== -1,
                "AuthShell title binding reflects current authMode")
     }
 
@@ -392,9 +392,9 @@ TestCase {
         var source = xhr.responseText
 
         verify(source.length > 0, "AuthShell.qml was read")
-        verify(source.indexOf('root.authMode === "login" ? "Calm entry') !== -1,
+        verify(source.indexOf('root.authMode === "login" ? "平静的桌面工作台入口。') !== -1,
                "AuthShell hero heading text reflects login mode")
-        verify(source.indexOf('"A quieter way to start') !== -1,
+        verify(source.indexOf('"更安静的方式开启您的桌面工作空间。') !== -1,
                "AuthShell hero heading text reflects register mode")
     }
 
