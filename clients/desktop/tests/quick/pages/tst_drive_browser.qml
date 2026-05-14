@@ -56,12 +56,12 @@ TestCase {
     function test_drive_browser_exposes_only_p0_actions() {
         var source = readDriveCompositeSource()
 
-        verify(source.indexOf('text: "Refresh"') !== -1, "Exposes Refresh action")
-        verify(source.indexOf('text: "New Folder"') !== -1, "Exposes New Folder action")
-        verify(source.indexOf('text: "Upload"') !== -1, "Exposes Upload action")
-        verify(source.indexOf('text: "Rename"') !== -1, "Exposes Rename action")
-        verify(source.indexOf('text: "Delete"') !== -1, "Exposes Delete action")
-        verify(source.indexOf('text: "Download"') !== -1, "Exposes Download action")
+        verify(source.indexOf('text: "刷新"') !== -1, "Exposes Refresh action")
+        verify(source.indexOf('text: "新建文件夹"') !== -1, "Exposes New Folder action")
+        verify(source.indexOf('text: "上传"') !== -1, "Exposes Upload action")
+        verify(source.indexOf('text: "重命名"') !== -1, "Exposes Rename action")
+        verify(source.indexOf('text: "删除"') !== -1, "Exposes Delete action")
+        verify(source.indexOf('text: "下载"') !== -1, "Exposes Download action")
         verify(source.indexOf('enabled: page.selectedItemId !== ""') !== -1
                || source.indexOf('enabled: root.selectedItemId !== ""') !== -1,
                "Selection-gates rename and delete")
@@ -69,8 +69,8 @@ TestCase {
                || source.indexOf('enabled: root.selectedItemKind === "file"') !== -1,
                "Selection-gates download to files")
 
-        verify(source.indexOf('placeholderText: "Search files..."') !== -1
-               || source.indexOf('Search files...') !== -1,
+        verify(source.indexOf('placeholderText: "搜索文件..."') !== -1
+               || source.indexOf('搜索文件...') !== -1,
                "Search field is present in My Files view")
         verify(source.indexOf('searchFiles(') !== -1, "Search behavior is present")
         verify(source.indexOf('text: "Move"') === -1, "Move action is absent")
@@ -125,9 +125,9 @@ TestCase {
                "Helper checks the tracked upload count before enqueuing")
         verify(source.indexOf("if (transferManager.uploadModel.rowCount() === uploadCountBefore)") !== -1,
                "Invalid upload paths do not create a tracked upload task")
-        verify(source.indexOf('uploadErrorMessage = "Please choose one local file."') !== -1,
+        verify(source.indexOf('uploadErrorMessage = "请选择一个本地文件"') !== -1,
                "Empty upload input gets deterministic feedback")
-        verify(source.indexOf('uploadErrorMessage = "Please choose an existing local file."') !== -1,
+        verify(source.indexOf('uploadErrorMessage = "请选择一个存在的本地文件"') !== -1,
                "Invalid upload path gets deterministic feedback")
         verify(source.indexOf('property string uploadErrorMessage: ""') !== -1,
                "Upload error feedback is kept in page state")
@@ -161,9 +161,9 @@ TestCase {
                "Chooser acceptance routes through the owner download helper")
         verify(source.indexOf("onRejected: root.startOwnerDownloadToPath(root.pendingOwnerDownloadFileId, root.pendingOwnerDownloadFilename, \"\")") !== -1,
                "Chooser rejection routes through the same owner download helper")
-        verify(source.indexOf('downloadErrorMessage = "Please select one file to download."') !== -1,
+        verify(source.indexOf('downloadErrorMessage = "请选择一个文件下载"') !== -1,
                "Invalid selection gets deterministic owner download feedback")
-        verify(source.indexOf('downloadErrorMessage = "Please choose one download destination."') !== -1,
+        verify(source.indexOf('downloadErrorMessage = "请选择下载保存位置"') !== -1,
                "Empty download destination gets deterministic feedback")
         verify(source.indexOf("transferManager.StartDownload(ownerFileId, localPath, \"owner\")") !== -1,
                "Valid owner download requests call TransferManager.StartDownload with the owner domain")
@@ -199,7 +199,7 @@ TestCase {
         verify(source.indexOf("onClicked: page.selectItem(model.id, model.kind, model.name)") !== -1
                || source.indexOf("onClicked: root.selectItem(model.id, model.kind, model.name)") !== -1,
                "Row click only updates selection")
-        verify(source.indexOf('text: "Open"') !== -1,
+        verify(source.indexOf('text: "打开"') !== -1,
                "Folder rows expose dedicated Open control")
         verify(source.indexOf('visible: model.kind === "folder"') !== -1,
                "Open control is only shown for folder rows")
@@ -212,10 +212,10 @@ TestCase {
 
     function test_drive_browser_file_list_uses_static_table_header_and_role_fallbacks() {
         var source = readDriveCompositeSource()
-        var nameHeaderIndex = source.indexOf('text: "Name"')
-        var typeHeaderIndex = source.indexOf('text: "Type"')
-        var sizeHeaderIndex = source.indexOf('text: "Size"')
-        var updatedHeaderIndex = source.indexOf('text: "Updated"')
+        var nameHeaderIndex = source.indexOf('text: "名称"')
+        var typeHeaderIndex = source.indexOf('text: "类型"')
+        var sizeHeaderIndex = source.indexOf('text: "大小"')
+        var updatedHeaderIndex = source.indexOf('text: "更新日期"')
 
         verify(nameHeaderIndex !== -1, "Has static Name header")
         verify(typeHeaderIndex !== -1, "Has static Type header")
@@ -225,11 +225,11 @@ TestCase {
                "Header columns stay ordered as Name, Type, Size, Updated")
         verify(source.indexOf("function formatItemType(kind, mimeType)") !== -1,
                "Uses a dedicated helper for the Type column")
-        verify(source.indexOf('return typeLabel !== "" ? typeLabel : "File"') !== -1,
+        verify(source.indexOf('return typeLabel !== "" ? typeLabel : "文件"') !== -1,
                "Files fall back to File when mimeType is missing")
         verify(source.indexOf("function formatItemSize(kind, size, itemCount)") !== -1,
                "Uses a dedicated helper for the Size column")
-        verify(source.indexOf('return itemCountValue !== "" ? itemCountValue + " items" : "—"') !== -1,
+        verify(source.indexOf('return itemCountValue !== "" ? itemCountValue + " 项" : "—"') !== -1,
                "Folders render item counts or an em dash when unavailable")
         verify(source.indexOf("return root.formatSize(size)") !== -1,
                "Files render size via the existing formatSize helper")
@@ -301,17 +301,17 @@ TestCase {
                "Create flow uses shared validator")
         verify(source.indexOf("root.validateDriveItemName(renameNameField.text)") !== -1,
                "Rename flow uses shared validator")
-        verify(source.indexOf('error: "Name must be 1-255 characters"') !== -1,
+        verify(source.indexOf('error: "名称必须为 1-255 个字符"') !== -1,
                "Validates backend length contract")
-        verify(source.indexOf("Name cannot be \".\" or \"..\"") !== -1,
+        verify(source.indexOf("名称不能为 \".\" 或 \"..\"") !== -1,
                "Rejects reserved names")
-        verify(source.indexOf("Name cannot start with \".\"") !== -1,
+        verify(source.indexOf("名称不能以 \".\" 开头") !== -1,
                "Rejects hidden-dot names")
-        verify(source.indexOf("Name must use ASCII printable characters only") !== -1,
+        verify(source.indexOf("名称只能使用 ASCII 可打印字符") !== -1,
                "Rejects non-ASCII printable names")
         verify(source.indexOf("var forbiddenChars = ") !== -1,
                "Defines the forbidden character set")
-        verify(source.indexOf("Name cannot contain any of /") !== -1,
+        verify(source.indexOf("名称不能包含以下字符：/ \\ : * ? \" < > |") !== -1,
                "Rejects forbidden filesystem characters")
         verify(source.indexOf("function validateNewFolderName(") === -1,
                "Does not introduce a create-only validator")
@@ -338,9 +338,9 @@ TestCase {
                "Delete flow calls DriveManager.deleteItems for one selected item")
         verify(source.indexOf('if (root.selectedItemKind !== "file")') !== -1,
                "Delete submit path checks item kind before using the file delete contract")
-        verify(source.indexOf('deleteErrorMessage = "Folder deletion is not supported in this build."') !== -1,
+        verify(source.indexOf('deleteErrorMessage = "此版本不支持删除文件夹"') !== -1,
                "Folder delete attempts surface deterministic local feedback")
-        verify(source.indexOf('deleteErrorMessage = "Folder deletion is not supported in this build."')
+        verify(source.indexOf('deleteErrorMessage = "此版本不支持删除文件夹"')
                < source.indexOf("driveManager.deleteItems([root.selectedItemId])"),
                "Folder delete feedback is assigned before any file delete request call")
 
@@ -561,7 +561,7 @@ TestCase {
     function test_drive_browser_folder_open_button_routes_through_navigateToFolder() {
         var source = readDriveCompositeSource()
 
-        var openBtnIndex = source.indexOf('text: "Open"')
+        var openBtnIndex = source.indexOf('text: "打开"')
         verify(openBtnIndex !== -1, "Has Open button")
 
         var openBtnBlock = source.substring(openBtnIndex, openBtnIndex + 400)
@@ -716,11 +716,11 @@ TestCase {
         verify(labelStart !== -1, "Has viewModeLabel")
         var labelBody = source.substring(labelStart, labelStart + 400)
 
-        verify(labelBody.indexOf('case "shared": return "SHARES"') !== -1,
+        verify(labelBody.indexOf('case "shared": return "分享"') !== -1,
                "shared mode returns SHARES label")
-        verify(labelBody.indexOf('case "trash": return "TRASH"') !== -1,
+        verify(labelBody.indexOf('case "trash": return "回收站"') !== -1,
                "trash mode returns TRASH label")
-        verify(labelBody.indexOf('default: return "DRIVE"') !== -1,
+        verify(labelBody.indexOf('default: return "网盘"') !== -1,
                "myfiles mode returns DRIVE label")
     }
 
@@ -733,9 +733,9 @@ TestCase {
 
         verify(titleBody.indexOf("root.isMyFilesMode") !== -1,
                "My Files mode delegates to driveTitle")
-        verify(titleBody.indexOf('case "shared": return "Shares"') !== -1,
+        verify(titleBody.indexOf('case "shared": return "分享"') !== -1,
                "shared mode returns Shares title")
-        verify(titleBody.indexOf('case "trash": return "Trash"') !== -1,
+        verify(titleBody.indexOf('case "trash": return "回收站"') !== -1,
                "trash mode returns Trash title")
     }
 
@@ -759,7 +759,7 @@ TestCase {
                "folderNavigatorToggleButton is gated by isMyFilesMode")
 
         // New Folder: visible gate in the button block
-        var newFolderIdx = source.indexOf('text: "New Folder"')
+        var newFolderIdx = source.indexOf('text: "新建文件夹"')
         verify(newFolderIdx !== -1, "Has New Folder button")
         var newFolderBlock = source.substring(newFolderIdx, newFolderIdx + 120)
         verify(newFolderBlock.indexOf("visible: page.isMyFilesMode") !== -1
@@ -778,21 +778,21 @@ TestCase {
     function test_drive_browser_mutation_toolbar_buttons_gated_by_mode() {
         var source = readDriveCompositeSource()
 
-        var renameIdx = source.indexOf('text: "Rename"')
+        var renameIdx = source.indexOf('text: "重命名"')
         verify(renameIdx !== -1, "Has Rename button")
         var renameBlock = source.substring(renameIdx, renameIdx + 150)
         verify(renameBlock.indexOf("visible: page.isMyFilesMode") !== -1
                || renameBlock.indexOf("visible: root.isMyFilesMode") !== -1,
                "Rename button is gated by isMyFilesMode")
 
-        var deleteIdx = source.indexOf('text: "Delete"')
+        var deleteIdx = source.indexOf('text: "删除"')
         verify(deleteIdx !== -1, "Has Delete button")
         var deleteBlock = source.substring(deleteIdx, deleteIdx + 150)
         verify(deleteBlock.indexOf("visible: page.isMyFilesMode") !== -1
                || deleteBlock.indexOf("visible: root.isMyFilesMode") !== -1,
                "Delete button is gated by isMyFilesMode")
 
-        var downloadIdx = source.indexOf('text: "Download"')
+        var downloadIdx = source.indexOf('text: "下载"')
         verify(downloadIdx !== -1, "Has Download button")
         var downloadBlock = source.substring(downloadIdx, downloadIdx + 150)
         verify(downloadBlock.indexOf("visible: page.isMyFilesMode") !== -1
@@ -803,7 +803,7 @@ TestCase {
     function test_drive_browser_refresh_button_is_always_visible() {
         var source = readDriveCompositeSource()
 
-        var refreshIdx = source.indexOf('text: "Refresh"')
+        var refreshIdx = source.indexOf('text: "刷新"')
         verify(refreshIdx !== -1, "Has Refresh button")
         var refreshBlock = source.substring(refreshIdx, refreshIdx + 150)
         verify(refreshBlock.indexOf("visible: page.isMyFilesMode") === -1

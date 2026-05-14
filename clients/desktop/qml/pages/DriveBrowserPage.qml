@@ -46,7 +46,7 @@ Page {
     readonly property string driveTitle: root.breadcrumbPath.length > 0
                                          && root.breadcrumbPath[root.breadcrumbPath.length - 1].name
                                          ? String(root.breadcrumbPath[root.breadcrumbPath.length - 1].name)
-                                         : "My Drive"
+                                         : "我的网盘"
     readonly property bool isRootFolder: root.currentFolderId === "0"
     readonly property string resolvedParentFolderId: {
         var breadcrumbPath = root.breadcrumbPath
@@ -105,9 +105,9 @@ Page {
 
     function viewModeLabel() {
         switch (root.currentViewMode) {
-        case "shared": return "SHARES"
-        case "trash": return "TRASH"
-        default: return "DRIVE"
+        case "shared": return "分享"
+        case "trash": return "回收站"
+        default: return "网盘"
         }
     }
 
@@ -116,9 +116,9 @@ Page {
             return root.driveTitle
         }
         switch (root.currentViewMode) {
-        case "shared": return "Shares"
-        case "trash": return "Trash"
-        default: return "My Drive"
+        case "shared": return "分享"
+        case "trash": return "回收站"
+        default: return "我的网盘"
         }
     }
 
@@ -136,102 +136,102 @@ Page {
     }
 
     function folderScopeLabel() {
-        return root.isRootFolder ? "Root folder" : "Nested folder"
+        return root.isRootFolder ? "根文件夹" : "子文件夹"
     }
 
     function pageStateLabel() {
         switch (shellController.pageState) {
         case "loading":
-            return "Refreshing"
+            return "加载中"
         case "empty":
-            return "Empty"
+            return "空"
         case "error":
-            return "Needs retry"
+            return "需要重试"
         default:
-            return "Ready"
+            return "就绪"
         }
     }
 
     function driveStatusSummary() {
         if (shellController.pageState === "loading") {
-            return "Refreshing folder contents and drive navigation."
+            return "正在刷新文件夹内容和网盘导航"
         }
         if (shellController.pageState === "error") {
-            return "We could not load this folder. Retry to restore the drive view."
+            return "无法加载此文件夹。请重试以恢复网盘视图。"
         }
         if (shellController.pageState === "empty") {
-            return "This folder is empty. Use the toolbar to add new content."
+            return "此文件夹为空。使用工具栏添加新内容。"
         }
         if (selectedItemId !== "") {
-            return 'Selected: "' + selectedItemName + '"'
+            return '已选择："' + selectedItemName + '"'
         }
 
         return currentFolderItemCount === 1
-               ? "1 item in this folder"
-               : currentFolderItemCount + " items in this folder"
+               ? "此文件夹中有 1 项"
+               : "此文件夹中有 " + currentFolderItemCount + " 项"
     }
 
     function sharedStatusSummary() {
         if (shellController.pageState === "loading") {
-            return "Refreshing your shared links and access controls."
+            return "正在刷新您的分享链接和访问控制"
         }
         if (shellController.pageState === "error") {
-            return "We could not load your shares. Retry to restore the shared view."
+            return "无法加载分享。请重试以恢复分享视图。"
         }
         if (shellController.pageState === "batchResult") {
-            return shareManager.batchResultModel.successCount + " of "
-                   + shareManager.batchResultModel.totalCount + " share updates succeeded."
+            return "成功更新 " + shareManager.batchResultModel.successCount + " / "
+                   + shareManager.batchResultModel.totalCount + " 个分享"
         }
         if (shellController.pageState === "empty") {
-            return "You have not created any shares yet."
+            return "您还没有创建任何分享"
         }
         if (root.selectedShareIds.length > 0) {
             return root.selectedShareIds.length === 1
-                   ? "1 share selected"
-                   : root.selectedShareIds.length + " shares selected"
+                   ? "已选择 1 个分享"
+                   : "已选择 " + root.selectedShareIds.length + " 个分享"
         }
 
         return root.currentShareItemCount === 1
-               ? "1 share available"
-               : root.currentShareItemCount + " shares available"
+               ? "1 个可用分享"
+               : root.currentShareItemCount + " 个可用分享"
     }
 
     function shareBatchResultTitle() {
-        return "Batch Cancel Results"
+        return "批量取消结果"
     }
 
     function trashStatusSummary() {
         if (shellController.pageState === "loading") {
-            return "Refreshing deleted items and trash actions."
+            return "正在刷新已删除项目和回收站操作"
         }
         if (shellController.pageState === "error") {
-            return "We could not load the trash view. Retry to restore deleted items."
+            return "无法加载回收站视图。请重试以恢复删除的项目。"
         }
         if (shellController.pageState === "batchResult") {
             var actionLabel = trashManager.batchResultModel.operation === "trash_restore"
-                              ? "restore"
-                              : "delete"
-            return trashManager.batchResultModel.successCount + " of "
-                   + trashManager.batchResultModel.totalCount + " trash " + actionLabel + " actions succeeded."
+                              ? "恢复"
+                              : "删除"
+            return "成功" + actionLabel + " " + trashManager.batchResultModel.successCount + " / "
+                   + trashManager.batchResultModel.totalCount + " 个回收站项目"
         }
         if (shellController.pageState === "empty") {
-            return "Trash is empty."
+            return "回收站为空"
         }
         if (root.selectedTrashIds.length > 0) {
             return root.selectedTrashIds.length === 1
-                   ? "1 trash item selected"
-                   : root.selectedTrashIds.length + " trash items selected"
+                   ? "已选择 1 个回收站项目"
+                   : "已选择 " + root.selectedTrashIds.length + " 个回收站项目"
         }
 
         return root.currentTrashItemCount === 1
-               ? "1 item in trash"
-               : root.currentTrashItemCount + " items in trash"
+               ? "回收站中有 1 个项目"
+               : "回收站中有 " + root.currentTrashItemCount + " 个项目"
     }
 
     function trashBatchResultTitle() {
         return trashManager.batchResultModel.operation === "trash_restore"
-               ? "Restore Results"
-               : "Delete Results"
+               ? "恢复结果"
+               : "删除结果"
     }
 
     function shareBatchResultSummaryColor(failureCount) {
@@ -239,17 +239,17 @@ Page {
     }
 
     function formatSharePermission(permission) {
-        return permission === "view" ? "View only" : "View and download"
+        return permission === "view" ? "仅查看" : "查看和下载"
     }
 
     function formatShareStatus(status) {
         switch (String(status || "active")) {
         case "expired":
-            return "Expired"
+            return "已过期"
         case "cancelled":
-            return "Cancelled"
+            return "已取消"
         default:
-            return "Active"
+            return "有效"
         }
     }
 
@@ -416,21 +416,21 @@ Page {
             return {
                 valid: false,
                 value: value,
-                error: "Name must be 1-255 characters"
+                error: "名称必须为 1-255 个字符"
             }
         }
         if (value === "." || value === "..") {
             return {
                 valid: false,
                 value: value,
-                error: 'Name cannot be "." or ".."'
+                error: '名称不能为 "." 或 ".."'
             }
         }
         if (value.charAt(0) === ".") {
             return {
                 valid: false,
                 value: value,
-                error: 'Name cannot start with "."'
+                error: '名称不能以 "." 开头'
             }
         }
 
@@ -442,14 +442,14 @@ Page {
                 return {
                     valid: false,
                     value: value,
-                    error: "Name must use ASCII printable characters only"
+                    error: "名称只能使用 ASCII 可打印字符"
                 }
             }
             if (forbiddenChars.indexOf(character) >= 0) {
                 return {
                     valid: false,
                     value: value,
-                    error: 'Name cannot contain any of / \\ : * ? " < > |'
+                    error: '名称不能包含以下字符：/ \\ : * ? " < > |'
                 }
             }
         }
@@ -467,17 +467,17 @@ Page {
 
     function formatItemType(kind, mimeType) {
         if (kind === "folder") {
-            return "Folder"
+            return "文件夹"
         }
 
         var typeLabel = mimeType === undefined || mimeType === null ? "" : String(mimeType)
-        return typeLabel !== "" ? typeLabel : "File"
+        return typeLabel !== "" ? typeLabel : "文件"
     }
 
     function formatItemSize(kind, size, itemCount) {
         if (kind === "folder") {
             var itemCountValue = itemCount === undefined || itemCount === null ? "" : String(itemCount)
-            return itemCountValue !== "" ? itemCountValue + " items" : "—"
+            return itemCountValue !== "" ? itemCountValue + " 项" : "—"
         }
 
         return root.formatSize(size)
@@ -514,7 +514,7 @@ Page {
     function startUploadFromPath(path) {
         var localPath = root.normalizeUploadPath(path)
         if (localPath === "") {
-            uploadErrorMessage = "Please choose one local file."
+            uploadErrorMessage = "请选择一个本地文件"
             toolbarCard.uploadButton.forceActiveFocus()
             return false
         }
@@ -529,7 +529,7 @@ Page {
         var uploadCountBefore = transferManager.uploadModel.rowCount()
         transferManager.StartUpload(localPath, parentFolderId)
         if (transferManager.uploadModel.rowCount() === uploadCountBefore) {
-            uploadErrorMessage = "Please choose an existing local file."
+            uploadErrorMessage = "请选择一个存在的本地文件"
             toolbarCard.uploadButton.forceActiveFocus()
             return false
         }
@@ -561,14 +561,14 @@ Page {
     function startOwnerDownloadToPath(fileId, filename, targetPath) {
         var ownerFileId = Number(fileId)
         if (!isFinite(ownerFileId) || ownerFileId <= 0) {
-            downloadErrorMessage = "Please select one file to download."
+            downloadErrorMessage = "请选择一个文件下载"
             toolbarCard.downloadButton.forceActiveFocus()
             return false
         }
 
         var localPath = root.normalizeDownloadPath(targetPath)
         if (localPath === "") {
-            downloadErrorMessage = "Please choose one download destination."
+            downloadErrorMessage = "请选择下载保存位置"
             toolbarCard.downloadButton.forceActiveFocus()
             return false
         }
@@ -578,7 +578,7 @@ Page {
         var downloadCountBefore = transferManager.downloadModel.rowCount()
         transferManager.StartDownload(ownerFileId, localPath, "owner")
         if (transferManager.downloadModel.rowCount() === downloadCountBefore) {
-            downloadErrorMessage = "Failed to create the download task."
+            downloadErrorMessage = "创建下载任务失败"
             toolbarCard.downloadButton.forceActiveFocus()
             return false
         }
@@ -656,7 +656,7 @@ Page {
 
         if (root.selectedItemKind !== "file") {
             mutationInFlight = false
-            deleteErrorMessage = "Folder deletion is not supported in this build."
+            deleteErrorMessage = "此版本不支持删除文件夹"
             return
         }
 
@@ -665,7 +665,7 @@ Page {
     }
 
     function applyMutationError(message) {
-        var errorMessage = message || "Request failed. Please try again."
+        var errorMessage = message || "请求失败，请重试"
         mutationInFlight = false
 
         if (pendingMutationAction === "create") {
@@ -692,11 +692,11 @@ Page {
         renameDialog.close()
         deleteDialog.close()
         if (finishedAction === "create") {
-            root.showToast("Folder created successfully")
+            root.showToast("文件夹创建成功")
         } else if (finishedAction === "rename") {
-            root.showToast("Item renamed successfully")
+            root.showToast("项目重命名成功")
         } else if (finishedAction === "delete") {
-            root.showToast("Item deleted successfully")
+            root.showToast("项目删除成功")
         }
         root.refreshCurrentFolder()
     }
@@ -769,7 +769,7 @@ Page {
     }
 
     function applyShareMutationError(message) {
-        var errorMessage = message || "Request failed. Please try again."
+        var errorMessage = message || "请求失败，请重试"
         root.shareMutationInFlight = false
 
         if (root.pendingShareMutationAction === "create") {
@@ -1011,7 +1011,7 @@ Page {
         id: uploadFileDialogComponent
 
         Platform.FileDialog {
-            title: "Choose File to Upload"
+            title: "选择要上传的文件"
             fileMode: Platform.FileDialog.OpenFile
             nameFilters: ["All files (*)"]
 
@@ -1025,8 +1025,8 @@ Page {
 
         Platform.FileDialog {
             title: root.pendingOwnerDownloadFilename === ""
-                   ? "Choose Download Destination"
-                   : "Save " + root.pendingOwnerDownloadFilename
+                   ? "选择下载保存位置"
+                   : "保存 " + root.pendingOwnerDownloadFilename
             fileMode: Platform.FileDialog.SaveFile
             nameFilters: ["All files (*)"]
 
@@ -1039,7 +1039,7 @@ Page {
         id: newFolderDialog
         modal: true
         width: 360
-        title: "New Folder"
+        title: "新建文件夹"
         standardButtons: Dialog.NoButton
         closePolicy: Popup.NoAutoClose
 
@@ -1055,7 +1055,7 @@ Page {
 
             Label {
                 Layout.fillWidth: true
-                text: "Enter a name for the new folder."
+                text: "请输入新文件夹的名称"
                 color: root.panelSecondaryTextColor
                 wrapMode: Text.WordWrap
             }
@@ -1065,7 +1065,7 @@ Page {
                 Layout.fillWidth: true
                 maximumLength: 255
                 enabled: !root.mutationInFlight
-                placeholderText: "Folder name"
+                placeholderText: "文件夹名称"
                 onAccepted: root.submitCreateFolder()
             }
 
@@ -1085,14 +1085,14 @@ Page {
                 }
 
                 Button {
-                    text: "Cancel"
+                    text: "取消"
                     enabled: !root.mutationInFlight
                     onClicked: newFolderDialog.close()
                 }
 
                 Button {
                     text: root.pendingMutationAction === "create" && root.mutationInFlight
-                          ? "Creating..." : "Create"
+                          ? "创建中..." : "创建"
                     highlighted: true
                     enabled: !root.mutationInFlight
                     onClicked: root.submitCreateFolder()
@@ -1105,7 +1105,7 @@ Page {
         id: renameDialog
         modal: true
         width: 360
-        title: "Rename"
+        title: "重命名"
         standardButtons: Dialog.NoButton
         closePolicy: Popup.NoAutoClose
 
@@ -1121,7 +1121,7 @@ Page {
 
             Label {
                 Layout.fillWidth: true
-                text: "Enter a new name for the selected item."
+                text: "请输入所选项目的新名称"
                 color: root.panelSecondaryTextColor
                 wrapMode: Text.WordWrap
             }
@@ -1131,7 +1131,7 @@ Page {
                 Layout.fillWidth: true
                 maximumLength: 255
                 enabled: !root.mutationInFlight
-                placeholderText: "Item name"
+                placeholderText: "项目名称"
                 onAccepted: root.submitRenameItem()
             }
 
@@ -1151,14 +1151,14 @@ Page {
                 }
 
                 Button {
-                    text: "Cancel"
+                    text: "取消"
                     enabled: !root.mutationInFlight
                     onClicked: renameDialog.close()
                 }
 
                 Button {
                     text: root.pendingMutationAction === "rename" && root.mutationInFlight
-                          ? "Saving..." : "Save"
+                          ? "保存中..." : "保存"
                     highlighted: true
                     enabled: !root.mutationInFlight
                     onClicked: root.submitRenameItem()
@@ -1171,7 +1171,7 @@ Page {
         id: deleteDialog
         modal: true
         width: 360
-        title: "Delete"
+        title: "删除"
         standardButtons: Dialog.NoButton
         closePolicy: Popup.NoAutoClose
 
@@ -1187,7 +1187,7 @@ Page {
 
             Label {
                 Layout.fillWidth: true
-                text: "Delete \"" + root.selectedItemName + "\"? This moves the selected item to trash."
+                text: "确定删除\"" + root.selectedItemName + "\"？所选项目将移至回收站。"
                 color: root.panelSecondaryTextColor
                 wrapMode: Text.WordWrap
             }
@@ -1208,14 +1208,14 @@ Page {
                 }
 
                 Button {
-                    text: "Cancel"
+                    text: "取消"
                     enabled: !root.mutationInFlight
                     onClicked: deleteDialog.close()
                 }
 
                 Button {
                     text: root.pendingMutationAction === "delete" && root.mutationInFlight
-                          ? "Deleting..." : "Delete"
+                          ? "删除中..." : "删除"
                     highlighted: true
                     enabled: !root.mutationInFlight
                     onClicked: root.submitDeleteItem()
@@ -1228,7 +1228,7 @@ Page {
         id: createShareDialog
         modal: true
         width: 360
-        title: "Create Share"
+        title: "创建分享"
         standardButtons: Dialog.NoButton
         closePolicy: Popup.NoAutoClose
 
@@ -1248,15 +1248,15 @@ Page {
                 Layout.fillWidth: true
                 text: createShareDialog.selectedFileIds.length > 0
                       ? (createShareDialog.selectedFileIds.length === 1
-                             ? "1 file id is queued for this share."
-                             : createShareDialog.selectedFileIds.length + " file ids are queued for this share.")
-                      : "No file ids are currently queued for this share."
+                             ? "1 个文件已加入分享队列"
+                             : createShareDialog.selectedFileIds.length + " 个文件已加入分享队列")
+                      : "当前没有文件加入分享队列"
                 color: root.panelSecondaryTextColor
                 wrapMode: Text.WordWrap
             }
 
             Label {
-                text: "Permission:"
+                text: "权限："
                 color: root.panelStrongTextColor
             }
 
@@ -1268,7 +1268,7 @@ Page {
             }
 
             Label {
-                text: "Password (optional, 4-8 chars):"
+                text: "密码（可选，4-8个字符）："
                 color: root.panelStrongTextColor
             }
 
@@ -1276,14 +1276,14 @@ Page {
                 id: createSharePasswordField
                 Layout.fillWidth: true
                 enabled: !root.shareMutationInFlight
-                placeholderText: "No password"
+                placeholderText: "无密码"
                 echoMode: TextInput.Password
                 maximumLength: 8
                 onAccepted: root.submitCreateShare()
             }
 
             Label {
-                text: "Expire (days, 0 = permanent):"
+                text: "过期天数（0=永久）："
                 color: root.panelStrongTextColor
             }
 
@@ -1312,14 +1312,14 @@ Page {
                 }
 
                 Button {
-                    text: "Cancel"
+                    text: "取消"
                     enabled: !root.shareMutationInFlight
                     onClicked: createShareDialog.close()
                 }
 
                 Button {
                     text: root.pendingShareMutationAction === "create" && root.shareMutationInFlight
-                          ? "Creating..." : "Create"
+                          ? "创建中..." : "创建"
                     highlighted: true
                     enabled: !root.shareMutationInFlight
                     onClicked: root.submitCreateShare()
@@ -1332,7 +1332,7 @@ Page {
         id: editShareDialog
         modal: true
         width: 360
-        title: "Edit Share"
+        title: "编辑分享"
         standardButtons: Dialog.NoButton
         closePolicy: Popup.NoAutoClose
 
@@ -1348,13 +1348,13 @@ Page {
 
             Label {
                 Layout.fillWidth: true
-                text: "Update the permission or password for the selected share."
+                text: "请更新所选分享的权限或密码"
                 color: root.panelSecondaryTextColor
                 wrapMode: Text.WordWrap
             }
 
             Label {
-                text: "Permission:"
+                text: "权限："
                 color: root.panelStrongTextColor
             }
 
@@ -1366,7 +1366,7 @@ Page {
             }
 
             Label {
-                text: "New Password (empty to remove):"
+                text: "新密码（留空移除）："
                 color: root.panelStrongTextColor
             }
 
@@ -1374,7 +1374,7 @@ Page {
                 id: editSharePasswordField
                 Layout.fillWidth: true
                 enabled: !root.shareMutationInFlight
-                placeholderText: "Leave empty to keep current"
+                placeholderText: "留空保持当前密码"
                 echoMode: TextInput.Password
                 maximumLength: 8
                 onAccepted: root.submitUpdateShare()
@@ -1396,14 +1396,14 @@ Page {
                 }
 
                 Button {
-                    text: "Cancel"
+                    text: "取消"
                     enabled: !root.shareMutationInFlight
                     onClicked: editShareDialog.close()
                 }
 
                 Button {
                     text: root.pendingShareMutationAction === "edit" && root.shareMutationInFlight
-                          ? "Saving..." : "Save"
+                          ? "保存中..." : "保存"
                     highlighted: true
                     enabled: !root.shareMutationInFlight
                     onClicked: root.submitUpdateShare()

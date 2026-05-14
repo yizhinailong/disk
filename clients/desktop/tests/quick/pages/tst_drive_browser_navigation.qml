@@ -582,10 +582,10 @@ TestCase {
         verify(headerSize !== null, "Size header label found at runtime")
         verify(headerUpdated !== null, "Updated header label found at runtime")
 
-        compare(headerName.text, "Name", "Name header text is correct")
-        compare(headerType.text, "Type", "Type header text is correct")
-        compare(headerSize.text, "Size", "Size header text is correct")
-        compare(headerUpdated.text, "Updated", "Updated header text is correct")
+        compare(headerName.text, "名称", "Name header text is correct")
+        compare(headerType.text, "类型", "Type header text is correct")
+        compare(headerSize.text, "大小", "Size header text is correct")
+        compare(headerUpdated.text, "更新日期", "Updated header text is correct")
 
         verify(headerName.x < headerType.x,
                "Name column is left of Type column")
@@ -1143,7 +1143,7 @@ TestCase {
         compare(sc.pageState, "batchResult", "Trash batch result signal switches the page state")
         compare(tm.batchResultModel.totalCount, 2, "Trash batch result keeps the total count")
         compare(tm.batchResultModel.failureCount, 1, "Trash batch result keeps the failure count")
-        compare(page.viewModeStatusText(), "1 of 2 trash restore actions succeeded.",
+        compare(page.viewModeStatusText(), "成功恢复 1 / 2 个回收站项目",
                 "Trash batch result summary is rendered through the drive host status contract")
     }
 
@@ -1288,22 +1288,22 @@ TestCase {
                 "myfiles title matches driveTitle")
 
         page.activateViewMode("shared")
-        compare(page.viewModeTitleText(), "Shares", "shared title is Shares")
+        compare(page.viewModeTitleText(), "分享", "shared title is Shares")
 
         page.activateViewMode("trash")
-        compare(page.viewModeTitleText(), "Trash", "trash title is Trash")
+        compare(page.viewModeTitleText(), "回收站", "trash title is Trash")
     }
 
     function test_viewModeLabel_returns_correct_labels() {
         var page = createPage()
 
-        compare(page.viewModeLabel(), "DRIVE", "myfiles label is DRIVE")
+        compare(page.viewModeLabel(), "网盘", "myfiles label is DRIVE")
 
         page.activateViewMode("shared")
-        compare(page.viewModeLabel(), "SHARES", "shared label is SHARES")
+        compare(page.viewModeLabel(), "分享", "shared label is SHARES")
 
         page.activateViewMode("trash")
-        compare(page.viewModeLabel(), "TRASH", "trash label is TRASH")
+        compare(page.viewModeLabel(), "回收站", "trash label is TRASH")
     }
 
     function test_myfiles_toolbar_buttons_exist_in_myfiles_mode() {

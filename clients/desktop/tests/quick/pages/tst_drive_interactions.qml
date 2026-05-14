@@ -481,7 +481,7 @@ TestCase {
 
         verify(source.indexOf("page.selectedItemIds.length > 1") !== -1,
                "Header shows count when multiple items selected")
-        verify(source.indexOf('page.selectedItemIds.length + " selected"') !== -1,
+        verify(source.indexOf('page.selectedItemIds.length + " 已选中"') !== -1,
                "Header displays the selected count")
     }
 }
