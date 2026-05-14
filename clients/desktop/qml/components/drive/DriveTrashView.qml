@@ -12,8 +12,8 @@ PageStateView {
     visible: page.isTrashMode
     pageState: shellController.pageState
 
-    emptyText: "Trash is empty"
-    errorText: "Failed to load trash items"
+    emptyText: "回收站为空"
+    errorText: "加载回收站项目失败"
 
     onRetryClicked: page.refreshTrashList()
 
@@ -40,17 +40,17 @@ PageStateView {
                     spacing: 24
 
                     Label {
-                        text: "Total: " + trashManager.batchResultModel.totalCount
+                        text: "总计：" + trashManager.batchResultModel.totalCount
                         color: root.page.panelMutedTextColor
                     }
 
                     Label {
-                        text: "Succeeded: " + trashManager.batchResultModel.successCount
+                        text: "成功：" + trashManager.batchResultModel.successCount
                         color: root.page.panelSuccessTextColor
                     }
 
                     Label {
-                        text: "Failed: " + trashManager.batchResultModel.failureCount
+                        text: "失败：" + trashManager.batchResultModel.failureCount
                         color: root.page.shareBatchResultSummaryColor(trashManager.batchResultModel.failureCount)
                     }
 
@@ -120,7 +120,7 @@ PageStateView {
                                 }
 
                                 Label {
-                                    text: freedSpace ? ("Freed: " + root.page.formatSize(freedSpace)) : ""
+                                    text: freedSpace ? ("已释放：" + root.page.formatSize(freedSpace)) : ""
                                     color: root.page.tableBodySecondaryTextColor
                                     font.pixelSize: 12
                                     visible: text !== ""
@@ -140,7 +140,7 @@ PageStateView {
 
                 Button {
                     objectName: "trashBatchResultBackButton"
-                    text: "Back to Trash"
+                    text: "返回回收站"
                     highlighted: true
                     onClicked: root.page.refreshTrashList()
                 }
@@ -164,7 +164,7 @@ PageStateView {
                 spacing: page.tableColumnSpacing
 
                 Label {
-                    text: page.currentTrashItemCount === 1 ? "1 item" : page.currentTrashItemCount + " items"
+                    text: page.currentTrashItemCount === 1 ? "1 项" : page.currentTrashItemCount + " 项"
                     color: page.panelMutedTextColor
                     font.pixelSize: 12
                     font.bold: true
@@ -172,8 +172,8 @@ PageStateView {
 
                 Label {
                     text: page.selectedTrashIds.length > 0
-                          ? (page.selectedTrashIds.length === 1 ? "1 selected" : page.selectedTrashIds.length + " selected")
-                          : "Selection updates trash actions"
+                          ? (page.selectedTrashIds.length === 1 ? "1 个已选" : page.selectedTrashIds.length + " 个已选")
+                          : "选择项目以启用回收站操作"
                     color: page.panelSecondaryTextColor
                     font.pixelSize: 12
                 }
@@ -276,14 +276,14 @@ PageStateView {
 
                             Button {
                                 objectName: "trashRestoreButton_" + String(model.trashId)
-                                text: "Restore"
+                                text: "恢复"
                                 flat: true
                                 onClicked: page.submitRestoreTrash(model.trashId)
                             }
 
                             Button {
                                 objectName: "trashDeleteButton_" + String(model.trashId)
-                                text: "Delete"
+                                text: "删除"
                                 flat: true
                                 onClicked: page.submitDeleteTrash(model.trashId)
                             }

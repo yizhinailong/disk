@@ -12,8 +12,8 @@ PageStateView {
     visible: page.isSharedMode
     pageState: shellController.pageState
 
-    emptyText: "No shares yet"
-    errorText: "Failed to load shares"
+    emptyText: "暂无分享"
+    errorText: "加载分享失败"
 
     onRetryClicked: page.refreshSharedList()
 
@@ -40,17 +40,17 @@ PageStateView {
                     spacing: 24
 
                     Label {
-                        text: "Total: " + shareManager.batchResultModel.totalCount
+                        text: "总计：" + shareManager.batchResultModel.totalCount
                         color: root.page.panelMutedTextColor
                     }
 
                     Label {
-                        text: "Succeeded: " + shareManager.batchResultModel.successCount
+                        text: "成功：" + shareManager.batchResultModel.successCount
                         color: root.page.panelSuccessTextColor
                     }
 
                     Label {
-                        text: "Failed: " + shareManager.batchResultModel.failureCount
+                        text: "失败：" + shareManager.batchResultModel.failureCount
                         color: root.page.shareBatchResultSummaryColor(shareManager.batchResultModel.failureCount)
                     }
 
@@ -125,7 +125,7 @@ PageStateView {
 
                 Button {
                     objectName: "sharedBatchResultBackButton"
-                    text: "Back to Shares"
+                    text: "返回分享"
                     highlighted: true
                     onClicked: root.page.refreshSharedList()
                 }
@@ -149,7 +149,7 @@ PageStateView {
                 spacing: page.tableColumnSpacing
 
                 Label {
-                    text: page.currentShareItemCount === 1 ? "1 share" : page.currentShareItemCount + " shares"
+                    text: page.currentShareItemCount === 1 ? "1 个分享" : page.currentShareItemCount + " 个分享"
                     color: page.panelMutedTextColor
                     font.pixelSize: 12
                     font.bold: true
@@ -157,8 +157,8 @@ PageStateView {
 
                 Label {
                     text: page.selectedShareIds.length > 0
-                          ? (page.selectedShareIds.length === 1 ? "1 selected" : page.selectedShareIds.length + " selected")
-                          : "Selection updates share actions"
+                          ? (page.selectedShareIds.length === 1 ? "1 个已选" : page.selectedShareIds.length + " 个已选")
+                          : "选择项目以启用分享操作"
                     color: page.panelSecondaryTextColor
                     font.pixelSize: 12
                 }
@@ -223,7 +223,7 @@ PageStateView {
                                     objectName: "sharedPrimaryItemLabel_" + String(model.shareId)
                                     Layout.fillWidth: true
                                     Layout.minimumWidth: 0
-                                    text: model.primaryItemName || "Shared files"
+                                    text: model.primaryItemName || "共享文件"
                                     color: page.tableBodyPrimaryTextColor
                                     font.pixelSize: 14
                                     font.bold: true
@@ -253,7 +253,7 @@ PageStateView {
                                     }
 
                                     Label {
-                                        text: model.hasPassword ? "Password protected" : "Open link"
+                                        text: model.hasPassword ? "密码保护" : "公开链接"
                                         color: page.tableBodySecondaryTextColor
                                         font.pixelSize: 12
                                     }
@@ -267,7 +267,7 @@ PageStateView {
 
                                     Label {
                                         text: model.itemCount !== undefined && model.itemCount !== null
-                                              ? (model.itemCount === 1 ? "1 item" : model.itemCount + " items")
+                                              ? (model.itemCount === 1 ? "1 项" : model.itemCount + " 项")
                                               : ""
                                         color: page.tableBodySecondaryTextColor
                                         font.pixelSize: 12
@@ -280,25 +280,25 @@ PageStateView {
                                 spacing: 2
 
                                 Label {
-                                    text: (model.viewCount || 0) + " views"
+                                    text: (model.viewCount || 0) + " 次浏览"
                                     color: page.tableBodySecondaryTextColor
                                     font.pixelSize: 11
                                 }
 
                                 Label {
-                                    text: (model.downloadCount || 0) + " downloads"
+                                    text: (model.downloadCount || 0) + " 次下载"
                                     color: page.tableBodySecondaryTextColor
                                     font.pixelSize: 11
                                 }
 
                                 Label {
-                                    text: page.formatShareDateTime(model.updatedAt, "Updated date unavailable")
+                                    text: page.formatShareDateTime(model.updatedAt, "无法获取更新日期")
                                     color: page.tableBodyTertiaryTextColor
                                     font.pixelSize: 11
                                 }
 
                                 Label {
-                                    text: page.formatShareDateTime(model.expiresAt, "No expiry")
+                                    text: page.formatShareDateTime(model.expiresAt, "永久有效")
                                     color: page.tableBodyTertiaryTextColor
                                     font.pixelSize: 11
                                 }
@@ -306,7 +306,7 @@ PageStateView {
 
                             Button {
                                 objectName: "sharedEditButton_" + String(model.shareId)
-                                text: "Edit"
+                                text: "编辑"
                                 flat: true
                                 enabled: !page.shareMutationInFlight
                                 onClicked: page.openEditShareDialog(model.shareId, model.permission)
@@ -314,7 +314,7 @@ PageStateView {
 
                             Button {
                                 objectName: "sharedCancelButton_" + String(model.shareId)
-                                text: "Cancel"
+                                text: "取消"
                                 flat: true
                                 enabled: !page.shareMutationInFlight
                                 onClicked: page.submitCancelShare(model.shareId)

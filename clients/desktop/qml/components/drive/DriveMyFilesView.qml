@@ -12,8 +12,8 @@ PageStateView {
     visible: page.isMyFilesMode
     pageState: shellController.pageState
 
-    emptyText: "This folder is empty"
-    errorText: "Failed to load folder contents"
+    emptyText: "此文件夹为空"
+    errorText: "加载文件夹内容失败"
 
     onRetryClicked: page.refreshCurrentFolder()
 
@@ -42,10 +42,10 @@ PageStateView {
 
                 Label {
                     text: page.selectedItemIds.length > 1
-                          ? page.selectedItemIds.length + " selected"
+                          ? page.selectedItemIds.length + " 已选中"
                           : (page.selectedItemId !== ""
-                             ? "Selected: " + page.selectedItemName
-                             : (page.currentFolderItemCount === 1 ? "1 item" : page.currentFolderItemCount + " items"))
+                             ? "已选择：" + page.selectedItemName
+                             : (page.currentFolderItemCount === 1 ? "1 项" : page.currentFolderItemCount + " 项"))
                     color: page.panelMutedTextColor
                     font.pixelSize: 12
                 }
@@ -62,7 +62,7 @@ PageStateView {
                     objectName: "driveSearchField"
                     Layout.fillWidth: true
                     Layout.maximumWidth: 240
-                    placeholderText: "Search files..."
+                    placeholderText: "搜索文件..."
                     font.pixelSize: 13
 
                     onAccepted: {
@@ -83,7 +83,7 @@ PageStateView {
 
                 Button {
                     objectName: "driveSearchButton"
-                    text: "Search"
+                    text: "搜索"
                     highlighted: true
                     onClicked: {
                         page.searchQuery = searchField.text
@@ -93,7 +93,7 @@ PageStateView {
 
                 Button {
                     objectName: "driveClearSearchButton"
-                    text: "Clear"
+                    text: "清除"
                     visible: page.isSearchActive
                     onClicked: page.clearSearch()
                 }
@@ -103,7 +103,7 @@ PageStateView {
                 }
 
                 Label {
-                    text: "Sort:"
+                    text: "排序："
                     color: page.panelMutedTextColor
                     font.pixelSize: 12
                 }
@@ -113,12 +113,12 @@ PageStateView {
                     objectName: "driveSortCombo"
                     Layout.preferredWidth: 160
                     model: [
-                        { text: "Name (A-Z)", value: "name_asc" },
-                        { text: "Name (Z-A)", value: "name_desc" },
-                        { text: "Newest first", value: "updated_desc" },
-                        { text: "Oldest first", value: "updated_asc" },
-                        { text: "Size (large first)", value: "size_desc" },
-                        { text: "Size (small first)", value: "size_asc" }
+                        { text: "名称 (A-Z)", value: "name_asc" },
+                        { text: "名称 (Z-A)", value: "name_desc" },
+                        { text: "最新优先", value: "updated_desc" },
+                        { text: "最旧优先", value: "updated_asc" },
+                        { text: "大小（大优先）", value: "size_desc" },
+                        { text: "大小（小优先）", value: "size_asc" }
                     ]
                     textRole: "text"
                     valueRole: "value"
@@ -144,7 +144,7 @@ PageStateView {
 
                 Button {
                     objectName: "driveViewToggle"
-                    text: page.currentViewLayout === "list" ? "Grid" : "List"
+                    text: page.currentViewLayout === "list" ? "网格" : "列表"
                     onClicked: page.toggleViewLayout()
                 }
             }
@@ -183,7 +183,7 @@ PageStateView {
                                 objectName: "fileTableHeaderName"
                                 Layout.fillWidth: true
                                 Layout.minimumWidth: 0
-                                text: "Name"
+                                text: "名称"
                                 color: page.tableHeaderTextColor
                                 font.pixelSize: 12
                                 font.bold: true
@@ -197,7 +197,7 @@ PageStateView {
                                 objectName: "fileTableHeaderType"
                                 Layout.preferredWidth: page.fileTypeColumnWidth
                                 Layout.minimumWidth: 0
-                                text: "Type"
+                                text: "类型"
                                 color: page.tableHeaderTextColor
                                 font.pixelSize: 12
                                 font.bold: true
@@ -211,7 +211,7 @@ PageStateView {
                                 objectName: "fileTableHeaderSize"
                                 Layout.preferredWidth: page.fileSizeColumnWidth
                                 Layout.minimumWidth: 0
-                                text: "Size"
+                                text: "大小"
                                 color: page.tableHeaderTextColor
                                 font.pixelSize: 12
                                 font.bold: true
@@ -225,7 +225,7 @@ PageStateView {
                                 objectName: "fileTableHeaderUpdated"
                                 Layout.preferredWidth: page.fileUpdatedColumnWidth
                                 Layout.minimumWidth: 0
-                                text: "Updated"
+                                text: "更新日期"
                                 color: page.tableHeaderTextColor
                                 font.pixelSize: 12
                                 font.bold: true
@@ -379,7 +379,7 @@ PageStateView {
 
                                 Button {
                                     Layout.preferredWidth: page.fileActionColumnWidth
-                                    text: "Open"
+                                    text: "打开"
                                     flat: true
                                     visible: model.kind === "folder"
                                     onClicked: page.navigateToFolder(model.id)

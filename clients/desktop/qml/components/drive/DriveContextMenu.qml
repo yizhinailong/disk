@@ -13,14 +13,14 @@ Menu {
 
     MenuItem {
         objectName: "contextMenuOpen"
-        text: "Open"
+        text: "打开"
         visible: contextMenu.targetItemKind === "folder"
         onTriggered: page.navigateToFolder(contextMenu.targetItemId)
     }
 
     MenuItem {
         objectName: "contextMenuDownload"
-        text: "Download"
+        text: "下载"
         visible: contextMenu.targetItemKind === "file"
         onTriggered: page.openOwnerDownloadFileChooser(contextMenu.targetItemId, contextMenu.targetItemName)
     }
@@ -31,13 +31,13 @@ Menu {
 
     MenuItem {
         objectName: "contextMenuRename"
-        text: "Rename"
+        text: "重命名"
         onTriggered: page.openRenameDialog()
     }
 
     MenuItem {
         objectName: "contextMenuDelete"
-        text: "Delete"
+        text: "删除"
         onTriggered: page.openDeleteDialog()
     }
 }

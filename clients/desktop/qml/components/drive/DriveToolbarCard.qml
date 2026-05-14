@@ -26,7 +26,7 @@ Rectangle {
 
             Button {
                 objectName: "homepageUpButton"
-                text: "Up"
+                text: "上级"
                 visible: page.isMyFilesMode
                 enabled: page.canNavigateUp
                 onClicked: page.navigateToFolder(page.resolvedParentFolderId)
@@ -34,20 +34,20 @@ Rectangle {
 
             Button {
                 objectName: "folderNavigatorToggleButton"
-                text: page.folderNavigatorExpanded ? "Hide folders" : "Folders"
+                text: page.folderNavigatorExpanded ? "隐藏文件夹" : "文件夹"
                 visible: page.isMyFilesMode
                 onClicked: page.folderNavigatorExpanded = !page.folderNavigatorExpanded
             }
 
             Button {
-                text: "Refresh"
+                text: "刷新"
                 highlighted: true
                 onClicked: page.refreshCurrentView()
             }
 
             Button {
                 objectName: "sharedCreateButton"
-                text: "Create Share"
+                text: "创建分享"
                 visible: page.isSharedMode
                 enabled: !page.shareMutationInFlight
                 highlighted: true
@@ -57,7 +57,7 @@ Rectangle {
             Button {
                 objectName: "sharedCancelSelectedButton"
                 text: page.pendingShareMutationAction === "cancel" && page.shareMutationInFlight
-                      ? "Cancelling..." : "Cancel Selected"
+                      ? "正在取消..." : "取消选中"
                 visible: page.isSharedMode && page.selectedShareIds.length > 0
                 enabled: !page.shareMutationInFlight
                 onClicked: page.submitCancelSelectedShares()
@@ -65,48 +65,48 @@ Rectangle {
 
             Button {
                 objectName: "trashRestoreSelectedButton"
-                text: "Restore Selected"
+                text: "恢复选中"
                 visible: page.isTrashMode && page.selectedTrashIds.length > 0
                 onClicked: page.submitRestoreSelectedTrash()
             }
 
             Button {
                 objectName: "trashDeleteSelectedButton"
-                text: "Delete Selected"
+                text: "删除选中"
                 visible: page.isTrashMode && page.selectedTrashIds.length > 0
                 onClicked: page.submitDeleteSelectedTrash()
             }
 
             Button {
                 objectName: "trashClearAllButton"
-                text: "Clear All"
+                text: "清空全部"
                 visible: page.isTrashMode
                 highlighted: true
                 onClicked: page.submitClearTrash()
             }
 
             Button {
-                text: "New Folder"
+                text: "新建文件夹"
                 visible: page.isMyFilesMode
                 onClicked: page.openCreateFolderDialog()
             }
 
             Button {
                 id: uploadButton
-                text: "Upload"
+                text: "上传"
                 visible: page.isMyFilesMode
                 onClicked: page.openUploadFileChooser()
             }
 
             Button {
-                text: "Rename"
+                text: "重命名"
                 visible: page.isMyFilesMode
                 enabled: page.selectedItemId !== ""
                 onClicked: page.openRenameDialog()
             }
 
             Button {
-                text: "Delete"
+                text: "删除"
                 visible: page.isMyFilesMode
                 enabled: page.selectedItemId !== ""
                 onClicked: page.openDeleteDialog()
@@ -114,7 +114,7 @@ Rectangle {
 
             Button {
                 id: downloadButton
-                text: "Download"
+                text: "下载"
                 visible: page.isMyFilesMode
                 enabled: page.selectedItemKind === "file"
                 onClicked: page.openOwnerDownloadFileChooser(page.selectedItemId, page.selectedItemName)
@@ -122,7 +122,7 @@ Rectangle {
 
             Label {
                 objectName: "multiSelectCount"
-                text: page.selectedItemIds.length > 1 ? page.selectedItemIds.length + " items selected" : ""
+                text: page.selectedItemIds.length > 1 ? page.selectedItemIds.length + " 项已选择" : ""
                 color: page.panelAccentTextColor
                 font.pixelSize: 12
                 visible: page.hasMultiSelection && page.isMyFilesMode
