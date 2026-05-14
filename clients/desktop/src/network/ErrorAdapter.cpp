@@ -37,40 +37,40 @@ namespace disk::desktop {
             case QNetworkReply::ConnectionRefusedError:
                 err.code = -1;
                 err.category = "ConnectionFailed";
-                err.message = "Connection refused";
+                err.message = "连接被拒绝";
                 err.action = "retry_with_backoff";
                 err.retryable = true;
                 break;
             case QNetworkReply::RemoteHostClosedError:
                 err.code = -2;
                 err.category = "ConnectionFailed";
-                err.message = "Remote host closed connection";
+                err.message = "远程主机关闭了连接";
                 err.action = "retry_with_backoff";
                 err.retryable = true;
                 break;
             case QNetworkReply::TimeoutError:
                 err.code = -3;
                 err.category = "Timeout";
-                err.message = "Request timed out";
+                err.message = "请求超时";
                 err.action = "retry_with_backoff";
                 err.retryable = true;
                 break;
             case QNetworkReply::SslHandshakeFailedError:
                 err.code = -4;
                 err.category = "TlsError";
-                err.message = "TLS handshake failed";
+                err.message = "TLS 握手失败";
                 err.action = "check_network";
                 break;
             case QNetworkReply::HostNotFoundError:
                 err.code = -5;
                 err.category = "DnsError";
-                err.message = "Host not found";
+                err.message = "主机未找到";
                 err.action = "check_network";
                 break;
             default:
                 err.code = -99;
                 err.category = "NetworkError";
-                err.message = "Network error";
+                err.message = "网络错误";
                 err.action = "retry_with_backoff";
                 err.retryable = true;
                 break;

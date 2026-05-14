@@ -61,7 +61,7 @@ namespace disk::desktop::managers {
         if (!reply) {
             disk::desktop::ApiError err;
             err.code = 0;
-            err.message = "Network error: null reply";
+            err.message = "网络错误：无响应";
             return err;
         }
 
@@ -139,7 +139,7 @@ namespace disk::desktop::managers {
             numericId = trimmed.toULongLong(&ok);
         }
         if (!ok) {
-            emit apiError("Invalid parentId", 0);
+            emit apiError("无效的父级 ID", 0);
             return;
         }
 
@@ -253,9 +253,9 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
 
     // ── Response handlers ──
 
-    void DriveManager::HandleListResponse(QNetworkReply* reply) {
+void DriveManager::HandleListResponse(QNetworkReply* reply) {
         if (!reply) {
-            auto message = QStringLiteral("Network error: null reply");
+            auto message = QStringLiteral("网络错误：无响应");
             emit apiError(message, 0);
             emit listLoadFailed(message, 0);
             return;
@@ -270,7 +270,7 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            auto message = QStringLiteral("Invalid response format");
+            auto message = QStringLiteral("响应格式无效");
             emit apiError(message, 0);
             emit listLoadFailed(message, 0);
             return;
@@ -301,9 +301,9 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
         emit paginationLoaded(page, total_pages, total);
     }
 
-    void DriveManager::HandleSearchResponse(QNetworkReply* reply) {
+void DriveManager::HandleSearchResponse(QNetworkReply* reply) {
         if (!reply) {
-            auto message = QStringLiteral("Network error: null reply");
+            auto message = QStringLiteral("网络错误：无响应");
             emit apiError(message, 0);
             emit listLoadFailed(message, 0);
             return;
@@ -318,7 +318,7 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            auto message = QStringLiteral("Invalid response format");
+            auto message = QStringLiteral("响应格式无效");
             emit apiError(message, 0);
             emit listLoadFailed(message, 0);
             return;
@@ -351,7 +351,7 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
 
     void DriveManager::HandleDetailResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -362,7 +362,7 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -399,9 +399,9 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
         emit fileDetailLoaded(detail);
     }
 
-    void DriveManager::HandleCreateFolderResponse(QNetworkReply* reply) {
+void DriveManager::HandleCreateFolderResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -412,7 +412,7 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -422,12 +422,12 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
             return;
         }
 
-        emit operationSuccess("Folder created");
+        emit operationSuccess("文件夹已创建");
     }
 
-    void DriveManager::HandleRenameResponse(QNetworkReply* reply) {
+void DriveManager::HandleRenameResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -438,7 +438,7 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -448,12 +448,12 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
             return;
         }
 
-        emit operationSuccess("Item renamed");
+        emit operationSuccess("项目已重命名");
     }
 
     void DriveManager::HandleMoveResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -462,12 +462,12 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
             return;
         }
 
-        emit operationSuccess("Items moved");
+        emit operationSuccess("项目已移动");
     }
 
     void DriveManager::HandleCopyResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -476,12 +476,12 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
             return;
         }
 
-        emit operationSuccess("Items copied");
+        emit operationSuccess("项目已复制");
     }
 
-    void DriveManager::HandleDeleteResponse(QNetworkReply* reply) {
+void DriveManager::HandleDeleteResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -492,7 +492,7 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -502,12 +502,12 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
             return;
         }
 
-        emit operationSuccess("Items deleted");
+        emit operationSuccess("项目已删除");
     }
 
     void DriveManager::HandleTreeResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -518,7 +518,7 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -526,7 +526,7 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
 
         disk::desktop::FolderNode root;
         root.id = 0;
-        root.name = "My Drive";
+        root.name = "我的网盘";
 
         if (data.contains("children") && data["children"].isArray()) {
             const auto arr = data["children"].toArray();
@@ -542,7 +542,7 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
 
     void DriveManager::HandleBreadcrumbResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -553,7 +553,7 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 

@@ -25,7 +25,7 @@ namespace disk::desktop {
             err.code = -100;
             err.family = "protocol";
             err.category = "InvalidResponse";
-            err.message = "Invalid server response";
+            err.message = "无效的服务器响应";
             err.retryable = false;
             err.action = "report_error";
             return err;
