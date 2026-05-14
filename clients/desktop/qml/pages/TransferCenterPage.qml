@@ -33,22 +33,22 @@ Page {
                 Layout.fillWidth: true
 
                 TabButton {
-                    text: qsTr("Uploads (%1)").arg(uploadList.count)
+                    text: "上传 (%1)".arg(uploadList.count)
                     width: implicitWidth
                 }
                 TabButton {
-                    text: qsTr("Downloads (%1)").arg(downloadList.count)
+                    text: "下载 (%1)".arg(downloadList.count)
                     width: implicitWidth
                 }
             }
 
             Button {
-                text: qsTr("Clear Completed")
+                text: "清除已完成"
                 onClicked: transferManager.ClearCompletedUploads()
                 visible: tabBar.currentIndex === 0
             }
             Button {
-                text: qsTr("Clear Completed")
+                text: "清除已完成"
                 onClicked: transferManager.ClearCompletedDownloads()
                 visible: tabBar.currentIndex === 1
             }
@@ -92,17 +92,17 @@ Page {
                             Text {
                                 function statusText(s) {
                                     var map = {
-                                        "queued": qsTr("Queued"),
-                                        "hashing": qsTr("Computing hash..."),
-                                        "initializing": qsTr("Initializing..."),
-                                        "uploading": qsTr("Uploading..."),
-                                        "completing": qsTr("Completing..."),
-                                        "cancelling": qsTr("Cancelling..."),
-                                        "completed": qsTr("Completed"),
-                                        "cancelled": qsTr("Cancelled"),
-                                        "expired": qsTr("Expired"),
-                                        "failed": qsTr("Failed"),
-                                        "retrying": qsTr("Retrying...")
+                                        "queued": "排队中",
+                                        "hashing": "正在计算哈希...",
+                                        "initializing": "正在初始化...",
+                                        "uploading": "正在上传...",
+                                        "completing": "正在完成...",
+                                        "cancelling": "正在取消...",
+                                        "completed": "已完成",
+                                        "cancelled": "已取消",
+                                        "expired": "已过期",
+                                        "failed": "失败",
+                                        "retrying": "正在重试..."
                                     }
                                     return map[s] || s
                                 }
@@ -154,7 +154,7 @@ Page {
                                      model.status === "hashing"
 
                             Button {
-                                text: qsTr("Cancel")
+                                text: "取消"
                                 flat: true
                                 palette.buttonText: root.errorColor
                                 onClicked: transferManager.CancelUpload(model.taskId)
@@ -167,14 +167,14 @@ Page {
                                      model.status === "expired"
 
                             Button {
-                                text: qsTr("Retry")
+                                text: "重试"
                                 flat: true
                                 palette.buttonText: "#1976d2"
                                 onClicked: transferManager.RetryUpload(model.taskId)
                             }
                             Button {
                                 visible: model.status !== "completed"
-                                text: qsTr("Dismiss")
+                                text: "忽略"
                                 flat: true
                                 onClicked: transferManager.ClearCompletedUploads()
                             }
@@ -184,7 +184,7 @@ Page {
 
                 Label {
                     anchors.centerIn: parent
-                    text: qsTr("No uploads")
+                    text: "暂无上传"
                     color: root.tertiaryColor
                     visible: uploadList.count === 0
                 }
@@ -223,15 +223,15 @@ Page {
                             Text {
                                 function statusText(s) {
                                     var map = {
-                                        "idle": qsTr("Idle"),
-                                        "fetching_metadata": qsTr("Fetching info..."),
-                                        "ready": qsTr("Ready"),
-                                        "downloading": qsTr("Downloading..."),
-                                        "paused": qsTr("Paused"),
-                                        "retry_waiting": qsTr("Waiting to retry..."),
-                                        "completed": qsTr("Completed"),
-                                        "cancelled": qsTr("Cancelled"),
-                                        "failed": qsTr("Failed")
+                                        "idle": "空闲",
+                                        "fetching_metadata": "正在获取信息...",
+                                        "ready": "就绪",
+                                        "downloading": "正在下载...",
+                                        "paused": "已暂停",
+                                        "retry_waiting": "等待重试...",
+                                        "completed": "已完成",
+                                        "cancelled": "已取消",
+                                        "failed": "失败"
                                     }
                                     return map[s] || s
                                 }
@@ -276,13 +276,13 @@ Page {
                                      model.status === "fetching_metadata"
 
                             Button {
-                                text: qsTr("Pause")
+                                text: "暂停"
                                 flat: true
                                 palette.buttonText: root.warningColor
                                 onClicked: transferManager.PauseDownload(model.taskId)
                             }
                             Button {
-                                text: qsTr("Cancel")
+                                text: "取消"
                                 flat: true
                                 palette.buttonText: root.errorColor
                                 onClicked: transferManager.CancelDownload(model.taskId)
@@ -294,13 +294,13 @@ Page {
                             visible: model.status === "paused"
 
                             Button {
-                                text: qsTr("Resume")
+                                text: "继续"
                                 flat: true
                                 palette.buttonText: root.successColor
                                 onClicked: transferManager.ResumeDownload(model.taskId)
                             }
                             Button {
-                                text: qsTr("Cancel")
+                                text: "取消"
                                 flat: true
                                 palette.buttonText: root.errorColor
                                 onClicked: transferManager.CancelDownload(model.taskId)
@@ -312,13 +312,13 @@ Page {
                             visible: model.status === "failed"
 
                             Button {
-                                text: qsTr("Retry")
+                                text: "重试"
                                 flat: true
                                 palette.buttonText: "#1976d2"
                                 onClicked: transferManager.RetryDownload(model.taskId)
                             }
                             Button {
-                                text: qsTr("Dismiss")
+                                text: "忽略"
                                 flat: true
                                 onClicked: transferManager.ClearCompletedDownloads()
                             }
@@ -328,7 +328,7 @@ Page {
 
                 Label {
                     anchors.centerIn: parent
-                    text: qsTr("No downloads")
+                    text: "暂无下载"
                     color: root.tertiaryColor
                     visible: downloadList.count === 0
                 }

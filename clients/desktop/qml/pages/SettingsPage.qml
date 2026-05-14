@@ -21,21 +21,21 @@ Page {
             spacing: 20
             
             Label {
-                text: "Settings & Profile"
+                text: "设置与资料"
                 font.pixelSize: 24
                 font.bold: true
             }
             
             // Profile Section
             GroupBox {
-                title: "Profile"
+                title: "个人资料"
                 Layout.fillWidth: true
                 
                 ColumnLayout {
                     anchors.fill: parent
                     
                     RowLayout {
-                        Label { text: "Nickname:" }
+                        Label { text: "昵称：" }
                         TextField {
                             id: nicknameField
                             text: profileManager.userProfile.nickname || ""
@@ -44,7 +44,7 @@ Page {
                     }
                     
                     Button {
-                        text: "Update Profile"
+                        text: "更新资料"
                         onClicked: profileManager.updateProfile(nicknameField.text, "")
                     }
                 }
@@ -52,14 +52,14 @@ Page {
             
             // Storage Section
             GroupBox {
-                title: "Storage"
+                title: "存储空间"
                 Layout.fillWidth: true
                 
                 ColumnLayout {
                     anchors.fill: parent
                     
                     Label {
-                        text: "Used: " + FormatUtils.formatStorageSize(profileManager.storageStats.used || 0) + 
+                        text: "已使用：" + FormatUtils.formatStorageSize(profileManager.storageStats.used || 0) + 
                               " / " + FormatUtils.formatStorageSize(profileManager.storageStats.total || 0)
                     }
                     
@@ -72,14 +72,14 @@ Page {
             
             // Password Section
             GroupBox {
-                title: "Change Password"
+                title: "修改密码"
                 Layout.fillWidth: true
                 
                 ColumnLayout {
                     anchors.fill: parent
                     
                     RowLayout {
-                        Label { text: "Old Password:" }
+                        Label { text: "旧密码：" }
                         TextField {
                             id: oldPasswordField
                             echoMode: TextInput.Password
@@ -88,7 +88,7 @@ Page {
                     }
                     
                     RowLayout {
-                        Label { text: "New Password:" }
+                        Label { text: "新密码：" }
                         TextField {
                             id: newPasswordField
                             echoMode: TextInput.Password
@@ -97,7 +97,7 @@ Page {
                     }
                     
                     Button {
-                        text: "Change Password"
+                        text: "修改密码"
                         onClicked: profileManager.changePassword(oldPasswordField.text, newPasswordField.text)
                     }
                 }

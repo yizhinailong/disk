@@ -15,7 +15,7 @@ Page {
 
         Label {
             Layout.alignment: Qt.AlignHCenter
-            text: "Share Access"
+            text: "分享访问"
             font.pixelSize: 24
             font.bold: true
         }
@@ -23,8 +23,8 @@ Page {
         Label {
             Layout.alignment: Qt.AlignHCenter
             text: needsPassword ?
-                  "This share requires a password" :
-                  "Enter share code or paste share link"
+                  "此分享需要密码" :
+                  "输入分享码或粘贴分享链接"
             color: "#666"
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
@@ -34,7 +34,7 @@ Page {
         TextField {
             id: shareIdField
             Layout.fillWidth: true
-            placeholderText: "Share code"
+            placeholderText: "分享码"
             visible: !needsPassword && shareId === ""
             text: root.shareId
             onAccepted: verifyButton.clicked()
@@ -43,7 +43,7 @@ Page {
         TextField {
             id: passwordField
             Layout.fillWidth: true
-            placeholderText: "Password (4-8 characters)"
+            placeholderText: "密码（4-8个字符）"
             echoMode: TextInput.Password
             visible: needsPassword || shareId !== ""
             maximumLength: 8
@@ -61,14 +61,14 @@ Page {
         Button {
             id: verifyButton
             Layout.fillWidth: true
-            text: "Access Share"
+            text: "访问分享"
             highlighted: true
 
             onClicked: {
                 errorLabel.text = ""
                 var sid = root.shareId !== "" ? root.shareId : shareIdField.text.trim()
                 if (sid === "") {
-                    errorLabel.text = "Please enter a share code"
+                    errorLabel.text = "请输入分享码"
                     return
                 }
                 var pwd = passwordField.text.trim()

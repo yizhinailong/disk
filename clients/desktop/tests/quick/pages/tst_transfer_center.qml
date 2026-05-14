@@ -104,7 +104,7 @@ TestCase {
     function test_transfer_center_empty_state_labels() {
         var source = readTransferCenterSource()
 
-        verify(source.indexOf("No uploads") !== -1, "Has empty uploads label")
-        verify(source.indexOf("No downloads") !== -1, "Has empty downloads label")
+        verify(source.indexOf("暂无上传") !== -1, "Has empty uploads label")
+        verify(source.indexOf("暂无下载") !== -1, "Has empty downloads label")
     }
 }

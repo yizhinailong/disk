@@ -11,7 +11,7 @@ Page {
         
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: "Disk Desktop"
+            text: "Disk 桌面端"
             font.pixelSize: 32
             font.bold: true
         }
@@ -23,7 +23,7 @@ Page {
         
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: "Initializing..."
+            text: "初始化中..."
             color: "#666"
         }
     }

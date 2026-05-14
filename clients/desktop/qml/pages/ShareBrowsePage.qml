@@ -23,7 +23,7 @@ Page {
             Layout.fillWidth: true
             Layout.leftMargin: 16
 
-            path: [{ id: "root", name: "Shared Files" }]
+            path: [{ id: "root", name: "共享文件" }]
 
             onPathClicked: function(index) {
                 if (index === 0) {
@@ -34,7 +34,7 @@ Page {
         }
 
         Label {
-            text: "Permission: " + root.permission
+            text: "权限：" + root.permission
             font.pixelSize: 12
             color: root.tertiaryColor
             Layout.rightMargin: 16
@@ -46,8 +46,8 @@ Page {
         anchors.fill: parent
         pageState: shellController.pageState
 
-        emptyText: "This share is empty"
-        errorText: "Failed to load share contents"
+        emptyText: "此分享为空"
+        errorText: "加载分享内容失败"
 
         onRetryClicked: shareManager.browseShare(root.shareId, root.currentFolderId)
 
@@ -101,7 +101,7 @@ Page {
                             Label {
                                 text: {
                                     if (model.isDir) {
-                                        return (model.itemCount || 0) + " items"
+                                        return (model.itemCount || 0) + " 项"
                                     }
                                     return FormatUtils.formatSize(model.size || 0)
                                 }
@@ -111,7 +111,7 @@ Page {
                         }
 
                         Button {
-                            text: "Download"
+                            text: "下载"
                             visible: !model.isDir && root.permission === "download"
                             flat: true
                             onClicked: {
