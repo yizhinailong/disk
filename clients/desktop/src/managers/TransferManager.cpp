@@ -430,7 +430,7 @@ namespace disk::desktop::managers {
                 err.code = 0;
                 err.family = "general";
                 err.category = "LocalIOError";
-                err.message = "Failed to compute file hash";
+                err.message = "计算文件哈希失败";
                 err.retryable = true;
                 err.action = "retry";
                 FailUpload(tid, err);
@@ -525,7 +525,7 @@ namespace disk::desktop::managers {
             err.code = 0;
             err.family = "general";
             err.category = "ParseError";
-            err.message = "Invalid init response";
+            err.message = "无效的初始化响应";
             err.retryable = true;
             err.action = "retry";
             RetryOrFailUpload(task_id, err);
@@ -594,7 +594,7 @@ namespace disk::desktop::managers {
             err.code = 0;
             err.family = "general";
             err.category = "LocalIOError";
-            err.message = "Cannot open file for reading";
+            err.message = "无法打开文件进行读取";
             err.retryable = true;
             err.action = "retry";
             FailUpload(task_id, err);
@@ -919,7 +919,7 @@ namespace disk::desktop::managers {
         err.code = 50008;
         err.family = "file";
         err.category = "UploadSessionExpired";
-        err.message = "Upload task expired or not found";
+        err.message = "上传任务已过期或不存在";
         err.retryable = true;
         err.action = "restart_upload";
         task.error = err;
@@ -1052,7 +1052,7 @@ namespace disk::desktop::managers {
             err.code = 0;
             err.family = "general";
             err.category = "ParseError";
-            err.message = "Invalid metadata response";
+            err.message = "无效的元数据响应";
             err.retryable = true;
             err.action = "retry";
             RetryOrFailDownload(task_id, err);
@@ -1112,7 +1112,7 @@ namespace disk::desktop::managers {
             err.code = 0;
             err.family = "general";
             err.category = "LocalIOError";
-            err.message = "Cannot open file for writing";
+            err.message = "无法打开文件进行写入";
             err.retryable = false;
             err.action = "fix_request";
             FailDownload(task_id, err);

@@ -59,7 +59,7 @@ namespace disk::desktop::managers {
 
     void TrashManager::EmitApiError(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -163,7 +163,7 @@ namespace disk::desktop::managers {
 
     void TrashManager::HandleListResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -174,7 +174,7 @@ namespace disk::desktop::managers {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -198,7 +198,7 @@ namespace disk::desktop::managers {
 
     void TrashManager::HandleRestoreResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -209,7 +209,7 @@ namespace disk::desktop::managers {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -219,17 +219,17 @@ namespace disk::desktop::managers {
         emit batchResultReady();
 
         if (result.failure_count == 0) {
-            emit operationSuccess("All items restored");
+            emit operationSuccess("所有项目已恢复");
         } else if (result.success_count > 0) {
             emit operationSuccess(
-                QString("Restored %1 of %2 items").arg(result.success_count).arg(result.total_count)
+                QString("已恢复 %2 项中的 %1 项").arg(result.success_count).arg(result.total_count)
             );
         }
     }
 
     void TrashManager::HandleDeleteResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -240,7 +240,7 @@ namespace disk::desktop::managers {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -250,17 +250,17 @@ namespace disk::desktop::managers {
         emit batchResultReady();
 
         if (result.failure_count == 0) {
-            emit operationSuccess("All items permanently deleted");
+            emit operationSuccess("所有项目已永久删除");
         } else if (result.success_count > 0) {
             emit operationSuccess(
-                QString("Deleted %1 of %2 items").arg(result.success_count).arg(result.total_count)
+                QString("已永久删除 %2 项中的 %1 项").arg(result.success_count).arg(result.total_count)
             );
         }
     }
 
     void TrashManager::HandleClearAllResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -271,7 +271,7 @@ namespace disk::desktop::managers {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -281,7 +281,7 @@ namespace disk::desktop::managers {
 
         emit clearAllCompleted(deleted_count, freed_space);
         emit operationSuccess(
-            QString("Cleared %1 items").arg(deleted_count)
+            QString("已清空 %1 项").arg(deleted_count)
         );
     }
 

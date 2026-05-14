@@ -55,7 +55,7 @@ namespace disk::desktop::managers {
 
     void ProfileManager::EmitApiError(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -139,7 +139,7 @@ namespace disk::desktop::managers {
 
     void ProfileManager::HandleProfileResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -150,7 +150,7 @@ namespace disk::desktop::managers {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -169,7 +169,7 @@ namespace disk::desktop::managers {
 
     void ProfileManager::HandleUpdateProfileResponse(QNetworkReply* reply, const QString& nickname, const QString& avatar) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -185,12 +185,12 @@ namespace disk::desktop::managers {
             m_userProfile["avatar"] = avatar;
         }
         emit userProfileChanged();
-        emit operationSuccess("Profile updated");
+        emit operationSuccess("资料已更新");
     }
 
     void ProfileManager::HandlePasswordResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -199,12 +199,12 @@ namespace disk::desktop::managers {
             return;
         }
 
-        emit operationSuccess("Password changed");
+        emit operationSuccess("密码已修改");
     }
 
     void ProfileManager::HandleStorageResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -215,7 +215,7 @@ namespace disk::desktop::managers {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 

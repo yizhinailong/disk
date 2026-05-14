@@ -68,7 +68,7 @@ namespace disk::desktop::managers {
 
     void ShareManager::EmitApiError(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -221,7 +221,7 @@ namespace disk::desktop::managers {
 
     void ShareManager::HandleListResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -232,7 +232,7 @@ namespace disk::desktop::managers {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -254,13 +254,13 @@ namespace disk::desktop::managers {
         emit paginationLoaded(page, total_pages, total);
 
         if (items.isEmpty()) {
-            emit operationSuccess("No shares found");
+            emit operationSuccess("未找到分享");
         }
     }
 
     void ShareManager::HandleCreateResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -271,7 +271,7 @@ namespace disk::desktop::managers {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -280,12 +280,12 @@ namespace disk::desktop::managers {
         QString share_link = data.value("share_link").toString();
 
         emit shareCreated(share_id, share_link);
-        emit operationSuccess("Share created");
+        emit operationSuccess("分享已创建");
     }
 
     void ShareManager::HandleDetailResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -296,7 +296,7 @@ namespace disk::desktop::managers {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -336,7 +336,7 @@ namespace disk::desktop::managers {
 
     void ShareManager::HandleUpdateResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -345,12 +345,12 @@ namespace disk::desktop::managers {
             return;
         }
 
-        emit operationSuccess("Share updated");
+        emit operationSuccess("分享已更新");
     }
 
     void ShareManager::HandleCancelResponse(QNetworkReply* reply) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -361,7 +361,7 @@ namespace disk::desktop::managers {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -371,17 +371,17 @@ namespace disk::desktop::managers {
         emit batchResultReady();
 
         if (result.failure_count == 0) {
-            emit operationSuccess("All shares cancelled");
+            emit operationSuccess("所有分享已取消");
         } else if (result.success_count > 0) {
             emit operationSuccess(
-                QString("Cancelled %1 of %2 shares").arg(result.success_count).arg(result.total_count)
+                QString("已取消 %2 个分享中的 %1 个").arg(result.success_count).arg(result.total_count)
             );
         }
     }
 
     void ShareManager::HandleBrowseResponse(QNetworkReply* reply, const QString& shareId) {
         if (!reply) {
-            emit apiError("Network error: null reply", 0);
+            emit apiError("网络错误：无响应", 0);
             return;
         }
 
@@ -392,7 +392,7 @@ namespace disk::desktop::managers {
 
         auto json_opt = ParseJsonResponse(reply);
         if (!json_opt.has_value()) {
-            emit apiError("Invalid response format", 0);
+            emit apiError("响应格式无效", 0);
             return;
         }
 
@@ -409,7 +409,7 @@ namespace disk::desktop::managers {
         emit browseLoaded(shareId);
 
         if (items.isEmpty()) {
-            emit operationSuccess("This folder is empty");
+            emit operationSuccess("此文件夹为空");
         }
     }
 
