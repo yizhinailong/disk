@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 
 #include <drogon/orm/DbClient.h>
@@ -179,6 +180,30 @@ namespace disk::services {
             -> drogon::Task<Result<admin::ShareDetailResponse>>;
 
         /**
+         * @brief 获取系统概览统计
+         *
+         * @details
+         * 聚合查询用户数、文件数、存储用量、配额总量和活跃分享数。
+         *
+         * @return drogon::Task<Result<admin::StorageStatsResponse>>
+         */
+        [[nodiscard]]
+        auto GetOverviewStats()
+            -> drogon::Task<Result<admin::StorageStatsResponse>>;
+
+        /**
+         * @brief 获取系统状态
+         *
+         * @details
+         * 检查 MySQL/Redis 连接状态、磁盘空间和服务运行时间。
+         *
+         * @return drogon::Task<Result<admin::SystemStatusResponse>>
+         */
+        [[nodiscard]]
+        auto GetSystemStatus()
+            -> drogon::Task<Result<admin::SystemStatusResponse>>;
+
+        /**
          * @brief 强制取消分享
          *
          * 业务规则：
@@ -216,6 +241,7 @@ namespace disk::services {
                           const std::string& details) -> drogon::Task<void>;
 
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
+        std::chrono::steady_clock::time_point m_start_time; ///< 服务启动时间
     };
 
 } // namespace disk::services

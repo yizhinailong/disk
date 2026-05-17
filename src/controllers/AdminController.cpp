@@ -393,4 +393,38 @@ namespace disk::controllers {
         co_return Response::Success();
     }
 
+    auto AdminController::GetOverviewStats(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "Admin get overview stats request: " << request->getPeerAddr().toIpPort();
+
+        auto service = services::AdminService::GetInstance();
+        auto result = co_await service->GetOverviewStats();
+
+        if (!result) {
+            LOG_ERROR << "Failed to get overview stats: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        LOG_INFO << "Admin get overview stats successful";
+        co_return Response::Success(result->ToJson());
+    }
+
+    auto AdminController::GetSystemStatus(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "Admin get system status request: " << request->getPeerAddr().toIpPort();
+
+        auto service = services::AdminService::GetInstance();
+        auto result = co_await service->GetSystemStatus();
+
+        if (!result) {
+            LOG_ERROR << "Failed to get system status: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        LOG_INFO << "Admin get system status successful";
+        co_return Response::Success(result->ToJson());
+    }
+
 } // namespace disk::controllers

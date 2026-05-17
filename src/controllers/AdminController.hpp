@@ -30,6 +30,8 @@ namespace disk::controllers {
      * - GET    /api/admin/shares            获取分享列表
      * - GET    /api/admin/shares/{id}       获取分享详情
      * - DELETE /api/admin/shares/{id}       强制取消分享
+     * - GET    /api/admin/stats/overview    获取系统概览统计
+     * - GET    /api/admin/stats/system      获取系统状态
      *
      * 所有接口需要 JWT 认证 + 管理员权限
      */
@@ -115,6 +117,20 @@ namespace disk::controllers {
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
         );
+        ADD_METHOD_TO(
+            AdminController::GetOverviewStats,
+            "/api/admin/stats/overview",
+            drogon::Get,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::AdminAuthFilter",
+        );
+        ADD_METHOD_TO(
+            AdminController::GetSystemStatus,
+            "/api/admin/stats/system",
+            drogon::Get,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::AdminAuthFilter",
+        );
         METHOD_LIST_END
 
         [[nodiscard]]
@@ -159,6 +175,14 @@ namespace disk::controllers {
 
         [[nodiscard]]
         auto ForceCancelShare(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto GetOverviewStats(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto GetSystemStatus(drogon::HttpRequestPtr request)
             -> drogon::Task<drogon::HttpResponsePtr>;
     };
 

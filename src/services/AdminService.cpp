@@ -10,13 +10,16 @@
 #include "AdminService.hpp"
 
 #include <cmath>
+#include <filesystem>
 #include <format>
 
 #include <drogon/HttpAppFramework.h>
+#include <drogon/nosql/RedisClient.h>
 #include <drogon/orm/CoroMapper.h>
 #include <drogon/orm/Criteria.h>
 
 #include "models/Users.hpp"
+#include "utils/ConfigMgr.hpp"
 
 namespace disk::services {
 
@@ -26,7 +29,8 @@ namespace disk::services {
     using drogon_model::disk::Users;
 
     AdminService::AdminService()
-        : m_db_client(drogon::app().getDbClient()) {
+        : m_db_client(drogon::app().getDbClient()),
+          m_start_time(std::chrono::steady_clock::now()) {
         LOG_DEBUG << "AdminService initialization completed";
     }
 
@@ -693,6 +697,107 @@ namespace disk::services {
                 "Failed to force cancel share"
             ));
         }
+    }
+
+    auto AdminService::GetOverviewStats()
+        -> drogon::Task<Result<admin::StorageStatsResponse>> {
+
+        LOG_INFO << "admin.stats.overview";
+
+        try {
+            auto user_stats = co_await m_db_client->execSqlCoro(
+                "SELECT COUNT(*) AS total_users, "
+                "COALESCE(SUM(storage_used), 0) AS total_storage_used, "
+                "COALESCE(SUM(storage_quota), 0) AS total_storage_quota "
+                "FROM users"
+            );
+
+            auto file_stats = co_await m_db_client->execSqlCoro(
+                "SELECT COUNT(*) AS total_files FROM files"
+            );
+
+            auto share_stats = co_await m_db_client->execSqlCoro(
+                "SELECT COUNT(*) AS active_shares FROM shares WHERE status = 1"
+            );
+
+            admin::StorageStatsResponse response;
+            response.total_users = user_stats.empty()
+                ? 0 : user_stats[0]["total_users"].as<int>();
+            response.total_storage_used = user_stats.empty()
+                ? 0 : user_stats[0]["total_storage_used"].as<uint64_t>();
+            response.total_storage_quota = user_stats.empty()
+                ? 0 : user_stats[0]["total_storage_quota"].as<uint64_t>();
+            response.total_files = file_stats.empty()
+                ? 0 : file_stats[0]["total_files"].as<int>();
+            response.active_shares = share_stats.empty()
+                ? 0 : share_stats[0]["active_shares"].as<int>();
+
+            LOG_INFO << "admin.stats.overview successful";
+            co_return response;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "admin.stats.overview database error: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to get overview stats"
+            ));
+        }
+    }
+
+    auto AdminService::GetSystemStatus()
+        -> drogon::Task<Result<admin::SystemStatusResponse>> {
+
+        LOG_INFO << "admin.stats.system";
+
+        admin::SystemStatusResponse response;
+
+        // MySQL check
+        try {
+            co_await m_db_client->execSqlCoro("SELECT 1");
+            response.mysql_connected = true;
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "admin.stats.system MySQL check failed: " << e.base().what();
+            response.mysql_connected = false;
+        }
+
+        // Redis check
+        try {
+            auto redis_client = drogon::app().getRedisClient();
+            if (redis_client) {
+                auto result = co_await redis_client->execCommandCoro("ping");
+                response.redis_connected = !result.isNil() && result.asString() == "PONG";
+            } else {
+                response.redis_connected = false;
+            }
+        } catch (const drogon::nosql::RedisException& e) {
+            LOG_WARN << "admin.stats.system Redis check failed: " << e.what();
+            response.redis_connected = false;
+        } catch (const std::exception& e) {
+            LOG_WARN << "admin.stats.system Redis check failed: " << e.what();
+            response.redis_connected = false;
+        }
+
+        // Disk space
+        try {
+            auto storage_path = utils::ConfigMgr::GetInstance()->GetStorageBasePath();
+            auto space_info = std::filesystem::space(storage_path);
+            response.disk_total = space_info.capacity;
+            response.disk_free = space_info.available;
+            response.disk_used = space_info.capacity - space_info.available;
+        } catch (const std::filesystem::filesystem_error& e) {
+            LOG_WARN << "admin.stats.system disk space check failed: " << e.what();
+            response.disk_total = 0;
+            response.disk_used = 0;
+            response.disk_free = 0;
+        }
+
+        // Uptime
+        auto now = std::chrono::steady_clock::now();
+        auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - m_start_time);
+        response.uptime_seconds = static_cast<uint64_t>(uptime.count());
+
+        LOG_INFO << "admin.stats.system successful";
+        co_return response;
     }
 
     auto AdminService::LogOperation(uint64_t operator_id,
