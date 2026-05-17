@@ -19,6 +19,7 @@ set(UNIT_TEST_SOURCES
     unit/navigation/test_shell_controller.cpp
     unit/network/test_request_factory.cpp
     unit/managers/test_drive_manager.cpp
+    unit/managers/test_admin_manager.cpp
     unit/transfers/test_transfer_state.cpp
     unit/transfers/test_transfer_manager.cpp
 )
@@ -46,6 +47,7 @@ qt_add_executable(desktop-unit-tests
     ${DESKTOP_SRC_DIR}/network/NetworkClient.cpp
     ${DESKTOP_SRC_DIR}/network/RequestFactory.cpp
     ${DESKTOP_SRC_DIR}/network/ErrorAdapter.cpp
+    ${DESKTOP_SRC_DIR}/managers/AdminManager.cpp
     ${DESKTOP_SRC_DIR}/managers/DriveManager.cpp
     ${DESKTOP_SRC_DIR}/managers/TransferManager.cpp
     ${DESKTOP_SRC_DIR}/app/ShellController.cpp
