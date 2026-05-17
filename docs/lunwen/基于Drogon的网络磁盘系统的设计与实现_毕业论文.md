@@ -411,7 +411,9 @@ graph TD
 
 Users 与 Files、Folders、UploadTasks、Trash、Shares 和 OperationLogs 之间存在一对多关系，一个用户可以拥有多个文件、目录、上传任务、回收站记录、分享记录和操作日志。Files 通过 content_id 关联 FileContents，多个 Files 可以引用同一个 FileContents，从而实现文件内容去重和引用计数管理；Files 通过 folder_id 归属于某个 Folders，Folders 又通过 parent_id 形成自引用目录树。UploadTasks 与 UploadTaskChunks 之间是一对多关系，一个上传任务包含多个已上传分片记录。Shares 与 ShareFiles 之间是一对多关系，一个分享可以包含一个或多个文件或目录。Trash 保存被软删除项目的恢复信息，并在文件类型项目中保留 content_id 以便彻底删除时维护引用计数。
 
-图3-4 系统实体关系图（ER图）
+为避免单张图同时承载字段结构和实体关系导致内容过于密集，本文将数据库概念结构拆分为实体图和系统 ER 图两部分表示。其中，图3-4 重点展示各核心实体及其主要属性，图3-5 重点展示实体之间的关联关系。
+
+图3-4 数据库实体图
 
 ```mermaid
 erDiagram
@@ -526,6 +528,12 @@ erDiagram
         datetime created_at
     }
 
+```
+
+图3-5 系统ER关系图
+
+```mermaid
+erDiagram
     USERS ||--o{ FILES : "拥有"
     USERS ||--o{ FOLDERS : "拥有"
     USERS ||--o{ UPLOAD_TASKS : "发起"
@@ -542,7 +550,7 @@ erDiagram
 
 #### 3.2.2 数据库逻辑结构设计
 
-在概念结构设计的基础上，将各实体及其关系转化为关系型数据库中的表结构。系统共设计十张核心数据表：用户表（users）、文件内容表（file_contents）、文件表（files）、文件夹表（folders）、上传任务表（upload_tasks）、上传任务分片表（upload_task_chunks）、回收站表（trash）、分享表（shares）、分享文件关联表（share_files）和操作日志表（operation_logs）。这些表通过外键约束、唯一索引、联合索引和全文索引共同维护数据完整性和查询效率。
+在概念结构设计的基础上，结合图3-4 所示实体属性和图3-5 所示实体关系，将各实体及其关系转化为关系型数据库中的表结构。系统共设计十张核心数据表：用户表（users）、文件内容表（file_contents）、文件表（files）、文件夹表（folders）、上传任务表（upload_tasks）、上传任务分片表（upload_task_chunks）、回收站表（trash）、分享表（shares）、分享文件关联表（share_files）和操作日志表（operation_logs）。这些表通过外键约束、唯一索引、联合索引和全文索引共同维护数据完整性和查询效率。
 
 用户表（users）在逻辑上对应 Users 实体，是系统登录认证和权限控制的基础表。文件内容表（file_contents）保存物理文件的内容哈希、存储路径和引用计数，文件表（files）保存用户视角下的文件元数据并通过 content_id 关联内容对象。文件夹表（folders）通过 parent_id 维护目录树结构，根目录以 0 表示。上传任务表（upload_tasks）保存分片上传任务的总体状态，上传任务分片表（upload_task_chunks）保存每个任务已经上传的分片编号，用于断点续传。回收站表（trash）保存软删除项目的恢复信息和过期清理时间。分享表（shares）保存分享短码、密码、权限、访问统计和过期状态，分享文件关联表（share_files）保存分享与文件或目录之间的多项关联。操作日志表（operation_logs）保存用户关键操作的审计信息。
 
