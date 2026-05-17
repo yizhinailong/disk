@@ -224,6 +224,93 @@ private slots:
         QCOMPARE(mgr.GetState(), OwnerSessionState::ReauthRequired);
         QCOMPARE(login_spy.count(), 1);
     }
+
+    void RoleExtractedFromAdminJwt() {
+        NetworkClient nc;
+        RequestFactory rf;
+        OwnerSessionManager mgr(&nc, &rf);
+        QSignalSpy role_spy(&mgr, &OwnerSessionManager::roleChanged);
+
+        // Construct a JWT with role=1: header.payload.signature
+        const QByteArray payload = QByteArray("{\"role\":1}").toBase64();
+        const QString admin_token = QString("header.") + payload + ".signature";
+
+        QJsonObject user;
+        user["id"] = 1;
+        user["username"] = "admin";
+        mgr.StartLogin();
+        mgr.HandleLoginSuccess(admin_token, "refresh", 7200, user);
+
+        QCOMPARE(mgr.GetRole(), 1);
+        QCOMPARE(role_spy.count(), 1);
+    }
+
+    void RoleExtractedFromRegularUserJwt() {
+        NetworkClient nc;
+        RequestFactory rf;
+        OwnerSessionManager mgr(&nc, &rf);
+        QSignalSpy role_spy(&mgr, &OwnerSessionManager::roleChanged);
+
+        const QByteArray payload = QByteArray("{\"role\":0}").toBase64();
+        const QString user_token = QString("header.") + payload + ".signature";
+
+        QJsonObject user;
+        user["id"] = 2;
+        user["username"] = "regular";
+        mgr.StartLogin();
+        mgr.HandleLoginSuccess(user_token, "refresh", 7200, user);
+
+        QCOMPARE(mgr.GetRole(), 0);
+        // roleChanged should not fire when role stays 0
+        QCOMPARE(role_spy.count(), 0);
+    }
+
+    void RoleDefaultsToZeroForMalformedJwt() {
+        NetworkClient nc;
+        RequestFactory rf;
+        OwnerSessionManager mgr(&nc, &rf);
+        QSignalSpy role_spy(&mgr, &OwnerSessionManager::roleChanged);
+
+        // Empty token
+        QJsonObject user;
+        user["id"] = 3;
+        user["username"] = "bob";
+        mgr.StartLogin();
+        mgr.HandleLoginSuccess("", "refresh", 7200, user);
+
+        QCOMPARE(mgr.GetRole(), 0);
+        // roleChanged should not fire when role stays 0
+        QCOMPARE(role_spy.count(), 0);
+    }
+
+    void RoleUpdatedOnRefresh() {
+        NetworkClient nc;
+        RequestFactory rf;
+        OwnerSessionManager mgr(&nc, &rf);
+        QSignalSpy role_spy(&mgr, &OwnerSessionManager::roleChanged);
+
+        // Login with role=0
+        const QByteArray payload0 = QByteArray("{\"role\":0}").toBase64();
+        const QString token0 = QString("header.") + payload0 + ".signature";
+
+        QJsonObject user;
+        user["id"] = 1;
+        user["username"] = "bob";
+        mgr.StartLogin();
+        mgr.HandleLoginSuccess(token0, "refresh", 7200, user);
+        QCOMPARE(mgr.GetRole(), 0);
+        role_spy.clear();
+
+        // Refresh with role=1
+        mgr.HandleTokenExpired();
+        const QByteArray payload1 = QByteArray("{\"role\":1}").toBase64();
+        const QString token1 = QString("header.") + payload1 + ".signature";
+        mgr.HandleRefreshSuccess(token1, "new_refresh", 7200);
+
+        QCOMPARE(mgr.GetRole(), 1);
+        // roleChanged should fire exactly once on transition from 0->1
+        QVERIFY(role_spy.count() == 1);
+    }
 };
 
 int run_TestOwnerSession(int argc, char* argv[]) {

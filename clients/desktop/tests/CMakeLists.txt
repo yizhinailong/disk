@@ -10,10 +10,12 @@ set(UNIT_TEST_SOURCES
     unit/auth/test_session_store.cpp
     unit/models/test_drive_item.cpp
     unit/models/test_drive_list_model.cpp
+    unit/models/test_admin_share_list_model.cpp
     unit/models/test_error_adapter.cpp
     unit/models/test_folder_tree_model.cpp
     unit/models/test_upload_task_model.cpp
     unit/models/test_download_task_model.cpp
+    unit/models/test_admin_user_list_model.cpp
     unit/navigation/test_shell_controller.cpp
     unit/network/test_request_factory.cpp
     unit/managers/test_drive_manager.cpp
@@ -36,9 +38,11 @@ qt_add_executable(desktop-unit-tests
     ${DESKTOP_SRC_DIR}/auth/SessionStore.cpp
     ${DESKTOP_SRC_DIR}/models/DriveItem.cpp
     ${DESKTOP_SRC_DIR}/models/DriveListModel.cpp
+    ${DESKTOP_SRC_DIR}/models/AdminShareListModel.cpp
     ${DESKTOP_SRC_DIR}/models/FolderTreeModel.cpp
     ${DESKTOP_SRC_DIR}/models/UploadTaskModel.cpp
     ${DESKTOP_SRC_DIR}/models/DownloadTaskModel.cpp
+    ${DESKTOP_SRC_DIR}/models/AdminUserListModel.cpp
     ${DESKTOP_SRC_DIR}/network/NetworkClient.cpp
     ${DESKTOP_SRC_DIR}/network/RequestFactory.cpp
     ${DESKTOP_SRC_DIR}/network/ErrorAdapter.cpp

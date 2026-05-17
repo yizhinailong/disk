@@ -42,6 +42,7 @@ namespace disk::desktop {
     class OwnerSessionManager : public QObject {
         Q_OBJECT
         Q_PROPERTY(OwnerSessionState state READ GetState NOTIFY stateChanged)
+        Q_PROPERTY(int role READ GetRole NOTIFY roleChanged)
 
     public:
         explicit OwnerSessionManager(
@@ -63,6 +64,7 @@ namespace disk::desktop {
         auto GetRefreshToken() const -> QString;
         auto GetUserId() const -> quint64;
         auto GetUsername() const -> QString;
+        auto GetRole() const -> int;
         auto ShouldRetryAfterRefresh() const -> bool;
 
     public slots:
@@ -91,9 +93,11 @@ namespace disk::desktop {
         void logoutRequested(const QString& access_token);
         void tokensUpdated();
         void sessionCleared();
+        void roleChanged();
 
     private:
         void SetState(OwnerSessionState new_state);
+        static int DecodeRoleFromJwt(const QString& token);
 
         NetworkClient* m_network_client;
         RequestFactory* m_request_factory;
@@ -103,6 +107,7 @@ namespace disk::desktop {
         QString m_refresh_token;
         quint64 m_user_id{ 0 };
         QString m_username;
+        int m_role{ 0 };
         QTimer m_token_expiry_timer;
 
         std::shared_ptr<QPromise<bool>> m_refresh_promise;

@@ -1,0 +1,50 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "items": [
+            {
+                "id": 1,
+                "username": "alice",
+                "email": "alice@example.com",
+                "nickname": "Alice",
+                "role": 0,
+                "status": 1,
+                "storage_quota": 10737418240,
+                "storage_used": 5368709120,
+                "created_at": "2026-01-01T00:00:00Z",
+                "last_login_at": "2026-05-01T08:30:00Z"
+            },
+            {
+                "id": 2,
+                "username": "bob",
+                "email": "bob@example.com",
+                "nickname": "Bob",
+                "role": 0,
+                "status": 2,
+                "storage_quota": 5368709120,
+                "storage_used": 2684354560,
+                "created_at": "2026-02-15T10:00:00Z",
+                "last_login_at": "2026-04-20T14:00:00Z"
+            },
+            {
+                "id": 3,
+                "username": "charlie",
+                "email": "charlie@example.com",
+                "nickname": "Charlie Admin",
+                "role": 1,
+                "status": 1,
+                "storage_quota": 21474836480,
+                "storage_used": 10737418240,
+                "created_at": "2025-12-01T12:00:00Z",
+                "last_login_at": "2026-05-10T16:45:00Z"
+            }
+        ],
+        "pagination": {
+            "page": 1,
+            "page_size": 20,
+            "total": 100,
+            "total_pages": 5
+        }
+    }
+}

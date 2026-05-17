@@ -7,6 +7,7 @@
 
 #include "auth/OwnerSessionManager.hpp"
 
+#include <QByteArray>
 #include <QJsonObject>
 
 #include "network/NetworkClient.hpp"
@@ -48,6 +49,10 @@ namespace disk::desktop {
         m_refresh_token.clear();
         m_user_id = 0;
         m_username.clear();
+        if (m_role != 0) {
+            m_role = 0;
+            emit roleChanged();
+        }
         m_replay_count = 0;
         m_token_expiry_timer.stop();
         m_request_factory->ClearOwnerToken();
@@ -76,6 +81,26 @@ namespace disk::desktop {
         return m_replay_count < MAX_REPLAY;
     }
 
+    auto OwnerSessionManager::GetRole() const -> int {
+        return m_role;
+    }
+
+    auto OwnerSessionManager::DecodeRoleFromJwt(const QString& token) -> int {
+        if (token.isEmpty()) {
+            return 0;
+        }
+        const auto segments = token.split(u'.');
+        if (segments.size() != 3) {
+            return 0;
+        }
+        const QByteArray payload = QByteArray::fromBase64(segments[1].toLatin1());
+        const QJsonDocument doc = QJsonDocument::fromJson(payload);
+        if (!doc.isObject()) {
+            return 0;
+        }
+        return doc.object().value("role").toInt(0);
+    }
+
     void OwnerSessionManager::StartLogin() {
         SetState(OwnerSessionState::Authenticating);
     }
@@ -88,6 +113,12 @@ namespace disk::desktop {
     ) {
         m_user_id = static_cast<quint64>(user.value("id").toInt(0));
         m_username = user.value("username").toString();
+
+        const int new_role = DecodeRoleFromJwt(access_token);
+        if (m_role != new_role) {
+            m_role = new_role;
+            emit roleChanged();
+        }
 
         SetTokens(access_token, refresh_token, expires_in_seconds);
         SetState(OwnerSessionState::Active);
@@ -127,6 +158,12 @@ namespace disk::desktop {
         const QString& refresh_token,
         int expires_in_seconds
     ) {
+        const int new_role = DecodeRoleFromJwt(access_token);
+        if (m_role != new_role) {
+            m_role = new_role;
+            emit roleChanged();
+        }
+
         SetTokens(access_token, refresh_token, expires_in_seconds);
         m_replay_count++;
 

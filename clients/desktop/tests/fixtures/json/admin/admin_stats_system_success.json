@@ -1,0 +1,12 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "mysql_connected": true,
+        "redis_connected": true,
+        "disk_total": 10995116277760,
+        "disk_used": 5497558138880,
+        "disk_free": 5497558138880,
+        "uptime_seconds": 86400
+    }
+}

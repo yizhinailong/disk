@@ -382,10 +382,12 @@ extern int run_TestVisitorSession(int argc, char* argv[]);
 extern int run_TestVisitorFlow(int argc, char* argv[]);
 extern int run_TestDriveItemMapping(int argc, char* argv[]);
 extern int run_TestDriveListModel(int argc, char* argv[]);
+extern int run_TestAdminShareListModel(int argc, char* argv[]);
 extern int run_TestErrorAdapter(int argc, char* argv[]);
 extern int run_TestFolderTreeModel(int argc, char* argv[]);
 extern int run_TestUploadTaskModel(int argc, char* argv[]);
 extern int run_TestDownloadTaskModel(int argc, char* argv[]);
+extern int run_TestAdminUserListModel(int argc, char* argv[]);
 extern int run_TestShellController(int argc, char* argv[]);
 extern int run_TestRequestFactory(int argc, char* argv[]);
 extern int run_TestDriveManager(int argc, char* argv[]);
@@ -421,7 +423,7 @@ int main(int argc, char* argv[]) {
     snprintf(prog_name_storage, sizeof(prog_name_storage), "%s", argv[0]);
     int failures = 0;
 
-    fprintf(stderr, "--- desktop-unit-tests: running 18 suites ---\n");
+    fprintf(stderr, "--- desktop-unit-tests: running 20 suites ---\n", failures);
     fflush(stderr);
 
     {
@@ -437,10 +439,12 @@ int main(int argc, char* argv[]) {
     failures += run_and_report("TestVisitorFlow", run_TestVisitorFlow, argc, argv);
     failures += run_and_report("TestDriveItemMapping", run_TestDriveItemMapping, argc, argv);
     failures += run_and_report("TestDriveListModel", run_TestDriveListModel, argc, argv);
+    failures += run_and_report("TestAdminShareListModel", run_TestAdminShareListModel, argc, argv);
     failures += run_and_report("TestErrorAdapter", run_TestErrorAdapter, argc, argv);
     failures += run_and_report("TestFolderTreeModel", run_TestFolderTreeModel, argc, argv);
     failures += run_and_report("TestUploadTaskModel", run_TestUploadTaskModel, argc, argv);
     failures += run_and_report("TestDownloadTaskModel", run_TestDownloadTaskModel, argc, argv);
+    failures += run_and_report("TestAdminUserListModel", run_TestAdminUserListModel, argc, argv);
     failures += run_and_report("TestShellController", run_TestShellController, argc, argv);
     failures += run_and_report("TestRequestFactory", run_TestRequestFactory, argc, argv);
     failures += run_and_report("TestDriveManager", run_TestDriveManager, argc, argv);

@@ -1,0 +1,11 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "total_users": 100,
+        "total_files": 5000,
+        "total_storage_used": 549755813888,
+        "total_storage_quota": 10995116277760,
+        "active_shares": 150
+    }
+}
