@@ -29,8 +29,10 @@ set(TEST_SOURCES
     services/SystemService_test.cpp
     services/OperationLogJsonDetails_test.cpp
     services/OperationLogService_test.cpp
+    filters/AdminAuthFilter_test.cpp
     filters/ShareAuthFilter_test.cpp
     filters/JwtAuthFilter_test.cpp
+    dtos/AdminDto_test.cpp
     dtos/AuthDto_test.cpp
     dtos/FileDto_test.cpp
     dtos/FolderDto_test.cpp
@@ -39,6 +41,7 @@ set(TEST_SOURCES
     dtos/UserDto_test.cpp
     storage/AssemblyWorkerPool_test.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/AdminAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/ShareAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/StorageMgr.cpp
@@ -49,10 +52,12 @@ set(TEST_SOURCES
 
 add_executable(disk-test ${TEST_SOURCES})
 
-# ConfigMgr.cpp uses LOG_* macros from trantor but doesn't include the header directly.
-# In the main build this works via PCH; for the test target we force-include it.
+# ConfigMgr.cpp and AdminAuthFilter use symbols provided by the main target PCH.
+# The test target does not use that PCH, so force-include Drogon where needed.
 set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/AdminAuthFilter.cpp
+    filters/AdminAuthFilter_test.cpp
     PROPERTIES COMPILE_FLAGS "-include drogon/HttpAppFramework.h"
 )
 
