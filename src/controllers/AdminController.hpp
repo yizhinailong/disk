@@ -1,0 +1,93 @@
+/**
+ * @file AdminController.hpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 管理员用户管理控制器
+ * @note Request 和 Response DTO 定义在 dtos/AdminDto.hpp
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
+#pragma once
+
+#include "services/AdminService.hpp"
+
+namespace disk::controllers {
+
+    /**
+     * @brief 管理员用户管理控制器
+     *
+     * @details
+     * 路由：
+     * - GET    /api/admin/users           获取用户列表
+     * - GET    /api/admin/users/{id}       获取用户详情
+     * - PUT    /api/admin/users/{id}/status 修改用户状态
+     * - PUT    /api/admin/users/{id}/role  修改用户角色
+     * - DELETE /api/admin/users/{id}       软删除用户
+     *
+     * 所有接口需要 JWT 认证 + 管理员权限
+     */
+    class AdminController : public drogon::HttpController<AdminController> {
+    public:
+        AdminController() = default;
+
+        METHOD_LIST_BEGIN
+        ADD_METHOD_TO(
+            AdminController::ListUsers,
+            "/api/admin/users",
+            drogon::Get,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::AdminAuthFilter",
+        );
+        ADD_METHOD_TO(
+            AdminController::GetUserDetail,
+            "/api/admin/users/{id}",
+            drogon::Get,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::AdminAuthFilter",
+        );
+        ADD_METHOD_TO(
+            AdminController::ChangeUserStatus,
+            "/api/admin/users/{id}/status",
+            drogon::Put,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::AdminAuthFilter",
+        );
+        ADD_METHOD_TO(
+            AdminController::ChangeUserRole,
+            "/api/admin/users/{id}/role",
+            drogon::Put,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::AdminAuthFilter",
+        );
+        ADD_METHOD_TO(
+            AdminController::SoftDeleteUser,
+            "/api/admin/users/{id}",
+            drogon::Delete,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::AdminAuthFilter",
+        );
+        METHOD_LIST_END
+
+        [[nodiscard]]
+        auto ListUsers(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto GetUserDetail(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto ChangeUserStatus(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto ChangeUserRole(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto SoftDeleteUser(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+    };
+
+} // namespace disk::controllers

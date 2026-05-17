@@ -2,6 +2,7 @@ add_executable(${PROJECT_NAME} main.cpp)
 
 # Controller
 set(Controllers_HEADERS
+    controllers/AdminController.hpp
     controllers/AuthController.hpp
     controllers/DownloadResponder.hpp
     controllers/FileController.hpp
@@ -14,6 +15,7 @@ set(Controllers_HEADERS
     controllers/UserController.hpp
 )
 set(Controllers_SOURCES
+    controllers/AdminController.cpp
     controllers/AuthController.cpp
     controllers/DownloadResponder.cpp
     controllers/FileController.cpp
@@ -80,6 +82,7 @@ set(Models_SOURCES
 
 # Service
 set(Services_HEADERS
+    services/AdminService.hpp
     services/AuthService.hpp
     services/CleanupService.hpp
     services/FileService.hpp
@@ -95,6 +98,7 @@ set(Services_HEADERS
     services/UserService.hpp
 )
 set(Services_SOURCES
+    services/AdminService.cpp
     services/AuthService.cpp
     services/CleanupService.cpp
     services/FileService.cpp
