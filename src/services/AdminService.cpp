@@ -514,6 +514,187 @@ namespace disk::services {
         }
     }
 
+    auto AdminService::ListShares(const admin::ListSharesRequest& req)
+        -> drogon::Task<Result<admin::ShareListResponse>> {
+
+        LOG_INFO << "Admin list shares: page=" << req.page
+                 << " page_size=" << req.page_size;
+
+        try {
+            std::string where_clause = " WHERE 1=1";
+            if (req.status.has_value()) {
+                where_clause += " AND s.status = " + std::to_string(*req.status);
+            }
+            if (req.user_id.has_value()) {
+                where_clause += " AND s.user_id = " + std::to_string(*req.user_id);
+            }
+
+            auto count_result = co_await m_db_client->execSqlCoro(
+                "SELECT COUNT(*) AS total FROM shares s" + where_clause
+            );
+
+            int total = 0;
+            if (!count_result.empty()) {
+                total = count_result[0]["total"].as<int>();
+            }
+
+            int offset = (req.page - 1) * req.page_size;
+            int total_pages = req.page_size > 0
+                ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size))
+                : 0;
+
+            auto result = co_await m_db_client->execSqlCoro(
+                "SELECT s.id, s.user_id, u.username, s.file_id, f.name AS file_name, "
+                "s.share_code, s.status, "
+                "(s.view_count + s.download_count) AS access_count, "
+                "s.created_at, s.expires_at "
+                "FROM shares s "
+                "LEFT JOIN users u ON s.user_id = u.id "
+                "LEFT JOIN files f ON s.file_id = f.id "
+                + where_clause +
+                " ORDER BY s.created_at DESC LIMIT ? OFFSET ?",
+                req.page_size,
+                offset
+            );
+
+            admin::ShareListResponse response;
+            response.pagination.page = req.page;
+            response.pagination.page_size = req.page_size;
+            response.pagination.total = total;
+            response.pagination.total_pages = total_pages;
+
+            for (const auto& row : result) {
+                admin::ShareDetailResponse share;
+                share.id = row["id"].as<uint64_t>();
+                share.user_id = row["user_id"].as<uint64_t>();
+                share.username = row["username"].isNull() ? "" : row["username"].as<std::string>();
+                share.file_id = row["file_id"].isNull() ? 0 : row["file_id"].as<uint64_t>();
+                share.file_name = row["file_name"].isNull() ? "" : row["file_name"].as<std::string>();
+                share.share_code = row["share_code"].as<std::string>();
+                share.status = row["status"].as<int>();
+                share.access_count = row["access_count"].isNull() ? 0 : row["access_count"].as<int>();
+                share.created_at = row["created_at"].as<std::string>();
+                share.expires_at = row["expires_at"].isNull() ? "" : row["expires_at"].as<std::string>();
+                response.items.push_back(std::move(share));
+            }
+
+            co_await LogOperation(0, "admin.share.list", 0,
+                std::format(R"({{"page": {}, "page_size": {}, "total": {}}})",
+                    req.page, req.page_size, total));
+
+            LOG_INFO << "Admin list shares successful: total=" << total;
+            co_return response;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Admin list shares database error: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to list shares"
+            ));
+        }
+    }
+
+    auto AdminService::GetShareDetail(uint64_t share_id)
+        -> drogon::Task<Result<admin::ShareDetailResponse>> {
+
+        LOG_INFO << "Admin get share detail: share_id=" << share_id;
+
+        try {
+            auto result = co_await m_db_client->execSqlCoro(
+                "SELECT s.id, s.user_id, u.username, s.file_id, f.name AS file_name, "
+                "s.share_code, s.status, "
+                "(s.view_count + s.download_count) AS access_count, "
+                "s.created_at, s.expires_at "
+                "FROM shares s "
+                "LEFT JOIN users u ON s.user_id = u.id "
+                "LEFT JOIN files f ON s.file_id = f.id "
+                "WHERE s.id = ?",
+                share_id
+            );
+
+            if (result.empty()) {
+                LOG_WARN << "Admin share not found: share_id=" << share_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::AdminShareNotFound));
+            }
+
+            const auto& row = result[0];
+            admin::ShareDetailResponse response;
+            response.id = row["id"].as<uint64_t>();
+            response.user_id = row["user_id"].as<uint64_t>();
+            response.username = row["username"].isNull() ? "" : row["username"].as<std::string>();
+            response.file_id = row["file_id"].isNull() ? 0 : row["file_id"].as<uint64_t>();
+            response.file_name = row["file_name"].isNull() ? "" : row["file_name"].as<std::string>();
+            response.share_code = row["share_code"].as<std::string>();
+            response.status = row["status"].as<int>();
+            response.access_count = row["access_count"].isNull() ? 0 : row["access_count"].as<int>();
+            response.created_at = row["created_at"].as<std::string>();
+            response.expires_at = row["expires_at"].isNull() ? "" : row["expires_at"].as<std::string>();
+
+            co_await LogOperation(0, "admin.share.detail", share_id,
+                std::format(R"({{"share_id": {}}})", share_id));
+
+            LOG_INFO << "Admin get share detail successful: share_id=" << share_id;
+            co_return response;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Admin get share detail database error: share_id=" << share_id
+                      << " - " << e.base().what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to get share detail"
+            ));
+        }
+    }
+
+    auto AdminService::ForceCancelShare(uint64_t share_id, uint64_t operator_id)
+        -> drogon::Task<Result<void>> {
+
+        LOG_INFO << "Admin force cancel share: share_id=" << share_id
+                 << " operator_id=" << operator_id;
+
+        try {
+            auto result = co_await m_db_client->execSqlCoro(
+                "SELECT id, share_code, user_id, status FROM shares WHERE id = ?",
+                share_id
+            );
+
+            if (result.empty()) {
+                LOG_WARN << "Admin share not found for force cancel: share_id=" << share_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::AdminShareNotFound));
+            }
+
+            auto current_status = result[0]["status"].as<int>();
+            if (current_status == 0) {
+                LOG_WARN << "Admin share already cancelled: share_id=" << share_id;
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Share already cancelled"
+                ));
+            }
+
+            co_await m_db_client->execSqlCoro(
+                "UPDATE shares SET status = 0, updated_at = NOW() WHERE id = ?",
+                share_id
+            );
+
+            auto share_code = result[0]["share_code"].as<std::string>();
+            auto owner_id = result[0]["user_id"].as<uint64_t>();
+            co_await LogOperation(operator_id, "admin.share.force_cancel", share_id,
+                std::format(R"({{"share_id": {}, "share_code": "{}", "owner_id": {}, "previous_status": {}}})",
+                    share_id, share_code, owner_id, current_status));
+
+            LOG_INFO << "Admin force cancel share successful: share_id=" << share_id;
+            co_return {};
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Admin force cancel share database error: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to force cancel share"
+            ));
+        }
+    }
+
     auto AdminService::LogOperation(uint64_t operator_id,
                                      const std::string& action,
                                      uint64_t target_id,

@@ -27,6 +27,9 @@ namespace disk::controllers {
      * - GET    /api/admin/users/{id}/files 获取用户文件列表
      * - GET    /api/admin/users/{id}/storage 获取用户存储统计
      * - GET    /api/admin/storage/stats    获取全局存储统计
+     * - GET    /api/admin/shares            获取分享列表
+     * - GET    /api/admin/shares/{id}       获取分享详情
+     * - DELETE /api/admin/shares/{id}       强制取消分享
      *
      * 所有接口需要 JWT 认证 + 管理员权限
      */
@@ -91,6 +94,27 @@ namespace disk::controllers {
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
         );
+        ADD_METHOD_TO(
+            AdminController::ListShares,
+            "/api/admin/shares",
+            drogon::Get,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::AdminAuthFilter",
+        );
+        ADD_METHOD_TO(
+            AdminController::GetShareDetail,
+            "/api/admin/shares/{id}",
+            drogon::Get,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::AdminAuthFilter",
+        );
+        ADD_METHOD_TO(
+            AdminController::ForceCancelShare,
+            "/api/admin/shares/{id}",
+            drogon::Delete,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::AdminAuthFilter",
+        );
         METHOD_LIST_END
 
         [[nodiscard]]
@@ -123,6 +147,18 @@ namespace disk::controllers {
 
         [[nodiscard]]
         auto GetGlobalStorageStats(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto ListShares(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto GetShareDetail(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto ForceCancelShare(drogon::HttpRequestPtr request)
             -> drogon::Task<drogon::HttpResponsePtr>;
     };
 

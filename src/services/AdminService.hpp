@@ -146,6 +146,55 @@ namespace disk::services {
         auto GetGlobalStorageStats()
             -> drogon::Task<Result<admin::StorageStatsResponse>>;
 
+        /**
+         * @brief 获取分享列表
+         *
+         * 业务规则：
+         * - 支持按状态、用户 ID 筛选
+         * - 按 created_at DESC 排序
+         * - 支持分页，自动计算 total_pages
+         * - JOIN users 和 files 表获取用户名和文件名
+         * - 记录操作日志 admin.share.list
+         *
+         * @param req 分享列表请求参数
+         * @return drogon::Task<Result<admin::ShareListResponse>> 分享列表响应
+         */
+        [[nodiscard]]
+        auto ListShares(const admin::ListSharesRequest& req)
+            -> drogon::Task<Result<admin::ShareListResponse>>;
+
+        /**
+         * @brief 获取分享详情
+         *
+         * 业务规则：
+         * - JOIN users 和 files 表获取用户名和文件名
+         * - 不存在时返回 AdminShareNotFound
+         * - 记录操作日志 admin.share.detail
+         *
+         * @param share_id 分享 ID
+         * @return drogon::Task<Result<admin::ShareDetailResponse>> 分享详情响应
+         */
+        [[nodiscard]]
+        auto GetShareDetail(uint64_t share_id)
+            -> drogon::Task<Result<admin::ShareDetailResponse>>;
+
+        /**
+         * @brief 强制取消分享
+         *
+         * 业务规则：
+         * - 不检查分享所有权（管理员可取消任何分享）
+         * - 将分享状态设置为已取消（status = 0）
+         * - 不存在时返回 AdminShareNotFound
+         * - 记录操作日志 admin.share.force_cancel
+         *
+         * @param share_id 分享 ID
+         * @param operator_id 操作者 ID
+         * @return drogon::Task<Result<void>>
+         */
+        [[nodiscard]]
+        auto ForceCancelShare(uint64_t share_id, uint64_t operator_id)
+            -> drogon::Task<Result<void>>;
+
     private:
         /**
          * @brief 私有构造函数（Singleton 模式）

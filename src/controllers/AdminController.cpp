@@ -295,4 +295,102 @@ namespace disk::controllers {
         co_return Response::Success(result->ToJson());
     }
 
+    auto AdminController::ListShares(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "Admin list shares request: " << request->getPeerAddr().toIpPort();
+
+        auto parse_result = admin::ListSharesRequest::FromRequest(request);
+        if (!parse_result) {
+            LOG_WARN << "List shares request validation failed: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+
+        auto service = services::AdminService::GetInstance();
+        auto result = co_await service->ListShares(*parse_result);
+
+        if (!result) {
+            LOG_ERROR << "Failed to list shares: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        LOG_INFO << "Admin list shares successful";
+        co_return Response::Success(result->ToJson());
+    }
+
+    auto AdminController::GetShareDetail(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "Admin get share detail request: " << request->getPeerAddr().toIpPort();
+
+        auto id_str = request->getParameter("id");
+        if (id_str.empty()) {
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::ValidationFailed,
+                "Missing required parameter: id"
+            ));
+        }
+
+        uint64_t share_id = 0;
+        try {
+            share_id = std::stoull(id_str);
+        } catch (const std::exception&) {
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::ValidationFailed,
+                "Invalid share id format"
+            ));
+        }
+
+        auto service = services::AdminService::GetInstance();
+        auto result = co_await service->GetShareDetail(share_id);
+
+        if (!result) {
+            LOG_ERROR << "Failed to get share detail: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        Json::Value data;
+        data["share"] = result->ToJson();
+
+        LOG_INFO << "Admin get share detail successful: share_id=" << share_id;
+        co_return Response::Success(data);
+    }
+
+    auto AdminController::ForceCancelShare(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "Admin force cancel share request: " << request->getPeerAddr().toIpPort();
+
+        auto operator_id = request->attributes()->get<uint64_t>("user_id");
+
+        auto id_str = request->getParameter("id");
+        if (id_str.empty()) {
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::ValidationFailed,
+                "Missing required parameter: id"
+            ));
+        }
+
+        uint64_t share_id = 0;
+        try {
+            share_id = std::stoull(id_str);
+        } catch (const std::exception&) {
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::ValidationFailed,
+                "Invalid share id format"
+            ));
+        }
+
+        auto service = services::AdminService::GetInstance();
+        auto result = co_await service->ForceCancelShare(share_id, operator_id);
+
+        if (!result) {
+            LOG_ERROR << "Failed to force cancel share: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        LOG_INFO << "Admin force cancel share successful: share_id=" << share_id;
+        co_return Response::Success();
+    }
+
 } // namespace disk::controllers
