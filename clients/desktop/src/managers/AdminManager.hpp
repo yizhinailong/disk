@@ -72,7 +72,7 @@ namespace disk::desktop::managers {
     signals:
         void userPaginationLoaded(int page, int totalPages, int total);
         void userDetailLoaded(const QVariantMap& detail);
-        void userFilesPaginationLoaded(int page, int totalPages, int total);
+        void userFilesPaginationLoaded(int page, int totalPages, int total, const QVariantList& files);
         void userStorageLoaded(const QVariantMap& storage);
         void sharePaginationLoaded(int page, int totalPages, int total);
         void shareDetailLoaded(const QVariantMap& detail);

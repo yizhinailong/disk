@@ -526,7 +526,7 @@ namespace disk::desktop::managers {
         int page = pagination.value("page").toInt(1);
         int total_pages = pagination.value("total_pages").toInt(1);
         int total = pagination.value("total").toInt(0);
-        emit userFilesPaginationLoaded(page, total_pages, total);
+        emit userFilesPaginationLoaded(page, total_pages, total, file_list);
     }
 
     void AdminManager::HandleGetUserStorageResponse(QNetworkReply* reply) {

@@ -313,6 +313,13 @@ private slots:
         QCOMPARE(args.at(0).toInt(), 1);
         QCOMPARE(args.at(1).toInt(), 3);
         QCOMPARE(args.at(2).toInt(), 50);
+
+        auto files = args.at(3).toList();
+        QCOMPARE(files.size(), 1);
+        auto first_file = files.at(0).toMap();
+        QCOMPARE(first_file.value("name").toString(), QString("report.pdf"));
+        QCOMPARE(first_file.value("type").toString(), QString("file"));
+        QVERIFY(first_file.contains("mime_type"));
     }
 
     // ── GetUserStorage ──
