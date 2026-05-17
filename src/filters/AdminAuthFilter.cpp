@@ -26,10 +26,17 @@ namespace disk::filters {
 
         auto user_id = request->attributes()->get<uint64_t>("user_id");
         auto role = request->attributes()->get<int>("role");
+        auto status = request->attributes()->get<int>("status");
 
         if (role != 1) {
             LOG_WARN << "[admin_auth_filter] Non-admin access attempt: user_id=" << user_id
                      << " role=" << role << " path=" << path;
+            co_return disk::Response::Error(disk::error::Code::AdminRequired);
+        }
+
+        if (status != 1) {
+            LOG_WARN << "[admin_auth_filter] Disabled admin access: user_id=" << user_id
+                     << " status=" << status << " path=" << path;
             co_return disk::Response::Error(disk::error::Code::AdminRequired);
         }
 

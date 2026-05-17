@@ -99,6 +99,7 @@ namespace disk::filters {
         request->attributes()->insert("user_id", claims.user_id);
         request->attributes()->insert("username", claims.username);
         request->attributes()->insert("role", claims.role);
+        request->attributes()->insert("status", claims.status);
 
         auto end = std::chrono::steady_clock::now();
         auto duration_us =
