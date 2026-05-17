@@ -415,6 +415,8 @@ Users 与 Files、Folders、UploadTasks、Trash、Shares 和 OperationLogs 之�
 
 图3-4 数据库实体图
 
+用户实体（USERS）用于保存系统用户的基础账号信息，包括用户名、邮箱、密码哈希、昵称、头像、存储配额、已用空间、账号状态、角色以及创建和更新时间等，是系统认证、权限判断和容量控制的基础。
+
 ```mermaid
 erDiagram
     USERS {
@@ -432,6 +434,12 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
+```
+
+文件内容实体（FILE_CONTENTS）用于保存真实物理文件的内容索引信息，通过 MD5、SHA256、文件大小和存储路径标识文件内容，并通过引用计数支持秒传、去重和物理文件释放。
+
+```mermaid
+erDiagram
     FILE_CONTENTS {
         bigint id PK
         char hash_md5
@@ -442,6 +450,12 @@ erDiagram
         int ref_count
         datetime created_at
     }
+```
+
+文件实体（FILES）用于保存用户视角下的文件元数据，记录文件所属用户、所在文件夹、关联内容对象、文件名、大小、类型、路径、收藏状态和下载次数等信息。
+
+```mermaid
+erDiagram
     FILES {
         bigint id PK
         bigint user_id FK
@@ -457,6 +471,12 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
+```
+
+文件夹实体（FOLDERS）用于保存用户的目录结构信息，通过父目录字段形成多级目录树，并记录文件夹名称、完整路径、层级深度和子项数量等数据。
+
+```mermaid
+erDiagram
     FOLDERS {
         bigint id PK
         bigint user_id FK
@@ -468,6 +488,12 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
+```
+
+上传任务实体（UPLOAD_TASKS）用于保存分片上传任务的整体状态，记录上传用户、目标文件夹、文件名、文件大小、文件哈希、分片大小、总分片数、任务状态和过期时间等信息。
+
+```mermaid
+erDiagram
     UPLOAD_TASKS {
         varchar id PK
         bigint user_id FK
@@ -480,11 +506,23 @@ erDiagram
         tinyint status
         datetime expires_at
     }
+```
+
+上传分片实体（UPLOAD_TASK_CHUNKS）用于记录上传任务中已经完成的分片，通过任务 ID 和分片编号共同确定唯一分片，为断点续传和上传进度恢复提供依据。
+
+```mermaid
+erDiagram
     UPLOAD_TASK_CHUNKS {
         varchar task_id PK, FK
         int chunk_index PK
         datetime uploaded_at
     }
+```
+
+回收站实体（TRASH）用于保存被软删除的文件或文件夹信息，记录删除项目的类型、原始 ID、名称、内容引用、原文件夹位置、删除时间和过期清理时间等。
+
+```mermaid
+erDiagram
     TRASH {
         bigint id PK
         bigint user_id FK
@@ -496,6 +534,12 @@ erDiagram
         datetime deleted_at
         datetime expires_at
     }
+```
+
+分享实体（SHARES）用于保存用户创建的分享链接信息，包括分享码、分享者、访问密码哈希、权限类型、浏览次数、下载次数、分享状态和有效期等。
+
+```mermaid
+erDiagram
     SHARES {
         bigint id PK
         varchar share_code
@@ -509,6 +553,12 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
+```
+
+分享文件关联实体（SHARE_FILES）用于保存分享与文件或文件夹之间的关联关系，使一个分享可以包含一个或多个文件或目录。
+
+```mermaid
+erDiagram
     SHARE_FILES {
         bigint id PK
         bigint share_id FK
@@ -516,6 +566,12 @@ erDiagram
         bigint item_id
         datetime created_at
     }
+```
+
+操作日志实体（OPERATION_LOGS）用于保存用户关键操作记录，包括操作用户、操作类型、目标对象、目标名称、详细信息、IP 地址和操作时间，用于审计、排查和统计。
+
+```mermaid
+erDiagram
     OPERATION_LOGS {
         bigint id PK
         bigint user_id FK
@@ -527,7 +583,6 @@ erDiagram
         varchar ip_address
         datetime created_at
     }
-
 ```
 
 图3-5 系统ER关系图
