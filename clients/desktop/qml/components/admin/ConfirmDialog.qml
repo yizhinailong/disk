@@ -32,7 +32,7 @@ Dialog {
             }
 
             Button {
-                text: "取消"
+                text: qsTr("取消")
                 onClicked: {
                     root.cancelled()
                     root.close()
@@ -40,7 +40,7 @@ Dialog {
             }
 
             Button {
-                text: "确认"
+                text: qsTr("确认")
                 highlighted: true
                 onClicked: {
                     root.confirmed()

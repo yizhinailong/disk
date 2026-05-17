@@ -15,20 +15,20 @@ Item {
     property int pageSize: 20
 
     function statusText(status) {
-        switch (String(status || "")) {
-        case "expired": return qsTr("已过期")
-        case "cancelled": return qsTr("已取消")
-        case "active":
-        default: return qsTr("活跃")
+        switch (status) {
+        case 0: return qsTr("已取消")
+        case 1: return qsTr("有效")
+        case 2: return qsTr("已过期")
+        default: return qsTr("未知")
         }
     }
 
     function statusColor(status) {
-        switch (String(status || "")) {
-        case "expired": return theme.errorTextColor
-        case "cancelled": return theme.mutedTextColor
-        case "active":
-        default: return theme.successTextColor
+        switch (status) {
+        case 0: return theme.mutedTextColor
+        case 1: return theme.successTextColor
+        case 2: return theme.errorTextColor
+        default: return theme.mutedTextColor
         }
     }
 
@@ -69,9 +69,9 @@ Item {
                 Layout.preferredWidth: 140
                 model: [
                     { text: qsTr("全部"), value: -1 },
-                    { text: qsTr("活跃"), value: 0 },
-                    { text: qsTr("已过期"), value: 1 },
-                    { text: qsTr("已取消"), value: 2 }
+                    { text: qsTr("有效"), value: 1 },
+                    { text: qsTr("已过期"), value: 2 },
+                    { text: qsTr("已取消"), value: 0 }
                 ]
                 textRole: "text"
                 valueRole: "value"

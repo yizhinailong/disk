@@ -19,8 +19,8 @@ Item {
 
     function statusText(status) {
         switch (status) {
-        case 0: return qsTr("正常")
-        case 1: return qsTr("禁用")
+        case 0: return qsTr("禁用")
+        case 1: return qsTr("正常")
         case 2: return qsTr("锁定")
         default: return qsTr("未知")
         }
@@ -28,8 +28,8 @@ Item {
 
     function statusColor(status) {
         switch (status) {
-        case 0: return theme.successTextColor
-        case 1: return theme.errorTextColor
+        case 0: return theme.errorTextColor
+        case 1: return theme.successTextColor
         case 2: return theme.warningChipColor
         default: return theme.mutedTextColor
         }
@@ -82,8 +82,8 @@ Item {
                 Layout.preferredWidth: 120
                 model: [
                     { text: qsTr("全部"), value: -1 },
-                    { text: qsTr("正常"), value: 0 },
-                    { text: qsTr("禁用"), value: 1 },
+                    { text: qsTr("禁用"), value: 0 },
+                    { text: qsTr("正常"), value: 1 },
                     { text: qsTr("锁定"), value: 2 }
                 ]
                 textRole: "text"
@@ -337,7 +337,7 @@ Item {
                                     onTriggered: {
                                         confirmDialog.message = qsTr("确定启用用户 %1 吗？").arg(model.username)
                                         confirmDialog.onConfirmed.connect(function() {
-                                            adminManager.ChangeUserStatus(model.id, 0)
+                                            adminManager.ChangeUserStatus(model.id, 1)
                                         }, Qt.SingleShotConnection)
                                         confirmDialog.open()
                                     }
@@ -347,7 +347,7 @@ Item {
                                     onTriggered: {
                                         confirmDialog.message = qsTr("确定禁用用户 %1 吗？").arg(model.username)
                                         confirmDialog.onConfirmed.connect(function() {
-                                            adminManager.ChangeUserStatus(model.id, 1)
+                                            adminManager.ChangeUserStatus(model.id, 0)
                                         }, Qt.SingleShotConnection)
                                         confirmDialog.open()
                                     }
