@@ -71,6 +71,7 @@ set(DESKTOP_APP_SOURCES
     ${DESKTOP_SRC_DIR}/auth/OwnerSessionManager.cpp
     ${DESKTOP_SRC_DIR}/auth/SessionStore.cpp
     ${DESKTOP_SRC_DIR}/auth/VisitorSessionManager.cpp
+    ${DESKTOP_SRC_DIR}/managers/AdminManager.cpp
     ${DESKTOP_SRC_DIR}/managers/DriveManager.cpp
     ${DESKTOP_SRC_DIR}/managers/ProfileManager.cpp
     ${DESKTOP_SRC_DIR}/managers/ShareManager.cpp
@@ -84,6 +85,8 @@ set(DESKTOP_APP_SOURCES
     ${DESKTOP_SRC_DIR}/models/ShareListModel.cpp
     ${DESKTOP_SRC_DIR}/models/TrashListModel.cpp
     ${DESKTOP_SRC_DIR}/models/UploadTaskModel.cpp
+    ${DESKTOP_SRC_DIR}/models/AdminUserListModel.cpp
+    ${DESKTOP_SRC_DIR}/models/AdminShareListModel.cpp
     ${DESKTOP_SRC_DIR}/network/ErrorAdapter.cpp
     ${DESKTOP_SRC_DIR}/network/NetworkClient.cpp
     ${DESKTOP_SRC_DIR}/network/RequestFactory.cpp
@@ -96,6 +99,7 @@ set(DESKTOP_APP_HEADERS
     ${DESKTOP_SRC_DIR}/auth/OwnerSessionManager.hpp
     ${DESKTOP_SRC_DIR}/auth/SessionStore.hpp
     ${DESKTOP_SRC_DIR}/auth/VisitorSessionManager.hpp
+    ${DESKTOP_SRC_DIR}/managers/AdminManager.hpp
     ${DESKTOP_SRC_DIR}/managers/DriveManager.hpp
     ${DESKTOP_SRC_DIR}/managers/ProfileManager.hpp
     ${DESKTOP_SRC_DIR}/managers/ShareManager.hpp
@@ -109,6 +113,8 @@ set(DESKTOP_APP_HEADERS
     ${DESKTOP_SRC_DIR}/models/ShareListModel.hpp
     ${DESKTOP_SRC_DIR}/models/TrashListModel.hpp
     ${DESKTOP_SRC_DIR}/models/UploadTaskModel.hpp
+    ${DESKTOP_SRC_DIR}/models/AdminUserListModel.hpp
+    ${DESKTOP_SRC_DIR}/models/AdminShareListModel.hpp
     ${DESKTOP_SRC_DIR}/network/ErrorAdapter.hpp
     ${DESKTOP_SRC_DIR}/network/NetworkClient.hpp
     ${DESKTOP_SRC_DIR}/network/RequestFactory.hpp
@@ -141,6 +147,7 @@ set(DESKTOP_QML_FILES
     qml/pages/ShareVerifyPage.qml
     qml/pages/SplashPage.qml
     qml/pages/TransferCenterPage.qml
+    qml/pages/AdminPage.qml
     qml/shells/AuthShell.qml
     qml/shells/OwnerShell.qml
     qml/shells/VisitorShell.qml

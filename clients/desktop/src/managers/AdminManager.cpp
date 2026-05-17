@@ -5,7 +5,7 @@
 #include <QJsonObject>
 #include <QUrlQuery>
 
-namespace disk::desktop {
+namespace disk::desktop::managers {
 
     AdminManager::AdminManager(
         NetworkClient* network_client,
@@ -773,4 +773,4 @@ namespace disk::desktop {
         emit systemStatusChanged();
     }
 
-} // namespace disk::desktop
+} // namespace disk::desktop::managers

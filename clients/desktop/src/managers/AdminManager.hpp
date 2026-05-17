@@ -21,7 +21,7 @@
 #include "network/NetworkClient.hpp"
 #include "network/RequestFactory.hpp"
 
-namespace disk::desktop {
+namespace disk::desktop::managers {
 
     class AdminManager : public QObject {
         Q_OBJECT
@@ -111,4 +111,4 @@ namespace disk::desktop {
         QVector<QNetworkReply*> m_active_replies;
     };
 
-} // namespace disk::desktop
+} // namespace disk::desktop::managers

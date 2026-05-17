@@ -62,7 +62,7 @@ readonly property var fileViewNavItems: [
             objectName: "ownerNavTrashButton"
         }
     ]
-    readonly property var independentPageNavItems: [
+readonly property var independentPageNavItems: [
         {
             id: "transfers",
             label: "传输",
@@ -72,6 +72,12 @@ readonly property var fileViewNavItems: [
             id: "settings",
             label: "设置",
             objectName: "ownerNavSettingsButton"
+        },
+        {
+            id: "admin",
+            label: "管理",
+            objectName: "ownerNavAdminButton",
+            visible: sessionStore && sessionStore.owner ? sessionStore.owner.GetRole() === 1 : false
         }
     ]
     property string activeDestination: "drive"
@@ -122,7 +128,7 @@ function activateFileView(itemId) {
         }
     }
 
-    function activateIndependentPage(itemId) {
+function activateIndependentPage(itemId) {
         switch (itemId) {
         case "transfers":
             root.activeDestination = "transfers"
@@ -131,6 +137,10 @@ function activateFileView(itemId) {
         case "settings":
             root.activeDestination = "settings"
             root.showPage(settingsPageComponent)
+            return
+        case "admin":
+            root.activeDestination = "admin"
+            root.showPage(adminPageComponent)
             return
         }
     }
@@ -148,6 +158,8 @@ function activateFileView(itemId) {
             return "传输"
         case "settings":
             return "设置"
+        case "admin":
+            return "管理"
         default:
             return "我的文件"
         }
@@ -166,6 +178,8 @@ function activateFileView(itemId) {
             return "跟踪上传和下载"
         case "settings":
             return "个人资料、密码和存储"
+        case "admin":
+            return "用户、分享和系统管理"
         default:
             return "浏览和管理您的网盘"
         }
@@ -439,8 +453,13 @@ function activateFileView(itemId) {
         TransferCenterPage {}
     }
 
-    Component {
+Component {
         id: settingsPageComponent
         SettingsPage {}
+    }
+
+    Component {
+        id: adminPageComponent
+        AdminPage {}
     }
 }

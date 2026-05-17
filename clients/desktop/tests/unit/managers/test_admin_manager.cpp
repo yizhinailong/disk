@@ -11,6 +11,7 @@
 #include "network/RequestFactory.hpp"
 
 using namespace disk::desktop;
+using namespace disk::desktop::managers;
 using namespace disk::desktop::testing;
 
 class TestAdminManager : public QObject {
