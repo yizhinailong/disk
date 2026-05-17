@@ -202,4 +202,97 @@ namespace disk::controllers {
         co_return Response::Success();
     }
 
+    auto AdminController::ListUserFiles(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "Admin list user files request: " << request->getPeerAddr().toIpPort();
+
+        auto id_str = request->getParameter("id");
+        if (id_str.empty()) {
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::ValidationFailed,
+                "Missing required parameter: id"
+            ));
+        }
+
+        uint64_t user_id = 0;
+        try {
+            user_id = std::stoull(id_str);
+        } catch (const std::exception&) {
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::ValidationFailed,
+                "Invalid user id format"
+            ));
+        }
+
+        auto parse_result = admin::ListUserFilesRequest::FromRequest(request);
+        if (!parse_result) {
+            LOG_WARN << "List user files request validation failed: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+
+        auto service = services::AdminService::GetInstance();
+        auto result = co_await service->ListUserFiles(user_id, *parse_result);
+
+        if (!result) {
+            LOG_ERROR << "Failed to list user files: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        LOG_INFO << "Admin list user files successful: user_id=" << user_id;
+        co_return Response::Success(result->ToJson());
+    }
+
+    auto AdminController::GetUserStorage(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "Admin get user storage request: " << request->getPeerAddr().toIpPort();
+
+        auto id_str = request->getParameter("id");
+        if (id_str.empty()) {
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::ValidationFailed,
+                "Missing required parameter: id"
+            ));
+        }
+
+        uint64_t user_id = 0;
+        try {
+            user_id = std::stoull(id_str);
+        } catch (const std::exception&) {
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::ValidationFailed,
+                "Invalid user id format"
+            ));
+        }
+
+        auto service = services::AdminService::GetInstance();
+        auto result = co_await service->GetUserStorage(user_id);
+
+        if (!result) {
+            LOG_ERROR << "Failed to get user storage: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        LOG_INFO << "Admin get user storage successful: user_id=" << user_id;
+        co_return Response::Success(result->ToJson());
+    }
+
+    auto AdminController::GetGlobalStorageStats(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "Admin get global storage stats request: " << request->getPeerAddr().toIpPort();
+
+        auto service = services::AdminService::GetInstance();
+        auto result = co_await service->GetGlobalStorageStats();
+
+        if (!result) {
+            LOG_ERROR << "Failed to get global storage stats: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        LOG_INFO << "Admin get global storage stats successful";
+        co_return Response::Success(result->ToJson());
+    }
+
 } // namespace disk::controllers

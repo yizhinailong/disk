@@ -116,6 +116,36 @@ namespace disk::services {
         auto SoftDeleteUser(uint64_t target_id, uint64_t operator_id)
             -> drogon::Task<Result<void>>;
 
+        /**
+         * @brief 获取用户文件列表
+         *
+         * @param user_id 用户 ID
+         * @param req 文件列表请求参数（分页、文件夹筛选）
+         * @return drogon::Task<Result<admin::FileListResponse>>
+         */
+        [[nodiscard]]
+        auto ListUserFiles(uint64_t user_id, const admin::ListUserFilesRequest& req)
+            -> drogon::Task<Result<admin::FileListResponse>>;
+
+        /**
+         * @brief 获取用户存储统计
+         *
+         * @param user_id 用户 ID
+         * @return drogon::Task<Result<admin::StorageStatsResponse>>
+         */
+        [[nodiscard]]
+        auto GetUserStorage(uint64_t user_id)
+            -> drogon::Task<Result<admin::StorageStatsResponse>>;
+
+        /**
+         * @brief 获取全局存储统计
+         *
+         * @return drogon::Task<Result<admin::StorageStatsResponse>>
+         */
+        [[nodiscard]]
+        auto GetGlobalStorageStats()
+            -> drogon::Task<Result<admin::StorageStatsResponse>>;
+
     private:
         /**
          * @brief 私有构造函数（Singleton 模式）

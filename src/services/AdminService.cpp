@@ -315,6 +315,205 @@ namespace disk::services {
         }
     }
 
+    auto AdminService::ListUserFiles(uint64_t user_id, const admin::ListUserFilesRequest& req)
+        -> drogon::Task<Result<admin::FileListResponse>> {
+
+        LOG_INFO << "Admin list user files: user_id=" << user_id
+                 << " page=" << req.page << " page_size=" << req.page_size;
+
+        try {
+            CoroMapper<Users> user_mapper(m_db_client);
+            co_await user_mapper.findOne(
+                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
+            );
+
+            std::string where_clause = " WHERE user_id = ?";
+            std::string count_sql = "SELECT COUNT(*) AS total FROM files" + where_clause;
+            std::string query_sql =
+                "SELECT id, user_id, folder_id AS parent_id, name, size, "
+                "extension, mime_type, path, created_at, updated_at "
+                "FROM files" + where_clause;
+
+            int total = 0;
+            if (req.folder_id.has_value()) {
+                auto count_result = co_await m_db_client->execSqlCoro(
+                    "SELECT COUNT(*) AS total FROM files WHERE user_id = ? AND folder_id = ?",
+                    user_id, *req.folder_id
+                );
+                if (!count_result.empty()) {
+                    total = count_result[0]["total"].as<int>();
+                }
+            } else {
+                auto count_result = co_await m_db_client->execSqlCoro(
+                    "SELECT COUNT(*) AS total FROM files WHERE user_id = ?",
+                    user_id
+                );
+                if (!count_result.empty()) {
+                    total = count_result[0]["total"].as<int>();
+                }
+            }
+
+            int offset = (req.page - 1) * req.page_size;
+            int total_pages = req.page_size > 0
+                ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size))
+                : 0;
+
+            auto buildQuerySql = [&](bool has_folder) -> std::string {
+                return "SELECT id, user_id, folder_id AS parent_id, name, size, "
+                       "extension, mime_type, path, created_at, updated_at "
+                       "FROM files WHERE user_id = ?"
+                       + std::string(has_folder ? " AND folder_id = ?" : "")
+                       + " ORDER BY created_at DESC LIMIT ? OFFSET ?";
+            };
+
+            auto result = req.folder_id.has_value()
+                ? co_await m_db_client->execSqlCoro(
+                    buildQuerySql(true),
+                    user_id, *req.folder_id, req.page_size, offset
+                )
+                : co_await m_db_client->execSqlCoro(
+                    buildQuerySql(false),
+                    user_id, req.page_size, offset
+                );
+
+            admin::FileListResponse response;
+            response.pagination.page = req.page;
+            response.pagination.page_size = req.page_size;
+            response.pagination.total = total;
+            response.pagination.total_pages = total_pages;
+
+            for (const auto& row : result) {
+                admin::FileDetailResponse file;
+                file.id = row["id"].as<uint64_t>();
+                file.name = row["name"].as<std::string>();
+                file.type = "file";
+                file.size = row["size"].as<uint64_t>();
+                file.hash = "";
+                file.mime_type = row["mime_type"].isNull() ? "" : row["mime_type"].as<std::string>();
+                file.parent_id = row["parent_id"].as<uint64_t>();
+                file.path = row["path"].isNull() ? "" : row["path"].as<std::string>();
+                file.created_at = row["created_at"].as<std::string>();
+                file.updated_at = row["updated_at"].as<std::string>();
+                response.items.push_back(std::move(file));
+            }
+
+            LOG_INFO << "Admin list user files successful: user_id=" << user_id
+                     << " total=" << total;
+            co_return response;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            const auto error_msg = std::string(e.base().what());
+            if (error_msg.find("condition") != std::string::npos ||
+                error_msg.find("empty") != std::string::npos) {
+                LOG_WARN << "Admin user not found for file listing: user_id=" << user_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
+            }
+
+            LOG_ERROR << "Admin list user files database error: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to list user files"
+            ));
+        }
+    }
+
+    auto AdminService::GetUserStorage(uint64_t user_id)
+        -> drogon::Task<Result<admin::StorageStatsResponse>> {
+
+        LOG_INFO << "Admin get user storage: user_id=" << user_id;
+
+        try {
+            CoroMapper<Users> mapper(m_db_client);
+            auto user = co_await mapper.findOne(
+                Criteria(Users::Cols::_id, CompareOperator::EQ, user_id)
+            );
+
+            auto file_count_result = co_await m_db_client->execSqlCoro(
+                "SELECT COUNT(*) AS total_files FROM files WHERE user_id = ?",
+                user_id
+            );
+
+            admin::StorageStatsResponse response;
+            response.total_users = 1;
+            response.total_files = file_count_result.empty()
+                ? 0 : file_count_result[0]["total_files"].as<int>();
+            response.total_storage_used = user.getValueOfStorageUsed();
+            response.total_storage_quota = user.getValueOfStorageQuota();
+            response.active_shares = 0;
+
+            co_await LogOperation(0, "admin.storage.user_stats", user_id,
+                std::format(R"({{"user_id": {}, "storage_used": {}, "storage_quota": {}}})",
+                    user_id, response.total_storage_used, response.total_storage_quota));
+
+            LOG_INFO << "Admin get user storage successful: user_id=" << user_id;
+            co_return response;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            const auto error_msg = std::string(e.base().what());
+            if (error_msg.find("condition") != std::string::npos ||
+                error_msg.find("empty") != std::string::npos) {
+                LOG_WARN << "Admin user not found for storage stats: user_id=" << user_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
+            }
+
+            LOG_ERROR << "Admin get user storage database error: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to get user storage stats"
+            ));
+        }
+    }
+
+    auto AdminService::GetGlobalStorageStats()
+        -> drogon::Task<Result<admin::StorageStatsResponse>> {
+
+        LOG_INFO << "Admin get global storage stats";
+
+        try {
+            auto user_stats = co_await m_db_client->execSqlCoro(
+                "SELECT COUNT(*) AS total_users, "
+                "COALESCE(SUM(storage_used), 0) AS total_storage_used, "
+                "COALESCE(SUM(storage_quota), 0) AS total_storage_quota "
+                "FROM users"
+            );
+
+            auto file_stats = co_await m_db_client->execSqlCoro(
+                "SELECT COUNT(*) AS total_files FROM files"
+            );
+
+            auto share_stats = co_await m_db_client->execSqlCoro(
+                "SELECT COUNT(*) AS active_shares FROM shares WHERE status = 1"
+            );
+
+            admin::StorageStatsResponse response;
+            response.total_users = user_stats.empty()
+                ? 0 : user_stats[0]["total_users"].as<int>();
+            response.total_storage_used = user_stats.empty()
+                ? 0 : user_stats[0]["total_storage_used"].as<uint64_t>();
+            response.total_storage_quota = user_stats.empty()
+                ? 0 : user_stats[0]["total_storage_quota"].as<uint64_t>();
+            response.total_files = file_stats.empty()
+                ? 0 : file_stats[0]["total_files"].as<int>();
+            response.active_shares = share_stats.empty()
+                ? 0 : share_stats[0]["active_shares"].as<int>();
+
+            co_await LogOperation(0, "admin.storage.global_stats", 0,
+                std::format(R"({{"total_users": {}, "total_files": {}, "total_storage_used": {}, "active_shares": {}}})",
+                    response.total_users, response.total_files,
+                    response.total_storage_used, response.active_shares));
+
+            LOG_INFO << "Admin get global storage stats successful";
+            co_return response;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Admin get global storage stats database error: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to get global storage stats"
+            ));
+        }
+    }
+
     auto AdminService::LogOperation(uint64_t operator_id,
                                      const std::string& action,
                                      uint64_t target_id,
