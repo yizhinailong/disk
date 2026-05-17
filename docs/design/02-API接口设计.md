@@ -4084,11 +4084,12 @@ Authorization: Bearer <access_token>
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| username | string | 否 | 用户名筛选（模糊匹配） |
-| email | string | 否 | 邮箱筛选（模糊匹配） |
-| status | integer | 否 | 状态筛选：0（禁用）/1（正常）/2（锁定） |
-| page | integer | 否 | 页码，默认 1 |
-| page_size | integer | 否 | 每页数量，默认 20，最大 100 |
+ | username | string | 否 | 用户名筛选（模糊匹配） |
+ | email | string | 否 | 邮箱筛选（模糊匹配） |
+ | status | integer | 否 | 状态筛选：0（禁用）/1（正常）/2（锁定） |
+ | role | integer | 否 | 角色筛选：0（普通用户）/1（管理员） |
+ | page | integer | 否 | 页码，默认 1 |
+ | page_size | integer | 否 | 每页数量，默认 20，最大 100 |
 
 #### 错误响应矩阵
 
@@ -4597,8 +4598,8 @@ Authorization: Bearer <access_token>
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| status | string | 否 | 状态筛选：all/active/expired/cancelled，默认 all |
-| user_id | integer | 否 | 按创建用户筛选 |
+ | status | integer | 否 | 状态筛选：0（已取消）/1（有效）/2（已过期） |
+ | user_id | integer | 否 | 按创建用户筛选 |
 | page | integer | 否 | 页码，默认 1 |
 | page_size | integer | 否 | 每页数量，默认 20，最大 100 |
 
@@ -4633,7 +4634,7 @@ Authorization: Bearer <access_token>
         "download_count": 5,
         "created_at": "2026-01-13T10:00:00Z",
         "expires_at": "2026-01-20T10:00:00Z",
-        "status": "active"
+        "status": 1
       }
     ],
     "pagination": {
