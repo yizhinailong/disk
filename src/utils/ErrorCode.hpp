@@ -111,6 +111,22 @@ namespace disk::error {
         RedisOperationFailed = 70002,
         /// Redis key不存在
         RedisKeyNotFound = 70003,
+
+        // ==================== 管理员错误码 (80xxx) ====================
+        /// 需要管理员权限
+        AdminRequired = 80001,
+        /// 用户不存在
+        AdminUserNotFound = 80002,
+        /// 不能修改自身状态/角色
+        AdminCannotModifySelf = 80003,
+        /// 不能降级最后一个管理员
+        AdminCannotDemoteLast = 80004,
+        /// 分享不存在
+        AdminShareNotFound = 80005,
+        /// 无效的用户状态值
+        AdminInvalidStatus = 80006,
+        /// 无效的角色值
+        AdminInvalidRole = 80007,
     };
 
     // ==================== 错误码信息 ====================
@@ -168,6 +184,15 @@ namespace disk::error {
             // Redis错误
             {    Code::RedisOperationFailed, drogon::k500InternalServerError },
             {        Code::RedisKeyNotFound,            drogon::k404NotFound },
+
+            // 管理员错误
+            {          Code::AdminRequired,           drogon::k403Forbidden },
+            {        Code::AdminUserNotFound,             drogon::k404NotFound },
+            {    Code::AdminCannotModifySelf,         drogon::k400BadRequest },
+            {     Code::AdminCannotDemoteLast,         drogon::k400BadRequest },
+            {       Code::AdminShareNotFound,             drogon::k404NotFound },
+            {       Code::AdminInvalidStatus,         drogon::k400BadRequest },
+            {         Code::AdminInvalidRole,         drogon::k400BadRequest },
         };
 
         auto it = status_map.find(code);

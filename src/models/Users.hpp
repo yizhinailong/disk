@@ -54,6 +54,7 @@ class Users
         static const std::string _storage_used;
         static const std::string _storage_reserved;
         static const std::string _status;
+        static const std::string _role;
         static const std::string _login_attempts;
         static const std::string _locked_until;
         static const std::string _last_login_at;
@@ -198,6 +199,14 @@ class Users
     ///Set the value of the column status
     void setStatus(const int8_t &pStatus) noexcept;
 
+    /**  For column role  */
+    ///Get the value of the column role, returns the default value if the column is null
+    const int8_t &getValueOfRole() const noexcept;
+    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
+    const std::shared_ptr<int8_t> &getRole() const noexcept;
+    ///Set the value of the column role
+    void setRole(const int8_t &pRole) noexcept;
+
     /**  For column login_attempts  */
     ///Get the value of the column login_attempts, returns the default value if the column is null
     const int32_t &getValueOfLoginAttempts() const noexcept;
@@ -251,7 +260,7 @@ class Users
     void setUpdatedAt(const ::trantor::Date &pUpdatedAt) noexcept;
 
 
-    static size_t getColumnNumber() noexcept {  return 16;  }
+    static size_t getColumnNumber() noexcept {  return 17;  }
     static const std::string &getColumnName(size_t index) noexcept(false);
 
     Json::Value toJson() const;
@@ -283,6 +292,7 @@ class Users
     std::shared_ptr<uint64_t> storageUsed_;
     std::shared_ptr<uint64_t> storageReserved_;
     std::shared_ptr<int8_t> status_;
+    std::shared_ptr<int8_t> role_;
     std::shared_ptr<int32_t> loginAttempts_;
     std::shared_ptr<::trantor::Date> lockedUntil_;
     std::shared_ptr<::trantor::Date> lastLoginAt_;
@@ -300,7 +310,7 @@ class Users
         const bool notNull_;
     };
     static const std::vector<MetaData> metaData_;
-    bool dirtyFlag_[16]={ false };
+    bool dirtyFlag_[17]={ false };
   public:
     static const std::string &sqlForFindingByPrimaryKey()
     {

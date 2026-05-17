@@ -17,6 +17,7 @@ CREATE TABLE `users` (
     `storage_used` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '已用存储(字节)',
     `storage_reserved` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '上传预占用存储(字节)',
     `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 0-禁用, 1-正常, 2-锁定',
+    `role` TINYINT NOT NULL DEFAULT 0 COMMENT '角色: 0-普通用户, 1-管理员',
     `login_attempts` INT NOT NULL DEFAULT 0 COMMENT '登录失败次数',
     `locked_until` DATETIME DEFAULT NULL COMMENT '锁定截止时间',
     `last_login_at` DATETIME DEFAULT NULL COMMENT '最后登录时间',
@@ -27,6 +28,7 @@ CREATE TABLE `users` (
     UNIQUE KEY `uk_users_username` (`username`),
     UNIQUE KEY `uk_users_email` (`email`),
     KEY `idx_users_status` (`status`),
+    KEY `idx_users_role` (`role`),
     KEY `idx_users_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
@@ -219,5 +221,5 @@ CREATE TABLE `operation_logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='操作日志表';
 
 -- 创建默认管理员用户 密码为 Admin123
-INSERT INTO `users` (`username`, `email`, `password_hash`, `nickname`, `storage_quota`)
-VALUES ('admin', 'admin@example.com', '$argon2id$v=19$m=65536,t=2,p=1$BjgpFYz8h/yjnJYjV497Tw$JCgRPDFvioq+FPQuR0i3a6kiTnLALv/F1A0eim7x7zE', '管理员', 107374182400);
+INSERT INTO `users` (`username`, `email`, `password_hash`, `nickname`, `storage_quota`, `role`)
+VALUES ('admin', 'admin@example.com', '$argon2id$v=19$m=65536,t=2,p=1$BjgpFYz8h/yjnJYjV497Tw$JCgRPDFvioq+FPQuR0i3a6kiTnLALv/F1A0eim7x7zE', '管理员', 107374182400, 1);
