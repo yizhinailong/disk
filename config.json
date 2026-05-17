@@ -50,7 +50,8 @@
       "name": "drogon::plugin::GlobalFilters",
       "config": {
         "filters": [
-          "disk::filters::JwtAuthFilter"
+          "disk::filters::JwtAuthFilter",
+          "disk::filters::AdminAuthFilter"
         ],
         "exempt": [
           "^/api/auth/register",
