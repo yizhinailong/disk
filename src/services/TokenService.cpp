@@ -83,7 +83,7 @@ namespace disk::services {
             .with_issuer("disk_share");
     }
 
-    auto TokenService::GenerateTokens(uint64_t user_id, const std::string& username) const
+    auto TokenService::GenerateTokens(uint64_t user_id, const std::string& username, int role) const
         -> std::pair<std::string, std::string> {
 
         const auto now = std::chrono::system_clock::now();
@@ -104,6 +104,7 @@ namespace disk::services {
                 .set_payload_claim("username", username)
                 .set_payload_claim("type", "access")
                 .set_payload_claim("jti", access_jti)
+                .set_payload_claim("role", role)
                 .set_issued_at(now)
                 .set_expires_at(now + std::chrono::seconds(GetAccessTokenExpireSeconds()))
                 .sign(jwt::algorithm::hs256{ m_jwt_secret });
@@ -143,9 +144,15 @@ namespace disk::services {
 
             const auto user_id = std::stoull(user_id_str);
 
+            int token_role = 0;
+            if (decoded.has_payload_claim("role")) {
+                token_role = static_cast<int>(decoded.get_payload_claim("role").as_integer());
+            }
+
             LOG_TRACE << "JWT verification successful: user_id=" << user_id
-                      << ", username=" << username << ", jti=" << jti;
-            return AccessTokenClaims{ .user_id = user_id, .username = username, .jti = jti };
+                      << ", username=" << username << ", jti=" << jti
+                      << ", role=" << token_role;
+            return AccessTokenClaims{ .user_id = user_id, .username = username, .jti = jti, .role = token_role };
 
         } catch (const jwt::error::token_verification_exception& e) {
             LOG_WARN << "JWT verification failed: " << e.what();

@@ -192,7 +192,7 @@ namespace disk::auth {
 
         // 4. 生成令牌
         auto [access_token, refresh_token] =
-            TokenService::GetInstance()->GenerateTokens(user.getValueOfId(), user.getValueOfUsername());
+            TokenService::GetInstance()->GenerateTokens(user.getValueOfId(), user.getValueOfUsername(), user.getValueOfRole());
 
         // 5. 存储 refresh_token 到 Redis
         auto store_result =
@@ -253,7 +253,7 @@ namespace disk::auth {
 
             // 4. 生成新的令牌对
             auto [access_token, new_refresh_token] =
-                TokenService::GetInstance()->GenerateTokens(user.getValueOfId(), user.getValueOfUsername());
+                TokenService::GetInstance()->GenerateTokens(user.getValueOfId(), user.getValueOfUsername(), user.getValueOfRole());
 
             // 5. 刷新 Redis 中的 token（原子操作）
             auto refresh_result = co_await TokenService::GetInstance()->RefreshRefreshToken(

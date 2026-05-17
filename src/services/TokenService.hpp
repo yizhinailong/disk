@@ -49,6 +49,7 @@ namespace disk::services {
         uint64_t user_id;
         std::string username;
         std::string jti;
+        int role{0};
     };
 
     /**
@@ -93,7 +94,7 @@ namespace disk::services {
          * @return pair<access_token, refresh_token>
          */
         [[nodiscard]]
-        auto GenerateTokens(uint64_t user_id, const std::string& username) const -> std::pair<std::string, std::string>;
+        auto GenerateTokens(uint64_t user_id, const std::string& username, int role = 0) const -> std::pair<std::string, std::string>;
 
         /**
          * @brief 获取访问令牌过期时间（秒）
