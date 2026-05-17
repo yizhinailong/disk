@@ -3936,3 +3936,939 @@ created_at  DATETIME         -- 操作时间
 - [ ] 敏感操作有独立的速率限制
 - [ ] 关键事件写入审计日志
 - [ ] 密码错误响应不泄露分享是否存在的信息（统一返回 60003）
+
+---
+
+## 10. 管理员接口
+
+### 10.1 管理员接口说明
+
+本章节所有接口均需要管理员权限，调用时必须携带有效的管理员 Access Token。
+
+#### 认证要求
+
+所有管理员接口需要在请求头中携带有效的管理员 Access Token：
+
+```
+Authorization: Bearer <access_token>
+```
+
+#### 管理员错误响应（统一）
+
+管理员接口统一使用以下错误码，不再每个接口中重复展开：
+
+| 错误码 | 枚举名称 | HTTP状态码 | 说明 |
+|--------|----------|------------|------|
+| 80001 | `AdminRequired` | 403 | 需要管理员权限 |
+| 80002 | `AdminUserNotFound` | 404 | 用户不存在 |
+| 80003 | `AdminCannotModifySelf` | 400 | 不能修改自己的状态或角色 |
+| 80004 | `AdminCannotDemoteLast` | 400 | 不能降级最后一个管理员 |
+| 80005 | `AdminShareNotFound` | 404 | 分享不存在 |
+| 80006 | `AdminInvalidStatus` | 400 | 无效的用户状态 |
+| 80007 | `AdminInvalidRole` | 400 | 无效的角色 |
+
+**80001 AdminRequired 响应示例**：
+
+```json
+{
+  "code": 80001,
+  "message": "需要管理员权限",
+  "data": null
+}
+```
+
+**80002 AdminUserNotFound 响应示例**：
+
+```json
+{
+  "code": 80002,
+  "message": "用户不存在",
+  "data": {
+    "user_id": 99999,
+    "reason": "指定的用户不存在"
+  }
+}
+```
+
+**80003 AdminCannotModifySelf 响应示例**：
+
+```json
+{
+  "code": 80003,
+  "message": "不能修改自己的状态或角色",
+  "data": null
+}
+```
+
+**80004 AdminCannotDemoteLast 响应示例**：
+
+```json
+{
+  "code": 80004,
+  "message": "不能降级最后一个管理员",
+  "data": null
+}
+```
+
+**80005 AdminShareNotFound 响应示例**：
+
+```json
+{
+  "code": 80005,
+  "message": "分享不存在",
+  "data": {
+    "share_id": "sh_invalid",
+    "reason": "指定的分享不存在"
+  }
+}
+```
+
+**80006 AdminInvalidStatus 响应示例**：
+
+```json
+{
+  "code": 80006,
+  "message": "无效的用户状态",
+  "data": {
+    "invalid_value": 5,
+    "reason": "用户状态必须是 0（禁用）、1（正常）或 2（锁定）"
+  }
+}
+```
+
+**80007 AdminInvalidRole 响应示例**：
+
+```json
+{
+  "code": 80007,
+  "message": "无效的角色",
+  "data": {
+    "invalid_value": 5,
+    "reason": "用户角色必须是 0（普通用户）或 1（管理员）"
+  }
+}
+```
+
+#### 通用认证错误
+
+除管理员专用错误外，还可能返回以下通用认证错误：
+
+| 错误码 | 枚举名称 | HTTP状态码 | 说明 |
+|--------|----------|------------|------|
+| 40106 | `TokenMissing` | 401 | 未提供令牌 |
+| 40107 | `TokenMalformed` | 401 | 令牌格式错误 |
+| 40108 | `TokenExpired` | 401 | 令牌已过期 |
+| 40109 | `TokenWrongType` | 401 | 令牌类型错误（需要 access token） |
+| 10001 | `InvalidParameter` | 400 | 请求参数错误 |
+| 10002 | `ValidationFailed` | 400 | 参数校验失败 |
+
+---
+
+### 10.2 获取用户列表
+
+**GET** `/api/admin/users`
+
+获取所有用户列表，支持分页和筛选。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 查询参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| username | string | 否 | 用户名筛选（模糊匹配） |
+| email | string | 否 | 邮箱筛选（模糊匹配） |
+| status | integer | 否 | 状态筛选：0（禁用）/1（正常）/2（锁定） |
+| page | integer | 否 | 页码，默认 1 |
+| page_size | integer | 否 | 每页数量，默认 20，最大 100 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "username": "john_doe",
+        "email": "john@example.com",
+        "nickname": "John",
+        "status": 1,
+        "role": 0,
+        "storage_used": 1073741824,
+        "storage_quota": 10737418240,
+        "file_count": 150,
+        "folder_count": 20,
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-10T12:00:00Z"
+      },
+      {
+        "id": 2,
+        "username": "admin_user",
+        "email": "admin@example.com",
+        "nickname": "Admin",
+        "status": 1,
+        "role": 1,
+        "storage_used": 5368709120,
+        "storage_quota": 53687091200,
+        "file_count": 500,
+        "folder_count": 50,
+        "created_at": "2025-12-01T00:00:00Z",
+        "updated_at": "2026-01-15T08:30:00Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 20,
+      "total": 100,
+      "total_pages": 5
+    }
+  }
+}
+```
+
+---
+
+### 10.3 获取用户详情
+
+**GET** `/api/admin/users/{id}`
+
+获取指定用户的详细信息。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | integer | 用户 ID |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | user_id 格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
+| 404 | 80002 | `AdminUserNotFound` | 用户不存在 | 指定的用户 ID 不存在 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "id": 1,
+    "username": "john_doe",
+    "email": "john@example.com",
+    "nickname": "John",
+    "avatar": "https://example.com/avatar/1.jpg",
+    "status": 1,
+    "role": 0,
+    "storage_used": 1073741824,
+    "storage_quota": 10737418240,
+    "file_count": 150,
+    "folder_count": 20,
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-01-10T12:00:00Z"
+  }
+}
+```
+
+---
+
+### 10.4 修改用户状态
+
+**PUT** `/api/admin/users/{id}/status`
+
+修改指定用户的状态（禁用/正常/锁定）。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | integer | 用户 ID |
+
+#### 请求参数
+
+```json
+{
+  "status": 0
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| status | integer | 是 | 用户状态：0（禁用）/1（正常）/2（锁定） |
+
+#### 业务规则
+
+1. **禁止修改自己**：管理员不能修改自己的状态
+2. **状态值范围**：仅允许 0、1、2 三个值
+3. **最后管理员保护**：不能将最后一个管理员的状态改为非正常状态
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 400 | 80006 | `AdminInvalidStatus` | 无效的用户状态 | status 不是 0、1、2 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
+| 403 | 80003 | `AdminCannotModifySelf` | 不能修改自己的状态 | 尝试修改自己的状态 |
+| 403 | 80004 | `AdminCannotDemoteLast` | 不能降级最后一个管理员 | 尝试禁用最后一个管理员 |
+| 404 | 80002 | `AdminUserNotFound` | 用户不存在 | 指定的用户 ID 不存在 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "id": 1,
+    "status": 0,
+    "updated_at": "2026-01-15T10:00:00Z"
+  }
+}
+```
+
+---
+
+### 10.5 修改用户角色
+
+**PUT** `/api/admin/users/{id}/role`
+
+修改指定用户的角色（普通用户/管理员）。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | integer | 用户 ID |
+
+#### 请求参数
+
+```json
+{
+  "role": 0
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| role | integer | 是 | 用户角色：0（普通用户）/1（管理员） |
+
+#### 业务规则
+
+1. **禁止修改自己**：管理员不能修改自己的角色
+2. **角色值范围**：仅允许 0、1 两个值
+3. **最后管理员保护**：不能将最后一个管理员降级为普通用户
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 400 | 80007 | `AdminInvalidRole` | 无效的角色 | role 不是 0 或 1 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
+| 403 | 80003 | `AdminCannotModifySelf` | 不能修改自己的角色 | 尝试修改自己的角色 |
+| 403 | 80004 | `AdminCannotDemoteLast` | 不能降级最后一个管理员 | 尝试降级最后一个管理员 |
+| 404 | 80002 | `AdminUserNotFound` | 用户不存在 | 指定的用户 ID 不存在 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "id": 1,
+    "role": 0,
+    "updated_at": "2026-01-15T10:00:00Z"
+  }
+}
+```
+
+---
+
+### 10.6 删除用户
+
+**DELETE** `/api/admin/users/{id}`
+
+删除指定用户（软删除，将用户状态置为禁用）。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | integer | 用户 ID |
+
+#### 业务规则
+
+1. **软删除**：执行软删除操作，将用户 status 置为 0（禁用）
+2. **禁止删除自己**：管理员不能删除自己
+3. **最后管理员保护**：不能删除最后一个管理员
+4. **用户数据保留**：用户文件数据保留，仅禁用账户访问
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | user_id 格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
+| 403 | 80003 | `AdminCannotModifySelf` | 不能修改自己的状态 | 尝试删除自己 |
+| 403 | 80004 | `AdminCannotDemoteLast` | 不能降级最后一个管理员 | 尝试删除最后一个管理员 |
+| 404 | 80002 | `AdminUserNotFound` | 用户不存在 | 指定的用户 ID 不存在 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "id": 1,
+    "status": 0,
+    "updated_at": "2026-01-15T10:00:00Z"
+  }
+}
+```
+
+---
+
+### 10.7 获取用户文件列表
+
+**GET** `/api/admin/users/{id}/files`
+
+获取指定用户的文件列表（管理员查看用户数据）。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | integer | 用户 ID |
+
+#### 查询参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| folder_id | integer | 否 | 父文件夹 ID，默认 0（根目录） |
+| page | integer | 否 | 页码，默认 1 |
+| page_size | integer | 否 | 每页数量，默认 20，最大 100 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
+| 404 | 80002 | `AdminUserNotFound` | 用户不存在 | 指定的用户 ID 不存在 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "name": "工作文档",
+        "type": "folder",
+        "item_count": 15,
+        "created_at": "2026-01-10T08:00:00Z",
+        "updated_at": "2026-01-12T14:30:00Z"
+      },
+      {
+        "id": 2,
+        "name": "报告.docx",
+        "type": "file",
+        "size": 102400,
+        "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "hash": "a1b2c3d4e5f6...",
+        "created_at": "2026-01-11T10:00:00Z",
+        "updated_at": "2026-01-11T10:00:00Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 20,
+      "total": 50,
+      "total_pages": 3
+    }
+  }
+}
+```
+
+---
+
+### 10.8 获取用户存储统计
+
+**GET** `/api/admin/users/{id}/storage`
+
+获取指定用户的存储空间统计信息。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | integer | 用户 ID |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | user_id 格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
+| 404 | 80002 | `AdminUserNotFound` | 用户不存在 | 指定的用户 ID 不存在 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "used": 1073741824,
+    "quota": 10737418240,
+    "percentage": 10.0,
+    "file_count": 150,
+    "folder_count": 20
+  }
+}
+```
+
+---
+
+### 10.9 获取全局存储统计
+
+**GET** `/api/admin/storage/stats`
+
+获取系统全局的存储空间统计信息。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "total_users": 100,
+    "total_files": 5000,
+    "total_folders": 200,
+    "total_size": 549755813888,
+    "user_count": 100,
+    "active_user_count": 95
+  }
+}
+```
+
+---
+
+### 10.10 获取分享列表
+
+**GET** `/api/admin/shares`
+
+获取所有分享列表，支持分页和筛选。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 查询参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| status | string | 否 | 状态筛选：all/active/expired/cancelled，默认 all |
+| user_id | integer | 否 | 按创建用户筛选 |
+| page | integer | 否 | 页码，默认 1 |
+| page_size | integer | 否 | 每页数量，默认 20，最大 100 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误 |
+| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "share_id": "sh_abc123",
+        "user_id": 1,
+        "username": "john_doe",
+        "file_name": "文档.pdf",
+        "file_count": 1,
+        "share_link": "https://disk.example.com/s/abc123",
+        "has_password": true,
+        "permission": "download",
+        "view_count": 10,
+        "download_count": 5,
+        "created_at": "2026-01-13T10:00:00Z",
+        "expires_at": "2026-01-20T10:00:00Z",
+        "status": "active"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 20,
+      "total": 50,
+      "total_pages": 3
+    }
+  }
+}
+```
+
+---
+
+### 10.11 获取分享详情
+
+**GET** `/api/admin/shares/{id}`
+
+获取指定分享的详细信息（包括关联文件）。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | string | 分享 ID（share_code） |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | share_id 格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
+| 404 | 80005 | `AdminShareNotFound` | 分享不存在 | 指定的分享不存在 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "share_id": "sh_abc123",
+    "user_id": 1,
+    "username": "john_doe",
+    "files": [
+      {"id": 1, "name": "文档.pdf", "type": "file", "size": 102400}
+    ],
+    "share_link": "https://disk.example.com/s/abc123",
+    "has_password": true,
+    "permission": "download",
+    "view_count": 10,
+    "download_count": 5,
+    "created_at": "2026-01-13T10:00:00Z",
+    "expires_at": "2026-01-20T10:00:00Z",
+    "status": "active"
+  }
+}
+```
+
+---
+
+### 10.12 删除分享
+
+**DELETE** `/api/admin/shares/{id}`
+
+强制取消指定分享（管理员操作）。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | string | 分享 ID（share_code） |
+
+#### 业务规则
+
+管理员可以强制取消任何分享，被取消的分享立即失效。
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | 请求参数错误 | share_id 格式错误 |
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
+| 404 | 80005 | `AdminShareNotFound` | 分享不存在 | 指定的分享不存在 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "share_id": "sh_abc123",
+    "status": "cancelled",
+    "updated_at": "2026-01-15T10:00:00Z"
+  }
+}
+```
+
+---
+
+### 10.13 获取系统概览统计
+
+**GET** `/api/admin/stats/overview`
+
+获取系统整体运行状态的统计信息。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "user_count": 100,
+    "file_count": 5000,
+    "storage_size": 549755813888,
+    "share_count": 200,
+    "active_share_count": 150,
+    "storage_quota": 10995116277760
+  }
+}
+```
+
+---
+
+### 10.14 获取系统状态
+
+**GET** `/api/admin/stats/system`
+
+获取系统运行状态详细信息（数据库连接、Redis 连接、磁盘空间、运行时间）。
+
+#### 请求头
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
+
+#### 响应字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| uptime | integer | 运行时间（秒） |
+| version | string | 系统版本 |
+| mysql | object | MySQL 连接状态 |
+| mysql.connected | boolean | 是否已连接 |
+| mysql.connection_count | integer | 当前连接数 |
+| mysql.latency_ms | integer | 查询延迟（毫秒） |
+| redis | object | Redis 连接状态 |
+| redis.connected | boolean | 是否已连接 |
+| redis.latency_ms | integer | 查询延迟（毫秒） |
+| disk | object | 磁盘空间状态 |
+| disk.total | integer | 总空间（字节） |
+| disk.used | integer | 已用空间（字节） |
+| disk.free | integer | 可用空间（字节） |
+| disk.percentage | double | 使用百分比 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
+|------------|--------|----------|----------|----------|
+| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
+| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
+| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "uptime": 86400,
+    "version": "1.0.0",
+    "mysql": {
+      "connected": true,
+      "connection_count": 5,
+      "latency_ms": 3
+    },
+    "redis": {
+      "connected": true,
+      "latency_ms": 1
+    },
+    "disk": {
+      "total": 10995116277760,
+      "used": 5497558138880,
+      "free": 5497558138880,
+      "percentage": 50.0
+    }
+  }
+}
+```
