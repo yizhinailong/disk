@@ -59,6 +59,7 @@ Ignore generated/artifact paths: `build/`, `clients/desktop/build/`, `.sisyphus/
 
 ## CONVENTIONS
 
+- Documentation is the source of truth before implementation changes: every code change must first update the relevant design/API/product/test documentation, then update code so docs and behavior remain consistent.
 - C++23, CMake + vcpkg; root backend and `clients/desktop/` are separate CMake projects.
 - Formatting is `.clang-format`: Google-based, 4-space indent, `ColumnLimit: 0`, `PointerAlignment: Left`, `AccessModifierOffset: -4`.
 - `.clangd` enables broad clang-tidy groups and removes noisy checks such as magic numbers, identifier length, trailing-return modernization.
