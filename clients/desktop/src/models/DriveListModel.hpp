@@ -8,6 +8,7 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QVariantMap>
 #include <QVector>
 
 #include "models/DriveItem.hpp"
@@ -46,6 +47,7 @@ namespace disk::desktop {
         auto SetItems(const QVector<DriveItem>& items) -> void;
         auto indexOf(quint64 id) const -> int;
         auto GetItem(int row) const -> std::optional<DriveItem>;
+        Q_INVOKABLE QVariantMap GetItemById(const QString& id) const;
 
     private:
         QVector<DriveItem> m_items;

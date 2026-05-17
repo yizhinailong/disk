@@ -88,6 +88,7 @@ Page {
     property string downloadErrorMessage: ""
     property string pendingOwnerDownloadFileId: ""
     property string pendingOwnerDownloadFilename: ""
+    property var pendingOwnerBatchDownloadFiles: []
     property bool folderNavigatorExpanded: false
     property string currentViewMode: "myfiles"
     property var breadcrumbPath: []
@@ -359,6 +360,29 @@ Page {
         root.toastMessage = ""
     }
 
+    function selectedDownloadFiles() {
+        var files = []
+        if (!driveManager.listModel) {
+            return files
+        }
+
+        for (var index = 0; index < root.selectedItemIds.length; ++index) {
+            var item = driveManager.listModel.GetItemById(String(root.selectedItemIds[index] || ""))
+            if (item && String(item.kind || "") === "file") {
+                files.push({
+                    id: String(item.id || ""),
+                    name: String(item.name || "")
+                })
+            }
+        }
+
+        return files
+    }
+
+    function selectedDownloadFileCount() {
+        return root.selectedDownloadFiles().length
+    }
+
     function toggleShareSelection(shareId) {
         var shareIdValue = String(shareId || "")
         var copy = root.selectedShareIds.slice()
@@ -538,12 +562,39 @@ Page {
     }
 
     function openOwnerDownloadFileChooser(fileId, filename) {
+        var selectedFiles = root.selectedDownloadFiles()
+        if (root.selectedItemIds.length > 1) {
+            if (selectedFiles.length === 0) {
+                downloadErrorMessage = "请选择文件下载"
+                toolbarCard.downloadButton.forceActiveFocus()
+                return
+            }
+            root.openOwnerBatchDownloadFolderChooser(selectedFiles)
+            return
+        }
+
+        if (selectedFiles.length === 1) {
+            fileId = selectedFiles[0].id
+            filename = selectedFiles[0].name
+        }
+
         pendingOwnerDownloadFileId = String(fileId || "")
         pendingOwnerDownloadFilename = String(filename || "")
         downloadErrorMessage = ""
         downloadFileDialogLoader.active = true
         if (downloadFileDialogLoader.item) {
             downloadFileDialogLoader.item.open()
+        }
+    }
+
+    function openOwnerBatchDownloadFolderChooser(files) {
+        pendingOwnerBatchDownloadFiles = files || []
+        pendingOwnerDownloadFileId = ""
+        pendingOwnerDownloadFilename = ""
+        downloadErrorMessage = ""
+        downloadFolderDialogLoader.active = true
+        if (downloadFolderDialogLoader.item) {
+            downloadFolderDialogLoader.item.open()
         }
     }
 
@@ -556,6 +607,54 @@ Page {
             }
         }
         return value
+    }
+
+    function downloadBasename(filename) {
+        var value = String(filename || "")
+        value = value.replace(/\\/g, "/")
+        var slashIndex = value.lastIndexOf("/")
+        if (slashIndex >= 0) {
+            value = value.slice(slashIndex + 1)
+        }
+        return value === "" ? "download" : value
+    }
+
+    function uniqueDownloadFilename(filename, usedNames) {
+        var baseName = root.downloadBasename(filename)
+        var lowerBaseName = baseName.toLowerCase()
+        if (!usedNames[lowerBaseName]) {
+            usedNames[lowerBaseName] = true
+            return baseName
+        }
+
+        var dotIndex = baseName.lastIndexOf(".")
+        var stem = dotIndex > 0 ? baseName.slice(0, dotIndex) : baseName
+        var extension = dotIndex > 0 ? baseName.slice(dotIndex) : ""
+        var suffix = 1
+        while (true) {
+            var candidate = stem + " (" + suffix + ")" + extension
+            var lowerCandidate = candidate.toLowerCase()
+            if (!usedNames[lowerCandidate]) {
+                usedNames[lowerCandidate] = true
+                return candidate
+            }
+            ++suffix
+        }
+    }
+
+    function joinDownloadPath(directoryPath, filename) {
+        var directory = root.normalizeDownloadPath(directoryPath)
+        var name = root.downloadBasename(filename)
+        if (directory === "" || name === "") {
+            return ""
+        }
+
+        var lastCharacter = directory.charAt(directory.length - 1)
+        if (lastCharacter === "/" || lastCharacter === "\\") {
+            return directory + name
+        }
+
+        return directory + "/" + name
     }
 
     function startOwnerDownloadToPath(fileId, filename, targetPath) {
@@ -583,6 +682,53 @@ Page {
             return false
         }
 
+        return true
+    }
+
+    function startOwnerBatchDownloadToDirectory(directoryPath) {
+        var localDirectory = root.normalizeDownloadPath(directoryPath)
+        if (localDirectory === "") {
+            downloadErrorMessage = "请选择下载保存目录"
+            toolbarCard.downloadButton.forceActiveFocus()
+            return false
+        }
+
+        var files = root.pendingOwnerBatchDownloadFiles || []
+        if (files.length === 0) {
+            downloadErrorMessage = "请选择文件下载"
+            toolbarCard.downloadButton.forceActiveFocus()
+            return false
+        }
+
+        downloadErrorMessage = ""
+
+        var createdCount = 0
+        var usedNames = ({})
+        for (var index = 0; index < files.length; ++index) {
+            var file = files[index]
+            var ownerFileId = Number(file.id)
+            var targetPath = root.joinDownloadPath(
+                localDirectory,
+                root.uniqueDownloadFilename(file.name, usedNames)
+            )
+            if (!isFinite(ownerFileId) || ownerFileId <= 0 || targetPath === "") {
+                continue
+            }
+
+            var downloadCountBefore = transferManager.downloadModel.rowCount()
+            transferManager.StartDownload(ownerFileId, targetPath, "owner")
+            if (transferManager.downloadModel.rowCount() > downloadCountBefore) {
+                ++createdCount
+            }
+        }
+
+        if (createdCount === 0) {
+            downloadErrorMessage = "创建下载任务失败"
+            toolbarCard.downloadButton.forceActiveFocus()
+            return false
+        }
+
+        root.showToast("已创建 " + createdCount + " 个下载任务")
         return true
     }
 
@@ -1007,6 +1153,12 @@ Page {
         sourceComponent: downloadFileDialogComponent
     }
 
+    Loader {
+        id: downloadFolderDialogLoader
+        active: false
+        sourceComponent: downloadFolderDialogComponent
+    }
+
     Component {
         id: uploadFileDialogComponent
 
@@ -1032,6 +1184,17 @@ Page {
 
             onAccepted: root.startOwnerDownloadToPath(root.pendingOwnerDownloadFileId, root.pendingOwnerDownloadFilename, file)
             onRejected: root.startOwnerDownloadToPath(root.pendingOwnerDownloadFileId, root.pendingOwnerDownloadFilename, "")
+        }
+    }
+
+    Component {
+        id: downloadFolderDialogComponent
+
+        Platform.FolderDialog {
+            title: "选择下载保存目录"
+
+            onAccepted: root.startOwnerBatchDownloadToDirectory(folder)
+            onRejected: root.startOwnerBatchDownloadToDirectory("")
         }
     }
 

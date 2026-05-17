@@ -116,7 +116,7 @@ Rectangle {
                 id: downloadButton
                 text: "下载"
                 visible: page.isMyFilesMode
-                enabled: page.selectedItemKind === "file"
+                enabled: page.selectedDownloadFileCount() > 0
                 onClicked: page.openOwnerDownloadFileChooser(page.selectedItemId, page.selectedItemName)
             }
 

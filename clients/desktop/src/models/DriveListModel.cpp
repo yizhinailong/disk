@@ -118,4 +118,24 @@ namespace disk::desktop {
         return std::nullopt;
     }
 
+    QVariantMap DriveListModel::GetItemById(const QString& id) const {
+        bool ok{ false };
+        const auto item_id = id.toULongLong(&ok);
+        if (!ok) {
+            return {};
+        }
+
+        const auto row = indexOf(item_id);
+        if (row < 0) {
+            return {};
+        }
+
+        const auto& item = m_items.at(row);
+        return {
+            {   "id", QVariant::fromValue(item.id) },
+            { "kind", item.kind },
+            { "name", item.name },
+        };
+    }
+
 } // namespace disk::desktop
