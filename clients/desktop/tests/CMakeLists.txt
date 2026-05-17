@@ -119,6 +119,7 @@ qt_add_qml_module(desktop-quick-tests
         quick/pages/tst_drive_browser_navigation.qml
         quick/navigation/tst_route_taxonomy.qml
         quick/pages/tst_drive_interactions.qml
+        quick/pages/tst_admin_page.qml
     RESOURCE_PREFIX /qt/qml
 )
 

@@ -299,6 +299,26 @@ cmake --build --preset windows-debug-clang-cl
 | GET | `/api/system/info` | 获取系统信息 | JWT |
 | GET | `/api/logs` | 分页查看当前用户操作日志 | JWT |
 
+### 管理员接口
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|------|------|------|------|
+| GET | `/api/admin/users` | 用户列表 | JWT + Admin |
+| GET | `/api/admin/users/{id}` | 用户详情 | JWT + Admin |
+| PUT | `/api/admin/users/{id}/status` | 修改用户状态 | JWT + Admin |
+| PUT | `/api/admin/users/{id}/role` | 修改用户角色 | JWT + Admin |
+| DELETE | `/api/admin/users/{id}` | 删除用户 | JWT + Admin |
+| GET | `/api/admin/users/{id}/files` | 用户文件列表 | JWT + Admin |
+| GET | `/api/admin/users/{id}/storage` | 用户存储统计 | JWT + Admin |
+| GET | `/api/admin/storage/stats` | 全局存储统计 | JWT + Admin |
+| GET | `/api/admin/shares` | 分享列表 | JWT + Admin |
+| GET | `/api/admin/shares/{id}` | 分享详情 | JWT + Admin |
+| DELETE | `/api/admin/shares/{id}` | 强制取消分享 | JWT + Admin |
+| GET | `/api/admin/stats/overview` | 概览统计 | JWT + Admin |
+| GET | `/api/admin/stats/system` | 系统状态 | JWT + Admin |
+
+所有管理员接口需要 JWT 角色为管理员 (role=1)，由 AdminAuthFilter 校验。
+
 更详细的请求和响应结构请参考 [docs/design/02-API接口设计.md](docs/design/02-API接口设计.md)。
 
 ## 项目结构

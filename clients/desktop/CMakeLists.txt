@@ -139,6 +139,11 @@ set(DESKTOP_QML_FILES
     qml/components/auth/AuthTheme.qml
     qml/components/owner/OwnerAccountCard.qml
     qml/components/owner/OwnerStorageCard.qml
+    qml/components/admin/ConfirmDialog.qml
+    qml/components/admin/UserDetailDialog.qml
+    qml/components/admin/UserTab.qml
+    qml/components/admin/ShareTab.qml
+    qml/components/admin/SystemTab.qml
     qml/pages/DriveBrowserPage.qml
     qml/pages/LoginPage.qml
     qml/pages/RegisterPage.qml
