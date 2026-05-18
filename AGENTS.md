@@ -76,7 +76,7 @@ Ignore generated/artifact paths: `build/`, `clients/desktop/build/`, `.sisyphus/
 - Do not throw/catch for business flow; return `Result<T>` / `ErrorInfo`.
 - Do not hand-edit generated ORM `.hpp` files for custom behavior.
 - Do not manually parse JSON in controllers when a DTO belongs in `src/dtos/`.
-- Do not use `upload_tasks.uploaded_chunks` for new code; it is deprecated compatibility storage. Use `upload_task_chunks`.
+- Upload chunk progress is stored only in `upload_task_chunks`; do not add compatibility JSON columns back to `upload_tasks`.
 - Do not make desktop warnings fatal; `clients/desktop/CMakeLists.txt` says advisory warnings are target-scoped and never `-Werror`.
 - Do not store production passwords/secrets in `config.json`; production uses environment variables and `DISK_SECURE_MODE=true`.
 - Do not expose Redis/internal services on public networks; deployment docs require private/internal addresses.

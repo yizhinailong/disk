@@ -76,6 +76,18 @@
 #include <trantor/utils/Date.h>
 #include <trantor/utils/Logger.h>
 
+// ==================== 后端 ORM 模型头文件 ====================
+#include "models/FileContents.hpp"
+#include "models/Files.hpp"
+#include "models/Folders.hpp"
+#include "models/OperationLogs.hpp"
+#include "models/ShareFiles.hpp"
+#include "models/Shares.hpp"
+#include "models/Trash.hpp"
+#include "models/UploadTaskChunks.hpp"
+#include "models/UploadTasks.hpp"
+#include "models/Users.hpp"
+
 // ==================== Google Test 测试框架头文件 ====================
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>

@@ -171,6 +171,14 @@ target_precompile_headers(${PROJECT_NAME}
     "${CMAKE_SOURCE_DIR}/src/utils/Pch.hpp"
 )
 
+# Drogon ORM model sources are generated and still use std::wstring_convert
+# for UTF-8 length validation. Keep the warning contained to generated code.
+set_source_files_properties(
+    ${Models_SOURCES}
+    PROPERTIES
+    COMPILE_OPTIONS "-Wno-deprecated-declarations"
+)
+
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
     Drogon::Drogon
