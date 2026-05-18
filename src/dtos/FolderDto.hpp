@@ -29,6 +29,7 @@
 #include <json/json.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/NameValidation.hpp"
 
 namespace disk::folder {
 
@@ -43,7 +44,7 @@ namespace disk::folder {
      * - name: 禁止字符 / \ : * ? " < > | 及控制字符 (0x00-0x1F)
      * - name: 禁止保留名称 "." 和 ".."
      * - name: 禁止以 "." 开头（隐藏文件夹）
-     * - name: 仅允许 ASCII 可打印字符 (0x20-0x7E)
+     * - name: 必须是合法 UTF-8，禁止控制字符
      * - parent_id: 默认 0（根目录）
      */
     struct CreateFolderRequest {
@@ -138,12 +139,13 @@ namespace disk::folder {
                 );
             }
 
-            // 规则 5：字符集验证（仅 ASCII 可打印字符）
+            // 规则 5：字符集验证（合法 UTF-8，且不含控制字符）
             if (!request.ValidateCharset()) {
-                LOG_WARN << "Folder name contains non-ASCII characters: " << request.name;
+                LOG_WARN << "Folder name contains invalid UTF-8 or control characters: "
+                         << request.name;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
-                    "Folder name only allows ASCII printable characters"
+                    "Folder name must be valid UTF-8 and cannot contain control characters"
                 ));
             }
 
@@ -201,16 +203,10 @@ namespace disk::folder {
             return name.empty() || name[0] != '.';
         }
 
-        /// 验证字符集（仅 ASCII 可打印字符 0x20-0x7E）
+        /// 验证字符集（合法 UTF-8，且不含控制字符）
         [[nodiscard]]
         auto ValidateCharset() const -> bool {
-            for (char c : name) {
-                // ASCII 可打印字符范围: 0x20 (空格) 到 0x7E (~)
-                if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) {
-                    return false;
-                }
-            }
-            return true;
+            return utils::IsValidUtf8WithoutControlChars(name);
         }
     };
 

@@ -50,6 +50,7 @@
 #include <json/json.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/NameValidation.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::file {
@@ -97,7 +98,7 @@ namespace disk::file {
      * - filename: 1-255字符，禁止字符 / \ : * ? " < > | 及控制字符
      * - filename: 禁止保留名称 "." 和 ".."
      * - filename: 禁止以 "." 开头（隐藏文件）
-     * - filename: 仅允许 ASCII 可打印字符 (0x20-0x7E)
+     * - filename: 必须是合法 UTF-8，禁止控制字符
      * - file_size: 必须 > 0（最大文件大小由服务层验证）
      * - file_hash: 32字符的十六进制字符串（MD5）
      * - parent_id: 默认 0（根目录）
@@ -220,10 +221,11 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameCharset()) {
-                LOG_WARN << "Filename contains non-ASCII characters: " << request.filename;
+                LOG_WARN << "Filename contains invalid UTF-8 or control characters: "
+                         << request.filename;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
-                    "Filename only allows ASCII printable characters"
+                    "Filename must be valid UTF-8 and cannot contain control characters"
                 ));
             }
 
@@ -287,16 +289,10 @@ namespace disk::file {
             return filename.empty() || filename[0] != '.';
         }
 
-        /// 验证文件名字符集（仅 ASCII 可打印字符 0x20-0x7E）
+        /// 验证文件名字符集（合法 UTF-8，且不含控制字符）
         [[nodiscard]]
         auto ValidateFilenameCharset() const -> bool {
-            for (char c : filename) {
-                // ASCII 可打印字符范围: 0x20 (空格) 到 0x7E (~)
-                if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) {
-                    return false;
-                }
-            }
-            return true;
+            return utils::IsValidUtf8WithoutControlChars(filename);
         }
 
         /// 验证文件大小 (> 0)
@@ -975,7 +971,7 @@ namespace disk::file {
      * - new_name: 1-255字符，禁止字符 / \ : * ? " < > | 及控制字符
      * - new_name: 禁止保留名称 "." 和 ".."
      * - new_name: 禁止以 "." 开头（隐藏文件）
-     * - new_name: 仅允许 ASCII 可打印字符 (0x20-0x7E)
+     * - new_name: 必须是合法 UTF-8，禁止控制字符
      *
      * 从 URL 路径参数和请求体解析。
      */
@@ -1091,10 +1087,11 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameCharset()) {
-                LOG_WARN << "Filename contains non-ASCII characters: " << request.new_name;
+                LOG_WARN << "Filename contains invalid UTF-8 or control characters: "
+                         << request.new_name;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
-                    "Filename only allows ASCII printable characters"
+                    "Filename must be valid UTF-8 and cannot contain control characters"
                 ));
             }
 
@@ -1140,16 +1137,10 @@ namespace disk::file {
             return new_name.empty() || new_name[0] != '.';
         }
 
-        /// 验证文件名字符集（仅 ASCII 可打印字符 0x20-0x7E）
+        /// 验证文件名字符集（合法 UTF-8，且不含控制字符）
         [[nodiscard]]
         auto ValidateFilenameCharset() const -> bool {
-            for (char c : new_name) {
-                // ASCII 可打印字符范围: 0x20 (空格) 到 0x7E (~)
-                if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) {
-                    return false;
-                }
-            }
-            return true;
+            return utils::IsValidUtf8WithoutControlChars(new_name);
         }
     };
 
