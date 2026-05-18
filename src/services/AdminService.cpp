@@ -399,13 +399,18 @@ namespace disk::services {
                 : 0;
 
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT s.id, s.user_id, u.username, s.file_id, f.name AS file_name, "
+                "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, "
                 "s.share_code, s.status, "
                 "(s.view_count + s.download_count) AS access_count, "
                 "s.created_at, s.expires_at "
                 "FROM shares s "
                 "LEFT JOIN users u ON s.user_id = u.id "
-                "LEFT JOIN files f ON s.file_id = f.id "
+                "LEFT JOIN share_files sf ON sf.id = ("
+                "    SELECT MIN(sf2.id) "
+                "    FROM share_files sf2 "
+                "    WHERE sf2.share_id = s.id AND sf2.item_type = 'file'"
+                ") "
+                "LEFT JOIN files f ON sf.item_id = f.id "
                 + where_clause +
                 " ORDER BY s.created_at DESC LIMIT ? OFFSET ?",
                 req.page_size,
@@ -456,13 +461,18 @@ namespace disk::services {
 
         try {
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT s.id, s.user_id, u.username, s.file_id, f.name AS file_name, "
+                "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, "
                 "s.share_code, s.status, "
                 "(s.view_count + s.download_count) AS access_count, "
                 "s.created_at, s.expires_at "
                 "FROM shares s "
                 "LEFT JOIN users u ON s.user_id = u.id "
-                "LEFT JOIN files f ON s.file_id = f.id "
+                "LEFT JOIN share_files sf ON sf.id = ("
+                "    SELECT MIN(sf2.id) "
+                "    FROM share_files sf2 "
+                "    WHERE sf2.share_id = s.id AND sf2.item_type = 'file'"
+                ") "
+                "LEFT JOIN files f ON sf.item_id = f.id "
                 "WHERE s.id = ?",
                 share_id
             );
