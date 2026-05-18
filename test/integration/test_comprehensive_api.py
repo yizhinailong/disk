@@ -667,7 +667,7 @@ def test_admin_domain(admin_token: str, user_token: str, temp_user_id: str) -> l
     tests = []
     resp = fetch(f"/api/admin/users/{temp_user_id}", method="GET", headers=auth_hdr(admin_token))
     tests.append(_test("admin_user_detail_ok",
-        json_field(resp.text, "code") == "0" or json_field(resp.text, "code") == "10002",
+        json_field(resp.text, "code") == "0",
         "code=0", json_field(resp.text, "code")))
     resp2 = fetch("/api/admin/users/99999999", method="GET", headers=auth_hdr(admin_token))
     tests.append(_test("admin_user_detail_invalid", json_field(resp2.text, "code") != "0", "code!=0", json_field(resp2.text, "code")))
@@ -678,12 +678,12 @@ def test_admin_domain(admin_token: str, user_token: str, temp_user_id: str) -> l
     resp = fetch(f"/api/admin/users/{temp_user_id}/status", method="PUT", headers=auth_hdr(admin_token),
                  json_body={"status": 0})
     tests.append(_test("admin_disable_user",
-        json_field(resp.text, "code") == "0" or json_field(resp.text, "code") == "10002",
+        json_field(resp.text, "code") == "0",
         "code=0", json_field(resp.text, "code")))
     resp2 = fetch(f"/api/admin/users/{temp_user_id}/status", method="PUT", headers=auth_hdr(admin_token),
                    json_body={"status": 1})
     tests.append(_test("admin_enable_user",
-        json_field(resp2.text, "code") == "0" or json_field(resp2.text, "code") == "10002",
+        json_field(resp2.text, "code") == "0",
         "code=0", json_field(resp2.text, "code")))
     results.append(("Admin", "/api/admin/users/{id}/status", "PUT", tests))
 
@@ -692,7 +692,7 @@ def test_admin_domain(admin_token: str, user_token: str, temp_user_id: str) -> l
     resp = fetch(f"/api/admin/users/{temp_user_id}/role", method="PUT", headers=auth_hdr(admin_token),
                  json_body={"role": 0})
     tests.append(_test("admin_change_role",
-        json_field(resp.text, "code") == "0" or json_field(resp.text, "code") == "10002",
+        json_field(resp.text, "code") == "0",
         "code=0", json_field(resp.text, "code")))
     results.append(("Admin", "/api/admin/users/{id}/role", "PUT", tests))
 
@@ -700,7 +700,7 @@ def test_admin_domain(admin_token: str, user_token: str, temp_user_id: str) -> l
     tests = []
     resp = fetch(f"/api/admin/users/{temp_user_id}", method="DELETE", headers=auth_hdr(admin_token))
     tests.append(_test("admin_delete_user",
-        json_field(resp.text, "code") == "0" or json_field(resp.text, "code") == "10002",
+        json_field(resp.text, "code") == "0",
         "code=0", json_field(resp.text, "code")))
     results.append(("Admin", "/api/admin/users/{id}", "DELETE", tests))
 
@@ -713,10 +713,22 @@ def test_admin_domain(admin_token: str, user_token: str, temp_user_id: str) -> l
     # Create a share for admin share management tests
     up = upload_file(admin_token, unique_name("adminshare") + ".dat")
     admin_share_id = ""
+    admin_share_db_id = ""
     if up:
         resp = fetch("/api/share", method="POST", headers=auth_hdr(admin_token),
                      json_body={"file_ids": [int(up["file_id"])], "expire_days": 7})
         admin_share_id = json_field(resp.text, "data.share_id")
+        # Admin endpoints use integer DB id, not share_code
+        if admin_share_id:
+            list_resp = fetch("/api/admin/shares?page=1&page_size=50", method="GET", headers=auth_hdr(admin_token))
+            try:
+                shares_data = json.loads(list_resp.text)
+                for s in shares_data.get("data", {}).get("items", []):
+                    if str(s.get("share_code", "")) == admin_share_id:
+                        admin_share_db_id = str(s["id"])
+                        break
+            except Exception:
+                pass
 
     # 46. GET /api/admin/shares
     tests = []
@@ -726,24 +738,24 @@ def test_admin_domain(admin_token: str, user_token: str, temp_user_id: str) -> l
 
     # 47. GET /api/admin/shares/{id}
     tests = []
-    if admin_share_id:
-        resp = fetch(f"/api/admin/shares/{admin_share_id}", method="GET", headers=auth_hdr(admin_token))
+    if admin_share_db_id:
+        resp = fetch(f"/api/admin/shares/{admin_share_db_id}", method="GET", headers=auth_hdr(admin_token))
         tests.append(_test("admin_share_detail",
-            json_field(resp.text, "code") == "0" or json_field(resp.text, "code") == "10002",
+            json_field(resp.text, "code") == "0",
             "code=0", json_field(resp.text, "code")))
     else:
-        tests.append(_test("admin_share_detail", False, "code=0", "no share_id"))
+        tests.append(_test("admin_share_detail", False, "code=0", "no share db id"))
     results.append(("Admin", "/api/admin/shares/{id}", "GET", tests))
 
     # 48. DELETE /api/admin/shares/{id}
     tests = []
-    if admin_share_id:
-        resp = fetch(f"/api/admin/shares/{admin_share_id}", method="DELETE", headers=auth_hdr(admin_token))
+    if admin_share_db_id:
+        resp = fetch(f"/api/admin/shares/{admin_share_db_id}", method="DELETE", headers=auth_hdr(admin_token))
         tests.append(_test("admin_force_cancel_share",
-            json_field(resp.text, "code") == "0" or json_field(resp.text, "code") == "10002",
+            json_field(resp.text, "code") == "0",
             "code=0", json_field(resp.text, "code")))
     else:
-        tests.append(_test("admin_force_cancel_share", False, "code=0", "no share_id"))
+        tests.append(_test("admin_force_cancel_share", False, "code=0", "no share db id"))
     results.append(("Admin", "/api/admin/shares/{id}", "DELETE", tests))
 
     # 49. GET /api/admin/stats/overview

@@ -122,19 +122,19 @@ namespace disk::controllers {
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         [[nodiscard]]
-        auto GetUserDetail(drogon::HttpRequestPtr request)
+        auto GetUserDetail(drogon::HttpRequestPtr request, std::string id)
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         [[nodiscard]]
-        auto ChangeUserStatus(drogon::HttpRequestPtr request)
+        auto ChangeUserStatus(drogon::HttpRequestPtr request, std::string id)
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         [[nodiscard]]
-        auto ChangeUserRole(drogon::HttpRequestPtr request)
+        auto ChangeUserRole(drogon::HttpRequestPtr request, std::string id)
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         [[nodiscard]]
-        auto SoftDeleteUser(drogon::HttpRequestPtr request)
+        auto SoftDeleteUser(drogon::HttpRequestPtr request, std::string id)
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         [[nodiscard]]
@@ -146,11 +146,11 @@ namespace disk::controllers {
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         [[nodiscard]]
-        auto GetShareDetail(drogon::HttpRequestPtr request)
+        auto GetShareDetail(drogon::HttpRequestPtr request, std::string id)
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         [[nodiscard]]
-        auto ForceCancelShare(drogon::HttpRequestPtr request)
+        auto ForceCancelShare(drogon::HttpRequestPtr request, std::string id)
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         [[nodiscard]]

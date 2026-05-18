@@ -217,33 +217,33 @@ namespace disk::services {
             co_return std::unexpected(ErrorInfo(ErrorCode::AdminCannotModifySelf));
         }
 
-        if (role == 0) {
-            try {
-                auto count_result = co_await m_db_client->execSqlCoro(
-                    "SELECT COUNT(*) AS cnt FROM users WHERE role = 1"
-                );
-                if (!count_result.empty()) {
-                    int admin_count = count_result[0]["cnt"].as<int>();
-                    if (admin_count <= 1) {
-                        LOG_WARN << "Cannot demote last admin: target_id=" << target_id;
-                        co_return std::unexpected(ErrorInfo(ErrorCode::AdminCannotDemoteLast));
-                    }
-                }
-            } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_ERROR << "Failed to count admins: " << e.base().what();
-                co_return std::unexpected(ErrorInfo(
-                    ErrorCode::InternalError,
-                    "Failed to verify admin count"
-                ));
-            }
-        }
-
         try {
             CoroMapper<Users> mapper(m_db_client);
 
             auto user = co_await mapper.findOne(
                 Criteria(Users::Cols::_id, CompareOperator::EQ, target_id)
             );
+
+            if (role == 0 && user.getValueOfRole() == 1) {
+                try {
+                    auto count_result = co_await m_db_client->execSqlCoro(
+                        "SELECT COUNT(*) AS cnt FROM users WHERE role = 1"
+                    );
+                    if (!count_result.empty()) {
+                        int admin_count = count_result[0]["cnt"].as<int>();
+                        if (admin_count <= 1) {
+                            LOG_WARN << "Cannot demote last admin: target_id=" << target_id;
+                            co_return std::unexpected(ErrorInfo(ErrorCode::AdminCannotDemoteLast));
+                        }
+                    }
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_ERROR << "Failed to count admins: " << e.base().what();
+                    co_return std::unexpected(ErrorInfo(
+                        ErrorCode::InternalError,
+                        "Failed to verify admin count"
+                    ));
+                }
+            }
 
             user.setRole(static_cast<int8_t>(role));
             co_await mapper.update(user);

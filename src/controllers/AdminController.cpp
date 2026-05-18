@@ -37,13 +37,12 @@ namespace disk::controllers {
         co_return Response::Success(result->ToJson());
     }
 
-    auto AdminController::GetUserDetail(drogon::HttpRequestPtr request)
+    auto AdminController::GetUserDetail(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         LOG_INFO << "Admin get user detail request: " << request->getPeerAddr().toIpPort();
 
-        auto id_str = request->getParameter("id");
-        if (id_str.empty()) {
+        if (id.empty()) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 "Missing required parameter: id"
@@ -52,7 +51,7 @@ namespace disk::controllers {
 
         uint64_t user_id = 0;
         try {
-            user_id = std::stoull(id_str);
+            user_id = std::stoull(id);
         } catch (const std::exception&) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
@@ -75,15 +74,14 @@ namespace disk::controllers {
         co_return Response::Success(data);
     }
 
-    auto AdminController::ChangeUserStatus(drogon::HttpRequestPtr request)
+    auto AdminController::ChangeUserStatus(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         LOG_INFO << "Admin change user status request: " << request->getPeerAddr().toIpPort();
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
 
-        auto id_str = request->getParameter("id");
-        if (id_str.empty()) {
+        if (id.empty()) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 "Missing required parameter: id"
@@ -92,7 +90,7 @@ namespace disk::controllers {
 
         uint64_t target_id = 0;
         try {
-            target_id = std::stoull(id_str);
+            target_id = std::stoull(id);
         } catch (const std::exception&) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
@@ -120,15 +118,14 @@ namespace disk::controllers {
         co_return Response::Success();
     }
 
-    auto AdminController::ChangeUserRole(drogon::HttpRequestPtr request)
+    auto AdminController::ChangeUserRole(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         LOG_INFO << "Admin change user role request: " << request->getPeerAddr().toIpPort();
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
 
-        auto id_str = request->getParameter("id");
-        if (id_str.empty()) {
+        if (id.empty()) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 "Missing required parameter: id"
@@ -137,7 +134,7 @@ namespace disk::controllers {
 
         uint64_t target_id = 0;
         try {
-            target_id = std::stoull(id_str);
+            target_id = std::stoull(id);
         } catch (const std::exception&) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
@@ -165,15 +162,14 @@ namespace disk::controllers {
         co_return Response::Success();
     }
 
-    auto AdminController::SoftDeleteUser(drogon::HttpRequestPtr request)
+    auto AdminController::SoftDeleteUser(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         LOG_INFO << "Admin soft delete user request: " << request->getPeerAddr().toIpPort();
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
 
-        auto id_str = request->getParameter("id");
-        if (id_str.empty()) {
+        if (id.empty()) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 "Missing required parameter: id"
@@ -182,7 +178,7 @@ namespace disk::controllers {
 
         uint64_t target_id = 0;
         try {
-            target_id = std::stoull(id_str);
+            target_id = std::stoull(id);
         } catch (const std::exception&) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
@@ -242,13 +238,12 @@ namespace disk::controllers {
         co_return Response::Success(result->ToJson());
     }
 
-    auto AdminController::GetShareDetail(drogon::HttpRequestPtr request)
+    auto AdminController::GetShareDetail(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         LOG_INFO << "Admin get share detail request: " << request->getPeerAddr().toIpPort();
 
-        auto id_str = request->getParameter("id");
-        if (id_str.empty()) {
+        if (id.empty()) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 "Missing required parameter: id"
@@ -257,7 +252,7 @@ namespace disk::controllers {
 
         uint64_t share_id = 0;
         try {
-            share_id = std::stoull(id_str);
+            share_id = std::stoull(id);
         } catch (const std::exception&) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
@@ -280,15 +275,14 @@ namespace disk::controllers {
         co_return Response::Success(data);
     }
 
-    auto AdminController::ForceCancelShare(drogon::HttpRequestPtr request)
+    auto AdminController::ForceCancelShare(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         LOG_INFO << "Admin force cancel share request: " << request->getPeerAddr().toIpPort();
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
 
-        auto id_str = request->getParameter("id");
-        if (id_str.empty()) {
+        if (id.empty()) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 "Missing required parameter: id"
@@ -297,7 +291,7 @@ namespace disk::controllers {
 
         uint64_t share_id = 0;
         try {
-            share_id = std::stoull(id_str);
+            share_id = std::stoull(id);
         } catch (const std::exception&) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
