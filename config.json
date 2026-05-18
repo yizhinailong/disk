@@ -67,7 +67,7 @@
     {
       "name": "drogon::plugin::AccessLogger",
       "config": {
-        "log_path": "./build/log",
+        "log_path": "build/log",
         "log_file": "log",
         "log_level": "INFO",
         "log_size_limit": 10485760,
