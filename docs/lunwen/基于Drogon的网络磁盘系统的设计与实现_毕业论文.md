@@ -2,11 +2,11 @@
 
 ## 摘　要
 
-近年来，随着互联网技术的持续发展和个人数字化生活方式的深刻变革，用户对在线文件存储、管理与共享的需求正在快速增长。无论是个人用户还是中小型团队，都面临着文件随时随地访问、多端同步以及安全私有存储等方面的实际诉求。然而，现有的主流公有云网盘产品往往存在数据隐私得不到保障、上传下载带宽受到限制、存储空间收费不透明、依赖第三方基础设施稳定性等问题，而自建网盘方案在性能和易用性方面又常常难以兼顾。因此，设计并实现一个高性能、易于私有化部署、可完全自主运维的网络磁盘系统，具有较为明显的现实应用价值与研究意义。
+近年来，随着互联网技术的持续发展和个人数字化生活方式的深刻变革，用户对在线文件存储、管理与共享的需求正在快速增长。无论是个人用户还是中小型团队，都面临着文件随时随地访问、多端同步以及安全私有存储等方面的实际诉求。然而，现有的主流公有云网盘产品往往存在数据隐私得不到保障、上传下载带宽受到限制、依赖第三方基础设施稳定性等问题，而自建网盘方案在性能和易用性方面又常常难以兼顾。因此，设计并实现一个高性能、易于私有化部署、可完全自主运维的网络磁盘系统，具有较为明显的现实应用价值与研究意义。
 
-本文依照软件工程的基本流程开展系统设计与实现工作，系统定位为面向私有化部署场景的高性能网盘后端服务。后端以 C++23 标准和 Drogon 高性能 Web 框架为核心技术，借助其基于 epoll 的非阻塞异步 I/O 和 C++ 协程能力承载文件传输与业务接口处理；系统通过 RESTful API 对外提供能力，便于后续对接 Web、桌面端或移动端客户端。数据层选用 MySQL 完成用户信息、文件元数据、内容索引、目录结构、上传任务、分享记录、回收站和操作日志等核心数据的持久化存储，同时引入 Redis 管理刷新令牌、令牌黑名单、登录失败计数、分享访问状态和限流计数等短时状态；文件实体则采用内容寻址方式存储在服务器本地文件系统中，由后端统一负责路径映射、引用计数和访问权限控制。系统面向普通用户与管理员两类角色展开设计：普通用户可完成账号注册、登录、令牌刷新与登出，个人资料和存储空间查看，文件与目录的列表、搜索、重命名、移动、复制、软删除，支持断点续传和秒传的大文件分片上传，文件下载、外链分享、分享密码访问以及回收站恢复等操作；管理员则可通过管理接口完成用户账号状态与角色管理、用户文件查看、全局存储统计、分享审核与强制取消、系统状态查看等运维功能。
+本文依照软件工程的基本流程开展系统设计与实现工作，系统定位为面向私有化部署场景的高性能网盘后端服务。后端以 C++23 标准和 Drogon 高性能 Web 框架为核心技术，借助其基于 epoll 的非阻塞异步 I/O 和 C++ 协程能力承载文件传输与业务接口处理；系统通过 RESTful API 对外提供能力，便于后续对接桌面端。数据层选用 MySQL 完成用户信息、文件元数据、内容索引、目录结构、上传任务、分享记录、回收站等核心数据的持久化存储，同时引入 Redis 管理刷新令牌、令牌黑名单、登录失败计数、分享访问状态和限流计数等短时状态；文件实体则采用内容寻址方式存储在服务器本地文件系统中，由后端统一负责路径映射、引用计数和访问权限控制。系统面向普通用户与管理员两类角色展开设计：普通用户可完成账号注册、登录、令牌刷新与登出，个人资料和存储空间查看，文件与目录的列表、搜索、重命名、移动、复制、软删除，支持断点续传和秒传的大文件分片上传，文件下载、外链分享、分享密码访问等操作；管理员则可通过管理接口完成用户账号状态与角色管理、用户文件查看、全局存储统计、分享审核与强制取消、等运维功能。
 
-系统目前已能够较好地满足私有化网络磁盘的核心业务需求，一方面让用户在线管理文件和进行文件共享变得更加便捷高效，另一方面也在性能层面充分发挥了 Drogon 框架在高并发 HTTP 处理和异步数据库访问方面的显著优势。本文的研究不仅完成了一个具有实际应用价值的私有化网盘系统，也为基于 C++ 技术栈构建高性能 Web 服务提供了具体的工程实践参考，同时为同类私有化存储平台的技术选型和系统设计积累了可复用的经验。
+系统目前已能够较好地满足私有化网络磁盘的核心业务需求，一方面让用户在线管理文件和进行文件共享变得更加便捷高效，另一方面也在性能层面充分发挥了 Drogon 框架在高并发 HTTP 处理和异步数据库访问方面的显著优势。本文的研究不仅完成了一个具有实际应用价值的私有化网盘系统，也为基于 C++ 技术栈构建高性能 Web 服务提供了具体的工程实践参考。
 
 关键词：网络磁盘；文件管理；Drogon；C++23；RESTful API
 
@@ -14,13 +14,13 @@
 
 ## ABSTRACT
 
-In recent years, with the rapid development of internet technologies and the profound transformation of personal digital lifestyles, the demand for online file storage, management, and sharing has been growing at an accelerating pace. Both individual users and small-to-medium-sized teams face practical needs for accessing files anytime and anywhere, synchronizing across multiple devices, and securely storing data on private infrastructure. However, mainstream public cloud storage products often suffer from problems such as insufficient data privacy protection, restricted upload and download bandwidth, opaque storage billing models, and dependence on the stability of third-party infrastructure. Meanwhile, self-hosted network disk solutions frequently struggle to achieve a satisfactory balance between performance and ease of use. Accordingly, designing and implementing a high-performance, easily deployable, and fully self-manageable private network disk system carries considerable practical application value and research significance.
+In recent years, with the continuous development of internet technologies and the profound transformation of personal digital lifestyles, the demand for online file storage, management, and sharing has been growing rapidly. Both individual users and small-to-medium-sized teams face practical needs for accessing files anytime and anywhere, synchronizing across multiple devices, and securely storing data on private infrastructure. However, mainstream public cloud storage products often suffer from problems such as insufficient data privacy protection, restricted upload and download bandwidth, and dependence on the stability of third-party infrastructure, while self-hosted network disk solutions frequently struggle to achieve a satisfactory balance between performance and ease of use. Accordingly, designing and implementing a high-performance, easily deployable, and fully self-manageable private network disk system carries considerable practical application value and research significance.
 
-This thesis conducts system design and implementation work in accordance with the fundamental processes of software engineering. The system is implemented as a high-performance RESTful backend service for private network disk scenarios. The back end is built upon the C++23 standard and the Drogon high-performance web framework, leveraging epoll-based non-blocking asynchronous I/O and coroutine-based service logic to efficiently handle file transfers and business APIs. MySQL is selected for persistent storage of core data such as users, file metadata, content hashes, folders, upload tasks, shares, trash records, and operation logs. Redis is introduced for refresh token rotation, token blacklists, login failure counters, share access state, and rate-limiting counters. File entities are stored on the server's local filesystem using content-addressed storage, with the back end uniformly managing path mapping, reference counting, and access control. The system is designed around two user roles. Regular users can perform registration, login, token refreshing and logout, profile and storage querying, file and folder listing, searching, renaming, moving, copying, soft deletion, resumable chunked upload with instant deduplication, file downloading, external sharing with optional passwords, and trash recovery. Administrators can manage user status and roles, inspect user files and storage usage, view global storage statistics, manage shares, and query system status through protected administrative APIs.
+This thesis conducts system design and implementation work in accordance with the fundamental processes of software engineering. The system is positioned as a high-performance backend service for private network disk deployment scenarios. The backend is built upon the C++23 standard and the Drogon high-performance web framework, leveraging its epoll-based non-blocking asynchronous I/O and C++ coroutine capabilities to handle file transfers and business API processing. The system exposes its capabilities through RESTful APIs, facilitating subsequent integration with desktop clients. MySQL is selected for persistent storage of core data such as user information, file metadata, content indexes, directory structures, upload tasks, share records, and trash records. Redis is introduced for managing short-lived states including refresh tokens, token blacklists, login failure counters, share access states, and rate-limiting counters. File entities are stored on the server's local filesystem using content-addressed storage, with the backend uniformly managing path mapping, reference counting, and access control. The system is designed around two user roles: regular users can perform account registration, login, token refreshing and logout, profile and storage querying, file and folder listing, searching, renaming, moving, copying, and soft deletion, resumable chunked upload with instant deduplication, file downloading, external sharing with optional passwords, and other operations; administrators can manage user account status and roles, inspect user files, view global storage statistics, review and forcefully cancel shares, and perform other administrative functions through protected management APIs.
 
-The system currently satisfies the core functional requirements of a private network disk to a considerable degree. On one hand, it makes online file management and file sharing more convenient and efficient for users. On the other hand, it fully exploits the advantages of the Drogon framework in high-concurrency HTTP processing and asynchronous database access at the performance level. The research presented in this thesis not only completes the development of a private network disk system with practical application value, but also provides a concrete engineering practice reference for building high-performance web services based on the C++ technology stack, while accumulating reusable experience in technology selection and system design for similar private storage platforms.
+The system currently satisfies the core business requirements of a private network disk to a considerable degree. On one hand, it makes online file management and file sharing more convenient and efficient for users. On the other hand, it fully exploits the advantages of the Drogon framework in high-concurrency HTTP processing and asynchronous database access at the performance level. The research presented in this thesis not only completes the development of a private network disk system with practical application value, but also provides a concrete engineering practice reference for building high-performance web services based on the C++ technology stack.
 
-KEYWORDS: Network Disk; File Management; Drogon; C++; Front-end And Back-end Separation
+KEYWORDS: Network Disk; File Management; Drogon; C++23; RESTful API
 
 ---
 
@@ -96,6 +96,10 @@ JWT（JSON Web Token）是一种基于 JSON 格式的开放标准（RFC 7519）�
 ### 2.5 CMake 构建工具与安全基础库
 
 CMake 是一种跨平台的构建系统生成工具，被 Drogon 生态所推荐使用。本系统通过 CMakeLists.txt、CMakePresets.json 和 vcpkg manifest 管理后端项目的编译依赖、构建预设和第三方库，简化了 Linux 与 Windows 环境下的编译、测试和部署流程。密码哈希方面，系统使用 libsodium 提供的 Argon2id 算法保存用户密码，避免明文密码或弱哈希方案带来的安全风险。
+
+### 2.6 Qt 框架与 QML
+
+Qt 是一个跨平台的 C++ 应用程序开发框架，提供了丰富的 GUI 组件、网络通信、文件处理和国际化等功能模块，广泛用于桌面端、嵌入式和移动端应用开发。本系统的桌面客户端基于 Qt 6 构建，使用 Qt Network 模块实现与后端 RESTful API 的 HTTP 通信，支持文件分片上传、断点下载和 JSON 数据解析；界面层采用 QML（Qt Modeling Language）声明式语言编写，配合 Qt Quick Controls 2 提供现代风格的用户界面组件，实现了文件列表展示、目录导航、上传进度、分享管理和后台管理等功能页面。通过 QML 与 C++ 后端的属性绑定和信号槽机制，客户端能够在保持流畅交互体验的同时，与后端服务保持清晰的职责分离。
 
 ---
 
@@ -245,6 +249,8 @@ graph TD
     TrashOps --> Purge[彻底删除/清空]
 ```
 
+![图4-1 用户端功能结构图](assets/普通用户模块图.png)
+
 图4-2 管理员端功能结构图
 
 ```mermaid
@@ -273,6 +279,8 @@ graph TD
     SysStat --> Overview[系统概览]
     SysStat --> Runtime[数据库/Redis/磁盘状态]
 ```
+
+![图4-2 管理员端功能结构图](assets/管理员模块图.png)
 
 ### 4.3 系统功能设计
 
@@ -315,6 +323,8 @@ sequenceDiagram
     end
 ```
 
+![图4-3 用户登录与鉴权流程图](assets/用户登录与鉴权流程图.png)
+
 #### 4.3.2 文件与目录模块设计
 
 **（1）文件管理模块**
@@ -346,6 +356,8 @@ flowchart TD
     Success --> End
 ```
 
+![图4-4 创建目录流程图](assets/创建目录流程图.png)
+
 **（3）文件上传模块**
 
 文件上传模块是整个系统中技术实现复杂度最高的部分。当前系统采用统一的分片上传流程，默认分片大小为 5MB，并支持初始化上传、上传分片、完成合并和取消上传四个阶段。上传初始化请求会携带文件名、文件大小、目标目录、文件 MD5 等信息，后端首先进行配额预检查，并根据 MD5 查询 `file_contents` 表。如果相同内容已经存在，系统无需再次上传物理文件，只需要创建新的 `files` 记录并增加内容引用计数，即可完成秒传。
@@ -372,6 +384,8 @@ flowchart TD
     SaveContent --> SaveFile[写入files元数据]
     SaveFile --> Done([上传完成])
 ```
+
+![图4-5 分片上传与秒传流程图](assets/分片上传和秒传流程图.png)
 
 #### 4.3.3 分享模块设计
 
@@ -406,6 +420,8 @@ sequenceDiagram
         ShareCtrl-->>Visitor: 返回错误响应
     end
 ```
+
+![图4-6 文件分享访问流程图](assets/文件分享访问流程图.png)
 
 **（1）回收站模块**
 
@@ -507,9 +523,20 @@ Users 与 Files、Folders、UploadTasks、Trash、Shares 和 OperationLogs 之�
 
 #### 4.4.2 数据库逻辑结构设计
 
-在概念结构设计的基础上，结合图4-7 所示实体属性和图4-8 所示实体关系，将各实体及其关系转化为关系型数据库中的表结构。系统共设计十张核心数据表：用户表（users）、文件内容表（file_contents）、文件表（files）、文件夹表（folders）、上传任务表（upload_tasks）、上传任务分片表（upload_task_chunks）、回收站表（trash）、分享表（shares）、分享文件关联表（share_files）和操作日志表（operation_logs）。这些表通过外键约束、唯一索引、联合索引和全文索引共同维护数据完整性和查询效率。
+到了逻辑结构设计阶段，就需要把前面的概念模型进一步转换成关系模型。结合系统当前的实现情况，核心数据关系主要如下。
 
-用户表（users）在逻辑上对应 Users 实体，是系统登录认证和权限控制的基础表。文件内容表（file_contents）保存物理文件的内容哈希、存储路径和引用计数，文件表（files）保存用户视角下的文件元数据并通过 content_id 关联内容对象。文件夹表（folders）通过 parent_id 维护目录树结构，根目录以 0 表示。上传任务表（upload_tasks）保存分片上传任务的总体状态，上传任务分片表（upload_task_chunks）保存每个任务已经上传的分片编号，用于断点续传。回收站表（trash）保存软删除项目的恢复信息和过期清理时间。分享表（shares）保存分享短码、密码、权限、访问统计和过期状态，分享文件关联表（share_files）保存分享与文件或目录之间的多项关联。操作日志表（operation_logs）保存用户关键操作的审计信息。
+1. 用户表 (用户ID, 登录用户名, 用户邮箱, 密码哈希, 用户昵称, 头像URL, 存储配额上限, 已用存储空间, 上传预占用空间, 账号状态, 用户角色, 登录失败次数, 锁定截止时间, 最后登录时间, 最后登录IP, 创建时间, 更新时间)
+2. 文件内容表 (内容ID, MD5哈希, SHA256哈希, 文件大小, 内容寻址存储路径, MIME类型, 引用计数, 创建时间)
+3. 文件表 (文件ID, 所属用户ID, 关联内容ID, 所属文件夹ID, 文件名, 文件扩展名, 文件大小, MIME类型, 完整路径, 是否收藏, 下载次数, 最后访问时间, 创建时间, 更新时间)
+4. 文件夹表 (文件夹ID, 所属用户ID, 父文件夹ID, 文件夹名称, 完整路径, 目录深度, 子项数量, 创建时间, 更新时间)
+5. 上传任务表 (上传任务ID, 上传用户ID, 目标文件夹ID, 目标文件名, 文件大小, 文件MD5, 分片大小, 总分片数, 预占用空间, 临时存储路径, 任务状态, 过期时间, 完成或失败时间, 失败原因, 创建时间, 更新时间)
+6. 上传任务分片表 (上传任务ID, 分片索引, 上传时间)
+7. 回收站表 (回收站记录ID, 用户ID, 项目类型, 原项目ID, 项目名称, 项目大小, 关联文件内容ID, 原所属文件夹ID, 原完整路径, 项目完整数据备份, 删除时间, 过期彻底删除时间)
+8. 分享表 (分享ID, 分享短码, 分享者用户ID, 访问密码哈希, 分享权限, 浏览次数, 下载次数, 分享状态, 过期时间, 创建时间, 更新时间)
+9. 分享文件关联表 (关联记录ID, 分享ID, 项目类型, 文件或文件夹ID, 创建时间)
+10. 操作日志表 (日志ID, 用户ID, 操作类型, 目标类型, 目标ID, 目标名称, 操作详情, IP地址, 客户端信息, 创建时间)
+
+从逻辑结构来看，系统各业务表之间通过主键和外键建立了比较清晰的关联关系，这样既能保证数据组织的规范性，也方便后续做业务查询、统计分析和状态维护。
 
 #### 4.4.3 数据库物理结构设计
 
@@ -519,61 +546,61 @@ Users 与 Files、Folders、UploadTasks、Trash、Shares 和 OperationLogs 之�
 
 表4-1 用户表
 
-| 字段名 | 数据类型 | 主键/约束 | 字段说明 |
-| --- | --- | --- | --- |
-| id | BIGINT UNSIGNED | 主键，自增 | 用户主键ID |
-| username | VARCHAR(32) | 唯一，非空 | 登录用户名 |
-| email | VARCHAR(128) | 唯一，非空 | 用户邮箱 |
-| password_hash | VARCHAR(255) | 非空 | Argon2id 哈希后的密码 |
-| nickname | VARCHAR(64) | 可空 | 用户昵称 |
-| avatar | VARCHAR(512) | 可空 | 头像 URL |
-| storage_quota | BIGINT UNSIGNED | 非空，默认10GB | 存储配额上限 |
-| storage_used | BIGINT UNSIGNED | 非空，默认0 | 已用存储空间 |
-| storage_reserved | BIGINT UNSIGNED | 非空，默认0 | 上传预占用空间 |
-| status | TINYINT | 非空，默认1 | 0禁用、1正常、2锁定 |
-| role | TINYINT | 非空，默认0 | 0普通用户、1管理员 |
-| login_attempts | INT | 非空，默认0 | 登录失败次数 |
-| locked_until | DATETIME | 可空 | 锁定截止时间 |
-| last_login_at | DATETIME | 可空 | 最后登录时间 |
-| last_login_ip | VARCHAR(45) | 可空 | 最后登录 IP |
-| created_at | DATETIME | 非空 | 创建时间 |
-| updated_at | DATETIME | 非空 | 更新时间 |
+| 字段名           | 数据类型        | 主键/约束      | 字段说明              |
+| ---------------- | --------------- | -------------- | --------------------- |
+| id               | BIGINT UNSIGNED | 主键，自增     | 用户主键ID            |
+| username         | VARCHAR(32)     | 唯一，非空     | 登录用户名            |
+| email            | VARCHAR(128)    | 唯一，非空     | 用户邮箱              |
+| password_hash    | VARCHAR(255)    | 非空           | Argon2id 哈希后的密码 |
+| nickname         | VARCHAR(64)     | 可空           | 用户昵称              |
+| avatar           | VARCHAR(512)    | 可空           | 头像 URL              |
+| storage_quota    | BIGINT UNSIGNED | 非空，默认10GB | 存储配额上限          |
+| storage_used     | BIGINT UNSIGNED | 非空，默认0    | 已用存储空间          |
+| storage_reserved | BIGINT UNSIGNED | 非空，默认0    | 上传预占用空间        |
+| status           | TINYINT         | 非空，默认1    | 0禁用、1正常、2锁定   |
+| role             | TINYINT         | 非空，默认0    | 0普通用户、1管理员    |
+| login_attempts   | INT             | 非空，默认0    | 登录失败次数          |
+| locked_until     | DATETIME        | 可空           | 锁定截止时间          |
+| last_login_at    | DATETIME        | 可空           | 最后登录时间          |
+| last_login_ip    | VARCHAR(45)     | 可空           | 最后登录 IP           |
+| created_at       | DATETIME        | 非空           | 创建时间              |
+| updated_at       | DATETIME        | 非空           | 更新时间              |
 
 2. 文件内容表（file_contents）
 
 表4-2 文件内容表
 
-| 字段名 | 数据类型 | 主键/约束 | 字段说明 |
-| --- | --- | --- | --- |
-| id | BIGINT UNSIGNED | 主键，自增 | 内容主键ID |
-| hash_md5 | CHAR(32) | 联合唯一，非空 | MD5 哈希 |
-| hash_sha256 | CHAR(64) | 联合唯一，非空 | SHA256 哈希 |
-| size | BIGINT UNSIGNED | 非空 | 文件大小 |
-| storage_path | VARCHAR(512) | 非空 | 内容寻址存储路径 |
-| mime_type | VARCHAR(128) | 可空 | MIME 类型 |
-| ref_count | INT UNSIGNED | 非空，默认1 | 引用计数 |
-| created_at | DATETIME | 非空 | 创建时间 |
+| 字段名       | 数据类型        | 主键/约束      | 字段说明         |
+| ------------ | --------------- | -------------- | ---------------- |
+| id           | BIGINT UNSIGNED | 主键，自增     | 内容主键ID       |
+| hash_md5     | CHAR(32)        | 联合唯一，非空 | MD5 哈希         |
+| hash_sha256  | CHAR(64)        | 联合唯一，非空 | SHA256 哈希      |
+| size         | BIGINT UNSIGNED | 非空           | 文件大小         |
+| storage_path | VARCHAR(512)    | 非空           | 内容寻址存储路径 |
+| mime_type    | VARCHAR(128)    | 可空           | MIME 类型        |
+| ref_count    | INT UNSIGNED    | 非空，默认1    | 引用计数         |
+| created_at   | DATETIME        | 非空           | 创建时间         |
 
 3. 文件表（files）
 
 表4-3 文件表
 
-| 字段名 | 数据类型 | 主键/约束 | 字段说明 |
-| --- | --- | --- | --- |
-| id | BIGINT UNSIGNED | 主键，自增 | 文件主键ID |
-| user_id | BIGINT UNSIGNED | 外键，非空 | 所属用户ID |
-| content_id | BIGINT UNSIGNED | 外键，非空 | 关联文件内容ID |
-| folder_id | BIGINT UNSIGNED | 非空，默认0 | 所属文件夹ID，0表示根目录 |
-| name | VARCHAR(255) | 非空 | 文件名 |
-| extension | VARCHAR(32) | 可空 | 文件扩展名 |
-| size | BIGINT UNSIGNED | 非空 | 文件大小 |
-| mime_type | VARCHAR(128) | 可空 | MIME 类型 |
-| path | VARCHAR(4096) | 非空 | 完整路径 |
-| is_favorite | TINYINT | 非空，默认0 | 是否收藏 |
-| download_count | INT UNSIGNED | 非空，默认0 | 下载次数 |
-| last_accessed_at | DATETIME | 可空 | 最后访问时间 |
-| created_at | DATETIME | 非空 | 创建时间 |
-| updated_at | DATETIME | 非空 | 更新时间 |
+| 字段名           | 数据类型        | 主键/约束   | 字段说明                  |
+| ---------------- | --------------- | ----------- | ------------------------- |
+| id               | BIGINT UNSIGNED | 主键，自增  | 文件主键ID                |
+| user_id          | BIGINT UNSIGNED | 外键，非空  | 所属用户ID                |
+| content_id       | BIGINT UNSIGNED | 外键，非空  | 关联文件内容ID            |
+| folder_id        | BIGINT UNSIGNED | 非空，默认0 | 所属文件夹ID，0表示根目录 |
+| name             | VARCHAR(255)    | 非空        | 文件名                    |
+| extension        | VARCHAR(32)     | 可空        | 文件扩展名                |
+| size             | BIGINT UNSIGNED | 非空        | 文件大小                  |
+| mime_type        | VARCHAR(128)    | 可空        | MIME 类型                 |
+| path             | VARCHAR(4096)   | 非空        | 完整路径                  |
+| is_favorite      | TINYINT         | 非空，默认0 | 是否收藏                  |
+| download_count   | INT UNSIGNED    | 非空，默认0 | 下载次数                  |
+| last_accessed_at | DATETIME        | 可空        | 最后访问时间              |
+| created_at       | DATETIME        | 非空        | 创建时间                  |
+| updated_at       | DATETIME        | 非空        | 更新时间                  |
 
 索引说明：`files` 表在 `(user_id, folder_id)` 及排序字段组合上建立联合索引，并在 `name` 字段建立全文索引，以支持分页列表、排序和搜索。
 
@@ -581,17 +608,17 @@ Users 与 Files、Folders、UploadTasks、Trash、Shares 和 OperationLogs 之�
 
 表4-4 文件夹表
 
-| 字段名 | 数据类型 | 主键/约束 | 字段说明 |
-| --- | --- | --- | --- |
-| id | BIGINT UNSIGNED | 主键，自增 | 文件夹ID |
-| user_id | BIGINT UNSIGNED | 外键，非空 | 所属用户ID |
-| parent_id | BIGINT UNSIGNED | 非空，默认0 | 父文件夹ID，0表示根目录 |
-| name | VARCHAR(255) | 非空 | 文件夹名称 |
-| path | VARCHAR(4096) | 非空 | 完整路径 |
-| depth | INT UNSIGNED | 非空，默认0 | 目录深度 |
-| item_count | INT UNSIGNED | 非空，默认0 | 子项数量 |
-| created_at | DATETIME | 非空 | 创建时间 |
-| updated_at | DATETIME | 非空 | 更新时间 |
+| 字段名     | 数据类型        | 主键/约束   | 字段说明                |
+| ---------- | --------------- | ----------- | ----------------------- |
+| id         | BIGINT UNSIGNED | 主键，自增  | 文件夹ID                |
+| user_id    | BIGINT UNSIGNED | 外键，非空  | 所属用户ID              |
+| parent_id  | BIGINT UNSIGNED | 非空，默认0 | 父文件夹ID，0表示根目录 |
+| name       | VARCHAR(255)    | 非空        | 文件夹名称              |
+| path       | VARCHAR(4096)   | 非空        | 完整路径                |
+| depth      | INT UNSIGNED    | 非空，默认0 | 目录深度                |
+| item_count | INT UNSIGNED    | 非空，默认0 | 子项数量                |
+| created_at | DATETIME        | 非空        | 创建时间                |
+| updated_at | DATETIME        | 非空        | 更新时间                |
 
 索引说明：`folders` 表通过 `(user_id, parent_id, name)` 唯一约束保证同一用户同一父目录下文件夹名称不重复，并通过父目录索引加速目录树查询。
 
@@ -599,96 +626,96 @@ Users 与 Files、Folders、UploadTasks、Trash、Shares 和 OperationLogs 之�
 
 表4-5 上传任务表
 
-| 字段名 | 数据类型 | 主键/约束 | 字段说明 |
-| --- | --- | --- | --- |
-| id | VARCHAR(64) | 主键 | 上传任务ID |
-| user_id | BIGINT UNSIGNED | 外键，非空 | 上传用户ID |
-| folder_id | BIGINT UNSIGNED | 非空，默认0 | 目标文件夹ID |
-| filename | VARCHAR(255) | 非空 | 目标文件名 |
-| file_size | BIGINT UNSIGNED | 非空 | 文件大小 |
-| file_hash | CHAR(32) | 非空 | 文件 MD5 |
-| chunk_size | INT UNSIGNED | 非空 | 分片大小 |
-| total_chunks | INT UNSIGNED | 非空 | 总分片数 |
-| reserved_bytes | BIGINT UNSIGNED | 非空，默认0 | 预占用空间 |
-| temp_path | VARCHAR(512) | 非空 | 临时存储路径 |
-| status | TINYINT | 非空，默认0 | 0进行中、1完成、2取消、3过期 |
-| expires_at | DATETIME | 非空 | 过期时间 |
-| finalized_at | DATETIME | 可空 | 完成或失败时间 |
-| fail_reason | VARCHAR(512) | 可空 | 失败原因 |
-| created_at | DATETIME | 非空 | 创建时间 |
-| updated_at | DATETIME | 非空 | 更新时间 |
+| 字段名         | 数据类型        | 主键/约束   | 字段说明                     |
+| -------------- | --------------- | ----------- | ---------------------------- |
+| id             | VARCHAR(64)     | 主键        | 上传任务ID                   |
+| user_id        | BIGINT UNSIGNED | 外键，非空  | 上传用户ID                   |
+| folder_id      | BIGINT UNSIGNED | 非空，默认0 | 目标文件夹ID                 |
+| filename       | VARCHAR(255)    | 非空        | 目标文件名                   |
+| file_size      | BIGINT UNSIGNED | 非空        | 文件大小                     |
+| file_hash      | CHAR(32)        | 非空        | 文件 MD5                     |
+| chunk_size     | INT UNSIGNED    | 非空        | 分片大小                     |
+| total_chunks   | INT UNSIGNED    | 非空        | 总分片数                     |
+| reserved_bytes | BIGINT UNSIGNED | 非空，默认0 | 预占用空间                   |
+| temp_path      | VARCHAR(512)    | 非空        | 临时存储路径                 |
+| status         | TINYINT         | 非空，默认0 | 0进行中、1完成、2取消、3过期 |
+| expires_at     | DATETIME        | 非空        | 过期时间                     |
+| finalized_at   | DATETIME        | 可空        | 完成或失败时间               |
+| fail_reason    | VARCHAR(512)    | 可空        | 失败原因                     |
+| created_at     | DATETIME        | 非空        | 创建时间                     |
+| updated_at     | DATETIME        | 非空        | 更新时间                     |
 
 表4-6 上传任务分片表
 
-| 字段名 | 数据类型 | 主键/约束 | 字段说明 |
-| --- | --- | --- | --- |
-| task_id | VARCHAR(64) | 联合主键，外键 | 上传任务ID |
-| chunk_index | INT UNSIGNED | 联合主键 | 分片索引 |
-| uploaded_at | DATETIME | 非空 | 上传时间 |
+| 字段名      | 数据类型     | 主键/约束      | 字段说明   |
+| ----------- | ------------ | -------------- | ---------- |
+| task_id     | VARCHAR(64)  | 联合主键，外键 | 上传任务ID |
+| chunk_index | INT UNSIGNED | 联合主键       | 分片索引   |
+| uploaded_at | DATETIME     | 非空           | 上传时间   |
 
 6. 回收站表（trash）
 
 表4-7 回收站表
 
-| 字段名 | 数据类型 | 主键/约束 | 字段说明 |
-| --- | --- | --- | --- |
-| id | BIGINT UNSIGNED | 主键，自增 | 回收站记录ID |
-| user_id | BIGINT UNSIGNED | 外键，非空 | 用户ID |
-| item_type | ENUM('file','folder') | 非空 | 项目类型 |
-| item_id | BIGINT UNSIGNED | 非空 | 原项目ID |
-| item_name | VARCHAR(255) | 非空 | 项目名称 |
-| item_size | BIGINT UNSIGNED | 非空，默认0 | 项目大小 |
-| content_id | BIGINT UNSIGNED | 外键，可空 | 关联文件内容ID |
-| original_folder_id | BIGINT UNSIGNED | 非空，默认0 | 原所属文件夹ID |
-| original_path | VARCHAR(4096) | 非空 | 原完整路径 |
-| item_data | JSON | 可空 | 项目完整数据备份 |
-| deleted_at | DATETIME | 非空 | 删除时间 |
-| expires_at | DATETIME | 非空 | 过期彻底删除时间 |
+| 字段名             | 数据类型              | 主键/约束   | 字段说明         |
+| ------------------ | --------------------- | ----------- | ---------------- |
+| id                 | BIGINT UNSIGNED       | 主键，自增  | 回收站记录ID     |
+| user_id            | BIGINT UNSIGNED       | 外键，非空  | 用户ID           |
+| item_type          | ENUM('file','folder') | 非空        | 项目类型         |
+| item_id            | BIGINT UNSIGNED       | 非空        | 原项目ID         |
+| item_name          | VARCHAR(255)          | 非空        | 项目名称         |
+| item_size          | BIGINT UNSIGNED       | 非空，默认0 | 项目大小         |
+| content_id         | BIGINT UNSIGNED       | 外键，可空  | 关联文件内容ID   |
+| original_folder_id | BIGINT UNSIGNED       | 非空，默认0 | 原所属文件夹ID   |
+| original_path      | VARCHAR(4096)         | 非空        | 原完整路径       |
+| item_data          | JSON                  | 可空        | 项目完整数据备份 |
+| deleted_at         | DATETIME              | 非空        | 删除时间         |
+| expires_at         | DATETIME              | 非空        | 过期彻底删除时间 |
 
 7. 分享表（shares）与分享文件关联表（share_files）
 
 表4-8 分享表
 
-| 字段名 | 数据类型 | 主键/约束 | 字段说明 |
-| --- | --- | --- | --- |
-| id | BIGINT UNSIGNED | 主键，自增 | 分享ID |
-| share_code | VARCHAR(32) | 唯一，非空 | 分享短码 |
-| user_id | BIGINT UNSIGNED | 外键，非空 | 分享者用户ID |
-| password_hash | VARCHAR(255) | 可空 | 访问密码哈希 |
-| permission | ENUM('view','download') | 非空，默认download | 分享权限 |
-| view_count | INT UNSIGNED | 非空，默认0 | 浏览次数 |
-| download_count | INT UNSIGNED | 非空，默认0 | 下载次数 |
-| status | TINYINT | 非空，默认1 | 0取消、1有效、2过期 |
-| expires_at | DATETIME | 可空 | 过期时间 |
-| created_at | DATETIME | 非空 | 创建时间 |
-| updated_at | DATETIME | 非空 | 更新时间 |
+| 字段名         | 数据类型                | 主键/约束          | 字段说明            |
+| -------------- | ----------------------- | ------------------ | ------------------- |
+| id             | BIGINT UNSIGNED         | 主键，自增         | 分享ID              |
+| share_code     | VARCHAR(32)             | 唯一，非空         | 分享短码            |
+| user_id        | BIGINT UNSIGNED         | 外键，非空         | 分享者用户ID        |
+| password_hash  | VARCHAR(255)            | 可空               | 访问密码哈希        |
+| permission     | ENUM('view','download') | 非空，默认download | 分享权限            |
+| view_count     | INT UNSIGNED            | 非空，默认0        | 浏览次数            |
+| download_count | INT UNSIGNED            | 非空，默认0        | 下载次数            |
+| status         | TINYINT                 | 非空，默认1        | 0取消、1有效、2过期 |
+| expires_at     | DATETIME                | 可空               | 过期时间            |
+| created_at     | DATETIME                | 非空               | 创建时间            |
+| updated_at     | DATETIME                | 非空               | 更新时间            |
 
 表4-9 分享文件关联表
 
-| 字段名 | 数据类型 | 主键/约束 | 字段说明 |
-| --- | --- | --- | --- |
-| id | BIGINT UNSIGNED | 主键，自增 | 关联记录ID |
-| share_id | BIGINT UNSIGNED | 外键，非空 | 分享ID |
-| item_type | ENUM('file','folder') | 非空 | 项目类型 |
-| item_id | BIGINT UNSIGNED | 非空 | 文件或文件夹ID |
-| created_at | DATETIME | 非空 | 创建时间 |
+| 字段名     | 数据类型              | 主键/约束  | 字段说明       |
+| ---------- | --------------------- | ---------- | -------------- |
+| id         | BIGINT UNSIGNED       | 主键，自增 | 关联记录ID     |
+| share_id   | BIGINT UNSIGNED       | 外键，非空 | 分享ID         |
+| item_type  | ENUM('file','folder') | 非空       | 项目类型       |
+| item_id    | BIGINT UNSIGNED       | 非空       | 文件或文件夹ID |
+| created_at | DATETIME              | 非空       | 创建时间       |
 
 8. 操作日志表（operation_logs）
 
 表4-10 操作日志表
 
-| 字段名 | 数据类型 | 主键/约束 | 字段说明 |
-| --- | --- | --- | --- |
-| id | BIGINT UNSIGNED | 主键，自增 | 日志ID |
-| user_id | BIGINT UNSIGNED | 非空 | 用户ID |
-| action | VARCHAR(32) | 非空 | 操作类型 |
-| target_type | VARCHAR(32) | 可空 | 目标类型 |
-| target_id | BIGINT UNSIGNED | 可空 | 目标ID |
-| target_name | VARCHAR(255) | 可空 | 目标名称 |
-| details | JSON | 可空 | 操作详情 |
-| ip_address | VARCHAR(45) | 非空 | IP 地址 |
-| user_agent | VARCHAR(512) | 可空 | 客户端信息 |
-| created_at | DATETIME | 非空 | 创建时间 |
+| 字段名      | 数据类型        | 主键/约束  | 字段说明   |
+| ----------- | --------------- | ---------- | ---------- |
+| id          | BIGINT UNSIGNED | 主键，自增 | 日志ID     |
+| user_id     | BIGINT UNSIGNED | 非空       | 用户ID     |
+| action      | VARCHAR(32)     | 非空       | 操作类型   |
+| target_type | VARCHAR(32)     | 可空       | 目标类型   |
+| target_id   | BIGINT UNSIGNED | 可空       | 目标ID     |
+| target_name | VARCHAR(255)    | 可空       | 目标名称   |
+| details     | JSON            | 可空       | 操作详情   |
+| ip_address  | VARCHAR(45)     | 非空       | IP 地址    |
+| user_agent  | VARCHAR(512)    | 可空       | 客户端信息 |
+| created_at  | DATETIME        | 非空       | 创建时间   |
 
 以上十张数据表从字段类型、约束规则和索引策略三个层面进行了合理的物理结构设计，在保证数据完整性和一致性的同时，也对文件列表查询、目录导航、内容哈希查重、上传断点续传、回收站恢复、分享访问和操作审计等高频场景进行了针对性的索引优化，为系统各业务模块的稳定运行提供了坚实的数据存储基础。
 
@@ -798,15 +825,15 @@ Users 与 Files、Folders、UploadTasks、Trash、Shares 和 OperationLogs 之�
 
 表6-1 登录注册模块测试表
 
-| 编号 | 测试用例 | 预期结果 | 实际结果 |
-| --- | --- | --- | --- |
-| TC-01 | 新用户填写未被注册的用户名、邮箱和密码完成注册 | 注册成功，账号写入 users 表，分配默认配额 | 与预期一致 |
-| TC-02 | 使用已注册的用户名或邮箱再次注册 | 注册失败，返回重复账号相关错误 | 与预期一致 |
-| TC-03 | 普通用户输入正确账号和密码登录 | 登录成功，返回 Access Token、Refresh Token 和用户信息 | 与预期一致 |
-| TC-04 | 普通用户连续输入错误密码 | 登录失败并累计失败次数，达到阈值后短时锁定 | 与预期一致 |
-| TC-05 | 使用 Refresh Token 刷新令牌 | 返回新的令牌并轮换 Redis 中的刷新令牌状态 | 与预期一致 |
-| TC-06 | 用户登出 | 访问令牌进入黑名单，刷新令牌失效 | 与预期一致 |
-| TC-07 | 普通用户使用有效令牌访问管理员专属接口 | 请求被拦截，返回403，提示权限不足 | 与预期一致 |
+| 编号  | 测试用例                                       | 预期结果                                              | 实际结果   |
+| ----- | ---------------------------------------------- | ----------------------------------------------------- | ---------- |
+| TC-01 | 新用户填写未被注册的用户名、邮箱和密码完成注册 | 注册成功，账号写入 users 表，分配默认配额             | 与预期一致 |
+| TC-02 | 使用已注册的用户名或邮箱再次注册               | 注册失败，返回重复账号相关错误                        | 与预期一致 |
+| TC-03 | 普通用户输入正确账号和密码登录                 | 登录成功，返回 Access Token、Refresh Token 和用户信息 | 与预期一致 |
+| TC-04 | 普通用户连续输入错误密码                       | 登录失败并累计失败次数，达到阈值后短时锁定            | 与预期一致 |
+| TC-05 | 使用 Refresh Token 刷新令牌                    | 返回新的令牌并轮换 Redis 中的刷新令牌状态             | 与预期一致 |
+| TC-06 | 用户登出                                       | 访问令牌进入黑名单，刷新令牌失效                      | 与预期一致 |
+| TC-07 | 普通用户使用有效令牌访问管理员专属接口         | 请求被拦截，返回403，提示权限不足                     | 与预期一致 |
 
 
 #### 6.2.2 文件模块功能测试
@@ -815,16 +842,16 @@ Users 与 Files、Folders、UploadTasks、Trash、Shares 和 OperationLogs 之�
 
 表6-2 文件上传与下载模块测试表
 
-| 编号 | 测试用例 | 预期结果 | 实际结果 |
-| --- | --- | --- | --- |
-| TC-08 | 用户初始化上传一个新文件 | 创建 upload_tasks 记录并返回任务 ID 与已上传分片列表 | 与预期一致 |
-| TC-09 | 用户上传所有分片并完成合并 | 分片合并成功，写入 file_contents 与 files 记录 | 与预期一致 |
-| TC-10 | 大文件上传过程中模拟网络中断后重新初始化 | 系统识别已上传分片，客户端只需补传缺失分片 | 与预期一致 |
-| TC-11 | 上传与已有内容 MD5 相同的文件 | 不重复上传物理文件，直接创建 files 记录并增加 ref_count | 与预期一致 |
-| TC-12 | 用户上传文件导致总存储使用量超过配额上限 | 上传初始化失败，返回存储空间不足，文件不写入系统 | 与预期一致 |
-| TC-13 | 用户下载自己名下的文件 | 文件流返回成功，内容与上传时一致 | 与预期一致 |
-| TC-14 | 用户使用 Range 请求下载文件片段 | 返回指定范围内容和正确的断点下载响应头 | 与预期一致 |
-| TC-15 | 用户尝试下载不属于自己的其他用户文件 | 请求被拒绝，返回403或404，文件内容不返回 | 与预期一致 |
+| 编号  | 测试用例                                 | 预期结果                                                | 实际结果   |
+| ----- | ---------------------------------------- | ------------------------------------------------------- | ---------- |
+| TC-08 | 用户初始化上传一个新文件                 | 创建 upload_tasks 记录并返回任务 ID 与已上传分片列表    | 与预期一致 |
+| TC-09 | 用户上传所有分片并完成合并               | 分片合并成功，写入 file_contents 与 files 记录          | 与预期一致 |
+| TC-10 | 大文件上传过程中模拟网络中断后重新初始化 | 系统识别已上传分片，客户端只需补传缺失分片              | 与预期一致 |
+| TC-11 | 上传与已有内容 MD5 相同的文件            | 不重复上传物理文件，直接创建 files 记录并增加 ref_count | 与预期一致 |
+| TC-12 | 用户上传文件导致总存储使用量超过配额上限 | 上传初始化失败，返回存储空间不足，文件不写入系统        | 与预期一致 |
+| TC-13 | 用户下载自己名下的文件                   | 文件流返回成功，内容与上传时一致                        | 与预期一致 |
+| TC-14 | 用户使用 Range 请求下载文件片段          | 返回指定范围内容和正确的断点下载响应头                  | 与预期一致 |
+| TC-15 | 用户尝试下载不属于自己的其他用户文件     | 请求被拒绝，返回403或404，文件内容不返回                | 与预期一致 |
 
 
 #### 6.2.3 目录模块功能测试
@@ -833,14 +860,14 @@ Users 与 Files、Folders、UploadTasks、Trash、Shares 和 OperationLogs 之�
 
 表6-3 目录与文件管理模块测试表
 
-| 编号 | 测试用例 | 预期结果 | 实际结果 |
-| --- | --- | --- | --- |
-| TC-16 | 用户在当前目录下创建一个新目录 | 目录创建成功，folders 表出现新记录 | 与预期一致 |
-| TC-17 | 用户在同一父目录下创建与已有目录同名的目录 | 创建失败，返回名称冲突错误 | 与预期一致 |
-| TC-18 | 用户查询目录树和面包屑路径 | 返回正确的层级结构和从根目录到目标目录的路径 | 与预期一致 |
-| TC-19 | 用户按关键词搜索文件或目录 | 返回匹配的文件和目录分页结果 | 与预期一致 |
-| TC-20 | 用户批量移动或复制文件 | 目标目录下出现对应记录，复制文件复用内容对象 | 与预期一致 |
-| TC-21 | 用户删除文件或目录 | 项目进入 trash 表，正常列表中不再展示 | 与预期一致 |
+| 编号  | 测试用例                                   | 预期结果                                     | 实际结果   |
+| ----- | ------------------------------------------ | -------------------------------------------- | ---------- |
+| TC-16 | 用户在当前目录下创建一个新目录             | 目录创建成功，folders 表出现新记录           | 与预期一致 |
+| TC-17 | 用户在同一父目录下创建与已有目录同名的目录 | 创建失败，返回名称冲突错误                   | 与预期一致 |
+| TC-18 | 用户查询目录树和面包屑路径                 | 返回正确的层级结构和从根目录到目标目录的路径 | 与预期一致 |
+| TC-19 | 用户按关键词搜索文件或目录                 | 返回匹配的文件和目录分页结果                 | 与预期一致 |
+| TC-20 | 用户批量移动或复制文件                     | 目标目录下出现对应记录，复制文件复用内容对象 | 与预期一致 |
+| TC-21 | 用户删除文件或目录                         | 项目进入 trash 表，正常列表中不再展示        | 与预期一致 |
 
 
 #### 6.2.4 分享模块功能测试
@@ -849,14 +876,14 @@ Users 与 Files、Folders、UploadTasks、Trash、Shares 和 OperationLogs 之�
 
 表6-4 文件分享模块测试表
 
-| 编号 | 测试用例 | 预期结果 | 实际结果 |
-| --- | --- | --- | --- |
+| 编号  | 测试用例                               | 预期结果                                         | 实际结果   |
+| ----- | -------------------------------------- | ------------------------------------------------ | ---------- |
 | TC-22 | 用户为指定文件生成一个七天有效期的分享 | shares 和 share_files 记录创建成功，返回分享信息 | 与预期一致 |
-| TC-23 | 访客使用正确访问密码访问分享 | 校验通过，返回短期 Share Token | 与预期一致 |
-| TC-24 | 访客使用 Share Token 浏览分享内容 | 返回分享包含的文件或目录列表，view_count 递增 | 与预期一致 |
-| TC-25 | 访客使用 Share Token 下载文件 | 文件下载成功，download_count 递增 | 与预期一致 |
-| TC-26 | 访客使用已过期或已取消的分享访问 | 返回链接无效或已过期错误，文件不提供下载 | 与预期一致 |
-| TC-27 | 用户批量取消分享 | 分享状态更新为取消，原分享令牌随即失效 | 与预期一致 |
+| TC-23 | 访客使用正确访问密码访问分享           | 校验通过，返回短期 Share Token                   | 与预期一致 |
+| TC-24 | 访客使用 Share Token 浏览分享内容      | 返回分享包含的文件或目录列表，view_count 递增    | 与预期一致 |
+| TC-25 | 访客使用 Share Token 下载文件          | 文件下载成功，download_count 递增                | 与预期一致 |
+| TC-26 | 访客使用已过期或已取消的分享访问       | 返回链接无效或已过期错误，文件不提供下载         | 与预期一致 |
+| TC-27 | 用户批量取消分享                       | 分享状态更新为取消，原分享令牌随即失效           | 与预期一致 |
 
 
 #### 6.2.5 回收站与管理员功能测试
@@ -865,17 +892,17 @@ Users 与 Files、Folders、UploadTasks、Trash、Shares 和 OperationLogs 之�
 
 表6-5 回收站与管理员功能测试表
 
-| 编号 | 测试用例 | 预期结果 | 实际结果 |
-| --- | --- | --- | --- |
-| TC-28 | 用户查看回收站列表 | 返回当前用户已删除项目分页列表 | 与预期一致 |
-| TC-29 | 用户恢复回收站文件 | 文件恢复到原目录或根目录，命名冲突时自动改名 | 与预期一致 |
-| TC-30 | 用户彻底删除回收站文件 | trash 记录删除，file_contents 引用计数正确减少 | 与预期一致 |
-| TC-31 | 管理员查看全部注册用户列表 | 返回用户账号、状态、角色和存储使用情况 | 与预期一致 |
-| TC-32 | 管理员禁用指定普通用户账号 | users.status 更新，用户后续请求被拒绝 | 与预期一致 |
-| TC-33 | 管理员修改用户角色 | users.role 更新，权限边界同步变化 | 与预期一致 |
+| 编号  | 测试用例                     | 预期结果                                       | 实际结果   |
+| ----- | ---------------------------- | ---------------------------------------------- | ---------- |
+| TC-28 | 用户查看回收站列表           | 返回当前用户已删除项目分页列表                 | 与预期一致 |
+| TC-29 | 用户恢复回收站文件           | 文件恢复到原目录或根目录，命名冲突时自动改名   | 与预期一致 |
+| TC-30 | 用户彻底删除回收站文件       | trash 记录删除，file_contents 引用计数正确减少 | 与预期一致 |
+| TC-31 | 管理员查看全部注册用户列表   | 返回用户账号、状态、角色和存储使用情况         | 与预期一致 |
+| TC-32 | 管理员禁用指定普通用户账号   | users.status 更新，用户后续请求被拒绝          | 与预期一致 |
+| TC-33 | 管理员修改用户角色           | users.role 更新，权限边界同步变化              | 与预期一致 |
 | TC-34 | 管理员查看全平台存储统计数据 | 正确返回用户数、文件数、内容对象数和存储使用量 | 与预期一致 |
-| TC-35 | 管理员强制取消违规分享 | 分享状态更新为取消，公开访问立即失效 | 与预期一致 |
-| TC-36 | 管理员查看系统状态 | 返回 MySQL、Redis、磁盘空间和运行时间等状态 | 与预期一致 |
+| TC-35 | 管理员强制取消违规分享       | 分享状态更新为取消，公开访问立即失效           | 与预期一致 |
+| TC-36 | 管理员查看系统状态           | 返回 MySQL、Redis、磁盘空间和运行时间等状态    | 与预期一致 |
 
 
 ### 6.3 系统性能测试
