@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import ".."
-import "../FormatUtils.js" as FormatUtils
 
 Dialog {
     id: root
@@ -17,28 +16,8 @@ Dialog {
     property string userEmail: ""
     property string userRole: ""
     property string userStatus: ""
-    property var userStorage: ({})
-    property var userFiles: []
 
     WorkspaceTheme { id: theme }
-
-    onOpened: {
-        if (userId > 0) {
-            adminManager.ListUserFiles(userId)
-            adminManager.GetUserStorage(userId)
-        }
-    }
-
-    Connections {
-        target: adminManager
-        ignoreUnknownSignals: true
-
-        function onUserStorageLoaded(storage) {
-            if (root.visible && storage) {
-                root.userStorage = storage
-            }
-        }
-    }
 
     ColumnLayout {
         width: parent.width
@@ -89,57 +68,6 @@ Dialog {
                           ? theme.errorTextColor
                           : theme.warningChipColor)
             }
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            height: 1
-            color: theme.panelBorderColor
-        }
-
-        Label {
-            text: qsTr("存储统计")
-            font.bold: true
-            font.pixelSize: 14
-        }
-
-        Label {
-            text: {
-                var used = root.userStorage.used || 0
-                var quota = root.userStorage.quota || 0
-                return FormatUtils.formatStorageSize(used) + " / " + FormatUtils.formatStorageSize(quota)
-            }
-            color: theme.secondaryTextColor
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            height: 1
-            color: theme.panelBorderColor
-        }
-
-        Label {
-            text: qsTr("用户文件")
-            font.bold: true
-            font.pixelSize: 14
-        }
-
-        ListView {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 120
-            model: root.userFiles
-            clip: true
-            delegate: Label {
-                text: modelData.name || "—"
-                color: theme.secondaryTextColor
-            }
-            visible: root.userFiles.length > 0
-        }
-
-        Label {
-            text: qsTr("暂无文件")
-            visible: root.userFiles.length === 0
-            color: theme.mutedTextColor
         }
 
         RowLayout {

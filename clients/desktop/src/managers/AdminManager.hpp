@@ -56,8 +56,6 @@ namespace disk::desktop::managers {
         Q_INVOKABLE void ChangeUserStatus(int userId, int status);
         Q_INVOKABLE void ChangeUserRole(int userId, int role);
         Q_INVOKABLE void SoftDeleteUser(int userId);
-        Q_INVOKABLE void ListUserFiles(int userId, int folderId = 0, int page = 1, int pageSize = 20);
-        Q_INVOKABLE void GetUserStorage(int userId);
         Q_INVOKABLE void GetGlobalStorageStats();
 
         // Share management (3 endpoints)
@@ -72,7 +70,6 @@ namespace disk::desktop::managers {
     signals:
         void userPaginationLoaded(int page, int totalPages, int total);
         void userDetailLoaded(const QVariantMap& detail);
-        void userFilesPaginationLoaded(int page, int totalPages, int total, const QVariantList& files);
         void userStorageLoaded(const QVariantMap& storage);
         void sharePaginationLoaded(int page, int totalPages, int total);
         void shareDetailLoaded(const QVariantMap& detail);
@@ -93,8 +90,6 @@ namespace disk::desktop::managers {
         void HandleChangeUserStatusResponse(QNetworkReply* reply);
         void HandleChangeUserRoleResponse(QNetworkReply* reply);
         void HandleSoftDeleteUserResponse(QNetworkReply* reply);
-        void HandleListUserFilesResponse(QNetworkReply* reply);
-        void HandleGetUserStorageResponse(QNetworkReply* reply);
         void HandleGetGlobalStorageResponse(QNetworkReply* reply);
         void HandleListSharesResponse(QNetworkReply* reply);
         void HandleGetShareDetailResponse(QNetworkReply* reply);

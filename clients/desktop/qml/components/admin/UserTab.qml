@@ -243,10 +243,6 @@ Item {
                         userDetailDialog.userEmail = model.email || ""
                         userDetailDialog.userRole = root.roleText(model.role)
                         userDetailDialog.userStatus = root.statusText(model.status)
-                        userDetailDialog.userStorage = {
-                            used: model.storage_used || 0,
-                            quota: model.storage_quota || 0
-                        }
                         userDetailDialog.open()
                     }
                 }

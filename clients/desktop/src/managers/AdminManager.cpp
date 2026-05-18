@@ -191,39 +191,6 @@ namespace disk::desktop::managers {
         });
     }
 
-    void AdminManager::ListUserFiles(int userId, int folderId, int page, int pageSize) {
-        QUrlQuery query;
-        query.addQueryItem("folder_id", QString::number(folderId));
-        query.addQueryItem("page", QString::number(page));
-        query.addQueryItem("page_size", QString::number(pageSize));
-
-        QUrl url(QString("/api/admin/users/%1/files").arg(userId));
-        url.setQuery(query);
-
-        auto headers = PrepareHeaders();
-        auto* reply = m_network_client->Get(url, headers);
-        m_active_replies.append(reply);
-
-        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-            m_active_replies.removeOne(reply);
-            reply->deleteLater();
-            HandleListUserFilesResponse(reply);
-        });
-    }
-
-    void AdminManager::GetUserStorage(int userId) {
-        QUrl url(QString("/api/admin/users/%1/storage").arg(userId));
-        auto headers = PrepareHeaders();
-        auto* reply = m_network_client->Get(url, headers);
-        m_active_replies.append(reply);
-
-        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-            m_active_replies.removeOne(reply);
-            reply->deleteLater();
-            HandleGetUserStorageResponse(reply);
-        });
-    }
-
     void AdminManager::GetGlobalStorageStats() {
         QUrl url("/api/admin/storage/stats");
         auto headers = PrepareHeaders();
@@ -477,90 +444,6 @@ namespace disk::desktop::managers {
         }
 
         emit operationSuccess(QStringLiteral("用户已删除"));
-    }
-
-    void AdminManager::HandleListUserFilesResponse(QNetworkReply* reply) {
-        if (!reply) {
-            emit apiError(QStringLiteral("网络错误：无响应"), 0);
-            return;
-        }
-
-        if (reply->error() != QNetworkReply::NoError) {
-            EmitApiError(reply);
-            return;
-        }
-
-        auto json_opt = ParseJsonResponse(reply);
-        if (!json_opt.has_value()) {
-            emit apiError(QStringLiteral("响应格式无效"), 0);
-            return;
-        }
-
-        if (json_opt->value("code").toInt(0) != 0) {
-            auto err = ErrorAdapter::FromJson(*json_opt);
-            emit apiError(err.message, err.code);
-            return;
-        }
-
-        auto data = json_opt->value("data").toObject();
-        auto items_array = data.value("items").toArray();
-
-        QVariantList file_list;
-        for (const auto& val : items_array) {
-            auto obj = val.toObject();
-            QVariantMap file;
-            file["id"] = static_cast<double>(obj.value("id").toDouble(0));
-            file["name"] = obj.value("name").toString();
-            file["type"] = obj.value("type").toString();
-            file["size"] = static_cast<double>(obj.value("size").toDouble(0));
-            if (obj.contains("mime_type")) {
-                file["mime_type"] = obj.value("mime_type").toString();
-            }
-            file["parent_id"] = static_cast<double>(obj.value("parent_id").toDouble(0));
-            file["created_at"] = obj.value("created_at").toString();
-            file["updated_at"] = obj.value("updated_at").toString();
-            file_list.append(file);
-        }
-
-        auto pagination = data.value("pagination").toObject();
-        int page = pagination.value("page").toInt(1);
-        int total_pages = pagination.value("total_pages").toInt(1);
-        int total = pagination.value("total").toInt(0);
-        emit userFilesPaginationLoaded(page, total_pages, total, file_list);
-    }
-
-    void AdminManager::HandleGetUserStorageResponse(QNetworkReply* reply) {
-        if (!reply) {
-            emit apiError(QStringLiteral("网络错误：无响应"), 0);
-            return;
-        }
-
-        if (reply->error() != QNetworkReply::NoError) {
-            EmitApiError(reply);
-            return;
-        }
-
-        auto json_opt = ParseJsonResponse(reply);
-        if (!json_opt.has_value()) {
-            emit apiError(QStringLiteral("响应格式无效"), 0);
-            return;
-        }
-
-        if (json_opt->value("code").toInt(0) != 0) {
-            auto err = ErrorAdapter::FromJson(*json_opt);
-            emit apiError(err.message, err.code);
-            return;
-        }
-
-        auto data = json_opt->value("data").toObject();
-        QVariantMap storage;
-        storage["total_users"] = data.value("total_users").toInt(0);
-        storage["total_files"] = data.value("total_files").toInt(0);
-        storage["total_storage_used"] = static_cast<double>(data.value("total_storage_used").toDouble(0));
-        storage["total_storage_quota"] = static_cast<double>(data.value("total_storage_quota").toDouble(0));
-        storage["active_shares"] = data.value("active_shares").toInt(0);
-
-        emit userStorageLoaded(storage);
     }
 
     void AdminManager::HandleGetGlobalStorageResponse(QNetworkReply* reply) {
