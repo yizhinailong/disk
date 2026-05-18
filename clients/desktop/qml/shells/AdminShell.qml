@@ -116,6 +116,7 @@ ApplicationWindow {
                     border.color: root.railBorderColor
 
                     ColumnLayout {
+                        id: adminNavigationContent
                         objectName: "adminNavigationContent"
                         anchors.fill: parent
                         anchors.margins: 12

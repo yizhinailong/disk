@@ -13,6 +13,7 @@ Item {
     property int totalPages: 1
     property int totalItems: 0
     property int pageSize: 20
+    property var pendingConfirmAction: null
 
     function statusText(status) {
         switch (status) {
@@ -49,6 +50,12 @@ Item {
         if (page < 1 || page > root.totalPages) return
         root.currentPage = page
         adminManager.ListShares(root.currentPage, root.pageSize, root.filterStatus)
+    }
+
+    function requestConfirmation(message, action) {
+        root.pendingConfirmAction = action
+        confirmDialog.message = message
+        confirmDialog.open()
     }
 
     Component.onCompleted: {
@@ -303,11 +310,11 @@ Item {
                             palette.buttonText: theme.errorTextColor
                             enabled: String(model.status || "") !== "cancelled"
                             onClicked: {
-                                confirmDialog.message = qsTr("确定强制取消分享 %1 吗？").arg(model.share_code || "")
-                                confirmDialog.onConfirmed.connect(function() {
-                                    adminManager.ForceCancelShare(model.id)
-                                }, Qt.SingleShotConnection)
-                                confirmDialog.open()
+                                var shareId = model.id
+                                var shareCode = model.share_code || ""
+                                root.requestConfirmation(qsTr("确定强制取消分享 %1 吗？").arg(shareCode), function() {
+                                    adminManager.ForceCancelShare(shareId)
+                                })
                             }
                         }
                     }
@@ -353,6 +360,16 @@ Item {
     ConfirmDialog {
         id: confirmDialog
         title: qsTr("确认操作")
+
+        onConfirmed: {
+            if (root.pendingConfirmAction) {
+                root.pendingConfirmAction()
+                root.pendingConfirmAction = null
+            }
+        }
+
+        onCancelled: root.pendingConfirmAction = null
+        onClosed: root.pendingConfirmAction = null
     }
 
     Connections {

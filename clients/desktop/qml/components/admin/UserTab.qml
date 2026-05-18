@@ -16,6 +16,7 @@ Item {
     property int totalPages: 1
     property int totalItems: 0
     property int pageSize: 20
+    property var pendingConfirmAction: null
 
     function statusText(status) {
         switch (status) {
@@ -52,6 +53,12 @@ Item {
         if (page < 1 || page > root.totalPages) return
         root.currentPage = page
         adminManager.ListUsers(root.currentPage, root.pageSize, root.searchUsername, "", root.filterStatus, root.filterRole)
+    }
+
+    function requestConfirmation(message, action) {
+        root.pendingConfirmAction = action
+        confirmDialog.message = message
+        confirmDialog.open()
     }
 
     Component.onCompleted: {
@@ -331,31 +338,31 @@ Item {
                                 MenuItem {
                                     text: qsTr("启用")
                                     onTriggered: {
-                                        confirmDialog.message = qsTr("确定启用用户 %1 吗？").arg(model.username)
-                                        confirmDialog.onConfirmed.connect(function() {
-                                            adminManager.ChangeUserStatus(model.id, 1)
-                                        }, Qt.SingleShotConnection)
-                                        confirmDialog.open()
+                                        var userId = model.id
+                                        var username = model.username || ""
+                                        root.requestConfirmation(qsTr("确定启用用户 %1 吗？").arg(username), function() {
+                                            adminManager.ChangeUserStatus(userId, 1)
+                                        })
                                     }
                                 }
                                 MenuItem {
                                     text: qsTr("禁用")
                                     onTriggered: {
-                                        confirmDialog.message = qsTr("确定禁用用户 %1 吗？").arg(model.username)
-                                        confirmDialog.onConfirmed.connect(function() {
-                                            adminManager.ChangeUserStatus(model.id, 0)
-                                        }, Qt.SingleShotConnection)
-                                        confirmDialog.open()
+                                        var userId = model.id
+                                        var username = model.username || ""
+                                        root.requestConfirmation(qsTr("确定禁用用户 %1 吗？").arg(username), function() {
+                                            adminManager.ChangeUserStatus(userId, 0)
+                                        })
                                     }
                                 }
                                 MenuItem {
                                     text: qsTr("锁定")
                                     onTriggered: {
-                                        confirmDialog.message = qsTr("确定锁定用户 %1 吗？").arg(model.username)
-                                        confirmDialog.onConfirmed.connect(function() {
-                                            adminManager.ChangeUserStatus(model.id, 2)
-                                        }, Qt.SingleShotConnection)
-                                        confirmDialog.open()
+                                        var userId = model.id
+                                        var username = model.username || ""
+                                        root.requestConfirmation(qsTr("确定锁定用户 %1 吗？").arg(username), function() {
+                                            adminManager.ChangeUserStatus(userId, 2)
+                                        })
                                     }
                                 }
                             }
@@ -366,13 +373,13 @@ Item {
                             flat: true
                             font.pixelSize: 12
                             onClicked: {
+                                var userId = model.id
+                                var username = model.username || ""
                                 var newRole = model.role === 0 ? 1 : 0
                                 var newRoleText = newRole === 0 ? qsTr("用户") : qsTr("管理员")
-                                confirmDialog.message = qsTr("确定将用户 %1 的角色修改为 %2 吗？").arg(model.username).arg(newRoleText)
-                                confirmDialog.onConfirmed.connect(function() {
-                                    adminManager.ChangeUserRole(model.id, newRole)
-                                }, Qt.SingleShotConnection)
-                                confirmDialog.open()
+                                root.requestConfirmation(qsTr("确定将用户 %1 的角色修改为 %2 吗？").arg(username).arg(newRoleText), function() {
+                                    adminManager.ChangeUserRole(userId, newRole)
+                                })
                             }
                         }
 
@@ -382,11 +389,11 @@ Item {
                             font.pixelSize: 12
                             palette.buttonText: theme.errorTextColor
                             onClicked: {
-                                confirmDialog.message = qsTr("确定删除用户 %1 吗？此操作不可撤销。").arg(model.username)
-                                confirmDialog.onConfirmed.connect(function() {
-                                    adminManager.SoftDeleteUser(model.id)
-                                }, Qt.SingleShotConnection)
-                                confirmDialog.open()
+                                var userId = model.id
+                                var username = model.username || ""
+                                root.requestConfirmation(qsTr("确定删除用户 %1 吗？此操作不可撤销。").arg(username), function() {
+                                    adminManager.SoftDeleteUser(userId)
+                                })
                             }
                         }
                     }
@@ -432,6 +439,16 @@ Item {
     ConfirmDialog {
         id: confirmDialog
         title: qsTr("确认操作")
+
+        onConfirmed: {
+            if (root.pendingConfirmAction) {
+                root.pendingConfirmAction()
+                root.pendingConfirmAction = null
+            }
+        }
+
+        onCancelled: root.pendingConfirmAction = null
+        onClosed: root.pendingConfirmAction = null
     }
 
     UserDetailDialog {
