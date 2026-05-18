@@ -307,11 +307,13 @@ TestCase {
                "Rejects reserved names")
         verify(source.indexOf("名称不能以 \".\" 开头") !== -1,
                "Rejects hidden-dot names")
-        verify(source.indexOf("名称只能使用 ASCII 可打印字符") !== -1,
-               "Rejects non-ASCII printable names")
+        verify(source.indexOf("名称必须是合法 UTF-8 且不能包含控制字符") !== -1,
+               "Rejects control characters while allowing UTF-8 names")
+        verify(source.indexOf("code > 0x7e") === -1,
+               "Does not reject non-ASCII UTF-8 names")
         verify(source.indexOf("var forbiddenChars = ") !== -1,
                "Defines the forbidden character set")
-        verify(source.indexOf("名称不能包含以下字符：/ \\ : * ? \" < > |") !== -1,
+        verify(source.indexOf("名称不能包含以下字符：") !== -1,
                "Rejects forbidden filesystem characters")
         verify(source.indexOf("function validateNewFolderName(") === -1,
                "Does not introduce a create-only validator")

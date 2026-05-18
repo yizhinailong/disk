@@ -462,11 +462,11 @@ Page {
         for (var index = 0; index < value.length; ++index) {
             var code = value.charCodeAt(index)
             var character = value.charAt(index)
-            if (code < 0x20 || code > 0x7e) {
+            if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) {
                 return {
                     valid: false,
                     value: value,
-                    error: "名称只能使用 ASCII 可打印字符"
+                    error: "名称必须是合法 UTF-8 且不能包含控制字符"
                 }
             }
             if (forbiddenChars.indexOf(character) >= 0) {
