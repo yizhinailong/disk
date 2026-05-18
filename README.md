@@ -308,8 +308,6 @@ cmake --build --preset windows-debug-clang-cl
 | PUT | `/api/admin/users/{id}/status` | 修改用户状态 | JWT + Admin |
 | PUT | `/api/admin/users/{id}/role` | 修改用户角色 | JWT + Admin |
 | DELETE | `/api/admin/users/{id}` | 删除用户 | JWT + Admin |
-| GET | `/api/admin/users/{id}/files` | 用户文件列表 | JWT + Admin |
-| GET | `/api/admin/users/{id}/storage` | 用户存储统计 | JWT + Admin |
 | GET | `/api/admin/storage/stats` | 全局存储统计 | JWT + Admin |
 | GET | `/api/admin/shares` | 分享列表 | JWT + Admin |
 | GET | `/api/admin/shares/{id}` | 分享详情 | JWT + Admin |

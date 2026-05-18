@@ -4405,137 +4405,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### 10.7 获取用户文件列表
-
-**GET** `/api/admin/users/{id}/files`
-
-获取指定用户的文件列表（管理员查看用户数据）。
-
-#### 请求头
-
-```
-Authorization: Bearer <access_token>
-```
-
-| Header | 必填 | 说明 |
-|--------|------|------|
-| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
-
-#### 路径参数
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| id | integer | 用户 ID |
-
-#### 查询参数
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| folder_id | integer | 否 | 父文件夹 ID，默认 0（根目录） |
-| page | integer | 否 | 页码，默认 1 |
-| page_size | integer | 否 | 每页数量，默认 20，最大 100 |
-
-#### 错误响应矩阵
-
-| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
-|------------|--------|----------|----------|----------|
-| 400 | 10001 | `InvalidParameter` | 请求参数错误 | 参数格式错误 |
-| 400 | 10002 | `ValidationFailed` | 参数校验失败 | 字段值不符合规则 |
-| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
-| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
-| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
-| 404 | 80002 | `AdminUserNotFound` | 用户不存在 | 指定的用户 ID 不存在 |
-
-#### 响应示例
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": [
-      {
-        "id": 1,
-        "name": "工作文档",
-        "type": "folder",
-        "item_count": 15,
-        "created_at": "2026-01-10T08:00:00Z",
-        "updated_at": "2026-01-12T14:30:00Z"
-      },
-      {
-        "id": 2,
-        "name": "报告.docx",
-        "type": "file",
-        "size": 102400,
-        "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "hash": "a1b2c3d4e5f6...",
-        "created_at": "2026-01-11T10:00:00Z",
-        "updated_at": "2026-01-11T10:00:00Z"
-      }
-    ],
-    "pagination": {
-      "page": 1,
-      "page_size": 20,
-      "total": 50,
-      "total_pages": 3
-    }
-  }
-}
-```
-
----
-
-### 10.8 获取用户存储统计
-
-**GET** `/api/admin/users/{id}/storage`
-
-获取指定用户的存储空间统计信息。
-
-#### 请求头
-
-```
-Authorization: Bearer <access_token>
-```
-
-| Header | 必填 | 说明 |
-|--------|------|------|
-| Authorization | 是 | Bearer 访问令牌（需要管理员权限） |
-
-#### 路径参数
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| id | integer | 用户 ID |
-
-#### 错误响应矩阵
-
-| HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
-|------------|--------|----------|----------|----------|
-| 400 | 10001 | `InvalidParameter` | 请求参数错误 | user_id 格式错误 |
-| 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
-| 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
-| 403 | 80001 | `AdminRequired` | 需要管理员权限 | 非管理员用户访问 |
-| 404 | 80002 | `AdminUserNotFound` | 用户不存在 | 指定的用户 ID 不存在 |
-
-#### 响应示例
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "used": 1073741824,
-    "quota": 10737418240,
-    "percentage": 10.0,
-    "file_count": 150,
-    "folder_count": 20
-  }
-}
-```
-
----
-
-### 10.9 获取全局存储统计
+### 10.7 获取全局存储统计
 
 **GET** `/api/admin/storage/stats`
 
@@ -4578,7 +4448,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### 10.10 获取分享列表
+### 10.8 获取分享列表
 
 **GET** `/api/admin/shares`
 
@@ -4649,7 +4519,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### 10.11 获取分享详情
+### 10.9 获取分享详情
 
 **GET** `/api/admin/shares/{id}`
 
@@ -4708,7 +4578,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### 10.12 删除分享
+### 10.10 删除分享
 
 **DELETE** `/api/admin/shares/{id}`
 
@@ -4760,7 +4630,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### 10.13 获取系统概览统计
+### 10.11 获取系统概览统计
 
 **GET** `/api/admin/stats/overview`
 
@@ -4803,7 +4673,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### 10.14 获取系统状态
+### 10.12 获取系统状态
 
 **GET** `/api/admin/stats/system`
 
