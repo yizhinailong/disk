@@ -119,7 +119,7 @@ TestCase {
     function test_share_tab_has_filter_and_table() {
         var source = readQmlSource("components/admin/ShareTab.qml")
 
-        verify(source.indexOf("活跃") !== -1, "Has active status filter")
+        verify(source.indexOf("有效") !== -1, "Has active status filter")
         verify(source.indexOf("已过期") !== -1, "Has expired status filter")
         verify(source.indexOf("已取消") !== -1, "Has cancelled status filter")
         verify(source.indexOf("分享者") !== -1, "Has sharer column")

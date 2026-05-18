@@ -149,7 +149,11 @@ namespace disk::app {
                 auto owner_state = m_session_store->GetOwnerManager()->GetState();
                 if (owner_state == disk::desktop::OwnerSessionState::Active ||
                     owner_state == disk::desktop::OwnerSessionState::Refreshing) {
-                    navigateToOwner();
+                    if (m_session_store->GetOwnerManager()->GetRole() == 1) {
+                        navigateToAdmin();
+                    } else {
+                        navigateToOwner();
+                    }
                 } else {
                     navigateToLogin();
                 }
