@@ -15,11 +15,11 @@
       "storage_base_path": "build/uploaded",
       "temp_upload_path": "build/temp_uploads",
       "chunk_size": 5242880,
-        "max_file_size": 10737418240,
-        "upload_task_expiry_seconds": 86400,
-        "upload_rate_limit_per_minute": 240,
-        "assembly_max_concurrent": 4,
-        "assemble_buffer_size_bytes": 262144
+      "max_file_size": 10737418240,
+      "upload_task_expiry_seconds": 86400,
+      "upload_rate_limit_per_minute": 240,
+      "assembly_max_concurrent": 4,
+      "assemble_buffer_size_bytes": 262144
     }
   },
   "db_clients": [
@@ -67,7 +67,7 @@
     {
       "name": "drogon::plugin::AccessLogger",
       "config": {
-        "log_path": "",
+        "log_path": "./build/log",
         "log_file": "log",
         "log_level": "INFO",
         "log_size_limit": 10485760,
