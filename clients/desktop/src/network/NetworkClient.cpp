@@ -51,7 +51,9 @@ namespace disk::desktop {
         const QMap<QString, QString>& headers
     ) -> QNetworkReply* {
         QNetworkRequest request = BuildRequest(url, headers);
-        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        if (!headers.contains("Content-Type")) {
+            request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        }
         return m_nam->post(request, body);
     }
 
@@ -61,7 +63,9 @@ namespace disk::desktop {
         const QMap<QString, QString>& headers
     ) -> QNetworkReply* {
         QNetworkRequest request = BuildRequest(url, headers);
-        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        if (!headers.contains("Content-Type")) {
+            request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        }
         return m_nam->put(request, body);
     }
 
@@ -71,7 +75,9 @@ namespace disk::desktop {
         const QMap<QString, QString>& headers
     ) -> QNetworkReply* {
         QNetworkRequest request = BuildRequest(url, headers);
-        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        if (!headers.contains("Content-Type")) {
+            request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        }
         return m_nam->sendCustomRequest(request, "PATCH", body);
     }
 
@@ -89,7 +95,9 @@ auto NetworkClient::Delete(
         const QMap<QString, QString>& headers
     ) -> QNetworkReply* {
         QNetworkRequest request = BuildRequest(url, headers);
-        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        if (!headers.contains("Content-Type")) {
+            request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        }
         return m_nam->sendCustomRequest(request, "DELETE", body);
     }
 
