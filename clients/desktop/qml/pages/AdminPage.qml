@@ -12,6 +12,7 @@ Page {
     WorkspaceTheme { id: theme }
 
     readonly property color pageBackground: theme.pageBackgroundColor
+    readonly property var adminManagerRef: adminManager
 
     background: Rectangle {
         color: root.pageBackground
@@ -61,6 +62,7 @@ Page {
             currentIndex: tabBar.currentIndex
 
             UserTab {
+                adminManagerRef: root.adminManagerRef
             }
 
             ShareTab {

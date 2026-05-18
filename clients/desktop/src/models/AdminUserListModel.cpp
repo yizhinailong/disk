@@ -60,7 +60,7 @@ namespace disk::desktop {
 
     auto AdminUserListModel::roleNames() const -> QHash<int, QByteArray> {
         return {
-            { IdRole,           "id" },
+            { IdRole,           "userId" },
             { UsernameRole,     "username" },
             { EmailRole,        "email" },
             { NicknameRole,     "nickname" },

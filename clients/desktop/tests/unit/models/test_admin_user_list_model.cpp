@@ -20,6 +20,7 @@ private slots:
         auto roles = model.roleNames();
         QCOMPARE(roles.size(), 10);
         QVERIFY(roles.contains(AdminUserListModel::IdRole));
+        QCOMPARE(roles.value(AdminUserListModel::IdRole), QByteArray("userId"));
         QVERIFY(roles.contains(AdminUserListModel::UsernameRole));
         QVERIFY(roles.contains(AdminUserListModel::EmailRole));
         QVERIFY(roles.contains(AdminUserListModel::NicknameRole));

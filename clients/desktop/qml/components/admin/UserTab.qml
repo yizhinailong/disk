@@ -4,10 +4,17 @@ import QtQuick.Layouts
 import ".."
 import "../FormatUtils.js" as FormatUtils
 
+pragma ComponentBehavior: Bound
+
 Item {
     id: root
 
     WorkspaceTheme { id: theme }
+
+    readonly property alias workspaceTheme: theme
+    readonly property alias confirmDialogRef: confirmDialog
+    readonly property alias userDetailDialogRef: userDetailDialog
+    required property var adminManagerRef
 
     property string searchUsername: ""
     property int filterStatus: -1
@@ -29,10 +36,10 @@ Item {
 
     function statusColor(status) {
         switch (status) {
-        case 0: return theme.errorTextColor
-        case 1: return theme.successTextColor
-        case 2: return theme.warningChipColor
-        default: return theme.mutedTextColor
+        case 0: return root.workspaceTheme.errorTextColor
+        case 1: return root.workspaceTheme.successTextColor
+        case 2: return root.workspaceTheme.warningChipColor
+        default: return root.workspaceTheme.mutedTextColor
         }
     }
 
@@ -46,23 +53,23 @@ Item {
 
     function applyFilters() {
         root.currentPage = 1
-        adminManager.ListUsers(root.currentPage, root.pageSize, root.searchUsername, "", root.filterStatus, root.filterRole)
+        root.adminManagerRef.ListUsers(root.currentPage, root.pageSize, root.searchUsername, "", root.filterStatus, root.filterRole)
     }
 
     function goToPage(page) {
         if (page < 1 || page > root.totalPages) return
         root.currentPage = page
-        adminManager.ListUsers(root.currentPage, root.pageSize, root.searchUsername, "", root.filterStatus, root.filterRole)
+        root.adminManagerRef.ListUsers(root.currentPage, root.pageSize, root.searchUsername, "", root.filterStatus, root.filterRole)
     }
 
     function requestConfirmation(message, action) {
         root.pendingConfirmAction = action
-        confirmDialog.message = message
-        confirmDialog.open()
+        root.confirmDialogRef.message = message
+        root.confirmDialogRef.open()
     }
 
     Component.onCompleted: {
-        adminManager.ListUsers(root.currentPage, root.pageSize, "", "", -1, -1)
+        root.adminManagerRef.ListUsers(root.currentPage, root.pageSize, "", "", -1, -1)
     }
 
     ColumnLayout {
@@ -231,26 +238,34 @@ Item {
             id: userListView
             Layout.fillWidth: true
             Layout.fillHeight: true
-            model: adminManager.userModel
+            model: root.adminManagerRef.userModel
             clip: true
             spacing: 1
 
             delegate: Rectangle {
                 id: userRowDelegate
+                required property int index
+                required property var userId
+                required property string username
+                required property string email
+                required property int role
+                required property int status
+                required property var storageUsed
+
                 width: userListView.width
                 implicitHeight: rowLayout.implicitHeight + 16
-                color: index % 2 === 0 ? theme.panelBackgroundColor : theme.panelMutedFillColor
-                radius: theme.innerPanelRadius
+                color: userRowDelegate.index % 2 === 0 ? root.workspaceTheme.panelBackgroundColor : root.workspaceTheme.panelMutedFillColor
+                radius: root.workspaceTheme.innerPanelRadius
 
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        userDetailDialog.userId = model.id
-                        userDetailDialog.userName = model.username || ""
-                        userDetailDialog.userEmail = model.email || ""
-                        userDetailDialog.userRole = root.roleText(model.role)
-                        userDetailDialog.userStatus = root.statusText(model.status)
-                        userDetailDialog.open()
+                        root.userDetailDialogRef.userId = userRowDelegate.userId
+                        root.userDetailDialogRef.userName = userRowDelegate.username || ""
+                        root.userDetailDialogRef.userEmail = userRowDelegate.email || ""
+                        root.userDetailDialogRef.userRole = root.roleText(userRowDelegate.role)
+                        root.userDetailDialogRef.userStatus = root.statusText(userRowDelegate.status)
+                        root.userDetailDialogRef.open()
                     }
                 }
 
@@ -259,14 +274,14 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 12
                     anchors.rightMargin: 12
-                    spacing: theme.tableColumnSpacing
+                    spacing: root.workspaceTheme.tableColumnSpacing
 
                     Label {
                         Layout.preferredWidth: 60
                         Layout.minimumWidth: 0
-                        text: String(model.id || "")
+                        text: String(userRowDelegate.userId || "")
                         font.pixelSize: 13
-                        color: theme.tableBodyPrimaryTextColor
+                        color: root.workspaceTheme.tableBodyPrimaryTextColor
                         elide: Text.ElideRight
                         wrapMode: Text.NoWrap
                     }
@@ -274,9 +289,9 @@ Item {
                     Label {
                         Layout.preferredWidth: 120
                         Layout.minimumWidth: 0
-                        text: model.username || ""
+                        text: userRowDelegate.username || ""
                         font.pixelSize: 13
-                        color: theme.tableBodyPrimaryTextColor
+                        color: root.workspaceTheme.tableBodyPrimaryTextColor
                         elide: Text.ElideRight
                         wrapMode: Text.NoWrap
                     }
@@ -284,9 +299,9 @@ Item {
                     Label {
                         Layout.preferredWidth: 180
                         Layout.minimumWidth: 0
-                        text: model.email || ""
+                        text: userRowDelegate.email || ""
                         font.pixelSize: 13
-                        color: theme.tableBodySecondaryTextColor
+                        color: root.workspaceTheme.tableBodySecondaryTextColor
                         elide: Text.ElideRight
                         wrapMode: Text.NoWrap
                     }
@@ -294,9 +309,9 @@ Item {
                     Label {
                         Layout.preferredWidth: 80
                         Layout.minimumWidth: 0
-                        text: root.roleText(model.role)
+                        text: root.roleText(userRowDelegate.role)
                         font.pixelSize: 13
-                        color: theme.tableBodySecondaryTextColor
+                        color: root.workspaceTheme.tableBodySecondaryTextColor
                         elide: Text.ElideRight
                         wrapMode: Text.NoWrap
                     }
@@ -304,9 +319,9 @@ Item {
                     Label {
                         Layout.preferredWidth: 80
                         Layout.minimumWidth: 0
-                        text: root.statusText(model.status)
+                        text: root.statusText(userRowDelegate.status)
                         font.pixelSize: 13
-                        color: root.statusColor(model.status)
+                        color: root.statusColor(userRowDelegate.status)
                         elide: Text.ElideRight
                         wrapMode: Text.NoWrap
                     }
@@ -314,9 +329,9 @@ Item {
                     Label {
                         Layout.preferredWidth: 120
                         Layout.minimumWidth: 0
-                        text: FormatUtils.formatStorageSize(model.storage_used || 0)
+                        text: FormatUtils.formatStorageSize(userRowDelegate.storageUsed || 0)
                         font.pixelSize: 13
-                        color: theme.tableBodySecondaryTextColor
+                        color: root.workspaceTheme.tableBodySecondaryTextColor
                         elide: Text.ElideRight
                         wrapMode: Text.NoWrap
                     }
@@ -338,30 +353,30 @@ Item {
                                 MenuItem {
                                     text: qsTr("启用")
                                     onTriggered: {
-                                        var userId = model.id
-                                        var username = model.username || ""
+                                        var userId = userRowDelegate.userId
+                                        var username = userRowDelegate.username || ""
                                         root.requestConfirmation(qsTr("确定启用用户 %1 吗？").arg(username), function() {
-                                            adminManager.ChangeUserStatus(userId, 1)
+                                            root.adminManagerRef.ChangeUserStatus(userId, 1)
                                         })
                                     }
                                 }
                                 MenuItem {
                                     text: qsTr("禁用")
                                     onTriggered: {
-                                        var userId = model.id
-                                        var username = model.username || ""
+                                        var userId = userRowDelegate.userId
+                                        var username = userRowDelegate.username || ""
                                         root.requestConfirmation(qsTr("确定禁用用户 %1 吗？").arg(username), function() {
-                                            adminManager.ChangeUserStatus(userId, 0)
+                                            root.adminManagerRef.ChangeUserStatus(userId, 0)
                                         })
                                     }
                                 }
                                 MenuItem {
                                     text: qsTr("锁定")
                                     onTriggered: {
-                                        var userId = model.id
-                                        var username = model.username || ""
+                                        var userId = userRowDelegate.userId
+                                        var username = userRowDelegate.username || ""
                                         root.requestConfirmation(qsTr("确定锁定用户 %1 吗？").arg(username), function() {
-                                            adminManager.ChangeUserStatus(userId, 2)
+                                            root.adminManagerRef.ChangeUserStatus(userId, 2)
                                         })
                                     }
                                 }
@@ -373,12 +388,12 @@ Item {
                             flat: true
                             font.pixelSize: 12
                             onClicked: {
-                                var userId = model.id
-                                var username = model.username || ""
-                                var newRole = model.role === 0 ? 1 : 0
+                                var userId = userRowDelegate.userId
+                                var username = userRowDelegate.username || ""
+                                var newRole = userRowDelegate.role === 0 ? 1 : 0
                                 var newRoleText = newRole === 0 ? qsTr("用户") : qsTr("管理员")
                                 root.requestConfirmation(qsTr("确定将用户 %1 的角色修改为 %2 吗？").arg(username).arg(newRoleText), function() {
-                                    adminManager.ChangeUserRole(userId, newRole)
+                                    root.adminManagerRef.ChangeUserRole(userId, newRole)
                                 })
                             }
                         }
@@ -387,12 +402,12 @@ Item {
                             text: qsTr("删除")
                             flat: true
                             font.pixelSize: 12
-                            palette.buttonText: theme.errorTextColor
+                            palette.buttonText: root.workspaceTheme.errorTextColor
                             onClicked: {
-                                var userId = model.id
-                                var username = model.username || ""
+                                var userId = userRowDelegate.userId
+                                var username = userRowDelegate.username || ""
                                 root.requestConfirmation(qsTr("确定删除用户 %1 吗？此操作不可撤销。").arg(username), function() {
-                                    adminManager.SoftDeleteUser(userId)
+                                    root.adminManagerRef.SoftDeleteUser(userId)
                                 })
                             }
                         }
@@ -456,7 +471,7 @@ Item {
     }
 
     Connections {
-        target: adminManager
+        target: root.adminManagerRef
         ignoreUnknownSignals: true
 
         function onUserPaginationLoaded(page, totalPages, total) {

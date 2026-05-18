@@ -29,6 +29,7 @@ ApplicationWindow {
     readonly property color headerMutedTextColor: workspaceTheme.headerMutedTextColor
     readonly property color contentBackgroundColor: workspaceTheme.pageBackgroundColor
     readonly property color contentBorderColor: workspaceTheme.contentBorderColor
+    readonly property var adminManagerRef: adminManager
 
     readonly property string currentPageTitle: root.destinationTitle(root.activeDestination)
     readonly property string currentPageSubtitle: root.destinationSubtitle(root.activeDestination)
@@ -311,7 +312,9 @@ ApplicationWindow {
 
     Component {
         id: userTabPage
-        UserTab {}
+        UserTab {
+            adminManagerRef: root.adminManagerRef
+        }
     }
 
     Component {
