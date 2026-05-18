@@ -79,6 +79,15 @@ TEST(CreateFolderRequest, CreateFolderRequestValidNameWithParent) {
     EXPECT_EQ(result->parent_id, 123);
 }
 
+TEST(CreateFolderRequest, CreateFolderRequestValidUtf8Name) {
+    auto req = CreateCreateFolderRequest("毕业设计资料", 123);
+    auto result = CreateFolderRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid UTF-8 folder name should pass validation";
+    EXPECT_EQ(result->name, "毕业设计资料");
+    EXPECT_EQ(result->parent_id, 123);
+}
+
 TEST(CreateFolderRequest, CreateFolderRequestDefaultParent) {
     auto req = CreateCreateFolderRequestWithoutParent("NewFolder");
     auto result = CreateFolderRequest::FromRequest(req);
@@ -246,17 +255,7 @@ TEST(CreateFolderRequest, CreateFolderRequestHiddenFolder) {
     }
 }
 
-// 规则 5：字符集（仅可打印 ASCII）-> InvalidFilename
-
-TEST(CreateFolderRequest, CreateFolderRequestNonAscii) {
-    auto req = CreateCreateFolderRequest("Folder\xF0\x9F\x93\x81");
-    auto result = CreateFolderRequest::FromRequest(req);
-
-    EXPECT_FALSE(result.has_value()) << "Name with non-ASCII chars should fail";
-    if (!result.has_value()) {
-        EXPECT_EQ(result.error().code, ErrorCode::InvalidFilename);
-    }
-}
+// 规则 5：字符集（合法 UTF-8，且不含控制字符）-> InvalidFilename
 
 TEST(CreateFolderRequest, CreateFolderRequestControlChar) {
     auto req = CreateCreateFolderRequest("Folder\x01Name");

@@ -250,6 +250,19 @@ TEST(InitUploadRequest, FilenameMaxLength) {
     EXPECT_EQ(result->filename.length(), 255);
 }
 
+TEST(InitUploadRequest, FilenameWithChineseCharacters) {
+    auto req = CreateInitUploadRequest(
+        "B22041423_吴俊_剧本杀服务平台的设计与实现_毕业论文_0516.doc",
+        1024,
+        "d41d8cd98f00b204e9800998ecf8427e",
+        0
+    );
+    auto result = InitUploadRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid UTF-8 Chinese filename should pass";
+    EXPECT_EQ(result->filename, "B22041423_吴俊_剧本杀服务平台的设计与实现_毕业论文_0516.doc");
+}
+
 TEST(InitUploadRequest, FilenameEmpty) {
     auto req = CreateInitUploadRequest(
         "",
@@ -645,6 +658,15 @@ TEST(RenameRequest, ValidRequest) {
     ASSERT_TRUE(result.has_value()) << "Valid rename request should pass";
     EXPECT_EQ(result->file_id, 123);
     EXPECT_EQ(result->new_name, "new_document.pdf");
+}
+
+TEST(RenameRequest, ValidUtf8Name) {
+    auto req = CreateRenameRequest(123, "毕业论文_最终版.doc");
+    auto result = RenameRequest::FromPathAndRequest("123", req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid UTF-8 rename target should pass";
+    EXPECT_EQ(result->file_id, 123);
+    EXPECT_EQ(result->new_name, "毕业论文_最终版.doc");
 }
 
 TEST(RenameRequest, EmptyName) {
