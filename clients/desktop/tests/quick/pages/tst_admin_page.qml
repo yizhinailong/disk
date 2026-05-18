@@ -161,4 +161,15 @@ TestCase {
 
         verify(source.indexOf("WorkspaceTheme") !== -1, "Uses WorkspaceTheme")
     }
+
+    function test_admin_shell_keeps_logout_visible_below_navigation() {
+        var source = readAdminShellSource()
+
+        verify(source.indexOf("objectName: \"adminSidebarSpacer\"") !== -1,
+               "Sidebar has flexible spacer before session card")
+        verify(source.indexOf("Layout.preferredHeight: adminNavigationContent.implicitHeight + 24") !== -1,
+               "Navigation panel sizes to content instead of filling the rail")
+        verify(source.indexOf("Layout.preferredHeight: sessionContent.implicitHeight + 16") !== -1,
+               "Session card reserves explicit height for logout")
+    }
 }

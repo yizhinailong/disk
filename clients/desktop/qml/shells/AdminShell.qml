@@ -108,8 +108,8 @@ ApplicationWindow {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.minimumHeight: 200
+                    Layout.preferredHeight: adminNavigationContent.implicitHeight + 24
+                    Layout.maximumHeight: adminNavigationContent.implicitHeight + 24
                     objectName: "adminNavigationPanel"
                     color: root.railPanelColor
                     radius: 10
@@ -118,6 +118,7 @@ ApplicationWindow {
                     ColumnLayout {
                         objectName: "adminNavigationContent"
                         anchors.fill: parent
+                        anchors.margins: 12
                         spacing: 4
 
                         Label {
@@ -172,14 +173,23 @@ ApplicationWindow {
                     }
                 }
 
+                Item {
+                    objectName: "adminSidebarSpacer"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                }
+
                 Rectangle {
                     objectName: "adminSessionCard"
                     Layout.fillWidth: true
+                    Layout.preferredHeight: sessionContent.implicitHeight + 16
+                    Layout.minimumHeight: sessionContent.implicitHeight + 16
                     color: root.railPanelColor
                     radius: 10
                     border.color: root.railBorderColor
 
                     ColumnLayout {
+                        id: sessionContent
                         anchors.fill: parent
                         anchors.margins: 8
                         spacing: 4
@@ -207,7 +217,8 @@ ApplicationWindow {
 
                             background: Rectangle {
                                 radius: 8
-                                color: parent.hovered ? "#f5ebeb" : "transparent"
+                                color: parent.hovered ? "#f5ebeb" : "#fff7f7"
+                                border.color: parent.hovered ? "#d7b4b4" : "#ead4d4"
                             }
 
                             contentItem: Text {
