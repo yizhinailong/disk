@@ -11,14 +11,12 @@
  * - ChangeStatusRequest: 修改用户状态请求
  * - ChangeRoleRequest: 修改用户角色请求
  * - ListSharesRequest: 获取分享列表请求
- * - ListUserFilesRequest: 获取用户文件列表请求
  * - UserDetailResponse: 用户详情响应
  * - UserListResponse: 用户列表响应
  * - StorageStatsResponse: 存储统计响应
  * - SystemStatusResponse: 系统状态响应
  * - ShareListResponse: 分享列表响应
  * - ShareDetailResponse: 分享详情响应
- * - FileListResponse: 文件列表响应
  * - PaginationInfo: 分页信息
  */
 
@@ -469,106 +467,6 @@ namespace disk::admin {
         }
     };
 
-    /**
-     * @brief 获取用户文件列表请求 DTO
-     *
-     * @details
-     * 验证规则：
-     * - page: 默认 1，必须 >= 1
-     * - page_size: 默认 20，必须 >= 1 且 <= 100
-     * - folder_id: 可选，文件夹 ID（0 表示根目录）
-     *
-     * 从 URL 查询参数解析。
-     */
-    struct ListUserFilesRequest {
-        int page{ 1 };
-        int page_size{ 20 };
-        std::optional<uint64_t> folder_id;
-
-        /// 从 HTTP 请求查询参数解析并验证，返回 Result
-        [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<ListUserFilesRequest> {
-            LOG_DEBUG << "Start parsing list user files request parameters";
-
-            ListUserFilesRequest request;
-
-            // 解析可选参数 page
-            auto page_str = req->getParameter("page");
-            if (!page_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_str, &pos);
-                    if (pos != page_str.length() || value < 1) {
-                        LOG_WARN << "Parameter 'page' invalid value: " << page_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page' must be a positive integer"
-                        ));
-                    }
-                    request.page = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page' invalid format: " << page_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'page' invalid format"
-                    ));
-                }
-            }
-
-            // 解析可选参数 page_size
-            auto page_size_str = req->getParameter("page_size");
-            if (!page_size_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_size_str, &pos);
-                    if (pos != page_size_str.length() || value < 1 || value > 100) {
-                        LOG_WARN << "Parameter 'page_size' invalid value: " << page_size_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page_size' must be an integer between 1-100"
-                        ));
-                    }
-                    request.page_size = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page_size' invalid format: " << page_size_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'page_size' invalid format"
-                    ));
-                }
-            }
-
-            // 解析可选参数 folder_id
-            auto folder_id_str = req->getParameter("folder_id");
-            if (!folder_id_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoull(folder_id_str, &pos);
-                    if (pos != folder_id_str.length()) {
-                        LOG_WARN << "Parameter 'folder_id' invalid format: " << folder_id_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'folder_id' invalid format"
-                        ));
-                    }
-                    request.folder_id = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'folder_id' invalid format: " << folder_id_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'folder_id' invalid format"
-                    ));
-                }
-            }
-
-            LOG_DEBUG << "Parsed list user files request: page=" << request.page
-                      << ", page_size=" << request.page_size
-                      << ", folder_id=" << (request.folder_id.has_value() ? std::to_string(*request.folder_id) : "null");
-
-            return request;
-        }
-    };
-
     // ==================== Response DTOs ====================
 
     /**
@@ -733,66 +631,6 @@ namespace disk::admin {
      */
     struct ShareListResponse {
         std::vector<ShareDetailResponse> items;
-        PaginationInfo pagination;
-
-        /// 转换为 JSON
-        [[nodiscard]]
-        auto ToJson() const -> Json::Value {
-            Json::Value json;
-            Json::Value items_array(Json::arrayValue);
-            for (const auto& item : items) {
-                items_array.append(item.ToJson());
-            }
-            json["items"] = items_array;
-            json["pagination"] = pagination.ToJson();
-            return json;
-        }
-    };
-
-    /**
-     * @brief 文件详情响应 DTO
-     *
-     * @details
-     * 包含文件的详细信息，用于管理员查看用户文件。
-     */
-    struct FileDetailResponse {
-        uint64_t id;
-        std::string name;
-        std::string type;
-        uint64_t size{ 0 };
-        std::string hash;
-        std::string mime_type;
-        uint64_t parent_id{ 0 };
-        std::string path;
-        std::string created_at;
-        std::string updated_at;
-
-        /// 转换为 JSON
-        [[nodiscard]]
-        auto ToJson() const -> Json::Value {
-            Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["name"] = name;
-            json["type"] = type;
-            json["size"] = static_cast<Json::UInt64>(size);
-            json["hash"] = hash;
-            json["mime_type"] = mime_type;
-            json["parent_id"] = static_cast<Json::UInt64>(parent_id);
-            json["path"] = path;
-            json["created_at"] = created_at;
-            json["updated_at"] = updated_at;
-            return json;
-        }
-    };
-
-    /**
-     * @brief 文件列表响应 DTO
-     *
-     * @details
-     * 包含文件列表和分页信息。
-     */
-    struct FileListResponse {
-        std::vector<FileDetailResponse> items;
         PaginationInfo pagination;
 
         /// 转换为 JSON

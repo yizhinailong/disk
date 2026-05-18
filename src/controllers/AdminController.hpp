@@ -24,8 +24,6 @@ namespace disk::controllers {
      * - PUT    /api/admin/users/{id}/status 修改用户状态
      * - PUT    /api/admin/users/{id}/role  修改用户角色
      * - DELETE /api/admin/users/{id}       软删除用户
-     * - GET    /api/admin/users/{id}/files 获取用户文件列表
-     * - GET    /api/admin/users/{id}/storage 获取用户存储统计
      * - GET    /api/admin/storage/stats    获取全局存储统计
      * - GET    /api/admin/shares            获取分享列表
      * - GET    /api/admin/shares/{id}       获取分享详情
@@ -72,20 +70,6 @@ namespace disk::controllers {
             AdminController::SoftDeleteUser,
             "/api/admin/users/{id}",
             drogon::Delete,
-            "disk::filters::JwtAuthFilter",
-            "disk::filters::AdminAuthFilter",
-        );
-        ADD_METHOD_TO(
-            AdminController::ListUserFiles,
-            "/api/admin/users/{id}/files",
-            drogon::Get,
-            "disk::filters::JwtAuthFilter",
-            "disk::filters::AdminAuthFilter",
-        );
-        ADD_METHOD_TO(
-            AdminController::GetUserStorage,
-            "/api/admin/users/{id}/storage",
-            drogon::Get,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
         );
@@ -151,14 +135,6 @@ namespace disk::controllers {
 
         [[nodiscard]]
         auto SoftDeleteUser(drogon::HttpRequestPtr request)
-            -> drogon::Task<drogon::HttpResponsePtr>;
-
-        [[nodiscard]]
-        auto ListUserFiles(drogon::HttpRequestPtr request)
-            -> drogon::Task<drogon::HttpResponsePtr>;
-
-        [[nodiscard]]
-        auto GetUserStorage(drogon::HttpRequestPtr request)
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         [[nodiscard]]
