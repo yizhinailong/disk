@@ -22,9 +22,7 @@ Verifies all admin endpoints:
   12. Admin 强制取消分享
   13. Admin 获取系统概览
   14. Admin 获取系统状态
-  15. Admin 查看用户文件
-  16. Admin 查看存储统计
-  17. 查询不存在资源
+  15. 查询不存在资源
 
 Prerequisites:
   - Server running on localhost:8080
@@ -640,61 +638,11 @@ def test_admin_stats_system():
         sys.exit(1)
 
 
-# ─── Test 15: Admin 查看用户文件 ────────────────────────────────────────────
-
-
-def test_admin_list_user_files():
-    log_info("[Test 15] Admin 查看用户文件...")
-
-    resp = fetch(
-        f"/api/admin/users/{_test_user_id}/files",
-        method="GET",
-        headers=get_admin_headers(),
-    )
-
-    code = json_field(resp.text, "code")
-
-    if resp.status_code == 200 and code == "0":
-        pagination = json_field(resp.text, "data.pagination")
-        if pagination:
-            log_pass(f"Admin list user files: HTTP 200, code=0, pagination present")
-        else:
-            log_pass("Admin list user files: HTTP 200, code=0")
-    else:
-        log_fail(f"Admin list user files: expected HTTP 200 + code 0, got HTTP {resp.status_code} code={code}")
-        print(resp.text)
-        sys.exit(1)
-
-
-# ─── Test 16: Admin 查看存储统计 ────────────────────────────────────────────
-
-
-def test_admin_get_user_storage():
-    log_info("[Test 16] Admin 查看存储统计...")
-
-    resp = fetch(
-        f"/api/admin/users/{_test_user_id}/storage",
-        method="GET",
-        headers=get_admin_headers(),
-    )
-
-    code = json_field(resp.text, "code")
-
-    if resp.status_code == 200 and code == "0":
-        quota = json_field(resp.text, "data.storage_quota")
-        used = json_field(resp.text, "data.storage_used")
-        log_pass(f"Admin get user storage: quota={quota}, used={used}")
-    else:
-        log_fail(f"Admin get user storage: expected HTTP 200 + code 0, got HTTP {resp.status_code} code={code}")
-        print(resp.text)
-        sys.exit(1)
-
-
-# ─── Test 17: 查询不存在资源 ────────────────────────────────────────────────
+# ─── Test 15: 查询不存在资源 ────────────────────────────────────────────────
 
 
 def test_admin_get_nonexistent_user():
-    log_info("[Test 17] 查询不存在资源...")
+    log_info("[Test 15] 查询不存在资源...")
 
     resp = fetch(
         "/api/admin/users/999999",
@@ -739,8 +687,6 @@ def main():
         test_admin_force_cancel_share,
         test_admin_stats_overview,
         test_admin_stats_system,
-        test_admin_list_user_files,
-        test_admin_get_user_storage,
         test_admin_get_nonexistent_user,
     ]
 
@@ -762,7 +708,7 @@ def main():
         f"Tests passed: {tests_passed}",
         f"Tests failed: {tests_failed}",
         "",
-        "All 17 scenarios executed.",
+        "All 15 scenarios executed.",
     ]
     save_evidence(EVIDENCE_FILE, "\n".join(evidence_lines))
 

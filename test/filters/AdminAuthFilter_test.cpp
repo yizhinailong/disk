@@ -191,9 +191,9 @@ TEST(AdminAuthFilterTest, AdminUserDetailPath_AdminPass) {
     EXPECT_EQ(resp, nullptr);
 }
 
-TEST(AdminAuthFilterTest, AdminFilesPath_AdminPass) {
+TEST(AdminAuthFilterTest, AdminStorageStatsPath_AdminPass) {
     disk::filters::AdminAuthFilter filter;
-    auto req = CreateRequest("/api/admin/users/42/files", 1, 1);
+    auto req = CreateRequest("/api/admin/storage/stats", 1, 1);
     auto resp = drogon::sync_wait(filter.doFilter(req));
     EXPECT_EQ(resp, nullptr);
 }
