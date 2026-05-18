@@ -479,5 +479,9 @@ Item {
             root.totalPages = totalPages
             root.totalItems = total
         }
+
+        function onOperationSuccess(_message) {
+            root.goToPage(root.currentPage)
+        }
     }
 }

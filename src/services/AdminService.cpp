@@ -667,8 +667,8 @@ namespace disk::services {
                                      const std::string& details) -> drogon::Task<void> {
         try {
             co_await m_db_client->execSqlCoro(
-                "INSERT INTO operation_logs (user_id, action, target_type, target_id, details) "
-                "VALUES (?, ?, 'user', ?, ?)",
+                "INSERT INTO operation_logs (user_id, action, target_type, target_id, details, ip_address) "
+                "VALUES (?, ?, 'user', ?, ?, 'system')",
                 operator_id,
                 action,
                 target_id,
