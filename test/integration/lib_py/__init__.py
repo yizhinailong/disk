@@ -56,3 +56,8 @@ from .fixtures import (
     md5_hash,
     unique_name,
 )
+
+# reporter
+from .reporter import (
+    ReportGenerator,
+)
