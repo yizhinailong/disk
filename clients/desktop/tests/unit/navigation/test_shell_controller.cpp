@@ -227,11 +227,104 @@ private slots:
 
         ctrl.Initialize();
         ctrl.navigateToOwner();
+        ctrl.navigateToAdmin();
         ctrl.navigateToVisitor("sh_test");
         ctrl.navigateToLogin();
         ctrl.navigateToSplash();
 
         QCOMPARE(ctrl.GetCurrentShell(), QString("splash"));
+    }
+
+    // ── Admin routing tests ──────────────────────────────────────────────────
+
+    void AdminUserNavigatesToAdminShell() {
+        NetworkClient nc;
+        RequestFactory rf;
+        SessionStore store(&nc, &rf);
+        ShellController ctrl(&store);
+
+        QJsonObject user;
+        user["id"] = 1;
+        user["username"] = "admin_alice";
+        store.GetOwnerManager()->StartLogin();
+        // Token payload {"role":1} base64 → admin user
+        store.GetOwnerManager()->HandleLoginSuccess("x.eyJyb2xlIjoxfQ==.x", "refresh", 7200, user);
+
+        ctrl.Initialize();
+
+        QCOMPARE(ctrl.GetCurrentShell(), QString("admin"));
+    }
+
+    void RegularUserNavigatesToOwnerShell() {
+        NetworkClient nc;
+        RequestFactory rf;
+        SessionStore store(&nc, &rf);
+        ShellController ctrl(&store);
+
+        QJsonObject user;
+        user["id"] = 2;
+        user["username"] = "bob";
+        store.GetOwnerManager()->StartLogin();
+        // Token payload {"role":0} base64 → regular user
+        store.GetOwnerManager()->HandleLoginSuccess("x.eyJyb2xlIjowfQ==.x", "refresh", 7200, user);
+
+        ctrl.Initialize();
+
+        QCOMPARE(ctrl.GetCurrentShell(), QString("owner"));
+    }
+
+    void AdminUserNavigateToAdminAllowed() {
+        NetworkClient nc;
+        RequestFactory rf;
+        SessionStore store(&nc, &rf);
+        ShellController ctrl(&store);
+
+        QJsonObject user;
+        user["id"] = 1;
+        user["username"] = "admin_alice";
+        store.GetOwnerManager()->StartLogin();
+        store.GetOwnerManager()->HandleLoginSuccess("x.eyJyb2xlIjoxfQ==.x", "refresh", 7200, user);
+
+        ctrl.navigateToAdmin();
+        QCOMPARE(ctrl.GetCurrentShell(), QString("admin"));
+    }
+
+    void UnauthenticatedNavigateToAdminRedirectsToLogin() {
+        NetworkClient nc;
+        RequestFactory rf;
+        SessionStore store(&nc, &rf);
+        ShellController ctrl(&store);
+
+        ctrl.navigateToAdmin();
+
+        QCOMPARE(ctrl.GetCurrentShell(), QString("login"));
+    }
+
+    void AdminRoleChangeToRegularTriggersLogout() {
+        NetworkClient nc;
+        RequestFactory rf;
+        SessionStore store(&nc, &rf);
+        ShellController ctrl(&store);
+
+        QJsonObject user;
+        user["id"] = 1;
+        user["username"] = "admin_alice";
+        store.GetOwnerManager()->StartLogin();
+        store.GetOwnerManager()->HandleLoginSuccess("x.eyJyb2xlIjoxfQ==.x", "refresh", 7200, user);
+
+        ctrl.Initialize();
+        QCOMPARE(ctrl.GetCurrentShell(), QString("admin"));
+
+        // Simulate token refresh returning a demoted role (role=0)
+        store.GetOwnerManager()->HandleTokenExpired();
+        store.GetOwnerManager()->HandleRefreshSuccess("x.eyJyb2xlIjowfQ==.x", "refresh2", 7200);
+
+        QCOMPARE(store.GetOwnerManager()->GetRole(), 0);
+
+        // Logout was triggered by role change — complete it
+        store.GetOwnerManager()->CompleteLogout();
+        QCOMPARE(store.GetOwnerManager()->GetState(), OwnerSessionState::LoggedOut);
+        QCOMPARE(ctrl.GetCurrentShell(), QString("login"));
     }
 
     // ── Task 11: Auth / Visitor route guard regressions ────────────────────

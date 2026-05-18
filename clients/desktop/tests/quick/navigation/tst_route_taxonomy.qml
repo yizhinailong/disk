@@ -339,6 +339,7 @@ TestCase {
 
         verify(source.length > 0, "ShellController.hpp was read")
         verify(source.indexOf("navigateToOwner") !== -1, "Has owner route")
+        verify(source.indexOf("navigateToAdmin") !== -1, "Has admin route")
         verify(source.indexOf("navigateToVisitor") !== -1, "Has visitor route")
         verify(source.indexOf("navigateToLogin") !== -1, "Has login route")
         verify(source.indexOf("navigateToRegister") !== -1, "Has register route")
@@ -358,6 +359,95 @@ TestCase {
         verify(shareManager !== null, "shareManager available")
         verify(trashManager !== null, "trashManager available")
         verify(screenshotHelper !== null, "screenshotHelper available")
+    }
+
+    // ── Admin shell routing ─────────────────────────────────────────────────
+
+    function test_main_qml_routes_admin_shell() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/Main.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "Main.qml was read")
+        verify(source.indexOf('case "admin"') !== -1,
+               "Main.qml routes admin shell")
+        verify(source.indexOf("adminComponent") !== -1,
+               "Main.qml has adminComponent")
+        verify(source.indexOf("AdminShell") !== -1,
+               "Main.qml instantiates AdminShell")
+    }
+
+    function test_admin_shell_has_stackview_for_pages() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/AdminShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "AdminShell.qml was read")
+        verify(source.indexOf("StackView") !== -1,
+               "AdminShell uses StackView for page navigation")
+        verify(source.indexOf("stackView.replace(") !== -1,
+               "AdminShell uses stackView.replace() for page switching")
+    }
+
+    function test_admin_shell_has_three_page_destinations() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/AdminShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "AdminShell.qml was read")
+        verify(source.indexOf("UserTab") !== -1, "AdminShell has UserTab page")
+        verify(source.indexOf("ShareTab") !== -1, "AdminShell has ShareTab page")
+        verify(source.indexOf("SystemTab") !== -1, "AdminShell has SystemTab page")
+        verify(source.indexOf("TabBar") === -1,
+               "AdminShell does NOT use TabBar (uses StackView pages)")
+        verify(source.indexOf("SwipeView") === -1,
+               "AdminShell does NOT use SwipeView (uses StackView pages)")
+    }
+
+    function test_admin_shell_has_three_navigation_destinations() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/AdminShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "AdminShell.qml was read")
+        verify(source.indexOf('activeDestination: "users"') !== -1,
+               "AdminShell default destination is users")
+        verify(source.indexOf('case "users"') !== -1,
+               "AdminShell routes users page")
+        verify(source.indexOf('case "shares"') !== -1,
+               "AdminShell routes shares page")
+        verify(source.indexOf('case "system"') !== -1,
+               "AdminShell routes system page")
+    }
+
+    function test_admin_shell_logout_uses_session_path() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/AdminShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "AdminShell.qml was read")
+        verify(source.indexOf("sessionStore.owner.StartLogout()") !== -1,
+               "AdminShell logout triggers the owner session logout flow")
+    }
+
+    function test_owner_shell_has_no_admin_navigation() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/OwnerShell.qml"), false)
+        xhr.send()
+        var source = xhr.responseText
+
+        verify(source.length > 0, "OwnerShell.qml was read")
+        verify(source.indexOf('id: "admin"') === -1,
+               "OwnerShell does not have admin nav item")
+        verify(source.indexOf("adminPageComponent") === -1,
+               "OwnerShell does not have adminPageComponent")
+        verify(source.indexOf('objectName: "ownerNavAdminButton"') === -1,
+               "OwnerShell does not have ownerNavAdminButton")
     }
 
 }

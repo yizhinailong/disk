@@ -203,19 +203,6 @@ TestCase {
         verify(source.indexOf("退出登录") !== -1, "Has Logout button")
     }
 
-    function test_owner_shell_source_has_admin_nav_item() {
-        var source = readSource("shells/OwnerShell.qml")
-
-        verify(source.indexOf('id: "admin"') !== -1,
-               "Has admin entry in independentPageNavItems")
-        verify(source.indexOf('label: "管理"') !== -1,
-               "Admin nav item has Chinese label")
-        verify(source.indexOf('objectName: "ownerNavAdminButton"') !== -1,
-               "Admin nav item has correct objectName")
-        verify(source.indexOf("adminPageComponent") !== -1,
-               "Has adminPageComponent")
-    }
-
     function test_owner_shell_runtime_has_distinct_navigation_groups() {
         var shell = createOwnerShell()
 

@@ -5,17 +5,17 @@ TestCase {
     name: "DesktopAdminPage"
     id: testAdminPage
 
-    function readAdminPageSource() {
+    function readAdminShellSource() {
         var xhr = new XMLHttpRequest()
-        xhr.open("GET", Qt.resolvedUrl("../../../qml/pages/AdminPage.qml"), false)
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/AdminShell.qml"), false)
         xhr.send()
-        verify(xhr.responseText.length > 0, "AdminPage.qml was read")
+        verify(xhr.responseText.length > 0, "AdminShell.qml was read")
         return xhr.responseText
     }
 
     function readAdminCompositeSource() {
         return [
-            readAdminPageSource(),
+            readAdminShellSource(),
             readQmlSource("components/admin/UserTab.qml"),
             readQmlSource("components/admin/ShareTab.qml"),
             readQmlSource("components/admin/SystemTab.qml"),
@@ -32,22 +32,25 @@ TestCase {
         return xhr.responseText
     }
 
-    function test_admin_page_has_three_tabs() {
-        var source = readAdminPageSource()
+    function test_admin_shell_has_three_page_destinations() {
+        var source = readAdminShellSource()
 
-        verify(source.indexOf('text: qsTr("用户")') !== -1 || source.indexOf('text: "用户"') !== -1,
-               "Has '用户' tab label")
-        verify(source.indexOf('text: qsTr("分享")') !== -1 || source.indexOf('text: "分享"') !== -1,
-               "Has '分享' tab label")
-        verify(source.indexOf('text: qsTr("系统")') !== -1 || source.indexOf('text: "系统"') !== -1,
-               "Has '系统' tab label")
+        verify(source.indexOf("用户管理") !== -1,
+               "Has user management nav label")
+        verify(source.indexOf("分享管理") !== -1,
+               "Has share management nav label")
+        verify(source.indexOf("系统监控") !== -1,
+               "Has system monitoring nav label")
     }
 
-    function test_admin_page_has_tab_bar_and_swipe_view() {
-        var source = readAdminPageSource()
+    function test_admin_shell_uses_stackview_not_tabs() {
+        var source = readAdminShellSource()
 
-        verify(source.indexOf("TabBar") !== -1, "Has TabBar")
-        verify(source.indexOf("SwipeView") !== -1, "Has SwipeView")
+        verify(source.indexOf("StackView") !== -1, "Has StackView")
+        verify(source.indexOf("TabBar") === -1,
+               "Does NOT use TabBar (uses StackView pages)")
+        verify(source.indexOf("SwipeView") === -1,
+               "Does NOT use SwipeView (uses StackView pages)")
     }
 
     function test_admin_page_references_admin_manager() {
@@ -153,17 +156,8 @@ TestCase {
         verify(source.indexOf("运行时间") !== -1, "Shows uptime")
     }
 
-    function test_admin_page_has_toast_mechanism() {
-        var source = readAdminPageSource()
-
-        verify(source.indexOf("toastVisible") !== -1, "Has toast visibility state")
-        verify(source.indexOf("showToast") !== -1, "Has showToast helper")
-        verify(source.indexOf("onApiError") !== -1, "Connects to apiError signal")
-        verify(source.indexOf("onOperationSuccess") !== -1, "Connects to operationSuccess signal")
-    }
-
-    function test_admin_page_uses_workspace_theme() {
-        var source = readAdminPageSource()
+    function test_admin_shell_uses_workspace_theme() {
+        var source = readAdminShellSource()
 
         verify(source.indexOf("WorkspaceTheme") !== -1, "Uses WorkspaceTheme")
     }
