@@ -379,36 +379,42 @@ class Users
         {
             needSelection=true;
         }
-        sql += "login_attempts,";
+        sql += "role,";
         ++parametersCount;
         if(!dirtyFlag_[10])
         {
             needSelection=true;
         }
-        if(dirtyFlag_[11])
+        sql += "login_attempts,";
+        ++parametersCount;
+        if(!dirtyFlag_[11])
+        {
+            needSelection=true;
+        }
+        if(dirtyFlag_[12])
         {
             sql += "locked_until,";
             ++parametersCount;
         }
-        if(dirtyFlag_[12])
+        if(dirtyFlag_[13])
         {
             sql += "last_login_at,";
             ++parametersCount;
         }
-        if(dirtyFlag_[13])
+        if(dirtyFlag_[14])
         {
             sql += "last_login_ip,";
             ++parametersCount;
         }
         sql += "created_at,";
         ++parametersCount;
-        if(!dirtyFlag_[14])
+        if(!dirtyFlag_[15])
         {
             needSelection=true;
         }
         sql += "updated_at,";
         ++parametersCount;
-        if(!dirtyFlag_[15])
+        if(!dirtyFlag_[16])
         {
             needSelection=true;
         }
@@ -497,6 +503,10 @@ class Users
             sql.append("?,");
 
         }
+        else
+        {
+            sql +="default,";
+        }
         if(dirtyFlag_[12])
         {
             sql.append("?,");
@@ -512,11 +522,16 @@ class Users
             sql.append("?,");
 
         }
+        if(dirtyFlag_[15])
+        {
+            sql.append("?,");
+
+        }
         else
         {
             sql +="default,";
         }
-        if(dirtyFlag_[15])
+        if(dirtyFlag_[16])
         {
             sql.append("?,");
 

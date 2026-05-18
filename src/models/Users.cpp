@@ -206,7 +206,7 @@ Users::Users(const Row &r, const ssize_t indexOffset) noexcept
     else
     {
         size_t offset = (size_t)indexOffset;
-        if(offset + 16 > r.size())
+        if(offset + 17 > r.size())
         {
             LOG_FATAL << "Invalid SQL result for this model";
             return;
@@ -478,32 +478,6 @@ Users::Users(const Json::Value &pJson, const std::vector<std::string> &pMasquera
     }
     if(!pMasqueradingVector[12].empty() && pJson.isMember(pMasqueradingVector[12]))
     {
-        dirtyFlag_[11] = true;
-        if(!pJson[pMasqueradingVector[11]].isNull())
-        {
-            auto timeStr = pJson[pMasqueradingVector[11]].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                lockedUntil_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-    if(!pMasqueradingVector[12].empty() && pJson.isMember(pMasqueradingVector[12]))
-    {
         dirtyFlag_[12] = true;
         if(!pJson[pMasqueradingVector[12]].isNull())
         {
@@ -524,7 +498,7 @@ Users::Users(const Json::Value &pJson, const std::vector<std::string> &pMasquera
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                lastLoginAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
+                lockedUntil_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
@@ -533,7 +507,25 @@ Users::Users(const Json::Value &pJson, const std::vector<std::string> &pMasquera
         dirtyFlag_[13] = true;
         if(!pJson[pMasqueradingVector[13]].isNull())
         {
-            lastLoginIp_=std::make_shared<std::string>(pJson[pMasqueradingVector[13]].asString());
+            auto timeStr = pJson[pMasqueradingVector[13]].asString();
+            struct tm stm;
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
+            time_t t = mktime(&stm);
+            size_t decimalNum = 0;
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
+                        decimals += "0";
+                    }
+                    decimalNum = (size_t)atol(decimals.c_str());
+                }
+                lastLoginAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
+            }
         }
     }
     if(!pMasqueradingVector[14].empty() && pJson.isMember(pMasqueradingVector[14]))
@@ -541,7 +533,15 @@ Users::Users(const Json::Value &pJson, const std::vector<std::string> &pMasquera
         dirtyFlag_[14] = true;
         if(!pJson[pMasqueradingVector[14]].isNull())
         {
-            auto timeStr = pJson[pMasqueradingVector[14]].asString();
+            lastLoginIp_=std::make_shared<std::string>(pJson[pMasqueradingVector[14]].asString());
+        }
+    }
+    if(!pMasqueradingVector[15].empty() && pJson.isMember(pMasqueradingVector[15]))
+    {
+        dirtyFlag_[15] = true;
+        if(!pJson[pMasqueradingVector[15]].isNull())
+        {
+            auto timeStr = pJson[pMasqueradingVector[15]].asString();
             struct tm stm;
             memset(&stm,0,sizeof(stm));
             auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
@@ -562,12 +562,12 @@ Users::Users(const Json::Value &pJson, const std::vector<std::string> &pMasquera
             }
         }
     }
-    if(!pMasqueradingVector[15].empty() && pJson.isMember(pMasqueradingVector[15]))
+    if(!pMasqueradingVector[16].empty() && pJson.isMember(pMasqueradingVector[16]))
     {
-        dirtyFlag_[15] = true;
-        if(!pJson[pMasqueradingVector[15]].isNull())
+        dirtyFlag_[16] = true;
+        if(!pJson[pMasqueradingVector[16]].isNull())
         {
-            auto timeStr = pJson[pMasqueradingVector[15]].asString();
+            auto timeStr = pJson[pMasqueradingVector[16]].asString();
             struct tm stm;
             memset(&stm,0,sizeof(stm));
             auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
@@ -716,7 +716,7 @@ Users::Users(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("last_login_at"))
     {
-        dirtyFlag_[12]=true;
+        dirtyFlag_[13]=true;
         if(!pJson["last_login_at"].isNull())
         {
             auto timeStr = pJson["last_login_at"].asString();
@@ -742,7 +742,7 @@ Users::Users(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("last_login_ip"))
     {
-        dirtyFlag_[13]=true;
+        dirtyFlag_[14]=true;
         if(!pJson["last_login_ip"].isNull())
         {
             lastLoginIp_=std::make_shared<std::string>(pJson["last_login_ip"].asString());
@@ -750,7 +750,7 @@ Users::Users(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("created_at"))
     {
-        dirtyFlag_[14]=true;
+        dirtyFlag_[15]=true;
         if(!pJson["created_at"].isNull())
         {
             auto timeStr = pJson["created_at"].asString();
@@ -776,7 +776,7 @@ Users::Users(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("updated_at"))
     {
-        dirtyFlag_[15]=true;
+        dirtyFlag_[16]=true;
         if(!pJson["updated_at"].isNull())
         {
             auto timeStr = pJson["updated_at"].asString();
@@ -805,7 +805,7 @@ Users::Users(const Json::Value &pJson) noexcept(false)
 void Users::updateByMasqueradedJson(const Json::Value &pJson,
                                             const std::vector<std::string> &pMasqueradingVector) noexcept(false)
 {
-    if(pMasqueradingVector.size() != 16)
+    if(pMasqueradingVector.size() != 17)
     {
         LOG_ERROR << "Bad masquerading vector";
         return;
@@ -1471,7 +1471,7 @@ const std::shared_ptr<int32_t> &Users::getLoginAttempts() const noexcept
 void Users::setLoginAttempts(const int32_t &pLoginAttempts) noexcept
 {
     loginAttempts_ = std::make_shared<int32_t>(pLoginAttempts);
-    dirtyFlag_[10] = true;
+    dirtyFlag_[11] = true;
 }
 
 const ::trantor::Date &Users::getValueOfLockedUntil() const noexcept
@@ -1488,12 +1488,12 @@ const std::shared_ptr<::trantor::Date> &Users::getLockedUntil() const noexcept
 void Users::setLockedUntil(const ::trantor::Date &pLockedUntil) noexcept
 {
     lockedUntil_ = std::make_shared<::trantor::Date>(pLockedUntil);
-    dirtyFlag_[11] = true;
+    dirtyFlag_[12] = true;
 }
 void Users::setLockedUntilToNull() noexcept
 {
     lockedUntil_.reset();
-    dirtyFlag_[11] = true;
+    dirtyFlag_[12] = true;
 }
 
 const ::trantor::Date &Users::getValueOfLastLoginAt() const noexcept
@@ -1510,12 +1510,12 @@ const std::shared_ptr<::trantor::Date> &Users::getLastLoginAt() const noexcept
 void Users::setLastLoginAt(const ::trantor::Date &pLastLoginAt) noexcept
 {
     lastLoginAt_ = std::make_shared<::trantor::Date>(pLastLoginAt);
-    dirtyFlag_[12] = true;
+    dirtyFlag_[13] = true;
 }
 void Users::setLastLoginAtToNull() noexcept
 {
     lastLoginAt_.reset();
-    dirtyFlag_[12] = true;
+    dirtyFlag_[13] = true;
 }
 
 const std::string &Users::getValueOfLastLoginIp() const noexcept
@@ -1532,17 +1532,17 @@ const std::shared_ptr<std::string> &Users::getLastLoginIp() const noexcept
 void Users::setLastLoginIp(const std::string &pLastLoginIp) noexcept
 {
     lastLoginIp_ = std::make_shared<std::string>(pLastLoginIp);
-    dirtyFlag_[13] = true;
+    dirtyFlag_[14] = true;
 }
 void Users::setLastLoginIp(std::string &&pLastLoginIp) noexcept
 {
     lastLoginIp_ = std::make_shared<std::string>(std::move(pLastLoginIp));
-    dirtyFlag_[13] = true;
+    dirtyFlag_[14] = true;
 }
 void Users::setLastLoginIpToNull() noexcept
 {
     lastLoginIp_.reset();
-    dirtyFlag_[13] = true;
+    dirtyFlag_[14] = true;
 }
 
 const ::trantor::Date &Users::getValueOfCreatedAt() const noexcept
@@ -1559,7 +1559,7 @@ const std::shared_ptr<::trantor::Date> &Users::getCreatedAt() const noexcept
 void Users::setCreatedAt(const ::trantor::Date &pCreatedAt) noexcept
 {
     createdAt_ = std::make_shared<::trantor::Date>(pCreatedAt);
-    dirtyFlag_[14] = true;
+    dirtyFlag_[15] = true;
 }
 
 const ::trantor::Date &Users::getValueOfUpdatedAt() const noexcept
@@ -1576,7 +1576,7 @@ const std::shared_ptr<::trantor::Date> &Users::getUpdatedAt() const noexcept
 void Users::setUpdatedAt(const ::trantor::Date &pUpdatedAt) noexcept
 {
     updatedAt_ = std::make_shared<::trantor::Date>(pUpdatedAt);
-    dirtyFlag_[15] = true;
+    dirtyFlag_[16] = true;
 }
 
 void Users::updateId(const uint64_t id)
@@ -1710,6 +1710,17 @@ void Users::outputArgs(drogon::orm::internal::SqlBinder &binder) const
     }
     if(dirtyFlag_[10])
     {
+        if(getRole())
+        {
+            binder << getValueOfRole();
+        }
+        else
+        {
+            binder << nullptr;
+        }
+    }
+    if(dirtyFlag_[11])
+    {
         if(getLoginAttempts())
         {
             binder << getValueOfLoginAttempts();
@@ -1719,7 +1730,7 @@ void Users::outputArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[11])
+    if(dirtyFlag_[12])
     {
         if(getLockedUntil())
         {
@@ -1730,7 +1741,7 @@ void Users::outputArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[12])
+    if(dirtyFlag_[13])
     {
         if(getLastLoginAt())
         {
@@ -1741,7 +1752,7 @@ void Users::outputArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[13])
+    if(dirtyFlag_[14])
     {
         if(getLastLoginIp())
         {
@@ -1752,7 +1763,7 @@ void Users::outputArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[14])
+    if(dirtyFlag_[15])
     {
         if(getCreatedAt())
         {
@@ -1763,7 +1774,7 @@ void Users::outputArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[15])
+    if(dirtyFlag_[16])
     {
         if(getUpdatedAt())
         {
@@ -1838,6 +1849,10 @@ const std::vector<std::string> Users::updateColumns() const
     if(dirtyFlag_[15])
     {
         ret.push_back(getColumnName(15));
+    }
+    if(dirtyFlag_[16])
+    {
+        ret.push_back(getColumnName(16));
     }
     return ret;
 }
@@ -1945,6 +1960,17 @@ void Users::updateArgs(drogon::orm::internal::SqlBinder &binder) const
     }
     if(dirtyFlag_[10])
     {
+        if(getRole())
+        {
+            binder << getValueOfRole();
+        }
+        else
+        {
+            binder << nullptr;
+        }
+    }
+    if(dirtyFlag_[11])
+    {
         if(getLoginAttempts())
         {
             binder << getValueOfLoginAttempts();
@@ -1954,7 +1980,7 @@ void Users::updateArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[11])
+    if(dirtyFlag_[12])
     {
         if(getLockedUntil())
         {
@@ -1965,7 +1991,7 @@ void Users::updateArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[12])
+    if(dirtyFlag_[13])
     {
         if(getLastLoginAt())
         {
@@ -1976,7 +2002,7 @@ void Users::updateArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[13])
+    if(dirtyFlag_[14])
     {
         if(getLastLoginIp())
         {
@@ -1987,7 +2013,7 @@ void Users::updateArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[14])
+    if(dirtyFlag_[15])
     {
         if(getCreatedAt())
         {
@@ -1998,7 +2024,7 @@ void Users::updateArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[15])
+    if(dirtyFlag_[16])
     {
         if(getUpdatedAt())
         {
@@ -2433,6 +2459,14 @@ Json::Value Users::toMasqueradedJson(
     {
         ret["status"]=Json::Value();
     }
+    if(getRole())
+    {
+        ret["role"]=getValueOfRole();
+    }
+    else
+    {
+        ret["role"]=Json::Value();
+    }
     if(getLoginAttempts())
     {
         ret["login_attempts"]=getValueOfLoginAttempts();
@@ -2551,34 +2585,39 @@ bool Users::validateJsonForCreation(const Json::Value &pJson, std::string &err)
         if(!validJsonOfField(9, "status", pJson["status"], err, true))
             return false;
     }
+    if(pJson.isMember("role"))
+    {
+        if(!validJsonOfField(10, "role", pJson["role"], err, true))
+            return false;
+    }
     if(pJson.isMember("login_attempts"))
     {
-        if(!validJsonOfField(10, "login_attempts", pJson["login_attempts"], err, true))
+        if(!validJsonOfField(11, "login_attempts", pJson["login_attempts"], err, true))
             return false;
     }
     if(pJson.isMember("locked_until"))
     {
-        if(!validJsonOfField(11, "locked_until", pJson["locked_until"], err, true))
+        if(!validJsonOfField(12, "locked_until", pJson["locked_until"], err, true))
             return false;
     }
     if(pJson.isMember("last_login_at"))
     {
-        if(!validJsonOfField(12, "last_login_at", pJson["last_login_at"], err, true))
+        if(!validJsonOfField(13, "last_login_at", pJson["last_login_at"], err, true))
             return false;
     }
     if(pJson.isMember("last_login_ip"))
     {
-        if(!validJsonOfField(13, "last_login_ip", pJson["last_login_ip"], err, true))
+        if(!validJsonOfField(14, "last_login_ip", pJson["last_login_ip"], err, true))
             return false;
     }
     if(pJson.isMember("created_at"))
     {
-        if(!validJsonOfField(14, "created_at", pJson["created_at"], err, true))
+        if(!validJsonOfField(15, "created_at", pJson["created_at"], err, true))
             return false;
     }
     if(pJson.isMember("updated_at"))
     {
-        if(!validJsonOfField(15, "updated_at", pJson["updated_at"], err, true))
+        if(!validJsonOfField(16, "updated_at", pJson["updated_at"], err, true))
             return false;
     }
     return true;
@@ -2587,7 +2626,7 @@ bool Users::validateMasqueradedJsonForCreation(const Json::Value &pJson,
                                                const std::vector<std::string> &pMasqueradingVector,
                                                std::string &err)
 {
-    if(pMasqueradingVector.size() != 16)
+    if(pMasqueradingVector.size() != 17)
     {
         err = "Bad masquerading vector";
         return false;
@@ -2736,6 +2775,14 @@ bool Users::validateMasqueradedJsonForCreation(const Json::Value &pJson,
                   return false;
           }
       }
+      if(!pMasqueradingVector[16].empty())
+      {
+          if(pJson.isMember(pMasqueradingVector[16]))
+          {
+              if(!validJsonOfField(16, pMasqueradingVector[16], pJson[pMasqueradingVector[16]], err, true))
+                  return false;
+          }
+      }
     }
     catch(const Json::LogicError &e)
     {
@@ -2801,34 +2848,39 @@ bool Users::validateJsonForUpdate(const Json::Value &pJson, std::string &err)
         if(!validJsonOfField(9, "status", pJson["status"], err, false))
             return false;
     }
+    if(pJson.isMember("role"))
+    {
+        if(!validJsonOfField(10, "role", pJson["role"], err, false))
+            return false;
+    }
     if(pJson.isMember("login_attempts"))
     {
-        if(!validJsonOfField(10, "login_attempts", pJson["login_attempts"], err, false))
+        if(!validJsonOfField(11, "login_attempts", pJson["login_attempts"], err, false))
             return false;
     }
     if(pJson.isMember("locked_until"))
     {
-        if(!validJsonOfField(11, "locked_until", pJson["locked_until"], err, false))
+        if(!validJsonOfField(12, "locked_until", pJson["locked_until"], err, false))
             return false;
     }
     if(pJson.isMember("last_login_at"))
     {
-        if(!validJsonOfField(12, "last_login_at", pJson["last_login_at"], err, false))
+        if(!validJsonOfField(13, "last_login_at", pJson["last_login_at"], err, false))
             return false;
     }
     if(pJson.isMember("last_login_ip"))
     {
-        if(!validJsonOfField(13, "last_login_ip", pJson["last_login_ip"], err, false))
+        if(!validJsonOfField(14, "last_login_ip", pJson["last_login_ip"], err, false))
             return false;
     }
     if(pJson.isMember("created_at"))
     {
-        if(!validJsonOfField(14, "created_at", pJson["created_at"], err, false))
+        if(!validJsonOfField(15, "created_at", pJson["created_at"], err, false))
             return false;
     }
     if(pJson.isMember("updated_at"))
     {
-        if(!validJsonOfField(15, "updated_at", pJson["updated_at"], err, false))
+        if(!validJsonOfField(16, "updated_at", pJson["updated_at"], err, false))
             return false;
     }
     return true;
@@ -2837,7 +2889,7 @@ bool Users::validateMasqueradedJsonForUpdate(const Json::Value &pJson,
                                              const std::vector<std::string> &pMasqueradingVector,
                                              std::string &err)
 {
-    if(pMasqueradingVector.size() != 16)
+    if(pMasqueradingVector.size() != 17)
     {
         err = "Bad masquerading vector";
         return false;
@@ -2928,6 +2980,11 @@ bool Users::validateMasqueradedJsonForUpdate(const Json::Value &pJson,
           if(!validJsonOfField(15, pMasqueradingVector[15], pJson[pMasqueradingVector[15]], err, false))
               return false;
       }
+      if(!pMasqueradingVector[16].empty() && pJson.isMember(pMasqueradingVector[16]))
+      {
+          if(!validJsonOfField(16, pMasqueradingVector[16], pJson[pMasqueradingVector[16]], err, false))
+              return false;
+      }
     }
     catch(const Json::LogicError &e)
     {
@@ -2972,7 +3029,8 @@ bool Users::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::string(pJson.asCString()).size() > 32)
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 32)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -2991,7 +3049,8 @@ bool Users::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::string(pJson.asCString()).size() > 128)
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 128)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -3010,7 +3069,8 @@ bool Users::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::string(pJson.asCString()).size() > 255)
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 255)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -3028,7 +3088,8 @@ bool Users::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::string(pJson.asCString()).size() > 64)
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 64)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -3046,7 +3107,8 @@ bool Users::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::string(pJson.asCString()).size() > 512)
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 512)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -3117,9 +3179,10 @@ bool Users::validJsonOfField(size_t index,
         case 11:
             if(pJson.isNull())
             {
-                return true;
+                err="The " + fieldName + " column cannot be null";
+                return false;
             }
-            if(!pJson.isString())
+            if(!pJson.isInt())
             {
                 err="Type error in the "+fieldName+" field";
                 return false;
@@ -3146,7 +3209,19 @@ bool Users::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::string(pJson.asCString()).size() > 45)
+            break;
+        case 14:
+            if(pJson.isNull())
+            {
+                return true;
+            }
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
+                return false;
+            }
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 45)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -3154,7 +3229,7 @@ bool Users::validJsonOfField(size_t index,
                 return false;
             }
             break;
-        case 14:
+        case 15:
             if(pJson.isNull())
             {
                 err="The " + fieldName + " column cannot be null";
@@ -3166,7 +3241,7 @@ bool Users::validJsonOfField(size_t index,
                 return false;
             }
             break;
-        case 15:
+        case 16:
             if(pJson.isNull())
             {
                 err="The " + fieldName + " column cannot be null";

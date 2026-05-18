@@ -21,7 +21,6 @@ const std::string UploadTasks::Cols::_file_size = "file_size";
 const std::string UploadTasks::Cols::_file_hash = "file_hash";
 const std::string UploadTasks::Cols::_chunk_size = "chunk_size";
 const std::string UploadTasks::Cols::_total_chunks = "total_chunks";
-const std::string UploadTasks::Cols::_uploaded_chunks = "uploaded_chunks";
 const std::string UploadTasks::Cols::_reserved_bytes = "reserved_bytes";
 const std::string UploadTasks::Cols::_temp_path = "temp_path";
 const std::string UploadTasks::Cols::_status = "status";
@@ -43,7 +42,6 @@ const std::vector<typename UploadTasks::MetaData> UploadTasks::metaData_={
 {"file_hash","std::string","char(32)",0,0,0,1},
 {"chunk_size","uint32_t","int unsigned",4,0,0,1},
 {"total_chunks","uint32_t","int unsigned",4,0,0,1},
-{"uploaded_chunks","std::string","text",0,0,0,0},
 {"reserved_bytes","uint64_t","bigint unsigned",8,0,0,1},
 {"temp_path","std::string","varchar(512)",512,0,0,1},
 {"status","int8_t","tinyint",1,0,0,1},
@@ -93,10 +91,6 @@ UploadTasks::UploadTasks(const Row &r, const ssize_t indexOffset) noexcept
         if(!r["total_chunks"].isNull())
         {
             totalChunks_=std::make_shared<uint32_t>(r["total_chunks"].as<uint32_t>());
-        }
-        if(!r["uploaded_chunks"].isNull())
-        {
-            uploadedChunks_=std::make_shared<std::string>(r["uploaded_chunks"].as<std::string>());
         }
         if(!r["reserved_bytes"].isNull())
         {
@@ -206,7 +200,7 @@ UploadTasks::UploadTasks(const Row &r, const ssize_t indexOffset) noexcept
     else
     {
         size_t offset = (size_t)indexOffset;
-        if(offset + 17 > r.size())
+        if(offset + 16 > r.size())
         {
             LOG_FATAL << "Invalid SQL result for this model";
             return;
@@ -255,24 +249,19 @@ UploadTasks::UploadTasks(const Row &r, const ssize_t indexOffset) noexcept
         index = offset + 8;
         if(!r[index].isNull())
         {
-            uploadedChunks_=std::make_shared<std::string>(r[index].as<std::string>());
+            reservedBytes_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
         }
         index = offset + 9;
         if(!r[index].isNull())
         {
-            reservedBytes_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
+            tempPath_=std::make_shared<std::string>(r[index].as<std::string>());
         }
         index = offset + 10;
         if(!r[index].isNull())
         {
-            tempPath_=std::make_shared<std::string>(r[index].as<std::string>());
-        }
-        index = offset + 11;
-        if(!r[index].isNull())
-        {
             status_=std::make_shared<int8_t>(r[index].as<int8_t>());
         }
-        index = offset + 12;
+        index = offset + 11;
         if(!r[index].isNull())
         {
             auto timeStr = r[index].as<std::string>();
@@ -295,7 +284,7 @@ UploadTasks::UploadTasks(const Row &r, const ssize_t indexOffset) noexcept
                 expiresAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
-        index = offset + 13;
+        index = offset + 12;
         if(!r[index].isNull())
         {
             auto timeStr = r[index].as<std::string>();
@@ -318,12 +307,12 @@ UploadTasks::UploadTasks(const Row &r, const ssize_t indexOffset) noexcept
                 finalizedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
-        index = offset + 14;
+        index = offset + 13;
         if(!r[index].isNull())
         {
             failReason_=std::make_shared<std::string>(r[index].as<std::string>());
         }
-        index = offset + 15;
+        index = offset + 14;
         if(!r[index].isNull())
         {
             auto timeStr = r[index].as<std::string>();
@@ -346,7 +335,7 @@ UploadTasks::UploadTasks(const Row &r, const ssize_t indexOffset) noexcept
                 createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
-        index = offset + 16;
+        index = offset + 15;
         if(!r[index].isNull())
         {
             auto timeStr = r[index].as<std::string>();
@@ -375,7 +364,7 @@ UploadTasks::UploadTasks(const Row &r, const ssize_t indexOffset) noexcept
 
 UploadTasks::UploadTasks(const Json::Value &pJson, const std::vector<std::string> &pMasqueradingVector) noexcept(false)
 {
-    if(pMasqueradingVector.size() != 17)
+    if(pMasqueradingVector.size() != 16)
     {
         LOG_ERROR << "Bad masquerading vector";
         return;
@@ -449,7 +438,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson, const std::vector<std::string
         dirtyFlag_[8] = true;
         if(!pJson[pMasqueradingVector[8]].isNull())
         {
-            uploadedChunks_=std::make_shared<std::string>(pJson[pMasqueradingVector[8]].asString());
+            reservedBytes_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[8]].asUInt64());
         }
     }
     if(!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9]))
@@ -457,7 +446,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson, const std::vector<std::string
         dirtyFlag_[9] = true;
         if(!pJson[pMasqueradingVector[9]].isNull())
         {
-            reservedBytes_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[9]].asUInt64());
+            tempPath_=std::make_shared<std::string>(pJson[pMasqueradingVector[9]].asString());
         }
     }
     if(!pMasqueradingVector[10].empty() && pJson.isMember(pMasqueradingVector[10]))
@@ -465,7 +454,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson, const std::vector<std::string
         dirtyFlag_[10] = true;
         if(!pJson[pMasqueradingVector[10]].isNull())
         {
-            tempPath_=std::make_shared<std::string>(pJson[pMasqueradingVector[10]].asString());
+            status_=std::make_shared<int8_t>((int8_t)pJson[pMasqueradingVector[10]].asInt64());
         }
     }
     if(!pMasqueradingVector[11].empty() && pJson.isMember(pMasqueradingVector[11]))
@@ -473,7 +462,25 @@ UploadTasks::UploadTasks(const Json::Value &pJson, const std::vector<std::string
         dirtyFlag_[11] = true;
         if(!pJson[pMasqueradingVector[11]].isNull())
         {
-            status_=std::make_shared<int8_t>((int8_t)pJson[pMasqueradingVector[11]].asInt64());
+            auto timeStr = pJson[pMasqueradingVector[11]].asString();
+            struct tm stm;
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
+            time_t t = mktime(&stm);
+            size_t decimalNum = 0;
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
+                        decimals += "0";
+                    }
+                    decimalNum = (size_t)atol(decimals.c_str());
+                }
+                expiresAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
+            }
         }
     }
     if(!pMasqueradingVector[12].empty() && pJson.isMember(pMasqueradingVector[12]))
@@ -498,7 +505,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson, const std::vector<std::string
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                expiresAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
+                finalizedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
@@ -507,25 +514,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson, const std::vector<std::string
         dirtyFlag_[13] = true;
         if(!pJson[pMasqueradingVector[13]].isNull())
         {
-            auto timeStr = pJson[pMasqueradingVector[13]].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                finalizedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
+            failReason_=std::make_shared<std::string>(pJson[pMasqueradingVector[13]].asString());
         }
     }
     if(!pMasqueradingVector[14].empty() && pJson.isMember(pMasqueradingVector[14]))
@@ -533,15 +522,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson, const std::vector<std::string
         dirtyFlag_[14] = true;
         if(!pJson[pMasqueradingVector[14]].isNull())
         {
-            failReason_=std::make_shared<std::string>(pJson[pMasqueradingVector[14]].asString());
-        }
-    }
-    if(!pMasqueradingVector[15].empty() && pJson.isMember(pMasqueradingVector[15]))
-    {
-        dirtyFlag_[15] = true;
-        if(!pJson[pMasqueradingVector[15]].isNull())
-        {
-            auto timeStr = pJson[pMasqueradingVector[15]].asString();
+            auto timeStr = pJson[pMasqueradingVector[14]].asString();
             struct tm stm;
             memset(&stm,0,sizeof(stm));
             auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
@@ -562,12 +543,12 @@ UploadTasks::UploadTasks(const Json::Value &pJson, const std::vector<std::string
             }
         }
     }
-    if(!pMasqueradingVector[16].empty() && pJson.isMember(pMasqueradingVector[16]))
+    if(!pMasqueradingVector[15].empty() && pJson.isMember(pMasqueradingVector[15]))
     {
-        dirtyFlag_[16] = true;
-        if(!pJson[pMasqueradingVector[16]].isNull())
+        dirtyFlag_[15] = true;
+        if(!pJson[pMasqueradingVector[15]].isNull())
         {
-            auto timeStr = pJson[pMasqueradingVector[16]].asString();
+            auto timeStr = pJson[pMasqueradingVector[15]].asString();
             struct tm stm;
             memset(&stm,0,sizeof(stm));
             auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
@@ -656,17 +637,9 @@ UploadTasks::UploadTasks(const Json::Value &pJson) noexcept(false)
             totalChunks_=std::make_shared<uint32_t>((uint32_t)pJson["total_chunks"].asUInt64());
         }
     }
-    if(pJson.isMember("uploaded_chunks"))
-    {
-        dirtyFlag_[8]=true;
-        if(!pJson["uploaded_chunks"].isNull())
-        {
-            uploadedChunks_=std::make_shared<std::string>(pJson["uploaded_chunks"].asString());
-        }
-    }
     if(pJson.isMember("reserved_bytes"))
     {
-        dirtyFlag_[9]=true;
+        dirtyFlag_[8]=true;
         if(!pJson["reserved_bytes"].isNull())
         {
             reservedBytes_=std::make_shared<uint64_t>((uint64_t)pJson["reserved_bytes"].asUInt64());
@@ -674,7 +647,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("temp_path"))
     {
-        dirtyFlag_[10]=true;
+        dirtyFlag_[9]=true;
         if(!pJson["temp_path"].isNull())
         {
             tempPath_=std::make_shared<std::string>(pJson["temp_path"].asString());
@@ -682,7 +655,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("status"))
     {
-        dirtyFlag_[11]=true;
+        dirtyFlag_[10]=true;
         if(!pJson["status"].isNull())
         {
             status_=std::make_shared<int8_t>((int8_t)pJson["status"].asInt64());
@@ -690,7 +663,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("expires_at"))
     {
-        dirtyFlag_[12]=true;
+        dirtyFlag_[11]=true;
         if(!pJson["expires_at"].isNull())
         {
             auto timeStr = pJson["expires_at"].asString();
@@ -716,7 +689,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("finalized_at"))
     {
-        dirtyFlag_[13]=true;
+        dirtyFlag_[12]=true;
         if(!pJson["finalized_at"].isNull())
         {
             auto timeStr = pJson["finalized_at"].asString();
@@ -742,7 +715,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("fail_reason"))
     {
-        dirtyFlag_[14]=true;
+        dirtyFlag_[13]=true;
         if(!pJson["fail_reason"].isNull())
         {
             failReason_=std::make_shared<std::string>(pJson["fail_reason"].asString());
@@ -750,7 +723,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("created_at"))
     {
-        dirtyFlag_[15]=true;
+        dirtyFlag_[14]=true;
         if(!pJson["created_at"].isNull())
         {
             auto timeStr = pJson["created_at"].asString();
@@ -776,7 +749,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("updated_at"))
     {
-        dirtyFlag_[16]=true;
+        dirtyFlag_[15]=true;
         if(!pJson["updated_at"].isNull())
         {
             auto timeStr = pJson["updated_at"].asString();
@@ -805,7 +778,7 @@ UploadTasks::UploadTasks(const Json::Value &pJson) noexcept(false)
 void UploadTasks::updateByMasqueradedJson(const Json::Value &pJson,
                                             const std::vector<std::string> &pMasqueradingVector) noexcept(false)
 {
-    if(pMasqueradingVector.size() != 17)
+    if(pMasqueradingVector.size() != 16)
     {
         LOG_ERROR << "Bad masquerading vector";
         return;
@@ -878,7 +851,7 @@ void UploadTasks::updateByMasqueradedJson(const Json::Value &pJson,
         dirtyFlag_[8] = true;
         if(!pJson[pMasqueradingVector[8]].isNull())
         {
-            uploadedChunks_=std::make_shared<std::string>(pJson[pMasqueradingVector[8]].asString());
+            reservedBytes_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[8]].asUInt64());
         }
     }
     if(!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9]))
@@ -886,7 +859,7 @@ void UploadTasks::updateByMasqueradedJson(const Json::Value &pJson,
         dirtyFlag_[9] = true;
         if(!pJson[pMasqueradingVector[9]].isNull())
         {
-            reservedBytes_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[9]].asUInt64());
+            tempPath_=std::make_shared<std::string>(pJson[pMasqueradingVector[9]].asString());
         }
     }
     if(!pMasqueradingVector[10].empty() && pJson.isMember(pMasqueradingVector[10]))
@@ -894,7 +867,7 @@ void UploadTasks::updateByMasqueradedJson(const Json::Value &pJson,
         dirtyFlag_[10] = true;
         if(!pJson[pMasqueradingVector[10]].isNull())
         {
-            tempPath_=std::make_shared<std::string>(pJson[pMasqueradingVector[10]].asString());
+            status_=std::make_shared<int8_t>((int8_t)pJson[pMasqueradingVector[10]].asInt64());
         }
     }
     if(!pMasqueradingVector[11].empty() && pJson.isMember(pMasqueradingVector[11]))
@@ -902,7 +875,25 @@ void UploadTasks::updateByMasqueradedJson(const Json::Value &pJson,
         dirtyFlag_[11] = true;
         if(!pJson[pMasqueradingVector[11]].isNull())
         {
-            status_=std::make_shared<int8_t>((int8_t)pJson[pMasqueradingVector[11]].asInt64());
+            auto timeStr = pJson[pMasqueradingVector[11]].asString();
+            struct tm stm;
+            memset(&stm,0,sizeof(stm));
+            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
+            time_t t = mktime(&stm);
+            size_t decimalNum = 0;
+            if(p)
+            {
+                if(*p=='.')
+                {
+                    std::string decimals(p+1,&timeStr[timeStr.length()]);
+                    while(decimals.length()<6)
+                    {
+                        decimals += "0";
+                    }
+                    decimalNum = (size_t)atol(decimals.c_str());
+                }
+                expiresAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
+            }
         }
     }
     if(!pMasqueradingVector[12].empty() && pJson.isMember(pMasqueradingVector[12]))
@@ -927,7 +918,7 @@ void UploadTasks::updateByMasqueradedJson(const Json::Value &pJson,
                     }
                     decimalNum = (size_t)atol(decimals.c_str());
                 }
-                expiresAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
+                finalizedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
             }
         }
     }
@@ -936,25 +927,7 @@ void UploadTasks::updateByMasqueradedJson(const Json::Value &pJson,
         dirtyFlag_[13] = true;
         if(!pJson[pMasqueradingVector[13]].isNull())
         {
-            auto timeStr = pJson[pMasqueradingVector[13]].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                finalizedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
+            failReason_=std::make_shared<std::string>(pJson[pMasqueradingVector[13]].asString());
         }
     }
     if(!pMasqueradingVector[14].empty() && pJson.isMember(pMasqueradingVector[14]))
@@ -962,15 +935,7 @@ void UploadTasks::updateByMasqueradedJson(const Json::Value &pJson,
         dirtyFlag_[14] = true;
         if(!pJson[pMasqueradingVector[14]].isNull())
         {
-            failReason_=std::make_shared<std::string>(pJson[pMasqueradingVector[14]].asString());
-        }
-    }
-    if(!pMasqueradingVector[15].empty() && pJson.isMember(pMasqueradingVector[15]))
-    {
-        dirtyFlag_[15] = true;
-        if(!pJson[pMasqueradingVector[15]].isNull())
-        {
-            auto timeStr = pJson[pMasqueradingVector[15]].asString();
+            auto timeStr = pJson[pMasqueradingVector[14]].asString();
             struct tm stm;
             memset(&stm,0,sizeof(stm));
             auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
@@ -991,12 +956,12 @@ void UploadTasks::updateByMasqueradedJson(const Json::Value &pJson,
             }
         }
     }
-    if(!pMasqueradingVector[16].empty() && pJson.isMember(pMasqueradingVector[16]))
+    if(!pMasqueradingVector[15].empty() && pJson.isMember(pMasqueradingVector[15]))
     {
-        dirtyFlag_[16] = true;
-        if(!pJson[pMasqueradingVector[16]].isNull())
+        dirtyFlag_[15] = true;
+        if(!pJson[pMasqueradingVector[15]].isNull())
         {
-            auto timeStr = pJson[pMasqueradingVector[16]].asString();
+            auto timeStr = pJson[pMasqueradingVector[15]].asString();
             struct tm stm;
             memset(&stm,0,sizeof(stm));
             auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
@@ -1084,17 +1049,9 @@ void UploadTasks::updateByJson(const Json::Value &pJson) noexcept(false)
             totalChunks_=std::make_shared<uint32_t>((uint32_t)pJson["total_chunks"].asUInt64());
         }
     }
-    if(pJson.isMember("uploaded_chunks"))
-    {
-        dirtyFlag_[8] = true;
-        if(!pJson["uploaded_chunks"].isNull())
-        {
-            uploadedChunks_=std::make_shared<std::string>(pJson["uploaded_chunks"].asString());
-        }
-    }
     if(pJson.isMember("reserved_bytes"))
     {
-        dirtyFlag_[9] = true;
+        dirtyFlag_[8] = true;
         if(!pJson["reserved_bytes"].isNull())
         {
             reservedBytes_=std::make_shared<uint64_t>((uint64_t)pJson["reserved_bytes"].asUInt64());
@@ -1102,7 +1059,7 @@ void UploadTasks::updateByJson(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("temp_path"))
     {
-        dirtyFlag_[10] = true;
+        dirtyFlag_[9] = true;
         if(!pJson["temp_path"].isNull())
         {
             tempPath_=std::make_shared<std::string>(pJson["temp_path"].asString());
@@ -1110,7 +1067,7 @@ void UploadTasks::updateByJson(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("status"))
     {
-        dirtyFlag_[11] = true;
+        dirtyFlag_[10] = true;
         if(!pJson["status"].isNull())
         {
             status_=std::make_shared<int8_t>((int8_t)pJson["status"].asInt64());
@@ -1118,7 +1075,7 @@ void UploadTasks::updateByJson(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("expires_at"))
     {
-        dirtyFlag_[12] = true;
+        dirtyFlag_[11] = true;
         if(!pJson["expires_at"].isNull())
         {
             auto timeStr = pJson["expires_at"].asString();
@@ -1144,7 +1101,7 @@ void UploadTasks::updateByJson(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("finalized_at"))
     {
-        dirtyFlag_[13] = true;
+        dirtyFlag_[12] = true;
         if(!pJson["finalized_at"].isNull())
         {
             auto timeStr = pJson["finalized_at"].asString();
@@ -1170,7 +1127,7 @@ void UploadTasks::updateByJson(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("fail_reason"))
     {
-        dirtyFlag_[14] = true;
+        dirtyFlag_[13] = true;
         if(!pJson["fail_reason"].isNull())
         {
             failReason_=std::make_shared<std::string>(pJson["fail_reason"].asString());
@@ -1178,7 +1135,7 @@ void UploadTasks::updateByJson(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("created_at"))
     {
-        dirtyFlag_[15] = true;
+        dirtyFlag_[14] = true;
         if(!pJson["created_at"].isNull())
         {
             auto timeStr = pJson["created_at"].asString();
@@ -1204,7 +1161,7 @@ void UploadTasks::updateByJson(const Json::Value &pJson) noexcept(false)
     }
     if(pJson.isMember("updated_at"))
     {
-        dirtyFlag_[16] = true;
+        dirtyFlag_[15] = true;
         if(!pJson["updated_at"].isNull())
         {
             auto timeStr = pJson["updated_at"].asString();
@@ -1386,33 +1343,6 @@ void UploadTasks::setTotalChunks(const uint32_t &pTotalChunks) noexcept
     dirtyFlag_[7] = true;
 }
 
-const std::string &UploadTasks::getValueOfUploadedChunks() const noexcept
-{
-    static const std::string defaultValue = std::string();
-    if(uploadedChunks_)
-        return *uploadedChunks_;
-    return defaultValue;
-}
-const std::shared_ptr<std::string> &UploadTasks::getUploadedChunks() const noexcept
-{
-    return uploadedChunks_;
-}
-void UploadTasks::setUploadedChunks(const std::string &pUploadedChunks) noexcept
-{
-    uploadedChunks_ = std::make_shared<std::string>(pUploadedChunks);
-    dirtyFlag_[8] = true;
-}
-void UploadTasks::setUploadedChunks(std::string &&pUploadedChunks) noexcept
-{
-    uploadedChunks_ = std::make_shared<std::string>(std::move(pUploadedChunks));
-    dirtyFlag_[8] = true;
-}
-void UploadTasks::setUploadedChunksToNull() noexcept
-{
-    uploadedChunks_.reset();
-    dirtyFlag_[8] = true;
-}
-
 const uint64_t &UploadTasks::getValueOfReservedBytes() const noexcept
 {
     static const uint64_t defaultValue = uint64_t();
@@ -1427,7 +1357,7 @@ const std::shared_ptr<uint64_t> &UploadTasks::getReservedBytes() const noexcept
 void UploadTasks::setReservedBytes(const uint64_t &pReservedBytes) noexcept
 {
     reservedBytes_ = std::make_shared<uint64_t>(pReservedBytes);
-    dirtyFlag_[9] = true;
+    dirtyFlag_[8] = true;
 }
 
 const std::string &UploadTasks::getValueOfTempPath() const noexcept
@@ -1444,12 +1374,12 @@ const std::shared_ptr<std::string> &UploadTasks::getTempPath() const noexcept
 void UploadTasks::setTempPath(const std::string &pTempPath) noexcept
 {
     tempPath_ = std::make_shared<std::string>(pTempPath);
-    dirtyFlag_[10] = true;
+    dirtyFlag_[9] = true;
 }
 void UploadTasks::setTempPath(std::string &&pTempPath) noexcept
 {
     tempPath_ = std::make_shared<std::string>(std::move(pTempPath));
-    dirtyFlag_[10] = true;
+    dirtyFlag_[9] = true;
 }
 
 const int8_t &UploadTasks::getValueOfStatus() const noexcept
@@ -1466,7 +1396,7 @@ const std::shared_ptr<int8_t> &UploadTasks::getStatus() const noexcept
 void UploadTasks::setStatus(const int8_t &pStatus) noexcept
 {
     status_ = std::make_shared<int8_t>(pStatus);
-    dirtyFlag_[11] = true;
+    dirtyFlag_[10] = true;
 }
 
 const ::trantor::Date &UploadTasks::getValueOfExpiresAt() const noexcept
@@ -1483,7 +1413,7 @@ const std::shared_ptr<::trantor::Date> &UploadTasks::getExpiresAt() const noexce
 void UploadTasks::setExpiresAt(const ::trantor::Date &pExpiresAt) noexcept
 {
     expiresAt_ = std::make_shared<::trantor::Date>(pExpiresAt);
-    dirtyFlag_[12] = true;
+    dirtyFlag_[11] = true;
 }
 
 const ::trantor::Date &UploadTasks::getValueOfFinalizedAt() const noexcept
@@ -1500,12 +1430,12 @@ const std::shared_ptr<::trantor::Date> &UploadTasks::getFinalizedAt() const noex
 void UploadTasks::setFinalizedAt(const ::trantor::Date &pFinalizedAt) noexcept
 {
     finalizedAt_ = std::make_shared<::trantor::Date>(pFinalizedAt);
-    dirtyFlag_[13] = true;
+    dirtyFlag_[12] = true;
 }
 void UploadTasks::setFinalizedAtToNull() noexcept
 {
     finalizedAt_.reset();
-    dirtyFlag_[13] = true;
+    dirtyFlag_[12] = true;
 }
 
 const std::string &UploadTasks::getValueOfFailReason() const noexcept
@@ -1522,17 +1452,17 @@ const std::shared_ptr<std::string> &UploadTasks::getFailReason() const noexcept
 void UploadTasks::setFailReason(const std::string &pFailReason) noexcept
 {
     failReason_ = std::make_shared<std::string>(pFailReason);
-    dirtyFlag_[14] = true;
+    dirtyFlag_[13] = true;
 }
 void UploadTasks::setFailReason(std::string &&pFailReason) noexcept
 {
     failReason_ = std::make_shared<std::string>(std::move(pFailReason));
-    dirtyFlag_[14] = true;
+    dirtyFlag_[13] = true;
 }
 void UploadTasks::setFailReasonToNull() noexcept
 {
     failReason_.reset();
-    dirtyFlag_[14] = true;
+    dirtyFlag_[13] = true;
 }
 
 const ::trantor::Date &UploadTasks::getValueOfCreatedAt() const noexcept
@@ -1549,7 +1479,7 @@ const std::shared_ptr<::trantor::Date> &UploadTasks::getCreatedAt() const noexce
 void UploadTasks::setCreatedAt(const ::trantor::Date &pCreatedAt) noexcept
 {
     createdAt_ = std::make_shared<::trantor::Date>(pCreatedAt);
-    dirtyFlag_[15] = true;
+    dirtyFlag_[14] = true;
 }
 
 const ::trantor::Date &UploadTasks::getValueOfUpdatedAt() const noexcept
@@ -1566,7 +1496,7 @@ const std::shared_ptr<::trantor::Date> &UploadTasks::getUpdatedAt() const noexce
 void UploadTasks::setUpdatedAt(const ::trantor::Date &pUpdatedAt) noexcept
 {
     updatedAt_ = std::make_shared<::trantor::Date>(pUpdatedAt);
-    dirtyFlag_[16] = true;
+    dirtyFlag_[15] = true;
 }
 
 void UploadTasks::updateId(const uint64_t id)
@@ -1584,7 +1514,6 @@ const std::vector<std::string> &UploadTasks::insertColumns() noexcept
         "file_hash",
         "chunk_size",
         "total_chunks",
-        "uploaded_chunks",
         "reserved_bytes",
         "temp_path",
         "status",
@@ -1689,17 +1618,6 @@ void UploadTasks::outputArgs(drogon::orm::internal::SqlBinder &binder) const
     }
     if(dirtyFlag_[8])
     {
-        if(getUploadedChunks())
-        {
-            binder << getValueOfUploadedChunks();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[9])
-    {
         if(getReservedBytes())
         {
             binder << getValueOfReservedBytes();
@@ -1709,7 +1627,7 @@ void UploadTasks::outputArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[10])
+    if(dirtyFlag_[9])
     {
         if(getTempPath())
         {
@@ -1720,7 +1638,7 @@ void UploadTasks::outputArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[11])
+    if(dirtyFlag_[10])
     {
         if(getStatus())
         {
@@ -1731,7 +1649,7 @@ void UploadTasks::outputArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[12])
+    if(dirtyFlag_[11])
     {
         if(getExpiresAt())
         {
@@ -1742,7 +1660,7 @@ void UploadTasks::outputArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[13])
+    if(dirtyFlag_[12])
     {
         if(getFinalizedAt())
         {
@@ -1753,7 +1671,7 @@ void UploadTasks::outputArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[14])
+    if(dirtyFlag_[13])
     {
         if(getFailReason())
         {
@@ -1764,7 +1682,7 @@ void UploadTasks::outputArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[15])
+    if(dirtyFlag_[14])
     {
         if(getCreatedAt())
         {
@@ -1775,7 +1693,7 @@ void UploadTasks::outputArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[16])
+    if(dirtyFlag_[15])
     {
         if(getUpdatedAt())
         {
@@ -1854,10 +1772,6 @@ const std::vector<std::string> UploadTasks::updateColumns() const
     if(dirtyFlag_[15])
     {
         ret.push_back(getColumnName(15));
-    }
-    if(dirtyFlag_[16])
-    {
-        ret.push_back(getColumnName(16));
     }
     return ret;
 }
@@ -1954,17 +1868,6 @@ void UploadTasks::updateArgs(drogon::orm::internal::SqlBinder &binder) const
     }
     if(dirtyFlag_[8])
     {
-        if(getUploadedChunks())
-        {
-            binder << getValueOfUploadedChunks();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[9])
-    {
         if(getReservedBytes())
         {
             binder << getValueOfReservedBytes();
@@ -1974,7 +1877,7 @@ void UploadTasks::updateArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[10])
+    if(dirtyFlag_[9])
     {
         if(getTempPath())
         {
@@ -1985,7 +1888,7 @@ void UploadTasks::updateArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[11])
+    if(dirtyFlag_[10])
     {
         if(getStatus())
         {
@@ -1996,7 +1899,7 @@ void UploadTasks::updateArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[12])
+    if(dirtyFlag_[11])
     {
         if(getExpiresAt())
         {
@@ -2007,7 +1910,7 @@ void UploadTasks::updateArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[13])
+    if(dirtyFlag_[12])
     {
         if(getFinalizedAt())
         {
@@ -2018,7 +1921,7 @@ void UploadTasks::updateArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[14])
+    if(dirtyFlag_[13])
     {
         if(getFailReason())
         {
@@ -2029,7 +1932,7 @@ void UploadTasks::updateArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[15])
+    if(dirtyFlag_[14])
     {
         if(getCreatedAt())
         {
@@ -2040,7 +1943,7 @@ void UploadTasks::updateArgs(drogon::orm::internal::SqlBinder &binder) const
             binder << nullptr;
         }
     }
-    if(dirtyFlag_[16])
+    if(dirtyFlag_[15])
     {
         if(getUpdatedAt())
         {
@@ -2119,14 +2022,6 @@ Json::Value UploadTasks::toJson() const
     {
         ret["total_chunks"]=Json::Value();
     }
-    if(getUploadedChunks())
-    {
-        ret["uploaded_chunks"]=getValueOfUploadedChunks();
-    }
-    else
-    {
-        ret["uploaded_chunks"]=Json::Value();
-    }
     if(getReservedBytes())
     {
         ret["reserved_bytes"]=(Json::UInt64)getValueOfReservedBytes();
@@ -2203,7 +2098,7 @@ Json::Value UploadTasks::toMasqueradedJson(
     const std::vector<std::string> &pMasqueradingVector) const
 {
     Json::Value ret;
-    if(pMasqueradingVector.size() == 17)
+    if(pMasqueradingVector.size() == 16)
     {
         if(!pMasqueradingVector[0].empty())
         {
@@ -2295,9 +2190,9 @@ Json::Value UploadTasks::toMasqueradedJson(
         }
         if(!pMasqueradingVector[8].empty())
         {
-            if(getUploadedChunks())
+            if(getReservedBytes())
             {
-                ret[pMasqueradingVector[8]]=getValueOfUploadedChunks();
+                ret[pMasqueradingVector[8]]=(Json::UInt64)getValueOfReservedBytes();
             }
             else
             {
@@ -2306,9 +2201,9 @@ Json::Value UploadTasks::toMasqueradedJson(
         }
         if(!pMasqueradingVector[9].empty())
         {
-            if(getReservedBytes())
+            if(getTempPath())
             {
-                ret[pMasqueradingVector[9]]=(Json::UInt64)getValueOfReservedBytes();
+                ret[pMasqueradingVector[9]]=getValueOfTempPath();
             }
             else
             {
@@ -2317,9 +2212,9 @@ Json::Value UploadTasks::toMasqueradedJson(
         }
         if(!pMasqueradingVector[10].empty())
         {
-            if(getTempPath())
+            if(getStatus())
             {
-                ret[pMasqueradingVector[10]]=getValueOfTempPath();
+                ret[pMasqueradingVector[10]]=getValueOfStatus();
             }
             else
             {
@@ -2328,9 +2223,9 @@ Json::Value UploadTasks::toMasqueradedJson(
         }
         if(!pMasqueradingVector[11].empty())
         {
-            if(getStatus())
+            if(getExpiresAt())
             {
-                ret[pMasqueradingVector[11]]=getValueOfStatus();
+                ret[pMasqueradingVector[11]]=getExpiresAt()->toDbStringLocal();
             }
             else
             {
@@ -2339,9 +2234,9 @@ Json::Value UploadTasks::toMasqueradedJson(
         }
         if(!pMasqueradingVector[12].empty())
         {
-            if(getExpiresAt())
+            if(getFinalizedAt())
             {
-                ret[pMasqueradingVector[12]]=getExpiresAt()->toDbStringLocal();
+                ret[pMasqueradingVector[12]]=getFinalizedAt()->toDbStringLocal();
             }
             else
             {
@@ -2350,9 +2245,9 @@ Json::Value UploadTasks::toMasqueradedJson(
         }
         if(!pMasqueradingVector[13].empty())
         {
-            if(getFinalizedAt())
+            if(getFailReason())
             {
-                ret[pMasqueradingVector[13]]=getFinalizedAt()->toDbStringLocal();
+                ret[pMasqueradingVector[13]]=getValueOfFailReason();
             }
             else
             {
@@ -2361,9 +2256,9 @@ Json::Value UploadTasks::toMasqueradedJson(
         }
         if(!pMasqueradingVector[14].empty())
         {
-            if(getFailReason())
+            if(getCreatedAt())
             {
-                ret[pMasqueradingVector[14]]=getValueOfFailReason();
+                ret[pMasqueradingVector[14]]=getCreatedAt()->toDbStringLocal();
             }
             else
             {
@@ -2372,24 +2267,13 @@ Json::Value UploadTasks::toMasqueradedJson(
         }
         if(!pMasqueradingVector[15].empty())
         {
-            if(getCreatedAt())
+            if(getUpdatedAt())
             {
-                ret[pMasqueradingVector[15]]=getCreatedAt()->toDbStringLocal();
+                ret[pMasqueradingVector[15]]=getUpdatedAt()->toDbStringLocal();
             }
             else
             {
                 ret[pMasqueradingVector[15]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[16].empty())
-        {
-            if(getUpdatedAt())
-            {
-                ret[pMasqueradingVector[16]]=getUpdatedAt()->toDbStringLocal();
-            }
-            else
-            {
-                ret[pMasqueradingVector[16]]=Json::Value();
             }
         }
         return ret;
@@ -2458,14 +2342,6 @@ Json::Value UploadTasks::toMasqueradedJson(
     else
     {
         ret["total_chunks"]=Json::Value();
-    }
-    if(getUploadedChunks())
-    {
-        ret["uploaded_chunks"]=getValueOfUploadedChunks();
-    }
-    else
-    {
-        ret["uploaded_chunks"]=Json::Value();
     }
     if(getReservedBytes())
     {
@@ -2611,19 +2487,14 @@ bool UploadTasks::validateJsonForCreation(const Json::Value &pJson, std::string 
         err="The total_chunks column cannot be null";
         return false;
     }
-    if(pJson.isMember("uploaded_chunks"))
-    {
-        if(!validJsonOfField(8, "uploaded_chunks", pJson["uploaded_chunks"], err, true))
-            return false;
-    }
     if(pJson.isMember("reserved_bytes"))
     {
-        if(!validJsonOfField(9, "reserved_bytes", pJson["reserved_bytes"], err, true))
+        if(!validJsonOfField(8, "reserved_bytes", pJson["reserved_bytes"], err, true))
             return false;
     }
     if(pJson.isMember("temp_path"))
     {
-        if(!validJsonOfField(10, "temp_path", pJson["temp_path"], err, true))
+        if(!validJsonOfField(9, "temp_path", pJson["temp_path"], err, true))
             return false;
     }
     else
@@ -2633,12 +2504,12 @@ bool UploadTasks::validateJsonForCreation(const Json::Value &pJson, std::string 
     }
     if(pJson.isMember("status"))
     {
-        if(!validJsonOfField(11, "status", pJson["status"], err, true))
+        if(!validJsonOfField(10, "status", pJson["status"], err, true))
             return false;
     }
     if(pJson.isMember("expires_at"))
     {
-        if(!validJsonOfField(12, "expires_at", pJson["expires_at"], err, true))
+        if(!validJsonOfField(11, "expires_at", pJson["expires_at"], err, true))
             return false;
     }
     else
@@ -2648,22 +2519,22 @@ bool UploadTasks::validateJsonForCreation(const Json::Value &pJson, std::string 
     }
     if(pJson.isMember("finalized_at"))
     {
-        if(!validJsonOfField(13, "finalized_at", pJson["finalized_at"], err, true))
+        if(!validJsonOfField(12, "finalized_at", pJson["finalized_at"], err, true))
             return false;
     }
     if(pJson.isMember("fail_reason"))
     {
-        if(!validJsonOfField(14, "fail_reason", pJson["fail_reason"], err, true))
+        if(!validJsonOfField(13, "fail_reason", pJson["fail_reason"], err, true))
             return false;
     }
     if(pJson.isMember("created_at"))
     {
-        if(!validJsonOfField(15, "created_at", pJson["created_at"], err, true))
+        if(!validJsonOfField(14, "created_at", pJson["created_at"], err, true))
             return false;
     }
     if(pJson.isMember("updated_at"))
     {
-        if(!validJsonOfField(16, "updated_at", pJson["updated_at"], err, true))
+        if(!validJsonOfField(15, "updated_at", pJson["updated_at"], err, true))
             return false;
     }
     return true;
@@ -2672,7 +2543,7 @@ bool UploadTasks::validateMasqueradedJsonForCreation(const Json::Value &pJson,
                                                      const std::vector<std::string> &pMasqueradingVector,
                                                      std::string &err)
 {
-    if(pMasqueradingVector.size() != 17)
+    if(pMasqueradingVector.size() != 16)
     {
         err = "Bad masquerading vector";
         return false;
@@ -2792,6 +2663,11 @@ bool UploadTasks::validateMasqueradedJsonForCreation(const Json::Value &pJson,
               if(!validJsonOfField(9, pMasqueradingVector[9], pJson[pMasqueradingVector[9]], err, true))
                   return false;
           }
+        else
+        {
+            err="The " + pMasqueradingVector[9] + " column cannot be null";
+            return false;
+        }
       }
       if(!pMasqueradingVector[10].empty())
       {
@@ -2800,11 +2676,6 @@ bool UploadTasks::validateMasqueradedJsonForCreation(const Json::Value &pJson,
               if(!validJsonOfField(10, pMasqueradingVector[10], pJson[pMasqueradingVector[10]], err, true))
                   return false;
           }
-        else
-        {
-            err="The " + pMasqueradingVector[10] + " column cannot be null";
-            return false;
-        }
       }
       if(!pMasqueradingVector[11].empty())
       {
@@ -2813,6 +2684,11 @@ bool UploadTasks::validateMasqueradedJsonForCreation(const Json::Value &pJson,
               if(!validJsonOfField(11, pMasqueradingVector[11], pJson[pMasqueradingVector[11]], err, true))
                   return false;
           }
+        else
+        {
+            err="The " + pMasqueradingVector[11] + " column cannot be null";
+            return false;
+        }
       }
       if(!pMasqueradingVector[12].empty())
       {
@@ -2821,11 +2697,6 @@ bool UploadTasks::validateMasqueradedJsonForCreation(const Json::Value &pJson,
               if(!validJsonOfField(12, pMasqueradingVector[12], pJson[pMasqueradingVector[12]], err, true))
                   return false;
           }
-        else
-        {
-            err="The " + pMasqueradingVector[12] + " column cannot be null";
-            return false;
-        }
       }
       if(!pMasqueradingVector[13].empty())
       {
@@ -2848,14 +2719,6 @@ bool UploadTasks::validateMasqueradedJsonForCreation(const Json::Value &pJson,
           if(pJson.isMember(pMasqueradingVector[15]))
           {
               if(!validJsonOfField(15, pMasqueradingVector[15], pJson[pMasqueradingVector[15]], err, true))
-                  return false;
-          }
-      }
-      if(!pMasqueradingVector[16].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[16]))
-          {
-              if(!validJsonOfField(16, pMasqueradingVector[16], pJson[pMasqueradingVector[16]], err, true))
                   return false;
           }
       }
@@ -2914,49 +2777,44 @@ bool UploadTasks::validateJsonForUpdate(const Json::Value &pJson, std::string &e
         if(!validJsonOfField(7, "total_chunks", pJson["total_chunks"], err, false))
             return false;
     }
-    if(pJson.isMember("uploaded_chunks"))
-    {
-        if(!validJsonOfField(8, "uploaded_chunks", pJson["uploaded_chunks"], err, false))
-            return false;
-    }
     if(pJson.isMember("reserved_bytes"))
     {
-        if(!validJsonOfField(9, "reserved_bytes", pJson["reserved_bytes"], err, false))
+        if(!validJsonOfField(8, "reserved_bytes", pJson["reserved_bytes"], err, false))
             return false;
     }
     if(pJson.isMember("temp_path"))
     {
-        if(!validJsonOfField(10, "temp_path", pJson["temp_path"], err, false))
+        if(!validJsonOfField(9, "temp_path", pJson["temp_path"], err, false))
             return false;
     }
     if(pJson.isMember("status"))
     {
-        if(!validJsonOfField(11, "status", pJson["status"], err, false))
+        if(!validJsonOfField(10, "status", pJson["status"], err, false))
             return false;
     }
     if(pJson.isMember("expires_at"))
     {
-        if(!validJsonOfField(12, "expires_at", pJson["expires_at"], err, false))
+        if(!validJsonOfField(11, "expires_at", pJson["expires_at"], err, false))
             return false;
     }
     if(pJson.isMember("finalized_at"))
     {
-        if(!validJsonOfField(13, "finalized_at", pJson["finalized_at"], err, false))
+        if(!validJsonOfField(12, "finalized_at", pJson["finalized_at"], err, false))
             return false;
     }
     if(pJson.isMember("fail_reason"))
     {
-        if(!validJsonOfField(14, "fail_reason", pJson["fail_reason"], err, false))
+        if(!validJsonOfField(13, "fail_reason", pJson["fail_reason"], err, false))
             return false;
     }
     if(pJson.isMember("created_at"))
     {
-        if(!validJsonOfField(15, "created_at", pJson["created_at"], err, false))
+        if(!validJsonOfField(14, "created_at", pJson["created_at"], err, false))
             return false;
     }
     if(pJson.isMember("updated_at"))
     {
-        if(!validJsonOfField(16, "updated_at", pJson["updated_at"], err, false))
+        if(!validJsonOfField(15, "updated_at", pJson["updated_at"], err, false))
             return false;
     }
     return true;
@@ -2965,7 +2823,7 @@ bool UploadTasks::validateMasqueradedJsonForUpdate(const Json::Value &pJson,
                                                    const std::vector<std::string> &pMasqueradingVector,
                                                    std::string &err)
 {
-    if(pMasqueradingVector.size() != 17)
+    if(pMasqueradingVector.size() != 16)
     {
         err = "Bad masquerading vector";
         return false;
@@ -3056,11 +2914,6 @@ bool UploadTasks::validateMasqueradedJsonForUpdate(const Json::Value &pJson,
           if(!validJsonOfField(15, pMasqueradingVector[15], pJson[pMasqueradingVector[15]], err, false))
               return false;
       }
-      if(!pMasqueradingVector[16].empty() && pJson.isMember(pMasqueradingVector[16]))
-      {
-          if(!validJsonOfField(16, pMasqueradingVector[16], pJson[pMasqueradingVector[16]], err, false))
-              return false;
-      }
     }
     catch(const Json::LogicError &e)
     {
@@ -3088,7 +2941,8 @@ bool UploadTasks::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::string(pJson.asCString()).size() > 64)
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 64)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -3131,7 +2985,8 @@ bool UploadTasks::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::string(pJson.asCString()).size() > 255)
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 255)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -3190,9 +3045,10 @@ bool UploadTasks::validJsonOfField(size_t index,
         case 8:
             if(pJson.isNull())
             {
-                return true;
+                err="The " + fieldName + " column cannot be null";
+                return false;
             }
-            if(!pJson.isString())
+            if(!pJson.isUInt64())
             {
                 err="Type error in the "+fieldName+" field";
                 return false;
@@ -3204,24 +3060,13 @@ bool UploadTasks::validJsonOfField(size_t index,
                 err="The " + fieldName + " column cannot be null";
                 return false;
             }
-            if(!pJson.isUInt64())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            break;
-        case 10:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
             if(!pJson.isString())
             {
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::string(pJson.asCString()).size() > 512)
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 512)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -3229,7 +3074,7 @@ bool UploadTasks::validJsonOfField(size_t index,
                 return false;
             }
             break;
-        case 11:
+        case 10:
             if(pJson.isNull())
             {
                 err="The " + fieldName + " column cannot be null";
@@ -3241,11 +3086,22 @@ bool UploadTasks::validJsonOfField(size_t index,
                 return false;
             }
             break;
-        case 12:
+        case 11:
             if(pJson.isNull())
             {
                 err="The " + fieldName + " column cannot be null";
                 return false;
+            }
+            if(!pJson.isString())
+            {
+                err="Type error in the "+fieldName+" field";
+                return false;
+            }
+            break;
+        case 12:
+            if(pJson.isNull())
+            {
+                return true;
             }
             if(!pJson.isString())
             {
@@ -3263,18 +3119,8 @@ bool UploadTasks::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            break;
-        case 14:
-            if(pJson.isNull())
-            {
-                return true;
-            }
-            if(!pJson.isString())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            if(pJson.isString() && std::string(pJson.asCString()).size() > 512)
+            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
+                .from_bytes(pJson.asCString()).size() > 512)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -3282,7 +3128,7 @@ bool UploadTasks::validJsonOfField(size_t index,
                 return false;
             }
             break;
-        case 15:
+        case 14:
             if(pJson.isNull())
             {
                 err="The " + fieldName + " column cannot be null";
@@ -3294,7 +3140,7 @@ bool UploadTasks::validJsonOfField(size_t index,
                 return false;
             }
             break;
-        case 16:
+        case 15:
             if(pJson.isNull())
             {
                 err="The " + fieldName + " column cannot be null";

@@ -52,7 +52,6 @@ class UploadTasks
         static const std::string _file_hash;
         static const std::string _chunk_size;
         static const std::string _total_chunks;
-        static const std::string _uploaded_chunks;
         static const std::string _reserved_bytes;
         static const std::string _temp_path;
         static const std::string _status;
@@ -179,16 +178,6 @@ class UploadTasks
     ///Set the value of the column total_chunks
     void setTotalChunks(const uint32_t &pTotalChunks) noexcept;
 
-    /**  For column uploaded_chunks  */
-    ///Get the value of the column uploaded_chunks, returns the default value if the column is null
-    const std::string &getValueOfUploadedChunks() const noexcept;
-    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-    const std::shared_ptr<std::string> &getUploadedChunks() const noexcept;
-    ///Set the value of the column uploaded_chunks
-    void setUploadedChunks(const std::string &pUploadedChunks) noexcept;
-    void setUploadedChunks(std::string &&pUploadedChunks) noexcept;
-    void setUploadedChunksToNull() noexcept;
-
     /**  For column reserved_bytes  */
     ///Get the value of the column reserved_bytes, returns the default value if the column is null
     const uint64_t &getValueOfReservedBytes() const noexcept;
@@ -258,7 +247,7 @@ class UploadTasks
     void setUpdatedAt(const ::trantor::Date &pUpdatedAt) noexcept;
 
 
-    static size_t getColumnNumber() noexcept {  return 17;  }
+    static size_t getColumnNumber() noexcept {  return 16;  }
     static const std::string &getColumnName(size_t index) noexcept(false);
 
     Json::Value toJson() const;
@@ -288,7 +277,6 @@ class UploadTasks
     std::shared_ptr<std::string> fileHash_;
     std::shared_ptr<uint32_t> chunkSize_;
     std::shared_ptr<uint32_t> totalChunks_;
-    std::shared_ptr<std::string> uploadedChunks_;
     std::shared_ptr<uint64_t> reservedBytes_;
     std::shared_ptr<std::string> tempPath_;
     std::shared_ptr<int8_t> status_;
@@ -308,7 +296,7 @@ class UploadTasks
         const bool notNull_;
     };
     static const std::vector<MetaData> metaData_;
-    bool dirtyFlag_[17]={ false };
+    bool dirtyFlag_[16]={ false };
   public:
     static const std::string &sqlForFindingByPrimaryKey()
     {
@@ -367,52 +355,47 @@ class UploadTasks
             sql += "total_chunks,";
             ++parametersCount;
         }
-        if(dirtyFlag_[8])
-        {
-            sql += "uploaded_chunks,";
-            ++parametersCount;
-        }
         sql += "reserved_bytes,";
         ++parametersCount;
-        if(!dirtyFlag_[9])
+        if(!dirtyFlag_[8])
         {
             needSelection=true;
         }
-        if(dirtyFlag_[10])
+        if(dirtyFlag_[9])
         {
             sql += "temp_path,";
             ++parametersCount;
         }
         sql += "status,";
         ++parametersCount;
-        if(!dirtyFlag_[11])
+        if(!dirtyFlag_[10])
         {
             needSelection=true;
         }
-        if(dirtyFlag_[12])
+        if(dirtyFlag_[11])
         {
             sql += "expires_at,";
             ++parametersCount;
         }
-        if(dirtyFlag_[13])
+        if(dirtyFlag_[12])
         {
             sql += "finalized_at,";
             ++parametersCount;
         }
-        if(dirtyFlag_[14])
+        if(dirtyFlag_[13])
         {
             sql += "fail_reason,";
             ++parametersCount;
         }
         sql += "created_at,";
         ++parametersCount;
-        if(!dirtyFlag_[15])
+        if(!dirtyFlag_[14])
         {
             needSelection=true;
         }
         sql += "updated_at,";
         ++parametersCount;
-        if(!dirtyFlag_[16])
+        if(!dirtyFlag_[15])
         {
             needSelection=true;
         }
@@ -473,28 +456,28 @@ class UploadTasks
             sql.append("?,");
 
         }
+        else
+        {
+            sql +="default,";
+        }
         if(dirtyFlag_[9])
         {
             sql.append("?,");
 
-        }
-        else
-        {
-            sql +="default,";
         }
         if(dirtyFlag_[10])
         {
             sql.append("?,");
 
         }
+        else
+        {
+            sql +="default,";
+        }
         if(dirtyFlag_[11])
         {
             sql.append("?,");
 
-        }
-        else
-        {
-            sql +="default,";
         }
         if(dirtyFlag_[12])
         {
@@ -511,16 +494,11 @@ class UploadTasks
             sql.append("?,");
 
         }
-        if(dirtyFlag_[15])
-        {
-            sql.append("?,");
-
-        }
         else
         {
             sql +="default,";
         }
-        if(dirtyFlag_[16])
+        if(dirtyFlag_[15])
         {
             sql.append("?,");
 
