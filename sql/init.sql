@@ -114,7 +114,6 @@ CREATE TABLE `upload_tasks` (
     `file_hash` CHAR(32) NOT NULL COMMENT '文件MD5哈希',
     `chunk_size` INT UNSIGNED NOT NULL COMMENT '分片大小',
     `total_chunks` INT UNSIGNED NOT NULL COMMENT '总分片数',
-    `uploaded_chunks` TEXT COMMENT '已上传分片索引列表(JSON数组)【已废弃，兼容性保留】',
     `reserved_bytes` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '预占用字节数',
     `temp_path` VARCHAR(512) NOT NULL COMMENT '临时存储路径',
     `status` TINYINT NOT NULL DEFAULT 0 COMMENT '状态: 0-进行中, 1-已完成, 2-已取消, 3-已过期',
