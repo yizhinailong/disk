@@ -10,6 +10,7 @@ namespace disk::app {
         : QObject(parent), m_session_store(session_store), m_current_shell("splash"), m_page_state("loading") {
         if (m_session_store) {
             connect(m_session_store->GetOwnerManager(), &disk::desktop::OwnerSessionManager::stateChanged, this, &ShellController::onOwnerSessionStateChanged);
+            connect(m_session_store->GetOwnerManager(), &disk::desktop::OwnerSessionManager::roleChanged, this, &ShellController::onOwnerRoleChanged);
             connect(m_session_store->GetVisitorManager(), &disk::desktop::VisitorSessionManager::stateChanged, this, &ShellController::onVisitorSessionStateChanged);
         }
     }
@@ -22,7 +23,11 @@ namespace disk::app {
         auto owner_state = m_session_store->GetOwnerManager()->GetState();
         if (owner_state == disk::desktop::OwnerSessionState::Active ||
             owner_state == disk::desktop::OwnerSessionState::Refreshing) {
-            navigateToOwner();
+            if (m_session_store->GetOwnerManager()->GetRole() == 1) {
+                navigateToAdmin();
+            } else {
+                navigateToOwner();
+            }
         } else {
             navigateToLogin();
         }
@@ -46,6 +51,23 @@ namespace disk::app {
             owner_state == disk::desktop::OwnerSessionState::Refreshing) {
             if (m_current_shell != "owner") {
                 m_current_shell = "owner";
+                emit currentShellChanged();
+            }
+        } else {
+            navigateToLogin();
+        }
+    }
+
+    void ShellController::navigateToAdmin() {
+        if (!m_session_store) {
+            return;
+        }
+
+        auto owner_state = m_session_store->GetOwnerManager()->GetState();
+        if (owner_state == disk::desktop::OwnerSessionState::Active ||
+            owner_state == disk::desktop::OwnerSessionState::Refreshing) {
+            if (m_current_shell != "admin") {
+                m_current_shell = "admin";
                 emit currentShellChanged();
             }
         } else {
@@ -104,7 +126,11 @@ namespace disk::app {
             navigateToLogin();
         } else if (state == disk::desktop::OwnerSessionState::Active) {
             if (m_current_shell == "login" || m_current_shell == "splash") {
-                navigateToOwner();
+                if (m_session_store->GetOwnerManager()->GetRole() == 1) {
+                    navigateToAdmin();
+                } else {
+                    navigateToOwner();
+                }
             }
         } else if (state == disk::desktop::OwnerSessionState::Authenticating ||
                    state == disk::desktop::OwnerSessionState::Refreshing) {
@@ -146,6 +172,17 @@ namespace disk::app {
             if (m_current_shell == "visitor") {
                 setPageState("content");
             }
+        }
+    }
+
+    void ShellController::onOwnerRoleChanged() {
+        if (!m_session_store) {
+            return;
+        }
+
+        // If role changes from admin (1) to regular (0) while in admin shell, force logout
+        if (m_current_shell == "admin" && m_session_store->GetOwnerManager()->GetRole() != 1) {
+            m_session_store->GetOwnerManager()->StartLogout();
         }
     }
 

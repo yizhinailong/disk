@@ -25,6 +25,7 @@ namespace disk::app {
 
     public slots:
         void navigateToOwner();
+        void navigateToAdmin();
         void navigateToVisitor(const QString& shareId);
         void navigateToLogin();
         void navigateToRegister();
@@ -39,6 +40,7 @@ namespace disk::app {
     private slots:
         void onOwnerSessionStateChanged();
         void onVisitorSessionStateChanged();
+        void onOwnerRoleChanged();
 
     private:
         disk::desktop::SessionStore* m_session_store;

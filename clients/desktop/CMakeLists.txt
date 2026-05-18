@@ -153,6 +153,7 @@ set(DESKTOP_QML_FILES
     qml/pages/SplashPage.qml
     qml/pages/TransferCenterPage.qml
     qml/pages/AdminPage.qml
+    qml/shells/AdminShell.qml
     qml/shells/AuthShell.qml
     qml/shells/OwnerShell.qml
     qml/shells/VisitorShell.qml

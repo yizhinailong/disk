@@ -16,6 +16,7 @@ Item {
             case "login": return authShellComponent;
             case "register": return authShellComponent;
             case "owner": return ownerComponent;
+            case "admin": return adminComponent;
             case "visitor": return visitorComponent;
             default: return splashComponent;
         }
@@ -98,6 +99,11 @@ Item {
     Component {
         id: ownerComponent
         OwnerShell {}
+    }
+
+    Component {
+        id: adminComponent
+        AdminShell {}
     }
 
     Component {
