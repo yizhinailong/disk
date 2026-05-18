@@ -191,88 +191,11 @@ CMake 是一种跨平台的构建系统生成工具，被 Drogon 生态所推荐
 
 从系统整体组成来看，主要分为客户端接入层、过滤器层、控制器层、服务层和数据存储层五个部分。客户端接入层通过 RESTful HTTP 请求调用系统能力；过滤器层以 Drogon 框架为基础，通过全局过滤器完成 JWT 鉴权、管理员鉴权、分享令牌鉴权和接口限流；控制器层通过控制器解析请求并返回统一响应；服务层划分为认证、用户、文件、目录、分享、回收站、管理员、日志、健康检查和系统信息等模块，集中承载业务逻辑；数据存储层由 MySQL、Redis 和本地文件系统共同组成，其中 MySQL 保存结构化业务数据，Redis 保存刷新令牌、黑名单、登录失败计数、分享访问状态和限流计数，本地文件系统按内容哈希保存物理文件对象。
 
-图4-1 系统总体架构图
-
-```mermaid
-graph TD
-    subgraph 客户端接入层
-        Client[Web/桌面/移动/CLI客户端]
-    end
-
-    subgraph 过滤器层
-        JWTFilter[JWT鉴权过滤器]
-        AdminFilter[管理员鉴权过滤器]
-        ShareFilter[分享令牌过滤器]
-        RateFilter[限流过滤器]
-    end
-
-    subgraph 控制器层
-        AuthCtrl[认证控制器]
-        UserCtrl[用户控制器]
-        FileCtrl[文件管理控制器]
-        DirCtrl[目录管理控制器]
-        ShareCtrl[分享控制器]
-        TrashCtrl[回收站控制器]
-        AdminCtrl[管理员控制器]
-        LogCtrl[日志/系统控制器]
-    end
-
-    subgraph 服务层
-        AuthSvc[认证服务]
-        UserSvc[用户服务]
-        FileSvc[文件服务]
-        FolderSvc[目录服务]
-        ShareSvc[分享服务]
-        TrashSvc[回收站服务]
-        AdminSvc[管理员服务]
-        LogSvc[日志与系统服务]
-    end
-
-    subgraph 数据存储层
-        MySQL[(MySQL数据库)]
-        Redis[(Redis)]
-        LocalFS[本地文件系统]
-    end
-
-    Client -->|RESTful HTTP| JWTFilter
-    JWTFilter --> RateFilter
-    RateFilter --> AuthCtrl
-    RateFilter --> UserCtrl
-    RateFilter --> FileCtrl
-    RateFilter --> DirCtrl
-    RateFilter --> ShareCtrl
-    RateFilter --> TrashCtrl
-    RateFilter --> LogCtrl
-    JWTFilter --> AdminFilter
-    AdminFilter --> AdminCtrl
-    ShareFilter --> ShareCtrl
-    AuthCtrl --> AuthSvc
-    UserCtrl --> UserSvc
-    FileCtrl --> FileSvc
-    DirCtrl --> FolderSvc
-    ShareCtrl --> ShareSvc
-    TrashCtrl --> TrashSvc
-    AdminCtrl --> AdminSvc
-    LogCtrl --> LogSvc
-    AuthSvc --> MySQL
-    AuthSvc --> Redis
-    UserSvc --> MySQL
-    FileSvc --> MySQL
-    FileSvc --> Redis
-    FileSvc --> LocalFS
-    FolderSvc --> MySQL
-    ShareSvc --> MySQL
-    ShareSvc --> Redis
-    TrashSvc --> MySQL
-    TrashSvc --> LocalFS
-    AdminSvc --> MySQL
-    LogSvc --> MySQL
-    LogSvc --> Redis
-```
-
 ### 4.2 系统模块设计
 
-图4-2 用户端功能结构图
+系统在功能层面按角色划分为普通用户端和管理员端两大模块。普通用户端涵盖账号管理、用户中心、文件管理、目录管理、分享管理、回收站管理和存储空间查看七个功能子模块。其中，账号管理包括注册、登录、刷新令牌和登出；文件管理支持分片上传（初始化、上传分片、完成合并、取消上传）、秒传去重、下载、重命名、移动、复制、删除和搜索；目录管理提供创建目录、目录树和面包屑路径查询；分享管理覆盖生成分享链接、访问密码、有效期、查看/下载权限、我的分享、取消分享以及浏览和下载分享文件；回收站管理包括回收站列表、批量恢复和彻底删除/清空。管理员端涵盖用户管理、存储统计、分享管理和系统状态四个功能子模块。其中，用户管理支持查看用户列表、搜索用户、查看用户详情、禁用或启用账号、修改角色、软删除用户和查看用户文件；存储统计提供全平台统计和各用户占用排行；分享管理支持查看分享列表、分享详情和强制取消分享；系统状态包括系统概览以及数据库、Redis 和磁盘的运行状态。图4-1 和图4-2 分别展示了普通用户端和管理员端的功能结构。
+
+图4-1 用户端功能结构图
 
 ```mermaid
 graph TD
@@ -322,7 +245,7 @@ graph TD
     TrashOps --> Purge[彻底删除/清空]
 ```
 
-图4-3 管理员端功能结构图
+图4-2 管理员端功能结构图
 
 ```mermaid
 graph TD
@@ -359,7 +282,7 @@ graph TD
 
 JWT 过滤器是认证模块与各业务控制器之间的桥梁。需要登录的接口统一通过 `Authorization: Bearer <access_token>` 携带访问令牌，过滤器负责验证签名、过期时间和黑名单状态，并将用户 ID、用户名和角色等上下文写入请求对象。管理员接口在 JWT 校验之后还会经过管理员鉴权过滤器，只有角色为管理员的账号才能继续访问。Refresh Token 采用 Redis 存储和轮换机制，登出时会使访问令牌进入黑名单并删除刷新令牌，实现较完整的登录态生命周期管理。
 
-图4-4 用户登录与鉴权流程图
+图4-3 用户登录与鉴权流程图
 
 ```mermaid
 sequenceDiagram
@@ -408,7 +331,7 @@ sequenceDiagram
 
 目录树接口通过递归查询返回当前用户的目录层级结构，面包屑接口返回从根目录到指定目录的路径链路。为了避免异常数据导致无限递归，服务层会限制目录树深度并在面包屑构建过程中检测循环引用。目录删除不直接丢弃数据，而是进入回收站流程，保留恢复所需的原始路径和项目数据。
 
-图4-5 创建目录流程图
+图4-4 创建目录流程图
 
 ```mermaid
 flowchart TD
@@ -429,7 +352,7 @@ flowchart TD
 
 如果文件内容不存在，系统会创建 `upload_tasks` 记录并预占用用户存储空间。客户端随后按分片索引上传数据，后端将分片写入临时目录，并在 `upload_task_chunks` 表中记录已上传分片。断点续传的关键在于初始化接口会返回已上传分片列表，客户端恢复上传时只需补传缺失分片。所有分片完成后，后端通过 `AssemblyWorkerPool` 控制并发合并，将临时分片按顺序合并为完整文件，计算并校验内容哈希，随后写入 `file_contents` 和 `files` 表，释放预占用空间并将上传任务标记为完成。
 
-图4-6 分片上传与秒传流程图
+图4-5 分片上传与秒传流程图
 
 ```mermaid
 flowchart TD
@@ -456,7 +379,7 @@ flowchart TD
 
 公开访问分享时，访客首先通过分享短码和可选密码调用访问接口。后端校验分享是否存在、是否过期、是否取消以及密码是否正确；校验通过后签发短期分享访问令牌。后续浏览分享目录或下载分享文件时，访客需要在 `X-Share-Token` 请求头中携带该令牌，由分享鉴权过滤器完成校验。系统会分别记录浏览次数和下载次数，并使用 Redis 对分享密码尝试进行限流，避免暴力猜测分享密码。
 
-图4-7 文件分享访问流程图
+图4-6 文件分享访问流程图
 
 ```mermaid
 sequenceDiagram
@@ -514,77 +437,77 @@ sequenceDiagram
 
 Users 与 Files、Folders、UploadTasks、Trash、Shares 和 OperationLogs 之间存在一对多关系，一个用户可以拥有多个文件、目录、上传任务、回收站记录、分享记录和操作日志。Files 通过 content_id 关联 FileContents，多个 Files 可以引用同一个 FileContents，从而实现文件内容去重和引用计数管理；Files 通过 folder_id 归属于某个 Folders，Folders 又通过 parent_id 形成自引用目录树。UploadTasks 与 UploadTaskChunks 之间是一对多关系，一个上传任务包含多个已上传分片记录。Shares 与 ShareFiles 之间是一对多关系，一个分享可以包含一个或多个文件或目录。Trash 保存被软删除项目的恢复信息，并在文件类型项目中保留 content_id 以便彻底删除时维护引用计数。
 
-为避免单张图同时承载字段结构和实体关系导致内容过于密集，本文将数据库概念结构拆分为实体图和系统 ER 图两部分表示。其中，图4-8 重点展示各核心实体及其主要属性，图4-9 重点展示实体之间的关联关系。
+为避免单张图同时承载字段结构和实体关系导致内容过于密集，本文将数据库概念结构拆分为实体图和系统 ER 图两部分表示。其中，图4-7 重点展示各核心实体及其主要属性，图4-8 重点展示实体之间的关联关系。
 
-图4-8 数据库实体图
+图4-7 数据库实体图
 
 用户实体（USERS）用于保存系统用户的基础账号信息，包括用户名、邮箱、密码哈希、昵称、头像、存储配额、已用空间、账号状态、角色以及创建和更新时间等，是系统认证、权限判断和容量控制的基础。
 
-图4-8(a) 用户表ER图
+图4-7(a) 用户表ER图
 
-![图4-8(a) 用户表ER图](assets/用户表.png)
+![图4-7(a) 用户表ER图](assets/用户表.png)
 
 文件内容实体（FILE_CONTENTS）用于保存真实物理文件的内容索引信息，通过 MD5、SHA256、文件大小和存储路径标识文件内容，并通过引用计数支持秒传、去重和物理文件释放。
 
-图4-8(b) 文件内容表ER图
+图4-7(b) 文件内容表ER图
 
-![图4-8(b) 文件内容表ER图](assets/文件内容表.png)
+![图4-7(b) 文件内容表ER图](assets/文件内容表.png)
 
 文件实体（FILES）用于保存用户视角下的文件元数据，记录文件所属用户、所在文件夹、关联内容对象、文件名、大小、类型、路径、收藏状态和下载次数等信息。
 
-图4-8(c) 文件表ER图
+图4-7(c) 文件表ER图
 
-![图4-8(c) 文件表ER图](assets/文件表.png)
+![图4-7(c) 文件表ER图](assets/文件表.png)
 
 文件夹实体（FOLDERS）用于保存用户的目录结构信息，通过父目录字段形成多级目录树，并记录文件夹名称、完整路径、层级深度和子项数量等数据。
 
-图4-8(d) 文件夹表ER图
+图4-7(d) 文件夹表ER图
 
-![图4-8(d) 文件夹表ER图](assets/文件夹表.png)
+![图4-7(d) 文件夹表ER图](assets/文件夹表.png)
 
 上传任务实体（UPLOAD_TASKS）用于保存分片上传任务的整体状态，记录上传用户、目标文件夹、文件名、文件大小、文件哈希、分片大小、总分片数、任务状态和过期时间等信息。
 
-图4-8(e) 上传任务表ER图
+图4-7(e) 上传任务表ER图
 
-![图4-8(e) 上传任务表ER图](assets/上传任务表.png)
+![图4-7(e) 上传任务表ER图](assets/上传任务表.png)
 
 上传分片实体（UPLOAD_TASK_CHUNKS）用于记录上传任务中已经完成的分片，通过任务 ID 和分片编号共同确定唯一分片，为断点续传和上传进度恢复提供依据。
 
-图4-8(f) 上传任务分片表ER图
+图4-7(f) 上传任务分片表ER图
 
-![图4-8(f) 上传任务分片表ER图](assets/上传任务分片表.png)
+![图4-7(f) 上传任务分片表ER图](assets/上传任务分片表.png)
 
 回收站实体（TRASH）用于保存被软删除的文件或文件夹信息，记录删除项目的类型、原始 ID、名称、内容引用、原文件夹位置、删除时间和过期清理时间等。
 
-图4-8(g) 回收站表ER图
+图4-7(g) 回收站表ER图
 
-![图4-8(g) 回收站表ER图](assets/回收站表.png)
+![图4-7(g) 回收站表ER图](assets/回收站表.png)
 
 分享实体（SHARES）用于保存用户创建的分享链接信息，包括分享码、分享者、访问密码哈希、权限类型、浏览次数、下载次数、分享状态和有效期等。
 
-图4-8(h) 分享表ER图
+图4-7(h) 分享表ER图
 
-![图4-8(h) 分享表ER图](assets/分享表.png)
+![图4-7(h) 分享表ER图](assets/分享表.png)
 
 分享文件关联实体（SHARE_FILES）用于保存分享与文件或文件夹之间的关联关系，使一个分享可以包含一个或多个文件或目录。
 
-图4-8(i) 分享文件关联表ER图
+图4-7(i) 分享文件关联表ER图
 
-![图4-8(i) 分享文件关联表ER图](assets/分享文件关联表.png)
+![图4-7(i) 分享文件关联表ER图](assets/分享文件关联表.png)
 
 操作日志实体（OPERATION_LOGS）用于保存用户关键操作记录，包括操作用户、操作类型、目标对象、目标名称、详细信息、IP 地址和操作时间，用于审计、排查和统计。
 
-图4-8(j) 操作日志表ER图
+图4-7(j) 操作日志表ER图
 
-![图4-8(j) 操作日志表ER图](assets/操作日志表.png)
+![图4-7(j) 操作日志表ER图](assets/操作日志表.png)
 
-图4-9 系统ER关系图
+图4-8 系统ER关系图
 
-![图4-9 系统ER关系图](assets/系统总体ER图.png)
+![图4-8 系统ER关系图](assets/系统总体ER图.png)
 
 #### 4.4.2 数据库逻辑结构设计
 
-在概念结构设计的基础上，结合图4-8 所示实体属性和图4-9 所示实体关系，将各实体及其关系转化为关系型数据库中的表结构。系统共设计十张核心数据表：用户表（users）、文件内容表（file_contents）、文件表（files）、文件夹表（folders）、上传任务表（upload_tasks）、上传任务分片表（upload_task_chunks）、回收站表（trash）、分享表（shares）、分享文件关联表（share_files）和操作日志表（operation_logs）。这些表通过外键约束、唯一索引、联合索引和全文索引共同维护数据完整性和查询效率。
+在概念结构设计的基础上，结合图4-7 所示实体属性和图4-8 所示实体关系，将各实体及其关系转化为关系型数据库中的表结构。系统共设计十张核心数据表：用户表（users）、文件内容表（file_contents）、文件表（files）、文件夹表（folders）、上传任务表（upload_tasks）、上传任务分片表（upload_task_chunks）、回收站表（trash）、分享表（shares）、分享文件关联表（share_files）和操作日志表（operation_logs）。这些表通过外键约束、唯一索引、联合索引和全文索引共同维护数据完整性和查询效率。
 
 用户表（users）在逻辑上对应 Users 实体，是系统登录认证和权限控制的基础表。文件内容表（file_contents）保存物理文件的内容哈希、存储路径和引用计数，文件表（files）保存用户视角下的文件元数据并通过 content_id 关联内容对象。文件夹表（folders）通过 parent_id 维护目录树结构，根目录以 0 表示。上传任务表（upload_tasks）保存分片上传任务的总体状态，上传任务分片表（upload_task_chunks）保存每个任务已经上传的分片编号，用于断点续传。回收站表（trash）保存软删除项目的恢复信息和过期清理时间。分享表（shares）保存分享短码、密码、权限、访问统计和过期状态，分享文件关联表（share_files）保存分享与文件或目录之间的多项关联。操作日志表（operation_logs）保存用户关键操作的审计信息。
 
