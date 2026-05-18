@@ -141,71 +141,11 @@ CMake 是一种跨平台的构建系统生成工具，被 Drogon 生态所推荐
 
 图3-1 普通用户用例图
 
-```mermaid
-graph TB
-    subgraph 系统边界
-        UC1(账号注册)
-        UC2(账号登录)
-        UC3(查看存储空间)
-        UC4(上传文件)
-        UC5(下载文件)
-        UC6(创建目录)
-        UC7(删除文件或目录)
-        UC8(重命名文件或目录)
-        UC9(移动文件或目录)
-        UC10(生成分享链接)
-        UC11(查看我的分享)
-        UC12(通过分享链接访问文件)
-        UC13(删除分享链接)
-        UC14(查看/恢复回收站)
-        UC15(复制与搜索文件)
-        UC16(刷新令牌/登出)
-    end
-    User((普通用户))
-    User --> UC1
-    User --> UC2
-    User --> UC3
-    User --> UC4
-    User --> UC5
-    User --> UC6
-    User --> UC7
-    User --> UC8
-    User --> UC9
-    User --> UC10
-    User --> UC11
-    User --> UC12
-    User --> UC13
-    User --> UC14
-    User --> UC15
-    User --> UC16
-```
+![普通用户用例图](assets/普通用户用例图.png)
 
 图3-2 管理员用例图
 
-```mermaid
-graph TB
-    subgraph 管理后台边界
-        AM1(管理员登录)
-        AM2(查看用户列表)
-        AM3(禁用或启用账号)
-        AM4(查看用户存储使用量)
-        AM5(查看全平台存储统计)
-        AM6(修改用户角色)
-        AM7(查看用户文件)
-        AM8(管理分享记录)
-        AM9(查看系统状态)
-    end
-    Admin((管理员))
-    Admin --> AM1
-    Admin --> AM2
-    Admin --> AM3
-    Admin --> AM4
-    Admin --> AM5
-    Admin --> AM6
-    Admin --> AM7
-    Admin --> AM8
-    Admin --> AM9
-```
+![管理员用例图](assets/管理员用例图.png)
 
 ### 3.3 系统非功能需求分析
 
