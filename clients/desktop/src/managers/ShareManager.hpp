@@ -53,6 +53,7 @@ namespace disk::desktop::managers {
 
         // Visitor operations (Share Token auth)
         Q_INVOKABLE void browseShare(const QString& shareId, const QString& parentId = {});
+        Q_INVOKABLE QString parseShareInput(const QString& input) const;
 
     signals:
         void apiError(const QString& message, int code);

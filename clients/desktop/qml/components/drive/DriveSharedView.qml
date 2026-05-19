@@ -8,6 +8,8 @@ PageStateView {
 
     required property var page
 
+    property string visitorEntryError: ""
+
     objectName: "sharedStateView"
     visible: page.isSharedMode
     pageState: shellController.pageState
@@ -168,6 +170,44 @@ PageStateView {
                 }
             }
 
+            RowLayout {
+                id: visitorEntrySection
+                Layout.fillWidth: true
+                spacing: page.tableColumnSpacing
+
+                TextField {
+                    id: visitorShareInput
+                    objectName: "visitorShareInput"
+                    Layout.fillWidth: true
+                    placeholderText: "输入分享码或粘贴分享链接"
+                }
+
+                Button {
+                    id: visitorAccessButton
+                    objectName: "visitorAccessButton"
+                    text: "访问分享"
+                    highlighted: true
+                    enabled: visitorShareInput.text.trim().length > 0
+                    onClicked: {
+                        var shareId = shareManager.parseShareInput(visitorShareInput.text.trim())
+                        if (shareId.length > 0) {
+                            root.visitorEntryError = ""
+                            shellController.navigateToVisitor(shareId)
+                        } else {
+                            root.visitorEntryError = "无效的分享码或链接"
+                        }
+                    }
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: root.visitorEntryError
+                    color: page.panelErrorTextColor
+                    font.pixelSize: 12
+                    visible: text !== ""
+                }
+            }
+
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -301,6 +341,26 @@ PageStateView {
                                     text: page.formatShareDateTime(model.expiresAt, "永久有效")
                                     color: page.tableBodyTertiaryTextColor
                                     font.pixelSize: 11
+                                }
+                            }
+
+                            Button {
+                                id: copyLinkButton
+                                objectName: "sharedCopyLinkButton_" + String(model.shareId)
+                                text: copyFeedbackActive ? "✓" : "复制链接"
+                                flat: true
+                                onClicked: {
+                                    QGuiApplication.clipboard().setText(model.shareLink)
+                                    copyFeedbackActive = true
+                                    copyFeedbackTimer.start()
+                                }
+
+                                property bool copyFeedbackActive: false
+
+                                Timer {
+                                    id: copyFeedbackTimer
+                                    interval: 2000
+                                    onTriggered: copyLinkButton.copyFeedbackActive = false
                                 }
                             }
 

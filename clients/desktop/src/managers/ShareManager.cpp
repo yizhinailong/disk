@@ -7,6 +7,8 @@
 #include <QNetworkReply>
 #include <QUrlQuery>
 
+#include "utils/ShareCodeParser.hpp"
+
 namespace disk::desktop::managers {
 
     ShareManager::ShareManager(
@@ -215,6 +217,10 @@ namespace disk::desktop::managers {
             reply->deleteLater();
             HandleBrowseResponse(reply, shareId);
         });
+    }
+
+    QString ShareManager::parseShareInput(const QString& input) const {
+        return disk::desktop::utils::ShareCodeParser::ParseShareInput(input);
     }
 
     // ── Response Handlers ──

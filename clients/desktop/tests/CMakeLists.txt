@@ -22,6 +22,7 @@ set(UNIT_TEST_SOURCES
     unit/managers/test_admin_manager.cpp
     unit/transfers/test_transfer_state.cpp
     unit/transfers/test_transfer_manager.cpp
+    unit/utils/test_share_code_parser.cpp
 )
 
 set(DESKTOP_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../src)
@@ -51,6 +52,7 @@ qt_add_executable(desktop-unit-tests
     ${DESKTOP_SRC_DIR}/managers/DriveManager.cpp
     ${DESKTOP_SRC_DIR}/managers/TransferManager.cpp
     ${DESKTOP_SRC_DIR}/app/ShellController.cpp
+    ${DESKTOP_SRC_DIR}/utils/ShareCodeParser.cpp
 )
 
 target_include_directories(desktop-unit-tests PRIVATE
@@ -120,6 +122,8 @@ qt_add_qml_module(desktop-quick-tests
         quick/navigation/tst_route_taxonomy.qml
         quick/pages/tst_drive_interactions.qml
         quick/pages/tst_admin_page.qml
+        quick/pages/tst_drive_shared_view.qml
+        quick/pages/tst_share_create_dialog.qml
     RESOURCE_PREFIX /qt/qml
 )
 

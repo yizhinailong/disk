@@ -79,6 +79,9 @@ Page {
     property string pendingMutationAction: ""
     property bool shareMutationInFlight: false
     property string pendingShareMutationAction: ""
+    property string createdShareLink: ""
+    property string createdShareId: ""
+    property string createDialogState: "form"
     property string createFolderErrorMessage: ""
     property string renameErrorMessage: ""
     property string deleteErrorMessage: ""
@@ -935,7 +938,9 @@ Page {
         var finishedAction = root.pendingShareMutationAction
         root.pendingShareMutationAction = ""
         root.clearShareMutationErrors()
-        if (finishedAction === "create") {
+        if (finishedAction === "create" && root.createDialogState === "success") {
+            // Dialog stays open in success state; user closes via "完成" button
+        } else if (finishedAction === "create") {
             createShareDialog.close()
         } else if (finishedAction === "edit") {
             editShareDialog.close()
@@ -1372,15 +1377,19 @@ Page {
 
     Dialog {
         id: createShareDialog
+        objectName: "createShareDialog"
         modal: true
         width: 360
-        title: "创建分享"
+        title: root.createDialogState === "success" ? "分享创建成功" : "创建分享"
         standardButtons: Dialog.NoButton
         closePolicy: Popup.NoAutoClose
 
         property var selectedFileIds: []
 
         onClosed: {
+            root.createdShareLink = ""
+            root.createdShareId = ""
+            root.createDialogState = "form"
             if (!root.shareMutationInFlight) {
                 root.resetShareMutationState()
             }
@@ -1390,85 +1399,189 @@ Page {
             width: parent.width
             spacing: root.panelSpacing
 
-            Label {
+            ColumnLayout {
+                id: shareFormContainer
+                objectName: "shareFormContainer"
                 Layout.fillWidth: true
-                text: createShareDialog.selectedFileIds.length > 0
-                      ? (createShareDialog.selectedFileIds.length === 1
-                             ? "1 个文件已加入分享队列"
-                             : createShareDialog.selectedFileIds.length + " 个文件已加入分享队列")
-                      : "当前没有文件加入分享队列"
-                color: root.panelSecondaryTextColor
-                wrapMode: Text.WordWrap
-            }
+                spacing: root.panelSpacing
+                visible: root.createDialogState === "form"
 
-            Label {
-                text: "权限："
-                color: root.panelStrongTextColor
-            }
-
-            ComboBox {
-                id: createSharePermissionCombo
-                Layout.fillWidth: true
-                enabled: !root.shareMutationInFlight
-                model: ["download", "view"]
-            }
-
-            Label {
-                text: "密码（可选，4-8个字符）："
-                color: root.panelStrongTextColor
-            }
-
-            TextField {
-                id: createSharePasswordField
-                Layout.fillWidth: true
-                enabled: !root.shareMutationInFlight
-                placeholderText: "无密码"
-                echoMode: TextInput.Password
-                maximumLength: 8
-                onAccepted: root.submitCreateShare()
-            }
-
-            Label {
-                text: "过期天数（0=永久）："
-                color: root.panelStrongTextColor
-            }
-
-            SpinBox {
-                id: createShareExpireSpin
-                Layout.fillWidth: true
-                enabled: !root.shareMutationInFlight
-                from: 0
-                to: 365
-                value: 7
-            }
-
-            Label {
-                Layout.fillWidth: true
-                text: root.createShareErrorMessage
-                color: root.panelErrorTextColor
-                visible: text !== ""
-                wrapMode: Text.WordWrap
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-
-                Item {
+                Label {
                     Layout.fillWidth: true
+                    text: createShareDialog.selectedFileIds.length > 0
+                          ? (createShareDialog.selectedFileIds.length === 1
+                                 ? "1 个文件已加入分享队列"
+                                 : createShareDialog.selectedFileIds.length + " 个文件已加入分享队列")
+                          : "当前没有文件加入分享队列"
+                    color: root.panelSecondaryTextColor
+                    wrapMode: Text.WordWrap
                 }
 
-                Button {
-                    text: "取消"
-                    enabled: !root.shareMutationInFlight
-                    onClicked: createShareDialog.close()
+                Label {
+                    text: "权限："
+                    color: root.panelStrongTextColor
                 }
 
-                Button {
-                    text: root.pendingShareMutationAction === "create" && root.shareMutationInFlight
-                          ? "创建中..." : "创建"
-                    highlighted: true
+                ComboBox {
+                    id: createSharePermissionCombo
+                    Layout.fillWidth: true
                     enabled: !root.shareMutationInFlight
-                    onClicked: root.submitCreateShare()
+                    model: ["download", "view"]
+                }
+
+                Label {
+                    text: "密码（可选，4-8个字符）："
+                    color: root.panelStrongTextColor
+                }
+
+                TextField {
+                    id: createSharePasswordField
+                    Layout.fillWidth: true
+                    enabled: !root.shareMutationInFlight
+                    placeholderText: "无密码"
+                    echoMode: TextInput.Password
+                    maximumLength: 8
+                    onAccepted: root.submitCreateShare()
+                }
+
+                Label {
+                    text: "过期天数（0=永久）："
+                    color: root.panelStrongTextColor
+                }
+
+                SpinBox {
+                    id: createShareExpireSpin
+                    Layout.fillWidth: true
+                    enabled: !root.shareMutationInFlight
+                    from: 0
+                    to: 365
+                    value: 7
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: root.createShareErrorMessage
+                    color: root.panelErrorTextColor
+                    visible: text !== ""
+                    wrapMode: Text.WordWrap
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Button {
+                        text: "取消"
+                        enabled: !root.shareMutationInFlight
+                        onClicked: createShareDialog.close()
+                    }
+
+                    Button {
+                        text: root.pendingShareMutationAction === "create" && root.shareMutationInFlight
+                              ? "创建中..." : "创建"
+                        highlighted: true
+                        enabled: !root.shareMutationInFlight
+                        onClicked: root.submitCreateShare()
+                    }
+                }
+            }
+
+            ColumnLayout {
+                id: shareSuccessContainer
+                objectName: "shareSuccessContainer"
+                Layout.fillWidth: true
+                spacing: root.panelSpacing
+                visible: root.createDialogState === "success"
+
+                Label {
+                    Layout.fillWidth: true
+                    text: "分享已成功创建"
+                    color: root.panelSuccessTextColor
+                    font.bold: true
+                    wrapMode: Text.WordWrap
+                }
+
+                Label {
+                    text: "分享码："
+                    color: root.panelStrongTextColor
+                }
+
+                TextEdit {
+                    id: shareSuccessCodeLabel
+                    objectName: "shareSuccessCodeLabel"
+                    Layout.fillWidth: true
+                    text: root.createdShareId
+                    color: root.tableBodyPrimaryTextColor
+                    font.pixelSize: 16
+                    font.bold: true
+                    readOnly: true
+                    selectByMouse: true
+                    wrapMode: TextEdit.Wrap
+                }
+
+                Label {
+                    text: "分享链接："
+                    color: root.panelStrongTextColor
+                }
+
+                TextEdit {
+                    id: shareSuccessLinkLabel
+                    objectName: "shareSuccessLinkLabel"
+                    Layout.fillWidth: true
+                    text: root.createdShareLink
+                    color: root.panelAccentTextColor
+                    font.pixelSize: 14
+                    readOnly: true
+                    selectByMouse: true
+                    wrapMode: TextEdit.Wrap
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Button {
+                        id: shareSuccessCopyButton
+                        objectName: "shareSuccessCopyButton"
+                        text: successCopyFeedback ? "✓ 已复制" : "复制链接"
+                        onClicked: {
+                            if (root.createdShareLink !== "") {
+                                QGuiApplication.clipboard().setText(root.createdShareLink)
+                                successCopyFeedback = true
+                                successCopyTimer.start()
+                            }
+                        }
+
+                        property bool successCopyFeedback: false
+
+                        Timer {
+                            id: successCopyTimer
+                            interval: 2000
+                            onTriggered: shareSuccessCopyButton.successCopyFeedback = false
+                        }
+                    }
+
+                    Button {
+                        id: shareSuccessDoneButton
+                        objectName: "shareSuccessDoneButton"
+                        text: "完成"
+                        highlighted: true
+                        onClicked: {
+                            root.createdShareLink = ""
+                            root.createdShareId = ""
+                            root.createDialogState = "form"
+                            createShareDialog.close()
+                            if (shellController.pageState !== "batchResult") {
+                                root.refreshSharedList()
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1602,6 +1715,12 @@ Page {
             if (root.isSharedMode) {
                 shellController.setPageState("error")
             }
+        }
+
+        function onShareCreated(shareId, shareLink) {
+            root.createdShareLink = String(shareLink || "")
+            root.createdShareId = String(shareId || "")
+            root.createDialogState = "success"
         }
 
         function onOperationSuccess(message) {
