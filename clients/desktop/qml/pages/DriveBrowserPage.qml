@@ -851,7 +851,13 @@ Page {
         pendingMutationAction = "delete"
 
         mutationInFlight = true
-        driveManager.deleteDriveItems(ids.fileIds, ids.folderIds)
+        try {
+            console.log("[DriveBrowserPage] deleteDriveItems", JSON.stringify(ids.fileIds), JSON.stringify(ids.folderIds))
+            driveManager.deleteDriveItems(ids.fileIds, ids.folderIds)
+        } catch (error) {
+            mutationInFlight = false
+            deleteErrorMessage = "删除请求发送失败：" + error
+        }
     }
 
     function applyMutationError(message) {
@@ -1012,15 +1018,6 @@ Page {
         }
     }
 
-    function refreshCurrentFolder() {
-        clearSelection()
-        shellController.setPageState("loading")
-        if (refreshDebounceTimer.running) {
-            refreshDebounceTimer.restart()
-        } else {
-            refreshDebounceTimer.start()
-        }
-    }
     function openVisitorShare() {
         var shareId = shareManager.parseShareInput(root.visitorShareInputText.trim())
         if (shareId.length > 0) {
@@ -1031,6 +1028,15 @@ Page {
         }
     }
 
+    function refreshCurrentFolder() {
+        clearSelection()
+        shellController.setPageState("loading")
+        if (refreshDebounceTimer.running) {
+            refreshDebounceTimer.restart()
+        } else {
+            refreshDebounceTimer.start()
+        }
+    }
 
     function refreshSharedList() {
         root.clearSelection()
