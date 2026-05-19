@@ -6,6 +6,7 @@
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QVariant>
 #include <memory>
 #include <optional>
 
@@ -38,7 +39,7 @@ namespace disk::desktop::managers {
         Q_INVOKABLE void createFolder(const QString& parentId, const QString& name);
         Q_INVOKABLE void renameItem(const QString& fileId, const QString& newName);
         Q_INVOKABLE void deleteItems(const QStringList& fileIds);
-        Q_INVOKABLE void deleteDriveItems(const QStringList& fileIds, const QStringList& folderIds);
+        Q_INVOKABLE void deleteDriveItems(const QVariantList& fileIds, const QVariantList& folderIds);
         Q_INVOKABLE void loadFolderTree();
         Q_INVOKABLE void loadBreadcrumb(const QString& folderId);
         Q_INVOKABLE void getFileDetail(const QString& fileId);

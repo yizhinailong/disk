@@ -181,18 +181,23 @@ namespace disk::desktop::managers {
     }
 
     void DriveManager::deleteItems(const QStringList& fileIds) {
-        deleteDriveItems(fileIds, {});
+        QVariantList ids;
+        ids.reserve(fileIds.size());
+        for (const auto& id : fileIds) {
+            ids.append(id);
+        }
+        deleteDriveItems(ids, {});
     }
 
-    void DriveManager::deleteDriveItems(const QStringList& fileIds, const QStringList& folderIds) {
+    void DriveManager::deleteDriveItems(const QVariantList& fileIds, const QVariantList& folderIds) {
         qDebug() << "[DriveManager] deleteDriveItems called, file ids:" << fileIds
                  << "folder ids:" << folderIds;
 
-        auto toJsonArray = [](const QStringList& ids) {
+        auto toJsonArray = [](const QVariantList& ids) {
             QJsonArray values;
             for (const auto& id : ids) {
                 bool ok = false;
-                auto val = id.toULongLong(&ok);
+                auto val = id.toString().toULongLong(&ok);
                 if (ok && val > 0) {
                     values.append(static_cast<double>(val));
                 }
@@ -216,7 +221,7 @@ namespace disk::desktop::managers {
 
         auto headers = PrepareHeaders();
         headers["Content-Type"] = "application/json";
-        auto* reply = m_networkClient->Delete(QUrl("/api/file"), json_body, headers);
+        auto* reply = m_networkClient->Post(QUrl("/api/file/delete"), json_body, headers);
         m_active_replies.append(reply);
 
         connect(reply, &QNetworkReply::finished, this, [this, reply]() {

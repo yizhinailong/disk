@@ -545,7 +545,7 @@ private slots:
     void DeleteItemsEmitsSuccessWithValidEnvelope() {
         MockNetworkAccessManager mock_network;
         mock_network.RegisterResponse(
-            "api/file",
+            "api/file/delete",
             QJsonObject{
                 { "code", 0 },
                 { "message", "success" },
@@ -569,10 +569,10 @@ private slots:
         QCOMPARE(mock_network.GetRequestLog().size(), 1);
     }
 
-    void DeleteItemsSetsRequestTransferTimeout() {
+    void DeleteItemsUsesPostDeleteEndpoint() {
         MockNetworkAccessManager mock_network;
         mock_network.RegisterResponse(
-            "api/file",
+            "api/file/delete",
             QJsonObject{
                 { "code", 0 },
                 { "message", "success" },
@@ -592,13 +592,13 @@ private slots:
 
         QTRY_COMPARE(success_spy.count(), 1);
         QCOMPARE(mock_network.GetRequestLog().size(), 1);
-        QCOMPARE(mock_network.GetRequestLog().constFirst().transferTimeout(), 15000);
+        QVERIFY(mock_network.GetRequestLog().constFirst().url().toString().contains("/api/file/delete"));
     }
 
     void DeleteItemsMapsTimeoutNetworkError() {
         MockNetworkAccessManager mock_network;
         mock_network.RegisterError(
-            "api/file",
+            "api/file/delete",
             QNetworkReply::TimeoutError,
             "timeout"
         );
@@ -624,7 +624,7 @@ private slots:
 
     void DeleteItemsRejectsMalformedSuccessPayload() {
         MockNetworkAccessManager mock_network;
-        mock_network.RegisterRawResponse("api/file", "not-json", 200);
+        mock_network.RegisterRawResponse("api/file/delete", "not-json", 200);
 
         NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
         network_client.SetBaseUrl("http://127.0.0.1:8080/");
@@ -649,7 +649,7 @@ private slots:
     void DeleteItemsRejectsApiErrorEnvelopeOnHttp200() {
         MockNetworkAccessManager mock_network;
         mock_network.RegisterResponse(
-            "api/file",
+            "api/file/delete",
             QJsonObject{
                 { "code", 50005 },
                 { "message", "File not found" },
@@ -680,7 +680,7 @@ private slots:
     void DeleteItemsSendsFileOnlyBody() {
         MockNetworkAccessManager mock_network;
         mock_network.RegisterResponse(
-            "api/file",
+            "api/file/delete",
             QJsonObject{
                 { "code", 0 },
                 { "message", "success" },
@@ -711,7 +711,7 @@ private slots:
     void DeleteDriveItemsSendsFolderOnlyBody() {
         MockNetworkAccessManager mock_network;
         mock_network.RegisterResponse(
-            "api/file",
+            "api/file/delete",
             QJsonObject{
                 { "code", 0 },
                 { "message", "success" },
@@ -742,7 +742,7 @@ private slots:
     void DeleteDriveItemsSendsMixedBody() {
         MockNetworkAccessManager mock_network;
         mock_network.RegisterResponse(
-            "api/file",
+            "api/file/delete",
             QJsonObject{
                 { "code", 0 },
                 { "message", "success" },
@@ -794,9 +794,10 @@ private slots:
         const QString source = QString::fromUtf8(source_file.readAll());
         QVERIFY(source.contains("body[\"file_ids\"] = fileIdArray;"));
         QVERIFY(source.contains("body[\"folder_ids\"] = folderIdArray;"));
-        QVERIFY(source.contains("m_networkClient->Delete(QUrl(\"/api/file\"), json_body, headers)"));
+        QVERIFY(source.contains("m_networkClient->Post(QUrl(\"/api/file/delete\"), json_body, headers)"));
         QVERIFY(source.contains("void DriveManager::deleteItems(const QStringList& fileIds)"));
-        QVERIFY(source.contains("deleteDriveItems(fileIds, {});"));
+        QVERIFY(source.contains("QVariantList ids;"));
+        QVERIFY(source.contains("deleteDriveItems(ids, {});"));
     }
 
     void ListFilesSendsAuthHeaders() {

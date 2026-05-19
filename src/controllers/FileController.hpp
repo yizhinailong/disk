@@ -99,6 +99,12 @@ namespace disk::file {
             "disk::filters::JwtAuthFilter",
         );
         ADD_METHOD_TO(
+            FileController::Delete,
+            "/api/file/delete",
+            drogon::Post,
+            "disk::filters::JwtAuthFilter",
+        );
+        ADD_METHOD_TO(
             FileController::Search,
             "/api/file/search",
             drogon::Get,
