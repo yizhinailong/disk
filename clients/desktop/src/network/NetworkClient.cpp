@@ -98,6 +98,7 @@ auto NetworkClient::Delete(
         if (!headers.contains("Content-Type")) {
             request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         }
+        request.setHeader(QNetworkRequest::ContentLengthHeader, body.size());
         return m_nam->sendCustomRequest(request, "DELETE", body);
     }
 
