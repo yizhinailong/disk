@@ -230,7 +230,7 @@ ApplicationWindow {
                                 verticalAlignment: Text.AlignVCenter
                             }
 
-                            onClicked: sessionStore.owner.StartLogout()
+                            onClicked: logoutConfirm.open()
                         }
                     }
                 }
@@ -338,6 +338,46 @@ ApplicationWindow {
         case "system":
             stackView.replace(systemTabPage)
             break
+        }
+    }
+
+    Dialog {
+        id: logoutConfirm
+        modal: true
+        width: 360
+        title: qsTr("退出登录")
+        closePolicy: Popup.NoAutoClose
+        anchors.centerIn: parent
+
+        ColumnLayout {
+            width: parent.width
+            spacing: 16
+
+            Label {
+                text: qsTr("确定要退出当前账号吗？")
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: qsTr("取消")
+                    onClicked: logoutConfirm.close()
+                }
+
+                Button {
+                    text: qsTr("确认")
+                    highlighted: true
+                    onClicked: {
+                        logoutConfirm.close()
+                        sessionStore.owner.StartLogout()
+                    }
+                }
+            }
         }
     }
 }
