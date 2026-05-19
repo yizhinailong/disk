@@ -181,6 +181,7 @@ namespace disk::desktop::managers {
     }
 
 void DriveManager::deleteItems(const QStringList& fileIds) {
+        qDebug() << "[DriveManager] deleteItems called, ids:" << fileIds;
         QJsonObject body;
         QJsonArray ids;
         for (const auto& id : fileIds) {
@@ -193,12 +194,14 @@ void DriveManager::deleteItems(const QStringList& fileIds) {
         body["file_ids"] = ids;
 
         QByteArray json_body = QJsonDocument(body).toJson(QJsonDocument::Compact);
+        qDebug() << "[DriveManager] deleteItems body:" << json_body;
 
         auto headers = PrepareHeaders();
         auto* reply = m_networkClient->Delete(QUrl("/api/file"), json_body, headers);
         m_active_replies.append(reply);
 
         connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            qDebug() << "[DriveManager] deleteItems reply finished, error:" << reply->error();
             m_active_replies.removeOne(reply);
             reply->deleteLater();
             HandleDeleteResponse(reply);

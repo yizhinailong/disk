@@ -805,11 +805,13 @@ Page {
 
         mutationInFlight = true
         driveManager.deleteItems([root.selectedItemId])
+        mutationTimeoutTimer.start()
     }
 
     function applyMutationError(message) {
         var errorMessage = message || "请求失败，请重试"
         mutationInFlight = false
+        mutationTimeoutTimer.stop()
 
         if (pendingMutationAction === "create") {
             createFolderErrorMessage = errorMessage
@@ -828,6 +830,7 @@ Page {
 
     function finishMutationSuccess() {
         mutationInFlight = false
+        mutationTimeoutTimer.stop()
         var finishedAction = pendingMutationAction
         pendingMutationAction = ""
         clearMutationErrors()
@@ -1826,6 +1829,17 @@ Page {
                 driveManager.searchFiles(root.searchQuery)
             } else {
                 driveManager.listFiles(currentFolderId, 1, 50, root.currentSort)
+            }
+        }
+    }
+
+    Timer {
+        id: mutationTimeoutTimer
+        interval: 15000
+        repeat: false
+        onTriggered: {
+            if (root.mutationInFlight) {
+                root.applyMutationError("操作超时，请重试")
             }
         }
     }
