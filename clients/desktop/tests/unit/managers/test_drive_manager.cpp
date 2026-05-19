@@ -572,6 +572,59 @@ private slots:
         QVERIFY(server.RequestData().contains("DELETE /api/file HTTP/1.1"));
     }
 
+    void DeleteItemsSetsRequestTransferTimeout() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+
+        mgr.deleteItems({ "10" });
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestLog().size(), 1);
+        QCOMPARE(mock_network.GetRequestLog().constFirst().transferTimeout(), 15000);
+    }
+
+    void DeleteItemsMapsTimeoutNetworkError() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterError(
+            "api/file",
+            QNetworkReply::TimeoutError,
+            "timeout"
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.deleteItems({ "10" });
+
+        QTRY_COMPARE(error_spy.count(), 1);
+        QCOMPARE(success_spy.count(), 0);
+
+        auto arguments = error_spy.takeFirst();
+        QCOMPARE(arguments.at(0).toString(), QString("请求超时"));
+        QCOMPARE(arguments.at(1).toInt(), -3);
+    }
+
     void DeleteItemsRejectsMalformedSuccessPayload() {
         OneShotHttpServer server("not-json");
         QVERIFY(server.Listen());

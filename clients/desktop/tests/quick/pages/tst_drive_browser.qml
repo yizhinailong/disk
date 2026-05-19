@@ -338,6 +338,12 @@ TestCase {
                "Valid rename flow calls DriveManager.renameItem")
         verify(source.indexOf("driveManager.deleteItems([root.selectedItemId])") !== -1,
                "Delete submit calls deleteItems for any selected item kind")
+        verify(source.indexOf('pendingMutationAction = "delete"') !== -1,
+               "Delete submit records the delete mutation action")
+        verify(source.indexOf("mutationInFlight = true") !== -1,
+               "Delete submit enters in-flight state before calling the manager")
+        verify(source.indexOf("mutationTimeoutTimer.start()") === -1,
+               "Delete submit no longer starts a parallel QML timeout timer")
 
         verify(source.indexOf("pendingMutationAction") !== -1,
                "Tracks the active mutation flow")
@@ -363,6 +369,8 @@ TestCase {
                "Closes delete dialog on success")
         verify(source.indexOf("root.refreshCurrentFolder()") !== -1,
                "Refreshes current folder after successful mutation")
+        verify(source.indexOf("mutationTimeoutTimer") === -1,
+               "DriveBrowserPage no longer defines a separate mutation timeout timer")
     }
 
     function test_drive_browser_navigateToFolder_sets_currentFolderId_and_refreshes() {

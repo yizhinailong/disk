@@ -16,6 +16,7 @@ namespace disk::desktop {
     namespace {
 
         constexpr auto DEFAULT_BASE_URL = "http://127.0.0.1:8080/";
+        constexpr auto DELETE_TRANSFER_TIMEOUT_MS = 15000;
 
     } // namespace
 
@@ -86,6 +87,7 @@ auto NetworkClient::Delete(
         const QMap<QString, QString>& headers
     ) -> QNetworkReply* {
         QNetworkRequest request = BuildRequest(url, headers);
+        request.setTransferTimeout(DELETE_TRANSFER_TIMEOUT_MS);
         return m_nam->deleteResource(request);
     }
 
@@ -99,6 +101,7 @@ auto NetworkClient::Delete(
             request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         }
         request.setHeader(QNetworkRequest::ContentLengthHeader, body.size());
+        request.setTransferTimeout(DELETE_TRANSFER_TIMEOUT_MS);
         return m_nam->sendCustomRequest(request, "DELETE", body);
     }
 
