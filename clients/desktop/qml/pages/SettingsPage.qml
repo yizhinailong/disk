@@ -12,7 +12,7 @@ Page {
     PageStateView {
         id: stateView
         anchors.fill: parent
-        pageState: shellController.pageState
+        pageState: "content"
         
         // Content state
         ColumnLayout {
@@ -59,13 +59,13 @@ Page {
                     anchors.fill: parent
                     
                     Label {
-                        text: "已使用：" + FormatUtils.formatStorageSize(profileManager.storageStats.used || 0) + 
-                              " / " + FormatUtils.formatStorageSize(profileManager.storageStats.total || 0)
+                        text: "已使用：" + FormatUtils.formatStorageSize(profileManager.storageStats.used || 0) +
+                              " / " + FormatUtils.formatStorageSize((profileManager.storageStats.total || profileManager.storageStats.quota) || 0)
                     }
-                    
+
                     ProgressBar {
                         Layout.fillWidth: true
-                        value: (profileManager.storageStats.used || 0) / Math.max(1, profileManager.storageStats.total || 1)
+                        value: (profileManager.storageStats.used || 0) / Math.max(1, (profileManager.storageStats.total || profileManager.storageStats.quota) || 1)
                     }
                 }
             }

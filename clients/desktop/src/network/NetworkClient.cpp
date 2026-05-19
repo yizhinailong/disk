@@ -7,6 +7,7 @@
 
 #include "network/NetworkClient.hpp"
 
+#include <QBuffer>
 #include <QByteArray>
 #include <QJsonDocument>
 #include <QNetworkRequest>
@@ -102,7 +103,13 @@ auto NetworkClient::Delete(
         }
         request.setHeader(QNetworkRequest::ContentLengthHeader, body.size());
         request.setTransferTimeout(DELETE_TRANSFER_TIMEOUT_MS);
-        return m_nam->sendCustomRequest(request, "DELETE", body);
+        auto* upload = new QBuffer;
+        upload->setData(body);
+        upload->open(QIODevice::ReadOnly);
+
+        auto* reply = m_nam->sendCustomRequest(request, "DELETE", upload);
+        upload->setParent(reply);
+        return reply;
     }
 
     auto NetworkClient::BuildRequest(
