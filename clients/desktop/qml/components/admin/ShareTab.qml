@@ -372,6 +372,10 @@ Item {
         onClosed: root.pendingConfirmAction = null
     }
 
+    ShareDetailDialog {
+        id: shareDetailDialog
+    }
+
     Connections {
         target: adminManager
         ignoreUnknownSignals: true
@@ -380,6 +384,23 @@ Item {
             root.currentPage = page
             root.totalPages = totalPages
             root.totalItems = total
+        }
+
+        function onShareDetailLoaded(detail) {
+            shareDetailDialog.shareId = detail.id || 0
+            shareDetailDialog.shareCode = detail.share_code || ""
+            shareDetailDialog.userName = detail.username || ""
+            shareDetailDialog.fileName = detail.file_name || ""
+            shareDetailDialog.status = detail.status || 0
+            shareDetailDialog.accessCount = detail.access_count || 0
+            shareDetailDialog.createdAt = detail.created_at || ""
+            shareDetailDialog.expiresAt = detail.expires_at || ""
+            shareDetailDialog.passwordSet = detail.password_set || false
+            shareDetailDialog.open()
+        }
+
+        function onOperationSuccess(_message) {
+            root.goToPage(root.currentPage)
         }
     }
 }
