@@ -456,9 +456,9 @@ private slots:
         QCOMPARE(error_spy.count(), 0);
 
         auto stats = mgr.GetOverviewStats();
-        QCOMPARE(stats.value("total_users").toInt(), 100);
-        QCOMPARE(stats.value("total_files").toInt(), 5000);
-        QCOMPARE(stats.value("active_shares").toInt(), 150);
+        QCOMPARE(stats.value("totalUsers").toInt(), 100);
+        QCOMPARE(stats.value("totalFiles").toInt(), 5000);
+        QCOMPARE(stats.value("activeShares").toInt(), 150);
     }
 
     // ── GetSystemStatusApi ──
@@ -485,9 +485,9 @@ private slots:
         QCOMPARE(error_spy.count(), 0);
 
         auto status = mgr.GetSystemStatus();
-        QCOMPARE(status.value("mysql_connected").toBool(), true);
-        QCOMPARE(status.value("redis_connected").toBool(), true);
-        QCOMPARE(status.value("uptime_seconds").toInt(), 86400);
+        QCOMPARE(status.value("mysqlConnected").toBool(), true);
+        QCOMPARE(status.value("redisConnected").toBool(), true);
+        QCOMPARE(status.value("uptime").toString(), QString("1d 0h 0m"));
     }
 
     void GetSystemStatusApiHandlesError() {
@@ -511,6 +511,110 @@ private slots:
 
         QTRY_COMPARE(error_spy.count(), 1);
         QCOMPARE(status_spy.count(), 0);
+    }
+
+    // ── CamelCase key verification ──
+
+    void GetOverviewStatsApiCamelCaseKeys() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/admin/stats/overview",
+            TestJsonLoader::LoadJson("admin/admin_stats_overview_success.json")
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("admin_token");
+        AdminManager mgr(&network_client, &request_factory);
+
+        QSignalSpy stats_spy(&mgr, &AdminManager::overviewStatsChanged);
+
+        mgr.GetOverviewStatsApi();
+
+        QTRY_COMPARE(stats_spy.count(), 1);
+
+        auto stats = mgr.GetOverviewStats();
+        QCOMPARE(stats.value("totalUsers").toInt(), 100);
+        QCOMPARE(stats.value("totalFiles").toInt(), 5000);
+        QCOMPARE(stats.value("storageUsed").toDouble(), 549755813888.0);
+        QCOMPARE(stats.value("storageQuota").toDouble(), 10995116277760.0);
+        QCOMPARE(stats.value("activeShares").toInt(), 150);
+
+        // Verify old snake_case keys are absent
+        QVERIFY(!stats.contains("total_users"));
+        QVERIFY(!stats.contains("total_files"));
+        QVERIFY(!stats.contains("total_storage_used"));
+        QVERIFY(!stats.contains("total_storage_quota"));
+        QVERIFY(!stats.contains("active_shares"));
+    }
+
+    void GetSystemStatusApiCamelCaseKeys() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/admin/stats/system",
+            TestJsonLoader::LoadJson("admin/admin_stats_system_success.json")
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("admin_token");
+        AdminManager mgr(&network_client, &request_factory);
+
+        QSignalSpy status_spy(&mgr, &AdminManager::systemStatusChanged);
+
+        mgr.GetSystemStatusApi();
+
+        QTRY_COMPARE(status_spy.count(), 1);
+
+        auto status = mgr.GetSystemStatus();
+        QCOMPARE(status.value("mysqlConnected").toBool(), true);
+        QCOMPARE(status.value("redisConnected").toBool(), true);
+        // disk_used=5497558138880, disk_total=10995116277760 → 50.0%
+        QCOMPARE(status.value("diskUsage").toDouble(), 50.0);
+        QCOMPARE(status.value("uptime").toString(), QString("1d 0h 0m"));
+
+        // Verify old snake_case keys are absent
+        QVERIFY(!status.contains("mysql_connected"));
+        QVERIFY(!status.contains("redis_connected"));
+        QVERIFY(!status.contains("disk_total"));
+        QVERIFY(!status.contains("disk_used"));
+        QVERIFY(!status.contains("uptime_seconds"));
+    }
+
+    void GetSystemStatusApiDiskUsageZeroDivision() {
+        MockNetworkAccessManager mock_network;
+        QJsonObject zero_disk_response;
+        zero_disk_response["code"] = 0;
+        zero_disk_response["message"] = "success";
+        QJsonObject data;
+        data["mysql_connected"] = true;
+        data["redis_connected"] = true;
+        data["disk_total"] = 0;
+        data["disk_used"] = 0;
+        data["disk_free"] = 0;
+        data["uptime_seconds"] = 45;
+        zero_disk_response["data"] = data;
+        mock_network.RegisterResponse("api/admin/stats/system", zero_disk_response);
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("admin_token");
+        AdminManager mgr(&network_client, &request_factory);
+
+        QSignalSpy status_spy(&mgr, &AdminManager::systemStatusChanged);
+
+        mgr.GetSystemStatusApi();
+
+        QTRY_COMPARE(status_spy.count(), 1);
+
+        auto status = mgr.GetSystemStatus();
+        // Zero-division guard: diskUsage must be 0.0, not NaN/inf
+        QCOMPARE(status.value("diskUsage").toDouble(), 0.0);
+        // 45 seconds → "45s" (less than a minute)
+        QCOMPARE(status.value("uptime").toString(), QString("45s"));
     }
 
     // ── Auth header verification ──

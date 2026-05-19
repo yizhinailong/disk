@@ -612,11 +612,11 @@ namespace disk::desktop::managers {
 
         auto data = json_opt->value("data").toObject();
         m_overview_stats.clear();
-        m_overview_stats["total_users"] = data.value("total_users").toInt(0);
-        m_overview_stats["total_files"] = data.value("total_files").toInt(0);
-        m_overview_stats["total_storage_used"] = static_cast<double>(data.value("total_storage_used").toDouble(0));
-        m_overview_stats["total_storage_quota"] = static_cast<double>(data.value("total_storage_quota").toDouble(0));
-        m_overview_stats["active_shares"] = data.value("active_shares").toInt(0);
+        m_overview_stats["totalUsers"] = data.value("total_users").toInt(0);
+        m_overview_stats["totalFiles"] = data.value("total_files").toInt(0);
+        m_overview_stats["storageUsed"] = static_cast<double>(data.value("total_storage_used").toDouble(0));
+        m_overview_stats["storageQuota"] = static_cast<double>(data.value("total_storage_quota").toDouble(0));
+        m_overview_stats["activeShares"] = data.value("active_shares").toInt(0);
 
         emit overviewStatsChanged();
     }
@@ -646,12 +646,25 @@ namespace disk::desktop::managers {
 
         auto data = json_opt->value("data").toObject();
         m_system_status.clear();
-        m_system_status["mysql_connected"] = data.value("mysql_connected").toBool(false);
-        m_system_status["redis_connected"] = data.value("redis_connected").toBool(false);
-        m_system_status["disk_total"] = static_cast<double>(data.value("disk_total").toDouble(0));
-        m_system_status["disk_used"] = static_cast<double>(data.value("disk_used").toDouble(0));
-        m_system_status["disk_free"] = static_cast<double>(data.value("disk_free").toDouble(0));
-        m_system_status["uptime_seconds"] = data.value("uptime_seconds").toInt(0);
+        m_system_status["mysqlConnected"] = data.value("mysql_connected").toBool(false);
+        m_system_status["redisConnected"] = data.value("redis_connected").toBool(false);
+
+        double diskTotal = data.value("disk_total").toDouble(0);
+        double diskUsed = data.value("disk_used").toDouble(0);
+        double diskUsage = diskTotal > 0 ? (diskUsed * 100.0 / diskTotal) : 0.0;
+        m_system_status["diskUsage"] = diskUsage;
+
+        int totalSeconds = data.value("uptime_seconds").toInt(0);
+        int days = totalSeconds / 86400;
+        int hours = (totalSeconds % 86400) / 3600;
+        int minutes = (totalSeconds % 3600) / 60;
+        int seconds = totalSeconds % 60;
+        QString uptime;
+        if (days > 0) uptime = QString("%1d %2h %3m").arg(days).arg(hours).arg(minutes);
+        else if (hours > 0) uptime = QString("%1h %2m %3s").arg(hours).arg(minutes).arg(seconds);
+        else if (minutes > 0) uptime = QString("%1m %2s").arg(minutes).arg(seconds);
+        else uptime = QString("%1s").arg(seconds);
+        m_system_status["uptime"] = uptime;
 
         emit systemStatusChanged();
     }
