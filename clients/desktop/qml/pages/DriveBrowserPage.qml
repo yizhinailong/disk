@@ -89,6 +89,8 @@ Page {
     property string editShareErrorMessage: ""
     property string uploadErrorMessage: ""
     property string downloadErrorMessage: ""
+    property string visitorEntryError: ""
+    property string visitorShareInputText: ""
     property string pendingOwnerDownloadFileId: ""
     property string pendingOwnerDownloadFilename: ""
     property var pendingOwnerBatchDownloadFiles: []
@@ -1019,6 +1021,16 @@ Page {
             refreshDebounceTimer.start()
         }
     }
+    function openVisitorShare() {
+        var shareId = shareManager.parseShareInput(root.visitorShareInputText.trim())
+        if (shareId.length > 0) {
+            root.visitorEntryError = ""
+            shellController.navigateToVisitor(shareId)
+        } else {
+            root.visitorEntryError = "无效的分享码或链接"
+        }
+    }
+
 
     function refreshSharedList() {
         root.clearSelection()
