@@ -36,6 +36,7 @@ PageStateView {
                     id: breadcrumbBar
                     objectName: "breadcrumbBar"
                     Layout.fillWidth: true
+                    Layout.preferredHeight: 36
                     path: root.breadcrumbPath
                     onPathClicked: function(folderId) { page.navigateToFolder(folderId) }
                 }
