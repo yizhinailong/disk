@@ -1547,6 +1547,27 @@ Page {
                     }
 
                     Button {
+                        id: shareSuccessCopyCodeButton
+                        objectName: "shareSuccessCopyCodeButton"
+                        text: codeCopyFeedback ? "✓ 已复制" : "复制分享码"
+                        onClicked: {
+                            if (root.createdShareId !== "") {
+                                Clipboard.setText(root.createdShareId)
+                                codeCopyFeedback = true
+                                codeCopyTimer.start()
+                            }
+                        }
+
+                        property bool codeCopyFeedback: false
+
+                        Timer {
+                            id: codeCopyTimer
+                            interval: 2000
+                            onTriggered: shareSuccessCopyCodeButton.codeCopyFeedback = false
+                        }
+                    }
+
+                    Button {
                         id: shareSuccessCopyButton
                         objectName: "shareSuccessCopyButton"
                         text: successCopyFeedback ? "✓ 已复制" : "复制链接"

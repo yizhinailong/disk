@@ -195,6 +195,12 @@ TestCase {
         sm.shareCreated("cp999001", "/s/cp999001")
         wait(50)
 
+        var copyCodeBtn = findByObjectName(page, "shareSuccessCopyCodeButton")
+        verify(copyCodeBtn !== null,
+               "shareSuccessCopyCodeButton exists in success state")
+        compare(copyCodeBtn.text, "复制分享码",
+                "Copy code button has correct label")
+
         var copyBtn = findByObjectName(page, "shareSuccessCopyButton")
         verify(copyBtn !== null,
                "shareSuccessCopyButton exists in success state")
