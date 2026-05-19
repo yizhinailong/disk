@@ -345,7 +345,9 @@ function activateIndependentPage(itemId) {
                                 text: parent.text
                                 color: root.railLogoutColor
                                 font.pixelSize: 14
+                                horizontalAlignment: Text.AlignLeft
                                 verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
                             }
 
                             onClicked: sessionStore.owner.StartLogout()

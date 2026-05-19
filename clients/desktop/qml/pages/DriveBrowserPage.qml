@@ -800,12 +800,6 @@ Page {
         clearMutationErrors()
         pendingMutationAction = "delete"
 
-        if (root.selectedItemKind !== "file") {
-            mutationInFlight = false
-            deleteErrorMessage = "此版本不支持删除文件夹"
-            return
-        }
-
         mutationInFlight = true
         driveManager.deleteItems([root.selectedItemId])
     }
@@ -851,6 +845,9 @@ Page {
         root.resetShareMutationState()
         createSharePasswordField.text = ""
         createShareExpireSpin.value = 7
+        if (root.isMyFilesMode) {
+            createShareDialog.selectedFileIds = root.selectedItemIds.slice()
+        }
         createShareDialog.open()
     }
 
@@ -1068,76 +1065,64 @@ Page {
         root.navigateToFolder(folderId)
     }
 
-    ColumnLayout {
+    RowLayout {
         anchors.fill: parent
         anchors.margins: root.pagePadding
         spacing: root.panelSpacing
 
-        DriveToolbarCard {
-            id: toolbarCard
-            Layout.fillWidth: true
-            page: root
-        }
-
-        DriveStatusCard {
-            Layout.fillWidth: true
-            page: root
-        }
-
-        DriveMyFilesView {
-            id: myFilesView
-            Layout.fillWidth: true
+        Rectangle {
+            objectName: "folderNavigatorPanel"
+            visible: root.folderNavigatorExpanded && root.isMyFilesMode
+            Layout.preferredWidth: 248
             Layout.fillHeight: true
-            page: root
-            breadcrumbPath: root.breadcrumbPath
-        }
-
-        DriveSharedView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            page: root
-        }
-
-        DriveTrashView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            page: root
-        }
-
-    }
-
-    FolderTreePanel {
-        visible: false
-        width: 0
-        height: 0
-        model: driveManager.treeModel
-        currentFolderId: root.currentFolderId
-        onFolderClicked: function(folderId) { root.navigateToFolder(folderId) }
-    }
-
-    Popup {
-        id: folderNavigatorOverlay
-        objectName: "folderNavigatorPanel"
-        x: root.pagePadding
-        y: root.pagePadding
-        width: 248
-        height: Math.max(0, root.height - (root.pagePadding * 2))
-        visible: root.folderNavigatorExpanded && root.isMyFilesMode
-        modal: false
-        padding: 0
-        closePolicy: Popup.NoAutoClose
-
-        background: Rectangle {
             color: root.panelBackgroundColor
             radius: root.panelRadius
             border.color: root.panelBorderColor
+
+            FolderTreePanel {
+                anchors.fill: parent
+                model: driveManager.treeModel
+                currentFolderId: root.currentFolderId
+                onFolderClicked: function(folderId) { root.navigateToFolder(folderId) }
+                onCloseRequested: root.folderNavigatorExpanded = false
+            }
         }
 
-        FolderTreePanel {
-            anchors.fill: parent
-            model: driveManager.treeModel
-            currentFolderId: root.currentFolderId
-            onFolderClicked: function(folderId) { root.navigateToFolder(folderId) }
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: root.panelSpacing
+
+            DriveToolbarCard {
+                id: toolbarCard
+                Layout.fillWidth: true
+                page: root
+            }
+
+            DriveStatusCard {
+                Layout.fillWidth: true
+                page: root
+            }
+
+            DriveMyFilesView {
+                id: myFilesView
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                page: root
+                breadcrumbPath: root.breadcrumbPath
+            }
+
+            DriveSharedView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                page: root
+            }
+
+            DriveTrashView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                page: root
+            }
         }
     }
 
@@ -1674,6 +1659,14 @@ Page {
             if (root.isMyFilesMode) {
                 shellController.setPageState("error")
             }
+        }
+    }
+
+    Connections {
+        target: transferManager
+
+        function onTaskError(task_id, message) {
+            root.showToast(message)
         }
     }
     

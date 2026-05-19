@@ -32,6 +32,7 @@ Item {
     readonly property color ancestorMarkerColor: "#c9d9ea"
 
     signal folderClicked(string folderId)
+    signal closeRequested()
 
     function normalizeFolderId(folderId) {
         if (folderId === undefined || folderId === null) {
@@ -126,11 +127,37 @@ Item {
         anchors.margins: root.panelPadding
         spacing: theme.panelSpacing
 
-        Label {
-            text: "文件夹"
-            color: root.titleTextColor
-            font.pixelSize: 14
-            font.bold: true
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: theme.compactSpacing
+
+            Label {
+                Layout.fillWidth: true
+                text: "文件夹"
+                color: root.titleTextColor
+                font.pixelSize: 14
+                font.bold: true
+            }
+
+            Button {
+                text: "✕"
+                flat: true
+                hoverEnabled: true
+                onClicked: root.closeRequested()
+
+                background: Rectangle {
+                    radius: 4
+                    color: parent.hovered ? theme.panelMutedFillColor : "transparent"
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: root.mutedTextColor
+                    font.pixelSize: 13
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
         }
 
         TreeView {

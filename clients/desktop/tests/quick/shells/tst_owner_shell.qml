@@ -606,6 +606,21 @@ TestCase {
                "Logout does not bypass the real owner logout flow")
     }
 
+    // ── Bug 6: Logout button contentItem ─────────────────────────────────────
+
+    function test_owner_shell_logout_button_uses_contentItem() {
+        var source = readSource("shells/OwnerShell.qml")
+
+        var logoutIdx = source.indexOf("退出登录")
+        verify(logoutIdx !== -1, "Has logout button text")
+        var logoutBlock = source.substring(logoutIdx - 200, logoutIdx + 200)
+
+        verify(logoutBlock.indexOf("contentItem:") !== -1,
+               "Logout button has explicit contentItem (Text) for icon rendering")
+        verify(logoutBlock.indexOf("contentItem: Text {") !== -1,
+               "Logout button contentItem is a Text element")
+    }
+
     function test_owner_shell_has_no_header_search_field() {
         var source = readSource("shells/OwnerShell.qml")
 

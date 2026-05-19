@@ -337,14 +337,7 @@ TestCase {
         verify(source.indexOf("driveManager.renameItem(root.selectedItemId, validationResult.value)") !== -1,
                "Valid rename flow calls DriveManager.renameItem")
         verify(source.indexOf("driveManager.deleteItems([root.selectedItemId])") !== -1,
-               "Delete flow calls DriveManager.deleteItems for one selected item")
-        verify(source.indexOf('if (root.selectedItemKind !== "file")') !== -1,
-               "Delete submit path checks item kind before using the file delete contract")
-        verify(source.indexOf('deleteErrorMessage = "此版本不支持删除文件夹"') !== -1,
-               "Folder delete attempts surface deterministic local feedback")
-        verify(source.indexOf('deleteErrorMessage = "此版本不支持删除文件夹"')
-               < source.indexOf("driveManager.deleteItems([root.selectedItemId])"),
-               "Folder delete feedback is assigned before any file delete request call")
+               "Delete submit calls deleteItems for any selected item kind")
 
         verify(source.indexOf("pendingMutationAction") !== -1,
                "Tracks the active mutation flow")
@@ -867,7 +860,10 @@ TestCase {
         verify(source.indexOf("model: shareManager.batchResultModel") !== -1,
                "Shared batch-result content binds to shareManager.batchResultModel")
         verify(source.indexOf('objectName: "sharedCreateButton"') !== -1,
-               "Shared toolbar exposes a create-share action")
+               "Toolbar exposes a create-share action")
+        var buttonBlock = source.substring(source.indexOf('"sharedCreateButton"'), source.indexOf('"sharedCreateButton"') + 500)
+        verify(buttonBlock.indexOf("isMyFilesMode") !== -1,
+               "Create share button visibility includes isMyFilesMode")
         verify(source.indexOf('objectName: "sharedCancelSelectedButton"') !== -1,
                "Shared toolbar exposes a cancel-selected action")
         verify(source.indexOf('objectName: "sharedBatchResultListView"') !== -1,
@@ -935,11 +931,11 @@ TestCase {
     function test_drive_browser_folder_navigator_gated_by_myfiles() {
         var source = readDriveBrowserSource()
 
-        var overlayIdx = source.indexOf("id: folderNavigatorOverlay")
-        verify(overlayIdx !== -1, "Has folder navigator overlay")
-        var overlayBlock = source.substring(overlayIdx, overlayIdx + 300)
-        verify(overlayBlock.indexOf("root.isMyFilesMode") !== -1,
-               "Folder navigator overlay visibility is gated by isMyFilesMode")
+        var panelIdx = source.indexOf('objectName: "folderNavigatorPanel"')
+        verify(panelIdx !== -1, "Has folder navigator panel")
+        var panelBlock = source.substring(panelIdx, panelIdx + 300)
+        verify(panelBlock.indexOf("root.isMyFilesMode") !== -1,
+               "Folder navigator panel visibility is gated by isMyFilesMode")
     }
 
     function test_drive_browser_activateViewMode_clears_folder_navigator() {
@@ -972,8 +968,25 @@ TestCase {
         }
         verify(downloadErrIdx !== -1, "Has download error label")
         var downloadErrBlock = source.substring(downloadErrIdx, downloadErrIdx + 150)
-        verify(downloadErrBlock.indexOf("page.isMyFilesMode") !== -1
+verify(downloadErrBlock.indexOf("page.isMyFilesMode") !== -1
                || downloadErrBlock.indexOf("root.isMyFilesMode") !== -1,
                "Download error label visibility is gated by isMyFilesMode")
+    }
+
+    // ── Bug 5: FolderTreePanel close button handler ──────────────────────────
+
+    function test_drive_browser_folder_tree_panel_close_handler() {
+        var source = readDriveBrowserSource()
+
+        // Verify FolderTreePanel instance wires the closeRequested signal
+        var treePanelIdx = source.indexOf("FolderTreePanel {")
+        verify(treePanelIdx !== -1, "Has FolderTreePanel instance")
+        var treePanelEnd = source.indexOf("}", treePanelIdx + 1)
+        var treePanelBlock = source.substring(treePanelIdx, treePanelEnd)
+
+        verify(treePanelBlock.indexOf("onCloseRequested") !== -1,
+               "FolderTreePanel wires closeRequested signal to collapse folder navigator")
+        verify(treePanelBlock.indexOf("folderNavigatorExpanded = false") !== -1,
+               "closeRequested handler collapses folderNavigatorExpanded to hide the panel")
     }
 }
