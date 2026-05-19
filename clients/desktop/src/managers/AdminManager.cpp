@@ -544,7 +544,7 @@ namespace disk::desktop::managers {
             return;
         }
 
-        auto data = json_opt->value("data").toObject();
+        auto data = json_opt->value("data").toObject().value("share").toObject();
         QVariantMap detail;
 
         detail["id"] = static_cast<double>(data.value("id").toDouble(0));

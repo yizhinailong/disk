@@ -244,7 +244,7 @@ Item {
                     Label {
                         Layout.preferredWidth: 140
                         Layout.minimumWidth: 0
-                        text: model.file_name || ""
+                        text: model.fileName || ""
                         font.pixelSize: 13
                         color: theme.tableBodySecondaryTextColor
                         elide: Text.ElideRight
@@ -254,7 +254,7 @@ Item {
                     Label {
                         Layout.preferredWidth: 100
                         Layout.minimumWidth: 0
-                        text: model.share_code || ""
+                        text: model.shareCode || ""
                         font.pixelSize: 13
                         color: theme.tableBodySecondaryTextColor
                         elide: Text.ElideRight
@@ -274,7 +274,7 @@ Item {
                     Label {
                         Layout.preferredWidth: 80
                         Layout.minimumWidth: 0
-                        text: String(model.access_count || 0)
+                        text: String(model.accessCount || 0)
                         font.pixelSize: 13
                         color: theme.tableBodySecondaryTextColor
                         elide: Text.ElideRight
@@ -284,7 +284,7 @@ Item {
                     Label {
                         Layout.preferredWidth: 140
                         Layout.minimumWidth: 0
-                        text: root.formatDateTime(model.created_at)
+                        text: root.formatDateTime(model.createdAt)
                         font.pixelSize: 13
                         color: theme.tableBodyTertiaryTextColor
                         elide: Text.ElideRight
