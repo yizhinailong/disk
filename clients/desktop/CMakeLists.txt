@@ -90,6 +90,7 @@ set(DESKTOP_APP_SOURCES
     ${DESKTOP_SRC_DIR}/network/ErrorAdapter.cpp
     ${DESKTOP_SRC_DIR}/network/NetworkClient.cpp
     ${DESKTOP_SRC_DIR}/network/RequestFactory.cpp
+    ${DESKTOP_SRC_DIR}/utils/ShareCodeParser.cpp
 )
 
 set(DESKTOP_APP_HEADERS
@@ -118,6 +119,7 @@ set(DESKTOP_APP_HEADERS
     ${DESKTOP_SRC_DIR}/network/ErrorAdapter.hpp
     ${DESKTOP_SRC_DIR}/network/NetworkClient.hpp
     ${DESKTOP_SRC_DIR}/network/RequestFactory.hpp
+    ${DESKTOP_SRC_DIR}/utils/ShareCodeParser.hpp
 )
 
 set(DESKTOP_QML_FILES

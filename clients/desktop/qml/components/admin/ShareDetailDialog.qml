@@ -48,10 +48,12 @@ Dialog {
                 text: qsTr("分享码:")
                 font.bold: true
             }
-            Label {
+            TextEdit {
                 text: root.shareCode
                 Layout.fillWidth: true
+                readOnly: true
                 selectByMouse: true
+                wrapMode: TextEdit.Wrap
             }
 
             Label {
