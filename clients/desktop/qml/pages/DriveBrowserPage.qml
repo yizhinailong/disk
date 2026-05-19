@@ -386,6 +386,45 @@ Page {
         return root.selectedDownloadFiles().length
     }
 
+    function selectedDeleteIds() {
+        var fileIds = []
+        var folderIds = []
+        for (var index = 0; index < root.selectedItemIds.length; ++index) {
+            var id = String(root.selectedItemIds[index] || "")
+            if (id === "") {
+                continue
+            }
+
+            var kind = ""
+            if (driveManager.listModel) {
+                var item = driveManager.listModel.GetItemById(id)
+                if (item) {
+                    kind = String(item.kind || "")
+                }
+            }
+            if (kind === "" && id === root.selectedItemId) {
+                kind = String(root.selectedItemKind || "")
+            }
+
+            if (kind === "folder") {
+                folderIds.push(id)
+            } else {
+                fileIds.push(id)
+            }
+        }
+        return {
+            fileIds: fileIds,
+            folderIds: folderIds
+        }
+    }
+
+    function deleteDialogMessage() {
+        if (root.selectedItemKind === "folder") {
+            return "确定删除\"" + root.selectedItemName + "\"？该文件夹及其内容将移至回收站。"
+        }
+        return "确定删除\"" + root.selectedItemName + "\"？所选项目将移至回收站。"
+    }
+
     function toggleShareSelection(shareId) {
         var shareIdValue = String(shareId || "")
         var copy = root.selectedShareIds.slice()
@@ -800,11 +839,17 @@ Page {
             return
         }
 
+        var ids = root.selectedDeleteIds()
+        if (ids.fileIds.length === 0 && ids.folderIds.length === 0) {
+            deleteErrorMessage = "请选择要删除的项目"
+            return
+        }
+
         clearMutationErrors()
         pendingMutationAction = "delete"
 
         mutationInFlight = true
-        driveManager.deleteItems([root.selectedItemId])
+        driveManager.deleteDriveItems(ids.fileIds, ids.folderIds)
     }
 
     function applyMutationError(message) {
@@ -1338,7 +1383,7 @@ Page {
 
             Label {
                 Layout.fillWidth: true
-                text: "确定删除\"" + root.selectedItemName + "\"？所选项目将移至回收站。"
+                text: root.deleteDialogMessage()
                 color: root.panelSecondaryTextColor
                 wrapMode: Text.WordWrap
             }
@@ -1807,7 +1852,7 @@ Page {
             root.showToast(message)
         }
     }
-    
+
     Rectangle {
         id: toastOverlay
         objectName: "driveToast"

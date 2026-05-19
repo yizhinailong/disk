@@ -180,28 +180,47 @@ namespace disk::desktop::managers {
         });
     }
 
-void DriveManager::deleteItems(const QStringList& fileIds) {
-        qDebug() << "[DriveManager] deleteItems called, ids:" << fileIds;
-        QJsonObject body;
-        QJsonArray ids;
-        for (const auto& id : fileIds) {
-            bool ok = false;
-            auto val = id.toULongLong(&ok);
-            if (ok) {
-                ids.append(static_cast<double>(val));
+    void DriveManager::deleteItems(const QStringList& fileIds) {
+        deleteDriveItems(fileIds, {});
+    }
+
+    void DriveManager::deleteDriveItems(const QStringList& fileIds, const QStringList& folderIds) {
+        qDebug() << "[DriveManager] deleteDriveItems called, file ids:" << fileIds
+                 << "folder ids:" << folderIds;
+
+        auto toJsonArray = [](const QStringList& ids) {
+            QJsonArray values;
+            for (const auto& id : ids) {
+                bool ok = false;
+                auto val = id.toULongLong(&ok);
+                if (ok && val > 0) {
+                    values.append(static_cast<double>(val));
+                }
             }
+            return values;
+        };
+
+        auto fileIdArray = toJsonArray(fileIds);
+        auto folderIdArray = toJsonArray(folderIds);
+        if (fileIdArray.isEmpty() && folderIdArray.isEmpty()) {
+            emit apiError("请选择要删除的项目", 0);
+            return;
         }
-        body["file_ids"] = ids;
+
+        QJsonObject body;
+        body["file_ids"] = fileIdArray;
+        body["folder_ids"] = folderIdArray;
 
         QByteArray json_body = QJsonDocument(body).toJson(QJsonDocument::Compact);
-        qDebug() << "[DriveManager] deleteItems body:" << json_body;
+        qDebug() << "[DriveManager] deleteDriveItems body:" << json_body;
 
         auto headers = PrepareHeaders();
+        headers["Content-Type"] = "application/json";
         auto* reply = m_networkClient->Delete(QUrl("/api/file"), json_body, headers);
         m_active_replies.append(reply);
 
         connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-            qDebug() << "[DriveManager] deleteItems reply finished, error:" << reply->error();
+            qDebug() << "[DriveManager] deleteDriveItems reply finished, error:" << reply->error();
             m_active_replies.removeOne(reply);
             reply->deleteLater();
             HandleDeleteResponse(reply);

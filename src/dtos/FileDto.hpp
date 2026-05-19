@@ -1438,6 +1438,7 @@ namespace disk::file {
      */
     struct DeleteRequest {
         std::vector<uint64_t> file_ids;
+        std::vector<uint64_t> folder_ids;
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
@@ -1453,55 +1454,69 @@ namespace disk::file {
             }
 
             const auto& json = *json_ptr;
-
-            // 检查必填字段 file_ids
-            if (!json.isMember("file_ids")) {
-                LOG_WARN << "Missing required parameter: file_ids";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: file_ids")
-                );
-            }
-
-            if (!json["file_ids"].isArray()) {
-                LOG_WARN << "Parameter 'file_ids' type error: expected array";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::InvalidParameter,
-                    "Parameter 'file_ids' type error: expected array"
-                ));
-            }
-
             DeleteRequest request;
 
-            // 解析 file_ids
-            const auto& file_ids_array = json["file_ids"];
-            if (file_ids_array.empty()) {
-                LOG_WARN << "Parameter 'file_ids' cannot be empty array";
+            const auto parse_ids = [&](const char* field_name, std::vector<uint64_t>& ids)
+                -> Result<void> {
+                if (!json.isMember(field_name)) {
+                    return {};
+                }
+
+                const auto& id_array = json[field_name];
+                if (!id_array.isArray()) {
+                    LOG_WARN << "Parameter '" << field_name << "' type error: expected array";
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::InvalidParameter,
+                        std::string("Parameter '") + field_name + "' type error: expected array"
+                    ));
+                }
+
+                for (const auto& item : id_array) {
+                    if (!item.isIntegral()) {
+                        LOG_WARN << "Element in parameter '" << field_name
+                                 << "' type error: expected integer";
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::InvalidParameter,
+                            std::string("Element in parameter '") + field_name +
+                                "' type error: expected integer"
+                        ));
+                    }
+                    auto id = item.asUInt64();
+                    if (id == 0) {
+                        LOG_WARN << "Element in parameter '" << field_name
+                                 << "' must be a positive integer";
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::InvalidParameter,
+                            std::string("Element in parameter '") + field_name +
+                                "' must be a positive integer"
+                        ));
+                    }
+                    ids.push_back(id);
+                }
+
+                return {};
+            };
+
+            auto file_parse_result = parse_ids("file_ids", request.file_ids);
+            if (!file_parse_result) {
+                return std::unexpected(file_parse_result.error());
+            }
+
+            auto folder_parse_result = parse_ids("folder_ids", request.folder_ids);
+            if (!folder_parse_result) {
+                return std::unexpected(folder_parse_result.error());
+            }
+
+            if (request.file_ids.empty() && request.folder_ids.empty()) {
+                LOG_WARN << "Delete request requires at least one file_id or folder_id";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
-                    "Parameter 'file_ids' cannot be empty array"
+                    "At least one file_id or folder_id is required"
                 ));
             }
 
-            for (const auto& item : file_ids_array) {
-                if (!item.isIntegral()) {
-                    LOG_WARN << "Element in parameter 'file_ids' type error: expected integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        "Element in parameter 'file_ids' type error: expected integer"
-                    ));
-                }
-                auto file_id = item.asUInt64();
-                if (file_id == 0) {
-                    LOG_WARN << "Element in parameter 'file_ids' must be a positive integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        "Element in parameter 'file_ids' must be a positive integer"
-                    ));
-                }
-                request.file_ids.push_back(file_id);
-            }
-
-            LOG_DEBUG << "Parsed delete file request: file_ids.size()=" << request.file_ids.size();
+            LOG_DEBUG << "Parsed delete request: file_ids.size()=" << request.file_ids.size()
+                      << ", folder_ids.size()=" << request.folder_ids.size();
 
             return request;
         }
@@ -1515,12 +1530,16 @@ namespace disk::file {
      */
     struct DeleteResponse {
         int deleted_count{ 0 };
+        int deleted_file_count{ 0 };
+        int deleted_folder_count{ 0 };
 
         /// 转换为 JSON
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
             json["deleted_count"] = deleted_count;
+            json["deleted_file_count"] = deleted_file_count;
+            json["deleted_folder_count"] = deleted_folder_count;
             return json;
         }
     };

@@ -900,13 +900,24 @@ TEST(CopyRequest, InvalidFileIdType) {
 
 // ==================== DeleteRequest Tests ====================
 
-static auto CreateDeleteRequest(const std::vector<uint64_t>& file_ids) -> drogon::HttpRequestPtr {
+static auto CreateDeleteRequest(
+    const std::vector<uint64_t>& file_ids,
+    const std::vector<uint64_t>& folder_ids = {}
+) -> drogon::HttpRequestPtr {
     Json::Value json;
-    Json::Value ids_array(Json::arrayValue);
+    Json::Value file_ids_array(Json::arrayValue);
     for (auto id : file_ids) {
-        ids_array.append(static_cast<Json::UInt64>(id));
+        file_ids_array.append(static_cast<Json::UInt64>(id));
     }
-    json["file_ids"] = ids_array;
+    json["file_ids"] = file_ids_array;
+
+    if (!folder_ids.empty()) {
+        Json::Value folder_ids_array(Json::arrayValue);
+        for (auto id : folder_ids) {
+            folder_ids_array.append(static_cast<Json::UInt64>(id));
+        }
+        json["folder_ids"] = folder_ids_array;
+    }
 
     return CreateJsonRequest(json);
 }
@@ -923,10 +934,49 @@ TEST(DeleteRequest, ValidRequest) {
 }
 
 TEST(DeleteRequest, EmptyFileIds) {
-    auto req = CreateDeleteRequest({});
+    auto req = CreateDeleteRequest({}, { 2 });
     auto result = DeleteRequest::FromRequest(req);
 
-    EXPECT_FALSE(result.has_value()) << "Empty file_ids array should fail";
+    ASSERT_TRUE(result.has_value()) << "Empty file_ids with folder_ids should pass";
+    EXPECT_TRUE(result->file_ids.empty());
+    EXPECT_EQ(result->folder_ids.size(), 1);
+    EXPECT_EQ(result->folder_ids[0], 2);
+}
+
+TEST(DeleteRequest, FolderOnlyRequest) {
+    Json::Value json;
+    Json::Value folder_ids(Json::arrayValue);
+    folder_ids.append(Json::UInt64(10));
+    json["folder_ids"] = folder_ids;
+
+    auto req = CreateJsonRequest(json);
+    auto result = DeleteRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Folder-only delete request should pass";
+    EXPECT_TRUE(result->file_ids.empty());
+    EXPECT_EQ(result->folder_ids.size(), 1);
+    EXPECT_EQ(result->folder_ids[0], 10);
+}
+
+TEST(DeleteRequest, MixedFileAndFolderRequest) {
+    auto req = CreateDeleteRequest({ 1 }, { 2 });
+    auto result = DeleteRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Mixed delete request should pass";
+    EXPECT_EQ(result->file_ids.size(), 1);
+    EXPECT_EQ(result->file_ids[0], 1);
+    EXPECT_EQ(result->folder_ids.size(), 1);
+    EXPECT_EQ(result->folder_ids[0], 2);
+}
+
+TEST(DeleteRequest, BothArraysEmpty) {
+    Json::Value json;
+    json["file_ids"] = Json::Value(Json::arrayValue);
+    json["folder_ids"] = Json::Value(Json::arrayValue);
+    auto req = CreateJsonRequest(json);
+    auto result = DeleteRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Both empty arrays should fail";
     if (!result.has_value()) {
         EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
     }
@@ -937,9 +987,9 @@ TEST(DeleteRequest, MissingFileIds) {
     auto req = CreateJsonRequest(json);
     auto result = DeleteRequest::FromRequest(req);
 
-    EXPECT_FALSE(result.has_value()) << "Missing file_ids should fail";
+    EXPECT_FALSE(result.has_value()) << "Missing file_ids and folder_ids should fail";
     if (!result.has_value()) {
-        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
     }
 }
 
@@ -951,6 +1001,29 @@ TEST(DeleteRequest, InvalidFileIdZero) {
     if (!result.has_value()) {
         EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
     }
+}
+
+TEST(DeleteRequest, InvalidFolderIdZero) {
+    auto req = CreateDeleteRequest({}, { 1, 0, 2 });
+    auto result = DeleteRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "folder_id = 0 should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+TEST(DeleteResponse, ToJsonIncludesFileAndFolderCounts) {
+    disk::file::DeleteResponse response;
+    response.deleted_count = 3;
+    response.deleted_file_count = 1;
+    response.deleted_folder_count = 2;
+
+    auto json = response.ToJson();
+
+    EXPECT_EQ(json["deleted_count"].asInt(), 3);
+    EXPECT_EQ(json["deleted_file_count"].asInt(), 1);
+    EXPECT_EQ(json["deleted_folder_count"].asInt(), 2);
 }
 
 // ==================== FileListItem Tests ====================

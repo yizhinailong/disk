@@ -336,8 +336,20 @@ TestCase {
                "Valid create flow calls DriveManager.createFolder")
         verify(source.indexOf("driveManager.renameItem(root.selectedItemId, validationResult.value)") !== -1,
                "Valid rename flow calls DriveManager.renameItem")
-        verify(source.indexOf("driveManager.deleteItems([root.selectedItemId])") !== -1,
-               "Delete submit calls deleteItems for any selected item kind")
+        verify(source.indexOf("function selectedDeleteIds()") !== -1,
+               "Delete flow splits selected files and folders")
+        verify(source.indexOf("driveManager.deleteDriveItems(ids.fileIds, ids.folderIds)") !== -1,
+               "Delete submit calls deleteDriveItems with split ids")
+        verify(source.indexOf("driveManager.deleteItems([root.selectedItemId])") === -1,
+               "Delete submit no longer sends every selected id as a file")
+        verify(source.indexOf('kind === "folder"') !== -1,
+               "Folder selections route to folder ids")
+        verify(source.indexOf("folderIds.push(id)") !== -1,
+               "Folder ids are collected separately")
+        verify(source.indexOf("fileIds.push(id)") !== -1,
+               "File ids are collected separately")
+        verify(source.indexOf("该文件夹及其内容将移至回收站") !== -1,
+               "Folder delete dialog mentions folder contents")
         verify(source.indexOf('pendingMutationAction = "delete"') !== -1,
                "Delete submit records the delete mutation action")
         verify(source.indexOf("mutationInFlight = true") !== -1,

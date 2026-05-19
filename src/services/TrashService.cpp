@@ -10,6 +10,7 @@
 #include "TrashService.hpp"
 
 #include <algorithm>
+#include <filesystem>
 #include <optional>
 #include <unordered_map>
 
@@ -43,70 +44,165 @@ namespace disk::trash {
 
     constexpr size_t MAX_PARALLEL_DELETE_PATHS = 4;
 
+    struct SnapshotFolder {
+        uint64_t id{ 0 };
+        uint64_t parent_id{ 0 };
+        std::string name;
+        uint32_t item_count{ 0 };
+        uint32_t depth{ 0 };
+    };
+
+    struct SnapshotFile {
+        uint64_t id{ 0 };
+        uint64_t folder_id{ 0 };
+        uint64_t content_id{ 0 };
+        std::string name;
+        std::string extension;
+        uint64_t size{ 0 };
+        std::string mime_type;
+        bool is_favorite{ false };
+        uint32_t download_count{ 0 };
+    };
+
+    struct FolderTreeSnapshot {
+        SnapshotFolder root;
+        std::vector<SnapshotFolder> folders;
+        std::vector<SnapshotFile> files;
+    };
+
+    [[nodiscard]] auto ParseFolderTreeSnapshot(const std::string& item_data)
+        -> std::optional<FolderTreeSnapshot> {
+        if (item_data.empty()) {
+            return std::nullopt;
+        }
+
+        Json::Value json;
+        Json::Reader reader;
+        if (!reader.parse(item_data, json) || json.get("type", "").asString() != "folder_tree") {
+            return std::nullopt;
+        }
+
+        FolderTreeSnapshot snapshot;
+        const auto& root = json["root"];
+        if (!root.isObject() || !root.isMember("id")) {
+            return std::nullopt;
+        }
+
+        snapshot.root.id = root["id"].asUInt64();
+        snapshot.root.parent_id = root.get("parent_id", 0).asUInt64();
+        snapshot.root.name = root.get("name", "").asString();
+        snapshot.root.item_count = root.get("item_count", 0).asUInt();
+        snapshot.root.depth = root.get("depth", 0).asUInt();
+
+        const auto& folders = json["folders"];
+        if (folders.isArray()) {
+            snapshot.folders.reserve(folders.size());
+            for (const auto& folder : folders) {
+                SnapshotFolder value;
+                value.id = folder.get("id", 0).asUInt64();
+                value.parent_id = folder.get("parent_id", 0).asUInt64();
+                value.name = folder.get("name", "").asString();
+                value.item_count = folder.get("item_count", 0).asUInt();
+                value.depth = folder.get("depth", 0).asUInt();
+                if (value.id > 0 && !value.name.empty()) {
+                    snapshot.folders.push_back(std::move(value));
+                }
+            }
+        }
+
+        std::sort(snapshot.folders.begin(), snapshot.folders.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.id < rhs.id;
+        });
+
+        const auto& files = json["files"];
+        if (files.isArray()) {
+            snapshot.files.reserve(files.size());
+            for (const auto& file : files) {
+                if (!file.isMember("content_id")) {
+                    continue;
+                }
+
+                SnapshotFile value;
+                value.id = file.get("id", 0).asUInt64();
+                value.folder_id = file.get("folder_id", 0).asUInt64();
+                value.content_id = file["content_id"].asUInt64();
+                value.name = file.get("name", "").asString();
+                value.extension = file.get("extension", "").asString();
+                value.size = file.get("size", 0).asUInt64();
+                value.mime_type = file.get("mime_type", "application/octet-stream").asString();
+                value.is_favorite = file.get("is_favorite", 0).asBool();
+                value.download_count = file.get("download_count", 0).asUInt();
+                if (value.id > 0 && value.folder_id > 0 && value.content_id > 0 && !value.name.empty()) {
+                    snapshot.files.push_back(std::move(value));
+                }
+            }
+        }
+
+        if (snapshot.root.id == 0 || snapshot.root.name.empty()) {
+            return std::nullopt;
+        }
+
+        return snapshot;
+    }
+
+    [[nodiscard]] auto ExtractSnapshotContentIds(const std::string& item_data)
+        -> std::vector<uint64_t> {
+        std::vector<uint64_t> content_ids;
+        auto snapshot = ParseFolderTreeSnapshot(item_data);
+        if (!snapshot.has_value()) {
+            return content_ids;
+        }
+
+        content_ids.reserve(snapshot->files.size());
+        for (const auto& file : snapshot->files) {
+            content_ids.push_back(file.content_id);
+        }
+        return content_ids;
+    }
+
+    auto DecrementContentRefs(
+        const drogon::orm::DbClientPtr& client,
+        const std::vector<uint64_t>& content_ids
+    ) -> drogon::Task<std::vector<std::filesystem::path>> {
+        std::vector<std::filesystem::path> zero_ref_paths;
+        std::unordered_set<std::string> seen_paths;
+
+        for (const auto content_id : content_ids) {
+            auto decrement_result = co_await client->execSqlCoro(
+                "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = ?",
+                content_id
+            );
+            if (decrement_result.affectedRows() == 0) {
+                continue;
+            }
+
+            auto content_rows = co_await client->execSqlCoro(
+                "SELECT ref_count, storage_path FROM file_contents WHERE id = ?",
+                content_id
+            );
+            if (!content_rows.empty() && content_rows[0]["ref_count"].as<uint32_t>() == 0) {
+                auto path = content_rows[0]["storage_path"].as<std::string>();
+                if (seen_paths.insert(path).second) {
+                    zero_ref_paths.emplace_back(std::move(path));
+                }
+            }
+        }
+
+        co_return zero_ref_paths;
+    }
+
     [[nodiscard]]
     auto ParallelDeletePaths(
         disk::storage::IFileStorage* storage,
         const std::vector<std::filesystem::path>& paths,
         size_t max_concurrent = MAX_PARALLEL_DELETE_PATHS
     ) -> drogon::Task<std::vector<Result<void>>> {
-        std::vector<Result<void>> results(paths.size());
+        std::vector<Result<void>> results;
+        results.reserve(paths.size());
+        (void)max_concurrent;
 
-        if (paths.empty()) {
-            co_return results;
-        }
-
-        size_t chunk_size = std::min(max_concurrent, paths.size());
-        auto* loop = drogon::app().getLoop();
-
-        for (size_t i = 0; i < paths.size(); i += chunk_size) {
-            auto last = std::min(i + chunk_size, paths.size());
-
-            std::vector<std::shared_ptr<Result<void>>> chunk_results;
-            std::vector<std::shared_ptr<std::atomic<bool>>> chunk_dones;
-            chunk_results.reserve(last - i);
-            chunk_dones.reserve(last - i);
-
-            for (size_t j = i; j < last; ++j) {
-                auto result_ptr = std::make_shared<Result<void>>();
-                auto done_flag = std::make_shared<std::atomic<bool>>(false);
-                chunk_results.push_back(result_ptr);
-                chunk_dones.push_back(done_flag);
-
-                std::weak_ptr<Result<void>> weak_result = result_ptr;
-                std::weak_ptr<std::atomic<bool>> weak_done = done_flag;
-                auto storage_path = paths[j];
-
-                loop->queueInLoop([storage, storage_path, weak_result, weak_done]() mutable {
-                    auto task = [weak_result, weak_done, storage, storage_path]() -> drogon::Task<void> {
-                        auto r = co_await storage->DeletePath(storage_path);
-                        if (auto sp = weak_result.lock()) {
-                            *sp = std::move(r);
-                        }
-                        if (auto d = weak_done.lock()) {
-                            d->store(true);
-                        }
-                    };
-                    task();
-                });
-            }
-
-            while (true) {
-                bool all_done = true;
-                for (auto& done : chunk_dones) {
-                    if (!done->load()) {
-                        all_done = false;
-                        break;
-                    }
-                }
-                if (all_done) {
-                    break;
-                }
-                co_await drogon::sleepCoro(loop, std::chrono::milliseconds(1));
-            }
-
-            for (size_t j = i; j < last; ++j) {
-                results[j] = *chunk_results[j - i];
-            }
+        for (const auto& path : paths) {
+            results.push_back(co_await storage->DeletePath(path));
         }
 
         co_return results;
@@ -490,25 +586,7 @@ namespace disk::trash {
                     response.summary.failure_count++;
                 }
             } else if (trash_item.item_type == "folder") {
-                try {
-                    CoroMapper<Trash> trash_mapper(m_db_client);
-                    co_await trash_mapper.deleteByPrimaryKey(trash_item.id);
-
-                    result.status = "success";
-                    result.freed_space = trash_item.item_size;
-                    freed_space = trash_item.item_size;
-
-                    LOG_INFO << "Folder permanently deleted: trash_id=" << trash_item.id
-                             << ", freed_space=" << trash_item.item_size;
-
-                } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_ERROR << "Failed to permanently delete folder: trash_id=" << trash_item.id << " - "
-                              << e.base().what();
-                    result.status = "failed";
-                    result.code = static_cast<uint16_t>(ErrorCode::InternalError);
-                    result.message = "Failed to permanently delete folder";
-                    response.summary.failure_count++;
-                }
+                freed_space = co_await DeleteFolder(trash_item, user_id, result);
             } else {
                 result.status = "failed";
                 result.code = static_cast<uint16_t>(ErrorCode::ValidationFailed);
@@ -634,6 +712,13 @@ namespace disk::trash {
                             }
 
                             content_ids.push_back(content_id_result->value);
+                        } else if (item.item_type == "folder") {
+                            auto snapshot_content_ids = ExtractSnapshotContentIds(item.item_data);
+                            content_ids.insert(
+                                content_ids.end(),
+                                snapshot_content_ids.begin(),
+                                snapshot_content_ids.end()
+                            );
                         }
 
                         chunk_trash_ids.push_back(item.id);
@@ -647,23 +732,7 @@ namespace disk::trash {
 
                     std::vector<std::filesystem::path> zero_ref_paths;
                     if (!content_ids.empty()) {
-                        std::sort(content_ids.begin(), content_ids.end());
-                        content_ids.erase(std::unique(content_ids.begin(), content_ids.end()), content_ids.end());
-
-                        auto content_in_clause = BatchUtils::BuildSafeNumericInClause(content_ids);
-                        co_await transaction->execSqlCoro(
-                            "UPDATE file_contents " "SET ref_count = GREATEST(ref_count - 1, 0) " "WHERE id IN (" + content_in_clause + ")"
-                        );
-
-                        auto content_rows = co_await transaction->execSqlCoro(
-                            "SELECT id, ref_count, storage_path " "FROM file_contents WHERE id IN (" + content_in_clause + ")"
-                        );
-
-                        for (const auto& row : content_rows) {
-                            if (row["ref_count"].as<uint32_t>() == 0) {
-                                zero_ref_paths.emplace_back(row["storage_path"].as<std::string>());
-                            }
-                        }
+                        zero_ref_paths = co_await DecrementContentRefs(transaction, content_ids);
                     }
 
                     auto delete_result = co_await transaction->execSqlCoro(
@@ -960,33 +1029,135 @@ namespace disk::trash {
             std::string folder_path = parent_path + final_name + "/";
             uint32_t folder_depth = parent_depth + 1;
 
-            Folders folder;
-            folder.setUserId(user_id);
-            folder.setParentId(target_parent_id);
-            folder.setName(final_name);
-            folder.setPath(folder_path);
-            folder.setDepth(folder_depth);
-            folder.setItemCount(0);
-            folder.setCreatedAt(trantor::Date::now());
-            folder.setUpdatedAt(trantor::Date::now());
-
             CoroMapper<Folders> folder_mapper(m_db_client);
-            auto inserted_folder = co_await folder_mapper.insert(folder);
-
+            CoroMapper<Files> file_mapper(m_db_client);
             CoroMapper<Trash> trash_mapper(m_db_client);
+
+            auto snapshot = ParseFolderTreeSnapshot(trash_item.item_data);
+            if (!snapshot.has_value()) {
+                Folders folder;
+                folder.setUserId(user_id);
+                folder.setParentId(target_parent_id);
+                folder.setName(final_name);
+                folder.setPath(folder_path);
+                folder.setDepth(folder_depth);
+                folder.setItemCount(0);
+                folder.setCreatedAt(trantor::Date::now());
+                folder.setUpdatedAt(trantor::Date::now());
+
+                auto inserted_folder = co_await folder_mapper.insert(folder);
+                co_await trash_mapper.deleteByPrimaryKey(trash_id);
+
+                result.status = "success";
+                result.folder_id = inserted_folder.getValueOfId();
+                result.path = folder_path;
+
+                LOG_INFO << "Folder restored successfully: trash_id=" << trash_id
+                         << ", folder_id=" << inserted_folder.getValueOfId() << ", name=" << final_name
+                         << ", path=" << folder_path << ", depth=" << folder_depth;
+                co_return;
+            }
+
+            std::unordered_map<uint64_t, uint64_t> folder_id_map;
+            std::unordered_map<uint64_t, std::string> folder_path_map;
+            folder_id_map.reserve(snapshot->folders.size() + 1);
+            folder_path_map.reserve(snapshot->folders.size() + 1);
+
+            Folders root_folder;
+            root_folder.setUserId(user_id);
+            root_folder.setParentId(target_parent_id);
+            root_folder.setName(final_name);
+            root_folder.setPath(folder_path);
+            root_folder.setDepth(folder_depth);
+            root_folder.setItemCount(snapshot->root.item_count);
+            root_folder.setCreatedAt(trantor::Date::now());
+            root_folder.setUpdatedAt(trantor::Date::now());
+
+            auto inserted_root = co_await folder_mapper.insert(root_folder);
+            auto root_new_id = inserted_root.getValueOfId();
+            folder_id_map[snapshot->root.id] = root_new_id;
+            folder_path_map[snapshot->root.id] = folder_path;
+
+            auto remaining_folders = snapshot->folders;
+            while (!remaining_folders.empty()) {
+                bool progressed = false;
+                for (auto it = remaining_folders.begin(); it != remaining_folders.end();) {
+                    auto parent_it = folder_id_map.find(it->parent_id);
+                    if (parent_it == folder_id_map.end()) {
+                        ++it;
+                        continue;
+                    }
+
+                    auto parent_path_it = folder_path_map.find(it->parent_id);
+                    auto restored_path = parent_path_it->second + it->name + "/";
+                    auto depth_delta = it->depth > snapshot->root.depth
+                        ? it->depth - snapshot->root.depth
+                        : 1;
+
+                    Folders folder;
+                    folder.setUserId(user_id);
+                    folder.setParentId(parent_it->second);
+                    folder.setName(it->name);
+                    folder.setPath(restored_path);
+                    folder.setDepth(folder_depth + depth_delta);
+                    folder.setItemCount(it->item_count);
+                    folder.setCreatedAt(trantor::Date::now());
+                    folder.setUpdatedAt(trantor::Date::now());
+
+                    auto inserted_folder = co_await folder_mapper.insert(folder);
+                    folder_id_map[it->id] = inserted_folder.getValueOfId();
+                    folder_path_map[it->id] = restored_path;
+                    it = remaining_folders.erase(it);
+                    progressed = true;
+                }
+
+                if (!progressed) {
+                    throw std::runtime_error("Folder snapshot contains orphaned folder nodes");
+                }
+            }
+
+            for (const auto& snapshot_file : snapshot->files) {
+                auto folder_it = folder_id_map.find(snapshot_file.folder_id);
+                auto path_it = folder_path_map.find(snapshot_file.folder_id);
+                if (folder_it == folder_id_map.end() || path_it == folder_path_map.end()) {
+                    throw std::runtime_error("Folder snapshot contains orphaned file nodes");
+                }
+
+                Files file;
+                file.setUserId(user_id);
+                file.setContentId(snapshot_file.content_id);
+                file.setFolderId(folder_it->second);
+                file.setName(snapshot_file.name);
+                file.setExtension(snapshot_file.extension);
+                file.setSize(snapshot_file.size);
+                file.setMimeType(snapshot_file.mime_type);
+                file.setPath(path_it->second + snapshot_file.name);
+                file.setIsFavorite(snapshot_file.is_favorite);
+                file.setDownloadCount(snapshot_file.download_count);
+                file.setCreatedAt(trantor::Date::now());
+                file.setUpdatedAt(trantor::Date::now());
+                co_await file_mapper.insert(file);
+            }
+
             co_await trash_mapper.deleteByPrimaryKey(trash_id);
 
             result.status = "success";
-            result.folder_id = inserted_folder.getValueOfId();
+            result.folder_id = root_new_id;
             result.path = folder_path;
 
-            LOG_INFO << "Folder restored successfully: trash_id=" << trash_id
-                     << ", folder_id=" << inserted_folder.getValueOfId() << ", name=" << final_name
-                     << ", path=" << folder_path << ", depth=" << folder_depth;
+            LOG_INFO << "Folder tree restored successfully: trash_id=" << trash_id
+                     << ", folder_id=" << root_new_id << ", folder_count="
+                     << (snapshot->folders.size() + 1) << ", file_count=" << snapshot->files.size();
 
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "Failed to restore folder: trash_id=" << trash_item.id << " - "
                       << e.base().what();
+            result.status = "failed";
+            result.code = static_cast<uint16_t>(ErrorCode::InternalError);
+            result.message = "Failed to restore folder";
+        } catch (const std::exception& e) {
+            LOG_ERROR << "Failed to restore folder: trash_id=" << trash_item.id << " - "
+                      << e.what();
             result.status = "failed";
             result.code = static_cast<uint16_t>(ErrorCode::InternalError);
             result.message = "Failed to restore folder";
@@ -1177,14 +1348,32 @@ namespace disk::trash {
             auto trash_id = trash_item.id;
             auto item_size = trash_item.item_size;
 
+            auto snapshot_content_ids = ExtractSnapshotContentIds(trash_item.item_data);
+            auto zero_ref_paths = co_await DecrementContentRefs(m_db_client, snapshot_content_ids);
+
             CoroMapper<Trash> trash_mapper(m_db_client);
             co_await trash_mapper.deleteByPrimaryKey(trash_id);
+
+            auto* storage = disk::storage::StorageMgr::GetStorage();
+            if (storage == nullptr && !zero_ref_paths.empty()) {
+                LOG_WARN << "Storage manager is not initialized, skip folder blob cleanup: trash_id="
+                         << trash_id << ", blob_count=" << zero_ref_paths.size();
+            } else if (storage != nullptr && !zero_ref_paths.empty()) {
+                auto delete_results = co_await ParallelDeletePaths(storage, zero_ref_paths);
+                for (size_t i = 0; i < delete_results.size(); ++i) {
+                    if (!delete_results[i].has_value()) {
+                        LOG_WARN << "Failed to cleanup blob after folder delete: path=" << zero_ref_paths[i]
+                                 << ", error=" << delete_results[i].error().message;
+                    }
+                }
+            }
 
             result.status = "success";
             result.freed_space = item_size;
 
             LOG_INFO << "Folder permanently deleted: trash_id=" << trash_id
-                     << ", freed_space=" << item_size;
+                     << ", freed_space=" << item_size
+                     << ", snapshot_file_count=" << snapshot_content_ids.size();
 
             co_return item_size;
 

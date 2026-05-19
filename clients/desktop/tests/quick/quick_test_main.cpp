@@ -270,6 +270,10 @@ public:
     Q_INVOKABLE void copyItems(const QStringList &, const QString &) {}
     Q_INVOKABLE void deleteItems(const QStringList &fileIds) {
         m_deleteItemsCalls.append(fileIds);
+        m_deleteDriveItemsCalls.append({fileIds, {}});
+    }
+    Q_INVOKABLE void deleteDriveItems(const QStringList &fileIds, const QStringList &folderIds) {
+        m_deleteDriveItemsCalls.append({fileIds, folderIds});
     }
     Q_INVOKABLE void loadFolderTree() {
         m_loadFolderTreeCallCount++;
@@ -286,6 +290,7 @@ public:
     Q_INVOKABLE QList<QStringList> createFolderCalls() const { return m_createFolderCalls; }
     Q_INVOKABLE QList<QStringList> renameItemCalls() const { return m_renameItemCalls; }
     Q_INVOKABLE QList<QStringList> deleteItemsCalls() const { return m_deleteItemsCalls; }
+    Q_INVOKABLE QList<QList<QStringList>> deleteDriveItemsCalls() const { return m_deleteDriveItemsCalls; }
 
     Q_INVOKABLE void resetCounts() {
         m_loadFolderTreeCallCount = 0;
@@ -296,6 +301,7 @@ public:
         m_createFolderCalls.clear();
         m_renameItemCalls.clear();
         m_deleteItemsCalls.clear();
+        m_deleteDriveItemsCalls.clear();
     }
 
     Q_INVOKABLE void clearTreeModel() {
@@ -352,6 +358,7 @@ private:
     QList<QStringList> m_createFolderCalls;
     QList<QStringList> m_renameItemCalls;
     QList<QStringList> m_deleteItemsCalls;
+    QList<QList<QStringList>> m_deleteDriveItemsCalls;
 };
 
 class StubShareListModel : public QAbstractListModel {

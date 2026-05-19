@@ -289,7 +289,7 @@ private slots:
         QCOMPARE(success_spy.count(), 0);
 
         auto arguments = error_spy.takeFirst();
-        QCOMPARE(arguments.at(0).toString(), QString("Invalid response format"));
+        QCOMPARE(arguments.at(0).toString(), QString("响应格式无效"));
         QCOMPARE(arguments.at(1).toInt(), 0);
     }
 
@@ -423,7 +423,7 @@ private slots:
         QCOMPARE(mock_network.GetRequestLog().size(), 0);
 
         auto arguments = error_spy.takeFirst();
-        QCOMPARE(arguments.at(0).toString(), QString("Invalid parentId"));
+        QCOMPARE(arguments.at(0).toString(), QString("无效的父级 ID"));
     }
 
     void CreateFolderMapsEmptyParentIdToRoot() {
@@ -507,7 +507,7 @@ private slots:
         QCOMPARE(success_spy.count(), 0);
 
         auto arguments = error_spy.takeFirst();
-        QCOMPARE(arguments.at(0).toString(), QString("Invalid response format"));
+        QCOMPARE(arguments.at(0).toString(), QString("响应格式无效"));
         QCOMPARE(arguments.at(1).toInt(), 0);
     }
 
@@ -543,21 +543,18 @@ private slots:
     }
 
     void DeleteItemsEmitsSuccessWithValidEnvelope() {
-        OneShotHttpServer server(
-            QJsonDocument(
-                QJsonObject{
-                    { "code", 0 },
-                    { "message", "success" },
-                    { "data", QJsonObject{} },
-                }
-            )
-                .toJson(QJsonDocument::Compact)
-        );
-        QVERIFY(server.Listen());
-
         MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
         NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
-        network_client.SetBaseUrl(server.BaseUrl());
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
         RequestFactory request_factory;
         request_factory.SetOwnerAccessToken("test_token");
         DriveManager mgr(&network_client, &request_factory);
@@ -569,7 +566,7 @@ private slots:
 
         QTRY_COMPARE(success_spy.count(), 1);
         QCOMPARE(error_spy.count(), 0);
-        QVERIFY(server.RequestData().contains("DELETE /api/file HTTP/1.1"));
+        QCOMPARE(mock_network.GetRequestLog().size(), 1);
     }
 
     void DeleteItemsSetsRequestTransferTimeout() {
@@ -626,12 +623,11 @@ private slots:
     }
 
     void DeleteItemsRejectsMalformedSuccessPayload() {
-        OneShotHttpServer server("not-json");
-        QVERIFY(server.Listen());
-
         MockNetworkAccessManager mock_network;
+        mock_network.RegisterRawResponse("api/file", "not-json", 200);
+
         NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
-        network_client.SetBaseUrl(server.BaseUrl());
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
         RequestFactory request_factory;
         request_factory.SetOwnerAccessToken("test_token");
         DriveManager mgr(&network_client, &request_factory);
@@ -645,27 +641,24 @@ private slots:
         QCOMPARE(success_spy.count(), 0);
 
         auto arguments = error_spy.takeFirst();
-        QCOMPARE(arguments.at(0).toString(), QString("Invalid response format"));
+        QCOMPARE(arguments.at(0).toString(), QString("响应格式无效"));
         QCOMPARE(arguments.at(1).toInt(), 0);
-        QVERIFY(server.RequestData().contains("DELETE /api/file HTTP/1.1"));
+        QCOMPARE(mock_network.GetRequestLog().size(), 1);
     }
 
     void DeleteItemsRejectsApiErrorEnvelopeOnHttp200() {
-        OneShotHttpServer server(
-            QJsonDocument(
-                QJsonObject{
-                    { "code", 50005 },
-                    { "message", "File not found" },
-                    { "data", QJsonValue::Null },
-                }
-            )
-                .toJson(QJsonDocument::Compact)
-        );
-        QVERIFY(server.Listen());
-
         MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file",
+            QJsonObject{
+                { "code", 50005 },
+                { "message", "File not found" },
+                { "data", QJsonValue::Null },
+            }
+        );
+
         NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
-        network_client.SetBaseUrl(server.BaseUrl());
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
         RequestFactory request_factory;
         request_factory.SetOwnerAccessToken("test_token");
         DriveManager mgr(&network_client, &request_factory);
@@ -681,7 +674,117 @@ private slots:
         auto arguments = error_spy.takeFirst();
         QCOMPARE(arguments.at(0).toString(), QString("File not found"));
         QCOMPARE(arguments.at(1).toInt(), 50005);
-        QVERIFY(server.RequestData().contains("DELETE /api/file HTTP/1.1"));
+        QCOMPARE(mock_network.GetRequestLog().size(), 1);
+    }
+
+    void DeleteItemsSendsFileOnlyBody() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+
+        mgr.deleteItems({ "10" });
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestBodyLog().size(), 1);
+
+        QJsonParseError parse_error;
+        auto doc = QJsonDocument::fromJson(mock_network.GetRequestBodyLog().constFirst(), &parse_error);
+        QCOMPARE(parse_error.error, QJsonParseError::NoError);
+        QCOMPARE(doc.object().value("file_ids").toArray().at(0).toInt(), 10);
+        QCOMPARE(doc.object().value("folder_ids").toArray().size(), 0);
+    }
+
+    void DeleteDriveItemsSendsFolderOnlyBody() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+
+        mgr.deleteDriveItems({}, { "20" });
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestBodyLog().size(), 1);
+
+        QJsonParseError parse_error;
+        auto doc = QJsonDocument::fromJson(mock_network.GetRequestBodyLog().constFirst(), &parse_error);
+        QCOMPARE(parse_error.error, QJsonParseError::NoError);
+        QCOMPARE(doc.object().value("file_ids").toArray().size(), 0);
+        QCOMPARE(doc.object().value("folder_ids").toArray().at(0).toInt(), 20);
+    }
+
+    void DeleteDriveItemsSendsMixedBody() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+
+        mgr.deleteDriveItems({ "10" }, { "20" });
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestBodyLog().size(), 1);
+
+        QJsonParseError parse_error;
+        auto doc = QJsonDocument::fromJson(mock_network.GetRequestBodyLog().constFirst(), &parse_error);
+        QCOMPARE(parse_error.error, QJsonParseError::NoError);
+        QCOMPARE(doc.object().value("file_ids").toArray().at(0).toInt(), 10);
+        QCOMPARE(doc.object().value("folder_ids").toArray().at(0).toInt(), 20);
+    }
+
+    void DeleteDriveItemsRejectsEmptyIds() {
+        MockNetworkAccessManager mock_network;
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.deleteDriveItems({}, {});
+
+        QTRY_COMPARE(error_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestLog().size(), 0);
     }
 
     void DeleteItemsSourceBuildsJsonFileIdsBody() {
@@ -689,10 +792,11 @@ private slots:
         QVERIFY(source_file.open(QIODevice::ReadOnly | QIODevice::Text));
 
         const QString source = QString::fromUtf8(source_file.readAll());
-        QVERIFY(source.contains("body[\"file_ids\"] = ids;"));
-        QVERIFY(source.contains("url = url.resolved(QUrl(\"api/file\"));"));
-        QVERIFY(!source.contains("base_url + \"api/file\""));
-        QVERIFY(source.contains("sendCustomRequest(request, \"DELETE\", json_body)"));
+        QVERIFY(source.contains("body[\"file_ids\"] = fileIdArray;"));
+        QVERIFY(source.contains("body[\"folder_ids\"] = folderIdArray;"));
+        QVERIFY(source.contains("m_networkClient->Delete(QUrl(\"/api/file\"), json_body, headers)"));
+        QVERIFY(source.contains("void DriveManager::deleteItems(const QStringList& fileIds)"));
+        QVERIFY(source.contains("deleteDriveItems(fileIds, {});"));
     }
 
     void ListFilesSendsAuthHeaders() {

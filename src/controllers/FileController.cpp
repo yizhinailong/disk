@@ -476,7 +476,8 @@ namespace disk::file {
             co_return Response::Error(parse_result.error());
         }
         LOG_DEBUG << "Delete file parameters validated: file_ids.size()="
-                  << parse_result->file_ids.size();
+                  << parse_result->file_ids.size()
+                  << ", folder_ids.size()=" << parse_result->folder_ids.size();
 
         // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -492,6 +493,8 @@ namespace disk::file {
 
             // 4. 构造响应
             LOG_INFO << "Delete file successful: deleted_count=" << result->deleted_count
+                     << ", deleted_file_count=" << result->deleted_file_count
+                     << ", deleted_folder_count=" << result->deleted_folder_count
                      << " (user_id=" << user_id << ")";
             co_return Response::Success(result->ToJson());
         } catch (const std::exception& e) {

@@ -414,14 +414,17 @@ namespace disk::file {
         }
 
         TEST_F(FileServiceDeleteAtomicityCharacterizationTest, DeleteResponseJsonFieldsComplete) {
-            // DeleteResponse 必须包含且仅包含 deleted_count 字段
             DeleteResponse response;
             response.deleted_count = 3;
+            response.deleted_file_count = 1;
+            response.deleted_folder_count = 2;
 
             const auto json = response.ToJson();
 
-            ASSERT_EQ(json.size(), 1U);
+            ASSERT_EQ(json.size(), 3U);
             EXPECT_TRUE(json.isMember("deleted_count"));
+            EXPECT_TRUE(json.isMember("deleted_file_count"));
+            EXPECT_TRUE(json.isMember("deleted_folder_count"));
         }
 
         // --- CopyRequest 验证回归 ---
@@ -1152,7 +1155,9 @@ namespace disk::file {
             const auto json = response.ToJson();
 
             EXPECT_EQ(json["deleted_count"].asInt(), 0);
-            ASSERT_EQ(json.size(), 1U);
+            EXPECT_EQ(json["deleted_file_count"].asInt(), 0);
+            EXPECT_EQ(json["deleted_folder_count"].asInt(), 0);
+            ASSERT_EQ(json.size(), 3U);
         }
 
         // --- Trash Payload 兼容性 ---
@@ -1260,7 +1265,9 @@ namespace disk::file {
             const auto json = response.ToJson();
 
             EXPECT_EQ(json["deleted_count"].asInt(), 0);
-            EXPECT_EQ(json.size(), 1U);
+            EXPECT_EQ(json["deleted_file_count"].asInt(), 0);
+            EXPECT_EQ(json["deleted_folder_count"].asInt(), 0);
+            EXPECT_EQ(json.size(), 3U);
         }
 
         // ============================================================================
