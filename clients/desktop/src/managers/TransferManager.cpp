@@ -165,6 +165,28 @@ namespace disk::desktop::managers {
         }
     }
 
+    void TransferManager::StartShareDownload(
+        const QString& share_id,
+        quint64 file_id,
+        const QString& target_path,
+        const QString& filename,
+        quint64 file_size
+    ) {
+        auto task_id = CreateDownloadTask(
+            file_id,
+            target_path,
+            "visitor",
+            filename,
+            file_size,
+            share_id
+        );
+        if (!task_id.isEmpty()) {
+            PreparePartialFileForRange(task_id);
+            SetDownloadState(task_id, DownloadState::Ready);
+            StartDownloadTransfer(task_id);
+        }
+    }
+
     void TransferManager::PauseDownload(const QString& task_id) {
         int row = m_download_model->FindTask(task_id);
         if (row < 0) {
@@ -983,11 +1005,13 @@ namespace disk::desktop::managers {
         const QString& target_path,
         const QString& auth_domain,
         const QString& filename,
-        quint64 file_size
+        quint64 file_size,
+        const QString& share_id
     ) -> QString {
         DownloadTask task;
         task.task_id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         task.auth_domain = auth_domain;
+        task.share_id = share_id.isEmpty() ? std::nullopt : std::optional<QString>(share_id);
         task.file_id = file_id;
         task.filename = filename.isEmpty() ? QString("file_%1").arg(file_id) : filename;
         task.file_size = file_size;

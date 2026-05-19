@@ -8,7 +8,6 @@ PageStateView {
 
     required property var page
 
-    property string visitorEntryError: ""
 
     objectName: "sharedStateView"
     visible: page.isSharedMode
@@ -170,43 +169,6 @@ PageStateView {
                 }
             }
 
-            RowLayout {
-                id: visitorEntrySection
-                Layout.fillWidth: true
-                spacing: page.tableColumnSpacing
-
-                TextField {
-                    id: visitorShareInput
-                    objectName: "visitorShareInput"
-                    Layout.fillWidth: true
-                    placeholderText: "输入分享码或粘贴分享链接"
-                }
-
-                Button {
-                    id: visitorAccessButton
-                    objectName: "visitorAccessButton"
-                    text: "访问分享"
-                    highlighted: true
-                    enabled: visitorShareInput.text.trim().length > 0
-                    onClicked: {
-                        var shareId = shareManager.parseShareInput(visitorShareInput.text.trim())
-                        if (shareId.length > 0) {
-                            root.visitorEntryError = ""
-                            shellController.navigateToVisitor(shareId)
-                        } else {
-                            root.visitorEntryError = "无效的分享码或链接"
-                        }
-                    }
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: root.visitorEntryError
-                    color: page.panelErrorTextColor
-                    font.pixelSize: 12
-                    visible: text !== ""
-                }
-            }
 
             Rectangle {
                 Layout.fillWidth: true

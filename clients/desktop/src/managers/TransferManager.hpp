@@ -133,6 +133,14 @@ namespace disk::desktop::managers {
             const QString& auth_domain = "owner"
         );
 
+        Q_INVOKABLE void StartShareDownload(
+            const QString& share_id,
+            quint64 file_id,
+            const QString& target_path,
+            const QString& filename = {},
+            quint64 file_size = 0
+        );
+
         /**
          * @brief Pause an active download
          * @param task_id Task to pause
@@ -223,7 +231,8 @@ namespace disk::desktop::managers {
             const QString& target_path,
             const QString& auth_domain,
             const QString& filename = {},
-            quint64 file_size = 0
+            quint64 file_size = 0,
+            const QString& share_id = {}
         ) -> QString;
         void FetchDownloadMetadata(const QString& task_id);
         void HandleMetadataResponse(const QString& task_id, QNetworkReply* reply);

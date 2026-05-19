@@ -45,6 +45,25 @@ Rectangle {
                 onClicked: page.refreshCurrentView()
             }
 
+            TextField {
+                objectName: "visitorShareInput"
+                Layout.preferredWidth: 240
+                visible: page.isSharedMode
+                placeholderText: "输入分享码或粘贴分享链接"
+                text: page.visitorShareInputText
+                onTextChanged: page.visitorShareInputText = text
+                onAccepted: page.openVisitorShare()
+            }
+
+            Button {
+                objectName: "visitorAccessButton"
+                text: "访问分享"
+                visible: page.isSharedMode
+                highlighted: true
+                enabled: page.visitorShareInputText.trim().length > 0
+                onClicked: page.openVisitorShare()
+            }
+
             Button {
                 objectName: "sharedCreateButton"
                 text: "创建分享"
@@ -131,6 +150,14 @@ Rectangle {
             Item {
                 Layout.fillWidth: true
             }
+        }
+
+        Label {
+            Layout.fillWidth: true
+            text: page.visitorEntryError
+            color: page.panelErrorTextColor
+            visible: text !== "" && page.isSharedMode
+            wrapMode: Text.WordWrap
         }
 
         Label {
