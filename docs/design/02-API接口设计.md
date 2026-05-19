@@ -2179,6 +2179,10 @@ Authorization: Bearer <access_token>
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
 | 404 | 10003 | `ResourceNotFound` | 资源不存在 | trash_id 不存在或不属于用户 |
 
+#### 实现说明
+
+回收站彻底删除（DELETE /api/trash）和清空（DELETE /api/trash/all）由 `TrashService::Delete` 和 `TrashService::DeleteAll` 处理。批量删除时逐项串行执行，每项内部先将文件元数据从 trash 表移除，再由 `LocalFileStorage` 线程池并行执行 blob 清理（最大并发 4），最后对 `file_contents.ref_count` 递减。引用计数归零时物理文件由后台线程异步删除，不阻塞响应返回。
+
 **40106 TokenMissing 响应示例**：
 
 ```json

@@ -138,6 +138,13 @@ namespace disk::utils {
         auto GetAssembleBufferSizeBytes() const noexcept -> uint32_t;
 
         /**
+         * @brief 获取文件IO线程数
+         * @return uint32_t 线程数（0 表示使用默认值）
+         */
+        [[nodiscard]]
+        auto GetFileIoThreads() const noexcept -> uint32_t;
+
+        /**
          * @brief 获取上传接口每分钟限流阈值
          * @return int 每分钟请求数上限（默认 60）
          */
@@ -195,6 +202,7 @@ namespace disk::utils {
         uint32_t m_assembly_max_concurrent{ 4 };
         uint32_t m_assemble_buffer_size_bytes{ 262144 };
         int m_upload_rate_limit_per_minute{ 60 };
+        uint32_t m_file_io_threads{ 0 };
 
         int64_t m_db_pool_size{ 0 };
         int64_t m_redis_pool_size{ 0 };

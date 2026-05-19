@@ -963,12 +963,10 @@ Page {
     function refreshCurrentFolder() {
         clearSelection()
         shellController.setPageState("loading")
-        driveManager.loadFolderTree()
-        driveManager.loadBreadcrumb(currentFolderId)
-        if (root.isSearchActive) {
-            driveManager.searchFiles(root.searchQuery)
+        if (refreshDebounceTimer.running) {
+            refreshDebounceTimer.restart()
         } else {
-            driveManager.listFiles(currentFolderId, 1, 50, root.currentSort)
+            refreshDebounceTimer.start()
         }
     }
 
@@ -1696,6 +1694,21 @@ Page {
         id: toastDismissTimer
         interval: 3000
         onTriggered: root.hideToast()
+    }
+
+    Timer {
+        id: refreshDebounceTimer
+        interval: 150
+        repeat: false
+        onTriggered: {
+            driveManager.loadFolderTree()
+            driveManager.loadBreadcrumb(currentFolderId)
+            if (root.isSearchActive) {
+                driveManager.searchFiles(root.searchQuery)
+            } else {
+                driveManager.listFiles(currentFolderId, 1, 50, root.currentSort)
+            }
+        }
     }
 
     Component.onCompleted: {

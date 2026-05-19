@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <bit>
 #include <chrono>
 #include <functional>
@@ -24,8 +25,10 @@ namespace disk::storage {
 
     namespace {
 
-        constexpr size_t MIN_LOCAL_FILE_IO_THREADS = 2;
-        constexpr size_t MAX_LOCAL_FILE_IO_THREADS = 4;
+        constexpr size_t MIN_LOCAL_FILE_IO_THREADS = 4;
+        constexpr size_t MAX_LOCAL_FILE_IO_THREADS = 8;
+        constexpr size_t DEFAULT_LOCAL_FILE_IO_THREADS = 4;
+        constexpr size_t DEFAULT_DELETE_TIMEOUT_SECONDS = 30;
         constexpr size_t MIN_ASSEMBLY_IO_THREADS = 1;
         constexpr size_t MAX_ASSEMBLY_IO_THREADS = 4;
         constexpr std::string_view LOCAL_FILE_IO_QUEUE_NAME = "local-file-storage";
@@ -38,11 +41,9 @@ namespace disk::storage {
         }
 
         auto ResolveLocalFileIoThreadCount(const disk::utils::ConfigMgr& config_mgr) -> size_t {
-            return std::clamp(
-                ResolveConfiguredAssemblyConcurrency(config_mgr),
-                MIN_LOCAL_FILE_IO_THREADS,
-                MAX_LOCAL_FILE_IO_THREADS
-            );
+            const auto configured = static_cast<size_t>(config_mgr.GetFileIoThreads());
+            const auto resolved = configured == 0 ? DEFAULT_LOCAL_FILE_IO_THREADS : configured;
+            return std::clamp(resolved, MIN_LOCAL_FILE_IO_THREADS, MAX_LOCAL_FILE_IO_THREADS);
         }
 
         auto ResolveAssemblyIoThreadCount(const disk::utils::ConfigMgr& config_mgr) -> size_t {
@@ -104,6 +105,85 @@ namespace disk::storage {
                 std::move(worker_queue),
                 std::function<ResultType()>(std::forward<Func>(task)),
                 trantor::EventLoop::getEventLoopOfCurrentThread()
+            );
+        }
+
+        template <typename T>
+        class ConcurrentQueueAwaiterWithTimeout : public drogon::CallbackAwaiter<T> {
+        public:
+            ConcurrentQueueAwaiterWithTimeout(
+                std::shared_ptr<trantor::ConcurrentTaskQueue> worker_queue,
+                std::function<T()> task,
+                trantor::EventLoop* resume_loop,
+                double timeout_seconds
+            )
+                : m_worker_queue(std::move(worker_queue)),
+                  m_task(std::move(task)),
+                  m_resume_loop(resume_loop),
+                  m_timeout_seconds(timeout_seconds) {}
+
+            auto await_suspend(std::coroutine_handle<> handle) -> void {
+                m_handle = handle;
+
+                m_worker_queue->runTaskInQueue([this]() mutable {
+                    try {
+                        auto result = m_task();
+                        bool expected = false;
+                        if (m_completed.compare_exchange_strong(expected, true)) {
+                            this->setValue(std::move(result));
+                            Resume();
+                        }
+                    } catch (...) {
+                        bool expected = false;
+                        if (m_completed.compare_exchange_strong(expected, true)) {
+                            this->setException(std::current_exception());
+                            Resume();
+                        }
+                    }
+                });
+
+                if (m_resume_loop != nullptr) {
+                    m_resume_loop->runAfter(m_timeout_seconds, [this]() {
+                        bool expected = false;
+                        if (m_completed.compare_exchange_strong(expected, true)) {
+                            this->setValue(std::unexpected(
+                                ErrorInfo(ErrorCode::InternalError, "Delete operation timed out")
+                            ));
+                            Resume();
+                        }
+                    });
+                }
+            }
+
+        private:
+            auto Resume() -> void {
+                if (m_resume_loop != nullptr) {
+                    m_resume_loop->queueInLoop([handle = m_handle]() mutable { handle.resume(); });
+                    return;
+                }
+                m_handle.resume();
+            }
+
+            std::shared_ptr<trantor::ConcurrentTaskQueue> m_worker_queue;
+            std::function<T()> m_task;
+            trantor::EventLoop* m_resume_loop = nullptr;
+            double m_timeout_seconds;
+            std::atomic<bool> m_completed{ false };
+            std::coroutine_handle<> m_handle;
+        };
+
+        template <typename Func>
+        auto RunBlockingFilesystemTaskWithTimeout(
+            std::shared_ptr<trantor::ConcurrentTaskQueue> worker_queue,
+            Func&& task,
+            double timeout_seconds = static_cast<double>(DEFAULT_DELETE_TIMEOUT_SECONDS)
+        ) -> ConcurrentQueueAwaiterWithTimeout<std::decay_t<std::invoke_result_t<std::decay_t<Func>&>>> {
+            using ResultType = std::decay_t<std::invoke_result_t<std::decay_t<Func>&>>;
+            return ConcurrentQueueAwaiterWithTimeout<ResultType>(
+                std::move(worker_queue),
+                std::function<ResultType()>(std::forward<Func>(task)),
+                trantor::EventLoop::getEventLoopOfCurrentThread(),
+                timeout_seconds
             );
         }
 
@@ -421,7 +501,7 @@ namespace disk::storage {
 
     auto LocalFileStorage::DeletePath(const std::filesystem::path& target_path)
         -> drogon::Task<Result<void>> {
-        auto result = co_await RunBlockingFilesystemTask(
+        auto result = co_await RunBlockingFilesystemTaskWithTimeout(
             m_worker_queue,
             [target_path]() -> Result<void> {
                 std::error_code ec;

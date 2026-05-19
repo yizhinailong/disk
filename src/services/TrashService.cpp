@@ -22,6 +22,7 @@
 #include "models/Trash.hpp"
 #include "models/Users.hpp"
 #include "services/TrashContentIdResolver.hpp"
+#include "storage/IFileStorage.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/BatchUtils.hpp"
 
@@ -37,6 +38,112 @@ namespace disk::trash {
     using drogon_model::disk::Folders;
     using drogon_model::disk::Trash;
     using drogon_model::disk::Users;
+
+    using disk::storage::IFileStorage;
+
+    constexpr size_t MAX_PARALLEL_DELETE_PATHS = 4;
+
+    [[nodiscard]]
+    auto ParallelDeletePaths(
+        disk::storage::IFileStorage* storage,
+        const std::vector<std::filesystem::path>& paths,
+        size_t max_concurrent = MAX_PARALLEL_DELETE_PATHS
+    ) -> drogon::Task<std::vector<Result<void>>> {
+        std::vector<Result<void>> results(paths.size());
+
+        if (paths.empty()) {
+            co_return results;
+        }
+
+        size_t chunk_size = std::min(max_concurrent, paths.size());
+        auto* loop = drogon::app().getLoop();
+
+        for (size_t i = 0; i < paths.size(); i += chunk_size) {
+            auto last = std::min(i + chunk_size, paths.size());
+
+            std::vector<std::shared_ptr<Result<void>>> chunk_results;
+            std::vector<std::shared_ptr<std::atomic<bool>>> chunk_dones;
+            chunk_results.reserve(last - i);
+            chunk_dones.reserve(last - i);
+
+            for (size_t j = i; j < last; ++j) {
+                auto result_ptr = std::make_shared<Result<void>>();
+                auto done_flag = std::make_shared<std::atomic<bool>>(false);
+                chunk_results.push_back(result_ptr);
+                chunk_dones.push_back(done_flag);
+
+                std::weak_ptr<Result<void>> weak_result = result_ptr;
+                std::weak_ptr<std::atomic<bool>> weak_done = done_flag;
+                auto storage_path = paths[j];
+
+                loop->queueInLoop([storage, storage_path, weak_result, weak_done]() mutable {
+                    auto task = [weak_result, weak_done, storage, storage_path]() -> drogon::Task<void> {
+                        auto r = co_await storage->DeletePath(storage_path);
+                        if (auto sp = weak_result.lock()) {
+                            *sp = std::move(r);
+                        }
+                        if (auto d = weak_done.lock()) {
+                            d->store(true);
+                        }
+                    };
+                    task();
+                });
+            }
+
+            while (true) {
+                bool all_done = true;
+                for (auto& done : chunk_dones) {
+                    if (!done->load()) {
+                        all_done = false;
+                        break;
+                    }
+                }
+                if (all_done) {
+                    break;
+                }
+                co_await drogon::sleepCoro(loop, std::chrono::milliseconds(1));
+            }
+
+            for (size_t j = i; j < last; ++j) {
+                results[j] = *chunk_results[j - i];
+            }
+        }
+
+        co_return results;
+    }
+
+    [[nodiscard]]
+    auto BatchUpdateRefCount(
+        drogon::orm::DbClientPtr db_client,
+        const std::vector<uint64_t>& content_ids
+    ) -> drogon::Task<Result<void>> {
+        if (content_ids.empty()) {
+            co_return Result<void>();
+        }
+
+        try {
+            auto chunks = BatchUtils::Chunk(content_ids, DEFAULT_BATCH_CHUNK_SIZE);
+            for (const auto& chunk : chunks) {
+                if (chunk.empty()) {
+                    continue;
+                }
+
+                auto in_clause = BatchUtils::BuildSafeNumericInClause(chunk);
+                co_await db_client->execSqlCoro(
+                    "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id IN (" + in_clause + ")"
+                );
+            }
+
+            co_return Result<void>();
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Failed to batch update ref_count: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to update file content reference count"
+            ));
+        }
+    }
 
     TrashService::TrashService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
@@ -272,6 +379,9 @@ namespace disk::trash {
             ));
         }
 
+        // Phase 1: Process all items — DB operations only, collect storage paths for batch deletion
+        std::vector<std::filesystem::path> paths_to_delete;
+
         for (auto trash_id : trash_ids) {
             BatchResultItem result;
             result.trash_id = trash_id;
@@ -302,9 +412,103 @@ namespace disk::trash {
             }
 
             if (trash_item.item_type == "file") {
-                freed_space = co_await DeleteFile(trash_item, user_id, result);
+                try {
+                    auto item_size = trash_item.item_size;
+
+                    auto content_id_result =
+                        disk::services::trash_content_internal::ResolveRequiredContentId(
+                            trash_item.content_id,
+                            trash_item.item_data
+                        );
+                    if (!content_id_result.has_value()) {
+                        LOG_WARN << "Cannot permanently delete trash file without valid content_id: trash_id="
+                                 << trash_id;
+                        result.status = "failed";
+                        result.code = static_cast<uint16_t>(content_id_result.error().code);
+                        result.message = content_id_result.error().message;
+                        result.field = "content_id";
+                        result.value = trash_item.content_id.has_value()
+                            ? std::to_string(trash_item.content_id.value()) : "NULL";
+                        response.summary.failure_count++;
+                        response.results.push_back(result);
+                        continue;
+                    }
+
+                    if (content_id_result->source ==
+                        disk::services::trash_content_internal::ContentIdSource::ItemData) {
+                        LOG_DEBUG << "Resolved legacy trash content_id from item_data during delete: trash_id="
+                                  << trash_id << ", content_id=" << content_id_result->value;
+                    }
+
+                    auto content_id = content_id_result->value;
+
+                    {
+                        try {
+                            auto decrement_result = co_await m_db_client->execSqlCoro(
+                                "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = ?",
+                                content_id
+                            );
+
+                            if (decrement_result.affectedRows() == 0) {
+                                LOG_DEBUG << "File content ref count already 0 or content missing, not decrementing: content_id="
+                                          << content_id;
+                            } else {
+                                CoroMapper<FileContents> content_mapper(m_db_client);
+                                auto content = co_await content_mapper.findOne(
+                                    Criteria(FileContents::Cols::_id, CompareOperator::EQ, content_id)
+                                );
+
+                                LOG_DEBUG << "Updated file content ref count: content_id=" << content_id
+                                          << ", ref_count=" << content.getValueOfRefCount();
+
+                                if (content.getValueOfRefCount() == 0) {
+                                    paths_to_delete.emplace_back(content.getValueOfStoragePath());
+                                }
+                            }
+                        } catch (const drogon::orm::DrogonDbException& e) {
+                            LOG_WARN << "Failed to update file content ref count: content_id="
+                                     << content_id;
+                        }
+                    }
+
+                    CoroMapper<Trash> trash_mapper(m_db_client);
+                    co_await trash_mapper.deleteByPrimaryKey(trash_id);
+
+                    result.status = "success";
+                    result.freed_space = item_size;
+                    freed_space = item_size;
+
+                    LOG_INFO << "File permanently deleted: trash_id=" << trash_id
+                             << ", freed_space=" << item_size;
+
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_ERROR << "Failed to permanently delete file: trash_id=" << trash_item.id << " - "
+                              << e.base().what();
+                    result.status = "failed";
+                    result.code = static_cast<uint16_t>(ErrorCode::InternalError);
+                    result.message = "Failed to permanently delete file";
+                    response.summary.failure_count++;
+                }
             } else if (trash_item.item_type == "folder") {
-                freed_space = co_await DeleteFolder(trash_item, user_id, result);
+                try {
+                    CoroMapper<Trash> trash_mapper(m_db_client);
+                    co_await trash_mapper.deleteByPrimaryKey(trash_item.id);
+
+                    result.status = "success";
+                    result.freed_space = trash_item.item_size;
+                    freed_space = trash_item.item_size;
+
+                    LOG_INFO << "Folder permanently deleted: trash_id=" << trash_item.id
+                             << ", freed_space=" << trash_item.item_size;
+
+                } catch (const drogon::orm::DrogonDbException& e) {
+                    LOG_ERROR << "Failed to permanently delete folder: trash_id=" << trash_item.id << " - "
+                              << e.base().what();
+                    result.status = "failed";
+                    result.code = static_cast<uint16_t>(ErrorCode::InternalError);
+                    result.message = "Failed to permanently delete folder";
+                    response.summary.failure_count++;
+                }
             } else {
                 result.status = "failed";
                 result.code = static_cast<uint16_t>(ErrorCode::ValidationFailed);
@@ -317,6 +521,30 @@ namespace disk::trash {
                 total_freed_space += freed_space;
             }
             response.results.push_back(result);
+        }
+
+        // Phase 2: Batch delete physical files in parallel (up to MAX_PARALLEL_DELETE_PATHS concurrent)
+        if (!paths_to_delete.empty()) {
+            auto* storage = disk::storage::StorageMgr::GetStorage();
+            if (storage == nullptr) {
+                LOG_WARN << "Storage manager is not initialized, skip blob cleanup: blob_count="
+                         << paths_to_delete.size();
+            } else {
+                auto delete_results = co_await ParallelDeletePaths(
+                    storage, paths_to_delete, MAX_PARALLEL_DELETE_PATHS
+                );
+                for (size_t i = 0; i < delete_results.size(); ++i) {
+                    if (!delete_results[i].has_value()) {
+                        LOG_WARN << "Failed to cleanup blob after batch delete: storage_path="
+                                 << paths_to_delete[i] << ", error_code="
+                                 << static_cast<uint32_t>(delete_results[i].error().code)
+                                 << ", error_message=" << delete_results[i].error().message;
+                    } else {
+                        LOG_INFO << "Blob cleanup completed after batch delete: storage_path="
+                                 << paths_to_delete[i];
+                    }
+                }
+            }
         }
 
         if (total_freed_space > 0) {
@@ -417,7 +645,7 @@ namespace disk::trash {
                         continue;
                     }
 
-                    std::vector<std::string> zero_ref_paths;
+                    std::vector<std::filesystem::path> zero_ref_paths;
                     if (!content_ids.empty()) {
                         std::sort(content_ids.begin(), content_ids.end());
                         content_ids.erase(std::unique(content_ids.begin(), content_ids.end()), content_ids.end());
@@ -433,7 +661,7 @@ namespace disk::trash {
 
                         for (const auto& row : content_rows) {
                             if (row["ref_count"].as<uint32_t>() == 0) {
-                                zero_ref_paths.push_back(row["storage_path"].as<std::string>());
+                                zero_ref_paths.emplace_back(row["storage_path"].as<std::string>());
                             }
                         }
                     }
@@ -455,16 +683,11 @@ namespace disk::trash {
                             LOG_WARN << "Storage manager is not initialized, skip blob cleanup for chunk: user_id="
                                      << user_id << ", blob_count=" << zero_ref_paths.size();
                         } else {
-                            for (const auto& path : zero_ref_paths) {
-                                auto delete_blob_result = co_await storage->DeletePath(path);
-                                if (!delete_blob_result.has_value()) {
-                                    LOG_WARN << "Failed to cleanup blob after DeleteAll chunk: storage_path="
-                                             << path << ", error_code="
-                                             << static_cast<uint32_t>(delete_blob_result.error().code)
-                                             << ", error_message=" << delete_blob_result.error().message;
-                                } else {
-                                    LOG_INFO << "Blob cleanup completed after DeleteAll chunk: storage_path="
-                                             << path;
+                            auto blob_results = co_await ParallelDeletePaths(storage, zero_ref_paths);
+                            for (size_t i = 0; i < blob_results.size(); ++i) {
+                                if (!blob_results[i].has_value()) {
+                                    LOG_WARN << "Failed to cleanup blob after DeleteAll: path=" << zero_ref_paths[i]
+                                             << ", error=" << blob_results[i].error().message;
                                 }
                             }
                         }

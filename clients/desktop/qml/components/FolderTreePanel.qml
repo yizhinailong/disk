@@ -57,7 +57,11 @@ Item {
     }
 
     function scheduleCurrentFolderSync() {
-        Qt.callLater(syncCurrentFolderState)
+        if (syncDebounceTimer.running) {
+            syncDebounceTimer.restart()
+        } else {
+            syncDebounceTimer.start()
+        }
     }
 
     function syncCurrentFolderState() {
@@ -82,13 +86,11 @@ Item {
         if (!currentIndex.valid) {
             folderTreeView.selectionModel.clearSelection()
             folderTreeView.selectionModel.clearCurrentIndex()
-            folderTreeView.forceLayout()
             return
         }
 
         folderTreeView.expandToIndex(currentIndex)
         folderTreeView.selectionModel.setCurrentIndex(currentIndex, ItemSelectionModel.NoUpdate)
-        folderTreeView.forceLayout()
 
         var currentRow = folderTreeView.rowAtIndex(currentIndex)
         if (currentRow >= 0) {
@@ -120,6 +122,13 @@ Item {
         function onModelReset() {
             root.scheduleCurrentFolderSync()
         }
+    }
+
+    Timer {
+        id: syncDebounceTimer
+        interval: 50
+        repeat: false
+        onTriggered: syncCurrentFolderState()
     }
 
     ColumnLayout {

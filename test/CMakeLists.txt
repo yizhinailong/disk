@@ -25,6 +25,7 @@ set(TEST_SOURCES
     services/TokenServiceRevocation_test.cpp
     services/TrashService_test.cpp
     services/TrashServiceBatch_test.cpp
+    services/ParallelDeletePaths_test.cpp
     services/UserService_test.cpp
     services/CleanupService_test.cpp
     services/SystemService_test.cpp

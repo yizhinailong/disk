@@ -70,6 +70,12 @@ namespace disk::utils {
                 LOG_INFO << "Loaded assemble_buffer_size_bytes from config: " << m_assemble_buffer_size_bytes;
             }
 
+            // 从配置读取 file_io_threads
+            m_file_io_threads = static_cast<uint32_t>(app_config.get("file_io_threads", 0).asUInt());
+            if (m_file_io_threads > 0) {
+                LOG_INFO << "Loaded file_io_threads from config: " << m_file_io_threads;
+            }
+
             // 从配置读取 upload_rate_limit_per_minute
             if (app_config.isMember("upload_rate_limit_per_minute")) {
                 m_upload_rate_limit_per_minute = app_config["upload_rate_limit_per_minute"].asInt();
@@ -157,6 +163,10 @@ namespace disk::utils {
 
     auto ConfigMgr::GetAssembleBufferSizeBytes() const noexcept -> uint32_t {
         return m_assemble_buffer_size_bytes;
+    }
+
+    auto ConfigMgr::GetFileIoThreads() const noexcept -> uint32_t {
+        return m_file_io_threads;
     }
 
     auto ConfigMgr::GetUploadRateLimitPerMinute() const noexcept -> int {

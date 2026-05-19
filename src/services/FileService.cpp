@@ -1932,6 +1932,7 @@ namespace disk::file {
         LOG_DEBUG << "Starting delete file: file_ids.size()=" << request.file_ids.size()
                   << ", user_id=" << user_id;
 
+        auto delete_start = std::chrono::steady_clock::now();
         int deleted_count = 0;
 
         auto chunks = BatchUtils::Chunk(request.file_ids, DEFAULT_BATCH_CHUNK_SIZE);
@@ -2040,7 +2041,10 @@ namespace disk::file {
             }
         }
 
-        LOG_INFO << "File delete completed: deleted_count=" << deleted_count;
+        auto delete_elapsed = std::chrono::steady_clock::now() - delete_start;
+        LOG_INFO << "FileService::Delete completed: deleted_count=" << deleted_count
+                 << ", elapsed_ms="
+                 << std::chrono::duration_cast<std::chrono::milliseconds>(delete_elapsed).count();
 
         if (deleted_count == 0) {
             co_return std::unexpected(
