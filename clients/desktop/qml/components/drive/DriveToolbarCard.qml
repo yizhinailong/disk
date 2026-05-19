@@ -41,6 +41,7 @@ Rectangle {
 
             Button {
                 text: "刷新"
+                visible: !page.isSharedMode
                 highlighted: true
                 onClicked: page.refreshCurrentView()
             }
@@ -48,7 +49,7 @@ Rectangle {
             Button {
                 objectName: "sharedCreateButton"
                 text: "创建分享"
-                visible: (page.isMyFilesMode && page.selectedItemId !== "") || page.isSharedMode
+                visible: page.isMyFilesMode && page.selectedItemId !== ""
                 enabled: !page.shareMutationInFlight
                 highlighted: true
                 onClicked: page.openCreateShareDialog()

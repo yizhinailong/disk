@@ -803,15 +803,15 @@ TestCase {
                "Download button is gated by isMyFilesMode")
     }
 
-    function test_drive_browser_refresh_button_is_always_visible() {
+    function test_drive_browser_refresh_button_is_not_myfiles_only() {
         var source = readDriveCompositeSource()
 
         var refreshIdx = source.indexOf('text: "刷新"')
         verify(refreshIdx !== -1, "Has Refresh button")
-        var refreshBlock = source.substring(refreshIdx, refreshIdx + 150)
+        var refreshBlock = source.substring(refreshIdx, refreshIdx + 180)
         verify(refreshBlock.indexOf("visible: page.isMyFilesMode") === -1
                && refreshBlock.indexOf("visible: root.isMyFilesMode") === -1,
-               "Refresh button is NOT gated by isMyFilesMode (always visible)")
+               "Refresh button is not gated to My Files only")
     }
 
     function test_drive_browser_status_card_uses_mode_aware_functions() {
@@ -870,8 +870,14 @@ TestCase {
         verify(source.indexOf('objectName: "sharedCreateButton"') !== -1,
                "Toolbar exposes a create-share action")
         var buttonBlock = source.substring(source.indexOf('"sharedCreateButton"'), source.indexOf('"sharedCreateButton"') + 500)
-        verify(buttonBlock.indexOf("isMyFilesMode") !== -1,
-               "Create share button visibility includes isMyFilesMode")
+        verify(buttonBlock.indexOf("page.isMyFilesMode") !== -1,
+               "Create share button visibility is gated by My Files mode")
+        verify(buttonBlock.indexOf("page.isSharedMode") === -1,
+               "Create share button is not visible in Shared mode")
+        verify(source.indexOf('objectName: "sharedRefreshButton"') !== -1,
+               "Shared view exposes a top-level refresh action")
+        verify(source.indexOf("page.refreshSharedList()") !== -1,
+               "Shared refresh action routes through refreshSharedList")
         verify(source.indexOf('objectName: "sharedCancelSelectedButton"') !== -1,
                "Shared toolbar exposes a cancel-selected action")
         verify(source.indexOf('objectName: "sharedBatchResultListView"') !== -1,

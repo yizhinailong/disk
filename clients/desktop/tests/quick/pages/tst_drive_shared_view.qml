@@ -51,8 +51,8 @@ TestCase {
     function test_copy_button_references_clipboard() {
         var source = readSharedViewSource()
 
-        verify(source.indexOf("clipboard") !== -1,
-               "Source references clipboard for copy functionality")
+        verify(source.indexOf("Clipboard") !== -1,
+               "Source references Clipboard for copy functionality")
         verify(source.indexOf("setText") !== -1,
                "Source calls setText on clipboard")
     }
@@ -93,6 +93,19 @@ TestCase {
         var timerPattern = /interval:\s*2000/
         verify(timerPattern.test(source),
                "Copy feedback timer resets after 2000ms")
+    }
+
+    function test_shared_view_source_has_top_right_refresh_button() {
+        var source = readSharedViewSource()
+
+        var spacerIdx = source.indexOf("Layout.fillWidth: true")
+        var refreshIdx = source.indexOf('objectName: "sharedRefreshButton"')
+        verify(refreshIdx !== -1,
+               "Source contains a shared refresh button with a stable objectName")
+        verify(spacerIdx !== -1 && spacerIdx < refreshIdx,
+               "Shared refresh button is placed after a fill-width spacer for right alignment")
+        verify(source.indexOf("page.refreshSharedList()") !== -1,
+               "Shared refresh button refreshes the share list directly")
     }
 
     // ── Visitor entry section source contract tests ─────────────────────
@@ -226,6 +239,19 @@ TestCase {
         verify(copyBtn !== null, "Copy button found")
         verify(copyBtn.text.length > 0,
                "Copy button has visible text label")
+    }
+
+    function test_shared_refresh_button_exists_at_runtime() {
+        var page = createDrivePage()
+
+        page.activateViewMode("shared")
+        wait(100)
+
+        var refreshBtn = findByObjectName(page, "sharedRefreshButton")
+        verify(refreshBtn !== null,
+               "Shared refresh button exists at runtime")
+        compare(refreshBtn.text, "刷新",
+                "Shared refresh button has correct label")
     }
 
     function findByObjectName(item, objectName) {
