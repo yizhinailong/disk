@@ -168,13 +168,6 @@ PageStateView {
                 Item {
                     Layout.fillWidth: true
                 }
-
-                Button {
-                    objectName: "sharedRefreshButton"
-                    text: "刷新"
-                    highlighted: true
-                    onClicked: page.refreshSharedList()
-                }
             }
 
             RowLayout {

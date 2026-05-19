@@ -874,10 +874,6 @@ TestCase {
                "Create share button visibility is gated by My Files mode")
         verify(buttonBlock.indexOf("page.isSharedMode") === -1,
                "Create share button is not visible in Shared mode")
-        verify(source.indexOf('objectName: "sharedRefreshButton"') !== -1,
-               "Shared view exposes a top-level refresh action")
-        verify(source.indexOf("page.refreshSharedList()") !== -1,
-               "Shared refresh action routes through refreshSharedList")
         verify(source.indexOf('objectName: "sharedCancelSelectedButton"') !== -1,
                "Shared toolbar exposes a cancel-selected action")
         verify(source.indexOf('objectName: "sharedBatchResultListView"') !== -1,

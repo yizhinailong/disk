@@ -1,10 +1,10 @@
-#include <QClipboard>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
 
 #include "app/Application.hpp"
+#include "utils/ClipboardBridge.hpp"
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
@@ -15,11 +15,11 @@ int main(int argc, char* argv[]) {
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     disk::app::Application diskApp;
+    disk::utils::ClipboardBridge clipboard;
 
     QQmlApplicationEngine engine;
 
-    engine.rootContext()->setContextProperty(
-        QStringLiteral("Clipboard"), QGuiApplication::clipboard());
+    engine.rootContext()->setContextProperty(QStringLiteral("Clipboard"), &clipboard);
 
     diskApp.Initialize(&engine);
 

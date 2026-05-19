@@ -41,7 +41,6 @@ Rectangle {
 
             Button {
                 text: "刷新"
-                visible: !page.isSharedMode
                 highlighted: true
                 onClicked: page.refreshCurrentView()
             }
