@@ -350,7 +350,7 @@ PageStateView {
                                 text: copyFeedbackActive ? "✓" : "复制链接"
                                 flat: true
                                 onClicked: {
-                                    QGuiApplication.clipboard().setText(model.shareLink)
+                                    Clipboard.setText(model.shareLink)
                                     copyFeedbackActive = true
                                     copyFeedbackTimer.start()
                                 }

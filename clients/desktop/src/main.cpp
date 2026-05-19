@@ -1,3 +1,4 @@
+#include <QClipboard>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -18,7 +19,7 @@ int main(int argc, char* argv[]) {
     QQmlApplicationEngine engine;
 
     engine.rootContext()->setContextProperty(
-        QStringLiteral("QGuiApplication"), &app);
+        QStringLiteral("Clipboard"), QGuiApplication::clipboard());
 
     diskApp.Initialize(&engine);
 

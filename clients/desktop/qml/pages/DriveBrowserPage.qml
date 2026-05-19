@@ -1552,7 +1552,7 @@ Page {
                         text: successCopyFeedback ? "✓ 已复制" : "复制链接"
                         onClicked: {
                             if (root.createdShareLink !== "") {
-                                QGuiApplication.clipboard().setText(root.createdShareLink)
+                                Clipboard.setText(root.createdShareLink)
                                 successCopyFeedback = true
                                 successCopyTimer.start()
                             }
