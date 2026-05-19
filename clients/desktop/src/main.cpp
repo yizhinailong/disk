@@ -17,6 +17,9 @@ int main(int argc, char* argv[]) {
 
     QQmlApplicationEngine engine;
 
+    engine.rootContext()->setContextProperty(
+        QStringLiteral("QGuiApplication"), &app);
+
     diskApp.Initialize(&engine);
 
     QObject::connect(

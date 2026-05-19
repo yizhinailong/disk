@@ -197,6 +197,7 @@ function activateIndependentPage(itemId) {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 104
+                    Layout.minimumHeight: 104
                     color: root.railPanelColor
                     radius: 10
                     border.color: root.railBorderColor
@@ -224,7 +225,7 @@ function activateIndependentPage(itemId) {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    Layout.minimumHeight: 200
+                    Layout.minimumHeight: 0
                     objectName: "ownerNavigationPanel"
                     color: root.railPanelColor
                     radius: 10
@@ -291,6 +292,9 @@ function activateIndependentPage(itemId) {
 
                 OwnerStorageCard {
                     objectName: "ownerStorageCard"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 104
+                    Layout.maximumHeight: 104
                     usageText: root.formatBytes(root.storageUsedBytes) + " / "
                                + root.formatBytes(root.storageTotalBytes)
                     usageRatio: root.storageUsageRatio
@@ -306,6 +310,8 @@ function activateIndependentPage(itemId) {
                 Rectangle {
                     objectName: "ownerSessionCard"
                     Layout.fillWidth: true
+                    Layout.preferredHeight: 72
+                    Layout.maximumHeight: 72
                     color: root.railPanelColor
                     radius: 10
                     border.color: root.railBorderColor
