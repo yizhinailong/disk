@@ -76,6 +76,7 @@ readonly property var independentPageNavItems: [
     ]
     property string activeDestination: "drive"
     property string activeDriveViewMode: "myfiles"
+    property Item driveHostItem: DriveBrowserPage {}
 
     function destinationForPageComponent(pageComponent) {
         if (pageComponent === transferCenterPageComponent)
@@ -94,17 +95,14 @@ readonly property var independentPageNavItems: [
     function showDriveViewMode(viewMode) {
         root.activeDriveViewMode = viewMode || "myfiles"
         root.activeDestination = "drive"
-        // Reuse the mounted drive host when the current page already supports
-        // internal view-mode switching (i.e. we are already on PAGE-DRIVE).
         if (stackView.currentItem
             && typeof stackView.currentItem.activateViewMode === "function") {
             stackView.currentItem.activateViewMode(root.activeDriveViewMode)
             return
         }
-        // Entering Drive from a non-drive page (Transfers / Settings).
-        stackView.replace(driveBrowserPageComponent)
-        if (stackView.currentItem && typeof stackView.currentItem.activateViewMode === "function") {
-            stackView.currentItem.activateViewMode(root.activeDriveViewMode)
+        stackView.replace(root.driveHostItem)
+        if (stackView.currentItem && typeof stackView.currentItem.reenterViewMode === "function") {
+            stackView.currentItem.reenterViewMode(root.activeDriveViewMode)
         }
     }
 
@@ -432,14 +430,9 @@ function activateIndependentPage(itemId) {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 
-                initialItem: DriveBrowserPage {}
+                initialItem: root.driveHostItem
             }
         }
-    }
-
-    Component {
-        id: driveBrowserPageComponent
-        DriveBrowserPage {}
     }
 
     Component {

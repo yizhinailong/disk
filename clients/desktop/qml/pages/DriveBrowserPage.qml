@@ -1172,6 +1172,8 @@ Page {
     }
 
     function refreshCurrentFolder() {
+        root.keepMyFilesContentWhileLoading = root.preserveMyFilesContentOnNextRefresh && root.hasCachedMyFilesContent()
+        root.preserveMyFilesContentOnNextRefresh = false
         clearSelection()
         shellController.setPageState("loading")
         driveManager.loadFolderTree()
@@ -1181,8 +1183,6 @@ Page {
         } else {
             driveManager.listFiles(currentFolderId, 1, 50, root.currentSort)
         }
-        root.keepMyFilesContentWhileLoading = root.preserveMyFilesContentOnNextRefresh && root.hasCachedMyFilesContent()
-        root.preserveMyFilesContentOnNextRefresh = false
     }
 
     function refreshSharedList() {
@@ -1213,6 +1213,28 @@ Page {
         currentFolderId = nextFolderId
         root.searchQuery = ""
         refreshCurrentFolder()
+    }
+
+    function reenterViewMode(mode) {
+        var nextMode = String(mode || "myfiles")
+        if (root.currentViewMode !== nextMode) {
+            root.activateViewMode(nextMode)
+            return
+        }
+        if (nextMode === "myfiles") {
+            root.preserveMyFilesContentForNextRefresh()
+            root.refreshCurrentFolder()
+            return
+        }
+        if (nextMode === "shared") {
+            root.preserveSharedContentForNextRefresh()
+            root.refreshSharedList()
+            return
+        }
+        if (nextMode === "trash") {
+            root.preserveTrashContentForNextRefresh()
+            root.refreshTrashList()
+        }
     }
 
     function activateViewMode(mode) {

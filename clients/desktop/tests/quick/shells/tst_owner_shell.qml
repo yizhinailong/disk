@@ -287,8 +287,8 @@ TestCase {
     function test_owner_shell_has_exactly_three_top_level_page_components() {
         var source = readSource("shells/OwnerShell.qml")
 
-        verify(source.indexOf("id: driveBrowserPageComponent") !== -1,
-               "Has driveBrowserPageComponent (PAGE-DRIVE)")
+        verify(source.indexOf("property Item driveHostItem: DriveBrowserPage {}") !== -1,
+               "Has stable driveHostItem (PAGE-DRIVE)")
         verify(source.indexOf("id: transferCenterPageComponent") !== -1,
                "Has transferCenterPageComponent (PAGE-TRANSFER)")
         verify(source.indexOf("id: settingsPageComponent") !== -1,
@@ -369,7 +369,7 @@ TestCase {
         }
     }
 
-    function test_owner_shell_drive_host_replaced_when_entering_from_transfers() {
+    function test_owner_shell_drive_host_preserved_when_entering_from_transfers() {
         var shell = createOwnerShell()
         var stackView = waitForObject(shell, "ownerStackView")
         var transfersButton = waitForObject(shell, "ownerNavTransfersButton")
@@ -386,19 +386,17 @@ TestCase {
         clickCenter(sharesButton)
         waitForDriveMode(stackView, "shared")
         compare(shell.activeDestination, "drive", "Returned to drive destination")
-        verify(stackView.currentItem !== originalDriveHost,
-               "Drive host is a fresh instance after re-entering from Transfers")
+        verify(stackView.currentItem === originalDriveHost,
+               "Drive host is preserved after re-entering from Transfers")
 
-        // Once mounted, the new host should be reused for subsequent switches
-        var secondDriveHost = stackView.currentItem
         var myFilesButton = waitForObject(shell, "ownerNavMyFilesButton")
         clickCenter(myFilesButton)
         waitForDriveMode(stackView, "myfiles")
-        verify(stackView.currentItem === secondDriveHost,
-               "Second drive host is reused after re-entry from Transfers")
+        verify(stackView.currentItem === originalDriveHost,
+               "Original drive host is reused after re-entry from Transfers")
     }
 
-    function test_owner_shell_drive_host_replaced_when_entering_from_settings() {
+    function test_owner_shell_drive_host_preserved_when_entering_from_settings() {
         var shell = createOwnerShell()
         var stackView = waitForObject(shell, "ownerStackView")
         var settingsButton = waitForObject(shell, "ownerNavSettingsButton")
@@ -412,15 +410,14 @@ TestCase {
         clickCenter(myFilesButton)
         waitForDriveMode(stackView, "myfiles")
         compare(shell.activeDestination, "drive", "Returned to drive destination")
-        verify(stackView.currentItem !== originalDriveHost,
-               "Drive host is a fresh instance after re-entering from Settings")
+        verify(stackView.currentItem === originalDriveHost,
+               "Drive host is preserved after re-entering from Settings")
 
-        var secondDriveHost = stackView.currentItem
         var trashButton = waitForObject(shell, "ownerNavTrashButton")
         clickCenter(trashButton)
         waitForDriveMode(stackView, "trash")
-        verify(stackView.currentItem === secondDriveHost,
-               "Second drive host is reused after re-entry from Settings")
+        verify(stackView.currentItem === originalDriveHost,
+               "Original drive host is reused after re-entry from Settings")
     }
 
     function test_owner_shell_switches_myfiles_shared_myfiles_with_one_drive_host_and_content_swap() {
@@ -639,10 +636,14 @@ TestCase {
                "Has showDriveViewMode function for FLOW-VIEW-SWITCH")
         verify(source.indexOf("stackView.replace(pageComponent)") !== -1,
                "showPage replaces StackView content")
-        verify(source.indexOf("stackView.replace(driveBrowserPageComponent)") !== -1,
-               "showDriveViewMode replaces StackView with DriveBrowserPage when entering from non-drive page")
+        verify(source.indexOf("property Item driveHostItem: DriveBrowserPage {}") !== -1,
+               "OwnerShell keeps a stable DriveBrowserPage host")
+        verify(source.indexOf("stackView.replace(root.driveHostItem)") !== -1,
+               "showDriveViewMode restores the preserved drive host when entering from non-drive page")
         verify(source.indexOf("typeof stackView.currentItem.activateViewMode === \"function\"") !== -1,
-               "showDriveViewMode checks for activateViewMode before deciding to reuse or replace")
+               "showDriveViewMode uses activateViewMode when already on the drive host")
+        verify(source.indexOf("typeof stackView.currentItem.reenterViewMode === \"function\"") !== -1,
+               "showDriveViewMode uses reenterViewMode after restoring the drive host")
     }
 
     function test_owner_shell_tracks_three_top_level_destinations() {

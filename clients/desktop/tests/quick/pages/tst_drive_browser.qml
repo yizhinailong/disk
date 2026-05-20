@@ -457,12 +457,16 @@ TestCase {
         var refreshStart = source.indexOf("function refreshCurrentFolder()")
         verify(refreshStart !== -1, "Has refreshCurrentFolder helper")
 
-        var refreshBody = source.substring(refreshStart, refreshStart + 400)
+        var refreshBody = source.substring(refreshStart, refreshStart + 500)
 
         verify(refreshBody.indexOf("clearSelection()") !== -1,
                "refreshCurrentFolder clears selection first")
         verify(refreshBody.indexOf('setPageState("loading")') !== -1,
                "refreshCurrentFolder sets loading state")
+        verify(refreshBody.indexOf("keepMyFilesContentWhileLoading") !== -1,
+               "refreshCurrentFolder decides whether to keep existing content visible")
+        verify(refreshBody.indexOf("keepMyFilesContentWhileLoading") < refreshBody.indexOf('setPageState("loading")'),
+               "refreshCurrentFolder computes content preservation before entering loading")
         verify(refreshBody.indexOf("driveManager.loadFolderTree()") !== -1,
                 "refreshCurrentFolder loads the folder tree")
         verify(refreshBody.indexOf("driveManager.listFiles(currentFolderId") !== -1
@@ -995,6 +999,29 @@ TestCase {
                "activateViewMode has a dedicated trash-mode branch")
         verify(activateBody.indexOf("root.refreshTrashList()") !== -1,
                "activateViewMode triggers trashManager-backed refresh for trash mode")
+    }
+
+    function test_drive_browser_has_reenterViewMode_for_preserved_host_reentry() {
+        var source = readDriveBrowserSource()
+
+        var reenterStart = source.indexOf("function reenterViewMode(mode)")
+        verify(reenterStart !== -1, "Has reenterViewMode for shell-level host reuse")
+        var reenterBody = source.substring(reenterStart, reenterStart + 900)
+
+        verify(reenterBody.indexOf("root.activateViewMode(nextMode)") !== -1,
+               "reenterViewMode delegates to activateViewMode when switching modes")
+        verify(reenterBody.indexOf("root.preserveMyFilesContentForNextRefresh()") !== -1,
+               "reenterViewMode preserves My Files content before same-mode refresh")
+        verify(reenterBody.indexOf("root.refreshCurrentFolder()") !== -1,
+               "reenterViewMode refreshes My Files when re-entering the same mode")
+        verify(reenterBody.indexOf("root.preserveSharedContentForNextRefresh()") !== -1,
+               "reenterViewMode preserves Shared content before same-mode refresh")
+        verify(reenterBody.indexOf("root.refreshSharedList()") !== -1,
+               "reenterViewMode refreshes Shared when re-entering the same mode")
+        verify(reenterBody.indexOf("root.preserveTrashContentForNextRefresh()") !== -1,
+               "reenterViewMode preserves Trash content before same-mode refresh")
+        verify(reenterBody.indexOf("root.refreshTrashList()") !== -1,
+               "reenterViewMode refreshes Trash when re-entering the same mode")
     }
 
     function test_drive_browser_folder_navigator_gated_by_myfiles() {

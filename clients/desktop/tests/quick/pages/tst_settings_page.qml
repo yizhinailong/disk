@@ -29,6 +29,13 @@ TestCase {
                "Has test connection button")
     }
 
+    function test_settings_page_has_stable_page_background() {
+        var source = readSettingsSource()
+
+        verify(source.indexOf("background: Rectangle { color: theme.pageBackgroundColor }") !== -1,
+               "Settings page uses the workspace page background")
+    }
+
     function test_settings_page_does_not_add_avatar_ui() {
         var source = readSettingsSource()
 

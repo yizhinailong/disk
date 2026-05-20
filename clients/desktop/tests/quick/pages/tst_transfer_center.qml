@@ -51,6 +51,13 @@ TestCase {
         verify(source.indexOf("model.filename") !== -1, "References model.filename")
     }
 
+    function test_transfer_center_uses_workspace_page_background() {
+        var source = readTransferCenterSource()
+
+        verify(source.indexOf("readonly property color pageBackground: theme.pageBackgroundColor") !== -1,
+               "Transfer center uses the workspace page background")
+    }
+
     function test_transfer_center_has_progress_bar() {
         var source = readTransferCenterSource()
 

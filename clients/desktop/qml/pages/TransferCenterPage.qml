@@ -9,7 +9,7 @@ Page {
 
     WorkspaceTheme { id: theme }
 
-    readonly property color pageBackground: theme.panelBackgroundColor
+    readonly property color pageBackground: theme.pageBackgroundColor
     readonly property color rowAltColor: theme.panelMutedFillColor
     readonly property color successColor: theme.successChipColor
     readonly property color errorColor: theme.errorTextColor

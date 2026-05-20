@@ -9,6 +9,8 @@ Page {
 
     WorkspaceTheme { id: theme }
 
+    background: Rectangle { color: theme.pageBackgroundColor }
+
     PageStateView {
         id: stateView
         anchors.fill: parent
