@@ -162,12 +162,15 @@ namespace disk::folder {
 
             auto subtree_result = co_await m_db_client->execSqlCoro(
                 "WITH RECURSIVE folder_tree AS ("
-                "SELECT id, parent_id, name, path, depth FROM folders WHERE id = ? AND user_id = ? "
+                "SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at "
+                "FROM folders WHERE id = ? AND user_id = ? "
                 "UNION ALL "
-                "SELECT f.id, f.parent_id, f.name, f.path, f.depth "
+                "SELECT f.id, f.user_id, f.parent_id, f.name, f.path, f.depth, "
+                "f.item_count, f.created_at, f.updated_at "
                 "FROM folders f INNER JOIN folder_tree ft ON f.parent_id = ft.id "
                 "WHERE f.user_id = ?) "
-                "SELECT id, parent_id, name, path, depth FROM folder_tree ORDER BY depth ASC, id ASC",
+                "SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at "
+                "FROM folder_tree ORDER BY depth ASC, id ASC",
                 folder_id,
                 user_id,
                 user_id
