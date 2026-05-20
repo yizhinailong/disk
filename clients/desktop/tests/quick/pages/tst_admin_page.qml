@@ -21,6 +21,7 @@ TestCase {
             readQmlSource("components/admin/OperationLogTab.qml"),
             readQmlSource("components/admin/SystemTab.qml"),
             readQmlSource("components/admin/UserDetailDialog.qml"),
+            readQmlSource("components/admin/OperationLogDetailDialog.qml"),
             readQmlSource("components/admin/ConfirmDialog.qml")
         ].join("\n")
     }
@@ -167,6 +168,10 @@ TestCase {
         verify(source.indexOf("ListOperationLogs") !== -1, "Calls ListOperationLogs")
         verify(source.indexOf("operationLogModel") !== -1, "Binds operationLogModel")
         verify(source.indexOf("onOperationLogPaginationLoaded") !== -1, "Handles log pagination")
+        verify(source.indexOf("OperationLogDetailDialog") !== -1, "Has operation log detail dialog")
+        verify(source.indexOf("查看详情") !== -1, "Has view detail action")
+        verify(source.indexOf("openLogDetail") !== -1, "Opens operation log detail dialog")
+        verify(source.indexOf("details = details || \"\"") !== -1, "Passes full detail text to dialog")
     }
 
     function test_system_tab_shows_connection_status() {

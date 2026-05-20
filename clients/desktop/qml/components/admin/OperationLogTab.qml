@@ -42,6 +42,20 @@ Item {
         }
     }
 
+    function openLogDetail(logId, action, targetType, targetId, targetName, details, ipAddress, createdAt) {
+        operationLogDetailDialog.logId = Number(logId || 0)
+        operationLogDetailDialog.actionName = root.actionText(action)
+        operationLogDetailDialog.rawAction = action || ""
+        operationLogDetailDialog.targetTypeName = root.targetTypeText(targetType)
+        operationLogDetailDialog.rawTargetType = targetType || ""
+        operationLogDetailDialog.targetId = Number(targetId || 0)
+        operationLogDetailDialog.targetName = targetName || ""
+        operationLogDetailDialog.details = details || ""
+        operationLogDetailDialog.ipAddress = ipAddress || ""
+        operationLogDetailDialog.createdAt = createdAt || ""
+        operationLogDetailDialog.open()
+    }
+
     function goToPage(page) {
         if (page < 1 || page > root.totalPages) {
             return
@@ -102,6 +116,7 @@ Item {
                 Label { Layout.fillWidth: true; text: qsTr("对象"); font.bold: true; color: theme.tableHeaderTextColor }
                 Label { Layout.preferredWidth: 160; text: qsTr("IP 地址"); font.bold: true; color: theme.tableHeaderTextColor }
                 Label { Layout.preferredWidth: 180; text: qsTr("时间"); font.bold: true; color: theme.tableHeaderTextColor }
+                Label { Layout.preferredWidth: 90; text: qsTr("操作"); font.bold: true; color: theme.tableHeaderTextColor }
             }
         }
 
@@ -130,6 +145,20 @@ Item {
                 implicitHeight: rowLayout.implicitHeight + 16
                 color: logRowDelegate.index % 2 === 0 ? theme.panelBackgroundColor : theme.panelMutedFillColor
                 radius: theme.innerPanelRadius
+
+                MouseArea {
+                    anchors.fill: parent
+                    onDoubleClicked: root.openLogDetail(
+                        logRowDelegate.id,
+                        logRowDelegate.action,
+                        logRowDelegate.targetType,
+                        logRowDelegate.targetId,
+                        logRowDelegate.targetName,
+                        logRowDelegate.details,
+                        logRowDelegate.ipAddress,
+                        logRowDelegate.createdAt
+                    )
+                }
 
                 RowLayout {
                     id: rowLayout
@@ -194,6 +223,21 @@ Item {
                         color: theme.tableBodyTertiaryTextColor
                         elide: Text.ElideRight
                     }
+
+                    Button {
+                        Layout.preferredWidth: 90
+                        text: qsTr("查看详情")
+                        onClicked: root.openLogDetail(
+                            logRowDelegate.id,
+                            logRowDelegate.action,
+                            logRowDelegate.targetType,
+                            logRowDelegate.targetId,
+                            logRowDelegate.targetName,
+                            logRowDelegate.details,
+                            logRowDelegate.ipAddress,
+                            logRowDelegate.createdAt
+                        )
+                    }
                 }
             }
 
@@ -228,6 +272,11 @@ Item {
                 onClicked: root.goToPage(root.currentPage + 1)
             }
         }
+    }
+
+    OperationLogDetailDialog {
+        id: operationLogDetailDialog
+        anchors.centerIn: Overlay.overlay
     }
 
     Connections {

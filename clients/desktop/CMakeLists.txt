@@ -148,6 +148,7 @@ set(DESKTOP_QML_FILES
     qml/components/owner/OwnerAccountCard.qml
     qml/components/owner/OwnerStorageCard.qml
     qml/components/admin/ConfirmDialog.qml
+    qml/components/admin/OperationLogDetailDialog.qml
     qml/components/admin/ShareDetailDialog.qml
     qml/components/admin/UserDetailDialog.qml
     qml/components/admin/UserTab.qml
