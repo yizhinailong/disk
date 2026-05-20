@@ -68,6 +68,7 @@ target_compile_definitions(desktop-unit-tests PRIVATE
 
 target_link_libraries(desktop-unit-tests PRIVATE
     Qt6::Core
+    Qt6::Concurrent
     Qt6::Gui
     Qt6::Quick
     Qt6::Network
