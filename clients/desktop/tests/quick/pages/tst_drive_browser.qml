@@ -156,6 +156,8 @@ TestCase {
                "Defines the owner download chooser as a dedicated component")
         verify(source.indexOf("fileMode: Platform.FileDialog.SaveFile") !== -1,
                "Uses a save-file chooser for owner downloads")
+        verify(source.indexOf("currentFile: root.pendingOwnerDownloadFilename") !== -1,
+               "Defaults the owner download save-file chooser to the original filename")
         verify(source.indexOf("onClicked: page.openOwnerDownloadFileChooser(page.selectedItemId, page.selectedItemName)") !== -1
                || source.indexOf("onClicked: root.openOwnerDownloadFileChooser(root.selectedItemId, root.selectedItemName)") !== -1,
                "Download toolbar action opens the owner save-file chooser")
