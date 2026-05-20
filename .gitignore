@@ -7,4 +7,4 @@ CMakeUserPresets.json
 .sisyphus
 .qtcreator
 output
-.claude/worktree
+.claude/worktrees
