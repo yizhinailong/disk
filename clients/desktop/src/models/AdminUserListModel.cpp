@@ -21,6 +21,7 @@ namespace disk::desktop {
         item.status = json.value("status").toInt(1);
         item.storage_quota = static_cast<qint64>(json.value("storage_quota").toDouble(0));
         item.storage_used = static_cast<qint64>(json.value("storage_used").toDouble(0));
+        item.storage_reserved = static_cast<qint64>(json.value("storage_reserved").toDouble(0));
         item.created_at = json.value("created_at").toString();
         item.last_login_at = json.value("last_login_at").toString();
         return item;
@@ -50,9 +51,10 @@ namespace disk::desktop {
             case NicknameRole     : return item.nickname;
             case RoleRole         : return item.role;
             case StatusRole       : return item.status;
-            case StorageQuotaRole : return item.storage_quota;
-            case StorageUsedRole  : return item.storage_used;
-            case CreatedAtRole    : return item.created_at;
+            case StorageQuotaRole    : return item.storage_quota;
+            case StorageUsedRole     : return item.storage_used;
+            case StorageReservedRole : return item.storage_reserved;
+            case CreatedAtRole       : return item.created_at;
             case LastLoginAtRole   : return item.last_login_at;
             default               : return {};
         }
@@ -66,9 +68,10 @@ namespace disk::desktop {
             { NicknameRole,     "nickname" },
             { RoleRole,         "role" },
             { StatusRole,       "status" },
-            { StorageQuotaRole, "storageQuota" },
-            { StorageUsedRole,  "storageUsed" },
-            { CreatedAtRole,    "createdAt" },
+            { StorageQuotaRole,    "storageQuota" },
+            { StorageUsedRole,     "storageUsed" },
+            { StorageReservedRole, "storageReserved" },
+            { CreatedAtRole,       "createdAt" },
             { LastLoginAtRole,  "lastLoginAt" },
         };
     }
