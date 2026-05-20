@@ -39,6 +39,12 @@ namespace disk::folder {
             drogon::Get,
             "disk::filters::JwtAuthFilter",
         );
+        ADD_METHOD_TO(
+            FolderController::Rename,
+            "/api/folder/{folder_id}/rename",
+            drogon::Put,
+            "disk::filters::JwtAuthFilter",
+        );
         METHOD_LIST_END
 
         /**
@@ -65,6 +71,10 @@ namespace disk::folder {
          */
         [[nodiscard]]
         auto GetBreadcrumb(drogon::HttpRequestPtr request, const std::string& folder_id)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto Rename(drogon::HttpRequestPtr request, const std::string& folder_id)
             -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:

@@ -1180,12 +1180,13 @@ namespace disk::file {
      */
     struct MoveRequest {
         std::vector<uint64_t> file_ids;
+        std::vector<uint64_t> folder_ids;
         uint64_t target_folder_id{ 0 };
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<MoveRequest> {
-            LOG_DEBUG << "Start parsing move file request parameters";
+            LOG_DEBUG << "Start parsing move drive items request parameters";
 
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
@@ -1196,52 +1197,62 @@ namespace disk::file {
             }
 
             const auto& json = *json_ptr;
-
-            // 检查必填字段 file_ids
-            if (!json.isMember("file_ids")) {
-                LOG_WARN << "Missing required parameter: file_ids";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: file_ids")
-                );
-            }
-
-            if (!json["file_ids"].isArray()) {
-                LOG_WARN << "Parameter 'file_ids' type error: expected array";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::InvalidParameter,
-                    "Parameter 'file_ids' type error: expected array"
-                ));
-            }
-
             MoveRequest request;
 
-            // 解析 file_ids
-            const auto& file_ids_array = json["file_ids"];
-            if (file_ids_array.empty()) {
-                LOG_WARN << "Parameter 'file_ids' cannot be empty array";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::InvalidParameter,
-                    "Parameter 'file_ids' cannot be empty array"
-                ));
+            auto parse_ids = [](const Json::Value& json,
+                                const char* field,
+                                std::vector<uint64_t>& ids) -> Result<void> {
+                if (!json.isMember(field)) {
+                    return {};
+                }
+                if (!json[field].isArray()) {
+                    LOG_WARN << "Parameter '" << field << "' type error: expected array";
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::InvalidParameter,
+                        std::string("Parameter '") + field + "' type error: expected array"
+                    ));
+                }
+
+                for (const auto& item : json[field]) {
+                    if (!item.isIntegral()) {
+                        LOG_WARN << "Element in parameter '" << field
+                                  << "' type error: expected integer";
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::InvalidParameter,
+                            std::string("Element in parameter '") + field +
+                                "' type error: expected integer"
+                        ));
+                    }
+                    auto id = item.asUInt64();
+                    if (id == 0) {
+                        LOG_WARN << "Element in parameter '" << field
+                                  << "' must be a positive integer";
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::InvalidParameter,
+                            std::string("Element in parameter '") + field +
+                                "' must be a positive integer"
+                        ));
+                    }
+                    ids.push_back(id);
+                }
+                return {};
+            };
+
+            auto file_ids_result = parse_ids(json, "file_ids", request.file_ids);
+            if (!file_ids_result) {
+                return std::unexpected(file_ids_result.error());
+            }
+            auto folder_ids_result = parse_ids(json, "folder_ids", request.folder_ids);
+            if (!folder_ids_result) {
+                return std::unexpected(folder_ids_result.error());
             }
 
-            for (const auto& item : file_ids_array) {
-                if (!item.isIntegral()) {
-                    LOG_WARN << "Element in parameter 'file_ids' type error: expected integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        "Element in parameter 'file_ids' type error: expected integer"
-                    ));
-                }
-                auto file_id = item.asUInt64();
-                if (file_id == 0) {
-                    LOG_WARN << "Element in parameter 'file_ids' must be a positive integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        "Element in parameter 'file_ids' must be a positive integer"
-                    ));
-                }
-                request.file_ids.push_back(file_id);
+            if (request.file_ids.empty() && request.folder_ids.empty()) {
+                LOG_WARN << "Move request must contain file_ids or folder_ids";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidParameter,
+                    "Move request must contain file_ids or folder_ids"
+                ));
             }
 
             // 解析可选参数 target_folder_id
@@ -1256,7 +1267,8 @@ namespace disk::file {
                 request.target_folder_id = json["target_folder_id"].asUInt64();
             }
 
-            LOG_DEBUG << "Parsed move file request: file_ids.size()=" << request.file_ids.size()
+            LOG_DEBUG << "Parsed move request: file_ids.size()=" << request.file_ids.size()
+                      << ", folder_ids.size()=" << request.folder_ids.size()
                       << ", target_folder_id=" << request.target_folder_id;
 
             return request;
@@ -1271,12 +1283,16 @@ namespace disk::file {
      */
     struct MoveResponse {
         int moved_count{ 0 };
+        int moved_file_count{ 0 };
+        int moved_folder_count{ 0 };
 
         /// 转换为 JSON
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
             json["moved_count"] = moved_count;
+            json["moved_file_count"] = moved_file_count;
+            json["moved_folder_count"] = moved_folder_count;
             return json;
         }
     };
@@ -1315,12 +1331,13 @@ namespace disk::file {
      */
     struct CopyRequest {
         std::vector<uint64_t> file_ids;
+        std::vector<uint64_t> folder_ids;
         uint64_t target_folder_id{ 0 };
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<CopyRequest> {
-            LOG_DEBUG << "Start parsing copy file request parameters";
+            LOG_DEBUG << "Start parsing copy drive items request parameters";
 
             auto json_ptr = req->getJsonObject();
             if (!json_ptr) {
@@ -1331,52 +1348,62 @@ namespace disk::file {
             }
 
             const auto& json = *json_ptr;
-
-            // 检查必填字段 file_ids
-            if (!json.isMember("file_ids")) {
-                LOG_WARN << "Missing required parameter: file_ids";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: file_ids")
-                );
-            }
-
-            if (!json["file_ids"].isArray()) {
-                LOG_WARN << "Parameter 'file_ids' type error: expected array";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::InvalidParameter,
-                    "Parameter 'file_ids' type error: expected array"
-                ));
-            }
-
             CopyRequest request;
 
-            // 解析 file_ids
-            const auto& file_ids_array = json["file_ids"];
-            if (file_ids_array.empty()) {
-                LOG_WARN << "Parameter 'file_ids' cannot be empty array";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::InvalidParameter,
-                    "Parameter 'file_ids' cannot be empty array"
-                ));
+            auto parse_ids = [](const Json::Value& json,
+                                const char* field,
+                                std::vector<uint64_t>& ids) -> Result<void> {
+                if (!json.isMember(field)) {
+                    return {};
+                }
+                if (!json[field].isArray()) {
+                    LOG_WARN << "Parameter '" << field << "' type error: expected array";
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::InvalidParameter,
+                        std::string("Parameter '") + field + "' type error: expected array"
+                    ));
+                }
+
+                for (const auto& item : json[field]) {
+                    if (!item.isIntegral()) {
+                        LOG_WARN << "Element in parameter '" << field
+                                  << "' type error: expected integer";
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::InvalidParameter,
+                            std::string("Element in parameter '") + field +
+                                "' type error: expected integer"
+                        ));
+                    }
+                    auto id = item.asUInt64();
+                    if (id == 0) {
+                        LOG_WARN << "Element in parameter '" << field
+                                  << "' must be a positive integer";
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::InvalidParameter,
+                            std::string("Element in parameter '") + field +
+                                "' must be a positive integer"
+                        ));
+                    }
+                    ids.push_back(id);
+                }
+                return {};
+            };
+
+            auto file_ids_result = parse_ids(json, "file_ids", request.file_ids);
+            if (!file_ids_result) {
+                return std::unexpected(file_ids_result.error());
+            }
+            auto folder_ids_result = parse_ids(json, "folder_ids", request.folder_ids);
+            if (!folder_ids_result) {
+                return std::unexpected(folder_ids_result.error());
             }
 
-            for (const auto& item : file_ids_array) {
-                if (!item.isIntegral()) {
-                    LOG_WARN << "Element in parameter 'file_ids' type error: expected integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        "Element in parameter 'file_ids' type error: expected integer"
-                    ));
-                }
-                auto file_id = item.asUInt64();
-                if (file_id == 0) {
-                    LOG_WARN << "Element in parameter 'file_ids' must be a positive integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        "Element in parameter 'file_ids' must be a positive integer"
-                    ));
-                }
-                request.file_ids.push_back(file_id);
+            if (request.file_ids.empty() && request.folder_ids.empty()) {
+                LOG_WARN << "Copy request must contain file_ids or folder_ids";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidParameter,
+                    "Copy request must contain file_ids or folder_ids"
+                ));
             }
 
             // 解析可选参数 target_folder_id
@@ -1391,7 +1418,8 @@ namespace disk::file {
                 request.target_folder_id = json["target_folder_id"].asUInt64();
             }
 
-            LOG_DEBUG << "Parsed copy file request: file_ids.size()=" << request.file_ids.size()
+            LOG_DEBUG << "Parsed copy request: file_ids.size()=" << request.file_ids.size()
+                      << ", folder_ids.size()=" << request.folder_ids.size()
                       << ", target_folder_id=" << request.target_folder_id;
 
             return request;
@@ -1406,19 +1434,30 @@ namespace disk::file {
      */
     struct CopyResponse {
         int copied_count{ 0 };
+        int copied_file_count{ 0 };
+        int copied_folder_count{ 0 };
         std::vector<FileIdMapping> new_files;
+        std::vector<FileIdMapping> new_folders;
 
         /// 转换为 JSON
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
             json["copied_count"] = copied_count;
+            json["copied_file_count"] = copied_file_count;
+            json["copied_folder_count"] = copied_folder_count;
 
             Json::Value files_array(Json::arrayValue);
             for (const auto& mapping : new_files) {
                 files_array.append(mapping.ToJson());
             }
             json["new_files"] = files_array;
+
+            Json::Value folders_array(Json::arrayValue);
+            for (const auto& mapping : new_folders) {
+                folders_array.append(mapping.ToJson());
+            }
+            json["new_folders"] = folders_array;
 
             return json;
         }
@@ -1615,7 +1654,7 @@ namespace disk::file {
 
             // 过滤 keyword 中的特殊字符（防止 SQL 注入）
             for (char c : keyword_str) {
-                if (c == '%' || c == '\\' || c == '\'' || c == '"') {
+                if (c == '%' || c == '_' || c == '\\' || c == '\'' || c == '"') {
                     LOG_WARN << "Parameter 'keyword' contains forbidden characters: " << c;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,

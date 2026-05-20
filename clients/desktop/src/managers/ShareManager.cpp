@@ -187,7 +187,8 @@ namespace disk::desktop::managers {
         QByteArray json_body = QJsonDocument(body).toJson(QJsonDocument::Compact);
 
         auto headers = PrepareOwnerHeaders();
-        auto* reply = m_networkClient->Delete(QUrl("/api/share"), json_body, headers);
+        headers["Content-Type"] = "application/json";
+        auto* reply = m_networkClient->Post(QUrl("/api/share/cancel"), json_body, headers);
         m_active_replies.append(reply);
 
         connect(reply, &QNetworkReply::finished, this, [this, reply]() {

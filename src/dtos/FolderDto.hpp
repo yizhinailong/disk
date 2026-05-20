@@ -210,6 +210,147 @@ namespace disk::folder {
         }
     };
 
+    /**
+     * @brief 重命名文件夹请求 DTO
+     */
+    struct RenameFolderRequest {
+        uint64_t folder_id{ 0 };
+        std::string new_name;
+
+        [[nodiscard]]
+        static auto FromPathAndRequest(
+            const std::string& folder_id_str,
+            const drogon::HttpRequestPtr& req
+        ) -> Result<RenameFolderRequest> {
+            if (folder_id_str.empty()) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: folder_id")
+                );
+            }
+            if (folder_id_str[0] == '-') {
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidParameter,
+                    "Parameter 'folder_id' must be a positive integer"
+                ));
+            }
+
+            uint64_t folder_id = 0;
+            try {
+                size_t pos = 0;
+                folder_id = std::stoull(folder_id_str, &pos);
+                if (pos != folder_id_str.length() || folder_id == 0) {
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::InvalidParameter,
+                        "Parameter 'folder_id' must be a positive integer"
+                    ));
+                }
+            } catch (const std::exception&) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "Parameter 'folder_id' invalid format")
+                );
+            }
+
+            auto json_ptr = req->getJsonObject();
+            if (!json_ptr) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
+                );
+            }
+
+            const auto& json = *json_ptr;
+            if (!json.isMember("new_name")) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: new_name")
+                );
+            }
+            if (!json["new_name"].isString()) {
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Parameter 'new_name' type error: expected string"
+                ));
+            }
+
+            RenameFolderRequest request;
+            request.folder_id = folder_id;
+            request.new_name = json["new_name"].asString();
+            request.TrimName();
+
+            if (!request.ValidateLength()) {
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Folder name length must be between 1-255 characters"
+                ));
+            }
+            if (!request.ValidateForbiddenChars()) {
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidFilename,
+                    "Folder name contains forbidden characters: / \\ : * ? \" < > | or control characters"
+                ));
+            }
+            if (!request.ValidateReservedNames()) {
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidFilename,
+                    "Folder name cannot be reserved name \".\" or \"..\""
+                ));
+            }
+            if (!request.ValidateNotHidden()) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidFilename, "Folder name cannot start with \".\"")
+                );
+            }
+            if (!request.ValidateCharset()) {
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidFilename,
+                    "Folder name must be valid UTF-8 and cannot contain control characters"
+                ));
+            }
+
+            return request;
+        }
+
+    private:
+        auto TrimName() -> void {
+            auto start = new_name.find_first_not_of(' ');
+            if (start == std::string::npos) {
+                new_name.clear();
+                return;
+            }
+            auto end = new_name.find_last_not_of(' ');
+            new_name = new_name.substr(start, end - start + 1);
+        }
+
+        [[nodiscard]] auto ValidateLength() const -> bool {
+            return new_name.length() >= 1 && new_name.length() <= 255;
+        }
+
+        [[nodiscard]] auto ValidateForbiddenChars() const -> bool {
+            static const char forbidden_chars[] = "/\\:*?\"<>|";
+            for (char c : new_name) {
+                if (static_cast<unsigned char>(c) <= 0x1F) {
+                    return false;
+                }
+                for (char fc : forbidden_chars) {
+                    if (c == fc) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        [[nodiscard]] auto ValidateReservedNames() const -> bool {
+            return new_name != "." && new_name != "..";
+        }
+
+        [[nodiscard]] auto ValidateNotHidden() const -> bool {
+            return new_name.empty() || new_name[0] != '.';
+        }
+
+        [[nodiscard]] auto ValidateCharset() const -> bool {
+            return utils::IsValidUtf8WithoutControlChars(new_name);
+        }
+    };
+
     // ==================== Response DTOs ====================
 
     /**
@@ -234,6 +375,23 @@ namespace disk::folder {
             json["parent_id"] = static_cast<Json::UInt64>(parent_id);
             json["path"] = path;
             json["created_at"] = created_at;
+            return json;
+        }
+    };
+
+    struct RenameFolderResponse {
+        uint64_t id{ 0 };
+        std::string name;
+        std::string path;
+        std::string updated_at;
+
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["id"] = static_cast<Json::UInt64>(id);
+            json["name"] = name;
+            json["path"] = path;
+            json["updated_at"] = updated_at;
             return json;
         }
     };

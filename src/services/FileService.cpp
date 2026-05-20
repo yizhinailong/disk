@@ -79,6 +79,89 @@ namespace disk::file {
             uint64_t item_size{ 0 };
         };
 
+        struct FolderLocation {
+            std::string path{ "/" };
+            uint32_t depth{ 0 };
+        };
+
+        struct ServiceValidationException : std::runtime_error {
+            explicit ServiceValidationException(ErrorInfo error_info)
+                : std::runtime_error(error_info.message), error(std::move(error_info)) {
+            }
+
+            ErrorInfo error;
+        };
+
+        [[nodiscard]] auto BuildFilePath(const std::string& folder_path, const std::string& filename)
+            -> std::string {
+            return folder_path == "/" ? "/" + filename : folder_path + filename;
+        }
+
+        [[nodiscard]] auto BuildFolderPath(const std::string& parent_path, const std::string& name)
+            -> std::string {
+            return parent_path == "/" ? "/" + name + "/" : parent_path + name + "/";
+        }
+
+        auto ResolveFolderLocation(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t folder_id,
+            uint64_t user_id
+        ) -> drogon::Task<Result<FolderLocation>> {
+            if (folder_id == 0) {
+                co_return FolderLocation{};
+            }
+
+            try {
+                auto result = co_await client->execSqlCoro(
+                    "SELECT path, depth FROM folders WHERE id = ? AND user_id = ?",
+                    folder_id,
+                    user_id
+                );
+                if (result.empty()) {
+                    co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+                }
+
+                co_return FolderLocation{ .path = result[0]["path"].as<std::string>(),
+                                          .depth = result[0]["depth"].as<uint32_t>() };
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_WARN << "Folder location lookup failed: folder_id=" << folder_id << " - "
+                         << e.base().what();
+                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+            }
+        }
+
+        auto QueryOccupiedFolderNames(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t parent_id,
+            uint64_t user_id,
+            const std::vector<std::string>& candidate_names
+        ) -> drogon::Task<std::unordered_set<std::string>> {
+            std::unordered_set<std::string> occupied_names;
+            if (candidate_names.empty()) {
+                co_return occupied_names;
+            }
+
+            auto sql =
+                "SELECT name FROM folders WHERE parent_id = ? AND user_id = ? AND name IN (" +
+                BatchUtils::BuildInPlaceholders(candidate_names) + ")";
+            auto result = co_await ExecSqlWithBindings(
+                client,
+                sql,
+                [&](auto& binder) {
+                    binder << parent_id << user_id;
+                    for (const auto& candidate_name : candidate_names) {
+                        binder << candidate_name;
+                    }
+                }
+            );
+
+            occupied_names.reserve(result.size());
+            for (const auto& row : result) {
+                occupied_names.insert(row["name"].as<std::string>());
+            }
+            co_return occupied_names;
+        }
+
         auto QueryOccupiedNames(
             const drogon::orm::DbClientPtr& client,
             uint64_t folder_id,
@@ -500,6 +583,12 @@ namespace disk::file {
                     throw std::runtime_error("Failed to increment file content reference count");
                 }
 
+                auto parent_location_result =
+                    co_await ResolveFolderLocation(transaction, request.parent_id, user_id);
+                if (!parent_location_result) {
+                    co_return std::unexpected(parent_location_result.error());
+                }
+
                 // 创建文件记录（使用 LookupExistingContentMetadata 提供的 mime_type，无需二次读取）
                 Files file;
                 file.setUserId(user_id);
@@ -509,7 +598,7 @@ namespace disk::file {
                 file.setExtension(ExtractExtension(request.filename));
                 file.setSize(request.file_size);
                 file.setMimeType(meta.mime_type);
-                file.setPath(""); // 路径由调用方自行拼接
+                file.setPath(BuildFilePath(parent_location_result->path, request.filename));
                 file.setIsFavorite(0);
                 file.setDownloadCount(0);
 
@@ -1133,6 +1222,12 @@ namespace disk::file {
                 LOG_DEBUG << "FileContents created successfully: content_id=" << content_id;
             }
 
+            auto parent_location_result =
+                co_await ResolveFolderLocation(transaction, task.getValueOfFolderId(), user_id);
+            if (!parent_location_result) {
+                throw std::runtime_error("Target upload folder not found");
+            }
+
             file.setUserId(user_id);
             file.setContentId(content_id);
             file.setFolderId(task.getValueOfFolderId());
@@ -1140,7 +1235,7 @@ namespace disk::file {
             file.setExtension(ExtractExtension(task.getValueOfFilename()));
             file.setSize(task.getValueOfFileSize());
             file.setMimeType("");
-            file.setPath("");
+            file.setPath(BuildFilePath(parent_location_result->path, task.getValueOfFilename()));
             file.setIsFavorite(0);
             file.setDownloadCount(0);
 
@@ -1671,25 +1766,32 @@ namespace disk::file {
                 Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
             );
 
-            if (file.getValueOfName() == new_name) {
-                LOG_DEBUG << "New name same as current name, skipping update";
-                RenameResponse response;
-                response.id = file.getValueOfId();
-                response.name = file.getValueOfName();
-                response.updated_at = file.getValueOfUpdatedAt().toDbStringLocal();
-                co_return response;
-            }
-
             auto folder_id = file.getValueOfFolderId();
-            if (co_await IsFilenameExists(folder_id, new_name, user_id)) {
+            if (file.getValueOfName() != new_name && co_await IsFilenameExists(folder_id, new_name, user_id)) {
                 LOG_WARN << "Target folder already has file with same name: " << new_name;
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
             }
 
-            file.setName(new_name);
-            file.setExtension(ExtractExtension(new_name));
-            file.setUpdatedAt(trantor::Date::now());
-            co_await mapper.update(file);
+            auto folder_location_result = co_await ResolveFolderLocation(m_db_client, folder_id, user_id);
+            if (!folder_location_result) {
+                co_return std::unexpected(folder_location_result.error());
+            }
+
+            auto updated_at = trantor::Date::now();
+            auto new_path = BuildFilePath(folder_location_result->path, new_name);
+            auto update_result = co_await m_db_client->execSqlCoro(
+                "UPDATE files SET name = ?, extension = ?, path = ?, updated_at = ? "
+                "WHERE id = ? AND user_id = ?",
+                new_name,
+                ExtractExtension(new_name),
+                new_path,
+                updated_at,
+                file_id,
+                user_id
+            );
+            if (update_result.affectedRows() == 0) {
+                co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
+            }
 
             LOG_INFO << "File rename successful: file_id=" << file_id << ", new_name=\"" << new_name
                      << "\"";
@@ -1697,7 +1799,7 @@ namespace disk::file {
             RenameResponse response;
             response.id = file.getValueOfId();
             response.name = new_name;
-            response.updated_at = file.getValueOfUpdatedAt().toDbStringLocal();
+            response.updated_at = updated_at.toDbStringLocal();
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
@@ -1711,140 +1813,308 @@ namespace disk::file {
     auto FileService::Move(MoveRequest request, uint64_t user_id)
         -> drogon::Task<Result<MoveResponse>> {
 
-        LOG_DEBUG << "Starting move file: file_ids.size()=" << request.file_ids.size()
+        LOG_DEBUG << "Starting move drive items: file_ids.size()=" << request.file_ids.size()
+                  << ", folder_ids.size()=" << request.folder_ids.size()
                   << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
-        if (request.target_folder_id != 0) {
-            try {
-                CoroMapper<Folders> folder_mapper(m_db_client);
-                co_await folder_mapper.findOne(
-                    Criteria(Folders::Cols::_id, CompareOperator::EQ, request.target_folder_id) &&
-                    Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id)
-                );
-                LOG_DEBUG << "Target folder verification passed: folder_id="
-                          << request.target_folder_id;
-            } catch (const drogon::orm::DrogonDbException&) {
-                LOG_WARN << "Target folder not found or no permission: folder_id="
-                         << request.target_folder_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
-            }
+        auto target_location_result =
+            co_await ResolveFolderLocation(m_db_client, request.target_folder_id, user_id);
+        if (!target_location_result) {
+            co_return std::unexpected(target_location_result.error());
         }
+        const auto target_location = *target_location_result;
 
-        int moved_count = 0;
-        std::unordered_set<uint64_t> already_moved_ids;
+        auto normalize_ids = [](std::vector<uint64_t> ids) {
+            std::sort(ids.begin(), ids.end());
+            ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+            return ids;
+        };
 
-        auto chunks = BatchUtils::Chunk(request.file_ids, DEFAULT_BATCH_CHUNK_SIZE);
-        for (const auto& chunk : chunks) {
-            if (chunk.empty()) {
-                continue;
-            }
+        auto file_ids = normalize_ids(std::move(request.file_ids));
+        auto folder_ids = normalize_ids(std::move(request.folder_ids));
 
-            auto in_clause = BatchUtils::BuildSafeNumericInClause(chunk);
+        int moved_file_count = 0;
+        int moved_folder_count = 0;
 
-            std::unordered_map<uint64_t, Files> file_map;
-            file_map.reserve(chunk.size());
+        std::shared_ptr<drogon::orm::Transaction> txn;
+        try {
+            txn = co_await m_db_client->newTransactionCoro();
 
-            try {
-                auto result = co_await m_db_client->execSqlCoro(
-                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, " "       is_favorite, download_count, last_accessed_at, created_at, updated_at " "FROM files WHERE id IN (" + in_clause + ") AND user_id = ?",
-                    user_id
-                );
+            if (!file_ids.empty()) {
+                auto chunks = BatchUtils::Chunk(file_ids, DEFAULT_BATCH_CHUNK_SIZE);
+                for (const auto& chunk : chunks) {
+                    if (chunk.empty()) {
+                        continue;
+                    }
 
-                for (const auto& row : result) {
-                    auto file = Files(row, -1);
-                    file_map[file.getValueOfId()] = std::move(file);
-                }
-            } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "File batch fetch failed in move, skipping chunk: " << e.base().what();
-                for (const auto& file_id : chunk) {
-                    LOG_WARN << "File not found or move failed, skipping: file_id=" << file_id;
-                }
-                continue;
-            }
+                    auto result = co_await txn->execSqlCoro(
+                        "SELECT id, folder_id, name FROM files WHERE id IN (" +
+                            BatchUtils::BuildSafeNumericInClause(chunk) + ") AND user_id = ?",
+                        user_id
+                    );
 
-            // Extract candidate names from already-fetched file_map
-            std::vector<std::string> candidate_names;
-            candidate_names.reserve(file_map.size());
-            for (const auto& [id, file] : file_map) {
-                candidate_names.push_back(file.getValueOfName());
-            }
+                    std::unordered_map<uint64_t, std::pair<uint64_t, std::string>> files;
+                    files.reserve(result.size());
+                    std::vector<std::string> candidate_names;
+                    candidate_names.reserve(result.size());
+                    for (const auto& row : result) {
+                        auto id = row["id"].as<uint64_t>();
+                        auto folder_id = row["folder_id"].as<uint64_t>();
+                        auto name = row["name"].as<std::string>();
+                        files[id] = { folder_id, name };
+                        if (folder_id != request.target_folder_id) {
+                            candidate_names.push_back(name);
+                        }
+                    }
 
-            std::unordered_set<std::string> occupied_names;
-            if (!candidate_names.empty()) {
-                try {
-                    occupied_names = co_await QueryOccupiedNames(
-                        m_db_client,
+                    auto occupied_names = co_await QueryOccupiedNames(
+                        txn,
                         request.target_folder_id,
                         user_id,
                         candidate_names
                     );
-                } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_WARN << "Filename conflict query failed in move, skipping chunk: "
-                             << e.base().what();
-                    continue;
+
+                    std::unordered_map<uint64_t, int> source_deltas;
+                    for (const auto file_id : chunk) {
+                        auto it = files.find(file_id);
+                        if (it == files.end()) {
+                            LOG_WARN << "File not found or no permission, skipping move: file_id="
+                                     << file_id;
+                            continue;
+                        }
+
+                        auto source_folder_id = it->second.first;
+                        const auto& name = it->second.second;
+                        if (source_folder_id == request.target_folder_id) {
+                            ++moved_file_count;
+                            continue;
+                        }
+
+                        if (occupied_names.contains(name)) {
+                            LOG_WARN << "Target folder already has file with same name, skipping: "
+                                     << name;
+                            continue;
+                        }
+                        occupied_names.insert(name);
+
+                        auto updated_at = trantor::Date::now();
+                        auto update_result = co_await txn->execSqlCoro(
+                            "UPDATE files SET folder_id = ?, path = ?, updated_at = ? "
+                            "WHERE id = ? AND user_id = ?",
+                            request.target_folder_id,
+                            BuildFilePath(target_location.path, name),
+                            updated_at,
+                            file_id,
+                            user_id
+                        );
+                        if (update_result.affectedRows() == 0) {
+                            continue;
+                        }
+
+                        if (source_folder_id > 0) {
+                            source_deltas[source_folder_id] -= 1;
+                        }
+                        if (request.target_folder_id > 0) {
+                            source_deltas[request.target_folder_id] += 1;
+                        }
+                        ++moved_file_count;
+                    }
+
+                    for (const auto& [folder_id, delta] : source_deltas) {
+                        if (delta == 0) {
+                            continue;
+                        }
+                        co_await txn->execSqlCoro(
+                            "UPDATE folders SET item_count = GREATEST(item_count + ?, 0), "
+                            "updated_at = ? WHERE id = ? AND user_id = ?",
+                            delta,
+                            trantor::Date::now(),
+                            folder_id,
+                            user_id
+                        );
+                    }
                 }
             }
 
-            std::vector<uint64_t> valid_ids;
-            valid_ids.reserve(chunk.size());
-
-            for (const auto& file_id : chunk) {
-                if (already_moved_ids.contains(file_id)) {
-                    LOG_DEBUG << "File already in target folder, skipping: file_id=" << file_id;
-                    ++moved_count;
-                    continue;
+            std::unordered_map<uint64_t, FolderDeletePlan> folder_plans;
+            folder_plans.reserve(folder_ids.size());
+            for (const auto folder_id : folder_ids) {
+                auto plan = co_await FetchFolderDeletePlan(txn, folder_id, user_id);
+                if (plan.has_value()) {
+                    folder_plans.emplace(folder_id, std::move(*plan));
                 }
-
-                auto it = file_map.find(file_id);
-                if (it == file_map.end()) {
-                    LOG_WARN << "File not found or move failed, skipping: file_id=" << file_id;
-                    continue;
-                }
-
-                auto& file = it->second;
-
-                if (file.getValueOfFolderId() == request.target_folder_id) {
-                    LOG_DEBUG << "File already in target folder, skipping: file_id=" << file_id;
-                    ++moved_count;
-                    occupied_names.insert(file.getValueOfName());
-                    already_moved_ids.insert(file_id);
-                    continue;
-                }
-
-                if (occupied_names.contains(file.getValueOfName())) {
-                    LOG_WARN << "Target folder already has file with same name, skipping: "
-                             << file.getValueOfName();
-                    continue;
-                }
-
-                valid_ids.push_back(file_id);
-                occupied_names.insert(file.getValueOfName());
-                already_moved_ids.insert(file_id);
-
-                ++moved_count;
-                LOG_DEBUG << "File move successful: file_id=" << file_id;
             }
 
-            if (!valid_ids.empty()) {
-                auto update_in_clause = BatchUtils::BuildSafeNumericInClause(valid_ids);
-                try {
-                    co_await m_db_client->execSqlCoro(
-                        "UPDATE files SET folder_id = ?, updated_at = ? WHERE id IN (" +
-                            update_in_clause + ")",
-                        request.target_folder_id,
-                        trantor::Date::now()
+            auto top_level_folder_ids = FilterCoveredFolderIds(folder_ids, folder_plans);
+            std::vector<std::string> folder_candidate_names;
+            folder_candidate_names.reserve(top_level_folder_ids.size());
+            for (const auto folder_id : top_level_folder_ids) {
+                auto plan_it = folder_plans.find(folder_id);
+                if (plan_it == folder_plans.end()) {
+                    continue;
+                }
+                if (plan_it->second.root.getValueOfParentId() != request.target_folder_id) {
+                    folder_candidate_names.push_back(plan_it->second.root.getValueOfName());
+                }
+            }
+
+            auto occupied_folder_names = co_await QueryOccupiedFolderNames(
+                txn,
+                request.target_folder_id,
+                user_id,
+                folder_candidate_names
+            );
+
+            for (const auto folder_id : top_level_folder_ids) {
+                auto plan_it = folder_plans.find(folder_id);
+                if (plan_it == folder_plans.end()) {
+                    LOG_WARN << "Folder not found or no permission, skipping move: folder_id="
+                             << folder_id;
+                    continue;
+                }
+
+                const auto& plan = plan_it->second;
+                const auto& root = plan.root;
+                auto old_parent_id = root.getValueOfParentId();
+                const auto& folder_name = root.getValueOfName();
+
+                auto moving_into_self_or_descendant = std::any_of(
+                    plan.folders.begin(),
+                    plan.folders.end(),
+                    [&](const Folders& folder) {
+                        return folder.getValueOfId() == request.target_folder_id;
+                    }
+                );
+                if (moving_into_self_or_descendant) {
+                    throw ServiceValidationException(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Cannot move a folder into itself or its descendant"
+                    ));
+                }
+
+                if (old_parent_id == request.target_folder_id) {
+                    ++moved_folder_count;
+                    continue;
+                }
+
+                if (occupied_folder_names.contains(folder_name)) {
+                    LOG_WARN << "Target folder already has folder with same name, skipping: "
+                             << folder_name;
+                    continue;
+                }
+                occupied_folder_names.insert(folder_name);
+
+                auto old_prefix = root.getValueOfPath();
+                auto new_prefix = BuildFolderPath(target_location.path, folder_name);
+                auto depth_delta = static_cast<int>(target_location.depth) + 1 -
+                                   static_cast<int>(root.getValueOfDepth());
+
+                for (const auto& folder : plan.folders) {
+                    auto old_path = folder.getValueOfPath();
+                    auto new_path = new_prefix + old_path.substr(old_prefix.size());
+                    if (folder.getValueOfId() == root.getValueOfId()) {
+                        co_await txn->execSqlCoro(
+                            "UPDATE folders SET parent_id = ?, path = ?, depth = depth + ?, "
+                            "updated_at = ? WHERE id = ? AND user_id = ?",
+                            request.target_folder_id,
+                            new_path,
+                            depth_delta,
+                            trantor::Date::now(),
+                            folder.getValueOfId(),
+                            user_id
+                        );
+                    } else {
+                        co_await txn->execSqlCoro(
+                            "UPDATE folders SET path = ?, depth = depth + ?, updated_at = ? "
+                            "WHERE id = ? AND user_id = ?",
+                            new_path,
+                            depth_delta,
+                            trantor::Date::now(),
+                            folder.getValueOfId(),
+                            user_id
+                        );
+                    }
+                }
+
+                std::unordered_map<uint64_t, std::string> folder_paths;
+                folder_paths.reserve(plan.folders.size());
+                for (const auto& folder : plan.folders) {
+                    auto old_path = folder.getValueOfPath();
+                    folder_paths[folder.getValueOfId()] = new_prefix + old_path.substr(old_prefix.size());
+                }
+                for (const auto& file : plan.files) {
+                    auto path_it = folder_paths.find(file.getValueOfFolderId());
+                    if (path_it == folder_paths.end()) {
+                        continue;
+                    }
+                    co_await txn->execSqlCoro(
+                        "UPDATE files SET path = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                        BuildFilePath(path_it->second, file.getValueOfName()),
+                        trantor::Date::now(),
+                        file.getValueOfId(),
+                        user_id
                     );
-                } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_WARN << "Batch move update failed: " << e.base().what();
-                    moved_count -= static_cast<int>(valid_ids.size());
+                }
+
+                if (old_parent_id > 0) {
+                    co_await txn->execSqlCoro(
+                        "UPDATE folders SET item_count = GREATEST(item_count - 1, 0), "
+                        "updated_at = ? WHERE id = ? AND user_id = ?",
+                        trantor::Date::now(),
+                        old_parent_id,
+                        user_id
+                    );
+                }
+                if (request.target_folder_id > 0) {
+                    co_await txn->execSqlCoro(
+                        "UPDATE folders SET item_count = item_count + 1, updated_at = ? "
+                        "WHERE id = ? AND user_id = ?",
+                        trantor::Date::now(),
+                        request.target_folder_id,
+                        user_id
+                    );
+                }
+
+                ++moved_folder_count;
+            }
+        } catch (const ServiceValidationException& e) {
+            if (txn) {
+                try {
+                    txn->rollback();
+                } catch (const std::exception& rb_e) {
+                    LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
                 }
             }
+            co_return std::unexpected(e.error);
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Move transaction failed (DB): " << e.base().what();
+            if (txn) {
+                try {
+                    txn->rollback();
+                } catch (const std::exception& rb_e) {
+                    LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                }
+            }
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to move items"));
+        } catch (const std::exception& e) {
+            LOG_ERROR << "Move transaction failed: " << e.what();
+            if (txn) {
+                try {
+                    txn->rollback();
+                } catch (const std::exception& rb_e) {
+                    LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                }
+            }
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to move items"));
         }
 
-        LOG_INFO << "File move completed: moved_count=" << moved_count;
+        LOG_INFO << "Move completed: moved_file_count=" << moved_file_count
+                 << ", moved_folder_count=" << moved_folder_count;
 
         MoveResponse response;
-        response.moved_count = moved_count;
+        response.moved_file_count = moved_file_count;
+        response.moved_folder_count = moved_folder_count;
+        response.moved_count = moved_file_count + moved_folder_count;
         co_return response;
     }
 
@@ -1853,89 +2123,121 @@ namespace disk::file {
     auto FileService::Copy(CopyRequest request, uint64_t user_id)
         -> drogon::Task<Result<CopyResponse>> {
 
-        LOG_DEBUG << "Starting copy file: file_ids.size()=" << request.file_ids.size()
+        LOG_DEBUG << "Starting copy items: file_ids.size()=" << request.file_ids.size()
+                  << ", folder_ids.size()=" << request.folder_ids.size()
                   << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
-        if (request.target_folder_id != 0) {
+        auto normalize_ids = [](std::vector<uint64_t> ids) {
+            std::sort(ids.begin(), ids.end());
+            ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+            return ids;
+        };
+
+        auto requested_file_ids = normalize_ids(std::move(request.file_ids));
+        auto requested_folder_ids = normalize_ids(std::move(request.folder_ids));
+
+        auto target_location_result = co_await ResolveFolderLocation(
+            m_db_client,
+            request.target_folder_id,
+            user_id
+        );
+        if (!target_location_result) {
+            LOG_WARN << "Target folder not found or no permission: folder_id="
+                     << request.target_folder_id;
+            co_return std::unexpected(target_location_result.error());
+        }
+
+        std::unordered_map<uint64_t, FolderDeletePlan> folder_plans;
+        folder_plans.reserve(requested_folder_ids.size());
+        for (const auto folder_id : requested_folder_ids) {
             try {
-                CoroMapper<Folders> folder_mapper(m_db_client);
-                co_await folder_mapper.findOne(
-                    Criteria(Folders::Cols::_id, CompareOperator::EQ, request.target_folder_id) &&
-                    Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id)
-                );
-                LOG_DEBUG << "Target folder verification passed: folder_id="
-                          << request.target_folder_id;
-            } catch (const drogon::orm::DrogonDbException&) {
-                LOG_WARN << "Target folder not found or no permission: folder_id="
-                         << request.target_folder_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+                auto plan = co_await FetchFolderDeletePlan(m_db_client, folder_id, user_id);
+                if (!plan.has_value()) {
+                    LOG_WARN << "Folder not found or no permission, skipping: folder_id=" << folder_id;
+                    continue;
+                }
+                folder_plans.emplace(folder_id, std::move(*plan));
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_WARN << "Folder plan fetch failed in copy, skipping: folder_id=" << folder_id
+                         << ", error=" << e.base().what();
             }
+        }
+
+        auto top_level_folder_ids = FilterCoveredFolderIds(requested_folder_ids, folder_plans);
+        auto covered_file_ids = CollectCoveredFileIds(top_level_folder_ids, folder_plans);
+
+        std::vector<uint64_t> explicit_file_ids;
+        explicit_file_ids.reserve(requested_file_ids.size());
+        for (const auto file_id : requested_file_ids) {
+            if (covered_file_ids.contains(file_id)) {
+                LOG_DEBUG << "Skipping explicit file copy covered by folder copy: file_id=" << file_id;
+                continue;
+            }
+            explicit_file_ids.push_back(file_id);
         }
 
         uint64_t total_copy_size = 0;
         std::vector<std::pair<uint64_t, Files>> files_to_copy;
 
-        {
-            auto id_chunks = BatchUtils::Chunk(request.file_ids, DEFAULT_BATCH_CHUNK_SIZE);
-            for (const auto& chunk : id_chunks) {
-                if (chunk.empty()) {
-                    continue;
-                }
+        auto id_chunks = BatchUtils::Chunk(explicit_file_ids, DEFAULT_BATCH_CHUNK_SIZE);
+        for (const auto& chunk : id_chunks) {
+            if (chunk.empty()) {
+                continue;
+            }
 
-                auto in_clause = BatchUtils::BuildSafeNumericInClause(chunk);
+            std::unordered_map<uint64_t, Files> file_map;
+            file_map.reserve(chunk.size());
 
-                std::unordered_map<uint64_t, Files> file_map;
-                file_map.reserve(chunk.size());
-
-                try {
+            try {
                 auto result = co_await m_db_client->execSqlCoro(
-                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, " "       is_favorite, download_count, last_accessed_at, created_at, updated_at " "FROM files WHERE id IN (" + in_clause + ") AND user_id = ?",
+                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, "
+                    "is_favorite, download_count, last_accessed_at, created_at, updated_at "
+                    "FROM files WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ") AND user_id = ?",
                     user_id
                 );
 
-                    for (const auto& row : result) {
-                        auto file = Files(row, -1);
-                        file_map[file.getValueOfId()] = std::move(file);
-                    }
-                } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_WARN << "File batch fetch failed in copy, skipping chunk: " << e.base().what();
-                    for (const auto& file_id : chunk) {
-                        LOG_WARN << "File not found or no permission, skipping: file_id=" << file_id;
-                    }
+                for (const auto& row : result) {
+                    auto file = Files(row, -1);
+                    file_map[file.getValueOfId()] = std::move(file);
+                }
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_WARN << "File batch fetch failed in copy, skipping chunk: " << e.base().what();
+                continue;
+            }
+
+            for (const auto file_id : chunk) {
+                auto it = file_map.find(file_id);
+                if (it == file_map.end()) {
+                    LOG_WARN << "File not found or no permission, skipping: file_id=" << file_id;
                     continue;
                 }
-
-                for (const auto& file_id : chunk) {
-                    auto it = file_map.find(file_id);
-                    if (it == file_map.end()) {
-                        LOG_WARN << "File not found or no permission, skipping: file_id=" << file_id;
-                        continue;
-                    }
-
-                    total_copy_size += it->second.getValueOfSize();
-                    files_to_copy.emplace_back(file_id, it->second);
-                }
+                total_copy_size += it->second.getValueOfSize();
+                files_to_copy.emplace_back(file_id, it->second);
             }
         }
 
-        if (total_copy_size == 0) {
-            LOG_INFO << "No files can be copied after validation";
-            CopyResponse response;
-            response.copied_count = 0;
-            response.new_files = {};
-            co_return response;
+        for (const auto folder_id : top_level_folder_ids) {
+            auto plan_it = folder_plans.find(folder_id);
+            if (plan_it == folder_plans.end()) {
+                continue;
+            }
+            total_copy_size += plan_it->second.item_size;
         }
 
-        auto quota_result = co_await CheckStorageQuota(m_db_client, user_id, total_copy_size);
-        if (!quota_result) {
-            LOG_WARN << "Storage quota check failed for copy: user_id=" << user_id
-                     << ", total_copy_size=" << total_copy_size;
-            co_return std::unexpected(quota_result.error());
+        if (total_copy_size > 0) {
+            auto quota_result = co_await CheckStorageQuota(m_db_client, user_id, total_copy_size);
+            if (!quota_result) {
+                LOG_WARN << "Storage quota check failed for copy: user_id=" << user_id
+                         << ", total_copy_size=" << total_copy_size;
+                co_return std::unexpected(quota_result.error());
+            }
         }
 
-        int copied_count = 0;
+        int copied_file_count = 0;
+        int copied_folder_count = 0;
         uint64_t actual_copy_size = 0;
         std::vector<FileIdMapping> new_files;
+        std::vector<FileIdMapping> new_folders;
 
         auto copy_chunks = BatchUtils::Chunk(files_to_copy, DEFAULT_BATCH_CHUNK_SIZE);
         for (const auto& chunk : copy_chunks) {
@@ -1943,7 +2245,6 @@ namespace disk::file {
                 continue;
             }
 
-            // ── 读取阶段（事务外）：名称冲突检查 ──
             std::vector<std::string> candidate_names;
             candidate_names.reserve(chunk.size());
             for (const auto& [old_id, file] : chunk) {
@@ -1951,19 +2252,17 @@ namespace disk::file {
             }
 
             std::unordered_set<std::string> occupied_names;
-            if (!candidate_names.empty()) {
-                try {
-                    occupied_names = co_await QueryOccupiedNames(
-                        m_db_client,
-                        request.target_folder_id,
-                        user_id,
-                        candidate_names
-                    );
-                } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_WARN << "Filename conflict query failed in copy, skipping chunk: "
-                             << e.base().what();
-                    continue;
-                }
+            try {
+                occupied_names = co_await QueryOccupiedNames(
+                    m_db_client,
+                    request.target_folder_id,
+                    user_id,
+                    candidate_names
+                );
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_WARN << "Filename conflict query failed in copy, skipping chunk: "
+                         << e.base().what();
+                continue;
             }
 
             struct PendingCopyItem {
@@ -1983,15 +2282,12 @@ namespace disk::file {
                 }
 
                 occupied_names.insert(file.getValueOfName());
-
                 if (file.getContentId()) {
                     content_ref_increment[*file.getContentId()] += 1;
                 }
-
                 pending_items.push_back({ .old_id = old_id, .file = file });
             }
 
-            // ── 读取阶段（事务外）：内容存在性校验 ──
             std::unordered_set<uint64_t> existing_content_ids;
             if (!content_ref_increment.empty()) {
                 std::vector<uint64_t> content_ids;
@@ -2000,12 +2296,10 @@ namespace disk::file {
                     content_ids.push_back(content_id);
                 }
 
-                auto content_in_clause = BatchUtils::BuildSafeNumericInClause(content_ids);
-                existing_content_ids.reserve(content_ids.size());
-
                 try {
                     auto content_result = co_await m_db_client->execSqlCoro(
-                        "SELECT id FROM file_contents WHERE id IN (" + content_in_clause + ")"
+                        "SELECT id FROM file_contents WHERE id IN (" +
+                        BatchUtils::BuildSafeNumericInClause(content_ids) + ")"
                     );
                     for (const auto& row : content_result) {
                         existing_content_ids.insert(row["id"].as<uint64_t>());
@@ -2017,97 +2311,290 @@ namespace disk::file {
                 }
             }
 
-            std::unordered_set<uint64_t> missing_content_ids;
-            for (const auto& [content_id, _] : content_ref_increment) {
-                if (!existing_content_ids.contains(content_id)) {
-                    missing_content_ids.insert(content_id);
-                }
-            }
-
             std::vector<std::pair<uint64_t, const Files*>> valid_items;
             valid_items.reserve(pending_items.size());
-
             for (const auto& pending : pending_items) {
                 auto content_id_ptr = pending.file.getContentId();
-                if (content_id_ptr && missing_content_ids.contains(*content_id_ptr)) {
+                if (content_id_ptr && !existing_content_ids.contains(*content_id_ptr)) {
                     LOG_WARN << "File content not found during copy: content_id=" << *content_id_ptr;
                     continue;
                 }
                 valid_items.emplace_back(pending.old_id, &pending.file);
             }
 
-            // ── 事务阶段：ref_count 递增 + 文件行插入，原子提交/回滚 ──
-            if (!valid_items.empty()) {
-                std::unordered_map<uint64_t, uint64_t> old_id_to_size;
+            if (valid_items.empty()) {
+                continue;
+            }
+
+            std::unordered_map<uint64_t, uint64_t> old_id_to_size;
+            for (const auto& [old_id, file_ptr] : valid_items) {
+                old_id_to_size[old_id] = file_ptr->getValueOfSize();
+            }
+
+            std::shared_ptr<drogon::orm::Transaction> txn;
+            try {
+                txn = co_await m_db_client->newTransactionCoro();
+
+                auto incremented_ids = co_await IncrementContentRefCount(
+                    txn,
+                    content_ref_increment,
+                    existing_content_ids
+                );
+
+                std::vector<std::pair<uint64_t, const Files*>> txn_valid_items;
+                txn_valid_items.reserve(valid_items.size());
                 for (const auto& [old_id, file_ptr] : valid_items) {
-                    old_id_to_size[old_id] = file_ptr->getValueOfSize();
+                    auto cid = file_ptr->getContentId();
+                    if (cid && !incremented_ids.contains(*cid)) {
+                        LOG_WARN << "Content ref_count increment skipped in txn, dropping file: content_id="
+                                 << *cid;
+                        continue;
+                    }
+                    txn_valid_items.emplace_back(old_id, file_ptr);
                 }
 
-                std::shared_ptr<drogon::orm::Transaction> txn;
-                bool batch_failed = false;
-                try {
-                    txn = co_await m_db_client->newTransactionCoro();
+                auto id_mappings = co_await InsertCopiedFiles(
+                    txn,
+                    user_id,
+                    request.target_folder_id,
+                    txn_valid_items
+                );
 
-                    auto incremented_ids = co_await IncrementContentRefCount(
-                        txn,
-                        content_ref_increment,
-                        existing_content_ids
-                    );
-
-                    // 重新校验：仅保留实际成功递增 ref_count 的条目
-                    std::vector<std::pair<uint64_t, const Files*>> txn_valid_items;
-                    txn_valid_items.reserve(valid_items.size());
-                    for (const auto& [old_id, file_ptr] : valid_items) {
-                        auto cid = file_ptr->getContentId();
-                        if (cid && !incremented_ids.contains(*cid)) {
-                            LOG_WARN << "Content ref_count increment skipped in txn, dropping file: content_id="
-                                     << *cid;
-                            continue;
-                        }
-                        txn_valid_items.emplace_back(old_id, file_ptr);
+                for (const auto& [old_id, new_id] : id_mappings) {
+                    ++copied_file_count;
+                    actual_copy_size += old_id_to_size[old_id];
+                    new_files.push_back({ .old_id = old_id, .new_id = new_id });
+                }
+            } catch (const std::exception& e) {
+                LOG_ERROR << "Copy file batch transaction failed: " << e.what();
+                if (txn) {
+                    try {
+                        txn->rollback();
+                    } catch (const std::exception& rb_e) {
+                        LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
                     }
+                }
+            }
+        }
 
-                    auto id_mappings = co_await InsertCopiedFiles(
-                        txn,
-                        user_id,
-                        request.target_folder_id,
-                        txn_valid_items
+        std::vector<std::string> root_folder_names;
+        root_folder_names.reserve(top_level_folder_ids.size());
+        for (const auto folder_id : top_level_folder_ids) {
+            auto plan_it = folder_plans.find(folder_id);
+            if (plan_it != folder_plans.end()) {
+                root_folder_names.push_back(plan_it->second.root.getValueOfName());
+            }
+        }
+
+        std::unordered_set<std::string> occupied_root_folder_names;
+        try {
+            occupied_root_folder_names = co_await QueryOccupiedFolderNames(
+                m_db_client,
+                request.target_folder_id,
+                user_id,
+                root_folder_names
+            );
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "Folder conflict query failed in copy: " << e.base().what();
+            occupied_root_folder_names.clear();
+        }
+
+        for (const auto folder_id : top_level_folder_ids) {
+            auto plan_it = folder_plans.find(folder_id);
+            if (plan_it == folder_plans.end()) {
+                continue;
+            }
+
+            const auto& plan = plan_it->second;
+            auto target_inside_source = std::any_of(
+                plan.folders.begin(),
+                plan.folders.end(),
+                [target_folder_id = request.target_folder_id](const Folders& folder) {
+                    return folder.getValueOfId() == target_folder_id;
+                }
+            );
+            if (target_inside_source) {
+                LOG_WARN << "Cannot copy folder into itself or descendant, skipping: folder_id="
+                         << folder_id;
+                continue;
+            }
+
+            auto root_name = plan.root.getValueOfName();
+            if (occupied_root_folder_names.contains(root_name)) {
+                LOG_WARN << "Target folder already has folder with same name, skipping: " << root_name;
+                continue;
+            }
+            occupied_root_folder_names.insert(root_name);
+
+            std::unordered_map<uint64_t, uint64_t> content_ref_increment;
+            for (const auto& file : plan.files) {
+                if (file.getContentId()) {
+                    content_ref_increment[*file.getContentId()] += 1;
+                }
+            }
+
+            std::unordered_set<uint64_t> existing_content_ids;
+            if (!content_ref_increment.empty()) {
+                std::vector<uint64_t> content_ids;
+                content_ids.reserve(content_ref_increment.size());
+                for (const auto& [content_id, _] : content_ref_increment) {
+                    content_ids.push_back(content_id);
+                }
+
+                try {
+                    auto content_result = co_await m_db_client->execSqlCoro(
+                        "SELECT id FROM file_contents WHERE id IN (" +
+                        BatchUtils::BuildSafeNumericInClause(content_ids) + ")"
                     );
-
-                    // 事务自动提交（协程正常完成）
-
-                    for (const auto& [old_id, new_id] : id_mappings) {
-                        ++copied_count;
-                        actual_copy_size += old_id_to_size[old_id];
-                        new_files.push_back({ .old_id = old_id, .new_id = new_id });
-                        LOG_DEBUG << "File copy successful: old_id=" << old_id
-                                  << ", new_id=" << new_id;
+                    for (const auto& row : content_result) {
+                        existing_content_ids.insert(row["id"].as<uint64_t>());
                     }
                 } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_ERROR << "Copy batch transaction failed (DB): " << e.base().what();
-                    if (txn) {
-                        try {
-                            txn->rollback();
-                        } catch (const std::exception& rb_e) {
-                            LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
-                        }
+                    LOG_WARN << "Folder copy content query failed, skipping folder_id=" << folder_id
+                             << ": " << e.base().what();
+                    continue;
+                }
+            }
+
+            std::shared_ptr<drogon::orm::Transaction> txn;
+            try {
+                txn = co_await m_db_client->newTransactionCoro();
+
+                auto incremented_ids = co_await IncrementContentRefCount(
+                    txn,
+                    content_ref_increment,
+                    existing_content_ids
+                );
+
+                CoroMapper<Folders> folder_mapper(txn);
+                CoroMapper<Files> file_mapper(txn);
+
+                std::unordered_map<uint64_t, uint64_t> folder_id_map;
+                std::unordered_map<uint64_t, std::string> folder_path_map;
+                folder_id_map.reserve(plan.folders.size());
+                folder_path_map.reserve(plan.folders.size());
+
+                std::vector<FileIdMapping> folder_mappings;
+                std::vector<FileIdMapping> file_mappings;
+                uint64_t copied_size = 0;
+                int folder_count = 0;
+                int file_count = 0;
+
+                auto root_path = BuildFolderPath(target_location_result->path, root_name);
+                auto root_depth = target_location_result->depth + 1;
+
+                Folders root_folder;
+                root_folder.setUserId(user_id);
+                root_folder.setParentId(request.target_folder_id);
+                root_folder.setName(root_name);
+                root_folder.setPath(root_path);
+                root_folder.setDepth(root_depth);
+                root_folder.setItemCount(plan.root.getValueOfItemCount());
+                root_folder.setCreatedAt(trantor::Date::now());
+                root_folder.setUpdatedAt(trantor::Date::now());
+
+                auto inserted_root = co_await folder_mapper.insert(root_folder);
+                folder_id_map[plan.root.getValueOfId()] = inserted_root.getValueOfId();
+                folder_path_map[plan.root.getValueOfId()] = root_path;
+                folder_mappings.push_back({ .old_id = plan.root.getValueOfId(),
+                                            .new_id = inserted_root.getValueOfId() });
+                ++folder_count;
+
+                for (const auto& folder : plan.folders) {
+                    if (folder.getValueOfId() == plan.root.getValueOfId()) {
+                        continue;
                     }
-                    batch_failed = true;
-                } catch (const std::exception& e) {
-                    LOG_ERROR << "Copy batch transaction failed: " << e.what();
-                    if (txn) {
-                        try {
-                            txn->rollback();
-                        } catch (const std::exception& rb_e) {
-                            LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
-                        }
+
+                    auto parent_it = folder_id_map.find(folder.getValueOfParentId());
+                    auto parent_path_it = folder_path_map.find(folder.getValueOfParentId());
+                    if (parent_it == folder_id_map.end() || parent_path_it == folder_path_map.end()) {
+                        throw std::runtime_error("Folder copy plan contains orphaned folder node");
                     }
-                    batch_failed = true;
+
+                    auto folder_path = BuildFolderPath(parent_path_it->second, folder.getValueOfName());
+                    auto depth_delta = folder.getValueOfDepth() > plan.root.getValueOfDepth()
+                        ? folder.getValueOfDepth() - plan.root.getValueOfDepth()
+                        : 1;
+
+                    Folders copied_folder;
+                    copied_folder.setUserId(user_id);
+                    copied_folder.setParentId(parent_it->second);
+                    copied_folder.setName(folder.getValueOfName());
+                    copied_folder.setPath(folder_path);
+                    copied_folder.setDepth(root_depth + depth_delta);
+                    copied_folder.setItemCount(folder.getValueOfItemCount());
+                    copied_folder.setCreatedAt(trantor::Date::now());
+                    copied_folder.setUpdatedAt(trantor::Date::now());
+
+                    auto inserted_folder = co_await folder_mapper.insert(copied_folder);
+                    folder_id_map[folder.getValueOfId()] = inserted_folder.getValueOfId();
+                    folder_path_map[folder.getValueOfId()] = folder_path;
+                    folder_mappings.push_back({ .old_id = folder.getValueOfId(),
+                                                .new_id = inserted_folder.getValueOfId() });
+                    ++folder_count;
                 }
 
-                if (batch_failed) {
-                    LOG_WARN << "Copy batch rolled back, skipping "
-                             << valid_items.size() << " files in this chunk";
+                for (const auto& file : plan.files) {
+                    auto folder_it = folder_id_map.find(file.getValueOfFolderId());
+                    auto path_it = folder_path_map.find(file.getValueOfFolderId());
+                    if (folder_it == folder_id_map.end() || path_it == folder_path_map.end()) {
+                        throw std::runtime_error("Folder copy plan contains orphaned file node");
+                    }
+
+                    auto content_id_ptr = file.getContentId();
+                    if (content_id_ptr && !incremented_ids.contains(*content_id_ptr)) {
+                        LOG_WARN << "Content ref_count increment skipped in folder copy, dropping file: content_id="
+                                 << *content_id_ptr;
+                        continue;
+                    }
+
+                    Files copied_file;
+                    copied_file.setUserId(user_id);
+                    if (content_id_ptr) {
+                        copied_file.setContentId(*content_id_ptr);
+                    }
+                    copied_file.setFolderId(folder_it->second);
+                    copied_file.setName(file.getValueOfName());
+                    copied_file.setExtension(file.getValueOfExtension());
+                    copied_file.setSize(file.getValueOfSize());
+                    copied_file.setMimeType(file.getValueOfMimeType());
+                    copied_file.setPath(BuildFilePath(path_it->second, file.getValueOfName()));
+                    copied_file.setIsFavorite(0);
+                    copied_file.setDownloadCount(0);
+                    copied_file.setCreatedAt(trantor::Date::now());
+                    copied_file.setUpdatedAt(trantor::Date::now());
+
+                    auto inserted_file = co_await file_mapper.insert(copied_file);
+                    file_mappings.push_back({ .old_id = file.getValueOfId(),
+                                              .new_id = inserted_file.getValueOfId() });
+                    ++file_count;
+                    copied_size += file.getValueOfSize();
+                }
+
+                if (request.target_folder_id > 0) {
+                    co_await txn->execSqlCoro(
+                        "UPDATE folders SET item_count = item_count + 1, updated_at = ? "
+                        "WHERE id = ? AND user_id = ?",
+                        trantor::Date::now(),
+                        request.target_folder_id,
+                        user_id
+                    );
+                }
+
+                copied_folder_count += folder_count;
+                copied_file_count += file_count;
+                actual_copy_size += copied_size;
+                new_folders.insert(new_folders.end(), folder_mappings.begin(), folder_mappings.end());
+                new_files.insert(new_files.end(), file_mappings.begin(), file_mappings.end());
+            } catch (const std::exception& e) {
+                LOG_ERROR << "Folder copy transaction failed: folder_id=" << folder_id
+                          << ", error=" << e.what();
+                if (txn) {
+                    try {
+                        txn->rollback();
+                    } catch (const std::exception& rb_e) {
+                        LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                    }
                 }
             }
         }
@@ -2119,12 +2606,17 @@ namespace disk::file {
             co_await UpdateStorageUsed(m_db_client, user_id, -release_size);
         }
 
-        LOG_INFO << "File copy completed: copied_count=" << copied_count
+        CopyResponse response;
+        response.copied_file_count = copied_file_count;
+        response.copied_folder_count = copied_folder_count;
+        response.copied_count = copied_file_count + copied_folder_count;
+        response.new_files = std::move(new_files);
+        response.new_folders = std::move(new_folders);
+
+        LOG_INFO << "Copy completed: copied_files=" << response.copied_file_count
+                 << ", copied_folders=" << response.copied_folder_count
                  << ", total_size=" << actual_copy_size;
 
-        CopyResponse response;
-        response.copied_count = copied_count;
-        response.new_files = new_files;
         co_return response;
     }
 
@@ -2998,6 +3490,11 @@ namespace disk::file {
             co_return id_mappings;
         }
 
+        auto target_location_result = co_await ResolveFolderLocation(client, target_folder_id, user_id);
+        if (!target_location_result) {
+            co_return id_mappings;
+        }
+
         std::string insert_sql =
             "INSERT INTO files (user_id, content_id, folder_id, name, extension, " "size, mime_type, path, is_favorite, download_count) VALUES ";
 
@@ -3022,7 +3519,8 @@ namespace disk::file {
                         binder << user_id << content_id << target_folder_id
                                << file.getValueOfName() << file.getValueOfExtension()
                                << file.getValueOfSize() << file.getValueOfMimeType()
-                               << std::string{} << 0 << 0;
+                               << BuildFilePath(target_location_result->path, file.getValueOfName())
+                               << 0 << 0;
                     }
                 }
             );

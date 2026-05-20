@@ -139,4 +139,32 @@ namespace disk::folder {
         co_return Response::Success(result->ToJson());
     }
 
+    auto FolderController::Rename(drogon::HttpRequestPtr request, const std::string& folder_id)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "Received rename folder request: " << request->getPeerAddr().toIpPort()
+                 << ", folder_id=" << folder_id;
+
+        auto parse_result = RenameFolderRequest::FromPathAndRequest(folder_id, request);
+        if (!parse_result) {
+            LOG_WARN << "Rename folder request parameter validation failed: "
+                     << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+
+        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        auto result = co_await m_folder_service
+                          ->Rename(parse_result->folder_id, parse_result->new_name, user_id);
+        if (!result) {
+            LOG_ERROR << "Rename folder failed: " << result.error().message
+                      << " (user_id=" << user_id << ", folder_id=" << parse_result->folder_id
+                      << ")";
+            co_return Response::Error(result.error());
+        }
+
+        LOG_INFO << "Rename folder successful: folder_id=" << result->id << ", name="
+                 << result->name << ", user_id=" << user_id;
+        co_return Response::Success(result->ToJson());
+    }
+
 } // namespace disk::folder

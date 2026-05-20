@@ -73,8 +73,9 @@ TestCase {
                || source.indexOf('搜索文件...') !== -1,
                "Search field is present in My Files view")
         verify(source.indexOf('searchFiles(') !== -1, "Search behavior is present")
-        verify(source.indexOf('text: "Move"') === -1, "Move action is absent")
-        verify(source.indexOf('text: "Copy"') === -1, "Copy action is absent")
+        verify(source.indexOf('objectName: "moveButton"') !== -1, "Move action is present")
+        verify(source.indexOf('text: "移动"') !== -1, "Move action is localized")
+        verify(source.indexOf('objectName: "copyButton"') !== -1, "Copy action is present")
         verify(source.indexOf('text: "Share"') === -1, "Share action is absent")
         verify(source.indexOf('text: "Batch"') === -1, "Batch action is absent")
     }
@@ -334,10 +335,26 @@ TestCase {
 
         verify(source.indexOf("driveManager.createFolder(root.currentFolderId, validationResult.value)") !== -1,
                "Valid create flow calls DriveManager.createFolder")
-        verify(source.indexOf("driveManager.renameItem(root.selectedItemId, validationResult.value)") !== -1,
-               "Valid rename flow calls DriveManager.renameItem")
+        verify(source.indexOf("driveManager.renameDriveItem(root.selectedItemId, root.selectedItemKind, validationResult.value)") !== -1,
+               "Valid rename flow calls DriveManager.renameDriveItem")
         verify(source.indexOf("function selectedDeleteIds()") !== -1,
                "Delete flow splits selected files and folders")
+        verify(source.indexOf("function openMoveDialog()") !== -1,
+               "Has move dialog opener")
+        verify(source.indexOf("function submitMoveItems()") !== -1,
+               "Has move submit helper")
+        verify(source.indexOf("driveManager.moveItems(ids.fileIds, ids.folderIds, root.targetMoveFolderId)") !== -1,
+               "Move submit calls moveItems with split ids and target folder")
+        verify(source.indexOf('pendingMutationAction = "move"') !== -1,
+               "Move submit records the move mutation action")
+        verify(source.indexOf('property string moveErrorMessage: ""') !== -1,
+               "Tracks move API errors in page state")
+        verify(source.indexOf('property string targetMoveFolderId: "0"') !== -1,
+               "Tracks selected move target folder")
+        verify(source.indexOf('id: moveDialog') !== -1,
+               "Has move dialog")
+        verify(source.indexOf('objectName: "moveDialog"') !== -1,
+               "Move dialog exposes a stable object name")
         verify(source.indexOf("driveManager.deleteDriveItems(ids.fileIds, ids.folderIds)") !== -1,
                "Delete submit calls deleteDriveItems with split ids")
         verify(source.indexOf("driveManager.deleteItems([root.selectedItemId])") === -1,
@@ -367,6 +384,8 @@ TestCase {
                "Tracks rename validation and API errors in page state")
         verify(source.indexOf('property string deleteErrorMessage: ""') !== -1,
                "Tracks delete API errors in page state")
+        verify(source.indexOf("moveDialog.close()") !== -1,
+               "Closes move dialog on success")
         verify(source.indexOf("root.applyMutationError(message)") !== -1,
                "Routes API failures into visible dialog state")
         verify(source.indexOf("shellController.navigateTo") === -1,

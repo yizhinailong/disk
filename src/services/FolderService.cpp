@@ -10,6 +10,11 @@
 #include "FolderService.hpp"
 
 #include <algorithm>
+#include <stdexcept>
+#include <unordered_map>
+#include <vector>
+
+#include "utils/BatchUtils.hpp"
 
 namespace disk::folder {
 
@@ -21,6 +26,18 @@ namespace disk::folder {
     FolderService::FolderService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
         LOG_DEBUG << "FolderService initialization completed";
+    }
+
+    namespace {
+        [[nodiscard]] auto BuildFolderPath(const std::string& parent_path, const std::string& name)
+            -> std::string {
+            return parent_path == "/" ? "/" + name + "/" : parent_path + name + "/";
+        }
+
+        [[nodiscard]] auto BuildFilePath(const std::string& folder_path, const std::string& filename)
+            -> std::string {
+            return folder_path == "/" ? "/" + filename : folder_path + filename;
+        }
     }
 
     auto FolderService::CreateFolder(CreateFolderRequest request, uint64_t user_id)
@@ -101,6 +118,167 @@ namespace disk::folder {
         response.created_at = folder.getValueOfCreatedAt().toDbStringLocal();
 
         co_return response;
+    }
+
+    auto FolderService::Rename(uint64_t folder_id, std::string new_name, uint64_t user_id)
+        -> drogon::Task<Result<RenameFolderResponse>> {
+
+        LOG_DEBUG << "Starting rename folder: folder_id=" << folder_id << ", new_name=\""
+                  << new_name << "\", user_id=" << user_id;
+
+        try {
+            auto folder_result = co_await m_db_client->execSqlCoro(
+                "SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at "
+                "FROM folders WHERE id = ? AND user_id = ?",
+                folder_id,
+                user_id
+            );
+            if (folder_result.empty()) {
+                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+            }
+
+            Folders folder(folder_result[0], -1);
+            auto parent_id = folder.getValueOfParentId();
+            if (folder.getValueOfName() != new_name &&
+                co_await IsFolderNameExists(new_name, parent_id, user_id)) {
+                co_return std::unexpected(ErrorInfo(ErrorCode::FolderAlreadyExists));
+            }
+
+            std::string parent_path = "/";
+            if (parent_id > 0) {
+                auto parent_result = co_await m_db_client->execSqlCoro(
+                    "SELECT path FROM folders WHERE id = ? AND user_id = ?",
+                    parent_id,
+                    user_id
+                );
+                if (parent_result.empty()) {
+                    co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+                }
+                parent_path = parent_result[0]["path"].as<std::string>();
+            }
+
+            auto old_prefix = folder.getValueOfPath();
+            auto new_prefix = BuildFolderPath(parent_path, new_name);
+
+            auto subtree_result = co_await m_db_client->execSqlCoro(
+                "WITH RECURSIVE folder_tree AS ("
+                "SELECT id, parent_id, name, path, depth FROM folders WHERE id = ? AND user_id = ? "
+                "UNION ALL "
+                "SELECT f.id, f.parent_id, f.name, f.path, f.depth "
+                "FROM folders f INNER JOIN folder_tree ft ON f.parent_id = ft.id "
+                "WHERE f.user_id = ?) "
+                "SELECT id, parent_id, name, path, depth FROM folder_tree ORDER BY depth ASC, id ASC",
+                folder_id,
+                user_id,
+                user_id
+            );
+
+            std::vector<Folders> subtree;
+            subtree.reserve(subtree_result.size());
+            for (const auto& row : subtree_result) {
+                subtree.emplace_back(row, -1);
+            }
+
+            std::shared_ptr<drogon::orm::Transaction> txn;
+            try {
+                txn = co_await m_db_client->newTransactionCoro();
+
+                for (const auto& item : subtree) {
+                    auto old_path = item.getValueOfPath();
+                    auto new_path = new_prefix + old_path.substr(old_prefix.size());
+                    if (item.getValueOfId() == folder_id) {
+                        co_await txn->execSqlCoro(
+                            "UPDATE folders SET name = ?, path = ?, updated_at = ? "
+                            "WHERE id = ? AND user_id = ?",
+                            new_name,
+                            new_path,
+                            trantor::Date::now(),
+                            item.getValueOfId(),
+                            user_id
+                        );
+                    } else {
+                        co_await txn->execSqlCoro(
+                            "UPDATE folders SET path = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                            new_path,
+                            trantor::Date::now(),
+                            item.getValueOfId(),
+                            user_id
+                        );
+                    }
+                }
+
+                std::unordered_map<uint64_t, std::string> folder_paths;
+                folder_paths.reserve(subtree.size());
+                for (const auto& item : subtree) {
+                    auto old_path = item.getValueOfPath();
+                    folder_paths[item.getValueOfId()] = new_prefix + old_path.substr(old_prefix.size());
+                }
+
+                if (!folder_paths.empty()) {
+                    std::vector<uint64_t> folder_ids;
+                    folder_ids.reserve(folder_paths.size());
+                    for (const auto& [id, _] : folder_paths) {
+                        folder_ids.push_back(id);
+                    }
+                    auto files_result = co_await txn->execSqlCoro(
+                        "SELECT id, folder_id, name FROM files WHERE user_id = ? AND folder_id IN (" +
+                            disk::utils::BatchUtils::BuildSafeNumericInClause(folder_ids) + ")",
+                        user_id
+                    );
+                    for (const auto& row : files_result) {
+                        auto file_id = row["id"].as<uint64_t>();
+                        auto file_folder_id = row["folder_id"].as<uint64_t>();
+                        auto file_name = row["name"].as<std::string>();
+                        auto path_it = folder_paths.find(file_folder_id);
+                        if (path_it == folder_paths.end()) {
+                            continue;
+                        }
+                        co_await txn->execSqlCoro(
+                            "UPDATE files SET path = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                            BuildFilePath(path_it->second, file_name),
+                            trantor::Date::now(),
+                            file_id,
+                            user_id
+                        );
+                    }
+                }
+            } catch (const drogon::orm::DrogonDbException& e) {
+                LOG_ERROR << "Rename folder transaction failed (DB): " << e.base().what();
+                if (txn) {
+                    try {
+                        txn->rollback();
+                    } catch (const std::exception& rb_e) {
+                        LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                    }
+                }
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to rename folder")
+                );
+            } catch (const std::exception& e) {
+                LOG_ERROR << "Rename folder transaction failed: " << e.what();
+                if (txn) {
+                    try {
+                        txn->rollback();
+                    } catch (const std::exception& rb_e) {
+                        LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                    }
+                }
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to rename folder")
+                );
+            }
+
+            RenameFolderResponse response;
+            response.id = folder_id;
+            response.name = new_name;
+            response.path = new_prefix;
+            response.updated_at = trantor::Date::now().toDbStringLocal();
+            co_return response;
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_WARN << "Folder not found or no permission: folder_id=" << folder_id << " - "
+                     << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+        }
     }
 
     auto FolderService::FindAndValidateParent(uint64_t parent_id, uint64_t user_id) const

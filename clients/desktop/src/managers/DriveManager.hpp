@@ -38,6 +38,9 @@ namespace disk::desktop::managers {
         Q_INVOKABLE void searchFiles(const QString& query);
         Q_INVOKABLE void createFolder(const QString& parentId, const QString& name);
         Q_INVOKABLE void renameItem(const QString& fileId, const QString& newName);
+        Q_INVOKABLE void renameDriveItem(const QString& itemId, const QString& kind, const QString& newName);
+        Q_INVOKABLE void moveItems(const QVariantList& fileIds, const QVariantList& folderIds, const QString& targetFolderId);
+        Q_INVOKABLE void copyDriveItems(const QVariantList& fileIds, const QVariantList& folderIds, const QString& targetFolderId);
         Q_INVOKABLE void deleteItems(const QStringList& fileIds);
         Q_INVOKABLE void deleteDriveItems(const QVariantList& fileIds, const QVariantList& folderIds);
         Q_INVOKABLE void loadFolderTree();

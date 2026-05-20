@@ -337,6 +337,11 @@ const auto drive_trash_qml = read_qml(QStringLiteral("components/drive/DriveTras
         QVERIFY(drive_qml.contains(QStringLiteral("PageStateView")));
         QVERIFY(drive_qml.contains(QStringLiteral("BreadcrumbBar")));
         QVERIFY(drive_qml.contains(QStringLiteral("FolderTreePanel")));
+        QVERIFY(drive_qml.contains(QStringLiteral("objectName: \"copyButton\"")));
+        QVERIFY(drive_qml.contains(QStringLiteral("objectName: \"contextMenuCopy\"")));
+        QVERIFY(drive_qml.contains(QStringLiteral("objectName: \"copyDialog\"")));
+        QVERIFY(drive_qml.contains(QStringLiteral("driveManager.copyDriveItems")));
+        QVERIFY(drive_qml.contains(QStringLiteral("pendingMutationAction = \"copy\"")));
         QVERIFY(drive_qml.contains(QStringLiteral("property string currentViewMode: \"myfiles\"")));
         QVERIFY(drive_qml.contains(QStringLiteral("function activateViewMode(mode)")));
     }
@@ -352,6 +357,24 @@ const auto drive_trash_qml = read_qml(QStringLiteral("components/drive/DriveTras
         QVERIFY(qml.contains(QStringLiteral("onPageStateChanged")));
         QVERIFY(!qml.contains(QStringLiteral("onCurrentShellChanged")));
         QVERIFY(qml.contains(QStringLiteral("sessionStore.visitor.shareId")));
+    }
+
+
+    void desktopBatchDeletesUsePostEndpoints() {
+        QFile trash_manager(QStringLiteral(QT_TEST_SOURCE_DIR "/../src/managers/TrashManager.cpp"));
+        QVERIFY(trash_manager.open(QIODevice::ReadOnly | QIODevice::Text));
+        const auto trash_source = QString::fromUtf8(trash_manager.readAll());
+        QVERIFY(trash_source.contains(QStringLiteral("headers[\"Content-Type\"] = \"application/json\";")));
+        QVERIFY(trash_source.contains(QStringLiteral("m_networkClient->Post(QUrl(\"/api/trash/delete\"), json_body, headers)")));
+        QVERIFY(trash_source.contains(QStringLiteral("m_networkClient->Delete(QUrl(\"/api/trash/all\"), headers)")));
+        QVERIFY(!trash_source.contains(QStringLiteral("m_networkClient->Delete(QUrl(\"/api/trash\"), json_body, headers)")));
+
+        QFile share_manager(QStringLiteral(QT_TEST_SOURCE_DIR "/../src/managers/ShareManager.cpp"));
+        QVERIFY(share_manager.open(QIODevice::ReadOnly | QIODevice::Text));
+        const auto share_source = QString::fromUtf8(share_manager.readAll());
+        QVERIFY(share_source.contains(QStringLiteral("headers[\"Content-Type\"] = \"application/json\";")));
+        QVERIFY(share_source.contains(QStringLiteral("m_networkClient->Post(QUrl(\"/api/share/cancel\"), json_body, headers)")));
+        QVERIFY(!share_source.contains(QStringLiteral("m_networkClient->Delete(QUrl(\"/api/share\"), json_body, headers)")));
     }
 
     void shareVerifyPageDrivesVisitorStateMachine() {

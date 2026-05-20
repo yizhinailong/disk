@@ -63,6 +63,7 @@ TEST_PASS = os.environ.get("TEST_PASS", "Admin123")
 TOKEN = ""
 FILE_ID = ""
 FOLDER_ID = ""
+MOVE_FOLDER_NAME = ""
 CANCELED_UPLOAD_ID = ""
 
 
@@ -164,6 +165,7 @@ def upload_fixture(token: str, file_size: int = 256) -> str:
 
 
 def test_rename(file_id: str, token: str) -> None:
+    global FILE_ID
     log_step("Test 1: Rename file")
 
     new_name = f"renamed_{os.getpid()}.txt"
@@ -184,6 +186,7 @@ def test_rename(file_id: str, token: str) -> None:
     assert_json_field("rename", resp.text, "code", "0") or (ok := False)
 
     if ok:
+        FILE_ID = file_id
         log_pass(
             f"rename: file renamed to '{new_name}' (HTTP {resp.status_code}, code=0)"
         )
@@ -215,9 +218,11 @@ def test_verify_rename(file_id: str, token: str) -> None:
 
 
 def test_create_folder(token: str) -> str:
+    global FOLDER_ID, MOVE_FOLDER_NAME
     log_step("Test 3: Create folder for move target")
 
     folder_name = f"move_target_{unique_name()}"
+    MOVE_FOLDER_NAME = folder_name
     resp = fetch(
         "/api/folder/create",
         method="POST",
@@ -241,6 +246,7 @@ def test_create_folder(token: str) -> str:
     assert_json_field("create-folder", resp.text, "code", "0") or (ok := False)
 
     if ok:
+        FOLDER_ID = folder_id
         log_pass(f"create-folder: folder_id={folder_id}, name='{folder_name}'")
 
     return folder_id
@@ -259,7 +265,11 @@ def test_move(file_id: str, folder_id: str, token: str) -> None:
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         },
-        json_body={"file_ids": [int(file_id)], "target_folder_id": int(folder_id)},
+        json_body={
+            "file_ids": [int(file_id)],
+            "folder_ids": [],
+            "target_folder_id": int(folder_id),
+        },
     )
 
     save_evidence("mutation-ops-move.json", resp.text)
@@ -289,13 +299,27 @@ def test_verify_move(file_id: str, folder_id: str, token: str) -> None:
     save_evidence("mutation-ops-verify-move.json", resp.text)
 
     actual_parent = json_field(resp.text, "data.parent_id")
+    actual_name = json_field(resp.text, "data.name")
+    actual_path = json_field(resp.text, "data.path")
+    expected_path = f"/{MOVE_FOLDER_NAME}/{actual_name}"
 
+    ok = True
     if int(actual_parent) == int(folder_id):
         log_pass(
             f"verify-move: parent_id = {actual_parent} (matches folder_id={folder_id})"
         )
     else:
+        ok = False
         log_fail(f"verify-move: expected parent_id={folder_id}, got='{actual_parent}'")
+
+    if actual_path == expected_path:
+        log_pass(f"verify-move: path = '{actual_path}'")
+    else:
+        ok = False
+        log_fail(f"verify-move: expected path='{expected_path}', got='{actual_path}'")
+
+    if not ok:
+        print(resp.text)
 
 
 # ─── Test 6: Upload cancel ──────────────────────────────────────────────────

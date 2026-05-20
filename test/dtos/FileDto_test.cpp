@@ -31,6 +31,7 @@ using disk::file::FileListResponse;
 using disk::file::InitUploadRequest;
 using disk::file::InitUploadResponse;
 using disk::file::MoveRequest;
+using disk::file::MoveResponse;
 using disk::file::RenameRequest;
 using disk::file::SearchRequest;
 using disk::file::SearchResponse;
@@ -762,13 +763,22 @@ TEST(RenameRequest, MissingNewName) {
 
 // ==================== MoveRequest Tests ====================
 
-static auto CreateMoveRequest(const std::vector<uint64_t>& file_ids, uint64_t target_folder_id = 0) -> drogon::HttpRequestPtr {
+static auto CreateMoveRequest(
+    const std::vector<uint64_t>& file_ids,
+    uint64_t target_folder_id = 0,
+    const std::vector<uint64_t>& folder_ids = {}
+) -> drogon::HttpRequestPtr {
     Json::Value json;
-    Json::Value ids_array(Json::arrayValue);
+    Json::Value file_ids_array(Json::arrayValue);
     for (auto id : file_ids) {
-        ids_array.append(static_cast<Json::UInt64>(id));
+        file_ids_array.append(static_cast<Json::UInt64>(id));
     }
-    json["file_ids"] = ids_array;
+    Json::Value folder_ids_array(Json::arrayValue);
+    for (auto id : folder_ids) {
+        folder_ids_array.append(static_cast<Json::UInt64>(id));
+    }
+    json["file_ids"] = file_ids_array;
+    json["folder_ids"] = folder_ids_array;
     json["target_folder_id"] = static_cast<Json::UInt64>(target_folder_id);
 
     return CreateJsonRequest(json);
@@ -786,24 +796,36 @@ TEST(MoveRequest, ValidRequest) {
     EXPECT_EQ(result->target_folder_id, 10);
 }
 
-TEST(MoveRequest, EmptyFileIds) {
+TEST(MoveRequest, EmptyFileIdsWithFoldersPasses) {
+    auto req = CreateMoveRequest({}, 10, { 20, 21 });
+    auto result = MoveRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Folder-only move request should pass";
+    EXPECT_TRUE(result->file_ids.empty());
+    EXPECT_EQ(result->folder_ids.size(), 2);
+    EXPECT_EQ(result->folder_ids[0], 20);
+    EXPECT_EQ(result->folder_ids[1], 21);
+    EXPECT_EQ(result->target_folder_id, 10);
+}
+
+TEST(MoveRequest, BothArraysEmpty) {
     auto req = CreateMoveRequest({});
     auto result = MoveRequest::FromRequest(req);
 
-    EXPECT_FALSE(result.has_value()) << "Empty file_ids array should fail";
+    EXPECT_FALSE(result.has_value()) << "Move request without file or folder ids should fail";
     if (!result.has_value()) {
         EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
     }
 }
 
-TEST(MoveRequest, MissingFileIds) {
+TEST(MoveRequest, MissingFileIdsAndFolderIds) {
     Json::Value json;
     auto req = CreateJsonRequest(json);
     auto result = MoveRequest::FromRequest(req);
 
-    EXPECT_FALSE(result.has_value()) << "Missing file_ids should fail";
+    EXPECT_FALSE(result.has_value()) << "Missing both id arrays should fail";
     if (!result.has_value()) {
-        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
     }
 }
 
@@ -837,15 +859,51 @@ TEST(MoveRequest, InvalidFileIdZero) {
     }
 }
 
+TEST(MoveRequest, InvalidFolderIdZero) {
+    auto req = CreateMoveRequest({}, 0, { 0 });
+    auto result = MoveRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "folder_id = 0 should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+TEST(MoveResponse, ToJsonIncludesFileAndFolderCounts) {
+    MoveResponse response;
+    response.moved_count = 3;
+    response.moved_file_count = 2;
+    response.moved_folder_count = 1;
+
+    auto json = response.ToJson();
+
+    EXPECT_EQ(json["moved_count"].asInt(), 3);
+    EXPECT_EQ(json["moved_file_count"].asInt(), 2);
+    EXPECT_EQ(json["moved_folder_count"].asInt(), 1);
+}
+
 // ==================== CopyRequest Tests ====================
 
-static auto CreateCopyRequest(const std::vector<uint64_t>& file_ids, uint64_t target_folder_id = 0) -> drogon::HttpRequestPtr {
+static auto CreateCopyRequest(
+    const std::vector<uint64_t>& file_ids,
+    uint64_t target_folder_id = 0,
+    const std::vector<uint64_t>& folder_ids = {}
+) -> drogon::HttpRequestPtr {
     Json::Value json;
-    Json::Value ids_array(Json::arrayValue);
+    Json::Value file_ids_array(Json::arrayValue);
     for (auto id : file_ids) {
-        ids_array.append(static_cast<Json::UInt64>(id));
+        file_ids_array.append(static_cast<Json::UInt64>(id));
     }
-    json["file_ids"] = ids_array;
+    json["file_ids"] = file_ids_array;
+
+    if (!folder_ids.empty()) {
+        Json::Value folder_ids_array(Json::arrayValue);
+        for (auto id : folder_ids) {
+            folder_ids_array.append(static_cast<Json::UInt64>(id));
+        }
+        json["folder_ids"] = folder_ids_array;
+    }
+
     json["target_folder_id"] = static_cast<Json::UInt64>(target_folder_id);
 
     return CreateJsonRequest(json);
@@ -859,27 +917,52 @@ TEST(CopyRequest, ValidRequest) {
     EXPECT_EQ(result->file_ids.size(), 2);
     EXPECT_EQ(result->file_ids[0], 100);
     EXPECT_EQ(result->file_ids[1], 200);
+    EXPECT_TRUE(result->folder_ids.empty());
     EXPECT_EQ(result->target_folder_id, 5);
 }
 
-TEST(CopyRequest, EmptyFileIds) {
+TEST(CopyRequest, ValidFolderOnlyRequest) {
+    auto req = CreateCopyRequest({}, 5, { 10, 11 });
+    auto result = CopyRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Folder-only copy request should pass";
+    EXPECT_TRUE(result->file_ids.empty());
+    EXPECT_EQ(result->folder_ids.size(), 2);
+    EXPECT_EQ(result->folder_ids[0], 10);
+    EXPECT_EQ(result->folder_ids[1], 11);
+    EXPECT_EQ(result->target_folder_id, 5);
+}
+
+TEST(CopyRequest, ValidMixedRequest) {
+    auto req = CreateCopyRequest({ 100 }, 5, { 10 });
+    auto result = CopyRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "Mixed file/folder copy request should pass";
+    EXPECT_EQ(result->file_ids.size(), 1);
+    EXPECT_EQ(result->file_ids[0], 100);
+    EXPECT_EQ(result->folder_ids.size(), 1);
+    EXPECT_EQ(result->folder_ids[0], 10);
+    EXPECT_EQ(result->target_folder_id, 5);
+}
+
+TEST(CopyRequest, EmptyFileAndFolderIds) {
     auto req = CreateCopyRequest({});
     auto result = CopyRequest::FromRequest(req);
 
-    EXPECT_FALSE(result.has_value()) << "Empty file_ids array should fail";
+    EXPECT_FALSE(result.has_value()) << "Empty file_ids and folder_ids should fail";
     if (!result.has_value()) {
         EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
     }
 }
 
-TEST(CopyRequest, MissingFileIds) {
+TEST(CopyRequest, MissingFileAndFolderIds) {
     Json::Value json;
     auto req = CreateJsonRequest(json);
     auto result = CopyRequest::FromRequest(req);
 
-    EXPECT_FALSE(result.has_value()) << "Missing file_ids should fail";
+    EXPECT_FALSE(result.has_value()) << "Missing file_ids and folder_ids should fail";
     if (!result.has_value()) {
-        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
     }
 }
 
@@ -893,6 +976,34 @@ TEST(CopyRequest, InvalidFileIdType) {
     auto result = CopyRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "Non-integer file_id should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+TEST(CopyRequest, InvalidFolderIdsType) {
+    Json::Value json;
+    json["folder_ids"] = "not-array";
+
+    auto req = CreateJsonRequest(json);
+    auto result = CopyRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Non-array folder_ids should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+TEST(CopyRequest, InvalidFolderIdItemType) {
+    Json::Value json;
+    Json::Value ids_array(Json::arrayValue);
+    ids_array.append("abc");
+    json["folder_ids"] = ids_array;
+
+    auto req = CreateJsonRequest(json);
+    auto result = CopyRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Non-integer folder_id should fail";
     if (!result.has_value()) {
         EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
     }

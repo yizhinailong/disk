@@ -71,6 +71,12 @@ namespace disk::share {
             drogon::Delete,
             "disk::filters::JwtAuthFilter",
         );
+        ADD_METHOD_TO(
+            ShareController::Cancel,
+            "/api/share/cancel",
+            drogon::Post,
+            "disk::filters::JwtAuthFilter",
+        );
 
         ADD_METHOD_TO(ShareController::Access, "/api/share/access/{share_id}", drogon::Post);
 

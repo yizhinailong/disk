@@ -542,6 +542,276 @@ private slots:
         QCOMPARE(arguments.at(1).toInt(), 50010);
     }
 
+    void RenameDriveItemSendsFileRenameEndpoint() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file/10/rename",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+
+        mgr.renameDriveItem("10", "file", "renamed.txt");
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestLog().size(), 1);
+        QVERIFY(mock_network.GetRequestLog().constFirst().url().toString().contains("/api/file/10/rename"));
+
+        QJsonParseError parse_error;
+        auto doc = QJsonDocument::fromJson(mock_network.GetRequestBodyLog().constFirst(), &parse_error);
+        QCOMPARE(parse_error.error, QJsonParseError::NoError);
+        QCOMPARE(doc.object().value("new_name").toString(), QString("renamed.txt"));
+    }
+
+    void RenameDriveItemSendsFolderRenameEndpoint() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/folder/20/rename",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+
+        mgr.renameDriveItem("20", "folder", "Projects");
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestLog().size(), 1);
+        QVERIFY(mock_network.GetRequestLog().constFirst().url().toString().contains("/api/folder/20/rename"));
+
+        QJsonParseError parse_error;
+        auto doc = QJsonDocument::fromJson(mock_network.GetRequestBodyLog().constFirst(), &parse_error);
+        QCOMPARE(parse_error.error, QJsonParseError::NoError);
+        QCOMPARE(doc.object().value("new_name").toString(), QString("Projects"));
+    }
+
+    void RenameDriveItemRejectsInvalidKind() {
+        MockNetworkAccessManager mock_network;
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.renameDriveItem("10", "trash", "renamed.txt");
+
+        QTRY_COMPARE(error_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestLog().size(), 0);
+        auto arguments = error_spy.takeFirst();
+        QCOMPARE(arguments.at(0).toString(), QString("无效的项目类型"));
+        QCOMPARE(arguments.at(1).toInt(), 0);
+    }
+
+    void MoveItemsSendsFileOnlyBody() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file/move",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+
+        mgr.moveItems({ "10" }, {}, "20");
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestLog().size(), 1);
+        QVERIFY(mock_network.GetRequestLog().constFirst().url().toString().contains("/api/file/move"));
+
+        QJsonParseError parse_error;
+        auto doc = QJsonDocument::fromJson(mock_network.GetRequestBodyLog().constFirst(), &parse_error);
+        QCOMPARE(parse_error.error, QJsonParseError::NoError);
+        QCOMPARE(doc.object().value("file_ids").toArray().at(0).toInt(), 10);
+        QCOMPARE(doc.object().value("folder_ids").toArray().size(), 0);
+        QCOMPARE(doc.object().value("target_folder_id").toInt(), 20);
+    }
+
+    void MoveItemsSendsFolderOnlyBody() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file/move",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+
+        mgr.moveItems({}, { "20" }, "0");
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestBodyLog().size(), 1);
+
+        QJsonParseError parse_error;
+        auto doc = QJsonDocument::fromJson(mock_network.GetRequestBodyLog().constFirst(), &parse_error);
+        QCOMPARE(parse_error.error, QJsonParseError::NoError);
+        QCOMPARE(doc.object().value("file_ids").toArray().size(), 0);
+        QCOMPARE(doc.object().value("folder_ids").toArray().at(0).toInt(), 20);
+        QCOMPARE(doc.object().value("target_folder_id").toInt(), 0);
+    }
+
+    void MoveItemsSendsMixedBody() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file/move",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+
+        mgr.moveItems({ "10" }, { "20" }, "30");
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestBodyLog().size(), 1);
+
+        QJsonParseError parse_error;
+        auto doc = QJsonDocument::fromJson(mock_network.GetRequestBodyLog().constFirst(), &parse_error);
+        QCOMPARE(parse_error.error, QJsonParseError::NoError);
+        QCOMPARE(doc.object().value("file_ids").toArray().at(0).toInt(), 10);
+        QCOMPARE(doc.object().value("folder_ids").toArray().at(0).toInt(), 20);
+        QCOMPARE(doc.object().value("target_folder_id").toInt(), 30);
+    }
+
+    void MoveItemsRejectsEmptyIds() {
+        MockNetworkAccessManager mock_network;
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.moveItems({}, {}, "0");
+
+        QTRY_COMPARE(error_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestLog().size(), 0);
+        auto arguments = error_spy.takeFirst();
+        QCOMPARE(arguments.at(0).toString(), QString("请选择要移动的项目"));
+        QCOMPARE(arguments.at(1).toInt(), 0);
+    }
+
+    void MoveItemsRejectsMalformedTargetId() {
+        MockNetworkAccessManager mock_network;
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.moveItems({ "10" }, {}, "abc");
+
+        QTRY_COMPARE(error_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestLog().size(), 0);
+        auto arguments = error_spy.takeFirst();
+        QCOMPARE(arguments.at(0).toString(), QString("无效的目标文件夹 ID"));
+        QCOMPARE(arguments.at(1).toInt(), 0);
+    }
+
+    void MoveItemsRejectsMalformedSuccessPayload() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterRawResponse("api/file/move", "not-json", 200);
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.moveItems({ "10" }, {}, "20");
+
+        QTRY_COMPARE(error_spy.count(), 1);
+        QCOMPARE(success_spy.count(), 0);
+        auto arguments = error_spy.takeFirst();
+        QCOMPARE(arguments.at(0).toString(), QString("响应格式无效"));
+        QCOMPARE(arguments.at(1).toInt(), 0);
+    }
+
+    void MoveItemsRejectsApiErrorEnvelopeOnHttp200() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file/move",
+            QJsonObject{
+                { "code", 50020 },
+                { "message", "Cannot move folder into itself" },
+                { "data", QJsonValue::Null },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.moveItems({}, { "20" }, "20");
+
+        QTRY_COMPARE(error_spy.count(), 1);
+        QCOMPARE(success_spy.count(), 0);
+        auto arguments = error_spy.takeFirst();
+        QCOMPARE(arguments.at(0).toString(), QString("Cannot move folder into itself"));
+        QCOMPARE(arguments.at(1).toInt(), 50020);
+    }
+
     void DeleteItemsEmitsSuccessWithValidEnvelope() {
         MockNetworkAccessManager mock_network;
         mock_network.RegisterResponse(
@@ -787,6 +1057,55 @@ private slots:
         QCOMPARE(mock_network.GetRequestLog().size(), 0);
     }
 
+    void CopyDriveItemsSendsMixedBody() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file/copy",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{} },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+
+        mgr.copyDriveItems({ "10" }, { "20" }, "5");
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestBodyLog().size(), 1);
+
+        QJsonParseError parse_error;
+        auto doc = QJsonDocument::fromJson(mock_network.GetRequestBodyLog().constFirst(), &parse_error);
+        QCOMPARE(parse_error.error, QJsonParseError::NoError);
+        QCOMPARE(doc.object().value("file_ids").toArray().at(0).toInt(), 10);
+        QCOMPARE(doc.object().value("folder_ids").toArray().at(0).toInt(), 20);
+        QCOMPARE(doc.object().value("target_folder_id").toInt(), 5);
+    }
+
+    void CopyDriveItemsRejectsEmptyIds() {
+        MockNetworkAccessManager mock_network;
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.copyDriveItems({}, {}, "0");
+
+        QTRY_COMPARE(error_spy.count(), 1);
+        QCOMPARE(mock_network.GetRequestLog().size(), 0);
+    }
+
     void DeleteItemsSourceBuildsJsonFileIdsBody() {
         QFile source_file(QStringLiteral(QT_TEST_SOURCE_DIR "/../src/managers/DriveManager.cpp"));
         QVERIFY(source_file.open(QIODevice::ReadOnly | QIODevice::Text));
@@ -798,6 +1117,8 @@ private slots:
         QVERIFY(source.contains("void DriveManager::deleteItems(const QStringList& fileIds)"));
         QVERIFY(source.contains("QVariantList ids;"));
         QVERIFY(source.contains("deleteDriveItems(ids, {});"));
+        QVERIFY(source.contains("void DriveManager::copyDriveItems(const QVariantList& fileIds, const QVariantList& folderIds, const QString& targetFolderId)"));
+        QVERIFY(source.contains("m_networkClient->Post(QUrl(\"/api/file/copy\"), QJsonDocument(body).toJson(QJsonDocument::Compact), headers)"));
     }
 
     void ListFilesSendsAuthHeaders() {

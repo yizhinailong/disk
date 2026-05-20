@@ -61,6 +61,10 @@ namespace disk::folder {
         auto CreateFolder(CreateFolderRequest request, uint64_t user_id)
             -> drogon::Task<Result<CreateFolderResponse>>;
 
+        [[nodiscard]]
+        auto Rename(uint64_t folder_id, std::string new_name, uint64_t user_id)
+            -> drogon::Task<Result<RenameFolderResponse>>;
+
         /**
          * @brief 获取文件夹树
          *

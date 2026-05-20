@@ -36,6 +36,18 @@ Menu {
     }
 
     MenuItem {
+        objectName: "contextMenuMove"
+        text: "移动"
+        onTriggered: page.openMoveDialog()
+    }
+
+    MenuItem {
+        objectName: "contextMenuCopy"
+        text: "复制"
+        onTriggered: page.openCopyDialog()
+    }
+
+    MenuItem {
         objectName: "contextMenuDelete"
         text: "删除"
         onTriggered: page.openDeleteDialog()

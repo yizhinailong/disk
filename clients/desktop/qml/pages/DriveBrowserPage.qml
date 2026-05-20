@@ -85,6 +85,12 @@ Page {
     property string createFolderErrorMessage: ""
     property string renameErrorMessage: ""
     property string deleteErrorMessage: ""
+    property string moveErrorMessage: ""
+    property string copyErrorMessage: ""
+    property string targetMoveFolderId: "0"
+    property string targetMoveFolderName: "我的网盘"
+    property string targetCopyFolderId: "0"
+    property string targetCopyFolderName: "我的网盘"
     property string createShareErrorMessage: ""
     property string editShareErrorMessage: ""
     property string uploadErrorMessage: ""
@@ -459,6 +465,8 @@ Page {
         createFolderErrorMessage = ""
         renameErrorMessage = ""
         deleteErrorMessage = ""
+        moveErrorMessage = ""
+        copyErrorMessage = ""
     }
 
     function clearShareMutationErrors() {
@@ -804,6 +812,30 @@ Page {
         deleteDialog.open()
     }
 
+    function openMoveDialog() {
+        if (selectedItemIds.length === 0 || !root.isMyFilesMode) {
+            return
+        }
+
+        resetMutationState()
+        targetMoveFolderId = "0"
+        targetMoveFolderName = "我的网盘"
+        driveManager.loadFolderTree()
+        moveDialog.open()
+    }
+
+    function openCopyDialog() {
+        if (selectedItemIds.length === 0 || !root.isMyFilesMode) {
+            return
+        }
+
+        resetMutationState()
+        targetCopyFolderId = "0"
+        targetCopyFolderName = "我的网盘"
+        driveManager.loadFolderTree()
+        copyDialog.open()
+    }
+
     function submitCreateFolder() {
         var validationResult = root.validateDriveItemName(newFolderNameField.text)
         if (!validationResult.valid) {
@@ -833,7 +865,51 @@ Page {
         clearMutationErrors()
         mutationInFlight = true
         pendingMutationAction = "rename"
-        driveManager.renameItem(root.selectedItemId, validationResult.value)
+        driveManager.renameDriveItem(root.selectedItemId, root.selectedItemKind, validationResult.value)
+    }
+
+    function submitMoveItems() {
+        if (selectedItemIds.length === 0) {
+            return
+        }
+
+        var ids = root.selectedDeleteIds()
+        if (ids.fileIds.length === 0 && ids.folderIds.length === 0) {
+            moveErrorMessage = "请选择要移动的项目"
+            return
+        }
+
+        clearMutationErrors()
+        pendingMutationAction = "move"
+        mutationInFlight = true
+        try {
+            driveManager.moveItems(ids.fileIds, ids.folderIds, root.targetMoveFolderId)
+        } catch (error) {
+            mutationInFlight = false
+            moveErrorMessage = "移动请求发送失败：" + error
+        }
+    }
+
+    function submitCopyItems() {
+        if (selectedItemIds.length === 0) {
+            return
+        }
+
+        var ids = root.selectedDeleteIds()
+        if (ids.fileIds.length === 0 && ids.folderIds.length === 0) {
+            copyErrorMessage = "请选择要复制的项目"
+            return
+        }
+
+        clearMutationErrors()
+        pendingMutationAction = "copy"
+        mutationInFlight = true
+        try {
+            driveManager.copyDriveItems(ids.fileIds, ids.folderIds, root.targetCopyFolderId)
+        } catch (error) {
+            mutationInFlight = false
+            copyErrorMessage = "复制请求发送失败：" + error
+        }
     }
 
     function submitDeleteItem() {
@@ -876,6 +952,14 @@ Page {
         }
         if (pendingMutationAction === "delete") {
             deleteErrorMessage = errorMessage
+            return
+        }
+        if (pendingMutationAction === "move") {
+            moveErrorMessage = errorMessage
+            return
+        }
+        if (pendingMutationAction === "copy") {
+            copyErrorMessage = errorMessage
         }
     }
 
@@ -887,12 +971,18 @@ Page {
         newFolderDialog.close()
         renameDialog.close()
         deleteDialog.close()
+        moveDialog.close()
+        copyDialog.close()
         if (finishedAction === "create") {
             root.showToast("文件夹创建成功")
         } else if (finishedAction === "rename") {
             root.showToast("项目重命名成功")
         } else if (finishedAction === "delete") {
             root.showToast("项目删除成功")
+        } else if (finishedAction === "move") {
+            root.showToast("项目移动成功")
+        } else if (finishedAction === "copy") {
+            root.showToast("项目复制成功")
         }
         root.refreshCurrentFolder()
     }
@@ -1439,6 +1529,180 @@ Page {
     }
 
     Dialog {
+        id: moveDialog
+        objectName: "moveDialog"
+        modal: true
+        width: 420
+        height: 520
+        title: "移动到"
+        standardButtons: Dialog.NoButton
+        closePolicy: Popup.NoAutoClose
+
+        onClosed: {
+            if (!root.mutationInFlight) {
+                root.resetMutationState()
+            }
+        }
+
+        ColumnLayout {
+            width: parent.width
+            height: parent.height
+            spacing: root.panelSpacing
+
+            Label {
+                Layout.fillWidth: true
+                text: "选择目标文件夹。当前目标：" + root.targetMoveFolderName
+                color: root.panelSecondaryTextColor
+                wrapMode: Text.WordWrap
+            }
+
+            Button {
+                Layout.fillWidth: true
+                text: "我的网盘（根目录）"
+                enabled: !root.mutationInFlight
+                onClicked: {
+                    root.targetMoveFolderId = "0"
+                    root.targetMoveFolderName = "我的网盘"
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                color: root.panelMutedFillColor
+                radius: root.innerPanelRadius
+                border.color: root.panelBorderColor
+
+                FolderTreePanel {
+                    anchors.fill: parent
+                    model: driveManager.treeModel
+                    currentFolderId: root.targetMoveFolderId
+                    onFolderClicked: function(folderId) {
+                        root.targetMoveFolderId = folderId
+                        root.targetMoveFolderName = "文件夹 " + folderId
+                    }
+                    onCloseRequested: moveDialog.close()
+                }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: root.moveErrorMessage
+                color: root.panelErrorTextColor
+                visible: text !== ""
+                wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: "取消"
+                    enabled: !root.mutationInFlight
+                    onClicked: moveDialog.close()
+                }
+
+                Button {
+                    text: root.pendingMutationAction === "move" && root.mutationInFlight
+                          ? "移动中..." : "移动"
+                    highlighted: true
+                    enabled: !root.mutationInFlight
+                    onClicked: root.submitMoveItems()
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: copyDialog
+        objectName: "copyDialog"
+        modal: true
+        width: 420
+        height: 520
+        title: "复制到"
+        standardButtons: Dialog.NoButton
+        closePolicy: Popup.NoAutoClose
+
+        onClosed: {
+            if (!root.mutationInFlight) {
+                root.resetMutationState()
+            }
+        }
+
+        ColumnLayout {
+            width: parent.width
+            height: parent.height
+            spacing: root.panelSpacing
+
+            Label {
+                Layout.fillWidth: true
+                text: "选择复制目标文件夹。当前目标：" + root.targetCopyFolderName
+                color: root.panelSecondaryTextColor
+                wrapMode: Text.WordWrap
+            }
+
+            Button {
+                Layout.fillWidth: true
+                text: "我的网盘（根目录）"
+                enabled: !root.mutationInFlight
+                onClicked: {
+                    root.targetCopyFolderId = "0"
+                    root.targetCopyFolderName = "我的网盘"
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                color: root.panelMutedFillColor
+                radius: root.innerPanelRadius
+                border.color: root.panelBorderColor
+
+                FolderTreePanel {
+                    anchors.fill: parent
+                    model: driveManager.treeModel
+                    currentFolderId: root.targetCopyFolderId
+                    onFolderClicked: function(folderId) {
+                        root.targetCopyFolderId = folderId
+                        root.targetCopyFolderName = "文件夹 " + folderId
+                    }
+                    onCloseRequested: copyDialog.close()
+                }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: root.copyErrorMessage
+                color: root.panelErrorTextColor
+                visible: text !== ""
+                wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: "取消"
+                    enabled: !root.mutationInFlight
+                    onClicked: copyDialog.close()
+                }
+
+                Button {
+                    text: root.pendingMutationAction === "copy" && root.mutationInFlight
+                          ? "复制中..." : "复制"
+                    highlighted: true
+                    enabled: !root.mutationInFlight
+                    onClicked: root.submitCopyItems()
+                }
+            }
+        }
+    }
+
+    Dialog {
         id: createShareDialog
         objectName: "createShareDialog"
         modal: true
@@ -1839,7 +2103,7 @@ Page {
         }
 
         function onOperationSuccess(message) {
-            if (root.pendingMutationAction === "create" || root.pendingMutationAction === "rename" || root.pendingMutationAction === "delete") {
+            if (root.pendingMutationAction === "create" || root.pendingMutationAction === "rename" || root.pendingMutationAction === "delete" || root.pendingMutationAction === "move" || root.pendingMutationAction === "copy") {
                 root.finishMutationSuccess()
             }
         }

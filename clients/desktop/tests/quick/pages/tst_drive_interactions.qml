@@ -187,6 +187,10 @@ TestCase {
 
         verify(source.indexOf('objectName: "contextMenuRename"') !== -1,
                "Context menu has Rename action")
+        verify(source.indexOf('objectName: "contextMenuMove"') !== -1,
+               "Context menu has Move action")
+        verify(source.indexOf("page.openMoveDialog()") !== -1,
+               "Move action opens the move dialog")
         verify(source.indexOf('objectName: "contextMenuDelete"') !== -1,
                "Context menu has Delete action")
     }

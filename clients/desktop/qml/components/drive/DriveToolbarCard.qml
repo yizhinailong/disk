@@ -120,8 +120,24 @@ Rectangle {
             Button {
                 text: "重命名"
                 visible: page.isMyFilesMode
-                enabled: page.selectedItemId !== ""
+                enabled: page.selectedItemIds.length === 1
                 onClicked: page.openRenameDialog()
+            }
+
+            Button {
+                objectName: "moveButton"
+                text: "移动"
+                visible: page.isMyFilesMode
+                enabled: page.selectedItemIds.length > 0
+                onClicked: page.openMoveDialog()
+            }
+
+            Button {
+                objectName: "copyButton"
+                text: "复制"
+                visible: page.isMyFilesMode
+                enabled: page.selectedItemIds.length > 0
+                onClicked: page.openCopyDialog()
             }
 
             Button {

@@ -57,6 +57,9 @@ PARENT_FOLDER_ID = ""
 CHILD_FOLDER_ID = ""
 PARENT_FOLDER_NAME = f"TstParent_{unique_name()}"
 CHILD_FOLDER_NAME = f"TstChild_{unique_name()}"
+RENAMED_PARENT_FOLDER_NAME = f"TstParentRenamed_{unique_name()}"
+MOVE_TARGET_FOLDER_ID = ""
+MOVE_TARGET_FOLDER_NAME = f"TstMoveTarget_{unique_name()}"
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -90,6 +93,49 @@ def get_breadcrumb(token: str, folder_id: int) -> tuple[int, str]:
     resp = fetch(
         f"/api/folder/{folder_id}/breadcrumb",
         headers={"Authorization": f"Bearer {token}"},
+    )
+    return resp.status_code, resp.text
+
+
+def rename_folder(token: str, folder_id: int, new_name: str) -> tuple[int, str]:
+    resp = fetch(
+        f"/api/folder/{folder_id}/rename",
+        method="PUT",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json_body={"new_name": new_name},
+    )
+    return resp.status_code, resp.text
+
+
+def move_folders(token: str, folder_ids: list[int], target_folder_id: int) -> tuple[int, str]:
+    resp = fetch(
+        "/api/file/move",
+        method="PUT",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json_body={
+            "file_ids": [],
+            "folder_ids": folder_ids,
+            "target_folder_id": target_folder_id,
+        },
+    )
+    return resp.status_code, resp.text
+
+
+def delete_folders(token: str, folder_ids: list[int]) -> tuple[int, str]:
+    resp = fetch(
+        "/api/file/delete",
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json_body={"file_ids": [], "folder_ids": folder_ids},
     )
     return resp.status_code, resp.text
 
@@ -313,6 +359,161 @@ def test_invalid_folder_name() -> None:
         sys.exit(1)
 
 
+# ─── Test 7: Rename folder updates tree and breadcrumb ───────────────────────
+
+
+def test_rename_parent_folder() -> None:
+    global PARENT_FOLDER_NAME
+
+    log_info("Testing parent folder rename...")
+
+    http_code, body = rename_folder(TOKEN, int(PARENT_FOLDER_ID), RENAMED_PARENT_FOLDER_NAME)
+    code = json_field(body, "code")
+
+    if http_code != 200 or code != "0":
+        log_fail(f"Folder rename failed: HTTP {http_code}, code={code}")
+        print(body)
+        sys.exit(1)
+
+    renamed_path = json_field(body, "data.path")
+    expected_path = f"/{RENAMED_PARENT_FOLDER_NAME}"
+    if renamed_path != expected_path:
+        log_fail(f"Folder rename path mismatch: expected '{expected_path}', got '{renamed_path}'")
+        print(body)
+        sys.exit(1)
+
+    PARENT_FOLDER_NAME = RENAMED_PARENT_FOLDER_NAME
+    log_pass(f"Parent folder renamed to {PARENT_FOLDER_NAME}")
+    save_evidence("rename_parent_folder_response.json", body)
+
+
+def test_renamed_folder_breadcrumb() -> None:
+    log_info("Testing child breadcrumb after parent rename...")
+
+    http_code, body = get_breadcrumb(TOKEN, int(CHILD_FOLDER_ID))
+    code = json_field(body, "code")
+
+    if http_code != 200 or code != "0":
+        log_fail(f"Breadcrumb after rename failed: HTTP {http_code}, code={code}")
+        print(body)
+        sys.exit(1)
+
+    data = json.loads(body)
+    path = data.get("data", {}).get("path", [])
+    names = [item.get("name") for item in path]
+    if PARENT_FOLDER_NAME not in names or CHILD_FOLDER_NAME not in names:
+        log_fail("Breadcrumb after rename does not include renamed parent and child")
+        print(body)
+        sys.exit(1)
+
+    log_pass("Breadcrumb reflects renamed parent folder")
+    save_evidence("renamed_folder_breadcrumb_response.json", body)
+
+
+# ─── Test 8: Move folder subtree ──────────────────────────────────────────────
+
+
+def test_create_move_target_folder() -> None:
+    global MOVE_TARGET_FOLDER_ID
+
+    log_info("Testing move target folder creation...")
+
+    http_code, body = create_folder(TOKEN, MOVE_TARGET_FOLDER_NAME, 0)
+    code = json_field(body, "code")
+
+    if http_code == 200 and code == "0":
+        MOVE_TARGET_FOLDER_ID = json_field(body, "data.id")
+        if MOVE_TARGET_FOLDER_ID and MOVE_TARGET_FOLDER_ID != "null":
+            log_pass(f"Move target created: id={MOVE_TARGET_FOLDER_ID}")
+            save_evidence("create_move_target_folder_response.json", body)
+            return
+
+    log_fail(f"Move target folder creation failed: HTTP {http_code}, code={code}")
+    print(body)
+    sys.exit(1)
+
+
+def test_reject_move_folder_into_child() -> None:
+    log_info("Testing folder move into child is rejected...")
+
+    http_code, body = move_folders(TOKEN, [int(PARENT_FOLDER_ID)], int(CHILD_FOLDER_ID))
+    code = json_field(body, "code")
+
+    if http_code != 200 or code != "0":
+        log_pass(f"Move into child correctly rejected: HTTP {http_code}, code={code}")
+        save_evidence("move_folder_into_child_rejected_response.json", body)
+        return
+
+    log_fail("Moving a folder into its child should be rejected but succeeded")
+    print(body)
+    sys.exit(1)
+
+
+def test_move_parent_folder_to_target() -> None:
+    log_info("Testing parent folder move to another folder...")
+
+    http_code, body = move_folders(TOKEN, [int(PARENT_FOLDER_ID)], int(MOVE_TARGET_FOLDER_ID))
+    code = json_field(body, "code")
+
+    if http_code != 200 or code != "0":
+        log_fail(f"Folder move failed: HTTP {http_code}, code={code}")
+        print(body)
+        sys.exit(1)
+
+    moved_count = json_field(body, "data.moved_folder_count")
+    if int(moved_count) < 1:
+        log_fail(f"Folder move did not report moved folders: moved_folder_count={moved_count}")
+        print(body)
+        sys.exit(1)
+
+    log_pass(f"Parent folder moved under target id={MOVE_TARGET_FOLDER_ID}")
+    save_evidence("move_parent_folder_response.json", body)
+
+
+def test_moved_folder_breadcrumb() -> None:
+    log_info("Testing child breadcrumb after parent move...")
+
+    http_code, body = get_breadcrumb(TOKEN, int(CHILD_FOLDER_ID))
+    code = json_field(body, "code")
+
+    if http_code != 200 or code != "0":
+        log_fail(f"Breadcrumb after move failed: HTTP {http_code}, code={code}")
+        print(body)
+        sys.exit(1)
+
+    data = json.loads(body)
+    path = data.get("data", {}).get("path", [])
+    names = [item.get("name") for item in path]
+    expected_order = [MOVE_TARGET_FOLDER_NAME, PARENT_FOLDER_NAME, CHILD_FOLDER_NAME]
+    positions = [names.index(name) if name in names else -1 for name in expected_order]
+
+    if any(pos < 0 for pos in positions) or positions != sorted(positions):
+        log_fail("Breadcrumb after move does not preserve target → parent → child order")
+        print(body)
+        sys.exit(1)
+
+    log_pass("Breadcrumb reflects moved folder subtree")
+    save_evidence("moved_folder_breadcrumb_response.json", body)
+
+
+def test_delete_moved_folder_to_trash() -> None:
+    log_info("Testing moved folder can be deleted via mixed delete endpoint...")
+
+    http_code, body = delete_folders(TOKEN, [int(PARENT_FOLDER_ID)])
+    code = json_field(body, "code")
+
+    if http_code == 200 and code == "0":
+        deleted_count = json_field(body, "data.deleted_count")
+        if deleted_count and int(deleted_count) >= 1:
+            log_pass("Moved folder deleted to trash")
+            save_evidence("delete_moved_folder_response.json", body)
+            return
+
+    log_fail(f"Moved folder delete failed: HTTP {http_code}, code={code}")
+    print(body)
+    sys.exit(1)
+
+
 # ─── Main ───────────────────────────────────────────────────────────────────
 
 
@@ -334,6 +535,13 @@ def main() -> None:
     test_breadcrumb_order()
     test_nonexistent_folder_breadcrumb()
     test_invalid_folder_name()
+    test_rename_parent_folder()
+    test_renamed_folder_breadcrumb()
+    test_create_move_target_folder()
+    test_reject_move_folder_into_child()
+    test_move_parent_folder_to_target()
+    test_moved_folder_breadcrumb()
+    test_delete_moved_folder_to_trash()
 
     log_info(
         f"Created folders — Parent: {PARENT_FOLDER_NAME} (ID: {PARENT_FOLDER_ID}), "

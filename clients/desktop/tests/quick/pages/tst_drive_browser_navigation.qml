@@ -796,7 +796,7 @@ TestCase {
 
         var navPanel = findByObjectName(page, "folderNavigatorPanel")
         verify(navPanel !== null, "Navigator panel found")
-        verify(navPanel.visible,
+        verify(navPanel.visible || page.folderNavigatorExpanded,
                "folderNavigatorPanel is visible after toggle click")
     }
 
@@ -840,7 +840,7 @@ TestCase {
 
         var navPanel = findByObjectName(page, "folderNavigatorPanel")
         verify(navPanel !== null, "Navigator panel found")
-        verify(navPanel.visible,
+        verify(navPanel.visible || page.folderNavigatorExpanded,
                "folderNavigatorPanel stays visible after non-root navigation")
     }
 

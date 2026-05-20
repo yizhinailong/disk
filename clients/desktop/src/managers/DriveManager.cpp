@@ -180,6 +180,122 @@ namespace disk::desktop::managers {
         });
     }
 
+    void DriveManager::renameDriveItem(const QString& itemId, const QString& kind, const QString& newName) {
+        if (kind == QStringLiteral("file")) {
+            renameItem(itemId, newName);
+            return;
+        }
+        if (kind != QStringLiteral("folder")) {
+            emit apiError("无效的项目类型", 0);
+            return;
+        }
+
+        QJsonObject body;
+        body["new_name"] = newName;
+
+        QJsonDocument doc(body);
+        auto headers = PrepareHeaders();
+        headers["Content-Type"] = "application/json";
+
+        QUrl url(QString("/api/folder/%1/rename").arg(itemId));
+        auto* reply = m_networkClient->Put(url, doc.toJson(QJsonDocument::Compact), headers);
+        m_active_replies.append(reply);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            m_active_replies.removeOne(reply);
+            reply->deleteLater();
+            HandleRenameResponse(reply);
+        });
+    }
+
+    void DriveManager::moveItems(const QVariantList& fileIds, const QVariantList& folderIds, const QString& targetFolderId) {
+        auto toJsonArray = [](const QVariantList& ids) {
+            QJsonArray values;
+            for (const auto& id : ids) {
+                bool ok = false;
+                auto val = id.toString().toULongLong(&ok);
+                if (ok && val > 0) {
+                    values.append(static_cast<double>(val));
+                }
+            }
+            return values;
+        };
+
+        auto fileIdArray = toJsonArray(fileIds);
+        auto folderIdArray = toJsonArray(folderIds);
+        if (fileIdArray.isEmpty() && folderIdArray.isEmpty()) {
+            emit apiError("请选择要移动的项目", 0);
+            return;
+        }
+
+        bool ok = true;
+        auto numericTargetId = targetFolderId.isEmpty() ? 0ULL : targetFolderId.toULongLong(&ok);
+        if (!ok) {
+            emit apiError("无效的目标文件夹 ID", 0);
+            return;
+        }
+
+        QJsonObject body;
+        body["file_ids"] = fileIdArray;
+        body["folder_ids"] = folderIdArray;
+        body["target_folder_id"] = static_cast<double>(numericTargetId);
+
+        auto headers = PrepareHeaders();
+        headers["Content-Type"] = "application/json";
+        auto* reply = m_networkClient->Put(QUrl("/api/file/move"), QJsonDocument(body).toJson(QJsonDocument::Compact), headers);
+        m_active_replies.append(reply);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            m_active_replies.removeOne(reply);
+            reply->deleteLater();
+            HandleMoveResponse(reply);
+        });
+    }
+
+    void DriveManager::copyDriveItems(const QVariantList& fileIds, const QVariantList& folderIds, const QString& targetFolderId) {
+        auto toJsonArray = [](const QVariantList& ids) {
+            QJsonArray values;
+            for (const auto& id : ids) {
+                bool ok = false;
+                auto val = id.toString().toULongLong(&ok);
+                if (ok && val > 0) {
+                    values.append(static_cast<double>(val));
+                }
+            }
+            return values;
+        };
+
+        auto fileIdArray = toJsonArray(fileIds);
+        auto folderIdArray = toJsonArray(folderIds);
+        if (fileIdArray.isEmpty() && folderIdArray.isEmpty()) {
+            emit apiError("请选择要复制的项目", 0);
+            return;
+        }
+
+        bool ok = true;
+        auto numericTargetId = targetFolderId.isEmpty() ? 0ULL : targetFolderId.toULongLong(&ok);
+        if (!ok) {
+            emit apiError("无效的目标文件夹 ID", 0);
+            return;
+        }
+
+        QJsonObject body;
+        body["file_ids"] = fileIdArray;
+        body["folder_ids"] = folderIdArray;
+        body["target_folder_id"] = static_cast<double>(numericTargetId);
+
+        auto headers = PrepareHeaders();
+        headers["Content-Type"] = "application/json";
+        auto* reply = m_networkClient->Post(QUrl("/api/file/copy"), QJsonDocument(body).toJson(QJsonDocument::Compact), headers);
+        m_active_replies.append(reply);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            m_active_replies.removeOne(reply);
+            reply->deleteLater();
+            HandleCopyResponse(reply);
+        });
+    }
+
     void DriveManager::deleteItems(const QStringList& fileIds) {
         QVariantList ids;
         ids.reserve(fileIds.size());
@@ -486,6 +602,18 @@ void DriveManager::HandleRenameResponse(QNetworkReply* reply) {
 
         if (reply->error() != QNetworkReply::NoError) {
             EmitApiError(reply);
+            return;
+        }
+
+        auto json_opt = ParseJsonResponse(reply);
+        if (!json_opt.has_value()) {
+            emit apiError("响应格式无效", 0);
+            return;
+        }
+
+        if (json_opt->value("code").toInt(0) != 0) {
+            auto err = ErrorAdapter::FromJson(*json_opt);
+            emit apiError(err.message, err.code);
             return;
         }
 

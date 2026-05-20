@@ -22,6 +22,8 @@ using disk::folder::BreadcrumbItem;
 using disk::folder::BreadcrumbResponse;
 using disk::folder::CreateFolderRequest;
 using disk::folder::CreateFolderResponse;
+using disk::folder::RenameFolderRequest;
+using disk::folder::RenameFolderResponse;
 
 static auto CreateCreateFolderRequest(
     const std::string& name,
@@ -47,6 +49,21 @@ static auto CreateCreateFolderRequestWithoutParent(
 ) -> drogon::HttpRequestPtr {
     Json::Value json;
     json["name"] = name;
+
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    std::string body = Json::writeString(builder, json);
+
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody(body);
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    return req;
+}
+
+static auto CreateRenameFolderRequest(const std::string& new_name) -> drogon::HttpRequestPtr {
+    Json::Value json;
+    json["new_name"] = new_name;
 
     Json::StreamWriterBuilder builder;
     builder["indentation"] = "";
@@ -596,7 +613,69 @@ TEST(BreadcrumbResponse, ToJsonSingleItem) {
     EXPECT_EQ(json["path"][0]["name"].asString(), "根目录");
 }
 
-TEST(BreadcrumbResponse, ToJsonMultipleItems) {
+// ==================== RenameFolderRequest Tests ====================
+
+TEST(RenameFolderRequest, ValidRequest) {
+    auto req = CreateRenameFolderRequest("Renamed");
+    auto result = RenameFolderRequest::FromPathAndRequest("123", req);
+
+    ASSERT_TRUE(result.has_value()) << "Valid rename folder request should pass";
+    EXPECT_EQ(result->folder_id, 123);
+    EXPECT_EQ(result->new_name, "Renamed");
+}
+
+TEST(RenameFolderRequest, InvalidFolderId) {
+    auto req = CreateRenameFolderRequest("Renamed");
+    auto result = RenameFolderRequest::FromPathAndRequest("abc", req);
+
+    EXPECT_FALSE(result.has_value()) << "Invalid folder id should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidParameter);
+    }
+}
+
+TEST(RenameFolderRequest, MissingNewName) {
+    Json::Value json;
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setBody(Json::writeString(builder, json));
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+
+    auto result = RenameFolderRequest::FromPathAndRequest("123", req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing new_name should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(RenameFolderRequest, InvalidFolderName) {
+    auto req = CreateRenameFolderRequest("bad/name");
+    auto result = RenameFolderRequest::FromPathAndRequest("123", req);
+
+    EXPECT_FALSE(result.has_value()) << "Invalid folder name should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::InvalidFilename);
+    }
+}
+
+TEST(RenameFolderResponse, ToJsonCorrectFields) {
+    RenameFolderResponse response;
+    response.id = 123;
+    response.name = "Renamed";
+    response.path = "/Renamed/";
+    response.updated_at = "2026-05-20 10:00:00";
+
+    auto json = response.ToJson();
+
+    EXPECT_EQ(json["id"].asUInt64(), 123);
+    EXPECT_EQ(json["name"].asString(), "Renamed");
+    EXPECT_EQ(json["path"].asString(), "/Renamed/");
+    EXPECT_EQ(json["updated_at"].asString(), "2026-05-20 10:00:00");
+}
+
+TEST(BreadcrumbResponse, ToJsonCorrectFields) {
     BreadcrumbResponse response;
 
     BreadcrumbItem root;

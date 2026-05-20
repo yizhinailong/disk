@@ -137,7 +137,8 @@ namespace disk::desktop::managers {
         QByteArray json_body = QJsonDocument(body).toJson(QJsonDocument::Compact);
 
         auto headers = PrepareHeaders();
-        auto* reply = m_networkClient->Delete(QUrl("/api/trash"), json_body, headers);
+        headers["Content-Type"] = "application/json";
+        auto* reply = m_networkClient->Post(QUrl("/api/trash/delete"), json_body, headers);
         m_active_replies.append(reply);
 
         connect(reply, &QNetworkReply::finished, this, [this, reply]() {
@@ -149,7 +150,7 @@ namespace disk::desktop::managers {
 
     void TrashManager::clearAll() {
         auto headers = PrepareHeaders();
-        auto* reply = m_networkClient->Delete(QUrl("/api/trash/all"), QByteArray(), headers);
+        auto* reply = m_networkClient->Delete(QUrl("/api/trash/all"), headers);
         m_active_replies.append(reply);
 
         connect(reply, &QNetworkReply::finished, this, [this, reply]() {
