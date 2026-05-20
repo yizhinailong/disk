@@ -293,6 +293,8 @@ namespace disk::file {
          */
         struct UploadTaskCacheEntry {
             uint64_t user_id = 0;
+            uint64_t file_size = 0;
+            uint32_t chunk_size = 0;
             uint32_t total_chunks = 0;
             trantor::Date expires_at;
             int status = 0;

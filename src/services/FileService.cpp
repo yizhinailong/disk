@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
-#include <cmath>
+#include <limits>
 #include <sstream>
 #include <string_view>
 #include <unordered_map>
@@ -549,6 +549,30 @@ namespace disk::file {
                   << "\", file_size=" << request.file_size << ", file_hash=" << request.file_hash
                   << ", parent_id=" << request.parent_id << ", user_id=" << user_id;
 
+        auto config = ConfigMgr::GetInstance();
+        auto max_file_size = config->GetMaxFileSize();
+        if (request.file_size > max_file_size) {
+            LOG_WARN << "Upload file exceeds max size: filename=\"" << request.filename
+                     << "\", file_size=" << request.file_size
+                     << ", max_file_size=" << max_file_size << ", user_id=" << user_id;
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "File size exceeds maximum allowed size")
+            );
+        }
+
+        auto parent_location_result =
+            co_await ResolveFolderLocation(m_db_client, request.parent_id, user_id);
+        if (!parent_location_result) {
+            co_return std::unexpected(parent_location_result.error());
+        }
+
+        if (co_await IsFilenameExists(request.parent_id, request.filename, user_id)) {
+            LOG_WARN << "File with same name already exists during upload init: "
+                     << request.filename << ", parent_id=" << request.parent_id
+                     << ", user_id=" << user_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
+        }
+
         // 1. 检测秒传：查找已存在的内容（获取 id + mime_type，避免二次读取）
         auto existing_content_meta =
             co_await LookupExistingContentMetadata(m_db_client, request.file_hash);
@@ -704,11 +728,27 @@ namespace disk::file {
         }
 
         // 4. 创建新的上传任务
-        auto config = ConfigMgr::GetInstance();
         auto chunk_size = config->GetChunkSize();
-        auto total_chunks = static_cast<uint32_t>(
-            std::ceil(static_cast<double>(request.file_size) / static_cast<double>(chunk_size))
-        );
+        if (chunk_size == 0) {
+            LOG_ERROR << "Invalid upload chunk size configured: 0";
+            co_await ReleaseReservedQuota(user_id, request.file_size);
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Invalid upload chunk size configuration")
+            );
+        }
+
+        const auto total_chunks_u64 = ((request.file_size - 1) / chunk_size) + 1;
+        if (total_chunks_u64 > std::numeric_limits<uint32_t>::max()) {
+            LOG_WARN << "Upload requires too many chunks: filename=\"" << request.filename
+                     << "\", file_size=" << request.file_size
+                     << ", chunk_size=" << chunk_size
+                     << ", total_chunks=" << total_chunks_u64;
+            co_await ReleaseReservedQuota(user_id, request.file_size);
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "File requires too many chunks")
+            );
+        }
+        auto total_chunks = static_cast<uint32_t>(total_chunks_u64);
         auto expiry_seconds = config->GetUploadTaskExpirySeconds();
 
         // 生成上传 ID
@@ -847,7 +887,32 @@ namespace disk::file {
             );
         }
 
-        // 4. 将请求体复制到拥有所有权的缓冲区，只做一次哈希+落盘复用。
+        // 4. 验证分片大小符合任务几何信息
+        const auto chunk_offset = static_cast<uint64_t>(chunk_index) * task.chunk_size;
+        const auto remaining_bytes = task.file_size - chunk_offset;
+        const auto expected_size = std::min<uint64_t>(task.chunk_size, remaining_bytes);
+        if (chunk_data.size() != expected_size) {
+            LOG_WARN << "Unexpected chunk size: upload_id=" << upload_id
+                     << ", chunk_index=" << chunk_index
+                     << ", expected_size=" << expected_size
+                     << ", actual_size=" << chunk_data.size()
+                     << ", file_size=" << task.file_size
+                     << ", chunk_size=" << task.chunk_size;
+
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+                     << " outcome=failure upload_id=" << upload_id
+                     << " chunk_index=" << chunk_index
+                     << " data_size=" << chunk_data.size();
+
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Unexpected chunk size")
+            );
+        }
+
+        // 5. 将请求体复制到拥有所有权的缓冲区，只做一次哈希+落盘复用。
         std::string chunk_payload{ chunk_data };
         auto actual_hash = FileHashUtil::HashMd5(chunk_payload);
         if (actual_hash != chunk_hash) {
@@ -867,7 +932,7 @@ namespace disk::file {
             );
         }
 
-        // 5. 创建临时目录并写入分片
+        // 6. 创建临时目录并写入分片
         auto write_result = co_await m_storage->WriteChunk(upload_id, chunk_index, std::move(chunk_payload));
         if (!write_result) {
             LOG_ERROR << "Failed to write chunk file: upload_id=" << upload_id
@@ -885,7 +950,7 @@ namespace disk::file {
             co_return std::unexpected(write_result.error());
         }
 
-        // 6. 记录已上传分片（幂等：INSERT IGNORE 允许重复上传同一分片）
+        // 7. 记录已上传分片（幂等：INSERT IGNORE 允许重复上传同一分片）
         try {
             co_await m_db_client->execSqlCoro(
                 "INSERT IGNORE INTO upload_task_chunks (task_id, chunk_index, uploaded_at) VALUES (?, ?, NOW())",
@@ -3244,6 +3309,8 @@ namespace disk::file {
 
     auto FileService::BuildUploadTaskCacheEntry(const UploadTasks& task) -> UploadTaskCacheEntry {
         return UploadTaskCacheEntry{ .user_id = task.getValueOfUserId(),
+                                     .file_size = task.getValueOfFileSize(),
+                                     .chunk_size = task.getValueOfChunkSize(),
                                      .total_chunks = task.getValueOfTotalChunks(),
                                      .expires_at = task.getValueOfExpiresAt(),
                                      .status = task.getValueOfStatus(),

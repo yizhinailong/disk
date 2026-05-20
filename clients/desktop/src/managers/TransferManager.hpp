@@ -12,6 +12,7 @@
 
 #include <QCryptographicHash>
 #include <QFile>
+#include <QFutureWatcher>
 #include <QMap>
 #include <QNetworkReply>
 #include <QObject>
@@ -221,7 +222,11 @@ namespace disk::desktop::managers {
         void SetUploadState(const QString& task_id, UploadState state);
         void FailUpload(const QString& task_id, const ApiError& error);
         void ExpireUpload(const QString& task_id);
-        void RetryOrFailUpload(const QString& task_id, const ApiError& error);
+        void RetryOrFailUpload(
+            const QString& task_id,
+            const ApiError& error,
+            QNetworkReply* reply = nullptr
+        );
         void AdvanceToNextChunk(const QString& task_id);
 
         // ── Download internal methods ──
@@ -247,9 +252,10 @@ namespace disk::desktop::managers {
 
         // ── Utility ──
 
-        auto ComputeFileMd5(const QString& file_path) -> QString;
+        static auto ComputeFileMd5(const QString& file_path) -> QString;
         void AbortActiveUpload(const QString& task_id);
         void AbortActiveDownload(const QString& task_id);
+        void ClearHashWatcher(const QString& task_id);
         auto ParseJsonResponse(QNetworkReply* reply) -> std::optional<QJsonObject>;
         auto IsRetryableError(QNetworkReply::NetworkError error) -> bool;
         auto IsServerError(int status_code) -> bool;
@@ -282,6 +288,7 @@ namespace disk::desktop::managers {
 
         QMap<QString, ActiveUpload> m_active_uploads;
         QMap<QString, ActiveDownload> m_active_downloads;
+        QMap<QString, QFutureWatcher<QString>*> m_hash_watchers;
     };
 
 } // namespace disk::desktop::managers

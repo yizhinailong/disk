@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Quick QuickControls2 Test QuickTest)
+find_package(Qt6 REQUIRED COMPONENTS Core Concurrent Gui Network Quick QuickControls2 Test QuickTest)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -195,6 +195,7 @@ set_target_properties(disk-desktop PROPERTIES
 
 target_link_libraries(disk-desktop PRIVATE
     Qt6::Core
+    Qt6::Concurrent
     Qt6::Gui
     Qt6::Network
     Qt6::Quick

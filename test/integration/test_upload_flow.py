@@ -49,6 +49,7 @@ TEST_PASS = os.environ.get("TEST_PASS", "Admin123")
 TOKEN = ""
 HAPPY_FILENAME = f"happy_path_test_{os.getpid()}.bin"
 MISSING_FILENAME = f"missing_chunk_test_{os.getpid()}.bin"
+MISMATCH_FILENAME = f"chunk_size_mismatch_test_{os.getpid()}.bin"
 
 
 def _configured_chunk_size() -> int:
@@ -66,7 +67,23 @@ def _configured_chunk_size() -> int:
         return 5 * 1024 * 1024
 
 
+def _configured_max_file_size() -> int:
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    config_path = os.path.join(repo_root, "config.json")
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            config = json.load(f)
+        return int(
+            config.get("custom_config", {})
+            .get("disk", {})
+            .get("max_file_size", 10 * 1024 * 1024 * 1024)
+        )
+    except Exception:
+        return 10 * 1024 * 1024 * 1024
+
+
 CHUNK_SIZE = _configured_chunk_size()
+MAX_FILE_SIZE = _configured_max_file_size()
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -295,14 +312,13 @@ def test_missing_chunk_upload():
     save_evidence("complete-upload-missing-chunk.json", resp.text)
 
 
-# ─── Test 3: Quota exceeded ─────────────────────────────────────────────────
+# ─── Test 3: File size policy ─────────────────────────────────────────────────
 
 
-def test_init_upload_quota():
-    log_info("Testing Init Upload (quota exceeded)...")
+def test_init_upload_max_file_size():
+    log_info("Testing Init Upload (max file size exceeded)...")
 
-    # Use a valid 32-char MD5 hash for quota test
-    quota_hash = "a1c7e6486f5811f4e23e6c696c0d6363"
+    oversized_hash = "a1c7e6486f5811f4e23e6c696c0d6363"
 
     resp = fetch(
         "/api/file/upload/init",
@@ -312,20 +328,78 @@ def test_init_upload_quota():
             "Content-Type": "application/json",
         },
         json_body={
-            "filename": "huge_file.pdf",
-            "file_size": 999999999999,
-            "file_hash": quota_hash,
+            "filename": "oversized_file.bin",
+            "file_size": MAX_FILE_SIZE + 1,
+            "file_hash": oversized_hash,
             "parent_id": 0,
         },
     )
 
     code = json_field(resp.text, "code")
+    message = json_field(resp.text, "message")
 
-    if code == "50004":
-        log_pass(f"Init Upload (quota exceeded) - code: {code}")
-        save_evidence("init-upload-quota.json", resp.text)
+    if code == "10002" and "maximum" in message.lower():
+        log_pass(f"Init Upload (max file size exceeded) - code: {code}")
+        save_evidence("init-upload-max-size.json", resp.text)
     else:
-        log_fail(f"Init Upload (quota exceeded) - expected code 50004, got: {code}")
+        log_fail(
+            f"Init Upload (max file size exceeded) - expected code 10002 maximum-size error, got: {code} {message}"
+        )
+        print(resp.text)
+
+
+# ─── Test 4: Chunk size mismatch ──────────────────────────────────────────────
+
+
+def test_chunk_size_mismatch():
+    log_info("Testing Upload Chunk (size mismatch)...")
+
+    valid_chunk = b"C" * CHUNK_SIZE
+    invalid_chunk = valid_chunk[:-1]
+    full_data = valid_chunk + b"D"
+    file_hash = _md5_bytes(full_data)
+    invalid_hash = _md5_bytes(invalid_chunk)
+
+    resp = fetch(
+        "/api/file/upload/init",
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "Content-Type": "application/json",
+        },
+        json_body={
+            "filename": MISMATCH_FILENAME,
+            "file_size": len(full_data),
+            "file_hash": file_hash,
+            "parent_id": 0,
+        },
+    )
+
+    upload_id = json_field(resp.text, "data.upload_id")
+    if not upload_id or upload_id == "null":
+        log_fail("Init Upload (chunk size mismatch) - failed to get upload_id")
+        print(resp.text)
+        return
+
+    resp = fetch(
+        f"/api/file/upload/chunk?upload_id={upload_id}&chunk_index=0&chunk_hash={invalid_hash}",
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "Content-Type": "application/octet-stream",
+        },
+        data=invalid_chunk,
+    )
+
+    code = json_field(resp.text, "code")
+    message = json_field(resp.text, "message")
+    if code == "10002" and "chunk size" in message.lower():
+        log_pass(f"Upload Chunk (size mismatch) - code: {code}")
+        save_evidence("upload-chunk-size-mismatch.json", resp.text)
+    else:
+        log_fail(
+            f"Upload Chunk (size mismatch) - expected code 10002 chunk-size error, got: {code} {message}"
+        )
         print(resp.text)
 
 
@@ -347,7 +421,8 @@ def main():
 
     test_happy_path_upload()
     test_missing_chunk_upload()
-    test_init_upload_quota()
+    test_init_upload_max_file_size()
+    test_chunk_size_mismatch()
 
     print_summary()
 

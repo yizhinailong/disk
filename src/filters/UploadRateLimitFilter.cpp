@@ -9,6 +9,8 @@
 
 #include "UploadRateLimitFilter.hpp"
 
+#include <algorithm>
+
 #include "utils/ConfigMgr.hpp"
 #include "utils/ErrorCode.hpp"
 #include "utils/RedisKeyPrefix.hpp"
@@ -58,13 +60,23 @@ namespace disk::filters {
 
         // 检查是否超过限制
         if (current_count > limit) {
+            const auto reset_time = GetResetTime(window);
+            const auto now = std::chrono::system_clock::now();
+            const auto now_seconds = std::chrono::duration_cast<std::chrono::seconds>(
+                                         now.time_since_epoch()
+                                     )
+                                         .count();
+            const auto retry_after = std::max<int64_t>(1, reset_time - now_seconds);
+
             LOG_WARN << "Upload rate limit: user_id=" << user_id
+                     << ", path=" << request->path()
                      << ", count=" << current_count;
 
             auto response = disk::Response::Error(disk::error::Code::TooManyRequests);
             response->addHeader("X-RateLimit-Limit", std::to_string(limit));
             response->addHeader("X-RateLimit-Remaining", "0");
-            response->addHeader("X-RateLimit-Reset", std::to_string(GetResetTime(window)));
+            response->addHeader("X-RateLimit-Reset", std::to_string(reset_time));
+            response->addHeader("Retry-After", std::to_string(retry_after));
 
             co_return response;
         }

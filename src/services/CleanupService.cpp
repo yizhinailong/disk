@@ -333,7 +333,7 @@ namespace disk::services {
                 expired_task_ids.push_back(task_id);
 
                 if (storage != nullptr) {
-                    auto delete_result = co_await storage->DeletePath(temp_path);
+                    auto delete_result = co_await storage->CleanupTemp(task_id);
                     if (!delete_result.has_value()) {
                         LOG_WARN << "Failed to cleanup temp file for expired upload task: task_id="
                                  << task_id << ", temp_path=" << temp_path

@@ -18,6 +18,7 @@
 #include <QNetworkReply>
 #include <QTimer>
 #include <QUrlQuery>
+#include <QtConcurrent>
 
 namespace disk::desktop::managers {
 
@@ -81,6 +82,11 @@ namespace disk::desktop::managers {
                 delete it->file;
             }
         }
+        for (auto* watcher : m_hash_watchers) {
+            watcher->cancel();
+            watcher->deleteLater();
+        }
+        m_hash_watchers.clear();
     }
 
     auto TransferManager::GetUploadModel() -> UploadTaskModel* {
@@ -139,6 +145,7 @@ namespace disk::desktop::managers {
         }
 
         AbortActiveUpload(task_id);
+        ClearHashWatcher(task_id);
         SetUploadState(task_id, UploadState::CancelPending);
 
         if (task.upload_id.has_value()) {
@@ -431,14 +438,21 @@ namespace disk::desktop::managers {
         }
         auto task = *m_upload_model->GetTask(row);
 
-        // Compute MD5 on a separate thread via QTimer::singleShot
-        QString file_path = task.local_path;
-        QString tid = task_id;
+        ClearHashWatcher(task_id);
 
-        QTimer::singleShot(0, this, [this, file_path, tid]() {
-            QString hash = ComputeFileMd5(file_path);
+        auto* watcher = new QFutureWatcher<QString>(this);
+        m_hash_watchers[task_id] = watcher;
 
-            int r = m_upload_model->FindTask(tid);
+        const QString file_path = task.local_path;
+        connect(watcher, &QFutureWatcher<QString>::finished, this, [this, task_id, watcher]() {
+            const QString hash = watcher->result();
+
+            if (m_hash_watchers.value(task_id) == watcher) {
+                m_hash_watchers.remove(task_id);
+            }
+            watcher->deleteLater();
+
+            int r = m_upload_model->FindTask(task_id);
             if (r < 0) {
                 return;
             }
@@ -455,14 +469,18 @@ namespace disk::desktop::managers {
                 err.message = "计算文件哈希失败";
                 err.retryable = true;
                 err.action = "retry";
-                FailUpload(tid, err);
+                FailUpload(task_id, err);
                 return;
             }
 
             t.file_hash = hash;
-            m_upload_model->UpdateTask(tid, t);
-            StartUploadInit(tid);
+            m_upload_model->UpdateTask(task_id, t);
+            StartUploadInit(task_id);
         });
+
+        watcher->setFuture(QtConcurrent::run([file_path]() {
+            return TransferManager::ComputeFileMd5(file_path);
+        }));
     }
 
     void TransferManager::StartUploadInit(const QString& task_id) {
@@ -482,10 +500,10 @@ namespace disk::desktop::managers {
 
         QJsonObject body;
         body["filename"] = task.filename;
-        body["file_size"] = static_cast<double>(task.file_size);
+        body["file_size"] = static_cast<qint64>(task.file_size);
         body["file_hash"] = task.file_hash;
-        body["parent_id"] = static_cast<double>(task.parent_id);
-        body["total_chunks"] = static_cast<int>(
+        body["parent_id"] = static_cast<qint64>(task.parent_id);
+        body["total_chunks"] = static_cast<qint64>(
             (task.file_size + kDefaultChunkSize - 1) / kDefaultChunkSize
         );
 
@@ -533,10 +551,10 @@ namespace disk::desktop::managers {
                     FailUpload(task_id, err);
                     return;
                 }
-                RetryOrFailUpload(task_id, err);
+                RetryOrFailUpload(task_id, err, reply);
             } else {
                 ApiError err = ErrorAdapter::FromNetworkError(reply->error());
-                RetryOrFailUpload(task_id, err);
+                RetryOrFailUpload(task_id, err, reply);
             }
             return;
         }
@@ -689,17 +707,17 @@ namespace disk::desktop::managers {
                     return;
                 }
                 if (err.code == 50009) {
-                    RetryOrFailUpload(task_id, err);
+                    RetryOrFailUpload(task_id, err, reply);
                     return;
                 }
                 if (err.code == 10005) {
-                    RetryOrFailUpload(task_id, err);
+                    RetryOrFailUpload(task_id, err, reply);
                     return;
                 }
-                RetryOrFailUpload(task_id, err);
+                RetryOrFailUpload(task_id, err, reply);
             } else {
                 ApiError err = ErrorAdapter::FromNetworkError(reply->error());
-                RetryOrFailUpload(task_id, err);
+                RetryOrFailUpload(task_id, err, reply);
             }
             return;
         }
@@ -815,10 +833,10 @@ namespace disk::desktop::managers {
                     FailUpload(task_id, err);
                     return;
                 }
-                RetryOrFailUpload(task_id, err);
+                RetryOrFailUpload(task_id, err, reply);
             } else {
                 ApiError err = ErrorAdapter::FromNetworkError(reply->error());
-                RetryOrFailUpload(task_id, err);
+                RetryOrFailUpload(task_id, err, reply);
             }
             return;
         }
@@ -953,7 +971,8 @@ namespace disk::desktop::managers {
 
     void TransferManager::RetryOrFailUpload(
         const QString& task_id,
-        const ApiError& error
+        const ApiError& error,
+        QNetworkReply* reply
     ) {
         if (!m_active_uploads.contains(task_id)) {
             FailUpload(task_id, error);
@@ -961,41 +980,72 @@ namespace disk::desktop::managers {
         }
 
         auto& active = m_active_uploads[task_id];
-        if (active.retry_count < kMaxRetryCount && error.retryable) {
-            active.retry_count++;
-            int delay_ms = 1000 * (1 << (active.retry_count - 1)); // exponential backoff
+        const auto status_code = reply
+            ? reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()
+            : 0;
+        const bool rate_limited = status_code == 429 || error.code == 10005;
 
-            int row = m_upload_model->FindTask(task_id);
-            if (row >= 0) {
-                auto task = *m_upload_model->GetTask(row);
-                task.status = "retrying";
-                task.error = error;
-                m_upload_model->UpdateTask(task_id, task);
+        int delay_ms = 0;
+        if (rate_limited && reply) {
+            const auto retry_after = reply->rawHeader("Retry-After").trimmed();
+            bool ok = false;
+            int seconds = retry_after.toInt(&ok);
+            if (ok && seconds > 0) {
+                delay_ms = seconds * 1000;
+            } else {
+                const auto reset_header = reply->rawHeader("X-RateLimit-Reset").trimmed();
+                const qint64 reset_time = reset_header.toLongLong(&ok);
+                if (ok && reset_time > 0) {
+                    const qint64 now = QDateTime::currentSecsSinceEpoch();
+                    delay_ms = static_cast<int>(qMax<qint64>(1, reset_time - now) * 1000);
+                }
+            }
+        }
+
+        const bool can_retry = (error.retryable || rate_limited) &&
+                               (rate_limited || active.retry_count < kMaxRetryCount);
+        if (!can_retry) {
+            FailUpload(task_id, error);
+            return;
+        }
+
+        if (!rate_limited) {
+            active.retry_count++;
+        }
+        if (delay_ms <= 0) {
+            delay_ms = 1000 * (1 << qMin(active.retry_count, kMaxRetryCount - 1));
+        }
+
+        int row = m_upload_model->FindTask(task_id);
+        if (row >= 0) {
+            auto task = *m_upload_model->GetTask(row);
+            task.status = "retrying";
+            task.error = error;
+            m_upload_model->UpdateTask(task_id, task);
+        }
+
+        QTimer::singleShot(delay_ms, this, [this, task_id]() {
+            int r = m_upload_model->FindTask(task_id);
+            if (r < 0) {
+                return;
+            }
+            auto t = *m_upload_model->GetTask(r);
+
+            if (t.status != "retrying") {
+                return;
             }
 
-            QTimer::singleShot(delay_ms, this, [this, task_id]() {
-                int r = m_upload_model->FindTask(task_id);
-                if (r < 0) {
-                    return;
-                }
-                auto t = *m_upload_model->GetTask(r);
-
-                if (t.status != "retrying") {
-                    return;
-                }
-
-                // Re-init if we don't have an upload_id (per §6.5: network drop
-                // after init → re-init)
-                if (!t.upload_id.has_value() || t.status == "initializing") {
-                    StartUploadInit(task_id);
-                } else {
-                    // Retry current chunk
-                    AdvanceToNextChunk(task_id);
-                }
-            });
-        } else {
-            FailUpload(task_id, error);
-        }
+            if (!t.upload_id.has_value()) {
+                StartUploadInit(task_id);
+                return;
+            }
+            if (t.total_chunks.has_value() &&
+                t.uploaded_chunk_indices.size() >= *t.total_chunks) {
+                StartUploadComplete(task_id);
+                return;
+            }
+            AdvanceToNextChunk(task_id);
+        });
     }
 
     // ── Download Internal ──
@@ -1432,6 +1482,15 @@ namespace disk::desktop::managers {
             active.reply->deleteLater();
             active.reply = nullptr;
         }
+    }
+
+    void TransferManager::ClearHashWatcher(const QString& task_id) {
+        auto* watcher = m_hash_watchers.take(task_id);
+        if (!watcher) {
+            return;
+        }
+        watcher->cancel();
+        watcher->deleteLater();
     }
 
     void TransferManager::AbortActiveDownload(const QString& task_id) {
