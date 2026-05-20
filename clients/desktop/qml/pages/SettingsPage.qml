@@ -11,6 +11,20 @@ Page {
 
     background: Rectangle { color: theme.pageBackgroundColor }
 
+    property string toastMessage: ""
+    property bool toastVisible: false
+
+    function showToast(message) {
+        root.toastMessage = String(message || "")
+        root.toastVisible = true
+        toastDismissTimer.restart()
+    }
+
+    function hideToast() {
+        root.toastVisible = false
+        root.toastMessage = ""
+    }
+
     PageStateView {
         id: stateView
         anchors.fill: parent
@@ -173,6 +187,78 @@ Page {
             }
 
             Item { Layout.fillHeight: true } // Spacer
+        }
+    }
+
+    Popup {
+        id: toastPopup
+        x: (parent.width - width) / 2
+        y: parent.height - height - 32
+        width: Math.min(toastLabel.implicitWidth + 32, parent.width - 40)
+        height: toastLabel.implicitHeight + 20
+        visible: root.toastVisible
+        modal: false
+        closePolicy: Popup.NoAutoClose
+        padding: 0
+
+        background: Rectangle {
+            color: "#323232"
+            radius: theme.innerPanelRadius
+        }
+
+        contentItem: Label {
+            id: toastLabel
+            text: root.toastMessage
+            color: "#ffffff"
+            font.pixelSize: 13
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            wrapMode: Text.WordWrap
+        }
+    }
+
+    Timer {
+        id: toastDismissTimer
+        interval: 3000
+        onTriggered: root.hideToast()
+    }
+
+    Connections {
+        target: networkSettingsManager
+        ignoreUnknownSignals: true
+
+        function onOperationSuccess(message) {
+            root.showToast(message)
+        }
+
+        function onOperationFailed(message) {
+            root.showToast(message)
+        }
+    }
+
+    Connections {
+        target: healthManager
+        ignoreUnknownSignals: true
+
+        function onHealthCheckFinished(overallStatus) {
+            root.showToast("连接测试完成：" + overallStatus)
+        }
+
+        function onApiError(message, code) {
+            root.showToast(message)
+        }
+    }
+
+    Connections {
+        target: profileManager
+        ignoreUnknownSignals: true
+
+        function onApiError(message, code) {
+            root.showToast(message)
+        }
+
+        function onOperationSuccess(message) {
+            root.showToast(message)
         }
     }
 
