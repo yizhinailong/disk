@@ -418,6 +418,7 @@ extern int run_TestShellController(int argc, char* argv[]);
 extern int run_TestRequestFactory(int argc, char* argv[]);
 extern int run_TestDriveManager(int argc, char* argv[]);
 extern int run_TestAdminManager(int argc, char* argv[]);
+extern int run_TestProfileManager(int argc, char* argv[]);
 extern int run_TestTransferState(int argc, char* argv[]);
 extern int run_TestTransferManager(int argc, char* argv[]);
 extern int run_TestShareCodeParser(int argc, char* argv[]);
@@ -451,7 +452,7 @@ int main(int argc, char* argv[]) {
     snprintf(prog_name_storage, sizeof(prog_name_storage), "%s", argv[0]);
     int failures = 0;
 
-    fprintf(stderr, "--- desktop-unit-tests: running 22 suites ---\n");
+    fprintf(stderr, "--- desktop-unit-tests: running 23 suites ---\n");
     fflush(stderr);
 
     {
@@ -477,6 +478,7 @@ int main(int argc, char* argv[]) {
     failures += run_and_report("TestRequestFactory", run_TestRequestFactory, argc, argv);
     failures += run_and_report("TestDriveManager", run_TestDriveManager, argc, argv);
     failures += run_and_report("TestAdminManager", run_TestAdminManager, argc, argv);
+    failures += run_and_report("TestProfileManager", run_TestProfileManager, argc, argv);
     failures += run_and_report("TestTransferState", run_TestTransferState, argc, argv);
     failures += run_and_report("TestTransferManager", run_TestTransferManager, argc, argv);
     failures += run_and_report("TestShareCodeParser", run_TestShareCodeParser, argc, argv);

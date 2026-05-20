@@ -53,20 +53,28 @@ namespace disk::desktop::managers {
         return doc.object();
     }
 
-    void ProfileManager::EmitApiError(QNetworkReply* reply) {
+    auto ProfileManager::BuildApiError(QNetworkReply* reply) -> disk::desktop::ApiError {
         if (!reply) {
-            emit apiError("网络错误：无响应", 0);
-            return;
+            disk::desktop::ApiError err;
+            err.code = 0;
+            err.message = "网络错误：无响应";
+            return err;
         }
 
         auto json_opt = ParseJsonResponse(reply);
         if (json_opt.has_value() && json_opt->contains("error")) {
-            auto err = ErrorAdapter::FromJson(json_opt->value("error").toObject());
-            emit apiError(err.message, err.code);
-        } else {
-            auto err = ErrorAdapter::FromNetworkError(reply->error());
-            emit apiError(err.message, err.code);
+            return ErrorAdapter::FromJson(json_opt->value("error").toObject());
         }
+        if (json_opt.has_value() && json_opt->value("code").toInt(0) != 0) {
+            return ErrorAdapter::FromJson(*json_opt);
+        }
+
+        return ErrorAdapter::FromNetworkError(reply->error());
+    }
+
+    void ProfileManager::EmitApiError(QNetworkReply* reply) {
+        auto err = BuildApiError(reply);
+        emit apiError(err.message, err.code);
     }
 
     void ProfileManager::loadProfile() {
@@ -196,6 +204,17 @@ namespace disk::desktop::managers {
 
         if (reply->error() != QNetworkReply::NoError) {
             EmitApiError(reply);
+            return;
+        }
+
+        auto json_opt = ParseJsonResponse(reply);
+        if (!json_opt.has_value()) {
+            emit apiError("响应格式无效", 0);
+            return;
+        }
+        if (json_opt->value("code").toInt(0) != 0) {
+            auto err = ErrorAdapter::FromJson(*json_opt);
+            emit apiError(err.message, err.code);
             return;
         }
 

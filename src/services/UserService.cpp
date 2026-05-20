@@ -109,7 +109,10 @@ namespace disk::user {
             // 步骤 2: 验证旧密码
             if (!HashUtil::VerifyPassword(request.old_password, user.getValueOfPasswordHash())) {
                 LOG_WARN << "Old password is incorrect: user_id=" << user_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::InvalidCredentials));
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidCredentials,
+                    "Old password is incorrect"
+                ));
             }
             LOG_DEBUG << "Old password verified successfully: user_id=" << user_id;
 

@@ -43,6 +43,7 @@ namespace disk::desktop::managers {
     private:
         auto PrepareHeaders() -> QMap<QString, QString>;
         static auto ParseJsonResponse(QNetworkReply* reply) -> std::optional<QJsonObject>;
+        static auto BuildApiError(QNetworkReply* reply) -> disk::desktop::ApiError;
         void HandleProfileResponse(QNetworkReply* reply);
         void HandleUpdateProfileResponse(QNetworkReply* reply, const QString& nickname, const QString& avatar);
         void HandlePasswordResponse(QNetworkReply* reply);
