@@ -2556,7 +2556,7 @@ Authorization: Bearer <access_token>
 | API 参数值 | 数据库 `shares.status` 值 | 说明 |
 |-----------|--------------------------|------|
 | `all` | （不筛选） | 返回所有状态的分享 |
-| `active` | `1` | 有效分享（未过期且未取消） |
+| `active` | `1` 且未过期 | 有效分享（未过期且未取消） |
 | `expired` | `2` | 已过期分享 |
 | `cancelled` | `0` | 已取消分享 |
 
@@ -3136,7 +3136,7 @@ Authorization: Bearer <access_token>
 
 **GET** `/api/share/browse/{share_id}`
 
-浏览分享的文件夹内容（使用分享令牌）。
+浏览分享的文件夹内容（使用分享令牌）。服务端会在每次浏览时复查 `shares.status` 和 `expires_at`，因此分享被取消或过期后，已签发但尚未过期的 `X-Share-Token` 也不能继续浏览。
 
 #### 实现状态
 **已实现**
@@ -3273,7 +3273,7 @@ X-Share-Token: <share_token>
 
 **GET** `/api/share/download/{share_id}/{file_id}`
 
-下载分享的文件。
+下载分享的文件。服务端会在每次下载时复查 `shares.status` 和 `expires_at`，因此分享被取消或过期后，已签发但尚未过期的 `X-Share-Token` 也不能继续下载。
 
 #### 实现状态
 **已实现**

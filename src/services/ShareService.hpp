@@ -36,8 +36,8 @@
 #include <drogon/nosql/RedisClient.h>
 #include <drogon/orm/DbClient.h>
 
-#include "dtos/ShareDto.hpp"
 #include "dtos/FileDto.hpp"
+#include "dtos/ShareDto.hpp"
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
 #include "models/Shares.hpp"
@@ -320,6 +320,9 @@ namespace disk::share {
          */
         [[nodiscard]]
         static auto IsShareActive(const drogon_model::disk::Shares& share) -> bool;
+
+        [[nodiscard]]
+        auto ValidateShareActive(uint64_t share_id) const -> drogon::Task<Result<void>>;
 
         /**
          * @brief 验证分享密码

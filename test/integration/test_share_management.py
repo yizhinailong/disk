@@ -12,9 +12,11 @@ Verifies:
   2. GET /api/share/{share_id} -> 200 + code 0, data.share_id matches
   3. PUT /api/share/{share_id} permission=view -> 200 + code 0
   4. Verify update: GET again -> data.permission == "view"
-  5. DELETE /api/share batch cancel -> 200 + summary.succeeded == 1
-  6. Detail after cancel -> error (code != 0)
-  7. Access after cancel -> error (code != 0)
+  5. Obtain share_token before cancel
+  6. DELETE /api/share batch cancel -> 200 + summary.succeeded == 1
+  7. Detail after cancel -> error (code != 0)
+  8. Access after cancel -> error (code != 0)
+  9. Browse with existing share_token after cancel -> error (code != 0)
 
 Prerequisites:
   - Server running on localhost:8080
@@ -61,6 +63,7 @@ TEST_PASS = os.environ.get("TEST_PASS", "Admin123")
 TOKEN = ""
 FILE_ID = ""
 SHARE_ID = ""
+SHARE_TOKEN = ""
 
 EVIDENCE_PREFIX = "share-mgmt"
 
@@ -299,7 +302,39 @@ def test_verify_update() -> None:
     log_pass("Verify update: permission persists as view")
 
 
-# ─── Test 4: DELETE batch cancel share ───────────────────────────────────────
+# ─── Test 4: Access before cancel ─────────────────────────────────────────────
+
+
+def test_access_before_cancel() -> None:
+    global SHARE_TOKEN
+
+    log_info(f"Test: POST /api/share/access/{SHARE_ID} before cancel -> token")
+
+    resp = fetch(
+        f"/api/share/access/{SHARE_ID}",
+        method="POST",
+        headers={"Content-Type": "application/json"},
+        json_body={},
+    )
+
+    save_evidence(f"{EVIDENCE_PREFIX}-share-access-before-cancel.json", resp.text)
+
+    code = json_field(resp.text, "code")
+    if code != "0":
+        log_fail(f"Access before cancel: expected code 0, got code={code}")
+        print(resp.text)
+        raise SystemExit(1)
+
+    SHARE_TOKEN = json_field(resp.text, "data.share_token")
+    if not SHARE_TOKEN or SHARE_TOKEN == "null":
+        log_fail("Access before cancel: no share_token returned")
+        print(resp.text)
+        raise SystemExit(1)
+
+    log_pass("Access before cancel returned share_token")
+
+
+# ─── Test 5: DELETE batch cancel share ───────────────────────────────────────
 
 
 def test_cancel_share_batch() -> None:
@@ -339,7 +374,7 @@ def test_cancel_share_batch() -> None:
     log_pass("DELETE batch cancel: summary.succeeded=1")
 
 
-# ─── Test 5: Detail after cancel -> error ────────────────────────────────────
+# ─── Test 6: Detail after cancel -> error ────────────────────────────────────
 
 
 def test_detail_after_cancel() -> None:
@@ -364,7 +399,7 @@ def test_detail_after_cancel() -> None:
         log_pass(f"Detail after cancel: error code={code} (expected != 0)")
 
 
-# ─── Test 6: Access after cancel -> error ────────────────────────────────────
+# ─── Test 7: Access after cancel -> error ────────────────────────────────────
 
 
 def test_access_after_cancel() -> None:
@@ -389,6 +424,31 @@ def test_access_after_cancel() -> None:
         log_pass("Access after cancel: code=60001 (ShareNotFound)")
     else:
         log_pass(f"Access after cancel: error code={code} (expected != 0)")
+
+
+# ─── Test 8: Browse with old token after cancel -> error ──────────────────────
+
+
+def test_browse_with_old_token_after_cancel() -> None:
+    log_info(f"Test: GET /api/share/browse/{SHARE_ID} with old token after cancel -> error")
+
+    resp = fetch(
+        f"/api/share/browse/{SHARE_ID}",
+        headers={"X-Share-Token": SHARE_TOKEN},
+    )
+
+    save_evidence(f"{EVIDENCE_PREFIX}-share-browse-old-token-after-cancel.json", resp.text)
+
+    code = json_field(resp.text, "code")
+    if code == "0":
+        log_fail("Browse with old token after cancel: expected error code, got code=0")
+        print(resp.text)
+        raise SystemExit(1)
+
+    if code == "60002":
+        log_pass("Browse with old token after cancel: code=60002 (ShareExpired)")
+    else:
+        log_pass(f"Browse with old token after cancel: error code={code} (expected != 0)")
 
 
 # ─── Main ────────────────────────────────────────────────────────────────────
@@ -421,9 +481,11 @@ def main() -> None:
     test_get_share_detail()
     test_update_share()
     test_verify_update()
+    test_access_before_cancel()
     test_cancel_share_batch()
     test_detail_after_cancel()
     test_access_after_cancel()
+    test_browse_with_old_token_after_cancel()
 
     print()
     print_summary()

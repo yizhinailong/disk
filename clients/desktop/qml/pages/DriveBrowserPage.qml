@@ -1152,7 +1152,7 @@ Page {
         root.clearSharedSelection()
         root.clearTrashSelection()
         shellController.setPageState("loading")
-        shareManager.listShares()
+        shareManager.listShares(1, 20, "active")
     }
 
     function refreshTrashList() {
