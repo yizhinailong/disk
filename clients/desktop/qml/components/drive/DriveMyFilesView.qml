@@ -252,6 +252,21 @@ PageStateView {
                         clip: true
                         spacing: 1
 
+                        TapHandler {
+                            acceptedButtons: Qt.RightButton
+                            gesturePolicy: TapHandler.WithinBounds
+                            onTapped: function(eventPoint, button) {
+                                if (fileListView.itemAt(eventPoint.position.x + fileListView.contentX,
+                                                        eventPoint.position.y + fileListView.contentY) !== null) {
+                                    return
+                                }
+                                driveContextMenu.targetItemId = ""
+                                driveContextMenu.targetItemKind = ""
+                                driveContextMenu.targetItemName = ""
+                                driveContextMenu.popup()
+                            }
+                        }
+
                         delegate: ItemDelegate {
                             id: fileRowDelegate
                             objectName: "fileRowDelegate_" + String(model.id)

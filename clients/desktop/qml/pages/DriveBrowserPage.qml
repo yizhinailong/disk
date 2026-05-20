@@ -115,6 +115,9 @@ Page {
     property bool keepMyFilesContentWhileLoading: false
     property bool keepSharedContentWhileLoading: false
     property bool keepTrashContentWhileLoading: false
+    property bool preserveMyFilesContentOnNextRefresh: false
+    property bool preserveSharedContentOnNextRefresh: false
+    property bool preserveTrashContentOnNextRefresh: false
     readonly property bool isSearchActive: root.searchQuery !== ""
     readonly property bool hasMultiSelection: root.selectedItemIds.length > 1
 
@@ -341,18 +344,33 @@ Page {
         }
     }
 
+    function preserveMyFilesContentForNextRefresh() {
+        root.preserveMyFilesContentOnNextRefresh = true
+    }
+
+    function preserveSharedContentForNextRefresh() {
+        root.preserveSharedContentOnNextRefresh = true
+    }
+
+    function preserveTrashContentForNextRefresh() {
+        root.preserveTrashContentOnNextRefresh = true
+    }
+
     function submitSearch() {
-        root.refreshCurrentFolder({ keepContent: true })
+        root.preserveMyFilesContentForNextRefresh()
+        root.refreshCurrentFolder()
     }
 
     function clearSearch() {
         root.searchQuery = ""
-        root.refreshCurrentFolder({ keepContent: true })
+        root.preserveMyFilesContentForNextRefresh()
+        root.refreshCurrentFolder()
     }
 
     function applySort(sortKey) {
         root.currentSort = String(sortKey || "name_asc")
-        root.refreshCurrentFolder({ keepContent: true })
+        root.preserveMyFilesContentForNextRefresh()
+        root.refreshCurrentFolder()
     }
 
     function toggleViewLayout() {
@@ -991,7 +1009,8 @@ Page {
         } else if (finishedAction === "copy") {
             root.showToast("项目复制成功")
         }
-        root.refreshCurrentFolder({ keepContent: true })
+        root.preserveMyFilesContentForNextRefresh()
+        root.refreshCurrentFolder()
     }
 
     function openCreateShareDialog() {
@@ -1108,21 +1127,25 @@ Page {
         }
 
         if (shellController.pageState !== "batchResult") {
-            root.refreshSharedList({ keepContent: true })
+            root.preserveSharedContentForNextRefresh()
+        root.refreshSharedList()
         }
     }
 
     function refreshCurrentView() {
         if (root.isMyFilesMode) {
-            root.refreshCurrentFolder({ keepContent: true })
+            root.preserveMyFilesContentForNextRefresh()
+        root.refreshCurrentFolder()
             return
         }
         if (root.isSharedMode) {
-            root.refreshSharedList({ keepContent: true })
+            root.preserveSharedContentForNextRefresh()
+        root.refreshSharedList()
             return
         }
         if (root.isTrashMode) {
-            root.refreshTrashList({ keepContent: true })
+            root.preserveTrashContentForNextRefresh()
+        root.refreshTrashList()
         }
     }
 
@@ -1136,21 +1159,23 @@ Page {
         }
     }
 
-    function refreshCurrentFolder(options) {
-        var keepContent = options && options.keepContent === true
-        root.keepMyFilesContentWhileLoading = keepContent && root.currentFolderItemCount > 0
+    function refreshCurrentFolder() {
+        root.keepMyFilesContentWhileLoading = root.preserveMyFilesContentOnNextRefresh && root.currentFolderItemCount > 0
+        root.preserveMyFilesContentOnNextRefresh = false
         clearSelection()
         shellController.setPageState("loading")
-        if (refreshDebounceTimer.running) {
-            refreshDebounceTimer.restart()
+        driveManager.loadFolderTree()
+        driveManager.loadBreadcrumb(currentFolderId)
+        if (root.isSearchActive) {
+            driveManager.searchFiles(root.searchQuery)
         } else {
-            refreshDebounceTimer.start()
+            driveManager.listFiles(currentFolderId, 1, 50, root.currentSort)
         }
     }
 
-    function refreshSharedList(options) {
-        var keepContent = options && options.keepContent === true
-        root.keepSharedContentWhileLoading = keepContent && root.currentShareItemCount > 0
+    function refreshSharedList() {
+        root.keepSharedContentWhileLoading = root.preserveSharedContentOnNextRefresh && root.currentShareItemCount > 0
+        root.preserveSharedContentOnNextRefresh = false
         root.clearSelection()
         root.clearSharedSelection()
         root.clearTrashSelection()
@@ -1158,9 +1183,9 @@ Page {
         shareManager.listShares(1, 20, "active")
     }
 
-    function refreshTrashList(options) {
-        var keepContent = options && options.keepContent === true
-        root.keepTrashContentWhileLoading = keepContent && root.currentTrashItemCount > 0
+    function refreshTrashList() {
+        root.keepTrashContentWhileLoading = root.preserveTrashContentOnNextRefresh && root.currentTrashItemCount > 0
+        root.preserveTrashContentOnNextRefresh = false
         root.clearSelection()
         root.clearSharedSelection()
         root.clearTrashSelection()
@@ -1175,7 +1200,7 @@ Page {
         }
         currentFolderId = nextFolderId
         root.searchQuery = ""
-        refreshCurrentFolder({ keepContent: false })
+        refreshCurrentFolder()
     }
 
     function activateViewMode(mode) {
@@ -1191,15 +1216,18 @@ Page {
         root.searchQuery = ""
         if (nextMode === "myfiles") {
             root.currentFolderId = "0"
-            root.refreshCurrentFolder({ keepContent: true })
+            root.preserveMyFilesContentForNextRefresh()
+            root.refreshCurrentFolder()
             return
         }
         if (nextMode === "shared") {
-            root.refreshSharedList({ keepContent: true })
+            root.preserveSharedContentForNextRefresh()
+            root.refreshSharedList()
             return
         }
         if (nextMode === "trash") {
-            root.refreshTrashList({ keepContent: true })
+            root.preserveTrashContentForNextRefresh()
+            root.refreshTrashList()
             return
         }
     }
@@ -1957,7 +1985,8 @@ Page {
                             root.createDialogState = "form"
                             createShareDialog.close()
                             if (shellController.pageState !== "batchResult") {
-                                root.refreshSharedList({ keepContent: true })
+                                root.preserveSharedContentForNextRefresh()
+        root.refreshSharedList()
                             }
                         }
                     }
@@ -2079,7 +2108,8 @@ Page {
 
         function onOperationSuccess(message) {
             if (root.isTrashMode && shellController.pageState !== "batchResult") {
-                root.refreshTrashList({ keepContent: true })
+                root.preserveTrashContentForNextRefresh()
+        root.refreshTrashList()
             }
         }
 
@@ -2225,21 +2255,6 @@ Page {
         id: toastDismissTimer
         interval: 3000
         onTriggered: root.hideToast()
-    }
-
-    Timer {
-        id: refreshDebounceTimer
-        interval: 150
-        repeat: false
-        onTriggered: {
-            driveManager.loadFolderTree()
-            driveManager.loadBreadcrumb(currentFolderId)
-            if (root.isSearchActive) {
-                driveManager.searchFiles(root.searchQuery)
-            } else {
-                driveManager.listFiles(currentFolderId, 1, 50, root.currentSort)
-            }
-        }
     }
 
     Component.onCompleted: {

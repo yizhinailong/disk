@@ -143,7 +143,10 @@ PageStateView {
                     objectName: "trashBatchResultBackButton"
                     text: "返回回收站"
                     highlighted: true
-                    onClicked: root.page.refreshTrashList({ keepContent: true })
+                    onClicked: {
+                        root.page.preserveTrashContentForNextRefresh()
+                        root.page.refreshTrashList()
+                    }
                 }
             }
         }

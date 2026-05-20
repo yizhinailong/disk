@@ -378,17 +378,21 @@ TestCase {
                "Main.qml instantiates AdminShell")
     }
 
-    function test_admin_shell_has_stackview_for_pages() {
+    function test_admin_shell_has_persistent_page_host() {
         var xhr = new XMLHttpRequest()
         xhr.open("GET", Qt.resolvedUrl("../../../qml/shells/AdminShell.qml"), false)
         xhr.send()
         var source = xhr.responseText
 
         verify(source.length > 0, "AdminShell.qml was read")
-        verify(source.indexOf("StackView") !== -1,
-               "AdminShell uses StackView for page navigation")
-        verify(source.indexOf("stackView.replace(") !== -1,
-               "AdminShell uses stackView.replace() for page switching")
+        verify(source.indexOf("adminPageHost") !== -1,
+               "AdminShell uses a persistent page host for admin navigation")
+        verify(source.indexOf("adminUsersPageLoader") !== -1,
+               "AdminShell keeps user page loader available")
+        verify(source.indexOf("adminSharesPageLoader") !== -1,
+               "AdminShell keeps share page loader available")
+        verify(source.indexOf("stackView.replace(") === -1,
+               "AdminShell does not destroy/recreate pages on page switching")
     }
 
     function test_admin_shell_has_three_page_destinations() {

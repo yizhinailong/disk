@@ -641,18 +641,19 @@ TestCase {
         dm.paginationLoaded(1, 1, 1)
         wait(100)
 
-        var fileListView = findByObjectName(page, "fileListView")
-        verify(fileListView !== null, "FileListView found")
-        verify(fileListView.visible, "File list is visible before refresh")
+        var myFilesStateView = findByObjectName(page, "myFilesStateView")
+        verify(myFilesStateView !== null, "MyFiles state view found")
+        verify(myFilesStateView.visible, "MyFiles content container is visible before refresh")
 
-        page.refreshCurrentFolder({ keepContent: true })
+        page.preserveMyFilesContentForNextRefresh()
+        page.refreshCurrentFolder()
         wait(50)
 
         compare(sc.pageState, "loading", "Preserving refresh enters loading state")
         verify(page.keepMyFilesContentWhileLoading,
                "MyFiles view keeps cached content during preserving refresh")
-        verify(fileListView.visible,
-               "Cached file list remains visible during preserving refresh")
+        verify(myFilesStateView.visible,
+               "Cached MyFiles view remains visible during preserving refresh")
     }
 
     function test_folder_navigation_does_not_preserve_old_folder_content() {
@@ -683,6 +684,8 @@ TestCase {
                "Shared view configures preserved loading content")
         verify(trashSource.indexOf("keepContentVisibleWhileLoading: page.keepTrashContentWhileLoading") !== -1,
                "Trash view configures preserved loading content")
+        verify(readQmlSource("pages/DriveBrowserPage.qml").indexOf("preserveMyFilesContentForNextRefresh") !== -1,
+               "Drive page exposes a preserve helper for refreshing cached content")
     }
 
     function test_screenshot_helper_is_available() {

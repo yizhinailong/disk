@@ -180,23 +180,56 @@ TestCase {
                "Context menu has Download action")
         verify(source.indexOf("page.openOwnerDownloadFileChooser(contextMenu.targetItemId, contextMenu.targetItemName)") !== -1,
                "Download action opens file chooser")
+        verify(source.indexOf("enabled: page.selectedDownloadFileCount() > 0") !== -1,
+               "Download action is enabled by selected downloadable files")
         verify(source.indexOf('objectName: "contextMenuDetail"') !== -1,
                "Context menu has Detail action")
         verify(source.indexOf("page.openFileDetailDialog(contextMenu.targetItemId)") !== -1,
                "Detail action opens file detail")
     }
 
+    function test_drive_browser_context_menu_has_current_folder_actions() {
+        var source = readDriveCompositeSource()
+
+        verify(source.indexOf('objectName: "contextMenuRefresh"') !== -1,
+               "Context menu has Refresh action")
+        verify(source.indexOf("page.refreshCurrentView()") !== -1,
+               "Refresh action refreshes the current view")
+        verify(source.indexOf('objectName: "contextMenuCreateFolder"') !== -1,
+               "Context menu has Create Folder action")
+        verify(source.indexOf("page.openCreateFolderDialog()") !== -1,
+               "Create Folder action opens the create folder dialog")
+        verify(source.indexOf('objectName: "contextMenuUpload"') !== -1,
+               "Context menu has Upload action")
+        verify(source.indexOf("page.openUploadFileChooser()") !== -1,
+               "Upload action opens the upload file chooser")
+    }
+
     function test_drive_browser_context_menu_has_mutation_actions() {
         var source = readDriveCompositeSource()
 
+        verify(source.indexOf('objectName: "contextMenuCreateShare"') !== -1,
+               "Context menu has Create Share action")
+        verify(source.indexOf("page.openCreateShareDialog()") !== -1,
+               "Create Share action opens the share dialog")
+        verify(source.indexOf("enabled: contextMenu.hasSelection() && !page.shareMutationInFlight") !== -1,
+               "Create Share action is enabled by selected items")
         verify(source.indexOf('objectName: "contextMenuRename"') !== -1,
                "Context menu has Rename action")
+        verify(source.indexOf("enabled: page.selectedItemIds.length === 1 && !page.mutationInFlight") !== -1,
+               "Rename action is enabled only for single selection")
         verify(source.indexOf('objectName: "contextMenuMove"') !== -1,
                "Context menu has Move action")
         verify(source.indexOf("page.openMoveDialog()") !== -1,
                "Move action opens the move dialog")
+        verify(source.indexOf('objectName: "contextMenuCopy"') !== -1,
+               "Context menu has Copy action")
+        verify(source.indexOf("page.openCopyDialog()") !== -1,
+               "Copy action opens the copy dialog")
         verify(source.indexOf('objectName: "contextMenuDelete"') !== -1,
                "Context menu has Delete action")
+        verify(source.indexOf("contextMenu.canMutateSelection()") !== -1,
+               "Batch mutation actions are enabled by selected items")
     }
 
     function test_drive_browser_context_menu_right_click_selects_first() {
@@ -210,13 +243,30 @@ TestCase {
                "Right-click pops up context menu")
     }
 
+    function test_drive_browser_context_menu_blank_area_preserves_selection() {
+        var source = readDriveCompositeSource()
+
+        verify(source.indexOf("fileListView.itemAt(eventPoint.position.x + fileListView.contentX") !== -1,
+               "Blank-area right-click ignores row delegates using content coordinates")
+        verify(source.indexOf('driveContextMenu.targetItemId = ""') !== -1,
+               "Blank-area right-click clears context target id")
+        verify(source.indexOf('driveContextMenu.targetItemKind = ""') !== -1,
+               "Blank-area right-click clears context target kind")
+        verify(source.indexOf('driveContextMenu.targetItemName = ""') !== -1,
+               "Blank-area right-click clears context target name")
+        verify(source.indexOf("page.clearSelection()") === -1,
+               "Blank-area right-click does not clear current selection")
+    }
+
     function test_drive_browser_context_menu_gates_folder_and_file_actions() {
         var source = readDriveCompositeSource()
 
         verify(source.indexOf('visible: contextMenu.targetItemKind === "folder"') !== -1,
                "Open menu item is visible only for folders")
         verify(source.indexOf('visible: contextMenu.targetItemKind === "file"') !== -1,
-               "Download menu item is visible only for files")
+               "Detail menu item is visible only for files")
+        verify(source.indexOf("enabled: page.selectedDownloadFileCount() > 0") !== -1,
+               "Download menu item is enabled only when selected files can download")
     }
 
     // ── Search ───────────────────────────────────────────────────────────
@@ -268,7 +318,7 @@ TestCase {
 
         var refreshStart = source.indexOf("function refreshCurrentFolder()")
         verify(refreshStart !== -1, "Has refreshCurrentFolder")
-        var refreshBody = source.substring(refreshStart, refreshStart + 500)
+        var refreshBody = source.substring(refreshStart, refreshStart + 700)
 
         verify(refreshBody.indexOf("isSearchActive") !== -1,
                "refreshCurrentFolder checks isSearchActive")

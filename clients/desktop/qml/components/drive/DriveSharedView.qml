@@ -129,7 +129,10 @@ PageStateView {
                     objectName: "sharedBatchResultBackButton"
                     text: "返回分享"
                     highlighted: true
-                    onClicked: root.page.refreshSharedList({ keepContent: true })
+                    onClicked: {
+                        root.page.preserveSharedContentForNextRefresh()
+                        root.page.refreshSharedList()
+                    }
                 }
             }
         }
