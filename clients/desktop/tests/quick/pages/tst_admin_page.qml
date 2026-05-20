@@ -47,14 +47,36 @@ TestCase {
                "Has system monitoring nav label")
     }
 
-    function test_admin_shell_uses_stackview_not_tabs() {
+    function test_admin_shell_uses_persistent_page_loaders() {
         var source = readAdminShellSource()
 
-        verify(source.indexOf("StackView") !== -1, "Has StackView")
+        verify(source.indexOf("adminPageHost") !== -1,
+               "Has persistent admin page host")
+        verify(source.indexOf("adminUsersPageLoader") !== -1,
+               "Has persistent users page loader")
+        verify(source.indexOf("adminSharesPageLoader") !== -1,
+               "Has persistent shares page loader")
+        verify(source.indexOf("adminLogsPageLoader") !== -1,
+               "Has persistent logs page loader")
+        verify(source.indexOf("adminSystemPageLoader") !== -1,
+               "Has persistent system page loader")
+        verify(source.indexOf("stackView.replace") === -1,
+               "Does not destroy/recreate admin pages on navigation")
         verify(source.indexOf("TabBar") === -1,
-               "Does NOT use TabBar (uses StackView pages)")
+               "Does NOT use TabBar")
         verify(source.indexOf("SwipeView") === -1,
-               "Does NOT use SwipeView (uses StackView pages)")
+               "Does NOT use SwipeView")
+    }
+
+    function test_admin_list_tabs_track_loading_state() {
+        var source = readAdminCompositeSource()
+
+        verify(source.indexOf("isLoadingUsers") !== -1, "User tab tracks loading state")
+        verify(source.indexOf("hasLoadedUsers") !== -1, "User tab tracks first load")
+        verify(source.indexOf("isLoadingShares") !== -1, "Share tab tracks loading state")
+        verify(source.indexOf("hasLoadedShares") !== -1, "Share tab tracks first load")
+        verify(source.indexOf("isLoadingOperationLogs") !== -1, "Operation log tab tracks loading state")
+        verify(source.indexOf("hasLoadedOperationLogs") !== -1, "Operation log tab tracks first load")
     }
 
     function test_admin_page_references_admin_manager() {
@@ -120,6 +142,26 @@ TestCase {
         verify(source.indexOf("GetUserDetail") !== -1, "Calls user detail API")
         verify(source.indexOf("onUserDetailLoaded") !== -1, "Handles user detail API response")
         verify(source.indexOf("userDetailDialogRef.open()") !== -1, "Opens user detail dialog")
+    }
+
+    function test_user_detail_dialog_has_available_space_editor() {
+        var source = readQmlSource("components/admin/UserDetailDialog.qml")
+
+        verify(source.indexOf("预留空间") !== -1, "Shows reserved storage")
+        verify(source.indexOf("可用空间") !== -1, "Shows available storage")
+        verify(source.indexOf("修改可用空间") !== -1, "Has available space edit label")
+        verify(source.indexOf("availableSpaceSpinBox") !== -1, "Has G unit input")
+        verify(source.indexOf("changeAvailableSpaceRequested") !== -1, "Emits available space change request")
+        verify(source.indexOf("qsTr(\"G\")") !== -1, "Displays G unit")
+    }
+
+    function test_user_tab_wires_available_space_update() {
+        var source = readQmlSource("components/admin/UserTab.qml")
+
+        verify(source.indexOf("storage_reserved") !== -1, "Passes storage_reserved to detail dialog")
+        verify(source.indexOf("ChangeUserAvailableSpace") !== -1, "Calls available space update API")
+        verify(source.indexOf("确定将该用户可用空间修改为 %1 G 吗？") !== -1,
+               "Confirms available space update with G unit")
     }
 
     function test_share_tab_has_filter_and_table() {

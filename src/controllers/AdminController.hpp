@@ -67,6 +67,13 @@ namespace disk::controllers {
             "disk::filters::AdminAuthFilter",
         );
         ADD_METHOD_TO(
+            AdminController::ChangeUserAvailableSpace,
+            "/api/admin/users/{id}/available-space",
+            drogon::Put,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::AdminAuthFilter",
+        );
+        ADD_METHOD_TO(
             AdminController::SoftDeleteUser,
             "/api/admin/users/{id}",
             drogon::Delete,
@@ -131,6 +138,10 @@ namespace disk::controllers {
 
         [[nodiscard]]
         auto ChangeUserRole(drogon::HttpRequestPtr request, std::string id)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto ChangeUserAvailableSpace(drogon::HttpRequestPtr request, std::string id)
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         [[nodiscard]]

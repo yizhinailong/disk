@@ -42,8 +42,30 @@ ApplicationWindow {
                                                     : "管理员"
 
     property string activeDestination: "users"
+    property bool usersTabLoaded: true
+    property bool sharesTabLoaded: false
+    property bool logsTabLoaded: false
+    property bool systemTabLoaded: false
+
+    function markDestinationLoaded(destination) {
+        switch (destination) {
+        case "users":
+            root.usersTabLoaded = true
+            break
+        case "shares":
+            root.sharesTabLoaded = true
+            break
+        case "logs":
+            root.logsTabLoaded = true
+            break
+        case "system":
+            root.systemTabLoaded = true
+            break
+        }
+    }
 
     function activateNavPage(itemId) {
+        root.markDestinationLoaded(itemId)
         root.activeDestination = itemId
     }
 
@@ -314,13 +336,44 @@ ApplicationWindow {
                 }
             }
 
-            // Content stack
-            StackView {
-                id: stackView
-                objectName: "adminStackView"
+            Item {
+                id: adminPageHost
+                objectName: "adminPageHost"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                initialItem: userTabPage
+                clip: true
+
+                Loader {
+                    objectName: "adminUsersPageLoader"
+                    anchors.fill: parent
+                    active: root.usersTabLoaded
+                    visible: root.activeDestination === "users"
+                    sourceComponent: userTabPage
+                }
+
+                Loader {
+                    objectName: "adminSharesPageLoader"
+                    anchors.fill: parent
+                    active: root.sharesTabLoaded
+                    visible: root.activeDestination === "shares"
+                    sourceComponent: shareTabPage
+                }
+
+                Loader {
+                    objectName: "adminLogsPageLoader"
+                    anchors.fill: parent
+                    active: root.logsTabLoaded
+                    visible: root.activeDestination === "logs"
+                    sourceComponent: operationLogTabPage
+                }
+
+                Loader {
+                    objectName: "adminSystemPageLoader"
+                    anchors.fill: parent
+                    active: root.systemTabLoaded
+                    visible: root.activeDestination === "system"
+                    sourceComponent: systemTabPage
+                }
             }
         }
     }
@@ -329,12 +382,16 @@ ApplicationWindow {
         id: userTabPage
         UserTab {
             adminManagerRef: root.adminManagerRef
+            isActive: root.activeDestination === "users"
         }
     }
 
     Component {
         id: shareTabPage
-        ShareTab {}
+        ShareTab {
+            isActive: root.activeDestination === "shares"
+        }
+
     }
 
     Component {
@@ -347,23 +404,6 @@ ApplicationWindow {
     Component {
         id: systemTabPage
         SystemTab {}
-    }
-
-    onActiveDestinationChanged: {
-        switch (root.activeDestination) {
-        case "users":
-            stackView.replace(userTabPage)
-            break
-        case "shares":
-            stackView.replace(shareTabPage)
-            break
-        case "logs":
-            stackView.replace(operationLogTabPage)
-            break
-        case "system":
-            stackView.replace(systemTabPage)
-            break
-        }
     }
 
     Dialog {

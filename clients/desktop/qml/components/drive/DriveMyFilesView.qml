@@ -11,6 +11,7 @@ PageStateView {
 
     visible: page.isMyFilesMode
     pageState: shellController.pageState
+    keepContentVisibleWhileLoading: page.keepMyFilesContentWhileLoading
 
     emptyText: "此文件夹为空"
     errorText: "加载文件夹内容失败"

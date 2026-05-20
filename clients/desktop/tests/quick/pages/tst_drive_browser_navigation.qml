@@ -25,6 +25,14 @@ TestCase {
         return obj
     }
 
+    function readQmlSource(relPath) {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", Qt.resolvedUrl("../../../qml/" + relPath), false)
+        xhr.send()
+        verify(xhr.responseText.length > 0, relPath + " was read")
+        return xhr.responseText
+    }
+
     function sourceUrl(relPath) {
         var base = Qt.resolvedUrl(".").toString()
         return normalizeFileUrl(base + "../../../qml/" + relPath)
@@ -619,6 +627,62 @@ TestCase {
                "Name label uses right elision")
         verify(nameLabel.wrapMode === Text.NoWrap,
                "Name label stays single-line")
+    }
+
+    function test_cached_myfiles_content_stays_visible_during_preserving_refresh() {
+        var page = createPage()
+        var dm = driveManager
+        var sc = shellController
+
+        verify(dm !== null, "driveManager available")
+        verify(sc !== null, "shellController available")
+        dm.clearListModel()
+        dm.addListFileItem(1, "file", "cached.txt")
+        dm.paginationLoaded(1, 1, 1)
+        wait(100)
+
+        var fileListView = findByObjectName(page, "fileListView")
+        verify(fileListView !== null, "FileListView found")
+        verify(fileListView.visible, "File list is visible before refresh")
+
+        page.refreshCurrentFolder({ keepContent: true })
+        wait(50)
+
+        compare(sc.pageState, "loading", "Preserving refresh enters loading state")
+        verify(page.keepMyFilesContentWhileLoading,
+               "MyFiles view keeps cached content during preserving refresh")
+        verify(fileListView.visible,
+               "Cached file list remains visible during preserving refresh")
+    }
+
+    function test_folder_navigation_does_not_preserve_old_folder_content() {
+        var page = createPage()
+        var dm = driveManager
+
+        verify(dm !== null, "driveManager available")
+        dm.clearListModel()
+        dm.addListFileItem(1, "file", "old-folder-file.txt")
+        dm.paginationLoaded(1, 1, 1)
+        wait(100)
+
+        page.navigateToFolder("42")
+        wait(50)
+
+        verify(!page.keepMyFilesContentWhileLoading,
+               "Folder navigation does not preserve previous folder content")
+    }
+
+    function test_drive_subviews_configure_preserved_loading_content() {
+        var myFilesSource = readQmlSource("components/drive/DriveMyFilesView.qml")
+        var sharedSource = readQmlSource("components/drive/DriveSharedView.qml")
+        var trashSource = readQmlSource("components/drive/DriveTrashView.qml")
+
+        verify(myFilesSource.indexOf("keepContentVisibleWhileLoading: page.keepMyFilesContentWhileLoading") !== -1,
+               "MyFiles view configures preserved loading content")
+        verify(sharedSource.indexOf("keepContentVisibleWhileLoading: page.keepSharedContentWhileLoading") !== -1,
+               "Shared view configures preserved loading content")
+        verify(trashSource.indexOf("keepContentVisibleWhileLoading: page.keepTrashContentWhileLoading") !== -1,
+               "Trash view configures preserved loading content")
     }
 
     function test_screenshot_helper_is_available() {

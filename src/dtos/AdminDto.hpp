@@ -23,6 +23,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <set>
 #include <string>
@@ -336,18 +337,69 @@ namespace disk::admin {
     };
 
     /**
-     * @brief 获取分享列表请求 DTO
+     * @brief 修改用户可用空间请求 DTO
      *
      * @details
      * 验证规则：
-     * - page: 默认 1，必须 >= 1
-     * - page_size: 默认 20，必须 >= 1 且 <= 100
-     * - status: 可选，筛选状态（0/1/2）
-     * - user_id: 可选，筛选用户 ID
-     * - username: 可选，按分享者用户名模糊筛选
+     * - available_space_g: 必填，非负整数，单位 G
      *
-     * 从 URL 查询参数解析。
+     * 注意：user_id 从 URL 路径参数获取，不在本 DTO 中
      */
+    struct ChangeAvailableSpaceRequest {
+        static constexpr uint64_t BytesPerG = 1024ULL * 1024ULL * 1024ULL;
+
+        uint64_t available_space_g{ 0 };
+
+        [[nodiscard]]
+        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<ChangeAvailableSpaceRequest> {
+            LOG_DEBUG << "Start parsing change available space request parameters";
+
+            auto json_ptr = req->getJsonObject();
+            if (!json_ptr) {
+                LOG_WARN << "Request body is not valid JSON";
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
+                );
+            }
+
+            const auto& json = *json_ptr;
+
+            if (!json.isMember("available_space_g")) {
+                LOG_WARN << "Missing required parameter: available_space_g";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Missing required parameter: available_space_g"
+                ));
+            }
+
+            if (!json["available_space_g"].isUInt64()) {
+                LOG_WARN << "Parameter 'available_space_g' type error: expected non-negative integer";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Parameter 'available_space_g' type error: expected non-negative integer"
+                ));
+            }
+
+            auto available_space_g = json["available_space_g"].asUInt64();
+            if (available_space_g > std::numeric_limits<uint64_t>::max() / BytesPerG) {
+                LOG_WARN << "Parameter 'available_space_g' is too large: " << available_space_g;
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Parameter 'available_space_g' is too large"
+                ));
+            }
+
+            ChangeAvailableSpaceRequest request;
+            request.available_space_g = available_space_g;
+
+            LOG_DEBUG << "Parsed change available space request: available_space_g="
+                      << request.available_space_g;
+
+            return request;
+        }
+    };
+
+
     struct ListSharesRequest {
         int page{ 1 };
         int page_size{ 20 };

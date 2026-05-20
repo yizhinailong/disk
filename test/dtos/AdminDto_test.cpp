@@ -9,6 +9,7 @@
 
 #include "dtos/AdminDto.hpp"
 
+#include <limits>
 #include <map>
 #include <set>
 #include <string>
@@ -537,7 +538,89 @@ TEST(ChangeRoleRequest, InvalidJSON) {
     }
 }
 
-// ==================== ListSharesRequest Tests ====================
+// ==================== ChangeAvailableSpaceRequest Tests ====================
+
+TEST(ChangeAvailableSpaceRequest, ValidZero) {
+    Json::Value json;
+    json["available_space_g"] = Json::UInt64(0);
+    auto req = CreateJsonRequest(json);
+    auto result = ChangeAvailableSpaceRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "available_space_g=0 should pass";
+    EXPECT_EQ(result->available_space_g, 0);
+}
+
+TEST(ChangeAvailableSpaceRequest, ValidPositive) {
+    Json::Value json;
+    json["available_space_g"] = Json::UInt64(20);
+    auto req = CreateJsonRequest(json);
+    auto result = ChangeAvailableSpaceRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value()) << "available_space_g=20 should pass";
+    EXPECT_EQ(result->available_space_g, 20);
+}
+
+TEST(ChangeAvailableSpaceRequest, MissingField) {
+    Json::Value json;
+    json["other"] = "value";
+    auto req = CreateJsonRequest(json);
+    auto result = ChangeAvailableSpaceRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "Missing available_space_g should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(ChangeAvailableSpaceRequest, WrongType_String) {
+    Json::Value json;
+    json["available_space_g"] = "20";
+    auto req = CreateJsonRequest(json);
+    auto result = ChangeAvailableSpaceRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "available_space_g as string should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(ChangeAvailableSpaceRequest, WrongType_Float) {
+    Json::Value json;
+    json["available_space_g"] = 1.5;
+    auto req = CreateJsonRequest(json);
+    auto result = ChangeAvailableSpaceRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "available_space_g as float should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(ChangeAvailableSpaceRequest, InvalidNegative) {
+    Json::Value json;
+    json["available_space_g"] = -1;
+    auto req = CreateJsonRequest(json);
+    auto result = ChangeAvailableSpaceRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "available_space_g=-1 should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(ChangeAvailableSpaceRequest, Overflow) {
+    Json::Value json;
+    json["available_space_g"] = Json::UInt64(std::numeric_limits<uint64_t>::max());
+    auto req = CreateJsonRequest(json);
+    auto result = ChangeAvailableSpaceRequest::FromRequest(req);
+
+    EXPECT_FALSE(result.has_value()) << "overflowing available_space_g should fail";
+    if (!result.has_value()) {
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+
 
 TEST(ListSharesRequest, ValidParameters) {
     auto req = CreateQueryRequest({{"page", "1"}, {"page_size", "20"}});

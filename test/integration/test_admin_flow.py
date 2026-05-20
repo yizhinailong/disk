@@ -23,6 +23,9 @@ Verifies all admin endpoints:
   13. Admin 获取系统概览
   14. Admin 获取系统状态
   15. 查询不存在资源
+  16. Admin 修改用户可用空间
+  17. Admin 修改用户可用空间参数校验
+  18. 非管理员/未认证修改用户可用空间被拒
 
 Prerequisites:
   - Server running on localhost:8080
@@ -347,11 +350,11 @@ def test_admin_get_user_detail():
     code = json_field(resp.text, "code")
 
     if resp.status_code == 200 and code == "0":
-        uid = json_field(resp.text, "data.id")
-        username = json_field(resp.text, "data.username")
-        email = json_field(resp.text, "data.email")
-        role = json_field(resp.text, "data.role")
-        status = json_field(resp.text, "data.status")
+        uid = json_field(resp.text, "data.user.id")
+        username = json_field(resp.text, "data.user.username")
+        email = json_field(resp.text, "data.user.email")
+        role = json_field(resp.text, "data.user.role")
+        status = json_field(resp.text, "data.user.status")
         if uid == _test_user_id and username and email:
             log_pass(f"Admin get user detail: id={uid}, username={username}, role={role}, status={status}")
         else:
@@ -660,7 +663,112 @@ def test_admin_get_nonexistent_user():
         sys.exit(1)
 
 
-# ─── Main ────────────────────────────────────────────────────────────────────
+
+# ─── Test 16: Admin 修改用户可用空间 ─────────────────────────────────────────
+
+
+def test_admin_change_user_available_space():
+    log_info("[Test 16] Admin 修改用户可用空间...")
+
+    before_resp = fetch(
+        f"/api/admin/users/{_test_user_id}",
+        method="GET",
+        headers=get_admin_headers(),
+    )
+    before_code = json_field(before_resp.text, "code")
+    if before_resp.status_code != 200 or before_code != "0":
+        log_fail(f"Fetch user detail before quota change failed: HTTP {before_resp.status_code} code={before_code}")
+        print(before_resp.text)
+        sys.exit(1)
+
+    storage_used = int(json_field(before_resp.text, "data.user.storage_used") or "0")
+    storage_reserved = int(json_field(before_resp.text, "data.user.storage_reserved") or "0")
+    available_space_g = 3
+
+    resp = fetch(
+        f"/api/admin/users/{_test_user_id}/available-space",
+        method="PUT",
+        headers={**get_admin_headers(), "Content-Type": "application/json"},
+        json_body={"available_space_g": available_space_g},
+    )
+    code = json_field(resp.text, "code")
+    if resp.status_code != 200 or code != "0":
+        log_fail(f"Admin change available space failed: HTTP {resp.status_code} code={code}")
+        print(resp.text)
+        sys.exit(1)
+
+    after_resp = fetch(
+        f"/api/admin/users/{_test_user_id}",
+        method="GET",
+        headers=get_admin_headers(),
+    )
+    after_code = json_field(after_resp.text, "code")
+    new_quota = int(json_field(after_resp.text, "data.user.storage_quota") or "0")
+    expected_quota = storage_used + storage_reserved + available_space_g * 1024 * 1024 * 1024
+    if after_resp.status_code == 200 and after_code == "0" and new_quota == expected_quota:
+        log_pass(f"Admin change available space: available={available_space_g}G, quota={new_quota}")
+    else:
+        log_fail(
+            f"Admin change available space: expected quota={expected_quota}, got HTTP {after_resp.status_code} "
+            f"code={after_code} quota={new_quota}"
+        )
+        print(after_resp.text)
+        sys.exit(1)
+
+
+def test_admin_change_user_available_space_validation():
+    log_info("[Test 17] Admin 修改用户可用空间参数校验...")
+
+    invalid_payloads = [
+        {},
+        {"available_space_g": -1},
+        {"available_space_g": 1.5},
+        {"available_space_g": "3"},
+    ]
+    for payload in invalid_payloads:
+        resp = fetch(
+            f"/api/admin/users/{_test_user_id}/available-space",
+            method="PUT",
+            headers={**get_admin_headers(), "Content-Type": "application/json"},
+            json_body=payload,
+        )
+        code = json_field(resp.text, "code")
+        if resp.status_code == 200 and code == "0":
+            log_fail(f"Invalid available-space payload unexpectedly succeeded: {payload}")
+            print(resp.text)
+            sys.exit(1)
+
+    log_pass("Admin change available space validation: invalid payloads rejected")
+
+
+def test_change_user_available_space_access_denied():
+    log_info("[Test 18] 非管理员/未认证修改用户可用空间被拒...")
+
+    non_admin_resp = fetch(
+        f"/api/admin/users/{_test_user_id}/available-space",
+        method="PUT",
+        headers={**get_user_headers(_test_user_token), "Content-Type": "application/json"},
+        json_body={"available_space_g": 1},
+    )
+    if non_admin_resp.status_code != 403:
+        log_fail(f"Non-admin available-space update: expected HTTP 403, got HTTP {non_admin_resp.status_code}")
+        print(non_admin_resp.text)
+        sys.exit(1)
+
+    unauth_resp = fetch(
+        f"/api/admin/users/{_test_user_id}/available-space",
+        method="PUT",
+        headers={"Content-Type": "application/json"},
+        json_body={"available_space_g": 1},
+    )
+    if unauth_resp.status_code != 401:
+        log_fail(f"Unauthenticated available-space update: expected HTTP 401, got HTTP {unauth_resp.status_code}")
+        print(unauth_resp.text)
+        sys.exit(1)
+
+    log_pass("Available-space update access control: non-admin 403, unauthenticated 401")
+
+
 
 
 def main():
@@ -688,6 +796,9 @@ def main():
         test_admin_stats_overview,
         test_admin_stats_system,
         test_admin_get_nonexistent_user,
+        test_admin_change_user_available_space,
+        test_admin_change_user_available_space_validation,
+        test_change_user_available_space_access_denied,
     ]
 
     for t in tests:
@@ -708,7 +819,7 @@ def main():
         f"Tests passed: {tests_passed}",
         f"Tests failed: {tests_failed}",
         "",
-        "All 15 scenarios executed.",
+        "All 18 scenarios executed.",
     ]
     save_evidence(EVIDENCE_FILE, "\n".join(evidence_lines))
 

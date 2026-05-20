@@ -12,6 +12,7 @@
 #include <cmath>
 #include <filesystem>
 #include <format>
+#include <limits>
 
 #include <drogon/HttpAppFramework.h>
 #include <drogon/nosql/RedisClient.h>
@@ -286,6 +287,85 @@ namespace disk::services {
             ));
         }
     }
+
+    auto AdminService::ChangeUserAvailableSpace(uint64_t target_id,
+                                                uint64_t available_space_g,
+                                                uint64_t operator_id)
+        -> drogon::Task<Result<void>> {
+
+        LOG_INFO << "Admin change user available space: target_id=" << target_id
+                 << " available_space_g=" << available_space_g
+                 << " operator_id=" << operator_id;
+
+        try {
+            CoroMapper<Users> mapper(m_db_client);
+
+            auto user = co_await mapper.findOne(
+                Criteria(Users::Cols::_id, CompareOperator::EQ, target_id)
+            );
+
+            constexpr uint64_t bytes_per_g = 1024ULL * 1024ULL * 1024ULL;
+            const auto storage_used = user.getValueOfStorageUsed();
+            const auto storage_reserved = user.getValueOfStorageReserved();
+            const auto old_storage_quota = user.getValueOfStorageQuota();
+
+            if (available_space_g > std::numeric_limits<uint64_t>::max() / bytes_per_g) {
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Available space is too large"
+                ));
+            }
+
+            const auto available_space_bytes = available_space_g * bytes_per_g;
+            if (storage_used > std::numeric_limits<uint64_t>::max() - storage_reserved ||
+                storage_used + storage_reserved > std::numeric_limits<uint64_t>::max() - available_space_bytes) {
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Available space is too large"
+                ));
+            }
+
+            const auto new_storage_quota = storage_used + storage_reserved + available_space_bytes;
+            user.setStorageQuota(new_storage_quota);
+            co_await mapper.update(user);
+
+            auto details = std::format(
+                R"({{"target_id": {}, "available_space_g": {}, "old_storage_quota": {}, "new_storage_quota": {}, "storage_used": {}, "storage_reserved": {}}})",
+                target_id,
+                available_space_g,
+                old_storage_quota,
+                new_storage_quota,
+                storage_used,
+                storage_reserved
+            );
+            co_await LogOperation(
+                operator_id,
+                "admin.user.available_space_change",
+                "user",
+                target_id,
+                user.getValueOfUsername(),
+                details
+            );
+
+            LOG_INFO << "Admin change user available space successful: target_id=" << target_id;
+            co_return {};
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            const auto error_msg = std::string(e.base().what());
+            if (error_msg.find("condition") != std::string::npos ||
+                error_msg.find("empty") != std::string::npos) {
+                LOG_WARN << "Admin user not found for available space change: target_id=" << target_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
+            }
+
+            LOG_ERROR << "Admin change user available space database error: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to change user available space"
+            ));
+        }
+    }
+
 
     auto AdminService::SoftDeleteUser(uint64_t target_id, uint64_t operator_id)
         -> drogon::Task<Result<void>> {

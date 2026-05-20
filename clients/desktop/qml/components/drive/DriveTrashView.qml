@@ -11,6 +11,7 @@ PageStateView {
     objectName: "trashStateView"
     visible: page.isTrashMode
     pageState: shellController.pageState
+    keepContentVisibleWhileLoading: page.keepTrashContentWhileLoading
 
     emptyText: "回收站为空"
     errorText: "加载回收站项目失败"
@@ -142,7 +143,7 @@ PageStateView {
                     objectName: "trashBatchResultBackButton"
                     text: "返回回收站"
                     highlighted: true
-                    onClicked: root.page.refreshTrashList()
+                    onClicked: root.page.refreshTrashList({ keepContent: true })
                 }
             }
         }

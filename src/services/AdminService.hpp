@@ -101,6 +101,12 @@ namespace disk::services {
         auto ChangeUserRole(uint64_t target_id, int role, uint64_t operator_id)
             -> drogon::Task<Result<void>>;
 
+        [[nodiscard]]
+        auto ChangeUserAvailableSpace(uint64_t target_id,
+                                      uint64_t available_space_g,
+                                      uint64_t operator_id)
+            -> drogon::Task<Result<void>>;
+
         /**
          * @brief 软删除用户
          *

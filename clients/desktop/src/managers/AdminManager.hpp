@@ -62,6 +62,7 @@ namespace disk::desktop::managers {
         Q_INVOKABLE void GetUserDetail(int userId);
         Q_INVOKABLE void ChangeUserStatus(int userId, int status);
         Q_INVOKABLE void ChangeUserRole(int userId, int role);
+        Q_INVOKABLE void ChangeUserAvailableSpace(int userId, int availableSpaceG);
         Q_INVOKABLE void SoftDeleteUser(int userId);
         Q_INVOKABLE void GetGlobalStorageStats();
 
@@ -107,6 +108,7 @@ namespace disk::desktop::managers {
         void HandleGetUserDetailResponse(QNetworkReply* reply);
         void HandleChangeUserStatusResponse(QNetworkReply* reply);
         void HandleChangeUserRoleResponse(QNetworkReply* reply);
+        void HandleChangeUserAvailableSpaceResponse(QNetworkReply* reply);
         void HandleSoftDeleteUserResponse(QNetworkReply* reply);
         void HandleGetGlobalStorageResponse(QNetworkReply* reply);
         void HandleListSharesResponse(QNetworkReply* reply);

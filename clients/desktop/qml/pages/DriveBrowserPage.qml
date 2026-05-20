@@ -112,6 +112,9 @@ Page {
     property string currentViewLayout: "list"
     property string toastMessage: ""
     property bool toastVisible: false
+    property bool keepMyFilesContentWhileLoading: false
+    property bool keepSharedContentWhileLoading: false
+    property bool keepTrashContentWhileLoading: false
     readonly property bool isSearchActive: root.searchQuery !== ""
     readonly property bool hasMultiSelection: root.selectedItemIds.length > 1
 
@@ -339,21 +342,17 @@ Page {
     }
 
     function submitSearch() {
-        if (root.searchQuery === "") {
-            root.refreshCurrentFolder()
-            return
-        }
-        root.refreshCurrentFolder()
+        root.refreshCurrentFolder({ keepContent: true })
     }
 
     function clearSearch() {
         root.searchQuery = ""
-        root.refreshCurrentFolder()
+        root.refreshCurrentFolder({ keepContent: true })
     }
 
     function applySort(sortKey) {
         root.currentSort = String(sortKey || "name_asc")
-        root.refreshCurrentFolder()
+        root.refreshCurrentFolder({ keepContent: true })
     }
 
     function toggleViewLayout() {
@@ -992,7 +991,7 @@ Page {
         } else if (finishedAction === "copy") {
             root.showToast("项目复制成功")
         }
-        root.refreshCurrentFolder()
+        root.refreshCurrentFolder({ keepContent: true })
     }
 
     function openCreateShareDialog() {
@@ -1109,21 +1108,21 @@ Page {
         }
 
         if (shellController.pageState !== "batchResult") {
-            root.refreshSharedList()
+            root.refreshSharedList({ keepContent: true })
         }
     }
 
     function refreshCurrentView() {
         if (root.isMyFilesMode) {
-            root.refreshCurrentFolder()
+            root.refreshCurrentFolder({ keepContent: true })
             return
         }
         if (root.isSharedMode) {
-            root.refreshSharedList()
+            root.refreshSharedList({ keepContent: true })
             return
         }
         if (root.isTrashMode) {
-            root.refreshTrashList()
+            root.refreshTrashList({ keepContent: true })
         }
     }
 
@@ -1137,7 +1136,9 @@ Page {
         }
     }
 
-    function refreshCurrentFolder() {
+    function refreshCurrentFolder(options) {
+        var keepContent = options && options.keepContent === true
+        root.keepMyFilesContentWhileLoading = keepContent && root.currentFolderItemCount > 0
         clearSelection()
         shellController.setPageState("loading")
         if (refreshDebounceTimer.running) {
@@ -1147,7 +1148,9 @@ Page {
         }
     }
 
-    function refreshSharedList() {
+    function refreshSharedList(options) {
+        var keepContent = options && options.keepContent === true
+        root.keepSharedContentWhileLoading = keepContent && root.currentShareItemCount > 0
         root.clearSelection()
         root.clearSharedSelection()
         root.clearTrashSelection()
@@ -1155,7 +1158,9 @@ Page {
         shareManager.listShares(1, 20, "active")
     }
 
-    function refreshTrashList() {
+    function refreshTrashList(options) {
+        var keepContent = options && options.keepContent === true
+        root.keepTrashContentWhileLoading = keepContent && root.currentTrashItemCount > 0
         root.clearSelection()
         root.clearSharedSelection()
         root.clearTrashSelection()
@@ -1170,7 +1175,7 @@ Page {
         }
         currentFolderId = nextFolderId
         root.searchQuery = ""
-        refreshCurrentFolder()
+        refreshCurrentFolder({ keepContent: false })
     }
 
     function activateViewMode(mode) {
@@ -1186,15 +1191,15 @@ Page {
         root.searchQuery = ""
         if (nextMode === "myfiles") {
             root.currentFolderId = "0"
-            root.refreshCurrentFolder()
+            root.refreshCurrentFolder({ keepContent: true })
             return
         }
         if (nextMode === "shared") {
-            root.refreshSharedList()
+            root.refreshSharedList({ keepContent: true })
             return
         }
         if (nextMode === "trash") {
-            root.refreshTrashList()
+            root.refreshTrashList({ keepContent: true })
             return
         }
     }
@@ -1952,7 +1957,7 @@ Page {
                             root.createDialogState = "form"
                             createShareDialog.close()
                             if (shellController.pageState !== "batchResult") {
-                                root.refreshSharedList()
+                                root.refreshSharedList({ keepContent: true })
                             }
                         }
                     }
@@ -2066,6 +2071,7 @@ Page {
         target: trashManager
 
         function onApiError(message, code) {
+            root.keepTrashContentWhileLoading = false
             if (root.isTrashMode) {
                 shellController.setPageState("error")
             }
@@ -2073,11 +2079,12 @@ Page {
 
         function onOperationSuccess(message) {
             if (root.isTrashMode && shellController.pageState !== "batchResult") {
-                root.refreshTrashList()
+                root.refreshTrashList({ keepContent: true })
             }
         }
 
         function onPaginationLoaded(page, totalPages, total) {
+            root.keepTrashContentWhileLoading = false
             if (root.isTrashMode) {
                 shellController.setPageState(total > 0 ? "content" : "empty")
             }
@@ -2103,6 +2110,7 @@ Page {
                 root.applyShareMutationError(message)
                 return
             }
+            root.keepSharedContentWhileLoading = false
             if (root.isSharedMode) {
                 shellController.setPageState("error")
             }
@@ -2121,6 +2129,7 @@ Page {
         }
 
         function onPaginationLoaded(page, totalPages, total) {
+            root.keepSharedContentWhileLoading = false
             if (root.isSharedMode) {
                 shellController.setPageState(total > 0 ? "content" : "empty")
             }
@@ -2163,12 +2172,14 @@ Page {
         }
 
         function onPaginationLoaded(page, totalPages, total) {
+            root.keepMyFilesContentWhileLoading = false
             if (root.isMyFilesMode) {
                 shellController.setPageState(total > 0 ? "content" : "empty")
             }
         }
 
         function onListLoadFailed(message, code) {
+            root.keepMyFilesContentWhileLoading = false
             if (root.isMyFilesMode) {
                 shellController.setPageState("error")
             }

@@ -191,6 +191,25 @@ namespace disk::desktop::managers {
         });
     }
 
+    void AdminManager::ChangeUserAvailableSpace(int userId, int availableSpaceG) {
+        QJsonObject body;
+        body["available_space_g"] = availableSpaceG;
+
+        QJsonDocument doc(body);
+        auto headers = PrepareHeaders();
+        headers["Content-Type"] = "application/json";
+
+        QUrl url(QString("/api/admin/users/%1/available-space").arg(userId));
+        auto* reply = m_network_client->Put(url, doc.toJson(QJsonDocument::Compact), headers);
+        m_active_replies.append(reply);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            m_active_replies.removeOne(reply);
+            reply->deleteLater();
+            HandleChangeUserAvailableSpaceResponse(reply);
+        });
+    }
+
     void AdminManager::SoftDeleteUser(int userId) {
         QUrl url(QString("/api/admin/users/%1").arg(userId));
         auto headers = PrepareHeaders();
@@ -411,6 +430,7 @@ namespace disk::desktop::managers {
         detail["status"] = user.value("status").toInt(1);
         detail["storage_quota"] = static_cast<double>(user.value("storage_quota").toDouble(0));
         detail["storage_used"] = static_cast<double>(user.value("storage_used").toDouble(0));
+        detail["storage_reserved"] = static_cast<double>(user.value("storage_reserved").toDouble(0));
         detail["created_at"] = user.value("created_at").toString();
         detail["last_login_at"] = user.value("last_login_at").toString();
 
@@ -467,6 +487,32 @@ namespace disk::desktop::managers {
         }
 
         emit operationSuccess(QStringLiteral("用户角色已更新"));
+    }
+
+    void AdminManager::HandleChangeUserAvailableSpaceResponse(QNetworkReply* reply) {
+        if (!reply) {
+            emit apiError(QStringLiteral("网络错误：无响应"), 0);
+            return;
+        }
+
+        if (reply->error() != QNetworkReply::NoError) {
+            EmitApiError(reply);
+            return;
+        }
+
+        auto json_opt = ParseJsonResponse(reply);
+        if (!json_opt.has_value()) {
+            emit apiError(QStringLiteral("响应格式无效"), 0);
+            return;
+        }
+
+        if (json_opt->value("code").toInt(0) != 0) {
+            auto err = ErrorAdapter::FromJson(*json_opt);
+            emit apiError(err.message, err.code);
+            return;
+        }
+
+        emit operationSuccess(QStringLiteral("用户可用空间已更新"));
     }
 
     void AdminManager::HandleSoftDeleteUserResponse(QNetworkReply* reply) {

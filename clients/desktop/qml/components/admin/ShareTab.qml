@@ -8,12 +8,16 @@ Item {
 
     WorkspaceTheme { id: theme }
 
+    property bool isActive: true
     property int filterStatus: -1
     property int currentPage: 1
     property int totalPages: 1
     property int totalItems: 0
     property int pageSize: 20
     property string searchUsername: ""
+    property bool isLoadingShares: false
+    property bool hasLoadedShares: false
+    property string shareLoadError: ""
     property var pendingConfirmAction: null
 
     function statusText(status) {
@@ -42,9 +46,15 @@ Item {
         return formatted !== "" ? formatted : String(value)
     }
 
+    function requestShares() {
+        root.isLoadingShares = true
+        root.shareLoadError = ""
+        adminManager.ListShares(root.currentPage, root.pageSize, root.filterStatus, -1, root.searchUsername)
+    }
+
     function applyFilters() {
         root.currentPage = 1
-        adminManager.ListShares(root.currentPage, root.pageSize, root.filterStatus, -1, root.searchUsername)
+        root.requestShares()
     }
 
     function applySharerSearch() {
@@ -55,7 +65,7 @@ Item {
     function goToPage(page) {
         if (page < 1 || page > root.totalPages) return
         root.currentPage = page
-        adminManager.ListShares(root.currentPage, root.pageSize, root.filterStatus, -1, root.searchUsername)
+        root.requestShares()
     }
 
     function requestConfirmation(message, action) {
@@ -65,7 +75,7 @@ Item {
     }
 
     Component.onCompleted: {
-        adminManager.ListShares(root.currentPage, root.pageSize, -1, -1, root.searchUsername)
+        root.requestShares()
     }
 
     ColumnLayout {
@@ -342,11 +352,19 @@ Item {
                 }
             }
 
+            BusyIndicator {
+                anchors.centerIn: parent
+                running: visible
+                visible: root.isLoadingShares && shareListView.count === 0
+            }
+
             Label {
                 anchors.centerIn: parent
-                text: qsTr("暂无分享数据")
-                color: theme.mutedTextColor
+                text: root.shareLoadError !== "" ? root.shareLoadError : qsTr("暂无分享数据")
+                color: root.shareLoadError !== "" ? theme.errorTextColor : theme.mutedTextColor
                 visible: shareListView.count === 0
+                         && ((root.hasLoadedShares && !root.isLoadingShares && root.shareLoadError === "")
+                             || root.shareLoadError !== "")
             }
         }
 
@@ -405,6 +423,9 @@ Item {
             root.currentPage = page
             root.totalPages = totalPages
             root.totalItems = total
+            root.isLoadingShares = false
+            root.hasLoadedShares = true
+            root.shareLoadError = ""
         }
 
         function onShareDetailLoaded(detail) {
@@ -421,7 +442,18 @@ Item {
         }
 
         function onOperationSuccess(_message) {
-            root.goToPage(root.currentPage)
+            if (root.isActive) {
+                root.goToPage(root.currentPage)
+            }
+        }
+
+        function onApiError(message, code) {
+            if (!root.isLoadingShares) {
+                return
+            }
+            root.isLoadingShares = false
+            root.hasLoadedShares = true
+            root.shareLoadError = message || qsTr("加载分享数据失败")
         }
     }
 }

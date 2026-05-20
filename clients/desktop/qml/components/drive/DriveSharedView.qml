@@ -12,6 +12,7 @@ PageStateView {
     objectName: "sharedStateView"
     visible: page.isSharedMode
     pageState: shellController.pageState
+    keepContentVisibleWhileLoading: page.keepSharedContentWhileLoading
 
     emptyText: "暂无分享"
     errorText: "加载分享失败"
@@ -128,7 +129,7 @@ PageStateView {
                     objectName: "sharedBatchResultBackButton"
                     text: "返回分享"
                     highlighted: true
-                    onClicked: root.page.refreshSharedList()
+                    onClicked: root.page.refreshSharedList({ keepContent: true })
                 }
             }
         }

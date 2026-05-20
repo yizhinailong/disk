@@ -162,6 +162,52 @@ namespace disk::controllers {
         co_return Response::Success();
     }
 
+    auto AdminController::ChangeUserAvailableSpace(drogon::HttpRequestPtr request, std::string id)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "Admin change user available space request: " << request->getPeerAddr().toIpPort();
+
+        auto operator_id = request->attributes()->get<uint64_t>("user_id");
+
+        if (id.empty()) {
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::ValidationFailed,
+                "Missing required parameter: id"
+            ));
+        }
+
+        uint64_t target_id = 0;
+        try {
+            target_id = std::stoull(id);
+        } catch (const std::exception&) {
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::ValidationFailed,
+                "Invalid user id format"
+            ));
+        }
+
+        auto parse_result = admin::ChangeAvailableSpaceRequest::FromRequest(request);
+        if (!parse_result) {
+            LOG_WARN << "Change available space request validation failed: "
+                     << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+
+        auto service = services::AdminService::GetInstance();
+        auto result = co_await service->ChangeUserAvailableSpace(
+            target_id, parse_result->available_space_g, operator_id
+        );
+
+        if (!result) {
+            LOG_ERROR << "Failed to change user available space: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        LOG_INFO << "Admin change user available space successful: target_id=" << target_id;
+        co_return Response::Success();
+    }
+
+
     auto AdminController::SoftDeleteUser(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 

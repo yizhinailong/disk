@@ -15,6 +15,7 @@ Item {
     readonly property alias confirmDialogRef: confirmDialog
     readonly property alias userDetailDialogRef: userDetailDialog
     required property var adminManagerRef
+    property bool isActive: true
 
     property string searchUsername: ""
     property int filterStatus: -1
@@ -23,6 +24,9 @@ Item {
     property int totalPages: 1
     property int totalItems: 0
     property int pageSize: 20
+    property bool isLoadingUsers: false
+    property bool hasLoadedUsers: false
+    property string userLoadError: ""
     property var pendingConfirmAction: null
 
     function statusText(status) {
@@ -51,15 +55,21 @@ Item {
         }
     }
 
+    function requestUsers() {
+        root.isLoadingUsers = true
+        root.userLoadError = ""
+        root.adminManagerRef.ListUsers(root.currentPage, root.pageSize, root.searchUsername, "", root.filterStatus, root.filterRole)
+    }
+
     function applyFilters() {
         root.currentPage = 1
-        root.adminManagerRef.ListUsers(root.currentPage, root.pageSize, root.searchUsername, "", root.filterStatus, root.filterRole)
+        root.requestUsers()
     }
 
     function goToPage(page) {
         if (page < 1 || page > root.totalPages) return
         root.currentPage = page
-        root.adminManagerRef.ListUsers(root.currentPage, root.pageSize, root.searchUsername, "", root.filterStatus, root.filterRole)
+        root.requestUsers()
     }
 
     function requestConfirmation(message, action) {
@@ -69,7 +79,7 @@ Item {
     }
 
     Component.onCompleted: {
-        root.adminManagerRef.ListUsers(root.currentPage, root.pageSize, "", "", -1, -1)
+        root.requestUsers()
     }
 
     ColumnLayout {
@@ -415,11 +425,19 @@ Item {
                 }
             }
 
+            BusyIndicator {
+                anchors.centerIn: parent
+                running: visible
+                visible: root.isLoadingUsers && userListView.count === 0
+            }
+
             Label {
                 anchors.centerIn: parent
-                text: qsTr("暂无用户数据")
-                color: theme.mutedTextColor
+                text: root.userLoadError !== "" ? root.userLoadError : qsTr("暂无用户数据")
+                color: root.userLoadError !== "" ? theme.errorTextColor : theme.mutedTextColor
                 visible: userListView.count === 0
+                         && ((root.hasLoadedUsers && !root.isLoadingUsers && root.userLoadError === "")
+                             || root.userLoadError !== "")
             }
         }
 
@@ -468,6 +486,12 @@ Item {
 
     UserDetailDialog {
         id: userDetailDialog
+
+        onChangeAvailableSpaceRequested: function(userId, availableSpaceG) {
+            root.requestConfirmation(qsTr("确定将该用户可用空间修改为 %1 G 吗？").arg(availableSpaceG), function() {
+                root.adminManagerRef.ChangeUserAvailableSpace(userId, availableSpaceG)
+            })
+        }
     }
 
     Connections {
@@ -478,10 +502,24 @@ Item {
             root.currentPage = page
             root.totalPages = totalPages
             root.totalItems = total
+            root.isLoadingUsers = false
+            root.hasLoadedUsers = true
+            root.userLoadError = ""
         }
 
         function onOperationSuccess(_message) {
-            root.goToPage(root.currentPage)
+            if (root.isActive) {
+                root.goToPage(root.currentPage)
+            }
+        }
+
+        function onApiError(message, code) {
+            if (!root.isLoadingUsers) {
+                return
+            }
+            root.isLoadingUsers = false
+            root.hasLoadedUsers = true
+            root.userLoadError = message || qsTr("加载用户数据失败")
         }
 
         function onUserDetailLoaded(detail) {
@@ -493,6 +531,7 @@ Item {
             root.userDetailDialogRef.userStatus = root.statusText(Number(detail.status || 0))
             root.userDetailDialogRef.storageQuota = detail.storage_quota || 0
             root.userDetailDialogRef.storageUsed = detail.storage_used || 0
+            root.userDetailDialogRef.storageReserved = detail.storage_reserved || 0
             root.userDetailDialogRef.createdAt = detail.created_at || ""
             root.userDetailDialogRef.lastLoginAt = detail.last_login_at || ""
             root.userDetailDialogRef.open()

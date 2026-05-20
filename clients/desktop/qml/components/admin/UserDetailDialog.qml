@@ -20,8 +20,11 @@ Dialog {
     property string userStatus: ""
     property var storageQuota: 0
     property var storageUsed: 0
+    property var storageReserved: 0
     property string createdAt: ""
     property string lastLoginAt: ""
+
+    signal changeAvailableSpaceRequested(int userId, int availableSpaceG)
 
     WorkspaceTheme { id: theme }
 
@@ -30,6 +33,14 @@ Dialog {
             return "—"
         }
         return String(value)
+    }
+
+    function availableBytes() {
+        return Math.max(0, Number(root.storageQuota || 0) - Number(root.storageUsed || 0) - Number(root.storageReserved || 0))
+    }
+
+    function availableSpaceG() {
+        return Math.floor(root.availableBytes() / 1073741824)
     }
 
     ColumnLayout {
@@ -70,8 +81,31 @@ Dialog {
             Label { text: qsTr("存储用量:"); font.bold: true }
             Label { text: FormatUtils.formatStorageSize(root.storageUsed || 0); Layout.fillWidth: true }
 
+            Label { text: qsTr("预留空间:"); font.bold: true }
+            Label { text: FormatUtils.formatStorageSize(root.storageReserved || 0); Layout.fillWidth: true }
+
             Label { text: qsTr("存储配额:"); font.bold: true }
             Label { text: FormatUtils.formatStorageSize(root.storageQuota || 0); Layout.fillWidth: true }
+
+            Label { text: qsTr("可用空间:"); font.bold: true }
+            Label { text: FormatUtils.formatStorageSize(root.availableBytes()); Layout.fillWidth: true }
+
+            Label { text: qsTr("修改可用空间:"); font.bold: true }
+            RowLayout {
+                Layout.fillWidth: true
+                SpinBox {
+                    id: availableSpaceSpinBox
+                    from: 0
+                    to: 1048576
+                    value: root.availableSpaceG()
+                    editable: true
+                }
+                Label { text: qsTr("G") }
+                Button {
+                    text: qsTr("保存")
+                    onClicked: root.changeAvailableSpaceRequested(root.userId, availableSpaceSpinBox.value)
+                }
+            }
 
             Label { text: qsTr("创建时间:"); font.bold: true }
             Label { text: root.valueOrDash(root.createdAt); Layout.fillWidth: true }

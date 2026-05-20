@@ -14,6 +14,9 @@ Item {
     property int totalPages: 1
     property int totalItems: 0
     property int pageSize: 20
+    property bool isLoadingOperationLogs: false
+    property bool hasLoadedOperationLogs: false
+    property string operationLogLoadError: ""
 
     function actionText(action) {
         switch (action) {
@@ -56,15 +59,21 @@ Item {
         operationLogDetailDialog.open()
     }
 
+    function requestOperationLogs() {
+        root.isLoadingOperationLogs = true
+        root.operationLogLoadError = ""
+        root.adminManagerRef.ListOperationLogs(root.currentPage, root.pageSize)
+    }
+
     function goToPage(page) {
         if (page < 1 || page > root.totalPages) {
             return
         }
         root.currentPage = page
-        root.adminManagerRef.ListOperationLogs(root.currentPage, root.pageSize)
+        root.requestOperationLogs()
     }
 
-    Component.onCompleted: root.adminManagerRef.ListOperationLogs(root.currentPage, root.pageSize)
+    Component.onCompleted: root.requestOperationLogs()
 
     ColumnLayout {
         anchors.fill: parent
@@ -93,7 +102,7 @@ Item {
             Button {
                 text: qsTr("刷新")
                 highlighted: true
-                onClicked: root.adminManagerRef.ListOperationLogs(root.currentPage, root.pageSize)
+                onClicked: root.requestOperationLogs()
             }
         }
 
@@ -241,11 +250,19 @@ Item {
                 }
             }
 
+            BusyIndicator {
+                anchors.centerIn: parent
+                running: visible
+                visible: root.isLoadingOperationLogs && operationLogListView.count === 0
+            }
+
             Label {
                 anchors.centerIn: parent
-                text: qsTr("暂无操作日志")
-                color: theme.mutedTextColor
+                text: root.operationLogLoadError !== "" ? root.operationLogLoadError : qsTr("暂无操作日志")
+                color: root.operationLogLoadError !== "" ? theme.errorTextColor : theme.mutedTextColor
                 visible: operationLogListView.count === 0
+                         && ((root.hasLoadedOperationLogs && !root.isLoadingOperationLogs && root.operationLogLoadError === "")
+                             || root.operationLogLoadError !== "")
             }
         }
 
@@ -287,6 +304,18 @@ Item {
             root.currentPage = page
             root.totalPages = totalPages
             root.totalItems = total
+            root.isLoadingOperationLogs = false
+            root.hasLoadedOperationLogs = true
+            root.operationLogLoadError = ""
+        }
+
+        function onApiError(message, code) {
+            if (!root.isLoadingOperationLogs) {
+                return
+            }
+            root.isLoadingOperationLogs = false
+            root.hasLoadedOperationLogs = true
+            root.operationLogLoadError = message || qsTr("加载操作日志失败")
         }
     }
 }

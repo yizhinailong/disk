@@ -7,6 +7,7 @@ Item {
     
     // loading, empty, content, error, batchResult
     property string pageState: "loading"
+    property bool keepContentVisibleWhileLoading: false
     
     // Content to show in empty state
     property string emptyText: "未找到项目"
@@ -32,7 +33,7 @@ Item {
     Item {
         id: loadingView
         anchors.fill: parent
-        visible: root.pageState === "loading"
+        visible: root.pageState === "loading" && !root.keepContentVisibleWhileLoading
         
         BusyIndicator {
             anchors.centerIn: parent
@@ -130,6 +131,14 @@ Item {
         id: contentContainer
         anchors.fill: parent
         visible: root.pageState === "content"
+                 || (root.pageState === "loading" && root.keepContentVisibleWhileLoading)
+    }
+
+    BusyIndicator {
+        anchors.centerIn: parent
+        running: visible
+        visible: root.pageState === "loading" && root.keepContentVisibleWhileLoading
+        z: 10
     }
     
     // 5. Batch Result State

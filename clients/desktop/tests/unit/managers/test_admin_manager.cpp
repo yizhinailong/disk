@@ -139,6 +139,7 @@ private slots:
         QCOMPARE(detail.value("status").toInt(), 1);
         QCOMPARE(detail.value("storage_quota").toDouble(), 10737418240.0);
         QCOMPARE(detail.value("storage_used").toDouble(), 1073741824.0);
+        QCOMPARE(detail.value("storage_reserved").toDouble(), 536870912.0);
         QCOMPARE(detail.value("created_at").toString(), QString("2026-01-01T00:00:00Z"));
         QCOMPARE(detail.value("last_login_at").toString(), QString("2026-01-15T10:30:00Z"));
     }
@@ -273,7 +274,67 @@ private slots:
         QCOMPARE(args.at(1).toInt(), 80004);
     }
 
-    // ── SoftDeleteUser ──
+    // ── ChangeUserAvailableSpace ──
+
+    void ChangeUserAvailableSpaceSendsRequestAndEmitsSuccess() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/admin/users/2/available-space",
+            TestJsonLoader::LoadJson("admin/admin_change_role_success.json")
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("admin_token");
+        AdminManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &AdminManager::operationSuccess);
+        QSignalSpy error_spy(&mgr, &AdminManager::apiError);
+
+        mgr.ChangeUserAvailableSpace(2, 50);
+
+        QTRY_COMPARE(success_spy.count(), 1);
+        QCOMPARE(error_spy.count(), 0);
+        QCOMPARE(mock_network.GetRequestLog().size(), 1);
+        QVERIFY(mock_network.GetRequestLog().constFirst().url().toString().contains("/api/admin/users/2/available-space"));
+
+        auto body = QJsonDocument::fromJson(mock_network.GetRequestBodyLog().constFirst()).object();
+        QCOMPARE(body.value("available_space_g").toInt(), 50);
+        QCOMPARE(success_spy.takeFirst().at(0).toString(), QString("用户可用空间已更新"));
+    }
+
+    void ChangeUserAvailableSpaceHandlesApiError() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/admin/users/999/available-space",
+            QJsonObject{
+                { "code", 80002 },
+                { "message", "用户不存在" },
+                { "data", QJsonValue::Null },
+            },
+            404
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("admin_token");
+        AdminManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &AdminManager::operationSuccess);
+        QSignalSpy error_spy(&mgr, &AdminManager::apiError);
+
+        mgr.ChangeUserAvailableSpace(999, 50);
+
+        QTRY_COMPARE(error_spy.count(), 1);
+        QCOMPARE(success_spy.count(), 0);
+
+        auto args = error_spy.takeFirst();
+        QCOMPARE(args.at(1).toInt(), 80002);
+    }
+
+
 
     void SoftDeleteUserEmitsSuccess() {
         MockNetworkAccessManager mock_network;
