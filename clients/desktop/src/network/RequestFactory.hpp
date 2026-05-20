@@ -14,17 +14,19 @@ namespace disk::desktop {
 
     enum class AuthDomain { Public,
                             Owner,
-                            Visitor };
+                            Visitor,
+                            OwnerAndVisitor };
 
     /**
      * @brief Creates pre-configured request headers based on auth domain
      *
      * Owner domain: injects Authorization: Bearer <access_token>
      * Visitor domain: injects X-Share-Token: <share_token>
+     * OwnerAndVisitor domain: injects both headers for save-to-drive
      * Public domain: no auth headers
      *
-     * Tokens are NEVER mixed: Owner requests never carry X-Share-Token,
-     * Visitor requests never carry Authorization.
+     * Owner and Visitor tokens stay separated except for explicit dual-auth
+     * save-to-drive requests.
      */
     class RequestFactory {
     public:

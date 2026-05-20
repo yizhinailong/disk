@@ -1089,6 +1089,75 @@ private slots:
         QCOMPARE(doc.object().value("target_folder_id").toInt(), 5);
     }
 
+    void CopyDriveItemsRejectsMalformedResponse() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterRawResponse("api/file/copy", "not-json");
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.copyDriveItems({ "10" }, {}, "0");
+
+        QTRY_COMPARE(error_spy.count(), 1);
+        QCOMPARE(success_spy.count(), 0);
+        QCOMPARE(error_spy.takeFirst().at(0).toString(), QString("响应格式无效"));
+    }
+
+    void CopyDriveItemsRejectsApiErrorEnvelope() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file/copy",
+            QJsonObject{
+                { "code", 40001 },
+                { "message", "copy failed" },
+                { "error", QJsonObject{ { "code", 40001 }, { "message", "copy failed" } } },
+            }
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.copyDriveItems({ "10" }, {}, "0");
+
+        QTRY_COMPARE(error_spy.count(), 1);
+        QCOMPARE(success_spy.count(), 0);
+    }
+
+    void CopyDriveItemsPropagatesNetworkError() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterError(
+            "api/file/copy",
+            QNetworkReply::ConnectionRefusedError,
+            "connection refused"
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("test_token");
+        DriveManager mgr(&network_client, &request_factory);
+
+        QSignalSpy success_spy(&mgr, &DriveManager::operationSuccess);
+        QSignalSpy error_spy(&mgr, &DriveManager::apiError);
+
+        mgr.copyDriveItems({ "10" }, {}, "0");
+
+        QTRY_COMPARE(error_spy.count(), 1);
+        QCOMPARE(success_spy.count(), 0);
+    }
+
     void CopyDriveItemsRejectsEmptyIds() {
         MockNetworkAccessManager mock_network;
 

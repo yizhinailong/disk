@@ -52,6 +52,10 @@ namespace disk::desktop::managers {
         return m_requestFactory->PrepareHeaders(disk::desktop::AuthDomain::Visitor);
     }
 
+    auto ShareManager::PrepareOwnerAndVisitorHeaders() -> QMap<QString, QString> {
+        return m_requestFactory->PrepareHeaders(disk::desktop::AuthDomain::OwnerAndVisitor);
+    }
+
     auto ShareManager::ParseJsonResponse(QNetworkReply* reply) -> std::optional<QJsonObject> {
         if (!reply) {
             return std::nullopt;
@@ -110,20 +114,30 @@ namespace disk::desktop::managers {
 
     void ShareManager::createShare(
         const QStringList& fileIds,
+        const QStringList& folderIds,
         const QString& permission,
         const QString& password,
         int expireDays
     ) {
         QJsonObject body;
-        QJsonArray ids;
+        QJsonArray file_id_array;
         for (const auto& id : fileIds) {
             bool ok = false;
             auto val = id.toULongLong(&ok);
             if (ok) {
-                ids.append(static_cast<double>(val));
+                file_id_array.append(static_cast<double>(val));
             }
         }
-        body["file_ids"] = ids;
+        QJsonArray folder_id_array;
+        for (const auto& id : folderIds) {
+            bool ok = false;
+            auto val = id.toULongLong(&ok);
+            if (ok) {
+                folder_id_array.append(static_cast<double>(val));
+            }
+        }
+        body["file_ids"] = file_id_array;
+        body["folder_ids"] = folder_id_array;
         body["permission"] = permission;
         body["expire_days"] = expireDays;
         if (!password.isEmpty()) {
@@ -230,6 +244,54 @@ namespace disk::desktop::managers {
             m_active_replies.removeOne(reply);
             reply->deleteLater();
             HandleBrowseResponse(reply, shareId);
+        });
+    }
+
+    void ShareManager::saveShareItems(
+        const QString& shareId,
+        const QStringList& fileIds,
+        const QStringList& folderIds,
+        const QString& targetFolderId
+    ) {
+        QJsonObject body;
+        QJsonArray file_id_array;
+        for (const auto& id : fileIds) {
+            bool ok = false;
+            auto val = id.toULongLong(&ok);
+            if (ok) {
+                file_id_array.append(static_cast<double>(val));
+            }
+        }
+        QJsonArray folder_id_array;
+        for (const auto& id : folderIds) {
+            bool ok = false;
+            auto val = id.toULongLong(&ok);
+            if (ok) {
+                folder_id_array.append(static_cast<double>(val));
+            }
+        }
+        body["file_ids"] = file_id_array;
+        body["folder_ids"] = folder_id_array;
+
+        bool target_ok = false;
+        auto target_id = targetFolderId.toULongLong(&target_ok);
+        body["target_folder_id"] = target_ok ? static_cast<double>(target_id) : 0;
+
+        QJsonDocument doc(body);
+        auto headers = PrepareOwnerAndVisitorHeaders();
+        headers["Content-Type"] = "application/json";
+
+        auto* reply = m_networkClient->Post(
+            QUrl(QString("/api/share/save/%1").arg(shareId)),
+            doc.toJson(QJsonDocument::Compact),
+            headers
+        );
+        m_active_replies.append(reply);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            m_active_replies.removeOne(reply);
+            reply->deleteLater();
+            HandleSaveResponse(reply);
         });
     }
 
@@ -431,6 +493,39 @@ namespace disk::desktop::managers {
         if (items.isEmpty()) {
             emit operationSuccess("此文件夹为空");
         }
+    }
+
+    void ShareManager::HandleSaveResponse(QNetworkReply* reply) {
+        if (!reply) {
+            emit apiError("网络错误：无响应", 0);
+            return;
+        }
+
+        if (reply->error() != QNetworkReply::NoError) {
+            EmitApiError(reply);
+            return;
+        }
+
+        auto json_opt = ParseJsonResponse(reply);
+        if (!json_opt.has_value()) {
+            emit apiError("响应格式无效", 0);
+            return;
+        }
+
+        if (json_opt->value("code").toInt(0) != 0) {
+            auto err = ErrorAdapter::FromJson(*json_opt);
+            emit apiError(err.message, err.code);
+            return;
+        }
+
+        auto data = json_opt->value("data").toObject();
+        auto saved_count = data.value("saved_count").toInt(0);
+        if (saved_count <= 0) {
+            emit operationSuccess("没有项目被保存，可能目标目录已存在同名项目");
+            return;
+        }
+
+        emit operationSuccess(QString("已保存 %1 个项目到我的网盘").arg(saved_count));
     }
 
     void ShareManager::HandleDetailVisitorResponse(QNetworkReply* reply) {

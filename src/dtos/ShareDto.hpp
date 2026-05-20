@@ -128,6 +128,44 @@ namespace disk::share {
         return std::nullopt;
     }
 
+    [[nodiscard]]
+    inline auto ParseOptionalPositiveIdArray(
+        const Json::Value& json,
+        const char* field,
+        std::vector<uint64_t>& ids
+    ) -> Result<void> {
+        if (!json.isMember(field)) {
+            return {};
+        }
+        if (!json[field].isArray()) {
+            LOG_WARN << "Parameter '" << field << "' type error: expected array";
+            return std::unexpected(ErrorInfo(
+                ErrorCode::InvalidParameter,
+                std::string("Parameter '") + field + "' type error: expected array"
+            ));
+        }
+
+        for (const auto& item : json[field]) {
+            if (!item.isIntegral()) {
+                LOG_WARN << "Element in parameter '" << field << "' type error: expected integer";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidParameter,
+                    std::string("Element in parameter '") + field + "' type error: expected integer"
+                ));
+            }
+            auto id = item.asUInt64();
+            if (id == 0) {
+                LOG_WARN << "Element in parameter '" << field << "' must be a positive integer";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidParameter,
+                    std::string("Element in parameter '") + field + "' must be a positive integer"
+                ));
+            }
+            ids.push_back(id);
+        }
+        return {};
+    }
+
     // ==================== 共享组件 ====================
 
     /**
@@ -141,6 +179,7 @@ namespace disk::share {
         std::string name;
         std::string type; // "file" 或 "folder"
         uint64_t size;
+        uint32_t item_count{ 0 };
 
         /// 转换为 JSON
         [[nodiscard]]
@@ -150,6 +189,9 @@ namespace disk::share {
             json["name"] = name;
             json["type"] = type;
             json["size"] = static_cast<Json::UInt64>(size);
+            if (type == "folder") {
+                json["item_count"] = item_count;
+            }
             return json;
         }
     };
@@ -161,13 +203,14 @@ namespace disk::share {
      *
      * @details
      * 验证规则：
-     * - file_ids: 非空数组，每个元素为正整数
+     * - file_ids/folder_ids: 至少一个非空数组，每个元素为正整数
      * - expire_days: 默认 7 天，0 表示永久，必须 >= 0
      * - password: 可选，4-8 字符
      * - permission: 默认 download，可选值 view/download
      */
     struct CreateShareRequest {
         std::vector<uint64_t> file_ids;
+        std::vector<uint64_t> folder_ids;
         int expire_days{ 7 };
         std::optional<std::string> password;
         SharePermission permission{ SharePermission::Download };
@@ -186,52 +229,23 @@ namespace disk::share {
             }
 
             const auto& json = *json_ptr;
-
-            // 检查必填字段 file_ids
-            if (!json.isMember("file_ids")) {
-                LOG_WARN << "Missing required parameter: file_ids";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: file_ids")
-                );
-            }
-
-            if (!json["file_ids"].isArray()) {
-                LOG_WARN << "Parameter 'file_ids' type error: expected array";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::InvalidParameter,
-                    "Parameter 'file_ids' type error: expected array"
-                ));
-            }
-
             CreateShareRequest request;
 
-            // 解析 file_ids
-            const auto& file_ids_array = json["file_ids"];
-            if (file_ids_array.empty()) {
-                LOG_WARN << "Parameter 'file_ids' cannot be empty array";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::InvalidParameter,
-                    "Parameter 'file_ids' cannot be empty array"
-                ));
+            auto file_ids_result = ParseOptionalPositiveIdArray(json, "file_ids", request.file_ids);
+            if (!file_ids_result) {
+                return std::unexpected(file_ids_result.error());
+            }
+            auto folder_ids_result = ParseOptionalPositiveIdArray(json, "folder_ids", request.folder_ids);
+            if (!folder_ids_result) {
+                return std::unexpected(folder_ids_result.error());
             }
 
-            for (const auto& item : file_ids_array) {
-                if (!item.isIntegral()) {
-                    LOG_WARN << "Element type error in parameter 'file_ids': expected integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        "Element type error in parameter 'file_ids': expected integer"
-                    ));
-                }
-                auto file_id = item.asUInt64();
-                if (file_id == 0) {
-                    LOG_WARN << "Element in parameter 'file_ids' must be a positive integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        "Element in parameter 'file_ids' must be a positive integer"
-                    ));
-                }
-                request.file_ids.push_back(file_id);
+            if (request.file_ids.empty() && request.folder_ids.empty()) {
+                LOG_WARN << "Create share request must contain file_ids or folder_ids";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidParameter,
+                    "Create share request must contain file_ids or folder_ids"
+                ));
             }
 
             // 解析可选参数 expire_days
@@ -299,6 +313,7 @@ namespace disk::share {
             }
 
             LOG_DEBUG << "Parsed create share request: file_ids.size()=" << request.file_ids.size()
+                      << ", folder_ids.size()=" << request.folder_ids.size()
                       << ", expire_days=" << request.expire_days
                       << ", has_password=" << request.password.has_value()
                       << ", permission=" << SharePermissionToString(request.permission);
@@ -1049,6 +1064,7 @@ namespace disk::share {
         std::string name;
         std::string type; // "file" 或 "folder"
         uint64_t size;
+        uint32_t item_count{ 0 };
 
         /// 转换为 JSON
         [[nodiscard]]
@@ -1058,6 +1074,9 @@ namespace disk::share {
             json["name"] = name;
             json["type"] = type;
             json["size"] = static_cast<Json::UInt64>(size);
+            if (type == "folder") {
+                json["item_count"] = item_count;
+            }
             return json;
         }
     };
@@ -1183,6 +1202,90 @@ namespace disk::share {
                       << ", file_id=" << request.file_id;
 
             return request;
+        }
+    };
+
+    // ==================== Save Share Items ====================
+
+    struct SaveShareItemsRequest {
+        std::string share_id;
+        std::vector<uint64_t> file_ids;
+        std::vector<uint64_t> folder_ids;
+        uint64_t target_folder_id{ 0 };
+
+        [[nodiscard]]
+        static auto FromRequest(const drogon::HttpRequestPtr& req, const std::string& share_id_str)
+            -> Result<SaveShareItemsRequest> {
+            LOG_DEBUG << "Start parsing save share items request parameters";
+
+            if (share_id_str.empty()) {
+                LOG_WARN << "Missing required parameter: share_id";
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: share_id")
+                );
+            }
+
+            auto json_ptr = req->getJsonObject();
+            if (!json_ptr) {
+                LOG_WARN << "Request body is not valid JSON";
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
+                );
+            }
+
+            const auto& json = *json_ptr;
+            SaveShareItemsRequest request;
+            request.share_id = share_id_str;
+
+            auto file_ids_result = ParseOptionalPositiveIdArray(json, "file_ids", request.file_ids);
+            if (!file_ids_result) {
+                return std::unexpected(file_ids_result.error());
+            }
+            auto folder_ids_result = ParseOptionalPositiveIdArray(json, "folder_ids", request.folder_ids);
+            if (!folder_ids_result) {
+                return std::unexpected(folder_ids_result.error());
+            }
+
+            if (request.file_ids.empty() && request.folder_ids.empty()) {
+                LOG_WARN << "Save share request must contain file_ids or folder_ids";
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidParameter,
+                    "Save share request must contain file_ids or folder_ids"
+                ));
+            }
+
+            if (json.isMember("target_folder_id")) {
+                if (!json["target_folder_id"].isIntegral()) {
+                    LOG_WARN << "Parameter 'target_folder_id' type error: expected integer";
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'target_folder_id' type error: expected integer"
+                    ));
+                }
+                request.target_folder_id = json["target_folder_id"].asUInt64();
+            }
+
+            LOG_DEBUG << "Parsed save share request: share_id=" << request.share_id
+                      << ", file_ids.size()=" << request.file_ids.size()
+                      << ", folder_ids.size()=" << request.folder_ids.size()
+                      << ", target_folder_id=" << request.target_folder_id;
+
+            return request;
+        }
+    };
+
+    struct SaveShareItemsResponse {
+        int saved_count{ 0 };
+        int saved_file_count{ 0 };
+        int saved_folder_count{ 0 };
+
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["saved_count"] = saved_count;
+            json["saved_file_count"] = saved_file_count;
+            json["saved_folder_count"] = saved_folder_count;
+            return json;
         }
     };
 

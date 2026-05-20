@@ -360,4 +360,46 @@ namespace disk::share {
         co_return resp;
     }
 
+    auto ShareController::Save(drogon::HttpRequestPtr request, std::string share_id)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "Received save share items request: " << request->getPeerAddr().toIpPort()
+                 << ", share_id=" << share_id;
+
+        auto parse_result = SaveShareItemsRequest::FromRequest(request, share_id);
+        if (!parse_result) {
+            LOG_WARN << "Save share items request parameter validation failed: "
+                     << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+
+        const auto target_user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto internal_share_id = request->attributes()->get<uint64_t>("share_id");
+        const auto& share_code = request->attributes()->get<std::string>("share_code");
+
+        if (share_id != share_code) {
+            LOG_WARN << "Share token does not match requested share_id: token_share_code="
+                     << share_code << ", request_share_id=" << share_id;
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::ShareAccessDenied,
+                "Share token does not match requested share"
+            ));
+        }
+
+        auto result = co_await m_share_service->SaveToDrive(
+            *parse_result,
+            internal_share_id,
+            target_user_id
+        );
+        if (!result) {
+            LOG_ERROR << "Save share items failed: " << result.error().message
+                      << " (share_id=" << share_id << ", user_id=" << target_user_id << ")";
+            co_return Response::Error(result.error());
+        }
+
+        LOG_INFO << "Save share items successful: saved_count=" << result->saved_count
+                 << " (share_id=" << share_id << ", user_id=" << target_user_id << ")";
+        co_return Response::Success(result->ToJson());
+    }
+
 } // namespace disk::share

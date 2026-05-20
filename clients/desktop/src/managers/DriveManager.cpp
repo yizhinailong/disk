@@ -631,6 +631,18 @@ void DriveManager::HandleRenameResponse(QNetworkReply* reply) {
             return;
         }
 
+        auto json_opt = ParseJsonResponse(reply);
+        if (!json_opt.has_value()) {
+            emit apiError("响应格式无效", 0);
+            return;
+        }
+
+        if (json_opt->value("code").toInt(0) != 0) {
+            auto err = ErrorAdapter::FromJson(*json_opt);
+            emit apiError(err.message, err.code);
+            return;
+        }
+
         emit operationSuccess("项目已复制");
     }
 

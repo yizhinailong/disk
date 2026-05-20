@@ -1000,7 +1000,9 @@ Page {
         createSharePasswordField.text = ""
         createShareExpireSpin.value = 7
         if (root.isMyFilesMode) {
-            createShareDialog.selectedFileIds = root.selectedItemIds.slice()
+            var ids = root.selectedDeleteIds()
+            createShareDialog.selectedFileIds = ids.fileIds
+            createShareDialog.selectedFolderIds = ids.folderIds
         }
         createShareDialog.open()
     }
@@ -1027,6 +1029,7 @@ Page {
         root.pendingShareMutationAction = "create"
         shareManager.createShare(
             createShareDialog.selectedFileIds,
+            createShareDialog.selectedFolderIds,
             createSharePermissionCombo.currentText,
             createSharePasswordField.text,
             createShareExpireSpin.value
@@ -1728,6 +1731,7 @@ Page {
         closePolicy: Popup.NoAutoClose
 
         property var selectedFileIds: []
+        property var selectedFolderIds: []
 
         onClosed: {
             root.createdShareLink = ""
@@ -1751,11 +1755,17 @@ Page {
 
                 Label {
                     Layout.fillWidth: true
-                    text: createShareDialog.selectedFileIds.length > 0
-                          ? (createShareDialog.selectedFileIds.length === 1
-                                 ? "1 个文件已加入分享队列"
-                                 : createShareDialog.selectedFileIds.length + " 个文件已加入分享队列")
-                          : "当前没有文件加入分享队列"
+                    text: {
+                        var fileCount = createShareDialog.selectedFileIds.length
+                        var folderCount = createShareDialog.selectedFolderIds.length
+                        var totalCount = fileCount + folderCount
+                        if (totalCount === 0) {
+                            return "当前没有项目加入分享队列"
+                        }
+                        return totalCount === 1
+                               ? "1 个项目已加入分享队列"
+                               : totalCount + " 个项目已加入分享队列"
+                    }
                     color: root.panelSecondaryTextColor
                     wrapMode: Text.WordWrap
                 }

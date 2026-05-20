@@ -39,6 +39,42 @@ namespace disk::share {
     using drogon_model::disk::Shares;
 
     namespace {
+        [[nodiscard]] auto BuildSharedFolderAccessPredicate(const std::string& folder_alias)
+            -> std::string {
+            return "EXISTS ("
+                   "SELECT 1 FROM share_files sff "
+                   "JOIN folders shared_root ON sff.item_id = shared_root.id "
+                   "WHERE sff.share_id = ? AND sff.item_type = 'folder' "
+                   "AND " + folder_alias + ".user_id = shared_root.user_id "
+                   "AND (" + folder_alias + ".id = shared_root.id OR " + folder_alias + ".path LIKE CONCAT(shared_root.path, '%'))"
+                   ")";
+        }
+
+        [[nodiscard]] auto BuildSharedFileAccessPredicate(const std::string& file_alias)
+            -> std::string {
+            return "(EXISTS ("
+                   "SELECT 1 FROM share_files sff "
+                   "WHERE sff.share_id = ? AND sff.item_type = 'file' AND sff.item_id = " + file_alias + ".id"
+                   ") OR EXISTS ("
+                   "SELECT 1 FROM share_files sff "
+                   "JOIN folders shared_root ON sff.item_id = shared_root.id "
+                   "JOIN folders parent_folder ON parent_folder.id = " + file_alias + ".folder_id "
+                   "WHERE sff.share_id = ? AND sff.item_type = 'folder' "
+                   "AND parent_folder.user_id = shared_root.user_id "
+                   "AND parent_folder.path LIKE CONCAT(shared_root.path, '%')"
+                   "))";
+        }
+
+        [[nodiscard]] auto BuildFilePath(const std::string& folder_path, const std::string& filename)
+            -> std::string {
+            return folder_path == "/" ? "/" + filename : folder_path + filename;
+        }
+
+        [[nodiscard]] auto BuildFolderPath(const std::string& parent_path, const std::string& name)
+            -> std::string {
+            return parent_path == "/" ? "/" + name + "/" : parent_path + name + "/";
+        }
+
         template <typename BindParameters>
         auto ExecSqlWithBindings(
             const drogon::orm::DbClientPtr& client,
@@ -72,14 +108,27 @@ namespace disk::share {
     auto ShareService::Create(CreateShareRequest request, uint64_t user_id)
         -> drogon::Task<Result<CreateShareResponse>> {
         LOG_INFO << "Creating share: user_id=" << user_id
-                 << ", file_ids.size()=" << request.file_ids.size();
+                 << ", file_ids.size()=" << request.file_ids.size()
+                 << ", folder_ids.size()=" << request.folder_ids.size();
 
-        // 1. 验证文件所有权
-        auto files_result = co_await ValidateFileOwnership(request.file_ids, user_id);
-        if (!files_result) {
-            co_return std::unexpected(files_result.error());
+        // 1. 验证文件和文件夹所有权
+        std::vector<Files> files;
+        if (!request.file_ids.empty()) {
+            auto files_result = co_await ValidateFileOwnership(request.file_ids, user_id);
+            if (!files_result) {
+                co_return std::unexpected(files_result.error());
+            }
+            files = std::move(*files_result);
         }
-        const auto& files = *files_result;
+
+        std::vector<Folders> folders;
+        if (!request.folder_ids.empty()) {
+            auto folders_result = co_await ValidateFolderOwnership(request.folder_ids, user_id);
+            if (!folders_result) {
+                co_return std::unexpected(folders_result.error());
+            }
+            folders = std::move(*folders_result);
+        }
 
         // 2. 生成分享码
         auto share_code = GenerateShareCode();
@@ -150,6 +199,31 @@ namespace disk::share {
                             for (const auto& file : chunk) {
                                 binder << created_share.getValueOfId() << "file"
                                        << file.getValueOfId() << now;
+                            }
+                        }
+                    );
+                }
+            }
+
+            if (!folders.empty()) {
+                auto chunks = BatchUtils::Chunk(folders, DEFAULT_BATCH_CHUNK_SIZE);
+                for (const auto& chunk : chunks) {
+                    std::string insert_sql =
+                        "INSERT INTO share_files (share_id, item_type, item_id, created_at) VALUES ";
+                    for (size_t i = 0; i < chunk.size(); ++i) {
+                        if (i > 0) {
+                            insert_sql += ", ";
+                        }
+                        insert_sql += "(?, ?, ?, ?)";
+                    }
+
+                    co_await ExecSqlWithBindings(
+                        transaction,
+                        insert_sql,
+                        [&](auto& binder) {
+                            for (const auto& folder : chunk) {
+                                binder << created_share.getValueOfId() << "folder"
+                                       << folder.getValueOfId() << now;
                             }
                         }
                     );
@@ -640,26 +714,93 @@ namespace disk::share {
         LOG_DEBUG << "Browsing share content: share_id=" << request.share_id
                   << ", internal_share_id=" << share_id;
 
-        // 获取分享的文件列表
-        auto share_files = co_await GetShareFiles(share_id);
-
         BrowseShareResponse response;
-
-        // 构建浏览项
-        for (const auto& file : share_files) {
-            BrowseItem item;
-            item.id = file.id;
-            item.name = file.name;
-            item.type = file.type;
-            item.size = file.size;
-            response.items.push_back(item);
-        }
-
-        // 面包屑导航（简化版：仅显示根目录）
         BrowseBreadcrumb root;
         root.id = 0;
         root.name = "root";
         response.breadcrumb.push_back(root);
+
+        if (!request.folder_id.has_value() || *request.folder_id == 0) {
+            auto share_files = co_await GetShareFiles(share_id);
+            for (const auto& file : share_files) {
+                BrowseItem item;
+                item.id = file.id;
+                item.name = file.name;
+                item.type = file.type;
+                item.size = file.size;
+                item.item_count = file.item_count;
+                response.items.push_back(item);
+            }
+            co_return response;
+        }
+
+        auto folder_id = *request.folder_id;
+        try {
+            auto folder_rows = co_await m_db_client->execSqlCoro(
+                "SELECT fo.id, fo.name, fo.path, fo.depth, fo.user_id "
+                "FROM folders fo WHERE fo.id = ? AND " + BuildSharedFolderAccessPredicate("fo"),
+                folder_id,
+                share_id
+            );
+            if (folder_rows.empty()) {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ShareAccessDenied, "Folder is not in share")
+                );
+            }
+
+            const auto current_path = folder_rows[0]["path"].as<std::string>();
+            const auto folder_user_id = folder_rows[0]["user_id"].as<uint64_t>();
+
+            auto file_rows = co_await m_db_client->execSqlCoro(
+                "SELECT f.id, f.name, f.size, 'file' AS type "
+                "FROM files f WHERE f.folder_id = ? AND f.user_id = ? ORDER BY f.name, f.id",
+                folder_id,
+                folder_user_id
+            );
+            for (const auto& row : file_rows) {
+                BrowseItem item;
+                item.id = row["id"].as<uint64_t>();
+                item.name = row["name"].as<std::string>();
+                item.type = row["type"].as<std::string>();
+                item.size = row["size"].as<uint64_t>();
+                response.items.push_back(item);
+            }
+
+            auto child_folder_rows = co_await m_db_client->execSqlCoro(
+                "SELECT fo.id, fo.name, fo.item_count, 0 AS size, 'folder' AS type "
+                "FROM folders fo WHERE fo.parent_id = ? AND fo.user_id = ? ORDER BY fo.name, fo.id",
+                folder_id,
+                folder_user_id
+            );
+            for (const auto& row : child_folder_rows) {
+                BrowseItem item;
+                item.id = row["id"].as<uint64_t>();
+                item.name = row["name"].as<std::string>();
+                item.type = row["type"].as<std::string>();
+                item.size = row["size"].as<uint64_t>();
+                item.item_count = row["item_count"].as<uint32_t>();
+                response.items.push_back(item);
+            }
+
+            auto breadcrumb_rows = co_await m_db_client->execSqlCoro(
+                "SELECT id, name FROM folders fo "
+                "WHERE ? LIKE CONCAT(fo.path, '%') AND fo.path <> '/' AND " +
+                BuildSharedFolderAccessPredicate("fo") + " ORDER BY depth, id",
+                current_path,
+                share_id
+            );
+            for (const auto& row : breadcrumb_rows) {
+                BrowseBreadcrumb crumb;
+                crumb.id = row["id"].as<uint64_t>();
+                crumb.name = row["name"].as<std::string>();
+                response.breadcrumb.push_back(crumb);
+            }
+        } catch (const DrogonDbException& e) {
+            LOG_ERROR << "Failed to browse share folder: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to browse share content")
+            );
+        }
 
         co_return response;
     }
@@ -707,8 +848,16 @@ namespace disk::share {
         // 单次 4 表 JOIN 查询：shares + share_files + files + file_contents
         try {
             auto rows = co_await m_db_client->execSqlCoro(
-                "SELECT s.id AS share_id, s.permission, " "f.id AS file_id, f.name AS file_name, f.size AS file_size, f.content_id, " "fc.storage_path, fc.hash_md5, fc.mime_type " "FROM shares s " "JOIN share_files sf ON s.id = sf.share_id " "AND sf.item_type = 'file' AND sf.item_id = ? " "JOIN files f ON sf.item_id = f.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE s.id = ?",
+                "SELECT s.id AS share_id, s.permission, "
+                "f.id AS file_id, f.name AS file_name, f.size AS file_size, f.content_id, "
+                "fc.storage_path, fc.hash_md5, fc.mime_type "
+                "FROM shares s "
+                "JOIN files f ON f.id = ? "
+                "LEFT JOIN file_contents fc ON f.content_id = fc.id "
+                "WHERE s.id = ? AND " + BuildSharedFileAccessPredicate("f"),
                 request.file_id,
+                share_id,
+                share_id,
                 share_id
             );
 
@@ -743,6 +892,330 @@ namespace disk::share {
             LOG_ERROR << "Failed to get download info: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to get download info")
+            );
+        }
+    }
+
+    auto ShareService::SaveToDrive(
+        const SaveShareItemsRequest& request,
+        uint64_t share_id,
+        uint64_t target_user_id
+    ) -> drogon::Task<Result<SaveShareItemsResponse>> {
+        LOG_DEBUG << "Saving share items: internal_share_id=" << share_id
+                  << ", target_user_id=" << target_user_id;
+
+        std::shared_ptr<drogon::orm::Transaction> transaction;
+        try {
+            auto share_rows = co_await m_db_client->execSqlCoro(
+                "SELECT permission, status, "
+                "(expires_at IS NOT NULL AND expires_at <= NOW()) AS is_expired "
+                "FROM shares WHERE id = ?",
+                share_id
+            );
+            if (share_rows.empty()) {
+                co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "Share not found"));
+            }
+            auto permission = share_rows[0]["permission"].as<std::string>();
+            auto status = share_rows[0]["status"].as<int>();
+            auto is_expired = share_rows[0]["is_expired"].as<int>() != 0;
+            if (status != static_cast<int>(ShareStatus::Active) || is_expired) {
+                co_return std::unexpected(ErrorInfo(ErrorCode::ShareExpired, "Share is not active"));
+            }
+            if (permission != "download") {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ShareAccessDenied, "Share is view-only, save not allowed")
+                );
+            }
+
+            auto target_path = std::string("/");
+            auto target_depth = uint32_t{ 0 };
+            if (request.target_folder_id > 0) {
+                auto target_rows = co_await m_db_client->execSqlCoro(
+                    "SELECT path, depth FROM folders WHERE id = ? AND user_id = ?",
+                    request.target_folder_id,
+                    target_user_id
+                );
+                if (target_rows.empty()) {
+                    co_return std::unexpected(
+                        ErrorInfo(ErrorCode::FolderNotFound, "Target folder not found")
+                    );
+                }
+                target_path = target_rows[0]["path"].as<std::string>();
+                target_depth = target_rows[0]["depth"].as<uint32_t>();
+            }
+
+            std::vector<Files> files_to_save;
+            for (auto file_id : request.file_ids) {
+                auto rows = co_await m_db_client->execSqlCoro(
+                    "SELECT f.* FROM files f WHERE f.id = ? AND " + BuildSharedFileAccessPredicate("f"),
+                    file_id,
+                    share_id,
+                    share_id
+                );
+                if (rows.empty()) {
+                    co_return std::unexpected(
+                        ErrorInfo(ErrorCode::ShareAccessDenied, "File is not in share")
+                    );
+                }
+                files_to_save.emplace_back(rows[0], -1);
+            }
+
+            struct FolderPlan {
+                Folders root;
+                std::vector<Folders> folders;
+                std::vector<Files> files;
+            };
+            std::vector<FolderPlan> folder_plans;
+            for (auto folder_id : request.folder_ids) {
+                auto rows = co_await m_db_client->execSqlCoro(
+                    "SELECT fo.* FROM folders fo WHERE fo.id = ? AND " + BuildSharedFolderAccessPredicate("fo"),
+                    folder_id,
+                    share_id
+                );
+                if (rows.empty()) {
+                    co_return std::unexpected(
+                        ErrorInfo(ErrorCode::ShareAccessDenied, "Folder is not in share")
+                    );
+                }
+
+                FolderPlan plan;
+                plan.root = Folders(rows[0], -1);
+                auto root_path = plan.root.getValueOfPath();
+                auto root_user_id = plan.root.getValueOfUserId();
+                auto folder_rows = co_await m_db_client->execSqlCoro(
+                    "SELECT * FROM folders WHERE user_id = ? AND path LIKE CONCAT(?, '%') ORDER BY depth, id",
+                    root_user_id,
+                    root_path
+                );
+                for (const auto& row : folder_rows) {
+                    plan.folders.emplace_back(row, -1);
+                }
+                auto file_rows = co_await m_db_client->execSqlCoro(
+                    "SELECT f.* FROM files f "
+                    "JOIN folders fo ON f.folder_id = fo.id "
+                    "WHERE f.user_id = ? AND fo.user_id = ? AND fo.path LIKE CONCAT(?, '%') ORDER BY fo.depth, f.id",
+                    root_user_id,
+                    root_user_id,
+                    root_path
+                );
+                for (const auto& row : file_rows) {
+                    plan.files.emplace_back(row, -1);
+                }
+                folder_plans.push_back(std::move(plan));
+            }
+
+            uint64_t total_size = 0;
+            for (const auto& file : files_to_save) {
+                total_size += file.getValueOfSize();
+            }
+            for (const auto& plan : folder_plans) {
+                for (const auto& file : plan.files) {
+                    total_size += file.getValueOfSize();
+                }
+            }
+
+            transaction = co_await m_db_client->newTransactionCoro();
+            if (total_size > 0) {
+                auto quota_result = co_await transaction->execSqlCoro(
+                    "UPDATE users SET storage_used = storage_used + ? "
+                    "WHERE id = ? AND storage_used + ? <= storage_quota",
+                    total_size,
+                    target_user_id,
+                    total_size
+                );
+                if (quota_result.affectedRows() == 0) {
+                    transaction->rollback();
+                    co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
+                }
+            }
+
+            CoroMapper<Files> file_mapper(transaction);
+            CoroMapper<Folders> folder_mapper(transaction);
+            SaveShareItemsResponse response;
+            uint64_t actual_size = 0;
+            int saved_top_level_count = 0;
+
+            for (const auto& source_file : files_to_save) {
+                auto conflict_rows = co_await transaction->execSqlCoro(
+                    "SELECT id FROM files WHERE user_id = ? AND folder_id = ? AND name = ? LIMIT 1",
+                    target_user_id,
+                    request.target_folder_id,
+                    source_file.getValueOfName()
+                );
+                if (!conflict_rows.empty()) {
+                    continue;
+                }
+
+                if (source_file.getContentId()) {
+                    co_await transaction->execSqlCoro(
+                        "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = ?",
+                        *source_file.getContentId()
+                    );
+                }
+
+                Files copied_file;
+                copied_file.setUserId(target_user_id);
+                if (source_file.getContentId()) {
+                    copied_file.setContentId(*source_file.getContentId());
+                }
+                copied_file.setFolderId(request.target_folder_id);
+                copied_file.setName(source_file.getValueOfName());
+                copied_file.setExtension(source_file.getValueOfExtension());
+                copied_file.setSize(source_file.getValueOfSize());
+                copied_file.setMimeType(source_file.getValueOfMimeType());
+                copied_file.setPath(BuildFilePath(target_path, source_file.getValueOfName()));
+                copied_file.setIsFavorite(0);
+                copied_file.setDownloadCount(0);
+                copied_file.setCreatedAt(trantor::Date::now());
+                copied_file.setUpdatedAt(trantor::Date::now());
+                co_await file_mapper.insert(copied_file);
+                ++response.saved_file_count;
+                ++saved_top_level_count;
+                actual_size += source_file.getValueOfSize();
+            }
+
+            for (const auto& plan : folder_plans) {
+                auto conflict_rows = co_await transaction->execSqlCoro(
+                    "SELECT id FROM folders WHERE user_id = ? AND parent_id = ? AND name = ? LIMIT 1",
+                    target_user_id,
+                    request.target_folder_id,
+                    plan.root.getValueOfName()
+                );
+                if (!conflict_rows.empty()) {
+                    continue;
+                }
+
+                std::unordered_map<uint64_t, uint64_t> folder_id_map;
+                std::unordered_map<uint64_t, std::string> folder_path_map;
+                auto root_path = BuildFolderPath(target_path, plan.root.getValueOfName());
+                auto root_depth = target_depth + 1;
+
+                Folders root_folder;
+                root_folder.setUserId(target_user_id);
+                root_folder.setParentId(request.target_folder_id);
+                root_folder.setName(plan.root.getValueOfName());
+                root_folder.setPath(root_path);
+                root_folder.setDepth(root_depth);
+                root_folder.setItemCount(plan.root.getValueOfItemCount());
+                root_folder.setCreatedAt(trantor::Date::now());
+                root_folder.setUpdatedAt(trantor::Date::now());
+                auto inserted_root = co_await folder_mapper.insert(root_folder);
+                folder_id_map[plan.root.getValueOfId()] = inserted_root.getValueOfId();
+                folder_path_map[plan.root.getValueOfId()] = root_path;
+                ++response.saved_folder_count;
+                ++saved_top_level_count;
+
+                for (const auto& folder : plan.folders) {
+                    if (folder.getValueOfId() == plan.root.getValueOfId()) {
+                        continue;
+                    }
+                    auto parent_it = folder_id_map.find(folder.getValueOfParentId());
+                    auto parent_path_it = folder_path_map.find(folder.getValueOfParentId());
+                    if (parent_it == folder_id_map.end() || parent_path_it == folder_path_map.end()) {
+                        continue;
+                    }
+
+                    auto folder_path = BuildFolderPath(parent_path_it->second, folder.getValueOfName());
+                    auto depth_delta = folder.getValueOfDepth() > plan.root.getValueOfDepth()
+                        ? folder.getValueOfDepth() - plan.root.getValueOfDepth()
+                        : 1;
+
+                    Folders copied_folder;
+                    copied_folder.setUserId(target_user_id);
+                    copied_folder.setParentId(parent_it->second);
+                    copied_folder.setName(folder.getValueOfName());
+                    copied_folder.setPath(folder_path);
+                    copied_folder.setDepth(root_depth + depth_delta);
+                    copied_folder.setItemCount(folder.getValueOfItemCount());
+                    copied_folder.setCreatedAt(trantor::Date::now());
+                    copied_folder.setUpdatedAt(trantor::Date::now());
+                    auto inserted_folder = co_await folder_mapper.insert(copied_folder);
+                    folder_id_map[folder.getValueOfId()] = inserted_folder.getValueOfId();
+                    folder_path_map[folder.getValueOfId()] = folder_path;
+                    ++response.saved_folder_count;
+                }
+
+                for (const auto& source_file : plan.files) {
+                    auto folder_it = folder_id_map.find(source_file.getValueOfFolderId());
+                    auto path_it = folder_path_map.find(source_file.getValueOfFolderId());
+                    if (folder_it == folder_id_map.end() || path_it == folder_path_map.end()) {
+                        continue;
+                    }
+
+                    if (source_file.getContentId()) {
+                        co_await transaction->execSqlCoro(
+                            "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = ?",
+                            *source_file.getContentId()
+                        );
+                    }
+
+                    Files copied_file;
+                    copied_file.setUserId(target_user_id);
+                    if (source_file.getContentId()) {
+                        copied_file.setContentId(*source_file.getContentId());
+                    }
+                    copied_file.setFolderId(folder_it->second);
+                    copied_file.setName(source_file.getValueOfName());
+                    copied_file.setExtension(source_file.getValueOfExtension());
+                    copied_file.setSize(source_file.getValueOfSize());
+                    copied_file.setMimeType(source_file.getValueOfMimeType());
+                    copied_file.setPath(BuildFilePath(path_it->second, source_file.getValueOfName()));
+                    copied_file.setIsFavorite(0);
+                    copied_file.setDownloadCount(0);
+                    copied_file.setCreatedAt(trantor::Date::now());
+                    copied_file.setUpdatedAt(trantor::Date::now());
+                    co_await file_mapper.insert(copied_file);
+                    ++response.saved_file_count;
+                    actual_size += source_file.getValueOfSize();
+                }
+            }
+
+            response.saved_count = response.saved_file_count + response.saved_folder_count;
+
+            if (request.target_folder_id > 0 && saved_top_level_count > 0) {
+                co_await transaction->execSqlCoro(
+                    "UPDATE folders SET item_count = item_count + ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                    saved_top_level_count,
+                    trantor::Date::now(),
+                    request.target_folder_id,
+                    target_user_id
+                );
+            }
+
+            auto reserved_size = static_cast<int64_t>(total_size);
+            auto consumed_size = static_cast<int64_t>(actual_size);
+            if (reserved_size > consumed_size) {
+                co_await transaction->execSqlCoro(
+                    "UPDATE users SET storage_used = storage_used - ? WHERE id = ?",
+                    reserved_size - consumed_size,
+                    target_user_id
+                );
+            }
+
+            co_return response;
+        } catch (const DrogonDbException& e) {
+            LOG_ERROR << "Failed to save share items: " << e.base().what();
+            if (transaction) {
+                try {
+                    transaction->rollback();
+                } catch (const std::exception& rollback_e) {
+                    LOG_ERROR << "Transaction rollback failed: " << rollback_e.what();
+                }
+            }
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to save share items")
+            );
+        } catch (const std::exception& e) {
+            LOG_ERROR << "Failed to save share items: " << e.what();
+            if (transaction) {
+                try {
+                    transaction->rollback();
+                } catch (const std::exception& rollback_e) {
+                    LOG_ERROR << "Transaction rollback failed: " << rollback_e.what();
+                }
+            }
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to save share items")
             );
         }
     }
@@ -845,6 +1318,64 @@ namespace disk::share {
         co_return files;
     }
 
+    auto ShareService::ValidateFolderOwnership(
+        const std::vector<uint64_t>& folder_ids,
+        uint64_t user_id
+    ) const -> drogon::Task<Result<std::vector<Folders>>> {
+        if (folder_ids.empty()) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InvalidParameter, "Folder ID list cannot be empty")
+            );
+        }
+
+        auto unique_folder_ids = folder_ids;
+        std::sort(unique_folder_ids.begin(), unique_folder_ids.end());
+        unique_folder_ids.erase(
+            std::unique(unique_folder_ids.begin(), unique_folder_ids.end()),
+            unique_folder_ids.end()
+        );
+
+        auto in_clause = BatchUtils::BuildSafeNumericInClause(unique_folder_ids);
+
+        std::vector<Folders> folders;
+        folders.reserve(folder_ids.size());
+
+        try {
+            auto sql =
+                "SELECT fo.* FROM folders fo WHERE fo.user_id = ? AND fo.id IN (" + in_clause + ")";
+            auto result = co_await m_db_client->execSqlCoro(sql, user_id);
+
+            std::vector<Folders> matched_folders;
+            matched_folders.reserve(result.size());
+            std::unordered_map<uint64_t, size_t> folder_index_by_id;
+            folder_index_by_id.reserve(result.size());
+            for (const auto& row : result) {
+                auto folder = Folders(row);
+                auto folder_id = folder.getValueOfId();
+                matched_folders.push_back(std::move(folder));
+                folder_index_by_id.emplace(folder_id, matched_folders.size() - 1);
+            }
+
+            for (auto folder_id : folder_ids) {
+                auto it = folder_index_by_id.find(folder_id);
+                if (it == folder_index_by_id.end()) {
+                    LOG_WARN << "Folder not found or not owned by user: folder_id=" << folder_id;
+                    co_return std::unexpected(
+                        ErrorInfo(ErrorCode::FolderNotFound, "Folder not found or no permission")
+                    );
+                }
+                folders.push_back(matched_folders[it->second]);
+            }
+        } catch (const DrogonDbException& e) {
+            LOG_ERROR << "Failed to validate folder ownership: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to validate folder ownership")
+            );
+        }
+
+        co_return folders;
+    }
+
     auto ShareService::ValidateShareOwnership(const std::string& share_code, uint64_t user_id) const
         -> drogon::Task<Result<Shares>> {
         auto share_result = co_await FindShareByCode(share_code);
@@ -875,7 +1406,7 @@ namespace disk::share {
             );
 
             auto folder_rows = co_await m_db_client->execSqlCoro(
-                "SELECT sf.id AS share_file_id, fo.id, fo.name, 0 AS size, 'folder' AS type " "FROM share_files sf " "JOIN folders fo ON sf.item_id = fo.id " "WHERE sf.share_id = ? AND sf.item_type = 'folder' " "ORDER BY sf.id",
+                "SELECT sf.id AS share_file_id, fo.id, fo.name, 0 AS size, fo.item_count, 'folder' AS type " "FROM share_files sf " "JOIN folders fo ON sf.item_id = fo.id " "WHERE sf.share_id = ? AND sf.item_type = 'folder' " "ORDER BY sf.id",
                 share_id
             );
 
@@ -899,6 +1430,7 @@ namespace disk::share {
                 sf_item.name = row["name"].as<std::string>();
                 sf_item.type = row["type"].as<std::string>();
                 sf_item.size = row["size"].as<uint64_t>();
+                sf_item.item_count = row["item_count"].as<uint32_t>();
                 ordered_items.push_back(
                     OrderedShareFile{ row["share_file_id"].as<uint64_t>(), std::move(sf_item) }
                 );
@@ -948,7 +1480,7 @@ namespace disk::share {
                 );
 
                 auto folder_rows = co_await m_db_client->execSqlCoro(
-                    "SELECT sf.id AS share_file_id, sf.share_id, fo.id, fo.name, 0 AS size, " "'folder' AS type " "FROM share_files sf " "JOIN folders fo ON sf.item_id = fo.id " "WHERE sf.share_id IN (" + placeholders + ") AND sf.item_type = 'folder' " "ORDER BY sf.id",
+                    "SELECT sf.id AS share_file_id, sf.share_id, fo.id, fo.name, 0 AS size, " "fo.item_count, 'folder' AS type " "FROM share_files sf " "JOIN folders fo ON sf.item_id = fo.id " "WHERE sf.share_id IN (" + placeholders + ") AND sf.item_type = 'folder' " "ORDER BY sf.id",
                     chunk
                 );
 
@@ -968,6 +1500,7 @@ namespace disk::share {
                     share_file.name = row["name"].as<std::string>();
                     share_file.type = row["type"].as<std::string>();
                     share_file.size = row["size"].as<uint64_t>();
+                    share_file.item_count = row["item_count"].as<uint32_t>();
                     auto share_id = row["share_id"].as<uint64_t>();
                     ordered_items_by_share[share_id].push_back(OrderedShareFile{ .share_file_id = row["share_file_id"].as<uint64_t>(), .share_file = std::move(share_file) });
                 }

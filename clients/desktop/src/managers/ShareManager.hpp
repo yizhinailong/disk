@@ -39,6 +39,7 @@ namespace disk::desktop::managers {
         Q_INVOKABLE void listShares(int page = 1, int pageSize = 20, const QString& status = "all");
         Q_INVOKABLE void createShare(
             const QStringList& fileIds,
+            const QStringList& folderIds,
             const QString& permission = "download",
             const QString& password = {},
             int expireDays = 7
@@ -54,6 +55,12 @@ namespace disk::desktop::managers {
 
         // Visitor operations (Share Token auth)
         Q_INVOKABLE void browseShare(const QString& shareId, const QString& parentId = {});
+        Q_INVOKABLE void saveShareItems(
+            const QString& shareId,
+            const QStringList& fileIds,
+            const QStringList& folderIds,
+            const QString& targetFolderId = "0"
+        );
         Q_INVOKABLE QString parseShareInput(const QString& input) const;
 
     signals:
@@ -68,6 +75,7 @@ namespace disk::desktop::managers {
     private:
         auto PrepareOwnerHeaders() -> QMap<QString, QString>;
         auto PrepareVisitorHeaders() -> QMap<QString, QString>;
+        auto PrepareOwnerAndVisitorHeaders() -> QMap<QString, QString>;
         static auto ParseJsonResponse(QNetworkReply* reply) -> std::optional<QJsonObject>;
         void EmitApiError(QNetworkReply* reply);
 
@@ -77,6 +85,7 @@ namespace disk::desktop::managers {
         void HandleUpdateResponse(QNetworkReply* reply);
         void HandleCancelResponse(QNetworkReply* reply);
         void HandleBrowseResponse(QNetworkReply* reply, const QString& shareId);
+        void HandleSaveResponse(QNetworkReply* reply);
         void HandleDetailVisitorResponse(QNetworkReply* reply);
 
         disk::desktop::ShareListModel* m_listModel;

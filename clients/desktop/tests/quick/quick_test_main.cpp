@@ -743,10 +743,12 @@ public:
         ++m_listSharesCallCount;
         m_listSharesStatuses.append(status);
     }
-    Q_INVOKABLE void createShare(const QStringList &fileIds, const QString &permission = "download",
+    Q_INVOKABLE void createShare(const QStringList &fileIds, const QStringList &folderIds,
+                                 const QString &permission = "download",
                                  const QString &password = {}, int expireDays = 7) {
         QVariantMap call;
         call["fileIds"] = fileIds;
+        call["folderIds"] = folderIds;
         call["permission"] = permission;
         call["password"] = password;
         call["expireDays"] = expireDays;
@@ -768,6 +770,12 @@ public:
         m_cancelSharesCalls.append(call);
     }
     Q_INVOKABLE void browseShare(const QString &, const QString & = {}) {}
+    Q_INVOKABLE void saveShareItems(
+        const QString &,
+        const QStringList &,
+        const QStringList &,
+        const QString & = QStringLiteral("0")
+    ) {}
     Q_INVOKABLE void getShareDetailVisitor(const QString &) {}
 
     Q_INVOKABLE int listSharesCallCount() const { return m_listSharesCallCount; }

@@ -37,7 +37,9 @@
 #include <drogon/orm/DbClient.h>
 
 #include "dtos/ShareDto.hpp"
+#include "dtos/FileDto.hpp"
 #include "models/Files.hpp"
+#include "models/Folders.hpp"
 #include "models/Shares.hpp"
 #include "services/RedisService.hpp"
 #include "services/TokenService.hpp"
@@ -238,6 +240,10 @@ namespace disk::share {
         auto GetDownloadInfo(const DownloadShareRequest& request, uint64_t share_id)
             -> drogon::Task<Result<DownloadInfo>>;
 
+        [[nodiscard]]
+        auto SaveToDrive(const SaveShareItemsRequest& request, uint64_t share_id, uint64_t target_user_id)
+            -> drogon::Task<Result<SaveShareItemsResponse>>;
+
         /**
          * @brief 根据分享码查找分享
          *
@@ -272,6 +278,10 @@ namespace disk::share {
         [[nodiscard]]
         auto ValidateFileOwnership(const std::vector<uint64_t>& file_ids, uint64_t user_id) const
             -> drogon::Task<Result<std::vector<drogon_model::disk::Files>>>;
+
+        [[nodiscard]]
+        auto ValidateFolderOwnership(const std::vector<uint64_t>& folder_ids, uint64_t user_id) const
+            -> drogon::Task<Result<std::vector<drogon_model::disk::Folders>>>;
 
         /**
          * @brief 验证分享所有权

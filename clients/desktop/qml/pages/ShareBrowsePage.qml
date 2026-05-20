@@ -15,6 +15,9 @@ Page {
     property string pendingDownloadFileId: ""
     property string pendingDownloadFilename: ""
     property double pendingDownloadFileSize: 0
+    property var selectedItemIds: []
+    property bool saveInFlight: false
+    property string saveErrorMessage: ""
 
     WorkspaceTheme { id: theme }
 
@@ -81,6 +84,57 @@ Page {
         return true
     }
 
+    function isSelected(itemId) {
+        return root.selectedItemIds.indexOf(String(itemId || "")) >= 0
+    }
+
+    function toggleSelection(itemId) {
+        var value = String(itemId || "")
+        if (value === "") {
+            return
+        }
+        var copy = root.selectedItemIds.slice()
+        var index = copy.indexOf(value)
+        if (index >= 0) {
+            copy.splice(index, 1)
+        } else {
+            copy.push(value)
+        }
+        root.selectedItemIds = copy
+    }
+
+    function selectedSaveIds() {
+        var fileIds = []
+        var folderIds = []
+        for (var index = 0; index < root.selectedItemIds.length; ++index) {
+            var id = String(root.selectedItemIds[index] || "")
+            var item = shareManager.browseModel.GetItemById(id)
+            if (!item) {
+                continue
+            }
+            if (String(item.kind || "") === "folder") {
+                folderIds.push(id)
+            } else {
+                fileIds.push(id)
+            }
+        }
+        return { fileIds: fileIds, folderIds: folderIds }
+    }
+
+    function saveSelectedItems() {
+        if (root.permission !== "download" || root.selectedItemIds.length === 0 || root.saveInFlight) {
+            return
+        }
+        var ids = root.selectedSaveIds()
+        if (ids.fileIds.length === 0 && ids.folderIds.length === 0) {
+            root.saveErrorMessage = "请选择要保存的项目"
+            return
+        }
+        root.saveErrorMessage = ""
+        root.saveInFlight = true
+        shareManager.saveShareItems(root.shareId, ids.fileIds, ids.folderIds, "0")
+    }
+
     header: Rectangle {
         implicitHeight: shareBrowseHeaderLayout.implicitHeight + 24
         color: theme.panelBackgroundColor
@@ -106,6 +160,7 @@ Page {
                 onPathClicked: function(index) {
                     if (index === 0) {
                         root.currentFolderId = ""
+                        root.selectedItemIds = []
                         shareManager.browseShare(root.shareId, "")
                     }
                 }
@@ -115,6 +170,13 @@ Page {
                 text: "权限：" + root.permission
                 font.pixelSize: 12
                 color: root.tertiaryColor
+            }
+
+            Button {
+                text: root.saveInFlight ? "保存中..." : "保存到我的网盘"
+                visible: root.permission === "download" && root.selectedItemIds.length > 0
+                enabled: !root.saveInFlight
+                onClicked: root.saveSelectedItems()
             }
 
             Button {
@@ -167,6 +229,16 @@ Page {
                 wrapMode: Text.WordWrap
             }
 
+            Label {
+                Layout.fillWidth: true
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                text: root.saveErrorMessage
+                color: theme.errorTextColor
+                visible: text !== ""
+                wrapMode: Text.WordWrap
+            }
+
             ListView {
                 id: browseListView
                 Layout.fillWidth: true
@@ -179,7 +251,8 @@ Page {
                     width: ListView.view.width
 
                     onClicked: {
-                        if (model.isDir) {
+                        if (model.kind === "folder") {
+                            root.selectedItemIds = []
                             root.currentFolderId = model.id
                             shareManager.browseShare(root.shareId, model.id)
 
@@ -195,8 +268,13 @@ Page {
                         anchors.rightMargin: 16
                         spacing: 12
 
+                        CheckBox {
+                            checked: root.isSelected(model.id)
+                            onClicked: root.toggleSelection(model.id)
+                        }
+
                         Label {
-                            text: model.isDir ? "📁" : "📄"
+                            text: model.kind === "folder" ? "📁" : "📄"
                             font.pixelSize: 20
                         }
 
@@ -213,7 +291,7 @@ Page {
 
                             Label {
                                 text: {
-                                    if (model.isDir) {
+                                    if (model.kind === "folder") {
                                         return (model.itemCount || 0) + " 项"
                                     }
                                     return FormatUtils.formatSize(model.size || 0)
@@ -225,7 +303,7 @@ Page {
 
                         Button {
                             text: "下载"
-                            visible: !model.isDir && root.permission === "download"
+                            visible: model.kind !== "folder" && root.permission === "download"
                             flat: true
                             onClicked: root.openDownloadDialog(model.id, model.name, model.size || 0)
                         }
@@ -242,6 +320,17 @@ Page {
             if (shareId === root.shareId && shareManager.browseModel.rowCount() === 0) {
                 shellController.setPageState("empty")
             }
+        }
+
+        function onOperationSuccess(message) {
+            root.saveInFlight = false
+            root.selectedItemIds = []
+            root.saveErrorMessage = ""
+        }
+
+        function onApiError(message, code) {
+            root.saveInFlight = false
+            root.saveErrorMessage = message
         }
     }
 

@@ -92,6 +92,13 @@ namespace disk::share {
             drogon::Get,
             "disk::filters::ShareAuthFilter"
         );
+        ADD_METHOD_TO(
+            ShareController::Save,
+            "/api/share/save/{share_id}",
+            drogon::Post,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::ShareAuthFilter"
+        );
         METHOD_LIST_END
 
         /**
@@ -167,6 +174,10 @@ namespace disk::share {
          */
         [[nodiscard]]
         auto Download(drogon::HttpRequestPtr request, std::string share_id, std::string file_id)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto Save(drogon::HttpRequestPtr request, std::string share_id)
             -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:

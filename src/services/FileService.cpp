@@ -2843,6 +2843,35 @@ namespace disk::file {
                 throw std::runtime_error("Failed to insert trash records");
             }
 
+            auto deleted_file_share_links = 0;
+            auto file_share_chunks = BatchUtils::Chunk(file_ids_to_delete, DEFAULT_BATCH_CHUNK_SIZE);
+            for (const auto& chunk : file_share_chunks) {
+                if (chunk.empty()) {
+                    continue;
+                }
+                auto result = co_await txn->execSqlCoro(
+                    "DELETE FROM share_files WHERE item_type = 'file' AND item_id IN (" +
+                        BatchUtils::BuildSafeNumericInClause(chunk) + ")"
+                );
+                deleted_file_share_links += static_cast<int>(result.affectedRows());
+            }
+
+            auto deleted_folder_share_links = 0;
+            auto folder_share_chunks = BatchUtils::Chunk(folder_ids_to_delete, DEFAULT_BATCH_CHUNK_SIZE);
+            for (const auto& chunk : folder_share_chunks) {
+                if (chunk.empty()) {
+                    continue;
+                }
+                auto result = co_await txn->execSqlCoro(
+                    "DELETE FROM share_files WHERE item_type = 'folder' AND item_id IN (" +
+                        BatchUtils::BuildSafeNumericInClause(chunk) + ")"
+                );
+                deleted_folder_share_links += static_cast<int>(result.affectedRows());
+            }
+
+            LOG_DEBUG << "Cleaned share links during delete: file_links=" << deleted_file_share_links
+                      << ", folder_links=" << deleted_folder_share_links;
+
             auto deleted_file_rows = co_await DeleteFilesByIds(txn, file_ids_to_delete);
             if (deleted_file_rows != static_cast<int>(file_ids_to_delete.size())) {
                 throw std::runtime_error("Failed to delete all file rows");

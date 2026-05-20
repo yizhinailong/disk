@@ -27,6 +27,16 @@ namespace disk::desktop {
                 }
                 break;
             }
+            case AuthDomain::OwnerAndVisitor: {
+                if (!m_owner_access_token.isEmpty()) {
+                    headers["Authorization"] =
+                        "Bearer " + m_owner_access_token;
+                }
+                if (!m_visitor_share_token.isEmpty()) {
+                    headers["X-Share-Token"] = m_visitor_share_token;
+                }
+                break;
+            }
             case AuthDomain::Public:
                 break;
         }
