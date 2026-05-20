@@ -185,7 +185,14 @@ namespace disk::services {
                 R"({{"target_id": {}, "status": {}}})",
                 target_id, status
             );
-            co_await LogOperation(operator_id, "admin.user.status_change", target_id, details);
+            co_await LogOperation(
+                operator_id,
+                "admin.user.status_change",
+                "user",
+                target_id,
+                user.getValueOfUsername(),
+                details
+            );
 
             LOG_INFO << "Admin change user status successful: target_id=" << target_id;
             co_return {};
@@ -252,7 +259,14 @@ namespace disk::services {
                 R"({{"target_id": {}, "role": {}}})",
                 target_id, role
             );
-            co_await LogOperation(operator_id, "admin.user.role_change", target_id, details);
+            co_await LogOperation(
+                operator_id,
+                "admin.user.role_change",
+                "user",
+                target_id,
+                user.getValueOfUsername(),
+                details
+            );
 
             LOG_INFO << "Admin change user role successful: target_id=" << target_id;
             co_return {};
@@ -298,7 +312,14 @@ namespace disk::services {
                 R"({{"target_id": {}, "username": "{}"}})",
                 target_id, user.getValueOfUsername()
             );
-            co_await LogOperation(operator_id, "admin.user.soft_delete", target_id, details);
+            co_await LogOperation(
+                operator_id,
+                "admin.user.soft_delete",
+                "user",
+                target_id,
+                user.getValueOfUsername(),
+                details
+            );
 
             LOG_INFO << "Admin soft delete user successful: target_id=" << target_id;
             co_return {};
@@ -352,7 +373,7 @@ namespace disk::services {
             response.active_shares = share_stats.empty()
                 ? 0 : share_stats[0]["active_shares"].as<int>();
 
-            co_await LogOperation(0, "admin.storage.global_stats", 0,
+            co_await LogOperation(0, "admin.storage.global_stats", "storage", 0, "全局存储统计",
                 std::format(R"({{"total_users": {}, "total_files": {}, "total_storage_used": {}, "active_shares": {}}})",
                     response.total_users, response.total_files,
                     response.total_storage_used, response.active_shares));
@@ -464,7 +485,7 @@ namespace disk::services {
                 response.items.push_back(std::move(share));
             }
 
-            co_await LogOperation(0, "admin.share.list", 0,
+            co_await LogOperation(0, "admin.share.list", "share", 0, "分享列表",
                 std::format(R"({{"page": {}, "page_size": {}, "total": {}}})",
                     req.page, req.page_size, total));
 
@@ -530,7 +551,7 @@ namespace disk::services {
             response.created_at = row["created_at"].as<std::string>();
             response.expires_at = row["expires_at"].isNull() ? "" : row["expires_at"].as<std::string>();
 
-            co_await LogOperation(0, "admin.share.detail", share_id,
+            co_await LogOperation(0, "admin.share.detail", "share", share_id, response.share_code,
                 std::format(R"({{"share_id": {}}})", share_id));
 
             LOG_INFO << "Admin get share detail successful: share_id=" << share_id;
@@ -579,7 +600,7 @@ namespace disk::services {
 
             auto share_code = result[0]["share_code"].as<std::string>();
             auto owner_id = result[0]["user_id"].as<uint64_t>();
-            co_await LogOperation(operator_id, "admin.share.force_cancel", share_id,
+            co_await LogOperation(operator_id, "admin.share.force_cancel", "share", share_id, share_code,
                 std::format(R"({{"share_id": {}, "share_code": "{}", "owner_id": {}, "previous_status": {}}})",
                     share_id, share_code, owner_id, current_status));
 
@@ -698,15 +719,19 @@ namespace disk::services {
 
     auto AdminService::LogOperation(uint64_t operator_id,
                                      const std::string& action,
+                                     const std::string& target_type,
                                      uint64_t target_id,
+                                     const std::string& target_name,
                                      const std::string& details) -> drogon::Task<void> {
         try {
             co_await m_db_client->execSqlCoro(
-                "INSERT INTO operation_logs (user_id, action, target_type, target_id, details, ip_address) "
-                "VALUES (?, ?, 'user', ?, ?, 'system')",
+                "INSERT INTO operation_logs (user_id, action, target_type, target_id, target_name, details, ip_address) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'system')",
                 operator_id,
                 action,
+                target_type,
                 target_id,
+                target_name,
                 details
             );
             LOG_DEBUG << "Operation logged: " << action << " by user_id=" << operator_id;

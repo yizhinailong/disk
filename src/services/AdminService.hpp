@@ -216,7 +216,9 @@ namespace disk::services {
          */
         auto LogOperation(uint64_t operator_id,
                           const std::string& action,
+                          const std::string& target_type,
                           uint64_t target_id,
+                          const std::string& target_name,
                           const std::string& details) -> drogon::Task<void>;
 
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端

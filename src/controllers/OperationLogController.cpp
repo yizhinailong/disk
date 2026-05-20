@@ -66,15 +66,9 @@ namespace disk::log {
             json["id"] = static_cast<Json::UInt64>(item.id);
             json["action"] = item.action;
             json["target_type"] = item.target_type;
-            if (item.target_id > 0) {
-                json["target_id"] = static_cast<Json::UInt64>(item.target_id);
-            }
-            if (!item.target_name.empty()) {
-                json["target_name"] = item.target_name;
-            }
-            if (!item.details.empty()) {
-                json["details"] = item.details;
-            }
+            json["target_id"] = static_cast<Json::UInt64>(item.target_id);
+            json["target_name"] = item.target_name;
+            json["details"] = item.details;
             json["ip_address"] = item.ip_address;
             json["created_at"] = item.created_at;
             items.append(json);
