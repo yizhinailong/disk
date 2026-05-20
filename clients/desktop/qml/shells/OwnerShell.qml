@@ -77,19 +77,14 @@ readonly property var independentPageNavItems: [
     property string activeDestination: "drive"
     property string activeDriveViewMode: "myfiles"
     property Item driveHostItem: DriveBrowserPage {}
+    property Item transferCenterHostItem: TransferCenterPage {}
+    property Item settingsHostItem: SettingsPage {}
 
-    function destinationForPageComponent(pageComponent) {
-        if (pageComponent === transferCenterPageComponent)
-            return "transfers"
-        if (pageComponent === settingsPageComponent)
-            return "settings"
-        return "drive"
-    }
-
-    function showPage(pageComponent) {
-        root.activeDestination = root.destinationForPageComponent(pageComponent)
+    function showPage(destination, pageItem) {
+        root.activeDestination = destination
         root.activeDriveViewMode = ""
-        stackView.replace(pageComponent)
+        if (stackView.currentItem !== pageItem)
+            stackView.replace(pageItem)
     }
 
     function showDriveViewMode(viewMode) {
@@ -123,12 +118,10 @@ function activateFileView(itemId) {
 function activateIndependentPage(itemId) {
         switch (itemId) {
         case "transfers":
-            root.activeDestination = "transfers"
-            root.showPage(transferCenterPageComponent)
+            root.showPage("transfers", root.transferCenterHostItem)
             return
         case "settings":
-            root.activeDestination = "settings"
-            root.showPage(settingsPageComponent)
+            root.showPage("settings", root.settingsHostItem)
             return
         }
     }
@@ -431,18 +424,10 @@ function activateIndependentPage(itemId) {
                 Layout.fillHeight: true
                 
                 initialItem: root.driveHostItem
+                replaceEnter: Transition {}
+                replaceExit: Transition {}
             }
         }
-    }
-
-    Component {
-        id: transferCenterPageComponent
-        TransferCenterPage {}
-    }
-
-    Component {
-        id: settingsPageComponent
-        SettingsPage {}
     }
 
     Dialog {
