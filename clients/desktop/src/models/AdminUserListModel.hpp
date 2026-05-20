@@ -22,6 +22,7 @@ namespace disk::desktop {
         int status{ 1 };     // 0 = disabled, 1 = normal, 2 = locked
         qint64 storage_quota{ 0 };
         qint64 storage_used{ 0 };
+        qint64 storage_reserved{ 0 };
         QString created_at;
         QString last_login_at;
 
@@ -41,6 +42,7 @@ namespace disk::desktop {
             StatusRole,
             StorageQuotaRole,
             StorageUsedRole,
+            StorageReservedRole,
             CreatedAtRole,
             LastLoginAtRole,
         };
