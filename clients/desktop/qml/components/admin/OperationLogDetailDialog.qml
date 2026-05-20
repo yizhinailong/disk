@@ -104,7 +104,7 @@ Dialog {
                 readOnly: true
                 selectByMouse: true
                 wrapMode: TextEdit.Wrap
-                color: theme.primaryTextColor
+                color: theme.strongTextColor
             }
         }
 

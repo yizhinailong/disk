@@ -351,11 +351,11 @@ Item {
                             color: root.healthStatusColor(healthManager.health.databaseStatus)
                         }
 
-                        Label { text: qsTr("数据库信息:"); font.bold: true; visible: healthManager.health.databaseMessage }
+                        Label { text: qsTr("数据库信息:"); font.bold: true; visible: !!healthManager.health.databaseMessage }
                         Label {
                             text: healthManager.health.databaseMessage || ""
                             color: theme.secondaryTextColor
-                            visible: healthManager.health.databaseMessage
+                            visible: !!healthManager.health.databaseMessage
                         }
 
                         Label { text: qsTr("Redis 健康:"); font.bold: true }
@@ -364,11 +364,11 @@ Item {
                             color: root.healthStatusColor(healthManager.health.redisStatus)
                         }
 
-                        Label { text: qsTr("Redis 信息:"); font.bold: true; visible: healthManager.health.redisMessage }
+                        Label { text: qsTr("Redis 信息:"); font.bold: true; visible: !!healthManager.health.redisMessage }
                         Label {
                             text: healthManager.health.redisMessage || ""
                             color: theme.secondaryTextColor
-                            visible: healthManager.health.redisMessage
+                            visible: !!healthManager.health.redisMessage
                         }
                     }
                 }

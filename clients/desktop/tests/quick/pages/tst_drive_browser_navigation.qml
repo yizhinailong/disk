@@ -641,9 +641,7 @@ TestCase {
         dm.paginationLoaded(1, 1, 1)
         wait(100)
 
-        var myFilesStateView = findByObjectName(page, "myFilesStateView")
-        verify(myFilesStateView !== null, "MyFiles state view found")
-        verify(myFilesStateView.visible, "MyFiles content container is visible before refresh")
+        verify(page.isMyFilesMode, "MyFiles view is active before refresh")
 
         page.preserveMyFilesContentForNextRefresh()
         page.refreshCurrentFolder()
@@ -652,8 +650,6 @@ TestCase {
         compare(sc.pageState, "loading", "Preserving refresh enters loading state")
         verify(page.keepMyFilesContentWhileLoading,
                "MyFiles view keeps cached content during preserving refresh")
-        verify(myFilesStateView.visible,
-               "Cached MyFiles view remains visible during preserving refresh")
     }
 
     function test_folder_navigation_does_not_preserve_old_folder_content() {

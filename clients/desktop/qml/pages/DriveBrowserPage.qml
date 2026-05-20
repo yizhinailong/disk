@@ -344,6 +344,18 @@ Page {
         }
     }
 
+    function hasCachedMyFilesContent() {
+        return driveManager.listModel && driveManager.listModel.rowCount() > 0
+    }
+
+    function hasCachedSharedContent() {
+        return shareManager.listModel && shareManager.listModel.rowCount() > 0
+    }
+
+    function hasCachedTrashContent() {
+        return trashManager.listModel && trashManager.listModel.rowCount() > 0
+    }
+
     function preserveMyFilesContentForNextRefresh() {
         root.preserveMyFilesContentOnNextRefresh = true
     }
@@ -1128,24 +1140,24 @@ Page {
 
         if (shellController.pageState !== "batchResult") {
             root.preserveSharedContentForNextRefresh()
-        root.refreshSharedList()
+            root.refreshSharedList()
         }
     }
 
     function refreshCurrentView() {
         if (root.isMyFilesMode) {
             root.preserveMyFilesContentForNextRefresh()
-        root.refreshCurrentFolder()
+            root.refreshCurrentFolder()
             return
         }
         if (root.isSharedMode) {
             root.preserveSharedContentForNextRefresh()
-        root.refreshSharedList()
+            root.refreshSharedList()
             return
         }
         if (root.isTrashMode) {
             root.preserveTrashContentForNextRefresh()
-        root.refreshTrashList()
+            root.refreshTrashList()
         }
     }
 
@@ -1160,8 +1172,6 @@ Page {
     }
 
     function refreshCurrentFolder() {
-        root.keepMyFilesContentWhileLoading = root.preserveMyFilesContentOnNextRefresh && root.currentFolderItemCount > 0
-        root.preserveMyFilesContentOnNextRefresh = false
         clearSelection()
         shellController.setPageState("loading")
         driveManager.loadFolderTree()
@@ -1171,10 +1181,12 @@ Page {
         } else {
             driveManager.listFiles(currentFolderId, 1, 50, root.currentSort)
         }
+        root.keepMyFilesContentWhileLoading = root.preserveMyFilesContentOnNextRefresh && root.hasCachedMyFilesContent()
+        root.preserveMyFilesContentOnNextRefresh = false
     }
 
     function refreshSharedList() {
-        root.keepSharedContentWhileLoading = root.preserveSharedContentOnNextRefresh && root.currentShareItemCount > 0
+        root.keepSharedContentWhileLoading = root.preserveSharedContentOnNextRefresh && root.hasCachedSharedContent()
         root.preserveSharedContentOnNextRefresh = false
         root.clearSelection()
         root.clearSharedSelection()
@@ -1184,7 +1196,7 @@ Page {
     }
 
     function refreshTrashList() {
-        root.keepTrashContentWhileLoading = root.preserveTrashContentOnNextRefresh && root.currentTrashItemCount > 0
+        root.keepTrashContentWhileLoading = root.preserveTrashContentOnNextRefresh && root.hasCachedTrashContent()
         root.preserveTrashContentOnNextRefresh = false
         root.clearSelection()
         root.clearSharedSelection()
