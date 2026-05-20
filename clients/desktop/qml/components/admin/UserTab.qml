@@ -55,6 +55,10 @@ Item {
         }
     }
 
+    function availableStorage(quota, used, reserved) {
+        return Math.max(0, Number(quota || 0) - Number(used || 0) - Number(reserved || 0))
+    }
+
     function requestUsers() {
         root.isLoadingUsers = true
         root.userLoadError = ""
@@ -220,9 +224,20 @@ Item {
                 }
 
                 Label {
-                    Layout.preferredWidth: 120
+                    Layout.preferredWidth: 110
                     Layout.minimumWidth: 0
                     text: qsTr("存储用量")
+                    font.bold: true
+                    font.pixelSize: 12
+                    color: theme.tableHeaderTextColor
+                    elide: Text.ElideRight
+                    wrapMode: Text.NoWrap
+                }
+
+                Label {
+                    Layout.preferredWidth: 110
+                    Layout.minimumWidth: 0
+                    text: qsTr("可用空间")
                     font.bold: true
                     font.pixelSize: 12
                     color: theme.tableHeaderTextColor
@@ -260,7 +275,9 @@ Item {
                 required property string email
                 required property int role
                 required property int status
+                required property var storageQuota
                 required property var storageUsed
+                required property var storageReserved
 
                 width: userListView.width
                 implicitHeight: rowLayout.implicitHeight + 16
@@ -330,9 +347,19 @@ Item {
                     }
 
                     Label {
-                        Layout.preferredWidth: 120
+                        Layout.preferredWidth: 110
                         Layout.minimumWidth: 0
                         text: FormatUtils.formatStorageSize(userRowDelegate.storageUsed || 0)
+                        font.pixelSize: 13
+                        color: root.workspaceTheme.tableBodySecondaryTextColor
+                        elide: Text.ElideRight
+                        wrapMode: Text.NoWrap
+                    }
+
+                    Label {
+                        Layout.preferredWidth: 110
+                        Layout.minimumWidth: 0
+                        text: FormatUtils.formatStorageSize(root.availableStorage(userRowDelegate.storageQuota, userRowDelegate.storageUsed, userRowDelegate.storageReserved))
                         font.pixelSize: 13
                         color: root.workspaceTheme.tableBodySecondaryTextColor
                         elide: Text.ElideRight
