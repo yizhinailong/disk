@@ -315,7 +315,8 @@ namespace disk::auth {
             drogon_model::disk::OperationLogs log;
             log.setUserId(user_id);
             log.setAction("logout");
-            log.setTargetId(0); // 登出操作无 target
+            log.setTargetType("user");
+            log.setTargetId(0);
             Json::Value details_json;
             details_json["message"] = "User logged out";
             Json::StreamWriterBuilder builder;

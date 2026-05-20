@@ -37,7 +37,8 @@ Item {
         case "folder": return qsTr("文件夹")
         case "share": return qsTr("分享")
         case "user": return qsTr("用户")
-        default: return targetType || qsTr("未知")
+        case "unknown": return qsTr("—")
+        default: return targetType || qsTr("—")
         }
     }
 
