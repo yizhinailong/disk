@@ -397,18 +397,19 @@ namespace disk::desktop::managers {
         }
 
         auto data = json_opt->value("data").toObject();
+        auto user = data.value("user").toObject();
         QVariantMap detail;
 
-        detail["id"] = static_cast<double>(data.value("id").toDouble(0));
-        detail["username"] = data.value("username").toString();
-        detail["email"] = data.value("email").toString();
-        detail["nickname"] = data.value("nickname").toString();
-        detail["role"] = data.value("role").toInt(0);
-        detail["status"] = data.value("status").toInt(1);
-        detail["storage_quota"] = static_cast<double>(data.value("storage_quota").toDouble(0));
-        detail["storage_used"] = static_cast<double>(data.value("storage_used").toDouble(0));
-        detail["created_at"] = data.value("created_at").toString();
-        detail["last_login_at"] = data.value("last_login_at").toString();
+        detail["id"] = static_cast<double>(user.value("id").toDouble(0));
+        detail["username"] = user.value("username").toString();
+        detail["email"] = user.value("email").toString();
+        detail["nickname"] = user.value("nickname").toString();
+        detail["role"] = user.value("role").toInt(0);
+        detail["status"] = user.value("status").toInt(1);
+        detail["storage_quota"] = static_cast<double>(user.value("storage_quota").toDouble(0));
+        detail["storage_used"] = static_cast<double>(user.value("storage_used").toDouble(0));
+        detail["created_at"] = user.value("created_at").toString();
+        detail["last_login_at"] = user.value("last_login_at").toString();
 
         emit userDetailLoaded(detail);
     }

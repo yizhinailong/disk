@@ -130,10 +130,16 @@ private slots:
         QCOMPARE(error_spy.count(), 0);
 
         auto detail = detail_spy.takeFirst().at(0).toMap();
+        QCOMPARE(detail.value("id").toDouble(), 1.0);
         QCOMPARE(detail.value("username").toString(), QString("alice"));
         QCOMPARE(detail.value("email").toString(), QString("alice@example.com"));
+        QCOMPARE(detail.value("nickname").toString(), QString("Alice"));
         QCOMPARE(detail.value("role").toInt(), 0);
         QCOMPARE(detail.value("status").toInt(), 1);
+        QCOMPARE(detail.value("storage_quota").toDouble(), 10737418240.0);
+        QCOMPARE(detail.value("storage_used").toDouble(), 1073741824.0);
+        QCOMPARE(detail.value("created_at").toString(), QString("2026-01-01T00:00:00Z"));
+        QCOMPARE(detail.value("last_login_at").toString(), QString("2026-01-15T10:30:00Z"));
     }
 
     void GetUserDetailHandlesApiError() {

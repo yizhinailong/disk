@@ -271,11 +271,11 @@ private slots:
         QVERIFY(qml.contains(QStringLiteral("root.showPage(settingsPageComponent)")));
         QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"myfiles\")")));
         QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"shared\")")));
-QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"trash\")")));
+        QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"trash\")")));
         QVERIFY(qml.contains(QStringLiteral("id: \"myfiles\"")));
         QVERIFY(qml.contains(QStringLiteral("id: \"shared\"")));
-QVERIFY(qml.contains(QStringLiteral("id: \"trash\"")));
-        QVERIFY(qml.contains(QStringLiteral("enabled: false")));
+        QVERIFY(qml.contains(QStringLiteral("id: \"trash\"")));
+        QVERIFY(!qml.contains(QStringLiteral("enabled: false")));
 
         QVERIFY(qml.contains(QStringLiteral("property string activeDestination: \"drive\"")));
         QVERIFY(qml.contains(QStringLiteral("property string activeDriveViewMode: \"myfiles\"")));
@@ -286,15 +286,15 @@ QVERIFY(qml.contains(QStringLiteral("id: \"trash\"")));
         QVERIFY(!qml.contains(QStringLiteral("root.activeDestination = \"trash\"")));
         QVERIFY(!qml.contains(QStringLiteral("root.activeDestination = \"files\"")));
 
-        QVERIFY(qml.contains(QStringLiteral("title: \"File Views\"")));
-        QVERIFY(qml.contains(QStringLiteral("title: \"Independent Pages\"")));
-QVERIFY(qml.contains(QStringLiteral("label: \"My Files\"")));
-        QVERIFY(qml.contains(QStringLiteral("label: \"Transfers\"")));
-        QVERIFY(qml.contains(QStringLiteral("text: \"Logout\"")));
-QVERIFY(qml.contains(QStringLiteral("label: \"Shares\"")));
-        QVERIFY(qml.contains(QStringLiteral("label: \"Settings\"")));
-        QVERIFY(qml.contains(QStringLiteral("text: \"Navigation\"")));
-        QVERIFY(qml.contains(QStringLiteral("text: \"Session\"")));
+        QVERIFY(qml.contains(QStringLiteral("title: \"文件视图\"")));
+        QVERIFY(qml.contains(QStringLiteral("title: \"独立页面\"")));
+        QVERIFY(qml.contains(QStringLiteral("label: \"我的文件\"")));
+        QVERIFY(qml.contains(QStringLiteral("label: \"传输\"")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"退出登录\"")));
+        QVERIFY(qml.contains(QStringLiteral("label: \"分享\"")));
+        QVERIFY(qml.contains(QStringLiteral("label: \"设置\"")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"导航\"")));
+        QVERIFY(qml.contains(QStringLiteral("text: \"会话\"")));
         QVERIFY(qml.contains(QStringLiteral("function showPage(pageComponent)")));
         QVERIFY(qml.contains(QStringLiteral("function showDriveViewMode(viewMode)")));
 
@@ -315,7 +315,8 @@ QVERIFY(qml.contains(QStringLiteral("label: \"Shares\"")));
         const auto drive_status_qml = read_qml(QStringLiteral("components/drive/DriveStatusCard.qml"));
         const auto drive_my_files_qml = read_qml(QStringLiteral("components/drive/DriveMyFilesView.qml"));
         const auto drive_shared_qml = read_qml(QStringLiteral("components/drive/DriveSharedView.qml"));
-const auto drive_trash_qml = read_qml(QStringLiteral("components/drive/DriveTrashView.qml"));
+        const auto drive_trash_qml = read_qml(QStringLiteral("components/drive/DriveTrashView.qml"));
+        const auto drive_context_menu_qml = read_qml(QStringLiteral("components/drive/DriveContextMenu.qml"));
 
         QVERIFY(!drive_browser_page_qml.isEmpty());
         QVERIFY(!drive_toolbar_qml.isEmpty());
@@ -323,6 +324,7 @@ const auto drive_trash_qml = read_qml(QStringLiteral("components/drive/DriveTras
         QVERIFY(!drive_my_files_qml.isEmpty());
         QVERIFY(!drive_shared_qml.isEmpty());
         QVERIFY(!drive_trash_qml.isEmpty());
+        QVERIFY(!drive_context_menu_qml.isEmpty());
 
         QStringList drive_sources;
         drive_sources << drive_browser_page_qml
@@ -330,7 +332,8 @@ const auto drive_trash_qml = read_qml(QStringLiteral("components/drive/DriveTras
                       << drive_status_qml
                       << drive_my_files_qml
                       << drive_shared_qml
-                      << drive_trash_qml;
+                      << drive_trash_qml
+                      << drive_context_menu_qml;
 
         const auto drive_qml = drive_sources.join(QStringLiteral("\n"));
 
