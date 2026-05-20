@@ -9,6 +9,8 @@
 #include "auth/VisitorSessionManager.hpp"
 #include "managers/AdminManager.hpp"
 #include "managers/DriveManager.hpp"
+#include "managers/HealthManager.hpp"
+#include "managers/NetworkSettingsManager.hpp"
 #include "managers/ProfileManager.hpp"
 #include "managers/ShareManager.hpp"
 #include "managers/TransferManager.hpp"
@@ -19,7 +21,7 @@
 namespace disk::app {
 
     Application::Application(QObject* parent)
-        : QObject(parent), m_network_client(std::make_unique<disk::desktop::NetworkClient>()), m_request_factory(std::make_unique<disk::desktop::RequestFactory>()), m_auth_service(std::make_unique<disk::desktop::AuthService>(m_network_client.get(), m_request_factory.get())), m_session_store(std::make_unique<disk::desktop::SessionStore>(m_network_client.get(), m_request_factory.get())), m_admin_manager(std::make_unique<disk::desktop::managers::AdminManager>(m_network_client.get(), m_request_factory.get())), m_drive_manager(std::make_unique<disk::desktop::managers::DriveManager>(m_network_client.get(), m_request_factory.get())), m_profile_manager(std::make_unique<disk::desktop::managers::ProfileManager>(m_network_client.get(), m_request_factory.get())), m_transfer_manager(std::make_unique<disk::desktop::managers::TransferManager>(m_network_client.get(), m_request_factory.get())), m_share_manager(std::make_unique<disk::desktop::managers::ShareManager>(m_network_client.get(), m_request_factory.get())), m_trash_manager(std::make_unique<disk::desktop::managers::TrashManager>(m_network_client.get(), m_request_factory.get())), m_shell_controller(std::make_unique<ShellController>(m_session_store.get())) {
+        : QObject(parent), m_network_client(std::make_unique<disk::desktop::NetworkClient>()), m_request_factory(std::make_unique<disk::desktop::RequestFactory>()), m_auth_service(std::make_unique<disk::desktop::AuthService>(m_network_client.get(), m_request_factory.get())), m_session_store(std::make_unique<disk::desktop::SessionStore>(m_network_client.get(), m_request_factory.get())), m_admin_manager(std::make_unique<disk::desktop::managers::AdminManager>(m_network_client.get(), m_request_factory.get())), m_drive_manager(std::make_unique<disk::desktop::managers::DriveManager>(m_network_client.get(), m_request_factory.get())), m_health_manager(std::make_unique<disk::desktop::managers::HealthManager>(m_network_client.get())), m_network_settings_manager(std::make_unique<disk::desktop::managers::NetworkSettingsManager>(m_network_client.get())), m_profile_manager(std::make_unique<disk::desktop::managers::ProfileManager>(m_network_client.get(), m_request_factory.get())), m_transfer_manager(std::make_unique<disk::desktop::managers::TransferManager>(m_network_client.get(), m_request_factory.get())), m_share_manager(std::make_unique<disk::desktop::managers::ShareManager>(m_network_client.get(), m_request_factory.get())), m_trash_manager(std::make_unique<disk::desktop::managers::TrashManager>(m_network_client.get(), m_request_factory.get())), m_shell_controller(std::make_unique<ShellController>(m_session_store.get())) {
     }
 
     Application::~Application() = default;
@@ -35,6 +37,8 @@ namespace disk::app {
         context->setContextProperty("authService", m_auth_service.get());
         context->setContextProperty("sessionStore", m_session_store.get());
         context->setContextProperty("driveManager", m_drive_manager.get());
+        context->setContextProperty("healthManager", m_health_manager.get());
+        context->setContextProperty("networkSettingsManager", m_network_settings_manager.get());
         context->setContextProperty("adminManager", m_admin_manager.get());
         context->setContextProperty("profileManager", m_profile_manager.get());
         context->setContextProperty("transferManager", m_transfer_manager.get());

@@ -52,9 +52,7 @@ namespace disk::health {
         }
 
         // degraded 或 unhealthy 状态返回 503
-        auto response = drogon::HttpResponse::newHttpJsonResponse(
-            Response::Success(data)->getJsonObject()->operator[]("data")
-        );
+        auto response = Response::Success(data);
         response->setStatusCode(drogon::k503ServiceUnavailable);
         co_return response;
     }

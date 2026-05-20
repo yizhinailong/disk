@@ -517,6 +517,7 @@ private slots:
         QCOMPARE(detail.value("file_name").toString(), QString("report.pdf"));
         QCOMPARE(detail.value("username").toString(), QString("alice"));
         QCOMPARE(detail.value("status").toInt(), 1);
+        QCOMPARE(detail.value("password_set").toBool(), true);
     }
 
     // ── ForceCancelShare ──

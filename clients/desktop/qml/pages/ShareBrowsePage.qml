@@ -18,6 +18,8 @@ Page {
     property var selectedItemIds: []
     property bool saveInFlight: false
     property string saveErrorMessage: ""
+    property string targetSaveFolderId: "0"
+    property string targetSaveFolderName: "我的网盘"
 
     WorkspaceTheme { id: theme }
 
@@ -121,6 +123,22 @@ Page {
         return { fileIds: fileIds, folderIds: folderIds }
     }
 
+    function openSaveDestinationDialog() {
+        if (root.permission !== "download" || root.selectedItemIds.length === 0 || root.saveInFlight) {
+            return
+        }
+        var ids = root.selectedSaveIds()
+        if (ids.fileIds.length === 0 && ids.folderIds.length === 0) {
+            root.saveErrorMessage = "请选择要保存的项目"
+            return
+        }
+        root.saveErrorMessage = ""
+        root.targetSaveFolderId = "0"
+        root.targetSaveFolderName = "我的网盘"
+        driveManager.loadFolderTree()
+        saveDestinationDialog.open()
+    }
+
     function saveSelectedItems() {
         if (root.permission !== "download" || root.selectedItemIds.length === 0 || root.saveInFlight) {
             return
@@ -132,7 +150,7 @@ Page {
         }
         root.saveErrorMessage = ""
         root.saveInFlight = true
-        shareManager.saveShareItems(root.shareId, ids.fileIds, ids.folderIds, "0")
+        shareManager.saveShareItems(root.shareId, ids.fileIds, ids.folderIds, root.targetSaveFolderId)
     }
 
     header: Rectangle {
@@ -176,7 +194,7 @@ Page {
                 text: root.saveInFlight ? "保存中..." : "保存到我的网盘"
                 visible: root.permission === "download" && root.selectedItemIds.length > 0
                 enabled: !root.saveInFlight
-                onClicked: root.saveSelectedItems()
+                onClicked: root.openSaveDestinationDialog()
             }
 
             Button {
@@ -190,6 +208,86 @@ Page {
         id: shareDownloadFileDialogLoader
         active: false
         sourceComponent: shareDownloadFileDialogComponent
+    }
+
+    Dialog {
+        id: saveDestinationDialog
+        objectName: "shareSaveDestinationDialog"
+        modal: true
+        width: 420
+        height: 520
+        title: "保存到我的网盘"
+        standardButtons: Dialog.NoButton
+        closePolicy: Popup.NoAutoClose
+
+        ColumnLayout {
+            width: parent.width
+            height: parent.height
+            spacing: 12
+
+            Label {
+                Layout.fillWidth: true
+                text: "选择保存目标文件夹。当前目标：" + root.targetSaveFolderName
+                color: root.tertiaryColor
+                wrapMode: Text.WordWrap
+            }
+
+            Button {
+                Layout.fillWidth: true
+                text: "我的网盘（根目录）"
+                enabled: !root.saveInFlight
+                onClicked: {
+                    root.targetSaveFolderId = "0"
+                    root.targetSaveFolderName = "我的网盘"
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                color: theme.panelMutedFillColor
+                radius: theme.innerPanelRadius
+                border.color: theme.panelBorderColor
+
+                FolderTreePanel {
+                    anchors.fill: parent
+                    model: driveManager.treeModel
+                    currentFolderId: root.targetSaveFolderId
+                    onFolderClicked: function(folderId) {
+                        root.targetSaveFolderId = folderId
+                        root.targetSaveFolderName = "文件夹 " + folderId
+                    }
+                    onCloseRequested: saveDestinationDialog.close()
+                }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: root.saveErrorMessage
+                color: theme.errorTextColor
+                visible: text !== ""
+                wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: "取消"
+                    enabled: !root.saveInFlight
+                    onClicked: saveDestinationDialog.close()
+                }
+
+                Button {
+                    text: root.saveInFlight ? "保存中..." : "保存"
+                    highlighted: true
+                    enabled: !root.saveInFlight
+                    onClicked: root.saveSelectedItems()
+                }
+            }
+        }
     }
 
     Component {
@@ -323,13 +421,19 @@ Page {
         }
 
         function onOperationSuccess(message) {
+            if (!root.saveInFlight) {
+                return
+            }
             root.saveInFlight = false
             root.selectedItemIds = []
             root.saveErrorMessage = ""
+            saveDestinationDialog.close()
         }
 
         function onApiError(message, code) {
-            root.saveInFlight = false
+            if (root.saveInFlight) {
+                root.saveInFlight = false
+            }
             root.saveErrorMessage = message
         }
     }

@@ -51,6 +51,8 @@ qt_add_executable(desktop-unit-tests
     ${DESKTOP_SRC_DIR}/network/ErrorAdapter.cpp
     ${DESKTOP_SRC_DIR}/managers/AdminManager.cpp
     ${DESKTOP_SRC_DIR}/managers/DriveManager.cpp
+    ${DESKTOP_SRC_DIR}/managers/HealthManager.cpp
+    ${DESKTOP_SRC_DIR}/managers/NetworkSettingsManager.cpp
     ${DESKTOP_SRC_DIR}/managers/TransferManager.cpp
     ${DESKTOP_SRC_DIR}/app/ShellController.cpp
     ${DESKTOP_SRC_DIR}/utils/ShareCodeParser.cpp
@@ -124,6 +126,8 @@ qt_add_qml_module(desktop-quick-tests
         quick/navigation/tst_route_taxonomy.qml
         quick/pages/tst_drive_interactions.qml
         quick/pages/tst_admin_page.qml
+        quick/pages/tst_share_browse.qml
+        quick/pages/tst_settings_page.qml
         quick/pages/tst_drive_shared_view.qml
         quick/pages/tst_share_create_dialog.qml
     RESOURCE_PREFIX /qt/qml

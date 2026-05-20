@@ -615,6 +615,7 @@ namespace disk::desktop::managers {
         detail["share_code"] = data.value("share_code").toString();
         detail["status"] = data.value("status").toInt(0);
         detail["access_count"] = data.value("access_count").toInt(0);
+        detail["password_set"] = data.value("password_set").toBool(false);
         detail["created_at"] = data.value("created_at").toString();
         detail["expires_at"] = data.value("expires_at").toString();
 

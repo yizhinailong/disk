@@ -73,6 +73,8 @@ set(DESKTOP_APP_SOURCES
     ${DESKTOP_SRC_DIR}/auth/VisitorSessionManager.cpp
     ${DESKTOP_SRC_DIR}/managers/AdminManager.cpp
     ${DESKTOP_SRC_DIR}/managers/DriveManager.cpp
+    ${DESKTOP_SRC_DIR}/managers/HealthManager.cpp
+    ${DESKTOP_SRC_DIR}/managers/NetworkSettingsManager.cpp
     ${DESKTOP_SRC_DIR}/managers/ProfileManager.cpp
     ${DESKTOP_SRC_DIR}/managers/ShareManager.cpp
     ${DESKTOP_SRC_DIR}/managers/TransferManager.cpp
@@ -104,6 +106,8 @@ set(DESKTOP_APP_HEADERS
     ${DESKTOP_SRC_DIR}/auth/VisitorSessionManager.hpp
     ${DESKTOP_SRC_DIR}/managers/AdminManager.hpp
     ${DESKTOP_SRC_DIR}/managers/DriveManager.hpp
+    ${DESKTOP_SRC_DIR}/managers/HealthManager.hpp
+    ${DESKTOP_SRC_DIR}/managers/NetworkSettingsManager.hpp
     ${DESKTOP_SRC_DIR}/managers/ProfileManager.hpp
     ${DESKTOP_SRC_DIR}/managers/ShareManager.hpp
     ${DESKTOP_SRC_DIR}/managers/TransferManager.hpp

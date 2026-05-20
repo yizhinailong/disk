@@ -418,6 +418,7 @@ namespace disk::services {
                 "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, "
                 "s.share_code, s.status, "
                 "(s.view_count + s.download_count) AS access_count, "
+                "(s.password_hash IS NOT NULL) AS password_set, "
                 "s.created_at, s.expires_at "
                 + from_clause + " "
                 "LEFT JOIN share_files sf ON sf.id = ("
@@ -457,6 +458,7 @@ namespace disk::services {
                 share.share_code = row["share_code"].as<std::string>();
                 share.status = row["status"].as<int>();
                 share.access_count = row["access_count"].isNull() ? 0 : row["access_count"].as<int>();
+                share.password_set = !row["password_set"].isNull() && row["password_set"].as<int>() != 0;
                 share.created_at = row["created_at"].as<std::string>();
                 share.expires_at = row["expires_at"].isNull() ? "" : row["expires_at"].as<std::string>();
                 response.items.push_back(std::move(share));
@@ -495,6 +497,7 @@ namespace disk::services {
                 "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, "
                 "s.share_code, s.status, "
                 "(s.view_count + s.download_count) AS access_count, "
+                "(s.password_hash IS NOT NULL) AS password_set, "
                 "s.created_at, s.expires_at "
                 "FROM shares s "
                 "LEFT JOIN users u ON s.user_id = u.id "
@@ -523,6 +526,7 @@ namespace disk::services {
             response.share_code = row["share_code"].as<std::string>();
             response.status = row["status"].as<int>();
             response.access_count = row["access_count"].isNull() ? 0 : row["access_count"].as<int>();
+            response.password_set = !row["password_set"].isNull() && row["password_set"].as<int>() != 0;
             response.created_at = row["created_at"].as<std::string>();
             response.expires_at = row["expires_at"].isNull() ? "" : row["expires_at"].as<std::string>();
 

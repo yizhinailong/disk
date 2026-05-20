@@ -14,6 +14,20 @@ Item {
         adminManager.GetSystemStatusApi()
         adminManager.GetGlobalStorageStats()
         adminManager.GetSystemInfo()
+        healthManager.checkHealth()
+    }
+
+    function healthStatusText(status) {
+        if (status === "healthy") return qsTr("健康")
+        if (status === "degraded") return qsTr("降级")
+        if (status === "unhealthy") return qsTr("异常")
+        return status || qsTr("未检测")
+    }
+
+    function healthStatusColor(status) {
+        if (status === "healthy") return theme.successTextColor
+        if (status === "unhealthy") return theme.errorTextColor
+        return theme.secondaryTextColor
     }
 
     function formatUptime(seconds) {
@@ -288,6 +302,78 @@ Item {
             }
 
             // System status section
+            Rectangle {
+                Layout.fillWidth: true
+                color: theme.panelBackgroundColor
+                radius: theme.panelRadius
+                border.color: theme.panelBorderColor
+                implicitHeight: healthLayout.implicitHeight + 24
+
+                ColumnLayout {
+                    id: healthLayout
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+
+                    Label {
+                        text: qsTr("服务健康检查")
+                        font.bold: true
+                        font.pixelSize: 14
+                        color: theme.strongTextColor
+                    }
+
+                    GridLayout {
+                        columns: 2
+                        rowSpacing: 8
+                        columnSpacing: 24
+
+                        Label { text: qsTr("总体状态:"); font.bold: true }
+                        Label {
+                            text: root.healthStatusText(healthManager.health.overallStatus)
+                            color: root.healthStatusColor(healthManager.health.overallStatus)
+                        }
+
+                        Label { text: qsTr("版本:"); font.bold: true }
+                        Label { text: healthManager.health.version || "—"; color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("运行时间:"); font.bold: true }
+                        Label { text: healthManager.health.uptime || "—"; color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("检测耗时:"); font.bold: true }
+                        Label { text: String(healthManager.health.totalCheckMs || 0) + " ms"; color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("检测时间:"); font.bold: true }
+                        Label { text: healthManager.health.timestamp || "—"; color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("数据库健康:"); font.bold: true }
+                        Label {
+                            text: root.healthStatusText(healthManager.health.databaseStatus) + " / " + String(healthManager.health.databaseLatencyMs || 0) + " ms"
+                            color: root.healthStatusColor(healthManager.health.databaseStatus)
+                        }
+
+                        Label { text: qsTr("数据库信息:"); font.bold: true; visible: healthManager.health.databaseMessage }
+                        Label {
+                            text: healthManager.health.databaseMessage || ""
+                            color: theme.secondaryTextColor
+                            visible: healthManager.health.databaseMessage
+                        }
+
+                        Label { text: qsTr("Redis 健康:"); font.bold: true }
+                        Label {
+                            text: root.healthStatusText(healthManager.health.redisStatus) + " / " + String(healthManager.health.redisLatencyMs || 0) + " ms"
+                            color: root.healthStatusColor(healthManager.health.redisStatus)
+                        }
+
+                        Label { text: qsTr("Redis 信息:"); font.bold: true; visible: healthManager.health.redisMessage }
+                        Label {
+                            text: healthManager.health.redisMessage || ""
+                            color: theme.secondaryTextColor
+                            visible: healthManager.health.redisMessage
+                        }
+                    }
+                }
+            }
+
             Rectangle {
                 Layout.fillWidth: true
                 color: theme.panelBackgroundColor

@@ -144,6 +144,10 @@ TestCase {
         verify(source.indexOf("查看详情") !== -1, "Has view detail action")
         verify(source.indexOf("强制取消") !== -1, "Has force cancel action")
         verify(source.indexOf("ForceCancelShare") !== -1, "Calls ForceCancelShare")
+        verify(source.indexOf("enabled: model.status !== 0") !== -1,
+               "Disables force cancel for already cancelled shares")
+        verify(source.indexOf("model.shareCode || \"\"") !== -1,
+               "Uses AdminShareListModel shareCode role in confirmation")
     }
 
     function test_system_tab_has_stats_and_refresh() {
@@ -158,6 +162,8 @@ TestCase {
         verify(source.indexOf("GetSystemStatusApi") !== -1, "Calls GetSystemStatusApi")
         verify(source.indexOf("GetGlobalStorageStats") !== -1, "Calls GetGlobalStorageStats")
         verify(source.indexOf("GetSystemInfo") !== -1, "Calls GetSystemInfo")
+        verify(source.indexOf("healthManager.checkHealth()") !== -1, "Calls health endpoint")
+        verify(source.indexOf("服务健康检查") !== -1, "Shows service health section")
     }
 
     function test_operation_log_tab_is_wired() {

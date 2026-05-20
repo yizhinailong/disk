@@ -14,6 +14,8 @@ namespace disk::desktop {
 namespace disk::desktop::managers {
     class AdminManager;
     class DriveManager;
+    class HealthManager;
+    class NetworkSettingsManager;
     class ProfileManager;
     class TransferManager;
     class ShareManager;
@@ -41,6 +43,8 @@ namespace disk::app {
 
         std::unique_ptr<disk::desktop::managers::AdminManager> m_admin_manager;
         std::unique_ptr<disk::desktop::managers::DriveManager> m_drive_manager;
+        std::unique_ptr<disk::desktop::managers::HealthManager> m_health_manager;
+        std::unique_ptr<disk::desktop::managers::NetworkSettingsManager> m_network_settings_manager;
         std::unique_ptr<disk::desktop::managers::ProfileManager> m_profile_manager;
         std::unique_ptr<disk::desktop::managers::TransferManager> m_transfer_manager;
         std::unique_ptr<disk::desktop::managers::ShareManager> m_share_manager;

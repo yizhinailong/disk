@@ -955,6 +955,7 @@ TEST(ShareDetailResponse, AllFields) {
     response.share_code = "abc123";
     response.status = 1;
     response.access_count = 5;
+    response.password_set = true;
     response.created_at = "2026-01-15T10:00:00Z";
     response.expires_at = "2026-02-15T10:00:00Z";
 
@@ -968,6 +969,7 @@ TEST(ShareDetailResponse, AllFields) {
     EXPECT_EQ(json["share_code"].asString(), "abc123");
     EXPECT_EQ(json["status"].asInt(), 1);
     EXPECT_EQ(json["access_count"].asInt(), 5);
+    EXPECT_TRUE(json["password_set"].asBool());
     EXPECT_EQ(json["created_at"].asString(), "2026-01-15T10:00:00Z");
     EXPECT_EQ(json["expires_at"].asString(), "2026-02-15T10:00:00Z");
 }

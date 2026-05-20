@@ -611,6 +611,7 @@ namespace disk::admin {
         std::string share_code;
         int status{ 0 };
         int access_count{ 0 };
+        bool password_set{ false };
         std::string created_at;
         std::string expires_at;
 
@@ -626,6 +627,7 @@ namespace disk::admin {
             json["share_code"] = share_code;
             json["status"] = status;
             json["access_count"] = access_count;
+            json["password_set"] = password_set;
             json["created_at"] = created_at;
             json["expires_at"] = expires_at;
             return json;

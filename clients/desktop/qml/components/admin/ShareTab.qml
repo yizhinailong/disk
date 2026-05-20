@@ -329,10 +329,10 @@ Item {
                             flat: true
                             font.pixelSize: 12
                             palette.buttonText: theme.errorTextColor
-                            enabled: String(model.status || "") !== "cancelled"
+                            enabled: model.status !== 0
                             onClicked: {
                                 var shareId = model.id
-                                var shareCode = model.share_code || ""
+                                var shareCode = model.shareCode || ""
                                 root.requestConfirmation(qsTr("确定强制取消分享 %1 吗？").arg(shareCode), function() {
                                     adminManager.ForceCancelShare(shareId)
                                 })
