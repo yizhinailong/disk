@@ -376,6 +376,12 @@ namespace disk::services {
                  << " page_size=" << req.page_size;
 
         try {
+            co_await m_db_client->execSqlCoro(
+                "UPDATE shares s SET s.status = 0, s.updated_at = NOW() "
+                "WHERE s.status = 1 "
+                "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)"
+            );
+
             std::string where_clause = " WHERE 1=1";
             if (req.status.has_value()) {
                 where_clause += " AND s.status = " + std::to_string(*req.status);
@@ -460,6 +466,13 @@ namespace disk::services {
         LOG_INFO << "Admin get share detail: share_id=" << share_id;
 
         try {
+            co_await m_db_client->execSqlCoro(
+                "UPDATE shares s SET s.status = 0, s.updated_at = NOW() "
+                "WHERE s.id = ? AND s.status = 1 "
+                "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)",
+                share_id
+            );
+
             auto result = co_await m_db_client->execSqlCoro(
                 "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, "
                 "s.share_code, s.status, "

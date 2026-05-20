@@ -2843,11 +2843,19 @@ namespace disk::file {
                 throw std::runtime_error("Failed to insert trash records");
             }
 
+            std::vector<uint64_t> affected_share_ids;
             auto deleted_file_share_links = 0;
             auto file_share_chunks = BatchUtils::Chunk(file_ids_to_delete, DEFAULT_BATCH_CHUNK_SIZE);
             for (const auto& chunk : file_share_chunks) {
                 if (chunk.empty()) {
                     continue;
+                }
+                auto linked_shares = co_await txn->execSqlCoro(
+                    "SELECT DISTINCT share_id FROM share_files WHERE item_type = 'file' AND item_id IN (" +
+                        BatchUtils::BuildSafeNumericInClause(chunk) + ")"
+                );
+                for (const auto& row : linked_shares) {
+                    affected_share_ids.push_back(row["share_id"].as<uint64_t>());
                 }
                 auto result = co_await txn->execSqlCoro(
                     "DELETE FROM share_files WHERE item_type = 'file' AND item_id IN (" +
@@ -2862,6 +2870,13 @@ namespace disk::file {
                 if (chunk.empty()) {
                     continue;
                 }
+                auto linked_shares = co_await txn->execSqlCoro(
+                    "SELECT DISTINCT share_id FROM share_files WHERE item_type = 'folder' AND item_id IN (" +
+                        BatchUtils::BuildSafeNumericInClause(chunk) + ")"
+                );
+                for (const auto& row : linked_shares) {
+                    affected_share_ids.push_back(row["share_id"].as<uint64_t>());
+                }
                 auto result = co_await txn->execSqlCoro(
                     "DELETE FROM share_files WHERE item_type = 'folder' AND item_id IN (" +
                         BatchUtils::BuildSafeNumericInClause(chunk) + ")"
@@ -2869,8 +2884,24 @@ namespace disk::file {
                 deleted_folder_share_links += static_cast<int>(result.affectedRows());
             }
 
+            affected_share_ids = normalize_ids(std::move(affected_share_ids));
+            auto cancelled_empty_shares = 0;
+            auto affected_share_chunks = BatchUtils::Chunk(affected_share_ids, DEFAULT_BATCH_CHUNK_SIZE);
+            for (const auto& chunk : affected_share_chunks) {
+                if (chunk.empty()) {
+                    continue;
+                }
+                auto result = co_await txn->execSqlCoro(
+                    "UPDATE shares s SET s.status = 0, s.updated_at = NOW() "
+                    "WHERE s.status = 1 AND s.id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ") "
+                    "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)"
+                );
+                cancelled_empty_shares += static_cast<int>(result.affectedRows());
+            }
+
             LOG_DEBUG << "Cleaned share links during delete: file_links=" << deleted_file_share_links
-                      << ", folder_links=" << deleted_folder_share_links;
+                      << ", folder_links=" << deleted_folder_share_links
+                      << ", cancelled_empty_shares=" << cancelled_empty_shares;
 
             auto deleted_file_rows = co_await DeleteFilesByIds(txn, file_ids_to_delete);
             if (deleted_file_rows != static_cast<int>(file_ids_to_delete.size())) {
