@@ -30,18 +30,36 @@ Item {
         return theme.secondaryTextColor
     }
 
+    function hasNumber(value) {
+        return value !== undefined && value !== null && value !== "" && !isNaN(Number(value))
+    }
+
     function formatUptime(seconds) {
-        var totalSeconds = Number(seconds || 0)
+        if (!root.hasNumber(seconds)) return qsTr("未返回")
+        var totalSeconds = Number(seconds)
         var days = Math.floor(totalSeconds / 86400)
         var hours = Math.floor((totalSeconds % 86400) / 3600)
         var minutes = Math.floor((totalSeconds % 3600) / 60)
         if (days > 0) {
-            return days + "d " + hours + "h " + minutes + "m"
+            return days + qsTr(" 天 ") + hours + qsTr(" 小时 ") + minutes + qsTr(" 分钟")
         }
         if (hours > 0) {
-            return hours + "h " + minutes + "m"
+            return hours + qsTr(" 小时 ") + minutes + qsTr(" 分钟")
         }
-        return minutes + "m " + Math.floor(totalSeconds % 60) + "s"
+        return minutes + qsTr(" 分钟 ") + Math.floor(totalSeconds % 60) + qsTr(" 秒")
+    }
+
+    function formatMilliseconds(milliseconds) {
+        if (!root.hasNumber(milliseconds)) return qsTr("未返回")
+        var totalMilliseconds = Number(milliseconds)
+        if (totalMilliseconds >= 1000) {
+            return (totalMilliseconds / 1000).toFixed(2) + qsTr(" 秒") + qsTr("（") + Math.round(totalMilliseconds) + qsTr(" 毫秒") + qsTr("）")
+        }
+        return Math.round(totalMilliseconds) + qsTr(" 毫秒")
+    }
+
+    function formatComponentHealth(status, latencyMs) {
+        return qsTr("状态：") + root.healthStatusText(status) + qsTr("，响应耗时：") + root.formatMilliseconds(latencyMs)
     }
 
     Component.onCompleted: root.refreshStats()
@@ -336,18 +354,18 @@ Item {
                         Label { text: qsTr("版本:"); font.bold: true }
                         Label { text: healthManager.health.version || "—"; color: theme.secondaryTextColor }
 
-                        Label { text: qsTr("运行时间:"); font.bold: true }
-                        Label { text: healthManager.health.uptime || "—"; color: theme.secondaryTextColor }
+                        Label { text: qsTr("服务运行时间:"); font.bold: true }
+                        Label { text: root.formatUptime(healthManager.health.uptime); color: theme.secondaryTextColor }
 
-                        Label { text: qsTr("检测耗时:"); font.bold: true }
-                        Label { text: String(healthManager.health.totalCheckMs || 0) + " ms"; color: theme.secondaryTextColor }
+                        Label { text: qsTr("本次检测总耗时:"); font.bold: true }
+                        Label { text: root.formatMilliseconds(healthManager.health.totalCheckMs); color: theme.secondaryTextColor }
 
                         Label { text: qsTr("检测时间:"); font.bold: true }
                         Label { text: healthManager.health.timestamp || "—"; color: theme.secondaryTextColor }
 
                         Label { text: qsTr("数据库健康:"); font.bold: true }
                         Label {
-                            text: root.healthStatusText(healthManager.health.databaseStatus) + " / " + String(healthManager.health.databaseLatencyMs || 0) + " ms"
+                            text: root.formatComponentHealth(healthManager.health.databaseStatus, healthManager.health.databaseLatencyMs)
                             color: root.healthStatusColor(healthManager.health.databaseStatus)
                         }
 
@@ -360,7 +378,7 @@ Item {
 
                         Label { text: qsTr("Redis 健康:"); font.bold: true }
                         Label {
-                            text: root.healthStatusText(healthManager.health.redisStatus) + " / " + String(healthManager.health.redisLatencyMs || 0) + " ms"
+                            text: root.formatComponentHealth(healthManager.health.redisStatus, healthManager.health.redisLatencyMs)
                             color: root.healthStatusColor(healthManager.health.redisStatus)
                         }
 
