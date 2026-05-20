@@ -12,12 +12,25 @@ Item {
     function refreshStats() {
         adminManager.GetOverviewStatsApi()
         adminManager.GetSystemStatusApi()
+        adminManager.GetGlobalStorageStats()
+        adminManager.GetSystemInfo()
     }
 
-    Component.onCompleted: {
-        adminManager.GetOverviewStatsApi()
-        adminManager.GetSystemStatusApi()
+    function formatUptime(seconds) {
+        var totalSeconds = Number(seconds || 0)
+        var days = Math.floor(totalSeconds / 86400)
+        var hours = Math.floor((totalSeconds % 86400) / 3600)
+        var minutes = Math.floor((totalSeconds % 3600) / 60)
+        if (days > 0) {
+            return days + "d " + hours + "h " + minutes + "m"
+        }
+        if (hours > 0) {
+            return hours + "h " + minutes + "m"
+        }
+        return minutes + "m " + Math.floor(totalSeconds % 60) + "s"
     }
+
+    Component.onCompleted: root.refreshStats()
 
     Flickable {
         anchors.fill: parent
@@ -169,6 +182,107 @@ Item {
                             font.bold: true
                             color: theme.strongTextColor
                         }
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                color: theme.panelBackgroundColor
+                radius: theme.panelRadius
+                border.color: theme.panelBorderColor
+                implicitHeight: globalStorageLayout.implicitHeight + 24
+
+                ColumnLayout {
+                    id: globalStorageLayout
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+
+                    Label {
+                        text: qsTr("全局存储统计")
+                        font.bold: true
+                        font.pixelSize: 14
+                        color: theme.strongTextColor
+                    }
+
+                    GridLayout {
+                        columns: 2
+                        rowSpacing: 8
+                        columnSpacing: 24
+
+                        Label { text: qsTr("用户总数:"); font.bold: true }
+                        Label { text: String(adminManager.globalStorageStats.totalUsers || 0); color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("文件总数:"); font.bold: true }
+                        Label { text: String(adminManager.globalStorageStats.totalFiles || 0); color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("存储用量:"); font.bold: true }
+                        Label { text: FormatUtils.formatStorageSize(adminManager.globalStorageStats.storageUsed || 0); color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("存储配额:"); font.bold: true }
+                        Label { text: FormatUtils.formatStorageSize(adminManager.globalStorageStats.storageQuota || 0); color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("活跃分享:"); font.bold: true }
+                        Label { text: String(adminManager.globalStorageStats.activeShares || 0); color: theme.secondaryTextColor }
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                color: theme.panelBackgroundColor
+                radius: theme.panelRadius
+                border.color: theme.panelBorderColor
+                implicitHeight: systemInfoLayout.implicitHeight + 24
+
+                ColumnLayout {
+                    id: systemInfoLayout
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+
+                    Label {
+                        text: qsTr("系统信息")
+                        font.bold: true
+                        font.pixelSize: 14
+                        color: theme.strongTextColor
+                    }
+
+                    GridLayout {
+                        columns: 2
+                        rowSpacing: 8
+                        columnSpacing: 24
+
+                        Label { text: qsTr("版本:"); font.bold: true }
+                        Label { text: adminManager.systemInfo.version || "—"; color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("Drogon 版本:"); font.bold: true }
+                        Label { text: adminManager.systemInfo.drogonVersion || "—"; color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("构建时间:"); font.bold: true }
+                        Label { text: adminManager.systemInfo.buildTime || "—"; color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("运行时间:"); font.bold: true }
+                        Label { text: root.formatUptime(adminManager.systemInfo.uptime || 0); color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("当前连接:"); font.bold: true }
+                        Label { text: String(adminManager.systemInfo.currentConnections || 0); color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("峰值连接:"); font.bold: true }
+                        Label { text: String(adminManager.systemInfo.peakConnections || 0); color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("数据库连接池:"); font.bold: true }
+                        Label { text: String(adminManager.systemInfo.dbPoolSize || 0); color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("Redis 连接池:"); font.bold: true }
+                        Label { text: String(adminManager.systemInfo.redisPoolSize || 0); color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("文件夹总数:"); font.bold: true }
+                        Label { text: String(adminManager.systemInfo.totalFolders || 0); color: theme.secondaryTextColor }
+
+                        Label { text: qsTr("总文件大小:"); font.bold: true }
+                        Label { text: FormatUtils.formatStorageSize(adminManager.systemInfo.totalSize || 0); color: theme.secondaryTextColor }
                     }
                 }
             }

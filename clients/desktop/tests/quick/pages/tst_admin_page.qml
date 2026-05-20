@@ -18,6 +18,7 @@ TestCase {
             readAdminShellSource(),
             readQmlSource("components/admin/UserTab.qml"),
             readQmlSource("components/admin/ShareTab.qml"),
+            readQmlSource("components/admin/OperationLogTab.qml"),
             readQmlSource("components/admin/SystemTab.qml"),
             readQmlSource("components/admin/UserDetailDialog.qml"),
             readQmlSource("components/admin/ConfirmDialog.qml")
@@ -39,6 +40,8 @@ TestCase {
                "Has user management nav label")
         verify(source.indexOf("分享管理") !== -1,
                "Has share management nav label")
+        verify(source.indexOf("操作日志") !== -1,
+               "Has operation log nav label")
         verify(source.indexOf("系统监控") !== -1,
                "Has system monitoring nav label")
     }
@@ -113,7 +116,9 @@ TestCase {
         var source = readQmlSource("components/admin/UserTab.qml")
 
         verify(source.indexOf("UserDetailDialog") !== -1, "Uses UserDetailDialog")
-        verify(source.indexOf("userDetailDialog.open()") !== -1, "Opens user detail dialog")
+        verify(source.indexOf("GetUserDetail") !== -1, "Calls user detail API")
+        verify(source.indexOf("onUserDetailLoaded") !== -1, "Handles user detail API response")
+        verify(source.indexOf("userDetailDialogRef.open()") !== -1, "Opens user detail dialog")
     }
 
     function test_share_tab_has_filter_and_table() {
@@ -145,6 +150,18 @@ TestCase {
         verify(source.indexOf("刷新") !== -1, "Has refresh button")
         verify(source.indexOf("GetOverviewStatsApi") !== -1, "Calls GetOverviewStatsApi")
         verify(source.indexOf("GetSystemStatusApi") !== -1, "Calls GetSystemStatusApi")
+        verify(source.indexOf("GetGlobalStorageStats") !== -1, "Calls GetGlobalStorageStats")
+        verify(source.indexOf("GetSystemInfo") !== -1, "Calls GetSystemInfo")
+    }
+
+    function test_operation_log_tab_is_wired() {
+        var source = readAdminCompositeSource()
+
+        verify(source.indexOf("OperationLogTab") !== -1, "Has operation log tab")
+        verify(source.indexOf("adminNavLogsButton") !== -1, "Has operation log navigation button")
+        verify(source.indexOf("ListOperationLogs") !== -1, "Calls ListOperationLogs")
+        verify(source.indexOf("operationLogModel") !== -1, "Binds operationLogModel")
+        verify(source.indexOf("onOperationLogPaginationLoaded") !== -1, "Handles log pagination")
     }
 
     function test_system_tab_shows_connection_status() {
@@ -154,6 +171,9 @@ TestCase {
         verify(source.indexOf("Redis") !== -1, "Shows Redis status")
         verify(source.indexOf("磁盘使用率") !== -1, "Shows disk usage")
         verify(source.indexOf("运行时间") !== -1, "Shows uptime")
+        verify(source.indexOf("系统信息") !== -1, "Shows system info section")
+        verify(source.indexOf("Drogon 版本") !== -1, "Shows Drogon version")
+        verify(source.indexOf("全局存储统计") !== -1, "Shows global storage section")
     }
 
     function test_admin_shell_uses_workspace_theme() {

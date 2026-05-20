@@ -15,6 +15,7 @@ namespace disk::desktop::managers {
         : QObject(parent),
           m_user_model(new AdminUserListModel(this)),
           m_share_model(new AdminShareListModel(this)),
+          m_operation_log_model(new OperationLogListModel(this)),
           m_network_client(network_client),
           m_request_factory(request_factory) {}
 
@@ -35,12 +36,24 @@ namespace disk::desktop::managers {
         return m_share_model;
     }
 
+    auto AdminManager::GetOperationLogModel() const -> OperationLogListModel* {
+        return m_operation_log_model;
+    }
+
     auto AdminManager::GetOverviewStats() const -> QVariantMap {
         return m_overview_stats;
     }
 
     auto AdminManager::GetSystemStatus() const -> QVariantMap {
         return m_system_status;
+    }
+
+    auto AdminManager::GetGlobalStorageStatsMap() const -> QVariantMap {
+        return m_global_storage_stats;
+    }
+
+    auto AdminManager::GetSystemInfoMap() const -> QVariantMap {
+        return m_system_info;
     }
 
     auto AdminManager::PrepareHeaders() -> QMap<QString, QString> {
@@ -285,6 +298,38 @@ namespace disk::desktop::managers {
         });
     }
 
+    void AdminManager::ListOperationLogs(int page, int pageSize) {
+        QUrlQuery query;
+        query.addQueryItem("page", QString::number(page));
+        query.addQueryItem("page_size", QString::number(pageSize));
+
+        QUrl url("/api/logs");
+        url.setQuery(query);
+
+        auto headers = PrepareHeaders();
+        auto* reply = m_network_client->Get(url, headers);
+        m_active_replies.append(reply);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            m_active_replies.removeOne(reply);
+            reply->deleteLater();
+            HandleListOperationLogsResponse(reply);
+        });
+    }
+
+    void AdminManager::GetSystemInfo() {
+        QUrl url("/api/system/info");
+        auto headers = PrepareHeaders();
+        auto* reply = m_network_client->Get(url, headers);
+        m_active_replies.append(reply);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            m_active_replies.removeOne(reply);
+            reply->deleteLater();
+            HandleGetSystemInfoResponse(reply);
+        });
+    }
+
     // ── Response Handlers ──
 
     void AdminManager::HandleListUsersResponse(QNetworkReply* reply) {
@@ -477,6 +522,14 @@ namespace disk::desktop::managers {
         storage["total_storage_quota"] = static_cast<double>(data.value("total_storage_quota").toDouble(0));
         storage["active_shares"] = data.value("active_shares").toInt(0);
 
+        m_global_storage_stats.clear();
+        m_global_storage_stats["totalUsers"] = storage.value("total_users");
+        m_global_storage_stats["totalFiles"] = storage.value("total_files");
+        m_global_storage_stats["storageUsed"] = storage.value("total_storage_used");
+        m_global_storage_stats["storageQuota"] = storage.value("total_storage_quota");
+        m_global_storage_stats["activeShares"] = storage.value("active_shares");
+
+        emit globalStorageStatsChanged();
         emit userStorageLoaded(storage);
     }
 
@@ -544,7 +597,10 @@ namespace disk::desktop::managers {
             return;
         }
 
-        auto data = json_opt->value("data").toObject().value("share").toObject();
+        auto data = json_opt->value("data").toObject();
+        if (data.contains("share") && data.value("share").isObject()) {
+            data = data.value("share").toObject();
+        }
         QVariantMap detail;
 
         detail["id"] = static_cast<double>(data.value("id").toDouble(0));
@@ -667,6 +723,90 @@ namespace disk::desktop::managers {
         m_system_status["uptime"] = uptime;
 
         emit systemStatusChanged();
+    }
+
+    void AdminManager::HandleListOperationLogsResponse(QNetworkReply* reply) {
+        if (!reply) {
+            emit apiError(QStringLiteral("网络错误：无响应"), 0);
+            return;
+        }
+
+        if (reply->error() != QNetworkReply::NoError) {
+            EmitApiError(reply);
+            return;
+        }
+
+        auto json_opt = ParseJsonResponse(reply);
+        if (!json_opt.has_value()) {
+            emit apiError(QStringLiteral("响应格式无效"), 0);
+            return;
+        }
+
+        if (json_opt->value("code").toInt(0) != 0) {
+            auto err = ErrorAdapter::FromJson(*json_opt);
+            emit apiError(err.message, err.code);
+            return;
+        }
+
+        auto data = json_opt->value("data").toObject();
+        auto items_array = data.value("items").toArray();
+
+        QVector<OperationLogItem> items;
+        items.reserve(items_array.size());
+        for (const auto& val : items_array) {
+            items.append(OperationLogItem::FromJson(val.toObject()));
+        }
+        m_operation_log_model->SetItems(items);
+
+        int page = data.value("page").toInt(1);
+        int page_size = data.value("page_size").toInt(20);
+        int total = data.value("total").toInt(0);
+        int total_pages = page_size > 0 ? ((total + page_size - 1) / page_size) : 1;
+        emit operationLogPaginationLoaded(page, total_pages > 0 ? total_pages : 1, total);
+    }
+
+    void AdminManager::HandleGetSystemInfoResponse(QNetworkReply* reply) {
+        if (!reply) {
+            emit apiError(QStringLiteral("网络错误：无响应"), 0);
+            return;
+        }
+
+        if (reply->error() != QNetworkReply::NoError) {
+            EmitApiError(reply);
+            return;
+        }
+
+        auto json_opt = ParseJsonResponse(reply);
+        if (!json_opt.has_value()) {
+            emit apiError(QStringLiteral("响应格式无效"), 0);
+            return;
+        }
+
+        if (json_opt->value("code").toInt(0) != 0) {
+            auto err = ErrorAdapter::FromJson(*json_opt);
+            emit apiError(err.message, err.code);
+            return;
+        }
+
+        auto data = json_opt->value("data").toObject();
+        auto connections = data.value("connections").toObject();
+        auto storage = data.value("storage").toObject();
+
+        m_system_info.clear();
+        m_system_info["version"] = data.value("version").toString();
+        m_system_info["drogonVersion"] = data.value("drogon_version").toString();
+        m_system_info["buildTime"] = data.value("build_time").toString();
+        m_system_info["uptime"] = data.value("uptime").toInt(0);
+        m_system_info["currentConnections"] = connections.value("current").toInt(0);
+        m_system_info["peakConnections"] = connections.value("peak").toInt(0);
+        m_system_info["dbPoolSize"] = connections.value("db_pool_size").toInt(0);
+        m_system_info["redisPoolSize"] = connections.value("redis_pool_size").toInt(0);
+        m_system_info["totalUsers"] = storage.value("total_users").toInt(0);
+        m_system_info["totalFiles"] = storage.value("total_files").toInt(0);
+        m_system_info["totalFolders"] = storage.value("total_folders").toInt(0);
+        m_system_info["totalSize"] = static_cast<double>(storage.value("total_size").toDouble(0));
+
+        emit systemInfoChanged();
     }
 
 } // namespace disk::desktop::managers

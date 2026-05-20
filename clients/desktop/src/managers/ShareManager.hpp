@@ -49,6 +49,7 @@ namespace disk::desktop::managers {
             const QString& password = {},
             int expireDays = -1
         );
+        Q_INVOKABLE void getShareDetail(const QString& shareId);
         Q_INVOKABLE void cancelShares(const QStringList& shareIds);
 
         // Visitor operations (Share Token auth)

@@ -264,6 +264,8 @@ PageStateView {
                             onDoubleClicked: {
                                 if (model.kind === "folder") {
                                     page.navigateToFolder(model.id)
+                                } else if (model.kind === "file") {
+                                    page.openFileDetailDialog(model.id)
                                 }
                             }
 
@@ -380,10 +382,16 @@ PageStateView {
 
                                 Button {
                                     Layout.preferredWidth: page.fileActionColumnWidth
-                                    text: "打开"
+                                    text: model.kind === "folder" ? "打开" : "详情"
                                     flat: true
-                                    visible: model.kind === "folder"
-                                    onClicked: page.navigateToFolder(model.id)
+                                    visible: model.kind === "folder" || model.kind === "file"
+                                    onClicked: {
+                                        if (model.kind === "folder") {
+                                            page.navigateToFolder(model.id)
+                                        } else {
+                                            page.openFileDetailDialog(model.id)
+                                        }
+                                    }
                                 }
                             }
                         }

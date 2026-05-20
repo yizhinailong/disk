@@ -82,6 +82,7 @@ set(DESKTOP_APP_SOURCES
     ${DESKTOP_SRC_DIR}/models/DriveItem.cpp
     ${DESKTOP_SRC_DIR}/models/DriveListModel.cpp
     ${DESKTOP_SRC_DIR}/models/FolderTreeModel.cpp
+    ${DESKTOP_SRC_DIR}/models/OperationLogListModel.cpp
     ${DESKTOP_SRC_DIR}/models/ShareListModel.cpp
     ${DESKTOP_SRC_DIR}/models/TrashListModel.cpp
     ${DESKTOP_SRC_DIR}/models/UploadTaskModel.cpp
@@ -112,6 +113,7 @@ set(DESKTOP_APP_HEADERS
     ${DESKTOP_SRC_DIR}/models/DriveItem.hpp
     ${DESKTOP_SRC_DIR}/models/DriveListModel.hpp
     ${DESKTOP_SRC_DIR}/models/FolderTreeModel.hpp
+    ${DESKTOP_SRC_DIR}/models/OperationLogListModel.hpp
     ${DESKTOP_SRC_DIR}/models/ShareListModel.hpp
     ${DESKTOP_SRC_DIR}/models/TrashListModel.hpp
     ${DESKTOP_SRC_DIR}/models/UploadTaskModel.hpp
@@ -139,6 +141,8 @@ set(DESKTOP_QML_FILES
     qml/components/drive/DriveStatusCard.qml
     qml/components/drive/DriveToolbarCard.qml
     qml/components/drive/DriveTrashView.qml
+    qml/components/drive/FileDetailDialog.qml
+    qml/components/drive/OwnerShareDetailDialog.qml
     qml/components/auth/AuthCard.qml
     qml/components/auth/AuthTheme.qml
     qml/components/owner/OwnerAccountCard.qml
@@ -147,6 +151,7 @@ set(DESKTOP_QML_FILES
     qml/components/admin/ShareDetailDialog.qml
     qml/components/admin/UserDetailDialog.qml
     qml/components/admin/UserTab.qml
+    qml/components/admin/OperationLogTab.qml
     qml/components/admin/ShareTab.qml
     qml/components/admin/SystemTab.qml
     qml/pages/DriveBrowserPage.qml

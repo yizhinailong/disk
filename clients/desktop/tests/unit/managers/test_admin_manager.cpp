@@ -29,8 +29,12 @@ private slots:
         QVERIFY(mgr.GetShareModel() != nullptr);
         QCOMPARE(mgr.GetUserModel()->rowCount(), 0);
         QCOMPARE(mgr.GetShareModel()->rowCount(), 0);
+        QVERIFY(mgr.GetOperationLogModel() != nullptr);
+        QCOMPARE(mgr.GetOperationLogModel()->rowCount(), 0);
         QVERIFY(mgr.GetOverviewStats().isEmpty());
         QVERIFY(mgr.GetSystemStatus().isEmpty());
+        QVERIFY(mgr.GetGlobalStorageStatsMap().isEmpty());
+        QVERIFY(mgr.GetSystemInfoMap().isEmpty());
     }
 
     // ── ListUsers ──
@@ -312,6 +316,102 @@ private slots:
         auto storage = storage_spy.takeFirst().at(0).toMap();
         QCOMPARE(storage.value("total_users").toInt(), 100);
         QCOMPARE(storage.value("total_files").toInt(), 5000);
+    }
+
+    void GetGlobalStorageStatsUpdatesPropertyAndSignal() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/admin/storage/stats",
+            TestJsonLoader::LoadJson("admin/admin_get_global_storage_success.json")
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("admin_token");
+        AdminManager mgr(&network_client, &request_factory);
+
+        QSignalSpy stats_spy(&mgr, &AdminManager::globalStorageStatsChanged);
+        QSignalSpy storage_spy(&mgr, &AdminManager::userStorageLoaded);
+
+        mgr.GetGlobalStorageStats();
+
+        QTRY_COMPARE(stats_spy.count(), 1);
+        QCOMPARE(storage_spy.count(), 1);
+
+        auto stats = mgr.GetGlobalStorageStatsMap();
+        QCOMPARE(stats.value("totalUsers").toInt(), 100);
+        QCOMPARE(stats.value("totalFiles").toInt(), 5000);
+        QCOMPARE(stats.value("storageUsed").toDouble(), 549755813888.0);
+        QCOMPARE(stats.value("storageQuota").toDouble(), 10995116277760.0);
+        QCOMPARE(stats.value("activeShares").toInt(), 150);
+    }
+
+    void ListOperationLogsPopulatesModelAndPagination() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/logs",
+            TestJsonLoader::LoadJson("admin/admin_operation_logs_success.json")
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("admin_token");
+        AdminManager mgr(&network_client, &request_factory);
+
+        QSignalSpy pagination_spy(&mgr, &AdminManager::operationLogPaginationLoaded);
+        QSignalSpy error_spy(&mgr, &AdminManager::apiError);
+
+        mgr.ListOperationLogs(2, 20);
+
+        QTRY_COMPARE(pagination_spy.count(), 1);
+        QCOMPARE(error_spy.count(), 0);
+        QCOMPARE(mgr.GetOperationLogModel()->rowCount(), 2);
+        QCOMPARE(
+            mgr.GetOperationLogModel()->data(mgr.GetOperationLogModel()->index(0), OperationLogListModel::ActionRole).toString(),
+            QString("upload")
+        );
+        QCOMPARE(
+            mgr.GetOperationLogModel()->data(mgr.GetOperationLogModel()->index(1), OperationLogListModel::TargetTypeRole).toString(),
+            QString("folder")
+        );
+
+        auto args = pagination_spy.takeFirst();
+        QCOMPARE(args.at(0).toInt(), 2);
+        QCOMPARE(args.at(1).toInt(), 3);
+        QCOMPARE(args.at(2).toInt(), 42);
+    }
+
+    void GetSystemInfoUpdatesProperty() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/system/info",
+            TestJsonLoader::LoadJson("admin/system_info_success.json")
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("admin_token");
+        AdminManager mgr(&network_client, &request_factory);
+
+        QSignalSpy info_spy(&mgr, &AdminManager::systemInfoChanged);
+        QSignalSpy error_spy(&mgr, &AdminManager::apiError);
+
+        mgr.GetSystemInfo();
+
+        QTRY_COMPARE(info_spy.count(), 1);
+        QCOMPARE(error_spy.count(), 0);
+
+        auto info = mgr.GetSystemInfoMap();
+        QCOMPARE(info.value("version").toString(), QString("1.0.0"));
+        QCOMPARE(info.value("drogonVersion").toString(), QString("1.9.10"));
+        QCOMPARE(info.value("uptime").toInt(), 3661);
+        QCOMPARE(info.value("currentConnections").toInt(), 8);
+        QCOMPARE(info.value("redisPoolSize").toInt(), 4);
+        QCOMPARE(info.value("totalFolders").toInt(), 300);
+        QCOMPARE(info.value("totalSize").toDouble(), 549755813888.0);
     }
 
     // ── ListShares ──

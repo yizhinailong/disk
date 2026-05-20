@@ -836,6 +836,14 @@ Page {
         copyDialog.open()
     }
 
+    function openFileDetailDialog(fileId) {
+        var fileIdValue = String(fileId || "")
+        if (fileIdValue === "") {
+            return
+        }
+        driveManager.getFileDetail(fileIdValue)
+    }
+
     function submitCreateFolder() {
         var validationResult = root.validateDriveItemName(newFolderNameField.text)
         if (!validationResult.valid) {
@@ -1003,6 +1011,14 @@ Page {
         editSharePermissionCombo.currentIndex = permission === "view" ? 1 : 0
         editSharePasswordField.text = ""
         editShareDialog.open()
+    }
+
+    function openShareDetailDialog(shareId) {
+        var shareIdValue = String(shareId || "")
+        if (shareIdValue === "") {
+            return
+        }
+        shareManager.getShareDetail(shareIdValue)
     }
 
     function submitCreateShare() {
@@ -2019,6 +2035,23 @@ Page {
         }
     }
 
+    FileDetailDialog {
+        id: fileDetailDialog
+        detail: ({})
+        formatSize: root.formatSize
+        formatType: root.formatItemType
+        formatDateTime: root.formatUpdatedAtText
+    }
+
+    OwnerShareDetailDialog {
+        id: ownerShareDetailDialog
+        detail: ({})
+        formatSize: root.formatSize
+        formatPermission: root.formatSharePermission
+        formatStatus: root.formatShareStatus
+        formatDateTime: root.formatShareDateTime
+    }
+
     Connections {
         target: trashManager
 
@@ -2091,6 +2124,11 @@ Page {
                 shellController.setPageState("batchResult")
             }
         }
+
+        function onShareDetailLoaded(detail) {
+            ownerShareDetailDialog.detail = detail
+            ownerShareDetailDialog.open()
+        }
     }
 
     Connections {
@@ -2124,6 +2162,11 @@ Page {
             if (root.isMyFilesMode) {
                 shellController.setPageState("error")
             }
+        }
+
+        function onFileDetailLoaded(detail) {
+            fileDetailDialog.detail = detail
+            fileDetailDialog.open()
         }
     }
 

@@ -335,6 +335,14 @@ PageStateView {
                             }
 
                             Button {
+                                objectName: "sharedDetailButton_" + String(model.shareId)
+                                text: "详情"
+                                flat: true
+                                enabled: !page.shareMutationInFlight
+                                onClicked: page.openShareDetailDialog(model.shareId)
+                            }
+
+                            Button {
                                 objectName: "sharedCancelButton_" + String(model.shareId)
                                 text: "取消"
                                 flat: true

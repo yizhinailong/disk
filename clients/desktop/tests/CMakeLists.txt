@@ -41,6 +41,7 @@ qt_add_executable(desktop-unit-tests
     ${DESKTOP_SRC_DIR}/models/DriveItem.cpp
     ${DESKTOP_SRC_DIR}/models/DriveListModel.cpp
     ${DESKTOP_SRC_DIR}/models/AdminShareListModel.cpp
+    ${DESKTOP_SRC_DIR}/models/OperationLogListModel.cpp
     ${DESKTOP_SRC_DIR}/models/FolderTreeModel.cpp
     ${DESKTOP_SRC_DIR}/models/UploadTaskModel.cpp
     ${DESKTOP_SRC_DIR}/models/DownloadTaskModel.cpp

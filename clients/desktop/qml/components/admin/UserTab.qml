@@ -221,7 +221,7 @@ Item {
                 }
 
                 Label {
-                    Layout.preferredWidth: 160
+                    Layout.preferredWidth: 200
                     Layout.minimumWidth: 0
                     text: qsTr("操作")
                     font.bold: true
@@ -259,14 +259,7 @@ Item {
 
                 MouseArea {
                     anchors.fill: parent
-                    onClicked: {
-                        root.userDetailDialogRef.userId = userRowDelegate.userId
-                        root.userDetailDialogRef.userName = userRowDelegate.username || ""
-                        root.userDetailDialogRef.userEmail = userRowDelegate.email || ""
-                        root.userDetailDialogRef.userRole = root.roleText(userRowDelegate.role)
-                        root.userDetailDialogRef.userStatus = root.statusText(userRowDelegate.status)
-                        root.userDetailDialogRef.open()
-                    }
+                    onClicked: root.adminManagerRef.GetUserDetail(userRowDelegate.userId)
                 }
 
                 RowLayout {
@@ -337,9 +330,16 @@ Item {
                     }
 
                     RowLayout {
-                        Layout.preferredWidth: 160
+                        Layout.preferredWidth: 200
                         Layout.minimumWidth: 0
                         spacing: 4
+
+                        Button {
+                            text: qsTr("详情")
+                            flat: true
+                            font.pixelSize: 12
+                            onClicked: root.adminManagerRef.GetUserDetail(userRowDelegate.userId)
+                        }
 
                         Button {
                             text: qsTr("修改状态")
@@ -482,6 +482,20 @@ Item {
 
         function onOperationSuccess(_message) {
             root.goToPage(root.currentPage)
+        }
+
+        function onUserDetailLoaded(detail) {
+            root.userDetailDialogRef.userId = Number(detail.id || 0)
+            root.userDetailDialogRef.userName = detail.username || ""
+            root.userDetailDialogRef.userEmail = detail.email || ""
+            root.userDetailDialogRef.userNickname = detail.nickname || ""
+            root.userDetailDialogRef.userRole = root.roleText(Number(detail.role || 0))
+            root.userDetailDialogRef.userStatus = root.statusText(Number(detail.status || 0))
+            root.userDetailDialogRef.storageQuota = detail.storage_quota || 0
+            root.userDetailDialogRef.storageUsed = detail.storage_used || 0
+            root.userDetailDialogRef.createdAt = detail.created_at || ""
+            root.userDetailDialogRef.lastLoginAt = detail.last_login_at || ""
+            root.userDetailDialogRef.open()
         }
     }
 }

@@ -64,6 +64,15 @@ TestCase {
                "Copy button uses model.shareLink as the data to copy")
     }
 
+    function test_shared_view_source_has_detail_button() {
+        var source = readSharedViewSource()
+
+        verify(source.indexOf("sharedDetailButton_") !== -1,
+               "Source contains a detail button with objectName pattern sharedDetailButton_")
+        verify(source.indexOf("page.openShareDetailDialog(model.shareId)") !== -1,
+               "Detail button calls openShareDetailDialog with the share id")
+    }
+
     function test_copy_button_has_visual_feedback() {
         var source = readSharedViewSource()
 

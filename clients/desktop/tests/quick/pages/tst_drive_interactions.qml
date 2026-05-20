@@ -180,6 +180,10 @@ TestCase {
                "Context menu has Download action")
         verify(source.indexOf("page.openOwnerDownloadFileChooser(contextMenu.targetItemId, contextMenu.targetItemName)") !== -1,
                "Download action opens file chooser")
+        verify(source.indexOf('objectName: "contextMenuDetail"') !== -1,
+               "Context menu has Detail action")
+        verify(source.indexOf("page.openFileDetailDialog(contextMenu.targetItemId)") !== -1,
+               "Detail action opens file detail")
     }
 
     function test_drive_browser_context_menu_has_mutation_actions() {

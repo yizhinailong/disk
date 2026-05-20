@@ -24,7 +24,8 @@ TestCase {
             readQmlSource("components/drive/DriveStatusCard.qml"),
             readQmlSource("components/drive/DriveMyFilesView.qml"),
             readQmlSource("components/drive/DriveSharedView.qml"),
-            readQmlSource("components/drive/DriveTrashView.qml")
+            readQmlSource("components/drive/DriveTrashView.qml"),
+            readQmlSource("components/drive/DriveContextMenu.qml")
         ].join("\n")
     }
 
@@ -202,13 +203,13 @@ TestCase {
                "Row click only updates selection")
         verify(source.indexOf('text: "打开"') !== -1,
                "Folder rows expose dedicated Open control")
-        verify(source.indexOf('visible: model.kind === "folder"') !== -1,
-               "Open control is only shown for folder rows")
+        verify(source.indexOf('text: model.kind === "folder" ? "打开" : "详情"') !== -1,
+               "File rows expose dedicated detail control")
         verify(source.indexOf("page.navigateToFolder(model.id)") !== -1
                || source.indexOf("root.navigateToFolder(model.id)") !== -1,
                "Folder Open button navigates through the shared flow")
-        verify(source.indexOf("driveManager.getFileDetail(") === -1,
-               "Row click no longer triggers file detail loading")
+        verify(source.indexOf("driveManager.getFileDetail(") !== -1,
+               "File detail loading is available through explicit detail actions")
     }
 
     function test_drive_browser_file_list_uses_static_table_header_and_role_fallbacks() {
@@ -291,6 +292,33 @@ TestCase {
                "Handles paginationLoaded signal")
         verify(source.indexOf("onListLoadFailed") !== -1,
                "Handles listLoadFailed signal")
+    }
+
+    function test_drive_browser_wires_file_detail_dialog() {
+        var source = readDriveCompositeSource()
+
+        verify(source.indexOf("FileDetailDialog") !== -1, "Uses FileDetailDialog")
+        verify(source.indexOf("function openFileDetailDialog(fileId)") !== -1,
+               "Has file detail opener")
+        verify(source.indexOf("driveManager.getFileDetail(fileIdValue)") !== -1,
+               "Calls DriveManager.getFileDetail")
+        verify(source.indexOf("onFileDetailLoaded") !== -1,
+               "Handles fileDetailLoaded")
+        verify(source.indexOf('objectName: "contextMenuDetail"') !== -1
+               || readQmlSource("components/drive/DriveContextMenu.qml").indexOf('objectName: "contextMenuDetail"') !== -1,
+               "Context menu exposes file detail action")
+    }
+
+    function test_drive_browser_wires_owner_share_detail_dialog() {
+        var source = readDriveCompositeSource()
+
+        verify(source.indexOf("OwnerShareDetailDialog") !== -1, "Uses owner share detail dialog")
+        verify(source.indexOf("function openShareDetailDialog(shareId)") !== -1,
+               "Has share detail opener")
+        verify(source.indexOf("shareManager.getShareDetail(shareIdValue)") !== -1,
+               "Calls ShareManager.getShareDetail")
+        verify(source.indexOf("onShareDetailLoaded") !== -1,
+               "Handles shareDetailLoaded")
     }
 
     function test_drive_browser_uses_one_shared_name_validator_for_create_and_rename() {
@@ -593,12 +621,12 @@ TestCase {
     }
 
     function test_drive_browser_folder_open_button_routes_through_navigateToFolder() {
-        var source = readDriveCompositeSource()
+        var source = readQmlSource("components/drive/DriveMyFilesView.qml")
 
-        var openBtnIndex = source.indexOf('text: "打开"')
-        verify(openBtnIndex !== -1, "Has Open button")
+        var openBtnIndex = source.indexOf('text: model.kind === "folder" ? "打开" : "详情"')
+        verify(openBtnIndex !== -1, "Has folder open / file detail button")
 
-        var openBtnBlock = source.substring(openBtnIndex, openBtnIndex + 400)
+        var openBtnBlock = source.substring(openBtnIndex, openBtnIndex + 500)
         verify(openBtnBlock.indexOf("page.navigateToFolder(model.id)") !== -1
                || openBtnBlock.indexOf("root.navigateToFolder(model.id)") !== -1,
                "Open button navigates through navigateToFolder")

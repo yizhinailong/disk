@@ -1,0 +1,22 @@
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "version": "1.0.0",
+        "drogon_version": "1.9.10",
+        "build_time": "May 20 2026 10:00:00",
+        "uptime": 3661,
+        "connections": {
+            "current": 8,
+            "peak": 16,
+            "db_pool_size": 8,
+            "redis_pool_size": 4
+        },
+        "storage": {
+            "total_users": 100,
+            "total_files": 5000,
+            "total_folders": 300,
+            "total_size": 549755813888
+        }
+    }
+}

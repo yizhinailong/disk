@@ -25,6 +25,13 @@ Menu {
         onTriggered: page.openOwnerDownloadFileChooser(contextMenu.targetItemId, contextMenu.targetItemName)
     }
 
+    MenuItem {
+        objectName: "contextMenuDetail"
+        text: "详情"
+        visible: contextMenu.targetItemKind === "file"
+        onTriggered: page.openFileDetailDialog(contextMenu.targetItemId)
+    }
+
     MenuSeparator {
         visible: contextMenu.targetItemKind === "folder" || contextMenu.targetItemKind === "file"
     }

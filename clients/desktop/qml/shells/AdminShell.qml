@@ -51,6 +51,7 @@ ApplicationWindow {
         switch (destination) {
         case "users": return "用户管理"
         case "shares": return "分享管理"
+        case "logs": return "操作日志"
         case "system": return "系统监控"
         default: return "用户管理"
         }
@@ -60,6 +61,7 @@ ApplicationWindow {
         switch (destination) {
         case "users": return "管理系统用户账户"
         case "shares": return "查看和管理分享链接"
+        case "logs": return "查看当前账号的操作记录"
         case "system": return "监控系统状态和统计"
         default: return "管理系统用户账户"
         }
@@ -158,6 +160,19 @@ ApplicationWindow {
                             activeTextColor: root.railTextColor
                             idleTextColor: root.railMutedTextColor
                             onClicked: root.activateNavPage("shares")
+                        }
+
+                        OwnerSidebarNavButton {
+                            objectName: "adminNavLogsButton"
+                            Layout.fillWidth: true
+                            buttonText: "操作日志"
+                            active: root.activeDestination === "logs"
+                            activeFillColor: root.railActiveColor
+                            hoverFillColor: root.railHoverColor
+                            activeStripeColor: root.railActiveStripeColor
+                            activeTextColor: root.railTextColor
+                            idleTextColor: root.railMutedTextColor
+                            onClicked: root.activateNavPage("logs")
                         }
 
                         OwnerSidebarNavButton {
@@ -323,6 +338,13 @@ ApplicationWindow {
     }
 
     Component {
+        id: operationLogTabPage
+        OperationLogTab {
+            adminManagerRef: root.adminManagerRef
+        }
+    }
+
+    Component {
         id: systemTabPage
         SystemTab {}
     }
@@ -334,6 +356,9 @@ ApplicationWindow {
             break
         case "shares":
             stackView.replace(shareTabPage)
+            break
+        case "logs":
+            stackView.replace(operationLogTabPage)
             break
         case "system":
             stackView.replace(systemTabPage)
