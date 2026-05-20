@@ -1407,6 +1407,7 @@ Page {
                    ? "选择下载保存位置"
                    : "保存 " + root.pendingOwnerDownloadFilename
             fileMode: Platform.FileDialog.SaveFile
+            currentFile: root.pendingOwnerDownloadFilename
             nameFilters: ["All files (*)"]
 
             onAccepted: root.startOwnerDownloadToPath(root.pendingOwnerDownloadFileId, root.pendingOwnerDownloadFilename, file)
