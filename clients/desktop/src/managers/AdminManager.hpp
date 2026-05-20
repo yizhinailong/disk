@@ -66,7 +66,13 @@ namespace disk::desktop::managers {
         Q_INVOKABLE void GetGlobalStorageStats();
 
         // Share management (3 endpoints)
-        Q_INVOKABLE void ListShares(int page = 1, int pageSize = 20, int status = -1, int userId = -1);
+        Q_INVOKABLE void ListShares(
+            int page = 1,
+            int pageSize = 20,
+            int status = -1,
+            int userId = -1,
+            const QString& username = ""
+        );
         Q_INVOKABLE void GetShareDetail(int shareId);
         Q_INVOKABLE void ForceCancelShare(int shareId);
 

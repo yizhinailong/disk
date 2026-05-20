@@ -382,6 +382,7 @@ namespace disk::services {
                 "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)"
             );
 
+            std::string from_clause = " FROM shares s LEFT JOIN users u ON s.user_id = u.id";
             std::string where_clause = " WHERE 1=1";
             if (req.status.has_value()) {
                 where_clause += " AND s.status = " + std::to_string(*req.status);
@@ -389,10 +390,19 @@ namespace disk::services {
             if (req.user_id.has_value()) {
                 where_clause += " AND s.user_id = " + std::to_string(*req.user_id);
             }
+            auto username_like = req.username.has_value() ? "%" + *req.username + "%" : std::string{};
+            if (req.username.has_value()) {
+                where_clause += " AND u.username LIKE ?";
+            }
 
-            auto count_result = co_await m_db_client->execSqlCoro(
-                "SELECT COUNT(*) AS total FROM shares s" + where_clause
-            );
+            auto count_result = req.username.has_value()
+                ? co_await m_db_client->execSqlCoro(
+                    "SELECT COUNT(*) AS total" + from_clause + where_clause,
+                    username_like
+                )
+                : co_await m_db_client->execSqlCoro(
+                    "SELECT COUNT(*) AS total" + from_clause + where_clause
+                );
 
             int total = 0;
             if (!count_result.empty()) {
@@ -404,13 +414,12 @@ namespace disk::services {
                 ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size))
                 : 0;
 
-            auto result = co_await m_db_client->execSqlCoro(
+            auto query_sql =
                 "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, "
                 "s.share_code, s.status, "
                 "(s.view_count + s.download_count) AS access_count, "
                 "s.created_at, s.expires_at "
-                "FROM shares s "
-                "LEFT JOIN users u ON s.user_id = u.id "
+                + from_clause + " "
                 "LEFT JOIN share_files sf ON sf.id = ("
                 "    SELECT MIN(sf2.id) "
                 "    FROM share_files sf2 "
@@ -418,10 +427,19 @@ namespace disk::services {
                 ") "
                 "LEFT JOIN files f ON sf.item_id = f.id "
                 + where_clause +
-                " ORDER BY s.created_at DESC LIMIT ? OFFSET ?",
-                req.page_size,
-                offset
-            );
+                " ORDER BY s.created_at DESC LIMIT ? OFFSET ?";
+            auto result = req.username.has_value()
+                ? co_await m_db_client->execSqlCoro(
+                    query_sql,
+                    username_like,
+                    req.page_size,
+                    offset
+                )
+                : co_await m_db_client->execSqlCoro(
+                    query_sql,
+                    req.page_size,
+                    offset
+                );
 
             admin::ShareListResponse response;
             response.pagination.page = req.page;

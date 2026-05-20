@@ -219,7 +219,7 @@ namespace disk::desktop::managers {
 
     // ── Share Management ──
 
-    void AdminManager::ListShares(int page, int pageSize, int status, int userId) {
+    void AdminManager::ListShares(int page, int pageSize, int status, int userId, const QString& username) {
         QUrlQuery query;
         query.addQueryItem("page", QString::number(page));
         query.addQueryItem("page_size", QString::number(pageSize));
@@ -228,6 +228,9 @@ namespace disk::desktop::managers {
         }
         if (userId >= 0) {
             query.addQueryItem("user_id", QString::number(userId));
+        }
+        if (!username.isEmpty()) {
+            query.addQueryItem("username", username);
         }
 
         QUrl url("/api/admin/shares");

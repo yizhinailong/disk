@@ -3,6 +3,7 @@
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTest>
+#include <QUrlQuery>
 
 #include "helpers/MockNetworkAccessManager.hpp"
 #include "helpers/TestJsonLoader.hpp"
@@ -457,6 +458,36 @@ private slots:
         QCOMPARE(args.at(0).toInt(), 1);
         QCOMPARE(args.at(1).toInt(), 3);
         QCOMPARE(args.at(2).toInt(), 50);
+    }
+
+    void ListSharesSendsSharerUsernameFilter() {
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/admin/shares",
+            TestJsonLoader::LoadJson("admin/admin_list_shares_success.json")
+        );
+
+        NetworkClient network_client(static_cast<QNetworkAccessManager*>(&mock_network));
+        network_client.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory request_factory;
+        request_factory.SetOwnerAccessToken("admin_token");
+        AdminManager mgr(&network_client, &request_factory);
+
+        QSignalSpy pagination_spy(&mgr, &AdminManager::sharePaginationLoaded);
+        QSignalSpy error_spy(&mgr, &AdminManager::apiError);
+
+        mgr.ListShares(2, 50, 1, -1, QStringLiteral("alice"));
+
+        QTRY_COMPARE(pagination_spy.count(), 1);
+        QCOMPARE(error_spy.count(), 0);
+        QCOMPARE(mock_network.GetRequestLog().size(), 1);
+
+        auto query = QUrlQuery(mock_network.GetRequestLog().first().url());
+        QCOMPARE(query.queryItemValue("page"), QString("2"));
+        QCOMPARE(query.queryItemValue("page_size"), QString("50"));
+        QCOMPARE(query.queryItemValue("status"), QString("1"));
+        QCOMPARE(query.queryItemValue("username"), QString("alice"));
+        QVERIFY(!query.hasQueryItem("user_id"));
     }
 
     // ── GetShareDetail ──

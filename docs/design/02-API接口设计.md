@@ -4481,6 +4481,7 @@ Authorization: Bearer <access_token>
 |------|------|------|------|
  | status | integer | 否 | 状态筛选：0（已取消）/1（有效）/2（已过期） |
  | user_id | integer | 否 | 按创建用户筛选 |
+ | username | string | 否 | 按分享者用户名模糊筛选 |
 | page | integer | 否 | 页码，默认 1 |
 | page_size | integer | 否 | 每页数量，默认 20，最大 100 |
 

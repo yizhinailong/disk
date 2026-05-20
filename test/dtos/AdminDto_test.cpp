@@ -557,12 +557,14 @@ TEST(ListSharesRequest, DefaultPagination) {
     EXPECT_EQ(result->page_size, 20);
     EXPECT_FALSE(result->status.has_value());
     EXPECT_FALSE(result->user_id.has_value());
+    EXPECT_FALSE(result->username.has_value());
 }
 
 TEST(ListSharesRequest, WithFilters) {
     auto req = CreateQueryRequest({
         {"status", "1"},
         {"user_id", "42"},
+        {"username", "alice"},
     });
     auto result = ListSharesRequest::FromRequest(req);
 
@@ -571,6 +573,8 @@ TEST(ListSharesRequest, WithFilters) {
     EXPECT_EQ(*result->status, 1);
     ASSERT_TRUE(result->user_id.has_value());
     EXPECT_EQ(*result->user_id, 42);
+    ASSERT_TRUE(result->username.has_value());
+    EXPECT_EQ(*result->username, "alice");
 }
 
 TEST(ListSharesRequest, InvalidStatus_OutOfRange) {

@@ -124,6 +124,11 @@ TestCase {
     function test_share_tab_has_filter_and_table() {
         var source = readQmlSource("components/admin/ShareTab.qml")
 
+        verify(source.indexOf("搜索分享者") !== -1, "Has sharer search field")
+        verify(source.indexOf("搜索") !== -1, "Has search button")
+        verify(source.indexOf("searchUsername") !== -1, "Keeps sharer search state")
+        verify(source.indexOf("ListShares(root.currentPage, root.pageSize, root.filterStatus, -1, root.searchUsername)") !== -1,
+               "Passes sharer search to ListShares")
         verify(source.indexOf("有效") !== -1, "Has active status filter")
         verify(source.indexOf("已过期") !== -1, "Has expired status filter")
         verify(source.indexOf("已取消") !== -1, "Has cancelled status filter")

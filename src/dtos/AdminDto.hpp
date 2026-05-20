@@ -344,6 +344,7 @@ namespace disk::admin {
      * - page_size: 默认 20，必须 >= 1 且 <= 100
      * - status: 可选，筛选状态（0/1/2）
      * - user_id: 可选，筛选用户 ID
+     * - username: 可选，按分享者用户名模糊筛选
      *
      * 从 URL 查询参数解析。
      */
@@ -352,6 +353,7 @@ namespace disk::admin {
         int page_size{ 20 };
         std::optional<int> status;
         std::optional<uint64_t> user_id;
+        std::optional<std::string> username;
 
         /// 从 HTTP 请求查询参数解析并验证，返回 Result
         [[nodiscard]]
@@ -458,10 +460,17 @@ namespace disk::admin {
                 }
             }
 
+            // 解析可选参数 username
+            auto username = req->getParameter("username");
+            if (!username.empty()) {
+                request.username = username;
+            }
+
             LOG_DEBUG << "Parsed list shares request: page=" << request.page
                       << ", page_size=" << request.page_size
                       << ", status=" << (request.status.has_value() ? std::to_string(*request.status) : "null")
-                      << ", user_id=" << (request.user_id.has_value() ? std::to_string(*request.user_id) : "null");
+                      << ", user_id=" << (request.user_id.has_value() ? std::to_string(*request.user_id) : "null")
+                      << ", username=" << (request.username.has_value() ? *request.username : "null");
 
             return request;
         }

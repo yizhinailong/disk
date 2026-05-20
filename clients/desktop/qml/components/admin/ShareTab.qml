@@ -13,6 +13,7 @@ Item {
     property int totalPages: 1
     property int totalItems: 0
     property int pageSize: 20
+    property string searchUsername: ""
     property var pendingConfirmAction: null
 
     function statusText(status) {
@@ -43,13 +44,18 @@ Item {
 
     function applyFilters() {
         root.currentPage = 1
-        adminManager.ListShares(root.currentPage, root.pageSize, root.filterStatus)
+        adminManager.ListShares(root.currentPage, root.pageSize, root.filterStatus, -1, root.searchUsername)
+    }
+
+    function applySharerSearch() {
+        root.searchUsername = sharerSearchField.text.trim()
+        root.applyFilters()
     }
 
     function goToPage(page) {
         if (page < 1 || page > root.totalPages) return
         root.currentPage = page
-        adminManager.ListShares(root.currentPage, root.pageSize, root.filterStatus)
+        adminManager.ListShares(root.currentPage, root.pageSize, root.filterStatus, -1, root.searchUsername)
     }
 
     function requestConfirmation(message, action) {
@@ -59,7 +65,7 @@ Item {
     }
 
     Component.onCompleted: {
-        adminManager.ListShares(root.currentPage, root.pageSize, -1)
+        adminManager.ListShares(root.currentPage, root.pageSize, -1, -1, root.searchUsername)
     }
 
     ColumnLayout {
@@ -70,6 +76,21 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: theme.compactSpacing
+
+            TextField {
+                id: sharerSearchField
+                Layout.preferredWidth: 180
+                placeholderText: qsTr("搜索分享者")
+                text: root.searchUsername
+                selectByMouse: true
+                onAccepted: root.applySharerSearch()
+            }
+
+            Button {
+                text: qsTr("搜索")
+                highlighted: true
+                onClicked: root.applySharerSearch()
+            }
 
             ComboBox {
                 id: statusFilterCombo
