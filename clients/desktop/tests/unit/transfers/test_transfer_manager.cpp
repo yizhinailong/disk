@@ -250,6 +250,98 @@ private slots:
         QCOMPARE(task->auth_domain, QString("owner"));
     }
 
+    void StartUploadEmitsCompletionForChunkedUpload() {
+        QTemporaryFile tmp;
+        QVERIFY(tmp.open());
+        tmp.write("hello upload");
+        tmp.close();
+
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file/upload/init",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data",
+                  QJsonObject{
+                      { "upload_id", "upload_abc" },
+                      { "chunk_size", 1024 },
+                      { "total_chunks", 1 },
+                      { "instant_upload", false },
+                  } },
+            }
+        );
+        mock_network.RegisterResponse(
+            "api/file/upload/chunk",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{ { "chunk_index", 0 }, { "uploaded", true } } },
+            }
+        );
+        mock_network.RegisterResponse(
+            "api/file/upload/complete",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data", QJsonObject{ { "file", QJsonObject{ { "id", 1 } } } } },
+            }
+        );
+
+        NetworkClient nc(static_cast<QNetworkAccessManager*>(&mock_network));
+        RequestFactory rf;
+        TransferManager mgr(&nc, &rf);
+        QSignalSpy completed_spy(&mgr, &TransferManager::uploadCompleted);
+
+        mgr.StartUpload(tmp.fileName(), 7);
+
+        QTRY_COMPARE(completed_spy.count(), 1);
+        auto task = mgr.GetUploadModel()->GetTask(0);
+        QVERIFY(task.has_value());
+        QCOMPARE(task->status, QString("completed"));
+        QCOMPARE(completed_spy.at(0).at(1).toString(), task->filename);
+        QCOMPARE(completed_spy.at(0).at(2).toULongLong(), quint64(7));
+    }
+
+    void StartUploadEmitsCompletionForInstantUpload() {
+        QTemporaryFile tmp;
+        QVERIFY(tmp.open());
+        tmp.write("hello instant");
+        tmp.close();
+
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file/upload/init",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data",
+                  QJsonObject{
+                      { "upload_id", "" },
+                      { "chunk_size", 0 },
+                      { "total_chunks", 0 },
+                      { "instant_upload", true },
+                      { "file", QJsonObject{ { "id", 1 } } },
+                  } },
+            }
+        );
+
+        NetworkClient nc(static_cast<QNetworkAccessManager*>(&mock_network));
+        RequestFactory rf;
+        TransferManager mgr(&nc, &rf);
+        QSignalSpy completed_spy(&mgr, &TransferManager::uploadCompleted);
+
+        mgr.StartUpload(tmp.fileName(), 9);
+
+        QTRY_COMPARE(completed_spy.count(), 1);
+        auto task = mgr.GetUploadModel()->GetTask(0);
+        QVERIFY(task.has_value());
+        QCOMPARE(task->status, QString("completed"));
+        QVERIFY(task->instant_upload);
+        QCOMPARE(completed_spy.at(0).at(1).toString(), task->filename);
+        QCOMPARE(completed_spy.at(0).at(2).toULongLong(), quint64(9));
+    }
+
     void ShutdownOwnerTransfersCancelsNonTerminalOwnerTransfers() {
         NetworkClient nc;
         RequestFactory rf;

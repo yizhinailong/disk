@@ -928,6 +928,10 @@ public:
     Q_INVOKABLE void StartUpload(const QString &, quint64) {}
     Q_INVOKABLE void StartDownload(quint64, const QString &, const QString &) {}
 
+signals:
+    void taskError(const QString &task_id, const QString &message);
+    void uploadCompleted(const QString &task_id, const QString &filename, quint64 parent_id);
+
 private:
     StubUploadModel *m_uploadModel;
     StubDownloadModel *m_downloadModel;
