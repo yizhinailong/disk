@@ -2,11 +2,11 @@
 
 ## 摘　要
 
-近年来，互联网应用和个人数字内容快速增长，用户对在线文件存储、管理与共享的需求不断增加。个人用户和中小型团队都希望文件能够随时访问、在多端同步，并尽量保存在可控的私有环境中。现有公有云网盘虽然使用方便，但常见问题也很突出，例如数据隐私受制于第三方平台、上传下载带宽受限、服务策略变化难以预判等；自建网盘方案则容易在性能和易用性之间失衡。因此，设计并实现一个高性能、便于私有化部署、可自主运维的网络磁盘系统，具有明确的应用价值。
+近年来，个人数字内容和团队协作资料快速增长，用户对在线文件存储、管理与共享的需求不断提高。公有云网盘虽然使用方便，但在数据隐私、上传下载带宽和服务可控性方面仍存在不足；部分自建网盘方案则容易受到性能、部署和易用性的限制。因此，设计并实现一个高性能、便于私有化部署、可自主运维的网络磁盘系统，具有一定的应用价值。
 
-本文按照软件工程流程完成系统设计与实现。系统定位为面向私有化部署的高性能网盘系统，后端采用 C++23 和 Drogon Web 框架，利用其基于 epoll 的非阻塞异步 I/O 与 C++ 协程处理文件传输和业务接口；客户端采用 Qt 6 与 QML 构建桌面端界面，通过 RESTful API 与后端交互。数据层使用 MySQL 保存用户信息、文件元数据、内容索引、目录结构、上传任务、分享记录和回收站等核心数据，引入 Redis 管理刷新令牌、令牌黑名单、登录失败计数、分享访问状态和限流计数等短时状态；文件实体采用内容寻址方式存放在服务器本地文件系统中，由后端统一处理路径映射、引用计数和访问权限。系统面向普通用户、访客与管理员三类使用场景：普通用户可完成注册、登录、令牌刷新与登出，查看个人资料和存储空间，进行文件与目录的列表、搜索、重命名、移动、复制、软删除，使用支持断点续传和秒传的大文件分片上传、文件下载、外链分享、分享管理和回收站管理等功能；访客可通过分享密码和分享令牌浏览或下载授权内容；管理员可通过管理界面维护用户账号状态与角色，查看全局存储统计、操作日志和系统状态，审核或强制取消分享。
+本文按照软件工程流程完成系统设计与实现。系统后端采用 C++23 和 Drogon Web 框架，利用其非阻塞异步 I/O 与 C++ 协程处理文件传输和业务接口；桌面客户端采用 Qt 6 与 QML 构建，通过 RESTful API 与后端交互。数据层使用 MySQL 保存用户信息、文件元数据、目录结构、上传任务、分享记录、回收站和操作日志等核心数据，引入 Redis 管理刷新令牌、令牌黑名单、登录失败计数、分享访问状态和限流计数等短时状态；文件实体采用内容寻址方式存放在服务器本地文件系统中。系统面向普通用户、访客与管理员三类使用场景，支持注册登录、令牌刷新、个人资料和存储空间查看，文件与目录的列表、搜索、重命名、移动、复制、软删除，支持断点续传和秒传的大文件分片上传、Range 下载、外链分享、分享访问、回收站管理，以及用户、分享、日志和系统状态等后台管理功能。
 
-系统目前能够覆盖私有化网络磁盘的主要业务需求，用户可以通过桌面端较方便地完成在线文件管理、文件传输与文件共享，管理员也可以在后台界面完成用户、分享、日志和系统状态管理；后端借助 Drogon 在高并发 HTTP 处理和异步数据库访问方面的能力保持较好的响应效率。本文完成了一个可运行的私有化网盘系统，也为使用 C++ 技术栈构建文件服务类 Web 后端及配套桌面客户端提供了工程实践参考。
+系统目前能够覆盖私有化网络磁盘的主要业务需求，用户可以通过桌面端完成在线文件管理、文件传输与文件共享，管理员也可以在后台界面完成平台运维管理。测试结果表明，系统核心流程运行稳定，权限边界清晰，后端借助 Drogon 在异步接口处理和文件传输方面保持了较好的响应效率。本文完成了一个可运行的私有化网盘系统，也为使用 C++ 技术栈构建文件服务类 Web 后端及配套桌面客户端提供了工程实践参考。
 
 关键词：网络磁盘；文件管理；Drogon；C++23；RESTful API
 
@@ -14,11 +14,11 @@
 
 ## ABSTRACT
 
-In recent years, with the continuous development of internet technologies and the profound transformation of personal digital lifestyles, the demand for online file storage, management, and sharing has been growing rapidly. Both individual users and small-to-medium-sized teams face practical needs for accessing files anytime and anywhere, synchronizing across multiple devices, and securely storing data on private infrastructure. However, mainstream public cloud storage products often suffer from problems such as insufficient data privacy protection, restricted upload and download bandwidth, and dependence on the stability of third-party infrastructure, while self-hosted network disk solutions frequently struggle to achieve a satisfactory balance between performance and ease of use. Accordingly, designing and implementing a high-performance, easily deployable, and fully self-manageable private network disk system carries considerable practical application value and research significance.
+In recent years, with the rapid growth of personal digital content and team collaboration materials, users have placed higher demands on online file storage, management, and sharing. Although public cloud storage services are convenient, they still have limitations in data privacy, upload and download bandwidth, and service controllability. Some self-hosted network disk solutions are also constrained by performance, deployment, and usability. Therefore, designing and implementing a high-performance network disk system that is suitable for private deployment and independent operation has practical application value.
 
-This thesis conducts system design and implementation work in accordance with the fundamental processes of software engineering. The system is positioned as a high-performance private network disk system. The backend is built upon the C++23 standard and the Drogon high-performance web framework, leveraging its epoll-based non-blocking asynchronous I/O and C++ coroutine capabilities to handle file transfers and business API processing. The desktop client is implemented with Qt 6 and QML and interacts with the backend through RESTful APIs. MySQL is selected for persistent storage of core data such as user information, file metadata, content indexes, directory structures, upload tasks, share records, and trash records. Redis is introduced for managing short-lived states including refresh tokens, token blacklists, login failure counters, share access states, and rate-limiting counters. File entities are stored on the server's local filesystem using content-addressed storage, with the backend uniformly managing path mapping, reference counting, and access control. The system covers regular-user, visitor, and administrator scenarios: regular users can perform account registration, login, token refreshing and logout, profile and storage querying, file and folder listing, searching, renaming, moving, copying, and soft deletion, resumable chunked upload with instant deduplication, file downloading, external sharing, share management, and trash management; visitors can browse or download authorized shared content through share passwords and share tokens; administrators can manage user account status and roles, view global storage statistics, inspect operation logs and system status, review and forcefully cancel shares, and perform other administrative functions through protected management interfaces.
+This thesis completes the system design and implementation according to the software engineering process. The backend adopts C++23 and the Drogon Web framework, using non-blocking asynchronous I/O and C++ coroutines to process file transfers and business interfaces. The desktop client is built with Qt 6 and QML and interacts with the backend through RESTful APIs. MySQL is used to store core data such as user information, file metadata, directory structures, upload tasks, share records, trash records, and operation logs. Redis is introduced to manage short-lived states including refresh tokens, token blacklists, login failure counters, share access states, and rate-limiting counters. File entities are stored on the server's local filesystem using content-addressed storage. The system covers regular-user, visitor, and administrator scenarios, supporting registration and login, token refresh, profile and storage querying, file and folder listing, searching, renaming, moving, copying, soft deletion, resumable chunked upload with instant deduplication, Range download, external sharing, share access, trash management, and backend management of users, shares, logs, and system status.
 
-The system currently satisfies the core business requirements of a private network disk to a considerable degree. On one hand, it makes online file management, file transfer, and file sharing more convenient and efficient for users through the desktop client. On the other hand, it fully exploits the advantages of the Drogon framework in high-concurrency HTTP processing and asynchronous database access at the performance level. The research presented in this thesis not only completes the development of a private network disk system with practical application value, but also provides a concrete engineering practice reference for building high-performance web services and supporting desktop clients based on the C++ technology stack.
+The system currently covers the main business requirements of a private network disk. Users can complete online file management, file transfer, and file sharing through the desktop client, while administrators can perform platform operation and maintenance through the management interface. Test results show that the core workflows run stably with clear permission boundaries, and the backend maintains good response efficiency in asynchronous API processing and file transfer with the support of Drogon. This thesis completes a runnable private network disk system and provides an engineering practice reference for building file-service Web backends and supporting desktop clients with the C++ technology stack.
 
 KEYWORDS: Network Disk; File Management; Drogon; C++23; RESTful API
 
@@ -588,21 +588,21 @@ Users 与 Files、Folders、UploadTasks、Trash、Shares 和 OperationLogs 之�
 
 （1）分片上传初始化与秒传判断
 
-文件上传由 `FileController` 提供初始化、上传分片、完成上传和取消上传四类接口，对应路径包括 `/api/file/upload/init`、`/api/file/upload/chunk`、`/api/file/upload/complete` 和取消上传接口。客户端选择文件后，`TransferManager` 首先提交文件名、文件大小、目标目录和文件 MD5。`FileService` 根据当前用户的已用空间和预占用空间进行配额检查，若上传后超过配额上限，则直接返回空间不足错误，避免无效分片写入。
+文件上传由 `FileController` 提供初始化、上传分片、完成上传和取消上传四类接口，对应路径包括 `/api/file/upload/init`、`/api/file/upload/chunk`、`/api/file/upload/complete` 和取消上传接口。控制器继承 Drogon 的 `HttpController`，通过 `METHOD_LIST_BEGIN` 和 `ADD_METHOD_TO` 完成路由、HTTP 方法和过滤器绑定，并将上传接口统一接入 JWT 鉴权和上传限流过滤器。各上传处理函数返回 `drogon::Task<drogon::HttpResponsePtr>`，在控制器中通过 `co_await` 调用服务层异步逻辑，使请求线程在等待数据库或文件状态处理时不被长时间阻塞。客户端选择文件后，`TransferManager` 首先提交文件名、文件大小、目标目录和文件 MD5。`FileService` 根据当前用户的已用空间和预占用空间进行配额检查，若上传后超过配额上限，则直接返回空间不足错误，避免无效分片写入。
 
 初始化阶段还会根据文件哈希查询 `file_contents` 表。如果系统已经存在相同内容对象，服务层不再要求客户端上传分片，而是直接创建新的 `files` 元数据记录，增加内容对象引用计数，并返回秒传结果。若内容不存在，则创建 `upload_tasks` 记录，写入任务 ID、目标目录、文件名、文件大小、分片大小、总分片数、临时路径、预占用字节数和过期时间，同时查询 `upload_task_chunks` 表返回已上传分片列表，为断点续传提供依据。
 
 （2）分片写入、断点续传与后台合并
 
-分片上传接口按任务 ID 和分片索引接收二进制数据。服务层先校验上传任务是否属于当前用户、是否仍处于进行中状态，再将分片写入任务临时目录，并在 `upload_task_chunks` 表中记录该分片已完成。客户端恢复上传时重新调用初始化接口即可获得已上传分片索引，只补传缺失部分，从而实现断点续传。
+分片上传接口按任务 ID 和分片索引接收二进制数据。Drogon 将 HTTP 请求体封装在 `HttpRequest` 对象中，控制器可直接通过 `request->body()` 获取 `application/octet-stream` 形式的分片内容，避免在接口层进行额外的 JSON 编解码开销。服务层先校验上传任务是否属于当前用户、是否仍处于进行中状态，再将分片写入任务临时目录，并在 `upload_task_chunks` 表中记录该分片已完成。由于上传过程被拆分为固定大小分片，单次请求只处理有限数据量，可以降低大文件一次性进入服务端造成的内存峰值；同时 Drogon 基于事件循环的非阻塞网络模型能够并发处理多个上传请求，使不同用户或不同分片的请求在网络等待阶段不会相互阻塞。客户端恢复上传时重新调用初始化接口即可获得已上传分片索引，只补传缺失部分，从而实现断点续传。
 
 全部分片上传完成后，客户端调用完成上传接口。后端通过 `AssemblyWorkerPool` 控制同一上传任务的合并并发，避免同一任务被重复合并；合并过程按分片顺序读取临时文件，生成完整文件后计算 MD5 和 SHA256，并与初始化阶段提交的哈希进行校验。校验通过后，系统通过 `IFileStorage` 的本地实现将文件移动到内容寻址存储路径，写入 `file_contents` 和 `files` 表，释放预占用空间并更新用户已用空间。若用户取消上传或任务过期，系统会删除临时分片、更新任务状态并释放预占用空间；`CleanupService` 和定时任务负责清理过期上传任务。
 
 （3）文件下载与 Range 断点下载
 
-文件下载接口分为下载信息查询和实际文件流下载。客户端下载前可先获取文件名、大小、MIME 类型等元数据，再调用下载接口获取文件内容。服务层会校验文件归属，确认当前用户只能下载自己名下的文件；校验通过后，通过 `IFileStorage` 定位内容寻址文件，并由下载响应逻辑返回 HTTP 文件流。
+文件下载接口分为下载信息查询和实际文件流下载。客户端下载前可先获取文件名、大小、MIME 类型等元数据，再调用下载接口获取文件内容。服务层会校验文件归属，确认当前用户只能下载自己名下的文件；校验通过后，通过 `IFileStorage` 定位内容寻址文件，并由统一的 `DownloadResponder` 构造 HTTP 下载响应。下载响应使用 Drogon 的 `HttpResponse::newStreamResponse` 实现流式返回，回调函数按照固定大小从文件流中逐块读取数据并写入响应缓冲区，而不是把完整文件一次性加载到内存。该方式能够显著降低大文件下载时的内存占用，并让 Drogon 在网络发送过程中继续依托事件循环处理其他连接，从而提高并发下载场景下的资源利用率。
 
-当请求头包含 `Range` 字段时，后端解析起止字节位置，只返回指定区间的文件内容，并设置 `206 Partial Content`、`Content-Range` 和 `Content-Length` 等响应信息。桌面端下载任务由 `TransferManager` 和 `DownloadTaskModel` 管理，传输中心页面展示下载进度、状态、失败原因，并支持取消、重试以及基于 Range 的暂停后继续下载。
+当请求头包含 `Range` 字段时，后端解析起止字节位置，只返回指定区间的文件内容，并设置 `206 Partial Content`、`Content-Range`、`Accept-Ranges` 和 `Content-Length` 等响应信息；当请求范围超出文件大小时，系统返回 `416 Requested Range Not Satisfiable`，并在响应头中给出当前文件长度。该逻辑复用了 Drogon 的响应头设置和状态码控制能力，使普通下载、断点续传下载和非法 Range 响应能够在同一套流式响应构造逻辑中完成。桌面端下载任务由 `TransferManager` 和 `DownloadTaskModel` 管理，传输中心页面展示下载进度、状态、失败原因，并支持取消、重试以及基于 Range 的暂停后继续下载。
 
 （4）传输中心实现
 
