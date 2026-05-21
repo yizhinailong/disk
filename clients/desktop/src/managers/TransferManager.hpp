@@ -196,6 +196,7 @@ namespace disk::desktop::managers {
 
     signals:
         void uploadProgressChanged(const QString& task_id, double progress);
+        void uploadCompleted(const QString& task_id, const QString& filename, quint64 parent_id);
         void downloadProgressChanged(const QString& task_id, double progress);
         void uploadSpeedChanged(const QString& task_id, qint64 bytes_per_sec);
         void downloadSpeedChanged(const QString& task_id, qint64 bytes_per_sec);

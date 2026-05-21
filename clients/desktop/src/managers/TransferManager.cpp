@@ -586,6 +586,7 @@ namespace disk::desktop::managers {
             m_upload_model->UpdateTask(task_id, task);
             SetUploadState(task_id, UploadState::InstantUploaded);
             m_active_uploads.remove(task_id);
+            emit uploadCompleted(task_id, task.filename, task.parent_id);
 
             return;
         }
@@ -842,9 +843,19 @@ namespace disk::desktop::managers {
         }
 
         // §6.2: complete success → Completed (reserved → used conversion happens server-side)
+        int row = m_upload_model->FindTask(task_id);
+        QString filename;
+        quint64 parent_id{ 0 };
+        if (row >= 0) {
+            auto task = *m_upload_model->GetTask(row);
+            filename = task.filename;
+            parent_id = task.parent_id;
+        }
+
         SetUploadState(task_id, UploadState::Completed);
         m_active_uploads.remove(task_id);
         emit uploadProgressChanged(task_id, 1.0);
+        emit uploadCompleted(task_id, filename, parent_id);
     }
 
     void TransferManager::StartUploadCancel(const QString& task_id) {
@@ -898,7 +909,7 @@ namespace disk::desktop::managers {
             if (status == 404) {
                 SetUploadState(task_id, UploadState::Cancelled);
                 m_active_uploads.remove(task_id);
-    
+
                 return;
             }
 

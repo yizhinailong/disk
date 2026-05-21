@@ -1394,7 +1394,7 @@ Page {
             fileMode: Platform.FileDialog.OpenFile
             nameFilters: ["All files (*)"]
 
-            onAccepted: root.startUploadFromPath(file)
+            onAccepted: root.startUploadFromPath(currentFile)
             onRejected: root.startUploadFromPath("")
         }
     }
@@ -2261,6 +2261,14 @@ Page {
 
         function onTaskError(task_id, message) {
             root.showToast(message)
+        }
+
+        function onUploadCompleted(task_id, filename, parent_id) {
+            root.showToast(filename === "" ? "文件上传成功" : "文件上传成功：" + filename)
+            if (root.isMyFilesMode && String(parent_id) === root.currentFolderId) {
+                root.preserveMyFilesContentForNextRefresh()
+                root.refreshCurrentFolder()
+            }
         }
     }
 

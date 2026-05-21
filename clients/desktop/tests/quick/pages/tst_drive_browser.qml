@@ -117,7 +117,7 @@ TestCase {
                "Chooser is created only when the upload action is used")
         verify(source.indexOf("uploadFileDialogLoader.item.open()") !== -1,
                "Upload action opens the native chooser instance")
-        verify(source.indexOf("onAccepted: root.startUploadFromPath(file)") !== -1,
+        verify(source.indexOf("onAccepted: root.startUploadFromPath(currentFile)") !== -1,
                "Chooser acceptance hands the selected path to the page helper")
         verify(source.indexOf("onRejected: root.startUploadFromPath(\"\")") !== -1,
                "Chooser rejection routes empty selection through the same helper")
