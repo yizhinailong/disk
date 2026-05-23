@@ -1,0 +1,215 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  JWT_SECRET: "ci-jwt-secret-for-testing-only-not-for-production"
+
+jobs:
+  # ── Format Check ──────────────────────────────────────────────────
+  format-check:
+    name: Format Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run clang-format
+        uses: jidicula/clang-format-action@v4.18.0
+        with:
+          clang-format-version: "18"
+          check-path: "."
+
+  # ── Backend Build & Unit Tests ────────────────────────────────────
+  backend-build-and-test:
+    name: Backend Build & Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CXX: clang++-21
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang 21
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Install Ninja and ccache
+        run: sudo apt-get install -y ninja-build ccache
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+
+      - name: Cache vcpkg installed packages
+        uses: actions/cache@v4
+        with:
+          path: build/linux-debug-clang/vcpkg_installed
+          key: vcpkg-installed-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+
+      - name: Configure
+        run: cmake --preset linux-debug-clang
+
+      - name: Build
+        run: cmake --build --preset linux-debug-clang
+
+      - name: Run unit tests
+        env:
+          GTEST_OUTPUT: xml:test-results.xml
+        run: |
+          ctest --preset linux-debug-clang -V \
+            --exclude-regex "Integration$" \
+            --output-on-failure
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-unit-test-results
+          path: test-results.xml
+
+  # ── Backend Integration Tests ─────────────────────────────────────
+  backend-integration:
+    name: Backend Integration
+    needs: backend-build-and-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CXX: clang++-21
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      JWT_SECRET: "ci-jwt-secret-for-testing-only-not-for-production"
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: mysql
+          MYSQL_DATABASE: disk
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang 21
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Install Ninja, ccache, and MySQL client
+        run: sudo apt-get install -y ninja-build ccache mysql-client
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+
+      - name: Cache vcpkg installed packages
+        uses: actions/cache@v4
+        with:
+          path: build/linux-debug-clang/vcpkg_installed
+          key: vcpkg-installed-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+
+      - name: Cache build directory
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/linux-debug-clang
+            !build/linux-debug-clang/vcpkg_installed
+          key: build-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'src/**/CMakeLists.txt', 'vcpkg.json') }}
+
+      - name: Configure
+        run: cmake --preset linux-debug-clang
+
+      - name: Build
+        run: cmake --build --preset linux-debug-clang
+
+      - name: Wait for MySQL
+        run: |
+          for i in $(seq 1 30); do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -pmysql 2>/dev/null; then
+              echo "MySQL is ready"
+              break
+            fi
+            echo "Waiting for MySQL... ($i/30)"
+            sleep 2
+          done
+
+      - name: Init MySQL schema
+        run: mysql -h 127.0.0.1 -P 3306 -u root -pmysql disk < sql/init.sql
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+
+      - name: Run integration tests
+        run: ctest --preset linux-debug-clang -V -R "Integration$" --timeout 300 --output-on-failure
+
+  # ── Desktop Build & Test ──────────────────────────────────────────
+  desktop-build-and-test:
+    name: Desktop Build & Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+          - os: windows-2022
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.*"
+          cache: true
+          modules: >-
+            qtbase qtdeclarative qtsvg qtshadertools qtquickcontrols2
+            qtimageformats qtwaylandcompositor qt5compat linguist
+
+      - name: Install Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y ninja-build
+
+      - name: Install Ninja (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja
+
+      - name: Configure
+        run: cmake -S clients/desktop -B clients/desktop/build -G Ninja
+
+      - name: Build
+        run: cmake --build clients/desktop/build
+
+      - name: Test
+        run: ctest --test-dir clients/desktop/build --output-on-failure
