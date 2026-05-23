@@ -6,7 +6,7 @@
 
 ## OVERVIEW
 
-Disk is a C++23 network-disk system: a Drogon REST backend plus a separate Qt/QML desktop client. Backend data lives in MySQL + Redis + content-addressed local storage; tests combine GoogleTest, Python `uv run` integration scripts, Qt Test, and Qt Quick Test.
+Disk is a C++23 network-disk system: a Drogon REST backend plus a separate Qt/QML desktop client. Backend data lives in PostgreSQL + Redis + content-addressed local storage; tests combine GoogleTest, Python `uv run` integration scripts, Qt Test, and Qt Quick Test.
 
 ## STRUCTURE
 
@@ -17,7 +17,7 @@ disk/
 ├── clients/desktop/     # Independent Qt6/QML desktop app `disk-desktop`
 ├── docs/design/         # Chinese backend architecture/API/DB/deploy/test docs
 ├── docs/desktop/        # Chinese desktop client authority docs DOC-00..DOC-07
-├── sql/init.sql         # MySQL schema; includes compatibility-only deprecated fields
+├── sql/init.sql         # PostgreSQL schema; includes compatibility-only deprecated fields
 ├── scripts/             # watchexec rebuild/run loops
 ├── config.json          # Drogon runtime config; dev DB/Redis defaults
 ├── CMakePresets.json    # Linux/Windows Clang presets with vcpkg toolchain
@@ -118,7 +118,7 @@ bash scripts/auto-build.sh
 find src test clients/desktop/src clients/desktop/tests -name '*.cpp' -o -name '*.hpp' | xargs clang-format -i
 
 # DB init
-mysql -u root -p < sql/init.sql
+sudo -u postgres psql -d disk -f sql/init.sql
 ```
 
 ## NOTES

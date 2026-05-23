@@ -88,7 +88,7 @@
 - **内容寻址存储**：本地存储按内容哈希组织目录和文件名，方便去重与校验。
 - **存储抽象层**：通过 `IFileStorage` 定义文件保存、读取、合并、清理等操作，当前实现为 `LocalFileStorage`。
 - **引用计数**：同一内容可被多个用户文件记录引用，复制和彻底删除会维护 `ref_count`。
-- **MySQL 数据持久化**：用户、文件、内容、上传任务、分享、回收站和操作日志存储在 MySQL。
+- **PostgreSQL 数据持久化**：用户、文件、内容、上传任务、分享、回收站和操作日志存储在 PostgreSQL。
 - **Redis 缓存与状态管理**：用于刷新令牌、黑名单、登录失败计数、分享访问和限流状态。
 - **统一响应模型**：业务层使用 `Result<T>` 返回成功或错误，控制器统一转换为 HTTP JSON 响应。
 - **协程异步服务**：服务层基于 `drogon::Task<Result<T>>` 实现非阻塞业务流程。
@@ -106,7 +106,7 @@
 |------|----------|------|------|
 | 编程语言 | C++ | C++23 | 协程、`std::expected` 等现代 C++ 能力 |
 | Web 框架 | Drogon | ≥ 1.9.11 | 高性能异步 HTTP 框架 |
-| 数据库 | MySQL | ≥ 8.0 | 业务数据持久化 |
+| 数据库 | PostgreSQL | ≥ 14 | 业务数据持久化 |
 | 缓存 | Redis | ≥ 6.0 | Token、限流、临时状态 |
 | ORM | Drogon ORM | - | 由模型配置生成数据库模型 |
 | 认证 | jwt-cpp | ≥ 0.7.1 | JWT HS256 签名与校验 |
@@ -121,7 +121,7 @@
 - **操作系统**：Linux (Ubuntu 22.04+) 或 Windows Server 2022+
 - **编译器**：Clang 21.1.6+ 或 MSVC/clang-cl 19.4+
 - **构建工具**：CMake 4.0+、Ninja、vcpkg
-- **运行依赖**：MySQL 8.0+、Redis 6.0+
+- **运行依赖**：PostgreSQL 14+、Redis 6.0+
 - **内存**：8 GB RAM
 - **磁盘**：100 GB SSD
 
@@ -148,7 +148,7 @@ cd disk
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y clang cmake ninja-build ccache mysql-server redis-server
+sudo apt-get install -y clang cmake ninja-build ccache postgresql redis-server
 ```
 
 #### Windows
@@ -165,7 +165,7 @@ $env:VCPKG_ROOT = "C:\path\to\vcpkg"
 ### 3. 初始化数据库
 
 ```bash
-mysql -u root -p < sql/init.sql
+psql -U postgres -d disk -f sql/init.sql
 ```
 
 ### 4. 配置应用
@@ -338,7 +338,7 @@ disk/
 │   ├── storage/        # 存储与合并测试
 │   └── integration/    # 需要运行服务的集成测试
 ├── docs/design/        # 中文设计文档
-├── sql/init.sql        # MySQL 初始化脚本
+├── sql/init.sql        # PostgreSQL 初始化脚本
 ├── config.json         # Drogon 运行配置
 ├── CMakePresets.json   # Linux/Windows 构建预设
 └── vcpkg.json          # C++ 依赖清单

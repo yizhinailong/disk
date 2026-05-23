@@ -30,7 +30,7 @@
       "port": 5432,
       "dbname": "disk",
       "user": "root",
-      "passwd": "mysql",
+      "passwd": "",
       "num_connection_number": 10
     }
   ],

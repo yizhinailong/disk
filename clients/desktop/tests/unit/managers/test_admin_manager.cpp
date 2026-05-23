@@ -684,7 +684,7 @@ private slots:
         QCOMPARE(error_spy.count(), 0);
 
         auto status = mgr.GetSystemStatus();
-        QCOMPARE(status.value("mysqlConnected").toBool(), true);
+        QCOMPARE(status.value("dbConnected").toBool(), true);
         QCOMPARE(status.value("redisConnected").toBool(), true);
         QCOMPARE(status.value("uptime").toString(), QString("1d 0h 0m"));
     }
@@ -768,14 +768,14 @@ private slots:
         QTRY_COMPARE(status_spy.count(), 1);
 
         auto status = mgr.GetSystemStatus();
-        QCOMPARE(status.value("mysqlConnected").toBool(), true);
+        QCOMPARE(status.value("dbConnected").toBool(), true);
         QCOMPARE(status.value("redisConnected").toBool(), true);
         // disk_used=5497558138880, disk_total=10995116277760 → 50.0%
         QCOMPARE(status.value("diskUsage").toDouble(), 50.0);
         QCOMPARE(status.value("uptime").toString(), QString("1d 0h 0m"));
 
-        // Verify old snake_case keys are absent
-        QVERIFY(!status.contains("mysql_connected"));
+        // Verify raw snake_case API keys are absent from QML-facing model
+        QVERIFY(!status.contains("db_connected"));
         QVERIFY(!status.contains("redis_connected"));
         QVERIFY(!status.contains("disk_total"));
         QVERIFY(!status.contains("disk_used"));
@@ -788,7 +788,7 @@ private slots:
         zero_disk_response["code"] = 0;
         zero_disk_response["message"] = "success";
         QJsonObject data;
-        data["mysql_connected"] = true;
+        data["db_connected"] = true;
         data["redis_connected"] = true;
         data["disk_total"] = 0;
         data["disk_used"] = 0;

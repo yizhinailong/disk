@@ -339,7 +339,7 @@ COMMENT ON COLUMN operation_logs.ip_address IS 'IP地址';
 COMMENT ON COLUMN operation_logs.user_agent IS '客户端信息';
 COMMENT ON COLUMN operation_logs.created_at IS '创建时间';
 
--- 创建自动更新 updated_at 的触发器函数（替代 MySQL ON UPDATE CURRENT_TIMESTAMP）
+-- 创建自动更新 updated_at 的触发器函数（替代 MySQL ON UPDATE CURRENT_TIMESTAMP 行为）
 CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$
 BEGIN

@@ -753,7 +753,7 @@ namespace disk::desktop::managers {
 
         auto data = json_opt->value("data").toObject();
         m_system_status.clear();
-        m_system_status["mysqlConnected"] = data.value("mysql_connected").toBool(false);
+        m_system_status["dbConnected"] = data.value("db_connected").toBool(false);
         m_system_status["redisConnected"] = data.value("redis_connected").toBool(false);
 
         double diskTotal = data.value("disk_total").toDouble(0);
