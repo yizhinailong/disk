@@ -169,7 +169,7 @@ namespace disk::trash {
 
         for (const auto content_id : content_ids) {
             auto decrement_result = co_await client->execSqlCoro(
-                "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = ?",
+                "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = $1",
                 content_id
             );
             if (decrement_result.affectedRows() == 0) {
@@ -177,7 +177,7 @@ namespace disk::trash {
             }
 
             auto content_rows = co_await client->execSqlCoro(
-                "SELECT ref_count, storage_path FROM file_contents WHERE id = ?",
+                "SELECT ref_count, storage_path FROM file_contents WHERE id = $1",
                 content_id
             );
             if (!content_rows.empty() && content_rows[0]["ref_count"].as<uint32_t>() == 0) {
@@ -258,7 +258,7 @@ namespace disk::trash {
             auto offset = (page - 1) * page_size;
 
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, item_type, item_id, item_name, item_size, " "original_" "folde" "r_" "id," " " "original_path, " "item_data, " "deleted_at, " "expires_at " "FRO" "M " "tra" "sh " "WHERE user_id = ? " "ORDER BY deleted_at DESC " "LIMIT ? OFFSET ?",
+                "SELECT id, user_id, item_type, item_id, item_name, item_size, " "original_" "folde" "r_" "id," " " "original_path, " "item_data, " "deleted_at, " "expires_at " "FRO" "M " "tra" "sh " "WHERE user_id = $1 " "ORDER BY deleted_at DESC " "LIMIT $2 OFFSET $3",
                 user_id,
                 page_size,
                 offset
@@ -541,7 +541,7 @@ namespace disk::trash {
                     {
                         try {
                             auto decrement_result = co_await m_db_client->execSqlCoro(
-                                "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = ?",
+                                "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = $1",
                                 content_id
                             );
 
@@ -648,7 +648,7 @@ namespace disk::trash {
 
         try {
             auto trash_rows = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, item_type, item_id, item_name, item_size, " "original_folder_id, original_path, item_data, content_id " "FROM trash WHERE user_id = ?",
+                "SELECT id, user_id, item_type, item_id, item_name, item_size, " "original_folder_id, original_path, item_data, content_id " "FROM trash WHERE user_id = $1",
                 user_id
             );
 
@@ -1236,12 +1236,12 @@ namespace disk::trash {
             {
                 try {
                     auto decrement_result = co_await m_db_client->execSqlCoro(
-                        "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = ?",
+                        "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = $1",
                         content_id
                     );
 
                     if (decrement_result.affectedRows() == 0) {
-                        LOG_DEBUG << "File content ref count already 0 or content missing, not decrementing: content_id="
+                        LOG_DEBUG << "File content ref count already 0 or content missing, not decrementing during DeleteFile: content_id="
                                   << content_id;
                     } else {
                         CoroMapper<FileContents> content_mapper(m_db_client);

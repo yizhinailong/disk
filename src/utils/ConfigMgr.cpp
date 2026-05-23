@@ -175,8 +175,8 @@ namespace disk::utils {
 
     // ==================== 数据库配置 ====================
 
-    auto ConfigMgr::GetMySqlPassword() const -> std::string {
-        const auto* env_password = std::getenv("MYSQL_PASSWORD");
+    auto ConfigMgr::GetDatabasePassword() const -> std::string {
+        const auto* env_password = std::getenv("DATABASE_PASSWORD");
         if (env_password != nullptr && std::strlen(env_password) > 0) {
             return env_password;
         }
@@ -206,9 +206,9 @@ namespace disk::utils {
             throw std::runtime_error(error_msg);
         }
 
-        // Only validate MYSQL_PASSWORD and REDIS_PASSWORD in secure mode
+        // Only validate DATABASE_PASSWORD and REDIS_PASSWORD in secure mode
         if (!IsSecureMode()) {
-            LOG_INFO << "Running in development mode - skipping MYSQL/REDIS password validation";
+            LOG_INFO << "Running in development mode - skipping DATABASE/REDIS password validation";
             return;
         }
 
@@ -216,9 +216,9 @@ namespace disk::utils {
 
         std::vector<std::string> missing_vars;
 
-        const auto* mysql_password = std::getenv("MYSQL_PASSWORD");
-        if (mysql_password == nullptr || std::strlen(mysql_password) == 0) {
-            missing_vars.emplace_back("MYSQL_PASSWORD");
+        const auto* db_password = std::getenv("DATABASE_PASSWORD");
+        if (db_password == nullptr || std::strlen(db_password) == 0) {
+            missing_vars.emplace_back("DATABASE_PASSWORD");
         }
 
         const auto* redis_password = std::getenv("REDIS_PASSWORD");

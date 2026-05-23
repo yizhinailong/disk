@@ -75,7 +75,7 @@ namespace disk::services {
                 "role, status, storage_quota, storage_used, storage_reserved, "
                 "created_at, last_login_at "
                 "FROM users" + where_clause +
-                " ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                " ORDER BY created_at DESC LIMIT $1 OFFSET $2",
                 req.page_size,
                 offset
             );
@@ -492,8 +492,11 @@ namespace disk::services {
                 where_clause += " AND s.user_id = " + std::to_string(*req.user_id);
             }
             auto username_like = req.username.has_value() ? "%" + *req.username + "%" : std::string{};
+            const size_t like_index = 1;
+            const size_t limit_index = req.username.has_value() ? 2 : 1;
+            const size_t offset_index = req.username.has_value() ? 3 : 2;
             if (req.username.has_value()) {
-                where_clause += " AND u.username LIKE ?";
+                where_clause += " AND u.username LIKE $" + std::to_string(like_index);
             }
 
             auto count_result = req.username.has_value()
@@ -515,6 +518,7 @@ namespace disk::services {
                 ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size))
                 : 0;
 
+            auto limit_offset = " ORDER BY s.created_at DESC LIMIT $" + std::to_string(limit_index) + " OFFSET $" + std::to_string(offset_index);
             auto query_sql =
                 "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, "
                 "s.share_code, s.status, "
@@ -528,8 +532,7 @@ namespace disk::services {
                 "    WHERE sf2.share_id = s.id AND sf2.item_type = 'file'"
                 ") "
                 "LEFT JOIN files f ON sf.item_id = f.id "
-                + where_clause +
-                " ORDER BY s.created_at DESC LIMIT ? OFFSET ?";
+                + where_clause + limit_offset;
             auto result = req.username.has_value()
                 ? co_await m_db_client->execSqlCoro(
                     query_sql,
@@ -589,7 +592,7 @@ namespace disk::services {
         try {
             co_await m_db_client->execSqlCoro(
                 "UPDATE shares s SET s.status = 0, s.updated_at = NOW() "
-                "WHERE s.id = ? AND s.status = 1 "
+                "WHERE s.id = $1 AND s.status = 1 "
                 "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)",
                 share_id
             );
@@ -608,7 +611,7 @@ namespace disk::services {
                 "    WHERE sf2.share_id = s.id AND sf2.item_type = 'file'"
                 ") "
                 "LEFT JOIN files f ON sf.item_id = f.id "
-                "WHERE s.id = ?",
+                "WHERE s.id = $1",
                 share_id
             );
 
@@ -655,7 +658,7 @@ namespace disk::services {
 
         try {
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, share_code, user_id, status FROM shares WHERE id = ?",
+                "SELECT id, share_code, user_id, status FROM shares WHERE id = $1",
                 share_id
             );
 
@@ -674,7 +677,7 @@ namespace disk::services {
             }
 
             co_await m_db_client->execSqlCoro(
-                "UPDATE shares SET status = 0, updated_at = NOW() WHERE id = ?",
+                "UPDATE shares SET status = 0, updated_at = NOW() WHERE id = $1",
                 share_id
             );
 
@@ -748,12 +751,12 @@ namespace disk::services {
 
         admin::SystemStatusResponse response;
 
-        // MySQL check
+        // Database check
         try {
             co_await m_db_client->execSqlCoro("SELECT 1");
             response.db_connected = true;
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "admin.stats.system MySQL check failed: " << e.base().what();
+            LOG_WARN << "admin.stats.system Database check failed: " << e.base().what();
             response.db_connected = false;
         }
 
@@ -806,7 +809,7 @@ namespace disk::services {
         try {
             co_await m_db_client->execSqlCoro(
                 "INSERT INTO operation_logs (user_id, action, target_type, target_id, target_name, details, ip_address) "
-                "VALUES (?, ?, ?, ?, ?, ?, 'system')",
+                "VALUES ($1, $2, $3, $4, $5, $6, 'system')",
                 operator_id,
                 action,
                 target_type,
