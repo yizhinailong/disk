@@ -9,7 +9,7 @@ Integration tests for file upload flow APIs (4.1-4.4).
 
 Prerequisites:
   - Server running on localhost:8080
-  - MySQL database configured
+  - PostgreSQL database configured
   - Redis configured
   - User account for testing
 

@@ -129,7 +129,7 @@ namespace disk::folder {
         try {
             auto folder_result = co_await m_db_client->execSqlCoro(
                 "SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at "
-                "FROM folders WHERE id = ? AND user_id = ?",
+                "FROM folders WHERE id = $1 AND user_id = $2",
                 folder_id,
                 user_id
             );
@@ -147,7 +147,7 @@ namespace disk::folder {
             std::string parent_path = "/";
             if (parent_id > 0) {
                 auto parent_result = co_await m_db_client->execSqlCoro(
-                    "SELECT path FROM folders WHERE id = ? AND user_id = ?",
+                    "SELECT path FROM folders WHERE id = $1 AND user_id = $2",
                     parent_id,
                     user_id
                 );
@@ -163,12 +163,12 @@ namespace disk::folder {
             auto subtree_result = co_await m_db_client->execSqlCoro(
                 "WITH RECURSIVE folder_tree AS ("
                 "SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at "
-                "FROM folders WHERE id = ? AND user_id = ? "
+                "FROM folders WHERE id = $1 AND user_id = $2 "
                 "UNION ALL "
                 "SELECT f.id, f.user_id, f.parent_id, f.name, f.path, f.depth, "
                 "f.item_count, f.created_at, f.updated_at "
                 "FROM folders f INNER JOIN folder_tree ft ON f.parent_id = ft.id "
-                "WHERE f.user_id = ?) "
+                "WHERE f.user_id = $3) "
                 "SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at "
                 "FROM folder_tree ORDER BY depth ASC, id ASC",
                 folder_id,
@@ -191,8 +191,8 @@ namespace disk::folder {
                     auto new_path = new_prefix + old_path.substr(old_prefix.size());
                     if (item.getValueOfId() == folder_id) {
                         co_await txn->execSqlCoro(
-                            "UPDATE folders SET name = ?, path = ?, updated_at = ? "
-                            "WHERE id = ? AND user_id = ?",
+                            "UPDATE folders SET name = $1, path = $2, updated_at = $3 "
+                            "WHERE id = $4 AND user_id = $5",
                             new_name,
                             new_path,
                             trantor::Date::now(),
@@ -201,7 +201,7 @@ namespace disk::folder {
                         );
                     } else {
                         co_await txn->execSqlCoro(
-                            "UPDATE folders SET path = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                            "UPDATE folders SET path = $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
                             new_path,
                             trantor::Date::now(),
                             item.getValueOfId(),
@@ -224,7 +224,7 @@ namespace disk::folder {
                         folder_ids.push_back(id);
                     }
                     auto files_result = co_await txn->execSqlCoro(
-                        "SELECT id, folder_id, name FROM files WHERE user_id = ? AND folder_id IN (" +
+                        "SELECT id, folder_id, name FROM files WHERE user_id = $1 AND folder_id IN (" +
                             disk::utils::BatchUtils::BuildSafeNumericInClause(folder_ids) + ")",
                         user_id
                     );
@@ -237,7 +237,7 @@ namespace disk::folder {
                             continue;
                         }
                         co_await txn->execSqlCoro(
-                            "UPDATE files SET path = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                            "UPDATE files SET path = $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
                             BuildFilePath(path_it->second, file_name),
                             trantor::Date::now(),
                             file_id,
@@ -383,7 +383,7 @@ namespace disk::folder {
 
         try {
             auto result = co_await m_db_client->execSqlCoro(
-                "WITH RECURSIVE folder_tree AS (" "SELECT id, name, parent_id, path, 0 AS level " "FROM folders " "WHERE user_id = ? AND parent_id = ? " "UNION ALL " "SELECT f.id, f.name, f.parent_id, f.path, ft.level + 1 " "FROM folders f " "INNER JOIN folder_tree ft ON f.parent_id = ft.id " "WHERE f.user_id = ? AND ft.level < ?" ") " "SELECT id, name, parent_id FROM folder_tree ORDER BY path",
+                "WITH RECURSIVE folder_tree AS (" "SELECT id, name, parent_id, path, 0 AS level " "FROM folders " "WHERE user_id = $1 AND parent_id = $2 " "UNION ALL " "SELECT f.id, f.name, f.parent_id, f.path, ft.level + 1 " "FROM folders f " "INNER JOIN folder_tree ft ON f.parent_id = ft.id " "WHERE f.user_id = $3 AND ft.level < $4" ") " "SELECT id, name, parent_id FROM folder_tree ORDER BY path",
                 user_id,
                 parent_id,
                 user_id,

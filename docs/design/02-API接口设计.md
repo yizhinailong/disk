@@ -3924,15 +3924,15 @@ Share Token（通过 `/api/share/access` 获取）需要以下安全措施：
 
 ```sql
 -- operation_logs 表关键字段
-user_id     BIGINT UNSIGNED  -- 操作者 ID（访客为 NULL，需调整 NOT NULL 约束）
+user_id     BIGINT           -- 操作者 ID（访客为 NULL，需调整 NOT NULL 约束）
 action      VARCHAR(32)      -- 操作类型
 target_type VARCHAR(32)      -- 目标类型（如 'share', 'file', 'folder'）
-target_id   BIGINT UNSIGNED  -- 目标内部 ID（shares.id，非 share_code）
+target_id   BIGINT           -- 目标内部 ID（shares.id，非 share_code）
 target_name VARCHAR(255)     -- 目标名称（可选，如分享的文件名）
-details     JSON             -- 操作详情（含 share_code 等外部标识）
+details     JSONB            -- 操作详情（含 share_code 等外部标识）
 ip_address  VARCHAR(45)      -- 客户端 IP
 user_agent  VARCHAR(512)     -- 客户端标识
-created_at  DATETIME         -- 操作时间
+created_at  TIMESTAMPTZ      -- 操作时间
 ```
 
 #### 9.4.5 安全检查清单
@@ -4707,10 +4707,10 @@ Authorization: Bearer <access_token>
 |------|------|------|
 | uptime | integer | 运行时间（秒） |
 | version | string | 系统版本 |
-| mysql | object | MySQL 连接状态 |
-| mysql.connected | boolean | 是否已连接 |
-| mysql.connection_count | integer | 当前连接数 |
-| mysql.latency_ms | integer | 查询延迟（毫秒） |
+| database | object | 数据库连接状态 |
+| database.connected | boolean | 是否已连接 |
+| database.connection_count | integer | 当前连接数 |
+| database.latency_ms | integer | 查询延迟（毫秒） |
 | redis | object | Redis 连接状态 |
 | redis.connected | boolean | 是否已连接 |
 | redis.latency_ms | integer | 查询延迟（毫秒） |
@@ -4737,7 +4737,7 @@ Authorization: Bearer <access_token>
   "data": {
     "uptime": 86400,
     "version": "1.0.0",
-    "mysql": {
+    "database": {
       "connected": true,
       "connection_count": 5,
       "latency_ms": 3

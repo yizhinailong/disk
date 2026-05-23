@@ -25,12 +25,12 @@
   "db_clients": [
     {
       "name": "default",
-      "rdbms": "mysql",
+      "rdbms": "postgresql",
       "host": "127.0.0.1",
-      "port": 3306,
+      "port": 5432,
       "dbname": "disk",
       "user": "root",
-      "passwd": "mysql",
+      "passwd": "",
       "num_connection_number": 10
     }
   ],

@@ -54,7 +54,7 @@ namespace disk::utils {
          * - JWT_SECRET (min 32 chars, required in all environments)
          *
          * In secure mode (when DISK_SECURE_MODE=true), additionally validates:
-         * - MYSQL_PASSWORD
+         * - DATABASE_PASSWORD
          * - REDIS_PASSWORD
          */
         auto ValidateSecureConfig() const -> void;
@@ -154,11 +154,11 @@ namespace disk::utils {
         // ==================== 数据库配置 ====================
 
         /**
-         * @brief 获取MySQL密码（从环境变量MYSQL_PASSWORD读取）
-         * @return std::string MySQL密码，开发环境可返回空字符串
+         * @brief 获取数据库密码（从环境变量DATABASE_PASSWORD读取）
+         * @return std::string 数据库密码，开发环境可返回空字符串
          */
         [[nodiscard]]
-        auto GetMySqlPassword() const -> std::string;
+        auto GetDatabasePassword() const -> std::string;
 
         /**
          * @brief 获取Redis密码（从环境变量REDIS_PASSWORD读取）

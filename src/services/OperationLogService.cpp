@@ -62,7 +62,7 @@ namespace disk::log {
             auto offset = (page - 1) * page_size;
 
             auto count_result = co_await m_db_client->execSqlCoro(
-                "SELECT COUNT(*) as count FROM operation_logs WHERE user_id = ?",
+                "SELECT COUNT(*) as count FROM operation_logs WHERE user_id = $1",
                 user_id
             );
             if (!count_result.empty()) {
@@ -70,7 +70,7 @@ namespace disk::log {
             }
 
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, action, target_type, target_id, " "target_name, " "       " "d" "e" "t" "a" "i" "l" "s" "," " " "ip_" "address, " "created_" "at " "FROM" " ope" "rati" "on_" "logs" " " "WHERE user_id = ? " "ORDER BY created_at DESC " "LIMIT ? OFFSET ?",
+                "SELECT id, user_id, action, target_type, target_id, " "target_name, " "       " "d" "e" "t" "a" "i" "l" "s" "," " " "ip_" "address, " "created_" "at " "FROM" " ope" "rati" "on_" "logs" " " "WHERE user_id = $1 " "ORDER BY created_at DESC " "LIMIT $2 OFFSET $3",
                 user_id,
                 page_size,
                 offset

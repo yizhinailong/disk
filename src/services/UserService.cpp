@@ -35,7 +35,7 @@ namespace disk::user {
         try {
             // 单次聚合查询：用户基本信息 + 文件数量 + 文件夹数量
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT u.id, u.username, u.email, u.nickname, u.avatar, " "       u.storage_quota, u.storage_used, " "       u.created_at, u.updated_at, " "       (SELECT COUNT(*) FROM files WHERE user_id = u.id) AS file_count, " "       (SELECT COUNT(*) FROM folders WHERE user_id = u.id) AS folder_count " "FROM users u " "WHERE u.id = ?",
+                "SELECT u.id, u.username, u.email, u.nickname, u.avatar, " "       u.storage_quota, u.storage_used, " "       u.created_at, u.updated_at, " "       (SELECT COUNT(*) FROM files WHERE user_id = u.id) AS file_count, " "       (SELECT COUNT(*) FROM folders WHERE user_id = u.id) AS folder_count " "FROM users u " "WHERE u.id = $1",
                 user_id
             );
 
@@ -240,7 +240,7 @@ namespace disk::user {
         try {
             // 单次聚合查询：配额 + 已使用 + 文件数量 + 文件夹数量
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT u.storage_quota, " "       COALESCE((SELECT SUM(f.size) FROM files f WHERE f.user_id = u.id), 0) AS used, " "       (SELECT COUNT(*) FROM files WHERE user_id = u.id) AS file_count, " "       (SELECT COUNT(*) FROM folders WHERE user_id = u.id) AS folder_count " "FROM users u " "WHERE u.id = ?",
+                "SELECT u.storage_quota, " "       COALESCE((SELECT SUM(f.size) FROM files f WHERE f.user_id = u.id), 0) AS used, " "       (SELECT COUNT(*) FROM files WHERE user_id = u.id) AS file_count, " "       (SELECT COUNT(*) FROM folders WHERE user_id = u.id) AS folder_count " "FROM users u " "WHERE u.id = $1",
                 user_id
             );
 

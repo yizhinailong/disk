@@ -19,7 +19,7 @@ Covers:
 
 Prerequisites:
   - Server running on localhost:8080
-  - MySQL database configured
+  - PostgreSQL database configured
   - Redis configured
   - User account exists (default: admin / Admin123)
 

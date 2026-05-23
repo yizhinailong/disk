@@ -39,14 +39,14 @@ namespace disk::share {
     using drogon_model::disk::Shares;
 
     namespace {
-        [[nodiscard]] auto BuildSharedFolderAccessPredicate(const std::string& folder_alias)
+        [[nodiscard]] auto BuildSharedFolderAccessPredicate(const std::string& folder_alias, size_t start_index = 1)
             -> std::string {
-            return "EXISTS (" "SELECT 1 FROM share_files sff " "JOIN folders shared_root ON sff.item_id = shared_root.id " "WHERE sff.share_id = ? AND sff.item_type = 'folder' " "AND " + folder_alias + ".user_id = shared_root.user_id " "AND (" + folder_alias + ".id = shared_root.id OR " + folder_alias + ".path LIKE CONCAT(shared_root.path, '%'))" ")";
+            return "EXISTS (" "SELECT 1 FROM share_files sff " "JOIN folders shared_root ON sff.item_id = shared_root.id " "WHERE sff.share_id = $" + std::to_string(start_index) + " AND sff.item_type = 'folder' " "AND " + folder_alias + ".user_id = shared_root.user_id " "AND (" + folder_alias + ".id = shared_root.id OR " + folder_alias + ".path LIKE CONCAT(shared_root.path, '%'))" ")";
         }
 
-        [[nodiscard]] auto BuildSharedFileAccessPredicate(const std::string& file_alias)
+        [[nodiscard]] auto BuildSharedFileAccessPredicate(const std::string& file_alias, size_t start_index = 1)
             -> std::string {
-            return "(EXISTS (" "SELECT 1 FROM share_files sff " "WHERE sff.share_id = ? AND sff.item_type = 'file' AND sff.item_id = " + file_alias + ".id" ") OR EXISTS (" "SELECT 1 FROM share_files sff " "JOIN folders shared_root ON sff.item_id = shared_root.id " "JOIN folders parent_folder ON parent_folder.id = " + file_alias + ".folder_id " "WHERE sff.share_id = ? AND sff.item_type = 'folder' " "AND parent_folder.user_id = shared_root.user_id " "AND parent_folder.path LIKE CONCAT(shared_root.path, '%')" "))";
+            return "(EXISTS (" "SELECT 1 FROM share_files sff " "WHERE sff.share_id = $" + std::to_string(start_index) + " AND sff.item_type = 'file' AND sff.item_id = " + file_alias + ".id" ") OR EXISTS (" "SELECT 1 FROM share_files sff " "JOIN folders shared_root ON sff.item_id = shared_root.id " "JOIN folders parent_folder ON parent_folder.id = " + file_alias + ".folder_id " "WHERE sff.share_id = $" + std::to_string(start_index + 1) + " AND sff.item_type = 'folder' " "AND parent_folder.user_id = shared_root.user_id " "AND parent_folder.path LIKE CONCAT(shared_root.path, '%')" "))";
         }
 
         [[nodiscard]] auto BuildFilePath(const std::string& folder_path, const std::string& filename)
@@ -173,7 +173,7 @@ namespace disk::share {
                         if (i > 0) {
                             insert_sql += ", ";
                         }
-                        insert_sql += "(?, ?, ?, ?)";
+                        insert_sql += "($" + std::to_string(i * 4 + 1) + ", $" + std::to_string(i * 4 + 2) + ", $" + std::to_string(i * 4 + 3) + ", $" + std::to_string(i * 4 + 4) + ")";
                     }
 
                     co_await ExecSqlWithBindings(
@@ -198,7 +198,7 @@ namespace disk::share {
                         if (i > 0) {
                             insert_sql += ", ";
                         }
-                        insert_sql += "(?, ?, ?, ?)";
+                        insert_sql += "($" + std::to_string(i * 4 + 1) + ", $" + std::to_string(i * 4 + 2) + ", $" + std::to_string(i * 4 + 3) + ", $" + std::to_string(i * 4 + 4) + ")";
                     }
 
                     co_await ExecSqlWithBindings(
@@ -261,7 +261,7 @@ namespace disk::share {
         try {
             if (request.status == "active") {
                 auto rows = co_await m_db_client->execSqlCoro(
-                    "SELECT COUNT(*) AS total FROM shares " "WHERE user_id = ? AND status = ? AND (expires_at IS NULL OR expires_at > NOW())",
+                    "SELECT COUNT(*) AS total FROM shares " "WHERE user_id = $1 AND status = $2 AND (expires_at IS NULL OR expires_at > NOW())",
                     user_id,
                     static_cast<int8_t>(ShareStatus::Active)
                 );
@@ -281,7 +281,7 @@ namespace disk::share {
         try {
             if (request.status == "active") {
                 auto rows = co_await m_db_client->execSqlCoro(
-                    "SELECT * FROM shares " "WHERE user_id = ? AND status = ? AND (expires_at IS NULL OR expires_at > NOW()) " "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    "SELECT * FROM shares " "WHERE user_id = $1 AND status = $2 AND (expires_at IS NULL OR expires_at > NOW()) " "ORDER BY created_at DESC LIMIT $3 OFFSET $4",
                     user_id,
                     static_cast<int8_t>(ShareStatus::Active),
                     request.page_size,
@@ -612,9 +612,9 @@ namespace disk::share {
                     valid_codes_to_cancel.end()
                 );
 
-                auto update_placeholders = BatchUtils::BuildInPlaceholders(valid_share_codes);
+                auto update_placeholders = BatchUtils::BuildInPlaceholders(valid_share_codes, 2);
                 auto update_sql =
-                    "UPDATE shares SET status = 0, updated_at = ? WHERE share_code IN (" + update_placeholders + ")";
+                    "UPDATE shares SET status = 0, updated_at = $1 WHERE share_code IN (" + update_placeholders + ")";
                 std::vector<std::string> update_args;
                 update_args.reserve(valid_share_codes.size() + 1);
                 update_args.push_back(trantor::Date::now().toDbStringLocal());
@@ -749,7 +749,7 @@ namespace disk::share {
         auto folder_id = *request.folder_id;
         try {
             auto folder_rows = co_await m_db_client->execSqlCoro(
-                "SELECT fo.id, fo.name, fo.path, fo.depth, fo.user_id " "FROM folders fo WHERE fo.id = ? AND " + BuildSharedFolderAccessPredicate("fo"),
+                "SELECT fo.id, fo.name, fo.path, fo.depth, fo.user_id " "FROM folders fo WHERE fo.id = $1 AND " + BuildSharedFolderAccessPredicate("fo", 2),
                 folder_id,
                 share_id
             );
@@ -763,7 +763,7 @@ namespace disk::share {
             const auto folder_user_id = folder_rows[0]["user_id"].as<uint64_t>();
 
             auto file_rows = co_await m_db_client->execSqlCoro(
-                "SELECT f.id, f.name, f.size, 'file' AS type " "FROM files f WHERE f.folder_id = ? AND f.user_id = ? ORDER BY f.name, f.id",
+                "SELECT f.id, f.name, f.size, 'file' AS type " "FROM files f WHERE f.folder_id = $1 AND f.user_id = $2 ORDER BY f.name, f.id",
                 folder_id,
                 folder_user_id
             );
@@ -777,7 +777,7 @@ namespace disk::share {
             }
 
             auto child_folder_rows = co_await m_db_client->execSqlCoro(
-                "SELECT fo.id, fo.name, fo.item_count, 0 AS size, 'folder' AS type " "FROM folders fo WHERE fo.parent_id = ? AND fo.user_id = ? ORDER BY fo.name, fo.id",
+                "SELECT fo.id, fo.name, fo.item_count, 0 AS size, 'folder' AS type " "FROM folders fo WHERE fo.parent_id = $1 AND fo.user_id = $2 ORDER BY fo.name, fo.id",
                 folder_id,
                 folder_user_id
             );
@@ -792,8 +792,8 @@ namespace disk::share {
             }
 
             auto breadcrumb_rows = co_await m_db_client->execSqlCoro(
-                "SELECT id, name FROM folders fo " "WHERE ? LIKE CONCAT(fo.path, '%') AND fo.path <> '/' AND " +
-                    BuildSharedFolderAccessPredicate("fo") + " ORDER BY depth, id",
+                "SELECT id, name FROM folders fo " "WHERE $1 LIKE CONCAT(fo.path, '%') AND fo.path <> '/' AND " +
+                    BuildSharedFolderAccessPredicate("fo", 2) + " ORDER BY depth, id",
                 current_path,
                 share_id
             );
@@ -821,7 +821,7 @@ namespace disk::share {
         // 单次 JOIN 查询：验证分享状态、文件属于分享内容并获取元数据
         try {
             auto rows = co_await m_db_client->execSqlCoro(
-                "SELECT s.status, " "(s.expires_at IS NOT NULL AND s.expires_at <= NOW()) AS is_expired, " "sf.id AS share_file_id, f.id, f.name, f.size, 'file' AS type " "FROM shares s " "LEFT JOIN share_files sf ON sf.share_id = s.id " "AND sf.item_type = 'file' AND sf.item_id = ? " "LEFT JOIN files f ON sf.item_id = f.id " "WHERE s.id = ?",
+                "SELECT s.status, " "(s.expires_at IS NOT NULL AND s.expires_at <= NOW()) AS is_expired, " "sf.id AS share_file_id, f.id, f.name, f.size, 'file' AS type " "FROM shares s " "LEFT JOIN share_files sf ON sf.share_id = s.id " "AND sf.item_type = 'file' AND sf.item_id = $1 " "LEFT JOIN files f ON sf.item_id = f.id " "WHERE s.id = $2",
                 request.file_id,
                 share_id
             );
@@ -865,7 +865,7 @@ namespace disk::share {
         // 单次 4 表 JOIN 查询：shares + share_files + files + file_contents
         try {
             auto rows = co_await m_db_client->execSqlCoro(
-                "SELECT s.id AS share_id, s.permission, s.status, " "(s.expires_at IS NOT NULL AND s.expires_at <= NOW()) AS is_expired, " "f.id AS file_id, f.name AS file_name, f.size AS file_size, f.content_id, " "fc.storage_path, fc.hash_md5, fc.mime_type " "FROM shares s " "LEFT JOIN files f ON f.id = ? AND " + BuildSharedFileAccessPredicate("f") + " " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE s.id = ?",
+                "SELECT s.id AS share_id, s.permission, s.status, " "(s.expires_at IS NOT NULL AND s.expires_at <= NOW()) AS is_expired, " "f.id AS file_id, f.name AS file_name, f.size AS file_size, f.content_id, " "fc.storage_path, fc.hash_md5, fc.mime_type " "FROM shares s " "LEFT JOIN files f ON f.id = $1 AND " + BuildSharedFileAccessPredicate("f", 2) + " " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE s.id = $4",
                 request.file_id,
                 share_id,
                 share_id,
@@ -925,7 +925,7 @@ namespace disk::share {
         std::shared_ptr<drogon::orm::Transaction> transaction;
         try {
             auto share_rows = co_await m_db_client->execSqlCoro(
-                "SELECT permission, status, " "(expires_at IS NOT NULL AND expires_at <= NOW()) AS is_expired " "FROM shares WHERE id = ?",
+                "SELECT permission, status, " "(expires_at IS NOT NULL AND expires_at <= NOW()) AS is_expired " "FROM shares WHERE id = $1",
                 share_id
             );
             if (share_rows.empty()) {
@@ -947,7 +947,7 @@ namespace disk::share {
             auto target_depth = uint32_t{ 0 };
             if (request.target_folder_id > 0) {
                 auto target_rows = co_await m_db_client->execSqlCoro(
-                    "SELECT path, depth FROM folders WHERE id = ? AND user_id = ?",
+                    "SELECT path, depth FROM folders WHERE id = $1 AND user_id = $2",
                     request.target_folder_id,
                     target_user_id
                 );
@@ -963,7 +963,7 @@ namespace disk::share {
             std::vector<Files> files_to_save;
             for (auto file_id : request.file_ids) {
                 auto rows = co_await m_db_client->execSqlCoro(
-                    "SELECT f.* FROM files f WHERE f.id = ? AND " + BuildSharedFileAccessPredicate("f"),
+                    "SELECT f.* FROM files f WHERE f.id = $1 AND " + BuildSharedFileAccessPredicate("f", 2),
                     file_id,
                     share_id,
                     share_id
@@ -985,7 +985,7 @@ namespace disk::share {
             std::vector<FolderPlan> folder_plans;
             for (auto folder_id : request.folder_ids) {
                 auto rows = co_await m_db_client->execSqlCoro(
-                    "SELECT fo.* FROM folders fo WHERE fo.id = ? AND " + BuildSharedFolderAccessPredicate("fo"),
+                    "SELECT fo.* FROM folders fo WHERE fo.id = $1 AND " + BuildSharedFolderAccessPredicate("fo", 2),
                     folder_id,
                     share_id
                 );
@@ -1000,7 +1000,7 @@ namespace disk::share {
                 auto root_path = plan.root.getValueOfPath();
                 auto root_user_id = plan.root.getValueOfUserId();
                 auto folder_rows = co_await m_db_client->execSqlCoro(
-                    "SELECT * FROM folders WHERE user_id = ? AND path LIKE CONCAT(?, '%') ORDER BY depth, id",
+                    "SELECT * FROM folders WHERE user_id = $1 AND path LIKE CONCAT($2, '%') ORDER BY depth, id",
                     root_user_id,
                     root_path
                 );
@@ -1008,7 +1008,7 @@ namespace disk::share {
                     plan.folders.emplace_back(row, -1);
                 }
                 auto file_rows = co_await m_db_client->execSqlCoro(
-                    "SELECT f.* FROM files f " "JOIN folders fo ON f.folder_id = fo.id " "WHERE f.user_id = ? AND fo.user_id = ? AND fo.path LIKE CONCAT(?, '%') ORDER BY fo.depth, f.id",
+                    "SELECT f.* FROM files f " "JOIN folders fo ON f.folder_id = fo.id " "WHERE f.user_id = $1 AND fo.user_id = $2 AND fo.path LIKE CONCAT($3, '%') ORDER BY fo.depth, f.id",
                     root_user_id,
                     root_user_id,
                     root_path
@@ -1032,7 +1032,7 @@ namespace disk::share {
             transaction = co_await m_db_client->newTransactionCoro();
             if (total_size > 0) {
                 auto quota_result = co_await transaction->execSqlCoro(
-                    "UPDATE users SET storage_used = storage_used + ? " "WHERE id = ? AND storage_used + ? <= storage_quota",
+                    "UPDATE users SET storage_used = storage_used + $1 " "WHERE id = $2 AND storage_used + $3 <= storage_quota",
                     total_size,
                     target_user_id,
                     total_size
@@ -1051,7 +1051,7 @@ namespace disk::share {
 
             for (const auto& source_file : files_to_save) {
                 auto conflict_rows = co_await transaction->execSqlCoro(
-                    "SELECT id FROM files WHERE user_id = ? AND folder_id = ? AND name = ? LIMIT 1",
+                    "SELECT id FROM files WHERE user_id = $1 AND folder_id = $2 AND name = $3 LIMIT 1",
                     target_user_id,
                     request.target_folder_id,
                     source_file.getValueOfName()
@@ -1062,7 +1062,7 @@ namespace disk::share {
 
                 if (source_file.getContentId()) {
                     co_await transaction->execSqlCoro(
-                        "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = ?",
+                        "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = $1",
                         *source_file.getContentId()
                     );
                 }
@@ -1090,7 +1090,7 @@ namespace disk::share {
 
             for (const auto& plan : folder_plans) {
                 auto conflict_rows = co_await transaction->execSqlCoro(
-                    "SELECT id FROM folders WHERE user_id = ? AND parent_id = ? AND name = ? LIMIT 1",
+                    "SELECT id FROM folders WHERE user_id = $1 AND parent_id = $2 AND name = $3 LIMIT 1",
                     target_user_id,
                     request.target_folder_id,
                     plan.root.getValueOfName()
@@ -1156,7 +1156,7 @@ namespace disk::share {
 
                     if (source_file.getContentId()) {
                         co_await transaction->execSqlCoro(
-                            "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = ?",
+                            "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = $1",
                             *source_file.getContentId()
                         );
                     }
@@ -1186,7 +1186,7 @@ namespace disk::share {
 
             if (request.target_folder_id > 0 && saved_top_level_count > 0) {
                 co_await transaction->execSqlCoro(
-                    "UPDATE folders SET item_count = item_count + ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                    "UPDATE folders SET item_count = item_count + $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
                     saved_top_level_count,
                     trantor::Date::now(),
                     request.target_folder_id,
@@ -1198,7 +1198,7 @@ namespace disk::share {
             auto consumed_size = static_cast<int64_t>(actual_size);
             if (reserved_size > consumed_size) {
                 co_await transaction->execSqlCoro(
-                    "UPDATE users SET storage_used = storage_used - ? WHERE id = ?",
+                    "UPDATE users SET storage_used = storage_used - $1 WHERE id = $2",
                     reserved_size - consumed_size,
                     target_user_id
                 );
@@ -1296,7 +1296,7 @@ namespace disk::share {
 
         try {
             auto sql =
-                "SELECT f.* FROM files f WHERE f.user_id = ? AND f.id IN (" + in_clause + ")";
+                "SELECT f.* FROM files f WHERE f.user_id = $1 AND f.id IN (" + in_clause + ")";
             auto result = co_await m_db_client->execSqlCoro(sql, user_id);
 
             std::vector<Files> matched_files;
@@ -1354,7 +1354,7 @@ namespace disk::share {
 
         try {
             auto sql =
-                "SELECT fo.* FROM folders fo WHERE fo.user_id = ? AND fo.id IN (" + in_clause + ")";
+                "SELECT fo.* FROM folders fo WHERE fo.user_id = $1 AND fo.id IN (" + in_clause + ")";
             auto result = co_await m_db_client->execSqlCoro(sql, user_id);
 
             std::vector<Folders> matched_folders;
@@ -1413,12 +1413,12 @@ namespace disk::share {
 
         try {
             auto file_rows = co_await m_db_client->execSqlCoro(
-                "SELECT sf.id AS share_file_id, f.id, f.name, f.size, 'file' AS type " "FROM share_files sf " "JOIN files f ON sf.item_id = f.id " "WHERE sf.share_id = ? AND sf.item_type = 'file' " "ORDER BY sf.id",
+                "SELECT sf.id AS share_file_id, f.id, f.name, f.size, 'file' AS type " "FROM share_files sf " "JOIN files f ON sf.item_id = f.id " "WHERE sf.share_id = $1 AND sf.item_type = 'file' " "ORDER BY sf.id",
                 share_id
             );
 
             auto folder_rows = co_await m_db_client->execSqlCoro(
-                "SELECT sf.id AS share_file_id, fo.id, fo.name, 0 AS size, fo.item_count, 'folder' AS type " "FROM share_files sf " "JOIN folders fo ON sf.item_id = fo.id " "WHERE sf.share_id = ? AND sf.item_type = 'folder' " "ORDER BY sf.id",
+                "SELECT sf.id AS share_file_id, fo.id, fo.name, 0 AS size, fo.item_count, 'folder' AS type " "FROM share_files sf " "JOIN folders fo ON sf.item_id = fo.id " "WHERE sf.share_id = $1 AND sf.item_type = 'folder' " "ORDER BY sf.id",
                 share_id
             );
 
@@ -1587,7 +1587,7 @@ namespace disk::share {
     auto ShareService::IncrementViewCount(uint64_t share_id) -> drogon::Task<void> {
         try {
             co_await m_db_client->execSqlCoro(
-                "UPDATE shares SET view_count = view_count + 1 WHERE id = ?",
+                "UPDATE shares SET view_count = view_count + 1 WHERE id = $1",
                 share_id
             );
         } catch (const DrogonDbException& e) {
@@ -1598,7 +1598,7 @@ namespace disk::share {
     auto ShareService::IncrementDownloadCount(uint64_t share_id) -> drogon::Task<void> {
         try {
             co_await m_db_client->execSqlCoro(
-                "UPDATE shares SET download_count = download_count + 1 WHERE id = ?",
+                "UPDATE shares SET download_count = download_count + 1 WHERE id = $1",
                 share_id
             );
         } catch (const DrogonDbException& e) {
@@ -1609,7 +1609,7 @@ namespace disk::share {
     auto ShareService::UpdateTimestamp(uint64_t share_id) -> drogon::Task<void> {
         try {
             co_await m_db_client->execSqlCoro(
-                "UPDATE shares SET updated_at = ? WHERE id = ?",
+                "UPDATE shares SET updated_at = $1 WHERE id = $2",
                 trantor::Date::now(),
                 share_id
             );

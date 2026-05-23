@@ -10,7 +10,7 @@
  * 2. GetJwtSecret throws when JWT_SECRET < 32 chars
  * 3. GetJwtSecret returns value when valid
  * 4. ValidateSecureConfig always checks JWT_SECRET regardless of DISK_SECURE_MODE
- * 5. ValidateSecureConfig gates MYSQL_PASSWORD/REDIS_PASSWORD on DISK_SECURE_MODE
+ * 5. ValidateSecureConfig gates DATABASE_PASSWORD/REDIS_PASSWORD on DISK_SECURE_MODE
  */
 
 #include "utils/ConfigMgr.hpp"
@@ -86,7 +86,7 @@ namespace {
 
         EnvVarGuard jwt_guard{ "JWT_SECRET" };
         EnvVarGuard secure_guard{ "DISK_SECURE_MODE" };
-        EnvVarGuard mysql_guard{ "MYSQL_PASSWORD" };
+        EnvVarGuard mysql_guard{ "DATABASE_PASSWORD" };
         EnvVarGuard redis_guard{ "REDIS_PASSWORD" };
     };
 
@@ -189,7 +189,7 @@ namespace {
     }
 
     // ================================================================================
-    // ValidateSecureConfig — in secure mode, missing MYSQL_PASSWORD throws
+    // ValidateSecureConfig — in secure mode, missing DATABASE_PASSWORD throws
     // ================================================================================
 
     TEST_F(ConfigMgrJwtTest, ValidateSecureConfigThrowsOnMissingMysqlPasswordInSecureMode) {
@@ -243,7 +243,7 @@ namespace {
     }
 
     // ================================================================================
-    // ValidateSecureConfig — DISK_SECURE_MODE=1, missing MYSQL_PASSWORD throws
+    // ValidateSecureConfig — DISK_SECURE_MODE=1, missing DATABASE_PASSWORD throws
     // ================================================================================
 
     TEST_F(ConfigMgrJwtTest, ValidateSecureModeWithOneMissingMysqlThrows) {

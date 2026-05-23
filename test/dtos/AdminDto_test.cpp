@@ -967,7 +967,7 @@ TEST(StorageStatsResponse, ZeroValues) {
 
 TEST(SystemStatusResponse, AllConnected) {
     SystemStatusResponse response;
-    response.mysql_connected = true;
+    response.db_connected = true;
     response.redis_connected = true;
     response.disk_total = 107374182400;
     response.disk_used = 53687091200;
@@ -976,7 +976,7 @@ TEST(SystemStatusResponse, AllConnected) {
 
     auto json = response.ToJson();
 
-    EXPECT_TRUE(json["mysql_connected"].asBool());
+    EXPECT_TRUE(json["db_connected"].asBool());
     EXPECT_TRUE(json["redis_connected"].asBool());
     EXPECT_EQ(json["disk_total"].asUInt64(), 107374182400ULL);
     EXPECT_EQ(json["disk_used"].asUInt64(), 53687091200ULL);
@@ -986,12 +986,12 @@ TEST(SystemStatusResponse, AllConnected) {
 
 TEST(SystemStatusResponse, Disconnected) {
     SystemStatusResponse response;
-    response.mysql_connected = false;
+    response.db_connected = false;
     response.redis_connected = false;
 
     auto json = response.ToJson();
 
-    EXPECT_FALSE(json["mysql_connected"].asBool());
+    EXPECT_FALSE(json["db_connected"].asBool());
     EXPECT_FALSE(json["redis_connected"].asBool());
 }
 
@@ -1012,7 +1012,7 @@ TEST(SystemStatusResponse, ZeroDisk) {
 
 TEST(SystemStatusResponse, MixedConnectivity) {
     SystemStatusResponse response;
-    response.mysql_connected = true;
+    response.db_connected = true;
     response.redis_connected = false;
     response.disk_total = 1000;
     response.disk_used = 500;
@@ -1021,7 +1021,7 @@ TEST(SystemStatusResponse, MixedConnectivity) {
 
     auto json = response.ToJson();
 
-    EXPECT_TRUE(json["mysql_connected"].asBool());
+    EXPECT_TRUE(json["db_connected"].asBool());
     EXPECT_FALSE(json["redis_connected"].asBool());
     EXPECT_EQ(json["uptime_seconds"].asUInt64(), 86400ULL);
 }

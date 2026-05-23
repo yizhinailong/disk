@@ -180,7 +180,7 @@ namespace disk::services {
          * @brief 获取系统状态
          *
          * @details
-         * 检查 MySQL/Redis 连接状态、磁盘空间和服务运行时间。
+         * 检查 PostgreSQL/Redis 连接状态、磁盘空间和服务运行时间。
          *
          * @return drogon::Task<Result<admin::SystemStatusResponse>>
          */

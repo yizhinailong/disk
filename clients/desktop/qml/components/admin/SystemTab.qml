@@ -418,12 +418,12 @@ Item {
                         columnSpacing: 24
 
                         Label {
-                            text: qsTr("MySQL 连接:")
+                            text: qsTr("数据库连接:")
                             font.bold: true
                         }
                         Label {
-                            text: adminManager.systemStatus.mysqlConnected === true ? qsTr("正常") : qsTr("异常")
-                            color: adminManager.systemStatus.mysqlConnected === true ? theme.successTextColor : theme.errorTextColor
+                            text: adminManager.systemStatus.dbConnected === true ? qsTr("正常") : qsTr("异常")
+                            color: adminManager.systemStatus.dbConnected === true ? theme.successTextColor : theme.errorTextColor
                         }
 
                         Label {

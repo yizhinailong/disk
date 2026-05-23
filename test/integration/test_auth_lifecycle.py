@@ -9,7 +9,7 @@ Integration tests for auth lifecycle: register and logout.
 
 Prerequisites:
   - Server running on localhost:8080
-  - MySQL database configured
+  - PostgreSQL database configured
   - Redis configured
 
 Usage:
