@@ -19,7 +19,7 @@
     {
       "name": "drogon",
       "features": [
-        "mysql",
+        "postgresql",
         "orm",
         "redis",
         "yaml"
