@@ -16,7 +16,7 @@ Uses ONLY Python stdlib (urllib) — no httpx dependency.
 
 Prerequisites:
   - Server running on localhost:8080
-  - MySQL and Redis configured
+  - PostgreSQL and Redis configured
 
 Usage:
   python3 test/integration/test_file_delete_regression.py

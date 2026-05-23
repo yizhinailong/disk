@@ -9,7 +9,7 @@ Comprehensive backend API test — covers all 50 endpoints across 10 domains.
 
 Prerequisites:
   - Server running on localhost:8080
-  - MySQL + Redis configured
+  - PostgreSQL + Redis configured
   - test001/Test123 user exists
   - admin/Admin123 user exists
 

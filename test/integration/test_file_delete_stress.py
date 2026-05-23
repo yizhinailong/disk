@@ -16,7 +16,7 @@ Covers:
 
 Prerequisites:
   - Server running on localhost:8080
-  - MySQL and Redis configured
+  - PostgreSQL and Redis configured
   - User account exists (default: admin / Admin123)
 
 Usage:

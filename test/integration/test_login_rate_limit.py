@@ -9,7 +9,7 @@ Integration tests for login rate limiting.
 
 Prerequisites:
   - Server running on localhost:8080
-  - MySQL database configured with seed data
+  - PostgreSQL database configured with seed data
   - Redis configured
 
 Usage:
