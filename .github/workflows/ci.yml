@@ -49,7 +49,7 @@ jobs:
           sudo ./llvm.sh 21
 
       - name: Install CMake
-        uses: lukka/get-cmake@latest
+        uses: lukka/get-cmake@v4
 
       - name: Install Ninja and ccache
         run: sudo apt-get install -y ninja-build ccache
@@ -126,7 +126,7 @@ jobs:
           sudo ./llvm.sh 21
 
       - name: Install CMake
-        uses: lukka/get-cmake@latest
+        uses: lukka/get-cmake@v4
 
       - name: Install Ninja, ccache, and MySQL client
         run: sudo apt-get install -y ninja-build ccache mysql-client
