@@ -113,7 +113,7 @@ namespace disk::file {
 
             try {
                 auto result = co_await client->execSqlCoro(
-                    "SELECT path, depth FROM folders WHERE id = ? AND user_id = ?",
+                    "SELECT path, depth FROM folders WHERE id = $1 AND user_id = $2",
                     folder_id,
                     user_id
                 );
@@ -141,9 +141,9 @@ namespace disk::file {
                 co_return occupied_names;
             }
 
-            auto sql =
-                "SELECT name FROM folders WHERE parent_id = ? AND user_id = ? AND name IN (" +
-                BatchUtils::BuildInPlaceholders(candidate_names) + ")";
+                auto sql =
+                    "SELECT name FROM folders WHERE parent_id = $1 AND user_id = $2 AND name IN (" +
+                    BatchUtils::BuildInPlaceholders(candidate_names, 3) + ")";
             auto result = co_await ExecSqlWithBindings(
                 client,
                 sql,
@@ -174,8 +174,8 @@ namespace disk::file {
             }
 
             auto sql =
-                "SELECT name FROM files WHERE folder_id = ? AND user_id = ? AND name IN (" +
-                BatchUtils::BuildInPlaceholders(candidate_names) + ")";
+                "SELECT name FROM files WHERE folder_id = $1 AND user_id = $2 AND name IN (" +
+                BatchUtils::BuildInPlaceholders(candidate_names, 3) + ")";
             auto result = co_await ExecSqlWithBindings(
                 client,
                 sql,
@@ -207,12 +207,23 @@ namespace disk::file {
             std::string insert_sql =
                 "INSERT INTO trash (user_id, item_type, item_id, item_name, item_size, " "content_id, original_folder_id, original_path, item_data, " "deleted_at, expires_at) VALUES ";
 
+            int base = 1;
+            const int cols_per_row = 9;
             for (size_t i = 0; i < trash_items.size(); ++i) {
                 if (i > 0) {
                     insert_sql += ",";
                 }
-                insert_sql +=
-                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY))";
+                int p = base + static_cast<int>(i) * cols_per_row;
+                insert_sql += "($" + std::to_string(p) + ", $" +
+                              std::to_string(p + 1) + ", $" +
+                              std::to_string(p + 2) + ", $" +
+                              std::to_string(p + 3) + ", $" +
+                              std::to_string(p + 4) + ", $" +
+                              std::to_string(p + 5) + ", $" +
+                              std::to_string(p + 6) + ", $" +
+                              std::to_string(p + 7) + ", $" +
+                              std::to_string(p + 8) +
+                              ", NOW(), NOW() + INTERVAL '30 days')";
             }
 
             try {
@@ -307,11 +318,11 @@ namespace disk::file {
             auto folder_result = co_await client->execSqlCoro(
                 "WITH RECURSIVE folder_tree AS ( "
                 "SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at "
-                "FROM folders WHERE id = ? AND user_id = ? "
+                "FROM folders WHERE id = $1 AND user_id = $2 "
                 "UNION ALL "
                 "SELECT f.id, f.user_id, f.parent_id, f.name, f.path, f.depth, f.item_count, f.created_at, f.updated_at "
                 "FROM folders f INNER JOIN folder_tree ft ON f.parent_id = ft.id "
-                "WHERE f.user_id = ? "
+                "WHERE f.user_id = $2 "
                 ") SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at "
                 "FROM folder_tree ORDER BY depth ASC, id ASC",
                 folder_id,
@@ -339,7 +350,7 @@ namespace disk::file {
             auto file_result = co_await client->execSqlCoro(
                 "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, "
                 "is_favorite, download_count, last_accessed_at, created_at, updated_at "
-                "FROM files WHERE user_id = ? AND folder_id IN (" +
+                "FROM files WHERE user_id = $1 AND folder_id IN (" +
                     BatchUtils::BuildSafeNumericInClause(folder_ids) + ") ORDER BY folder_id ASC, id ASC",
                 user_id
             );
@@ -598,7 +609,7 @@ namespace disk::file {
 
                 // 事务内递增引用计数
                 auto increment_result = co_await transaction->execSqlCoro(
-                    "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = ?",
+                    "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = $1",
                     meta.id
                 );
                 if (increment_result.affectedRows() == 0) {
@@ -685,7 +696,7 @@ namespace disk::file {
 
                 try {
                     co_await m_db_client->execSqlCoro(
-                        "DELETE FROM upload_tasks WHERE id = ? AND status = 0",
+                        "DELETE FROM upload_tasks WHERE id = $1 AND status = 0",
                         task_id
                     );
                 } catch (const drogon::orm::DrogonDbException& e) {
@@ -701,7 +712,7 @@ namespace disk::file {
                 InvalidateUploadTaskCache(task_id);
 
                 auto chunk_result = co_await m_db_client->execSqlCoro(
-                    "SELECT chunk_index FROM upload_task_chunks WHERE task_id = ? ORDER BY chunk_index",
+                    "SELECT chunk_index FROM upload_task_chunks WHERE task_id = $1 ORDER BY chunk_index",
                     task_id
                 );
 
@@ -953,7 +964,7 @@ namespace disk::file {
         // 7. 记录已上传分片（幂等：INSERT IGNORE 允许重复上传同一分片）
         try {
             co_await m_db_client->execSqlCoro(
-                "INSERT IGNORE INTO upload_task_chunks (task_id, chunk_index, uploaded_at) VALUES (?, ?, NOW())",
+                "INSERT INTO upload_task_chunks (task_id, chunk_index, uploaded_at) VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING",
                 upload_id,
                 chunk_index
             );
@@ -1156,7 +1167,7 @@ namespace disk::file {
                                        user_id]() -> drogon::Task<FinalizeLookupResult> {
             try {
                 auto result = co_await m_db_client->execSqlCoro(
-                    "SELECT (SELECT id FROM file_contents WHERE hash_md5 = ? LIMIT 1) AS content_id, " "EXISTS(SELECT 1 FROM files WHERE user_id = ? AND folder_id = ? AND name = ?) AS filename_exists",
+                    "SELECT (SELECT id FROM file_contents WHERE hash_md5 = $1 LIMIT 1) AS content_id, " "EXISTS(SELECT 1 FROM files WHERE user_id = $2 AND folder_id = $3 AND name = $4) AS filename_exists",
                     final_hash,
                     user_id,
                     task.getValueOfFolderId(),
@@ -1265,7 +1276,7 @@ namespace disk::file {
             if (existing_content.has_value()) {
                 content_id = existing_content.value();
                 auto increment_result = co_await transaction->execSqlCoro(
-                    "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = ?",
+                    "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = $1",
                     content_id
                 );
                 if (increment_result.affectedRows() == 0) {
@@ -1306,19 +1317,19 @@ namespace disk::file {
 
             file = co_await file_mapper.insert(file);
 
-            auto transfer_result = co_await transaction->execSqlCoro(
-                "UPDATE users SET storage_reserved = GREATEST(storage_reserved - ?, 0), " "storage_used = storage_used + ? WHERE id = ?",
-                task.getValueOfFileSize(),
-                task.getValueOfFileSize(),
-                user_id
-            );
+                auto transfer_result = co_await transaction->execSqlCoro(
+                    "UPDATE users SET storage_reserved = GREATEST(storage_reserved - $1, 0), " "storage_used = storage_used + $2 WHERE id = $3",
+                    task.getValueOfFileSize(),
+                    task.getValueOfFileSize(),
+                    user_id
+                );
 
             if (transfer_result.affectedRows() == 0) {
                 throw std::runtime_error("Failed to transfer reserved quota to used");
             }
 
             auto finalize_result = co_await transaction->execSqlCoro(
-                "UPDATE upload_tasks SET status = 1, finalized_at = NOW() WHERE id = ? AND status = 0",
+                "UPDATE upload_tasks SET status = 1, finalized_at = NOW() WHERE id = $1 AND status = 0",
                 upload_id
             );
             if (finalize_result.affectedRows() == 0) {
@@ -1326,7 +1337,7 @@ namespace disk::file {
             }
 
             co_await transaction->execSqlCoro(
-                "DELETE FROM upload_task_chunks WHERE task_id = ?",
+                "DELETE FROM upload_task_chunks WHERE task_id = $1",
                 upload_id
             );
 
@@ -1452,7 +1463,7 @@ namespace disk::file {
         // 4. Set terminal state (status=2 cancelled)
         try {
             co_await m_db_client->execSqlCoro(
-                "UPDATE upload_tasks SET status = 2, finalized_at = NOW(), " "fail_reason = '用户取消' WHERE id = ? AND status = 0",
+                "UPDATE upload_tasks SET status = 2, finalized_at = NOW(), " "fail_reason = '用户取消' WHERE id = $1 AND status = 0",
                 upload_id
             );
             InvalidateUploadTaskCache(upload_id);
@@ -1466,7 +1477,7 @@ namespace disk::file {
         // 5. Cleanup chunk tracking rows
         try {
             co_await m_db_client->execSqlCoro(
-                "DELETE FROM upload_task_chunks WHERE task_id = ?",
+                "DELETE FROM upload_task_chunks WHERE task_id = $1",
                 upload_id
             );
         } catch (const drogon::orm::DrogonDbException& e) {
@@ -1530,7 +1541,7 @@ namespace disk::file {
         try {
             if (request.type == "all") {
                 auto file_count_result = co_await m_db_client->execSqlCoro(
-                    "SELECT COUNT(*) AS cnt FROM files f WHERE f.folder_id = ? AND f.user_id = ?",
+                    "SELECT COUNT(*) AS cnt FROM files f WHERE f.folder_id = $1 AND f.user_id = $2",
                     request.parent_id,
                     user_id
                 );
@@ -1540,7 +1551,7 @@ namespace disk::file {
                 }
 
                 auto folder_count_result = co_await m_db_client->execSqlCoro(
-                    "SELECT COUNT(*) AS cnt FROM folders fo WHERE fo.parent_id = ? AND fo.user_id = ?",
+                    "SELECT COUNT(*) AS cnt FROM folders fo WHERE fo.parent_id = $1 AND fo.user_id = $2",
                     request.parent_id,
                     user_id
                 );
@@ -1551,7 +1562,7 @@ namespace disk::file {
 
                 // 先在窄行结果集上完成分页，再回表补齐详情，避免在宽行 UNION 结果上提前排序。
                 const std::string data_sql =
-                    "SELECT page.id, page.name, page.type, page.size, " "       COALESCE(f.mime_type, '') AS mime_type, " "       COALESCE(fc.hash_md5, '') AS hash, " "       COALESCE(fo.item_count, 0) AS item_count, " "       page.created_at, page.updated_at " "FROM (" "  SELECT combined.id, combined.name, combined.type, combined.size, combined.created_at, combined.updated_at " "  FROM (" "    SELECT f.id, f.name, 'file' AS type, f.size, f.created_at, f.updated_at " "    FROM files f " "    WHERE f.folder_id = ? AND f.user_id = ? " "    UNION ALL " "    SELECT fo.id, fo.name, 'folder' AS type, 0 AS size, fo.created_at, fo.updated_at " "    FROM folders fo " "    WHERE fo.parent_id = ? AND fo.user_id = ? " "  ) AS combined " "  ORDER BY " + inner_order_by + " " "  LIMIT ? OFFSET ?" ") AS page " "LEFT JOIN files f ON page.type = 'file' AND page.id = f.id " "LEFT JOIN folders fo ON page.type = 'folder' AND page.id = fo.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "ORDER BY " + outer_order_by;
+                    "SELECT page.id, page.name, page.type, page.size, " "       COALESCE(f.mime_type, '') AS mime_type, " "       COALESCE(fc.hash_md5, '') AS hash, " "       COALESCE(fo.item_count, 0) AS item_count, " "       page.created_at, page.updated_at " "FROM (" "  SELECT combined.id, combined.name, combined.type, combined.size, combined.created_at, combined.updated_at " "  FROM (" "    SELECT f.id, f.name, 'file' AS type, f.size, f.created_at, f.updated_at " "    FROM files f " "    WHERE f.folder_id = $1 AND f.user_id = $2 " "    UNION ALL " "    SELECT fo.id, fo.name, 'folder' AS type, 0 AS size, fo.created_at, fo.updated_at " "    FROM folders fo " "    WHERE fo.parent_id = $3 AND fo.user_id = $4 " "  ) AS combined " "  ORDER BY " + inner_order_by + " " "  LIMIT $5 OFFSET $6" ") AS page " "LEFT JOIN files f ON page.type = 'file' AND page.id = f.id " "LEFT JOIN folders fo ON page.type = 'folder' AND page.id = fo.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "ORDER BY " + outer_order_by;
 
                 auto paginated_result = co_await m_db_client->execSqlCoro(
                     data_sql,
@@ -1579,7 +1590,7 @@ namespace disk::file {
 
             } else if (request.type == "file") {
                 auto count_result = co_await m_db_client->execSqlCoro(
-                    "SELECT COUNT(*) AS cnt FROM files WHERE folder_id = ? AND user_id = ?",
+                    "SELECT COUNT(*) AS cnt FROM files WHERE folder_id = $1 AND user_id = $2",
                     request.parent_id,
                     user_id
                 );
@@ -1589,7 +1600,7 @@ namespace disk::file {
                 }
 
                 const std::string data_sql =
-                    "SELECT f.id, f.name, f.size, f.mime_type, " "       COALESCE(fc.hash_md5, '') AS hash, f.created_at, f.updated_at " "FROM (" "  SELECT f.id, f.name, f.size, f.created_at, f.updated_at " "  FROM files f " "  WHERE f.folder_id = ? AND f.user_id = ? " "  ORDER BY " + inner_order_by + " " "  LIMIT ? OFFSET ?" ") AS page " "JOIN files f ON f.id = page.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "ORDER BY " + outer_order_by;
+                    "SELECT f.id, f.name, f.size, f.mime_type, " "       COALESCE(fc.hash_md5, '') AS hash, f.created_at, f.updated_at " "FROM (" "  SELECT f.id, f.name, f.size, f.created_at, f.updated_at " "  FROM files f " "  WHERE f.folder_id = $1 AND f.user_id = $2 " "  ORDER BY " + inner_order_by + " " "  LIMIT $3 OFFSET $4" ") AS page " "JOIN files f ON f.id = page.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "ORDER BY " + outer_order_by;
 
                 auto paginated_result = co_await m_db_client->execSqlCoro(
                     data_sql,
@@ -1615,7 +1626,7 @@ namespace disk::file {
 
             } else if (request.type == "folder") {
                 auto count_result = co_await m_db_client->execSqlCoro(
-                    "SELECT COUNT(*) AS cnt FROM folders WHERE parent_id = ? AND user_id = ?",
+                    "SELECT COUNT(*) AS cnt FROM folders WHERE parent_id = $1 AND user_id = $2",
                     request.parent_id,
                     user_id
                 );
@@ -1625,7 +1636,7 @@ namespace disk::file {
                 }
 
                 const std::string data_sql =
-                    "SELECT page.id, page.name, page.item_count, page.created_at, page.updated_at " "FROM (" "  SELECT fo.id, fo.name, fo.item_count, fo.created_at, fo.updated_at, 0 AS sort_size " "  FROM folders fo " "  WHERE fo.parent_id = ? AND fo.user_id = ? " "  ORDER BY " + inner_order_by + " " "  LIMIT ? OFFSET ?" ") AS page " "ORDER BY " + outer_order_by;
+                    "SELECT page.id, page.name, page.item_count, page.created_at, page.updated_at " "FROM (" "  SELECT fo.id, fo.name, fo.item_count, fo.created_at, fo.updated_at, 0 AS sort_size " "  FROM folders fo " "  WHERE fo.parent_id = $1 AND fo.user_id = $2 " "  ORDER BY " + inner_order_by + " " "  LIMIT $3 OFFSET $4" ") AS page " "ORDER BY " + outer_order_by;
 
                 auto paginated_result = co_await m_db_client->execSqlCoro(
                     data_sql,
@@ -1845,8 +1856,8 @@ namespace disk::file {
             auto updated_at = trantor::Date::now();
             auto new_path = BuildFilePath(folder_location_result->path, new_name);
             auto update_result = co_await m_db_client->execSqlCoro(
-                "UPDATE files SET name = ?, extension = ?, path = ?, updated_at = ? "
-                "WHERE id = ? AND user_id = ?",
+                "UPDATE files SET name = $1, extension = $2, path = $3, updated_at = $4 "
+                "WHERE id = $5 AND user_id = $6",
                 new_name,
                 ExtractExtension(new_name),
                 new_path,
@@ -1914,7 +1925,7 @@ namespace disk::file {
 
                     auto result = co_await txn->execSqlCoro(
                         "SELECT id, folder_id, name FROM files WHERE id IN (" +
-                            BatchUtils::BuildSafeNumericInClause(chunk) + ") AND user_id = ?",
+                            BatchUtils::BuildSafeNumericInClause(chunk) + ") AND user_id = $1",
                         user_id
                     );
 
@@ -1964,8 +1975,8 @@ namespace disk::file {
 
                         auto updated_at = trantor::Date::now();
                         auto update_result = co_await txn->execSqlCoro(
-                            "UPDATE files SET folder_id = ?, path = ?, updated_at = ? "
-                            "WHERE id = ? AND user_id = ?",
+                            "UPDATE files SET folder_id = $1, path = $2, updated_at = $3 "
+                            "WHERE id = $4 AND user_id = $5",
                             request.target_folder_id,
                             BuildFilePath(target_location.path, name),
                             updated_at,
@@ -1990,8 +2001,8 @@ namespace disk::file {
                             continue;
                         }
                         co_await txn->execSqlCoro(
-                            "UPDATE folders SET item_count = GREATEST(item_count + ?, 0), "
-                            "updated_at = ? WHERE id = ? AND user_id = ?",
+                            "UPDATE folders SET item_count = GREATEST(item_count + $1, 0), "
+                            "updated_at = $2 WHERE id = $3 AND user_id = $4",
                             delta,
                             trantor::Date::now(),
                             folder_id,
@@ -2079,8 +2090,8 @@ namespace disk::file {
                     auto new_path = new_prefix + old_path.substr(old_prefix.size());
                     if (folder.getValueOfId() == root.getValueOfId()) {
                         co_await txn->execSqlCoro(
-                            "UPDATE folders SET parent_id = ?, path = ?, depth = depth + ?, "
-                            "updated_at = ? WHERE id = ? AND user_id = ?",
+                            "UPDATE folders SET parent_id = $1, path = $2, depth = depth + $3, "
+                            "updated_at = $4 WHERE id = $5 AND user_id = $6",
                             request.target_folder_id,
                             new_path,
                             depth_delta,
@@ -2090,8 +2101,8 @@ namespace disk::file {
                         );
                     } else {
                         co_await txn->execSqlCoro(
-                            "UPDATE folders SET path = ?, depth = depth + ?, updated_at = ? "
-                            "WHERE id = ? AND user_id = ?",
+                            "UPDATE folders SET path = $1, depth = depth + $2, updated_at = $3 "
+                            "WHERE id = $4 AND user_id = $5",
                             new_path,
                             depth_delta,
                             trantor::Date::now(),
@@ -2113,7 +2124,7 @@ namespace disk::file {
                         continue;
                     }
                     co_await txn->execSqlCoro(
-                        "UPDATE files SET path = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                        "UPDATE files SET path = $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
                         BuildFilePath(path_it->second, file.getValueOfName()),
                         trantor::Date::now(),
                         file.getValueOfId(),
@@ -2124,7 +2135,7 @@ namespace disk::file {
                 if (old_parent_id > 0) {
                     co_await txn->execSqlCoro(
                         "UPDATE folders SET item_count = GREATEST(item_count - 1, 0), "
-                        "updated_at = ? WHERE id = ? AND user_id = ?",
+                        "updated_at = $1 WHERE id = $2 AND user_id = $3",
                         trantor::Date::now(),
                         old_parent_id,
                         user_id
@@ -2132,8 +2143,8 @@ namespace disk::file {
                 }
                 if (request.target_folder_id > 0) {
                     co_await txn->execSqlCoro(
-                        "UPDATE folders SET item_count = item_count + 1, updated_at = ? "
-                        "WHERE id = ? AND user_id = ?",
+                        "UPDATE folders SET item_count = item_count + 1, updated_at = $1 "
+                        "WHERE id = $2 AND user_id = $3",
                         trantor::Date::now(),
                         request.target_folder_id,
                         user_id
@@ -2257,7 +2268,7 @@ namespace disk::file {
                 auto result = co_await m_db_client->execSqlCoro(
                     "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, "
                     "is_favorite, download_count, last_accessed_at, created_at, updated_at "
-                    "FROM files WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ") AND user_id = ?",
+                    "FROM files WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ") AND user_id = $1",
                     user_id
                 );
 
@@ -2638,8 +2649,8 @@ namespace disk::file {
 
                 if (request.target_folder_id > 0) {
                     co_await txn->execSqlCoro(
-                        "UPDATE folders SET item_count = item_count + 1, updated_at = ? "
-                        "WHERE id = ? AND user_id = ?",
+                        "UPDATE folders SET item_count = item_count + 1, updated_at = $1 "
+                        "WHERE id = $2 AND user_id = $3",
                         trantor::Date::now(),
                         request.target_folder_id,
                         user_id
@@ -2745,7 +2756,7 @@ namespace disk::file {
                 auto result = co_await m_db_client->execSqlCoro(
                     "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, "
                     "is_favorite, download_count, last_accessed_at, created_at, updated_at "
-                    "FROM files WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ") AND user_id = ?",
+                    "FROM files WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ") AND user_id = $1",
                     user_id
                 );
 
@@ -2992,15 +3003,15 @@ namespace disk::file {
 
         try {
             std::string file_where = use_fulltext ?
-                                         "WHERE f.user_id = ? AND MATCH(f.name) AGAINST(? IN BOOLEAN MODE)" :
-                                         "WHERE f.user_id = ? AND f.name LIKE ?";
+                                          "WHERE f.user_id = $1 AND to_tsvector('simple', f.name) @@ to_tsquery('simple', replace($2, ' ', ' | '))" :
+                                          "WHERE f.user_id = $1 AND f.name LIKE $2";
             std::string folder_where = use_fulltext ?
-                                           "WHERE fo.user_id = ? AND MATCH(fo.name) AGAINST(? IN BOOLEAN MODE)" :
-                                           "WHERE fo.user_id = ? AND fo.name LIKE ?";
+                                            "WHERE fo.user_id = $1 AND to_tsvector('simple', fo.name) @@ to_tsquery('simple', replace($2, ' ', ' | '))" :
+                                            "WHERE fo.user_id = $1 AND fo.name LIKE $2";
 
             if (has_folder_filter) {
-                file_where += " AND f.folder_id = ?";
-                folder_where += " AND fo.parent_id = ?";
+                file_where += " AND f.folder_id = $3";
+                folder_where += " AND fo.parent_id = $3";
             }
 
             if (request.type == "all") {
@@ -3009,7 +3020,7 @@ namespace disk::file {
                 const std::string folder_count_sql =
                     "SELECT COUNT(*) AS cnt FROM folders fo " + folder_where;
                 const std::string data_sql =
-                    "SELECT page.id, page.name, page.type, " "       COALESCE(f.size, 0) AS size, " "       COALESCE(f.mime_type, '') AS mime_type, " "       COALESCE(fc.hash_md5, '') AS hash, " "       COALESCE(fo.item_count, 0) AS item_count, " "       COALESCE(f.path, fo.path) AS path, " "       COALESCE(f.created_at, fo.created_at) AS created_at, " "       COALESCE(f.updated_at, fo.updated_at) AS updated_at " "FROM (" "  SELECT combined.id, combined.name, combined.type " "  FROM (" "    SELECT f.id, f.name, 'file' AS type " "    FROM files f " + file_where + " " "    UNION ALL " "    SELECT fo.id, fo.name, 'folder' AS type " "    FROM folders fo " + folder_where + " " "  ) AS combined " "  ORDER BY " + inner_order_by + " " "  LIMIT ? OFFSET ?" ") AS page " "LEFT JOIN files f ON page.type = 'file' AND f.id = page.id " "LEFT JOIN folders fo ON page.type = 'folder' AND fo.id = page.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "ORDER BY " + outer_order_by;
+                    "SELECT page.id, page.name, page.type, " "       COALESCE(f.size, 0) AS size, " "       COALESCE(f.mime_type, '') AS mime_type, " "       COALESCE(fc.hash_md5, '') AS hash, " "       COALESCE(fo.item_count, 0) AS item_count, " "       COALESCE(f.path, fo.path) AS path, " "       COALESCE(f.created_at, fo.created_at) AS created_at, " "       COALESCE(f.updated_at, fo.updated_at) AS updated_at " "FROM (" "  SELECT combined.id, combined.name, combined.type " "  FROM (" "    SELECT f.id, f.name, 'file' AS type " "    FROM files f " + file_where + " " "    UNION ALL " "    SELECT fo.id, fo.name, 'folder' AS type " "    FROM folders fo " + folder_where + " " "  ) AS combined " "  ORDER BY " + inner_order_by + " " "  LIMIT $3 OFFSET $4" ") AS page " "LEFT JOIN files f ON page.type = 'file' AND f.id = page.id " "LEFT JOIN folders fo ON page.type = 'folder' AND fo.id = page.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "ORDER BY " + outer_order_by;
 
                 if (has_folder_filter) {
                     auto file_count_result = co_await m_db_client->execSqlCoro(
@@ -3101,7 +3112,7 @@ namespace disk::file {
                 const std::string count_sql =
                     "SELECT COUNT(*) AS cnt FROM files f " + file_where;
                 const std::string data_sql =
-                    "SELECT f.id, f.name, f.size, f.mime_type, f.path, f.created_at, f.updated_at, " "       COALESCE(fc.hash_md5, '') AS hash " "FROM (" "  SELECT f.id, f.name " "  FROM files f " + file_where + " " "  ORDER BY " + inner_order_by + " " "  LIMIT ? OFFSET ?" ") AS page " "JOIN files f ON f.id = page.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "ORDER BY " + outer_order_by;
+                    "SELECT f.id, f.name, f.size, f.mime_type, f.path, f.created_at, f.updated_at, " "       COALESCE(fc.hash_md5, '') AS hash " "FROM (" "  SELECT f.id, f.name " "  FROM files f " + file_where + " " "  ORDER BY " + inner_order_by + " " "  LIMIT $3 OFFSET $4" ") AS page " "JOIN files f ON f.id = page.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "ORDER BY " + outer_order_by;
 
                 if (has_folder_filter) {
                     auto count_result = co_await m_db_client->execSqlCoro(
@@ -3172,7 +3183,7 @@ namespace disk::file {
                 const std::string count_sql =
                     "SELECT COUNT(*) AS cnt FROM folders fo " + folder_where;
                 const std::string data_sql =
-                    "SELECT fo.id, fo.name, fo.item_count, fo.path, fo.created_at, fo.updated_at " "FROM (" "  SELECT fo.id, fo.name " "  FROM folders fo " + folder_where + " " "  ORDER BY " + inner_order_by + " " "  LIMIT ? OFFSET ?" ") AS page " "JOIN folders fo ON fo.id = page.id " "ORDER BY " + outer_order_by;
+                    "SELECT fo.id, fo.name, fo.item_count, fo.path, fo.created_at, fo.updated_at " "FROM (" "  SELECT fo.id, fo.name " "  FROM folders fo " + folder_where + " " "  ORDER BY " + inner_order_by + " " "  LIMIT $3 OFFSET $4" ") AS page " "JOIN folders fo ON fo.id = page.id " "ORDER BY " + outer_order_by;
 
                 if (has_folder_filter) {
                     auto count_result = co_await m_db_client->execSqlCoro(
@@ -3265,7 +3276,7 @@ namespace disk::file {
 
         try {
             auto result = co_await m_db_client->execSqlCoro(
-                "UPDATE users SET storage_reserved = storage_reserved + ? " "WHERE id = ? AND storage_used + storage_reserved + ? <= storage_quota",
+                "UPDATE users SET storage_reserved = storage_reserved + $1 " "WHERE id = $2 AND storage_used + storage_reserved + $3 <= storage_quota",
                 file_size,
                 user_id,
                 file_size
@@ -3298,7 +3309,7 @@ namespace disk::file {
 
         try {
             co_await m_db_client->execSqlCoro(
-                "UPDATE users SET storage_reserved = GREATEST(storage_reserved - ?, 0) WHERE id = ?",
+                "UPDATE users SET storage_reserved = GREATEST(storage_reserved - $1, 0) WHERE id = $2",
                 reserved_bytes,
                 user_id
             );
@@ -3496,7 +3507,7 @@ namespace disk::file {
 
         try {
             auto result = co_await client->execSqlCoro(
-                "UPDATE users SET storage_used = storage_used + ? " "WHERE id = ? AND storage_used + ? <= storage_quota",
+                "UPDATE users SET storage_used = storage_used + $1 " "WHERE id = $2 AND storage_used + $3 <= storage_quota",
                 file_size,
                 user_id,
                 file_size
@@ -3529,7 +3540,7 @@ namespace disk::file {
         try {
             if (delta >= 0) {
                 auto result = co_await client->execSqlCoro(
-                    "UPDATE users SET storage_used = storage_used + ? " "WHERE id = ? AND storage_used + ? <= storage_quota",
+                    "UPDATE users SET storage_used = storage_used + $1 " "WHERE id = $2 AND storage_used + $3 <= storage_quota",
                     delta,
                     user_id,
                     delta
@@ -3542,7 +3553,7 @@ namespace disk::file {
                 }
             } else {
                 co_await client->execSqlCoro(
-                    "UPDATE users SET storage_used = GREATEST(storage_used + ?, 0) WHERE id = ?",
+                    "UPDATE users SET storage_used = GREATEST(storage_used + $1, 0) WHERE id = $2",
                     delta,
                     user_id
                 );
@@ -3567,13 +3578,16 @@ namespace disk::file {
         std::vector<uint64_t> valid_content_ids;
         valid_content_ids.reserve(content_ref_increment.size());
 
+        int param_index = 1;
         for (const auto& [content_id, increment] : content_ref_increment) {
             if (!existing_content_ids.contains(content_id)) {
                 continue;
             }
             update_cases.emplace_back(content_id, increment);
             valid_content_ids.push_back(content_id);
-            update_sql += " WHEN ? THEN ?";
+            auto when_param = std::to_string(param_index++);
+            auto then_param = std::to_string(param_index++);
+            update_sql += " WHEN $" + when_param + " THEN $" + then_param;
         }
 
         std::unordered_set<uint64_t> incremented_ids;
@@ -3625,15 +3639,24 @@ namespace disk::file {
         std::string insert_sql =
             "INSERT INTO files (user_id, content_id, folder_id, name, extension, " "size, mime_type, path, is_favorite, download_count) VALUES ";
 
+        int param_index = 1;
         for (size_t i = 0; i < valid_items.size(); ++i) {
             if (i > 0) {
                 insert_sql += ",";
             }
-            insert_sql += "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            insert_sql += "(";
+            for (int j = 0; j < 10; ++j) {
+                if (j > 0) {
+                    insert_sql += ",";
+                }
+                insert_sql += "$" + std::to_string(param_index++);
+            }
+            insert_sql += ")";
         }
+        insert_sql += " RETURNING id";
 
         try {
-            co_await ExecSqlWithBindings(
+            auto result = co_await ExecSqlWithBindings(
                 client,
                 insert_sql,
                 [&](auto& binder) {
@@ -3652,11 +3675,9 @@ namespace disk::file {
                 }
             );
 
-            auto id_result = co_await client->execSqlCoro("SELECT LAST_INSERT_ID() AS id");
-            if (!id_result.empty()) {
-                uint64_t first_id = id_result[0]["id"].as<uint64_t>();
+            if (result.size() == valid_items.size()) {
                 for (size_t i = 0; i < valid_items.size(); ++i) {
-                    uint64_t new_id = first_id + i;
+                    uint64_t new_id = result[i]["id"].as<uint64_t>();
                     id_mappings.emplace_back(valid_items[i].first, new_id);
                 }
             }
@@ -3695,7 +3716,7 @@ namespace disk::file {
 
         try {
             auto result = co_await client->execSqlCoro(
-                "SELECT id, mime_type FROM file_contents WHERE hash_md5 = ? LIMIT 1",
+                "SELECT id, mime_type FROM file_contents WHERE hash_md5 = $1 LIMIT 1",
                 file_hash
             );
 
@@ -3723,7 +3744,7 @@ namespace disk::file {
 
         try {
             auto result = co_await client->execSqlCoro(
-                "SELECT COUNT(*) AS cnt FROM files " "WHERE user_id = ? AND folder_id = ? AND name = ?",
+                "SELECT COUNT(*) AS cnt FROM files " "WHERE user_id = $1 AND folder_id = $2 AND name = $3",
                 user_id,
                 folder_id,
                 filename
@@ -3747,7 +3768,7 @@ namespace disk::file {
 
         try {
             auto result = co_await client->execSqlCoro(
-                "SELECT COUNT(*) AS uploaded_count, " "COALESCE(MAX(chunk_index), -1) AS max_chunk_index " "FROM upload_task_chunks WHERE task_id = ?",
+                "SELECT COUNT(*) AS uploaded_count, " "COALESCE(MAX(chunk_index), -1) AS max_chunk_index " "FROM upload_task_chunks WHERE task_id = $1",
                 upload_id
             );
 

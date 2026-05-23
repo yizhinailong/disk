@@ -751,10 +751,10 @@ namespace disk::services {
         // MySQL check
         try {
             co_await m_db_client->execSqlCoro("SELECT 1");
-            response.mysql_connected = true;
+            response.db_connected = true;
         } catch (const drogon::orm::DrogonDbException& e) {
             LOG_WARN << "admin.stats.system MySQL check failed: " << e.base().what();
-            response.mysql_connected = false;
+            response.db_connected = false;
         }
 
         // Redis check

@@ -339,6 +339,45 @@ COMMENT ON COLUMN operation_logs.ip_address IS 'IP地址';
 COMMENT ON COLUMN operation_logs.user_agent IS '客户端信息';
 COMMENT ON COLUMN operation_logs.created_at IS '创建时间';
 
+-- 创建自动更新 updated_at 的触发器函数（替代 MySQL ON UPDATE CURRENT_TIMESTAMP）
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 为用户表添加触发器
+CREATE TRIGGER trigger_users_updated_at
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_modified_column();
+
+-- 为文件夹表添加触发器
+CREATE TRIGGER trigger_folders_updated_at
+    BEFORE UPDATE ON folders
+    FOR EACH ROW
+    EXECUTE FUNCTION update_modified_column();
+
+-- 为文件表添加触发器
+CREATE TRIGGER trigger_files_updated_at
+    BEFORE UPDATE ON files
+    FOR EACH ROW
+    EXECUTE FUNCTION update_modified_column();
+
+-- 为上传任务表添加触发器
+CREATE TRIGGER trigger_upload_tasks_updated_at
+    BEFORE UPDATE ON upload_tasks
+    FOR EACH ROW
+    EXECUTE FUNCTION update_modified_column();
+
+-- 为分享表添加触发器
+CREATE TRIGGER trigger_shares_updated_at
+    BEFORE UPDATE ON shares
+    FOR EACH ROW
+    EXECUTE FUNCTION update_modified_column();
+
 -- 创建默认管理员用户 密码为 Admin123
 INSERT INTO users (username, email, password_hash, nickname, storage_quota, role)
 VALUES ('admin', 'admin@example.com', '$argon2id$v=19$m=65536,t=2,p=1$BjgpFYz8h/yjnJYjV497Tw$JCgRPDFvioq+FPQuR0i3a6kiTnLALv/F1A0eim7x7zE', '管理员', 107374182400, 1);

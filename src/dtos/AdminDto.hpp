@@ -627,7 +627,7 @@ namespace disk::admin {
      * 包含系统运行状态和资源使用情况。
      */
     struct SystemStatusResponse {
-        bool mysql_connected{ false };
+        bool db_connected{ false };
         bool redis_connected{ false };
         uint64_t disk_total{ 0 };
         uint64_t disk_used{ 0 };
@@ -638,7 +638,7 @@ namespace disk::admin {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["mysql_connected"] = mysql_connected;
+            json["db_connected"] = db_connected;
             json["redis_connected"] = redis_connected;
             json["disk_total"] = static_cast<Json::UInt64>(disk_total);
             json["disk_used"] = static_cast<Json::UInt64>(disk_used);

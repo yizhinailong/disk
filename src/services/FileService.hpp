@@ -16,6 +16,7 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <drogon/orm/DbClient.h>
 #include <trantor/utils/Date.h>

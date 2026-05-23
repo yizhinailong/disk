@@ -19,7 +19,8 @@
     {
       "name": "drogon",
       "features": [
-        "postgresql",
+        "ctl",
+        "postgres",
         "orm",
         "redis",
         "yaml"

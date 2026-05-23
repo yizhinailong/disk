@@ -66,7 +66,11 @@ namespace disk::services {
             while (batch_iteration < kMaxTrashBatchesPerRun) {
                 auto batch_start = std::chrono::steady_clock::now();
                 auto result = co_await m_db_client->execSqlCoro(
-                    "SELECT id, user_id, item_type, item_size, content_id, item_data " "FROM trash " "WHERE expires_at < NOW() AND id > ? " "ORDER BY id ASC " "LIMIT ?",
+                    "SELECT id, user_id, item_type, item_size, content_id, item_data "
+                    "FROM trash "
+                    "WHERE expires_at < NOW() AND id > $1 "
+                    "ORDER BY id ASC "
+                    "LIMIT $2",
                     last_seen_id,
                     kTrashFetchBatchSize
                 );
@@ -314,7 +318,9 @@ namespace disk::services {
         auto batch_start = std::chrono::steady_clock::now();
         try {
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, temp_path, user_id, reserved_bytes FROM upload_tasks " "WHERE status = 0 AND expires_at < NOW() " "LIMIT ?",
+                "SELECT id, temp_path, user_id, reserved_bytes FROM upload_tasks "
+                "WHERE status = 0 AND expires_at < NOW() "
+                "LIMIT $1",
                 kUploadTaskCleanupBatchSize
             );
 
@@ -365,7 +371,7 @@ namespace disk::services {
 
             for (const auto& [user_id, delta] : user_reserved_delta) {
                 co_await m_db_client->execSqlCoro(
-                    "UPDATE users SET storage_reserved = GREATEST(storage_reserved - ?, 0) WHERE id = ?",
+                    "UPDATE users SET storage_reserved = GREATEST(storage_reserved - $1, 0) WHERE id = $2",
                     delta,
                     user_id
                 );
@@ -401,7 +407,8 @@ namespace disk::services {
     auto CleanupService::UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void> {
         try {
             co_await m_db_client->execSqlCoro(
-                "UPDATE users SET storage_used = GREATEST(CAST(storage_used AS SIGNED) + ?, 0) " "WHERE id = ?",
+                "UPDATE users SET storage_used = GREATEST(CAST(storage_used AS BIGINT) + $1, 0) "
+                "WHERE id = $2",
                 delta,
                 user_id
             );
@@ -415,7 +422,7 @@ namespace disk::services {
     auto CleanupService::DecrementContentRefCount(uint64_t content_id) -> drogon::Task<void> {
         try {
             auto decrement_result = co_await m_db_client->execSqlCoro(
-                "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = ?",
+                "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id = $1",
                 content_id
             );
 

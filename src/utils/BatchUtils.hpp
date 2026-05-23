@@ -90,16 +90,16 @@ namespace disk::utils {
          * @endcode
          */
         [[nodiscard]]
-        static auto BuildInPlaceholders(size_t count) -> std::string {
+        static auto BuildInPlaceholders(size_t count, size_t start_index = 1) -> std::string {
             if (count == 0) {
                 return "";
             }
 
             std::ostringstream oss;
-            oss << "?";
+            oss << "$" << start_index;
 
             for (size_t i = 1; i < count; ++i) {
-                oss << ",?";
+                oss << ",$" << (start_index + i);
             }
 
             return oss.str();
@@ -112,12 +112,13 @@ namespace disk::utils {
          *
          * @tparam T 元素类型（仅使用容器大小，忽略元素值）
          * @param items 向量容器
-         * @return std::string 逗号分隔的问号占位符字符串
+         * @param start_index 第一个占位符的参数索引（默认1）
+         * @return std::string 逗号分隔的参数占位符字符串
          */
         template <typename T>
         [[nodiscard]]
-        static auto BuildInPlaceholders(const std::vector<T>& items) -> std::string {
-            return BuildInPlaceholders(items.size());
+        static auto BuildInPlaceholders(const std::vector<T>& items, size_t start_index = 1) -> std::string {
+            return BuildInPlaceholders(items.size(), start_index);
         }
 
         // ==================== 数值 IN 子句 ====================

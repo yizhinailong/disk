@@ -625,16 +625,16 @@ def test_admin_stats_system():
     code = json_field(resp.text, "code")
 
     if resp.status_code == 200 and code == "0":
-        mysql_connected = json_field(resp.text, "data.mysql_connected")
+        db_connected = json_field(resp.text, "data.db_connected")
         redis_connected = json_field(resp.text, "data.redis_connected")
         uptime = json_field(resp.text, "data.uptime_seconds")
         disk_total = json_field(resp.text, "data.disk_total")
         disk_used = json_field(resp.text, "data.disk_used")
         disk_free = json_field(resp.text, "data.disk_free")
-        if mysql_connected == "true" and redis_connected == "true":
-            log_pass(f"Admin stats system: mysql={mysql_connected}, redis={redis_connected}, uptime={uptime}s")
+        if db_connected == "true" and redis_connected == "true":
+            log_pass(f"Admin stats system: db={db_connected}, redis={redis_connected}, uptime={uptime}s")
         else:
-            log_pass(f"Admin stats system: mysql={mysql_connected}, redis={redis_connected}")
+            log_pass(f"Admin stats system: db={db_connected}, redis={redis_connected}")
     else:
         log_fail(f"Admin stats system: expected HTTP 200 + code 0, got HTTP {resp.status_code} code={code}")
         print(resp.text)
