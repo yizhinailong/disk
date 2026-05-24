@@ -285,7 +285,7 @@ namespace {
     // ================================================================================
 
     TEST_F(ConfigMgrJwtTest, GetAssembleBufferSizeBytesReturnsDefault) {
-        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 262144);
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 1048576);
     }
 
     // ================================================================================
@@ -307,7 +307,7 @@ namespace {
     static auto RestoreAssemblyDefaults() -> void {
         Json::Value cfg;
         cfg["custom_config"]["disk"]["assembly_max_concurrent"] = 4;
-        cfg["custom_config"]["disk"]["assemble_buffer_size_bytes"] = 262144;
+        cfg["custom_config"]["disk"]["assemble_buffer_size_bytes"] = 1048576;
         drogon::app().loadConfigJson(cfg);
         ConfigMgr::GetInstance()->LoadConfig();
     }
@@ -342,7 +342,7 @@ namespace {
         ConfigMgr::GetInstance()->LoadConfig();
 
         EXPECT_EQ(ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent(), 4);
-        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 262144);
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 1048576);
 
         RestoreAssemblyDefaults();
     }
@@ -359,7 +359,7 @@ namespace {
         ConfigMgr::GetInstance()->LoadConfig();
 
         EXPECT_EQ(ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent(), 8);
-        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 262144);
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 1048576);
 
         RestoreAssemblyDefaults();
     }
@@ -393,7 +393,7 @@ namespace {
         ConfigMgr::GetInstance()->LoadConfig();
 
         EXPECT_EQ(ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent(), 4);
-        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 262144);
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 1048576);
 
         RestoreAssemblyDefaults();
     }

@@ -364,6 +364,101 @@ namespace disk::file {
             co_return plan;
         }
 
+        auto FetchBatchFolderDeletePlans(
+            const drogon::orm::DbClientPtr& client,
+            const std::vector<uint64_t>& folder_ids,
+            uint64_t user_id
+        ) -> drogon::Task<std::unordered_map<uint64_t, FolderDeletePlan>> {
+            std::unordered_map<uint64_t, FolderDeletePlan> plans;
+
+            if (folder_ids.empty()) {
+                co_return plans;
+            }
+
+            auto folder_result = co_await client->execSqlCoro(
+                "WITH RECURSIVE folder_tree AS ( "
+                "SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at, "
+                "id AS root_id "
+                "FROM folders WHERE id IN (" +
+                    BatchUtils::BuildSafeNumericInClause(folder_ids) + ") AND user_id = $1 "
+                "UNION ALL "
+                "SELECT f.id, f.user_id, f.parent_id, f.name, f.path, f.depth, f.item_count, f.created_at, f.updated_at, "
+                "ft.root_id "
+                "FROM folders f INNER JOIN folder_tree ft ON f.parent_id = ft.id "
+                "WHERE f.user_id = $1 "
+                ") SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at, root_id "
+                "FROM folder_tree ORDER BY root_id ASC, depth ASC, id ASC",
+                user_id
+            );
+
+            std::unordered_map<uint64_t, size_t> root_to_plan_index;
+            std::vector<uint64_t> all_folder_ids;
+
+            for (const auto& row : folder_result) {
+                auto root_id = row["root_id"].as<uint64_t>();
+                auto folder_id = row["id"].as<uint64_t>();
+
+                auto it = root_to_plan_index.find(root_id);
+                if (it == root_to_plan_index.end()) {
+                    FolderDeletePlan plan;
+                    plan.folders.emplace_back(row, -1);
+                    plan.root = plan.folders.front();
+                    root_to_plan_index[root_id] = plans.size();
+                    plans.emplace(root_id, std::move(plan));
+                } else {
+                    auto plan_it = plans.find(root_id);
+                    plan_it->second.folders.emplace_back(row, -1);
+                }
+
+                all_folder_ids.push_back(folder_id);
+            }
+
+            if (all_folder_ids.empty()) {
+                co_return plans;
+            }
+
+            std::sort(all_folder_ids.begin(), all_folder_ids.end());
+            all_folder_ids.erase(std::unique(all_folder_ids.begin(), all_folder_ids.end()), all_folder_ids.end());
+
+            auto file_result = co_await client->execSqlCoro(
+                "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, "
+                "is_favorite, download_count, last_accessed_at, created_at, updated_at "
+                "FROM files WHERE user_id = $1 AND folder_id IN (" +
+                    BatchUtils::BuildSafeNumericInClause(all_folder_ids) + ") ORDER BY folder_id ASC, id ASC",
+                user_id
+            );
+
+            std::unordered_map<uint64_t, std::vector<uint64_t>> root_to_folder_ids;
+            for (const auto& [root_id, plan] : plans) {
+                auto& ids = root_to_folder_ids[root_id];
+                ids.reserve(plan.folders.size());
+                for (const auto& folder : plan.folders) {
+                    ids.push_back(folder.getValueOfId());
+                }
+                std::sort(ids.begin(), ids.end());
+            }
+
+            for (const auto& row : file_result) {
+                auto folder_id = row["folder_id"].as<uint64_t>();
+                uint64_t matched_root = 0;
+                for (const auto& [root_id, folder_id_list] : root_to_folder_ids) {
+                    if (std::binary_search(folder_id_list.begin(), folder_id_list.end(), folder_id)) {
+                        matched_root = root_id;
+                        break;
+                    }
+                }
+                if (matched_root == 0) continue;
+
+                auto plan_it = plans.find(matched_root);
+                if (plan_it != plans.end()) {
+                    plan_it->second.files.emplace_back(row, -1);
+                    plan_it->second.item_size += plan_it->second.files.back().getValueOfSize();
+                }
+            }
+
+            co_return plans;
+        }
+
         [[nodiscard]] auto FilterCoveredFolderIds(
             const std::vector<uint64_t>& requested_folder_ids,
             const std::unordered_map<uint64_t, FolderDeletePlan>& plans
@@ -2012,14 +2107,8 @@ namespace disk::file {
                 }
             }
 
-            std::unordered_map<uint64_t, FolderDeletePlan> folder_plans;
-            folder_plans.reserve(folder_ids.size());
-            for (const auto folder_id : folder_ids) {
-                auto plan = co_await FetchFolderDeletePlan(txn, folder_id, user_id);
-                if (plan.has_value()) {
-                    folder_plans.emplace(folder_id, std::move(*plan));
-                }
-            }
+            std::unordered_map<uint64_t, FolderDeletePlan> folder_plans =
+                co_await FetchBatchFolderDeletePlans(txn, folder_ids, user_id);
 
             auto top_level_folder_ids = FilterCoveredFolderIds(folder_ids, folder_plans);
             std::vector<std::string> folder_candidate_names;
@@ -2223,21 +2312,8 @@ namespace disk::file {
             co_return std::unexpected(target_location_result.error());
         }
 
-        std::unordered_map<uint64_t, FolderDeletePlan> folder_plans;
-        folder_plans.reserve(requested_folder_ids.size());
-        for (const auto folder_id : requested_folder_ids) {
-            try {
-                auto plan = co_await FetchFolderDeletePlan(m_db_client, folder_id, user_id);
-                if (!plan.has_value()) {
-                    LOG_WARN << "Folder not found or no permission, skipping: folder_id=" << folder_id;
-                    continue;
-                }
-                folder_plans.emplace(folder_id, std::move(*plan));
-            } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "Folder plan fetch failed in copy, skipping: folder_id=" << folder_id
-                         << ", error=" << e.base().what();
-            }
-        }
+        std::unordered_map<uint64_t, FolderDeletePlan> folder_plans =
+            co_await FetchBatchFolderDeletePlans(m_db_client, requested_folder_ids, user_id);
 
         auto top_level_folder_ids = FilterCoveredFolderIds(requested_folder_ids, folder_plans);
         auto covered_file_ids = CollectCoveredFileIds(top_level_folder_ids, folder_plans);
@@ -2715,21 +2791,8 @@ namespace disk::file {
         auto requested_file_ids = normalize_ids(std::move(request.file_ids));
         auto requested_folder_ids = normalize_ids(std::move(request.folder_ids));
 
-        std::unordered_map<uint64_t, FolderDeletePlan> folder_plans;
-        folder_plans.reserve(requested_folder_ids.size());
-        for (const auto folder_id : requested_folder_ids) {
-            try {
-                auto plan = co_await FetchFolderDeletePlan(m_db_client, folder_id, user_id);
-                if (!plan.has_value()) {
-                    LOG_WARN << "Folder not found or delete failed, skipping: folder_id=" << folder_id;
-                    continue;
-                }
-                folder_plans.emplace(folder_id, std::move(*plan));
-            } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "Folder plan fetch failed in delete, skipping: folder_id=" << folder_id
-                         << ", error=" << e.base().what();
-            }
-        }
+        std::unordered_map<uint64_t, FolderDeletePlan> folder_plans =
+            co_await FetchBatchFolderDeletePlans(m_db_client, requested_folder_ids, user_id);
 
         auto top_level_folder_ids = FilterCoveredFolderIds(requested_folder_ids, folder_plans);
         auto covered_file_ids = CollectCoveredFileIds(top_level_folder_ids, folder_plans);

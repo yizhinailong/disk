@@ -9,8 +9,10 @@
 
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <map>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
@@ -35,6 +37,13 @@ namespace disk {
 
             [[nodiscard]]
             auto GetAuthCpuWorkLoop() -> trantor::EventLoop*;
+
+            /// Start periodic AuthCpuPool metrics logging (call once at startup).
+            auto StartAuthCpuPoolMetricsTimer(int interval_seconds) -> void;
+
+            /// Get current AuthCpuPool active task count (for testing/observability).
+            [[nodiscard]]
+            auto GetAuthCpuPoolActiveTaskCount() -> size_t;
 
         } // namespace detail
     } // namespace services
@@ -135,6 +144,16 @@ namespace disk::services {
          * 应在应用启动后（beginning advice）调用一次。
          */
         auto StartCacheMaintenance() -> void;
+
+        /**
+         * @brief 启动 AuthCpuPool 监控定时器
+         *
+         * 在 Drogon 事件循环中注册周期性定时器，定期输出池使用统计。
+         * 应在应用启动后调用一次。
+         *
+         * @param interval_seconds 日志输出间隔（秒），默认 60
+         */
+        auto StartPoolMetricsTimer(int interval_seconds = 60) -> void;
 
         /**
          * @brief 验证访问令牌
@@ -385,7 +404,78 @@ namespace disk::services {
             std::chrono::steady_clock::time_point expires_at;
         };
 
+        /**
+         * @brief 时间排序双索引缓存
+         *
+         * 提供 O(1) 按键查找（unordered_map）和 O(expired_count) 过期驱逐（multimap 按过期时间排序）。
+         * 适用于读多写少的令牌撤销缓存场景。
+         */
+        template <typename Key, typename Entry>
+        class ExpiryCache {
+        public:
+            /// 插入或更新条目。若 key 已存在则先移除旧的时间索引。
+            auto Upsert(const Key& key, Entry entry) -> void {
+                auto old_it = m_by_key.find(key);
+                if (old_it != m_by_key.end()) {
+                    m_by_expiry.erase(old_it->second.expiry_it);
+                }
+                auto expiry_it = m_by_expiry.emplace(entry.expires_at, key);
+                m_by_key.emplace(key, Value{ std::move(entry), expiry_it });
+            }
+
+            /// 按键查找。返回 nullptr 表示未找到或已过期。
+            auto Find(const Key& key, std::chrono::steady_clock::time_point now) const -> const Entry* {
+                auto it = m_by_key.find(key);
+                if (it == m_by_key.end()) return nullptr;
+                if (it->second.entry.expires_at <= now) return nullptr;
+                return &it->second.entry;
+            }
+
+            /// 按键移除单条条目。返回 true 表示成功移除。
+            auto Erase(const Key& key) -> bool {
+                auto it = m_by_key.find(key);
+                if (it == m_by_key.end()) return false;
+                m_by_expiry.erase(it->second.expiry_it);
+                m_by_key.erase(it);
+                return true;
+            }
+
+            /// 驱逐所有过期条目。仅遍历过期部分，O(expired_count)。
+            auto EvictExpired(std::chrono::steady_clock::time_point now) -> size_t {
+                size_t evicted = 0;
+                auto it = m_by_expiry.begin();
+                while (it != m_by_expiry.end() && it->first <= now) {
+                    m_by_key.erase(it->second);
+                    it = m_by_expiry.erase(it);
+                    ++evicted;
+                }
+                return evicted;
+            }
+
+            /// 清空所有条目。
+            auto Clear() -> void {
+                m_by_key.clear();
+                m_by_expiry.clear();
+            }
+
+            /// 返回缓存条目数。
+            [[nodiscard]]
+            auto Size() const -> size_t {
+                return m_by_key.size();
+            }
+
+        private:
+            struct Value {
+                Entry entry;
+                typename std::multimap<std::chrono::steady_clock::time_point, Key>::iterator expiry_it;
+            };
+
+            std::unordered_map<Key, Value> m_by_key;
+            std::multimap<std::chrono::steady_clock::time_point, Key> m_by_expiry;
+        };
+
         auto EvictExpiredCacheEntries() const -> void;
+        auto LogPoolMetrics() -> void;
 
         std::string m_jwt_secret;
         JwtVerifier m_jwt_verifier;
@@ -393,9 +483,11 @@ namespace disk::services {
         drogon::nosql::RedisClientPtr m_redis_client;
         std::shared_ptr<RedisService> m_redis_service;
         mutable std::shared_mutex m_cache_mutex;
-        mutable std::unordered_map<std::string, RevocationCacheEntry> m_revocation_cache;
+        mutable ExpiryCache<std::string, RevocationCacheEntry> m_revocation_cache;
         mutable std::shared_mutex m_share_cache_mutex;
-        mutable std::unordered_map<std::string, ShareCacheEntry> m_share_revocation_cache;
+        mutable ExpiryCache<std::string, ShareCacheEntry> m_share_revocation_cache;
+
+        std::chrono::steady_clock::time_point m_metrics_last_reset{ std::chrono::steady_clock::now() };
     };
 
 } // namespace disk::services

@@ -9,7 +9,6 @@
 
 #include "ShareController.hpp"
 
-#include <filesystem>
 #include <memory>
 
 #include "DownloadResponder.hpp"
@@ -335,13 +334,7 @@ namespace disk::share {
                  << ", filename=" << download_info.filename << ", size=" << download_info.file_size
                  << ", storage_path=" << download_info.storage_path;
 
-        // 5. 检查文件是否存在
-        if (!std::filesystem::exists(download_info.storage_path)) {
-            LOG_ERROR << "File not found: " << download_info.storage_path;
-            co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "File not found"));
-        }
-
-        // 6. 委托共享下载响应构造
+        // 5. 委托共享下载响应构造
         auto resp = co_await BuildDownloadResponse(
             disk::controllers::DownloadParams{
                 .storage_path = download_info.storage_path,

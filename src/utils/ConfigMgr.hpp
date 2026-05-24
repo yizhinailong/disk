@@ -132,7 +132,7 @@ namespace disk::utils {
 
         /**
          * @brief 获取组装缓冲区大小（字节）
-         * @return uint32_t 缓冲区大小（默认 256KB）
+         * @return uint32_t 缓冲区大小（默认 1MB）
          */
         [[nodiscard]]
         auto GetAssembleBufferSizeBytes() const noexcept -> uint32_t;
@@ -200,7 +200,7 @@ namespace disk::utils {
         uint64_t m_max_file_size{ 10737418240 };
         int m_upload_task_expiry_seconds{ 86400 };
         uint32_t m_assembly_max_concurrent{ 4 };
-        uint32_t m_assemble_buffer_size_bytes{ 262144 };
+        uint32_t m_assemble_buffer_size_bytes{ 1048576 };
         int m_upload_rate_limit_per_minute{ 60 };
         uint32_t m_file_io_threads{ 0 };
 
