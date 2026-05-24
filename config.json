@@ -30,8 +30,8 @@
       "host": "127.0.0.1",
       "port": 5432,
       "dbname": "disk",
-      "user": "root",
-      "passwd": "",
+      "user": "postgres",
+      "passwd": "postgresql",
       "num_connection_number": 10
     }
   ],
