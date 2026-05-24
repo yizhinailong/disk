@@ -99,27 +99,6 @@ namespace disk::auth {
             -> drogon::Task<Result<void>>;
 
     private:
-        /**
-         * @brief 检查用户名是否已存在
-         * @param username 用户名
-         * @return drogon::Task<bool> 用户名是否存在
-         */
-        [[nodiscard]]
-        auto IsUsernameExists(std::string username) const -> drogon::Task<bool>;
-
-        /**
-         * @brief 检查邮箱是否已存在
-         * @param email 邮箱地址
-         * @return drogon::Task<bool> 邮箱是否已存在
-         */
-        [[nodiscard]]
-        auto IsEmailExists(std::string email) const -> drogon::Task<bool>;
-
-        /**
-         * @brief 用户模型转响应结构
-         * @param user 用户模型
-         * @return RegisterResponse 响应结构
-         */
         [[nodiscard]]
         static auto UserToResponse(const drogon_model::disk::Users& user) -> RegisterResponse;
 

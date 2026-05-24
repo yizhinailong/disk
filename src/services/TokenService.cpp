@@ -10,6 +10,7 @@
 #include "TokenService.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <functional>
 #include <thread>
 
@@ -27,6 +28,30 @@ namespace disk::services {
 
     namespace {
 
+        struct PoolMetrics {
+            std::atomic<size_t> active_tasks{0};
+            std::atomic<size_t> total_submitted{0};
+            std::atomic<size_t> total_completed{0};
+            std::atomic<size_t> peak_active{0};
+
+            auto OnSubmit() -> void {
+                const auto active = active_tasks.fetch_add(1, std::memory_order_relaxed) + 1;
+                total_submitted.fetch_add(1, std::memory_order_relaxed);
+
+                size_t current_peak = peak_active.load(std::memory_order_relaxed);
+                while (active > current_peak &&
+                       !peak_active.compare_exchange_weak(current_peak, active,
+                                                           std::memory_order_relaxed)) {}
+            }
+
+            auto OnComplete() -> void {
+                active_tasks.fetch_sub(1, std::memory_order_relaxed);
+                total_completed.fetch_add(1, std::memory_order_relaxed);
+            }
+        };
+
+        static PoolMetrics g_pool_metrics;
+
         auto CreateAuthCpuPool() -> trantor::EventLoopThreadPool* {
             const auto hardware_threads = std::max(1u, std::thread::hardware_concurrency());
             auto* pool = new trantor::EventLoopThreadPool(
@@ -34,6 +59,7 @@ namespace disk::services {
                 "AuthCpuPool"
             );
             pool->start();
+            LOG_INFO << "[auth_cpu_pool] created threads=" << hardware_threads;
             return pool;
         }
 
@@ -50,6 +76,14 @@ namespace disk::services {
         auto GetAuthCpuWorkLoop() -> trantor::EventLoop* {
             static auto* pool = CreateAuthCpuPool();
             return pool->getNextLoop();
+        }
+
+        auto StartAuthCpuPoolMetricsTimer(int interval_seconds) -> void {
+            TokenService::GetInstance()->StartPoolMetricsTimer(interval_seconds);
+        }
+
+        auto GetAuthCpuPoolActiveTaskCount() -> size_t {
+            return g_pool_metrics.active_tasks.load(std::memory_order_relaxed);
         }
 
     } // namespace detail
@@ -129,6 +163,17 @@ namespace disk::services {
     auto TokenService::VerifyAccessToken(const std::string& token) const
         -> Result<AccessTokenClaims> {
 
+        g_pool_metrics.OnSubmit();
+        const auto start = std::chrono::steady_clock::now();
+
+        auto cleanup = [start]() {
+            g_pool_metrics.OnComplete();
+            const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - start
+            ).count();
+            LOG_INFO << "[auth_cpu_pool] op=jwt_verify duration_us=" << elapsed_us;
+        };
+
         try {
             auto decoded = jwt::decode<JwtTraits>(token);
 
@@ -136,6 +181,7 @@ namespace disk::services {
 
             const auto type = decoded.get_payload_claim("type").as_string();
             if (type != "access") {
+                cleanup();
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenWrongType));
             }
 
@@ -155,18 +201,22 @@ namespace disk::services {
                 token_status = static_cast<int>(decoded.get_payload_claim("status").as_integer());
             }
 
+            cleanup();
+
             LOG_TRACE << "JWT verification successful: user_id=" << user_id
                       << ", username=" << username << ", jti=" << jti
                       << ", role=" << token_role << ", status=" << token_status;
             return AccessTokenClaims{ .user_id = user_id, .username = username, .jti = jti, .role = token_role, .status = token_status };
 
         } catch (const jwt::error::token_verification_exception& e) {
+            cleanup();
             LOG_WARN << "JWT verification failed: " << e.what();
             if (std::string(e.what()).find("expired") != std::string::npos) {
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenExpired));
             }
             return std::unexpected(ErrorInfo(disk::error::Code::InvalidToken));
         } catch (const std::exception& e) {
+            cleanup();
             LOG_WARN << "JWT parsing failed: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
@@ -175,6 +225,17 @@ namespace disk::services {
     auto TokenService::VerifyRefreshToken(const std::string& token) const
         -> Result<std::pair<uint64_t, std::string>> {
 
+        g_pool_metrics.OnSubmit();
+        const auto start = std::chrono::steady_clock::now();
+
+        auto cleanup = [start]() {
+            g_pool_metrics.OnComplete();
+            const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - start
+            ).count();
+            LOG_INFO << "[auth_cpu_pool] op=jwt_refresh_verify duration_us=" << elapsed_us;
+        };
+
         try {
             auto decoded = jwt::decode<JwtTraits>(token);
 
@@ -182,6 +243,7 @@ namespace disk::services {
 
             const auto type = decoded.get_payload_claim("type").as_string();
             if (type != "refresh") {
+                cleanup();
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenWrongType));
             }
 
@@ -190,17 +252,21 @@ namespace disk::services {
             const auto user_id_str = decoded.get_subject();
             const auto user_id = std::stoull(user_id_str);
 
+            cleanup();
+
             LOG_TRACE << "Refresh token verification successful: user_id=" << user_id
                       << ", jti=" << jti;
             return std::make_pair(user_id, jti);
 
         } catch (const jwt::error::token_verification_exception& e) {
+            cleanup();
             LOG_WARN << "Refresh token verification failed: " << e.what();
             if (std::string(e.what()).find("expired") != std::string::npos) {
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenExpired));
             }
             return std::unexpected(ErrorInfo(disk::error::Code::InvalidRefreshToken));
         } catch (const std::exception& e) {
+            cleanup();
             LOG_WARN << "Refresh token parsing failed: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
@@ -273,10 +339,10 @@ namespace disk::services {
         {
             const auto now = std::chrono::steady_clock::now();
             std::unique_lock lock(m_cache_mutex);
-            m_revocation_cache[jti] = RevocationCacheEntry{
+            m_revocation_cache.Upsert(jti, RevocationCacheEntry{
                 .is_revoked = true,
                 .expires_at = now + std::chrono::seconds(GetAccessTokenExpireSeconds())
-            };
+            });
         }
 
         const auto key = disk::redis::RedisKeyPrefix::BuildAccessTokenBlacklistKey(jti);
@@ -293,19 +359,15 @@ namespace disk::services {
 
         {
             std::shared_lock lock(m_cache_mutex);
-            auto it = m_revocation_cache.find(jti);
-            if (it != m_revocation_cache.end() && it->second.expires_at > now) {
-                co_return it->second.is_revoked;
+            auto* entry = m_revocation_cache.Find(jti, now);
+            if (entry != nullptr) {
+                co_return entry->is_revoked;
             }
         }
 
         {
             std::unique_lock lock(m_cache_mutex);
-            auto it = m_revocation_cache.find(jti);
-            if (it != m_revocation_cache.end() && it->second.expires_at <= now) {
-                // 仅擦除当前过期的单条目 — 不遍历整个缓存
-                m_revocation_cache.erase(it);
-            }
+            m_revocation_cache.Erase(jti);
         }
 
         const auto key = disk::redis::RedisKeyPrefix::BuildAccessTokenBlacklistKey(jti);
@@ -313,12 +375,12 @@ namespace disk::services {
 
         {
             std::unique_lock lock(m_cache_mutex);
-            m_revocation_cache[jti] = RevocationCacheEntry{
+            m_revocation_cache.Upsert(jti, RevocationCacheEntry{
                 .is_revoked = revoked,
                 .expires_at = now + std::chrono::seconds(
                                         revoked ? GetAccessTokenExpireSeconds() : GetNegativeCacheTtlSeconds()
                                     )
-            };
+            });
         }
 
         co_return revoked;
@@ -326,7 +388,7 @@ namespace disk::services {
 
     auto TokenService::ClearRevocationCache() -> void {
         std::unique_lock lock(m_cache_mutex);
-        m_revocation_cache.clear();
+        m_revocation_cache.Clear();
     }
 
     auto TokenService::SetRevocationCacheEntryForTest(
@@ -336,15 +398,15 @@ namespace disk::services {
     ) -> void {
         const auto now = std::chrono::steady_clock::now();
         std::unique_lock lock(m_cache_mutex);
-        m_revocation_cache[jti] = RevocationCacheEntry{
+        m_revocation_cache.Upsert(jti, RevocationCacheEntry{
             .is_revoked = is_revoked,
             .expires_at = now + std::chrono::seconds(ttl_seconds)
-        };
+        });
     }
 
     auto TokenService::GetRevocationCacheSizeForTest() const -> size_t {
         std::shared_lock lock(m_cache_mutex);
-        return m_revocation_cache.size();
+        return m_revocation_cache.Size();
     }
 
     auto TokenService::StartCacheMaintenance() -> void {
@@ -354,30 +416,69 @@ namespace disk::services {
         );
         LOG_DEBUG << "Revocation cache maintenance timer started (interval="
                   << CACHE_MAINTENANCE_INTERVAL_SECONDS << "s)";
+
+        const auto& json = drogon::app().getCustomConfig();
+        int metrics_interval = 60;
+        if (json.isMember("disk") && json["disk"].isMember("auth_cpu_pool_metrics_interval_seconds")) {
+            metrics_interval = json["disk"]["auth_cpu_pool_metrics_interval_seconds"].asInt();
+            if (metrics_interval <= 0) {
+                metrics_interval = 60;
+            }
+        }
+        StartPoolMetricsTimer(metrics_interval);
+    }
+
+    auto TokenService::StartPoolMetricsTimer(int interval_seconds) -> void {
+        m_metrics_last_reset = std::chrono::steady_clock::now();
+
+        drogon::app().getLoop()->runEvery(
+            static_cast<double>(interval_seconds),
+            [this]() { LogPoolMetrics(); }
+        );
+        LOG_INFO << "[auth_cpu_pool] TokenService metrics timer started interval_s="
+                 << interval_seconds;
+    }
+
+    auto TokenService::LogPoolMetrics() -> void {
+        const auto now = std::chrono::steady_clock::now();
+        const auto elapsed_s = std::chrono::duration_cast<std::chrono::seconds>(
+            now - m_metrics_last_reset
+        ).count();
+
+        const auto submitted = g_pool_metrics.total_submitted.exchange(0, std::memory_order_relaxed);
+        const auto completed = g_pool_metrics.total_completed.exchange(0, std::memory_order_relaxed);
+        const auto active = g_pool_metrics.active_tasks.load(std::memory_order_relaxed);
+        const auto peak = g_pool_metrics.peak_active.exchange(0, std::memory_order_relaxed);
+
+        LOG_INFO << "[auth_cpu_pool] period_s=" << elapsed_s
+                 << " jwt_submitted=" << submitted
+                 << " jwt_completed=" << completed
+                 << " active=" << active
+                 << " peak=" << peak;
+
+        m_metrics_last_reset = now;
     }
 
     auto TokenService::EvictExpiredCacheEntries() const -> void {
         const auto now = std::chrono::steady_clock::now();
+        size_t access_evicted = 0;
+        size_t access_remaining = 0;
         {
             std::unique_lock lock(m_cache_mutex);
-            for (auto it = m_revocation_cache.begin(); it != m_revocation_cache.end();) {
-                if (it->second.expires_at <= now) {
-                    it = m_revocation_cache.erase(it);
-                } else {
-                    ++it;
-                }
-            }
+            access_evicted = m_revocation_cache.EvictExpired(now);
+            access_remaining = m_revocation_cache.Size();
         }
+        size_t share_evicted = 0;
+        size_t share_remaining = 0;
         {
             std::unique_lock lock(m_share_cache_mutex);
-            for (auto it = m_share_revocation_cache.begin(); it != m_share_revocation_cache.end();) {
-                if (it->second.expires_at <= now) {
-                    it = m_share_revocation_cache.erase(it);
-                } else {
-                    ++it;
-                }
-            }
+            share_evicted = m_share_revocation_cache.EvictExpired(now);
+            share_remaining = m_share_revocation_cache.Size();
         }
+        LOG_DEBUG << "Cache eviction completed: access_evicted=" << access_evicted
+                  << " access_size=" << access_remaining
+                  << " share_evicted=" << share_evicted
+                  << " share_size=" << share_remaining;
     }
 
     auto TokenService::ExtractJti(const std::string& token) const -> Result<std::string> {
@@ -546,28 +647,25 @@ namespace disk::services {
     auto TokenService::IsShareTokenRevoked(const std::string& token_hash) -> drogon::Task<bool> {
         const auto now = std::chrono::steady_clock::now();
 
-        // 读锁：检查本地缓存（读多写少场景使用 shared_mutex）
         {
             std::shared_lock lock(m_share_cache_mutex);
-            auto it = m_share_revocation_cache.find(token_hash);
-            if (it != m_share_revocation_cache.end() && it->second.expires_at > now) {
-                co_return it->second.is_revoked;
+            auto* entry = m_share_revocation_cache.Find(token_hash, now);
+            if (entry != nullptr) {
+                co_return entry->is_revoked;
             }
         }
 
-        // 缓存未命中 → 回退到 Redis
         const auto key = disk::redis::RedisKeyPrefix::BuildShareTokenBlacklistKey(token_hash);
         const auto revoked = co_await m_redis_service->Exists(key);
 
-        // 写锁：更新缓存
         {
             std::unique_lock lock(m_share_cache_mutex);
-            m_share_revocation_cache[token_hash] = ShareCacheEntry{
+            m_share_revocation_cache.Upsert(token_hash, ShareCacheEntry{
                 .is_revoked = revoked,
                 .expires_at = now + std::chrono::seconds(
                                         revoked ? GetShareTokenExpireSeconds() : GetNegativeCacheTtlSeconds()
                                     )
-            };
+            });
         }
 
         co_return revoked;
@@ -580,20 +678,20 @@ namespace disk::services {
     ) -> void {
         const auto now = std::chrono::steady_clock::now();
         std::unique_lock lock(m_share_cache_mutex);
-        m_share_revocation_cache[token_hash] = ShareCacheEntry{
+        m_share_revocation_cache.Upsert(token_hash, ShareCacheEntry{
             .is_revoked = is_revoked,
             .expires_at = now + std::chrono::seconds(ttl_seconds)
-        };
+        });
     }
 
     auto TokenService::GetShareRevocationCacheSizeForTest() const -> size_t {
         std::shared_lock lock(m_share_cache_mutex);
-        return m_share_revocation_cache.size();
+        return m_share_revocation_cache.Size();
     }
 
     auto TokenService::ClearShareRevocationCache() -> void {
         std::unique_lock lock(m_share_cache_mutex);
-        m_share_revocation_cache.clear();
+        m_share_revocation_cache.Clear();
     }
 
 } // namespace disk::services

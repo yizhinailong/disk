@@ -14,6 +14,7 @@ set(TEST_SOURCES
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp
     services/FileUploadConsistency_test.cpp
+    services/UploadPath_test.cpp
     services/CompleteUploadSingleflight_test.cpp
     services/FileServiceAtomicity_test.cpp
     services/FileServiceBatch_test.cpp
@@ -34,6 +35,11 @@ set(TEST_SOURCES
     filters/AdminAuthFilter_test.cpp
     filters/ShareAuthFilter_test.cpp
     filters/JwtAuthFilter_test.cpp
+    filters/RegisterRateLimit_test.cpp
+    filters/DownloadRateLimit_test.cpp
+    filters/SharePublicRateLimit_test.cpp
+    filters/AdminRateLimit_test.cpp
+    filters/FolderRateLimit_test.cpp
     dtos/AdminDto_test.cpp
     dtos/AuthDto_test.cpp
     dtos/FileDto_test.cpp
@@ -42,9 +48,17 @@ set(TEST_SOURCES
     dtos/TrashDto_test.cpp
     dtos/UserDto_test.cpp
     storage/AssemblyWorkerPool_test.cpp
+    storage/AssemblyPerf_test.cpp
+    controllers/DownloadResponder_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/controllers/DownloadResponder.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/ShareAuthFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/RegisterRateLimitFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/DownloadRateLimitFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/SharePublicRateLimitFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/AdminRateLimitFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/FolderRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/StorageMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/models/FileContents.cpp
@@ -59,7 +73,17 @@ add_executable(disk-test ${TEST_SOURCES})
 set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminAuthFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/RegisterRateLimitFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/DownloadRateLimitFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/SharePublicRateLimitFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/AdminRateLimitFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/FolderRateLimitFilter.cpp
     filters/AdminAuthFilter_test.cpp
+    filters/RegisterRateLimit_test.cpp
+    filters/DownloadRateLimit_test.cpp
+    filters/SharePublicRateLimit_test.cpp
+    filters/AdminRateLimit_test.cpp
+    filters/FolderRateLimit_test.cpp
     PROPERTIES COMPILE_FLAGS "-include drogon/HttpAppFramework.h"
 )
 

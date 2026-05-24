@@ -23,6 +23,14 @@ namespace disk::controllers {
 
     namespace {
         constexpr std::size_t DOWNLOAD_STREAM_CHUNK_BYTES = 64ULL * 1024ULL;
+
+        /// sendfile 零拷贝阈值（256KB）。Drogon 内部对 >200KB 的文件使用 sendfile()，
+        /// 此阈值确保路由到 newFileResponse 路径时一定命中 sendfile 分支。
+        /// HTTPS 场景下 Drogon 的 newFileResponse 会自动从 sendfile 回退到 read+write
+        /// （TLS 连接不支持 sendfile），因此无需显式 isOnSecureConnection() 检测。
+        /// 大文件仍走 newFileResponse 路径，享受 Drogon 的内部 TLS 回退机制；
+        /// 小文件走 newStreamResponse 流式路径，减少内存占用。
+        constexpr std::size_t SENDFILE_THRESHOLD_BYTES = 256ULL * 1024ULL;
     }
 
     auto BuildDownloadResponse(
@@ -66,7 +74,62 @@ namespace disk::controllers {
         uint64_t end = range_request.has_range ? range_request.end : file_size - 1;
         uint64_t content_length = end - start + 1;
 
-        // 打开文件流
+        // ================================================================
+        // Path A: newFileResponse — sendfile 零拷贝路径
+        // ================================================================
+        // 当传输内容 >= sendfile 阈值时，使用 Drogon 内置的 newFileResponse，
+        // 由 sendfile() 系统调用完成零拷贝传输，避免用户态 read/write 拷贝。
+        if (content_length >= SENDFILE_THRESHOLD_BYTES) {
+            // 检查文件是否存在
+            auto exists_result = co_await storage->Exists(params.storage_path);
+            if (!exists_result || !*exists_result) {
+                co_return Response::Error(
+                    ErrorInfo(ErrorCode::FileNotFound, "File not found")
+                );
+            }
+
+            drogon::HttpResponsePtr resp;
+
+            if (range_request.has_range) {
+                // Range 请求 → Drogon 自动设置 206 + Content-Range
+                resp = drogon::HttpResponse::newFileResponse(
+                    params.storage_path,
+                    static_cast<size_t>(start),
+                    static_cast<size_t>(content_length),
+                    true,  // setContentRange
+                    params.filename,
+                    drogon::CT_CUSTOM,
+                    params.mime_type
+                );
+                LOG_INFO << "Sending partial content via sendfile: start=" << start
+                         << ", end=" << end << ", total=" << file_size;
+            } else {
+                // 全文件下载 → Drogon 自动设置 200
+                resp = drogon::HttpResponse::newFileResponse(
+                    params.storage_path,
+                    params.filename,
+                    drogon::CT_CUSTOM,
+                    params.mime_type
+                );
+                LOG_INFO << "Sending full file via sendfile: size=" << file_size;
+            }
+
+            // 补充 newFileResponse 未设置的响应头
+            resp->addHeader("Accept-Ranges", "bytes");
+            resp->addHeader(
+                "Content-Disposition", "attachment; filename=\"" + params.filename + "\""
+            );
+            if (!params.file_hash.empty()) {
+                resp->addHeader("ETag", "\"" + params.file_hash + "\"");
+            }
+
+            co_return resp;
+        }
+
+        // ================================================================
+        // Path B: newStreamResponse — 流式下载路径（备用）
+        // ================================================================
+        // 适用于小文件或需要显式流控制的场景。保留作为 sendfile 不可用时的回退。
         auto open_result = co_await storage->OpenForRead(params.storage_path);
         if (!open_result) {
             LOG_ERROR << "Cannot open file: " << params.storage_path;
@@ -75,11 +138,12 @@ namespace disk::controllers {
         auto file = std::move(*open_result);
         if (start > static_cast<uint64_t>(std::numeric_limits<std::streamoff>::max())) {
             LOG_ERROR << "Range start exceeds stream offset limit: " << start;
-            co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "Invalid request range"));
+            co_return Response::Error(
+                ErrorInfo(ErrorCode::ValidationFailed, "Invalid request range")
+            );
         }
         file->seekg(static_cast<std::streamoff>(start));
 
-        // (b)(c) 构造流式响应（206 或 200）
         auto remaining = std::make_shared<uint64_t>(content_length);
         auto resp = drogon::HttpResponse::newStreamResponse(
             [file, remaining](char* buffer, std::size_t suggested_length) -> std::size_t {

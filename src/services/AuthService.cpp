@@ -9,49 +9,24 @@
 
 #include "AuthService.hpp"
 
-#include <functional>
-#include <type_traits>
+#include <json/writer.h>
 
 #include <drogon/utils/coroutine.h>
-#include <json/writer.h>
 
 #include "dtos/AuthDto.hpp"
 #include "models/OperationLogs.hpp"
 #include "services/TokenService.hpp"
+#include "utils/AuthCpuPool.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/HashUtil.hpp"
 #include "utils/RedisKeyPrefix.hpp"
 
 namespace disk::auth {
 
-    namespace {
-
-        template <typename Func>
-        auto RunOnAuthCpuPool(Func func)
-            -> drogon::Task<std::remove_cvref_t<std::invoke_result_t<Func&>>> {
-            using ReturnType = std::remove_cvref_t<std::invoke_result_t<Func&>>;
-
-            auto* resume_loop = trantor::EventLoop::getEventLoopOfCurrentThread();
-            auto result = co_await drogon::queueInLoopCoro<ReturnType>(
-                disk::services::detail::GetAuthCpuWorkLoop(),
-                std::function<ReturnType()>([func = std::move(func)]() mutable -> ReturnType {
-                    return func();
-                })
-            );
-
-            if (resume_loop != nullptr &&
-                resume_loop != trantor::EventLoop::getEventLoopOfCurrentThread()) {
-                co_await drogon::switchThreadCoro(resume_loop);
-            }
-
-            co_return result;
-        }
-
-    } // namespace
-
     using disk::services::TokenService;
     using disk::utils::ConfigMgr;
     using disk::utils::HashUtil;
+    using disk::utils::RunOnAuthCpuPool;
     using drogon::orm::CompareOperator;
     using drogon::orm::CoroMapper;
     using drogon::orm::Criteria;
@@ -71,19 +46,39 @@ namespace disk::auth {
     auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {
         LOG_DEBUG << "Starting user registration: " << request.username;
 
-        // 1. 检查用户名是否已存在
-        if (co_await IsUsernameExists(request.username)) {
-            LOG_WARN << "Username already exists: " << request.username;
-            co_return std::unexpected(ErrorInfo(ErrorCode::UsernameExists));
+        // 1. 检查用户名和邮箱是否已存在（单次查询）
+        try {
+            auto result = co_await m_db_client->execSqlCoro(
+                "SELECT "
+                "  COUNT(CASE WHEN username = $1 THEN 1 END) AS username_count, "
+                "  COUNT(CASE WHEN email = $2 THEN 1 END) AS email_count "
+                "FROM users",
+                request.username,
+                request.email
+            );
+
+            if (!result.empty()) {
+                auto username_count = result[0]["username_count"].as<int>();
+                auto email_count = result[0]["email_count"].as<int>();
+
+                if (username_count > 0) {
+                    LOG_WARN << "Username already exists: " << request.username;
+                    co_return std::unexpected(ErrorInfo(ErrorCode::UsernameExists));
+                }
+
+                if (email_count > 0) {
+                    LOG_WARN << "Email already exists: " << request.email.substr(0, 3) << "***@***";
+                    co_return std::unexpected(ErrorInfo(ErrorCode::EmailExists));
+                }
+            }
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Uniqueness check failed: " << request.username << " - " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Registration failed, please try again later")
+            );
         }
 
-        // 2. 检查邮箱是否已存在
-        if (co_await IsEmailExists(request.email)) {
-            LOG_WARN << "Email already exists: " << request.email.substr(0, 3) << "***@***";
-            co_return std::unexpected(ErrorInfo(ErrorCode::EmailExists));
-        }
-
-        // 3. 加密密码（使用 libsodium Argon2id）
+        // 2. 加密密码（使用 libsodium Argon2id）
         LOG_DEBUG << "Starting password hash: " << request.username;
         auto hash_result = co_await RunOnAuthCpuPool(
             [password = std::move(request.password)]() {
@@ -96,7 +91,7 @@ namespace disk::auth {
         }
         LOG_DEBUG << "Password hash completed: " << request.username;
 
-        // 4. 创建用户记录
+        // 3. 创建用户记录
         Users user;
         user.setUsername(request.username);
         user.setEmail(request.email);
@@ -107,7 +102,7 @@ namespace disk::auth {
         user.setStatus(1); // 正常状态
         user.setLoginAttempts(0);
 
-        // 5. 插入数据库
+        // 4. 插入数据库
         try {
             CoroMapper<Users> mapper(m_db_client);
             user = co_await mapper.insert(user);
@@ -121,7 +116,7 @@ namespace disk::auth {
             );
         }
 
-        // 6. 返回用户信息
+        // 5. 返回用户信息
         auto response = UserToResponse(user);
         LOG_INFO << "User registration process completed: " << response.username
                  << " (ID: " << response.id << ")";
@@ -336,32 +331,6 @@ namespace disk::auth {
         co_return {};
     }
 
-    auto AuthService::IsUsernameExists(std::string username) const -> drogon::Task<bool> {
-        try {
-            CoroMapper<Users> mapper(m_db_client);
-            auto count = co_await mapper.count(Criteria(Users::Cols::_username, username));
-            LOG_DEBUG << "Check username existence: " << username << " - "
-                      << (count > 0 ? "exists" : "not found");
-            co_return count > 0;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Check username failed: " << username << " - " << e.base().what();
-            co_return false;
-        }
-    }
-
-    auto AuthService::IsEmailExists(std::string email) const -> drogon::Task<bool> {
-        try {
-            CoroMapper<Users> mapper(m_db_client);
-            auto count = co_await mapper.count(Criteria(Users::Cols::_email, email));
-            LOG_DEBUG << "Check email existence: " << email.substr(0, 3) << "***@***" << " - "
-                      << (count > 0 ? "exists" : "not found");
-            co_return count > 0;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Check email failed: " << email << " - " << e.base().what();
-            co_return false;
-        }
-    }
-
     auto AuthService::UserToResponse(const Users& user) -> RegisterResponse {
         RegisterResponse response;
         response.id = user.getValueOfId();
@@ -375,35 +344,29 @@ namespace disk::auth {
     }
 
     auto AuthService::FindUser(std::string account) const -> drogon::Task<Result<Users>> {
-
         try {
-            CoroMapper<Users> mapper(m_db_client);
-
-            auto by_username = co_await mapper.findOne(
-                Criteria(Users::Cols::_username, CompareOperator::EQ, account)
+            auto result = co_await m_db_client->execSqlCoro(
+                "SELECT id, username, email, password_hash, nickname, avatar, "
+                "storage_quota, storage_used, storage_reserved, status, role, "
+                "login_attempts, locked_until, last_login_at, last_login_ip, "
+                "created_at, updated_at "
+                "FROM users WHERE username = $1 OR email = $1 LIMIT 1",
+                account
             );
-            LOG_DEBUG << "Found user by username: " << account;
-            co_return by_username;
+
+            if (result.empty()) {
+                LOG_WARN << "User not found: " << account;
+                co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
+            }
+
+            Users user(result[0], -1);
+            LOG_DEBUG << "Found user: " << account;
+            co_return user;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_DEBUG << "Username lookup failed: " << account;
+            LOG_WARN << "User lookup failed: " << account << " - " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
         }
-
-        try {
-            CoroMapper<Users> mapper(m_db_client);
-
-            auto by_email = co_await mapper.findOne(
-                Criteria(Users::Cols::_email, CompareOperator::EQ, account)
-            );
-            LOG_DEBUG << "Found user by email: " << account;
-            co_return by_email;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_DEBUG << "Email lookup failed: " << account;
-        }
-
-        LOG_WARN << "User not found: " << account;
-        co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
     }
 
     auto AuthService::CheckAccountLocked(const Users& user) const -> bool {

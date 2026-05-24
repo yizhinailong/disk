@@ -10,41 +10,16 @@
 #include "JwtAuthFilter.hpp"
 
 #include <chrono>
-#include <functional>
-#include <type_traits>
 
 #include <drogon/utils/coroutine.h>
 
+#include "utils/AuthCpuPool.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::filters {
 
-    namespace {
-
-        template <typename Func>
-        auto RunOnAuthCpuPool(Func func)
-            -> drogon::Task<std::remove_cvref_t<std::invoke_result_t<Func&>>> {
-            using ReturnType = std::remove_cvref_t<std::invoke_result_t<Func&>>;
-
-            auto* resume_loop = trantor::EventLoop::getEventLoopOfCurrentThread();
-            auto result = co_await drogon::queueInLoopCoro<ReturnType>(
-                disk::services::detail::GetAuthCpuWorkLoop(),
-                std::function<ReturnType()>([func = std::move(func)]() mutable -> ReturnType {
-                    return func();
-                })
-            );
-
-            if (resume_loop != nullptr &&
-                resume_loop != trantor::EventLoop::getEventLoopOfCurrentThread()) {
-                co_await drogon::switchThreadCoro(resume_loop);
-            }
-
-            co_return result;
-        }
-
-    } // namespace
-
     using disk::services::TokenService;
+    using disk::utils::RunOnAuthCpuPool;
 
     auto JwtAuthFilter::doFilter(const drogon::HttpRequestPtr& request)
         -> drogon::Task<drogon::HttpResponsePtr> {
