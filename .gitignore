@@ -8,3 +8,4 @@ CMakeUserPresets.json
 .qtcreator
 output
 .claude/worktrees
+.omc/
