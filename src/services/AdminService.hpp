@@ -189,6 +189,22 @@ namespace disk::services {
             -> drogon::Task<Result<admin::SystemStatusResponse>>;
 
         /**
+         * @brief 获取操作日志列表
+         *
+         * 业务规则：
+         * - 支持按 action、start_date、end_date 筛选
+         * - 按 created_at DESC 排序
+         * - 支持分页，自动计算 total_pages
+         * - 返回所有用户的操作日志（系统级）
+         *
+         * @param req 日志列表请求参数
+         * @return drogon::Task<Result<admin::AdminLogListResponse>> 日志列表响应
+         */
+        [[nodiscard]]
+        auto GetAdminLogs(const admin::AdminLogListRequest& req)
+            -> drogon::Task<Result<admin::AdminLogListResponse>>;
+
+        /**
          * @brief 强制取消分享
          *
          * 业务规则：

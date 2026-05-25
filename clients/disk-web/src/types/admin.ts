@@ -1,5 +1,4 @@
-import type { PaginationParams, PaginatedData } from './api';
-import type { ShareFile } from './share';
+import type { Pagination, PaginationParams, PaginatedData } from './api';
 
 // ==================== 管理员 - 用户管理 ====================
 
@@ -15,8 +14,6 @@ export interface AdminUserItem {
   readonly role: number;
   readonly storage_used: number;
   readonly storage_quota: number;
-  readonly file_count: number;
-  readonly folder_count: number;
   readonly created_at: string;
   readonly updated_at: string;
 }
@@ -47,8 +44,6 @@ export interface AdminUserDetailResponse {
   readonly role: number;
   readonly storage_used: number;
   readonly storage_quota: number;
-  readonly file_count: number;
-  readonly folder_count: number;
   readonly created_at: string;
   readonly updated_at: string;
 }
@@ -63,7 +58,6 @@ export interface AdminChangeStatusRequest {
 export interface AdminChangeStatusResponse {
   readonly id: number;
   readonly status: number;
-  readonly updated_at: string;
 }
 
 /** 修改用户角色请求 */
@@ -76,14 +70,12 @@ export interface AdminChangeRoleRequest {
 export interface AdminChangeRoleResponse {
   readonly id: number;
   readonly role: number;
-  readonly updated_at: string;
 }
 
 /** 删除用户响应 */
 export interface AdminDeleteUserResponse {
   readonly id: number;
   readonly status: number;
-  readonly updated_at: string;
 }
 
 // ==================== 管理员 - 存储统计 ====================
@@ -92,30 +84,27 @@ export interface AdminDeleteUserResponse {
 export interface AdminStorageStatsResponse {
   readonly total_users: number;
   readonly total_files: number;
-  readonly total_folders: number;
-  readonly total_size: number;
-  readonly user_count: number;
-  readonly active_user_count: number;
+  readonly total_storage_used: number;
+  readonly total_storage_quota: number;
+  readonly active_shares: number;
 }
 
 // ==================== 管理员 - 分享管理 ====================
 
 /** 管理员分享列表项 */
 export interface AdminShareItem {
-  readonly share_id: string;
+  readonly id: number;
   readonly user_id: number;
   readonly username: string;
+  readonly file_id: number;
   readonly file_name: string;
-  readonly file_count: number;
-  readonly share_link: string;
-  readonly has_password: boolean;
-  readonly permission: string;
-  readonly view_count: number;
-  readonly download_count: number;
-  readonly created_at: string;
-  readonly expires_at: string;
+  readonly share_code: string;
   /** 0/1/2 */
   readonly status: number;
+  readonly access_count: number;
+  readonly password_set: boolean;
+  readonly created_at: string;
+  readonly expires_at: string;
 }
 
 /** 管理员分享列表查询参数 */
@@ -133,67 +122,42 @@ export interface AdminShareListResponse extends PaginatedData<AdminShareItem> {}
 
 /** 管理员分享详情响应 */
 export interface AdminShareDetailResponse {
-  readonly share_id: string;
+  readonly id: number;
   readonly user_id: number;
   readonly username: string;
-  readonly files: readonly ShareFile[];
-  readonly share_link: string;
-  readonly has_password: boolean;
-  readonly permission: string;
-  readonly view_count: number;
-  readonly download_count: number;
+  readonly file_id: number;
+  readonly file_name: string;
+  readonly share_code: string;
+  /** 0/1/2 */
+  readonly status: number;
+  readonly access_count: number;
+  readonly password_set: boolean;
   readonly created_at: string;
   readonly expires_at: string;
-  readonly status: string;
 }
 
 /** 管理员删除分享响应 */
-export interface AdminDeleteShareResponse {
-  readonly share_id: string;
-  readonly status: string;
-  readonly updated_at: string;
-}
+export interface AdminDeleteShareResponse {}
 
 // ==================== 管理员 - 概览统计 ====================
 
 /** 管理员概览统计响应 */
 export interface AdminStatsOverviewResponse {
-  readonly user_count: number;
-  readonly file_count: number;
-  readonly storage_size: number;
-  readonly share_count: number;
-  readonly active_share_count: number;
-  readonly storage_quota: number;
-}
-
-/** MySQL 连接状态 */
-export interface MysqlStatus {
-  readonly connected: boolean;
-  readonly connection_count: number;
-  readonly latency_ms: number;
-}
-
-/** Redis 连接状态 */
-export interface RedisStatus {
-  readonly connected: boolean;
-  readonly latency_ms: number;
-}
-
-/** 磁盘使用状态 */
-export interface DiskUsage {
-  readonly total: number;
-  readonly used: number;
-  readonly free: number;
-  readonly percentage: number;
+  readonly total_users: number;
+  readonly total_files: number;
+  readonly total_storage_used: number;
+  readonly total_storage_quota: number;
+  readonly active_shares: number;
 }
 
 /** 管理员系统状态响应 */
 export interface AdminStatsSystemResponse {
-  readonly uptime: number;
-  readonly version: string;
-  readonly mysql: MysqlStatus;
-  readonly redis: RedisStatus;
-  readonly disk: DiskUsage;
+  readonly db_connected: boolean;
+  readonly redis_connected: boolean;
+  readonly disk_total: number;
+  readonly disk_used: number;
+  readonly disk_free: number;
+  readonly uptime_seconds: number;
 }
 
 // ==================== 系统与日志 ====================
@@ -266,4 +230,29 @@ export interface LogsResponse {
   readonly total: number;
   readonly page: number;
   readonly page_size: number;
+}
+
+/** 管理员操作日志条目 */
+export interface AdminLogItem {
+  readonly id: number;
+  readonly user_id: number;
+  readonly action: string;
+  readonly target_type: string;
+  readonly target_id?: number;
+  readonly details?: string;
+  readonly ip_address: string;
+  readonly created_at: string;
+}
+
+/** 管理员操作日志列表响应 */
+export interface AdminLogListResponse {
+  readonly items: readonly AdminLogItem[];
+  readonly pagination: Pagination;
+}
+
+/** 管理员操作日志查询参数 */
+export interface AdminLogListQuery extends PaginationParams {
+  readonly action?: string;
+  readonly start_date?: string;
+  readonly end_date?: string;
 }

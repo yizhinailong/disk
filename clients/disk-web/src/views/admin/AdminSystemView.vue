@@ -26,7 +26,7 @@
               <div class="stat-card__body">
                 <span class="stat-card__label">总用户数</span>
                 <span class="stat-card__value">
-                  {{ overview?.user_count ?? '-' }}
+                  {{ overview?.total_users ?? '-' }}
                 </span>
               </div>
             </div>
@@ -40,7 +40,7 @@
               <div class="stat-card__body">
                 <span class="stat-card__label">总文件数</span>
                 <span class="stat-card__value">
-                  {{ overview?.file_count ?? '-' }}
+                  {{ overview?.total_files ?? '-' }}
                 </span>
               </div>
             </div>
@@ -55,8 +55,8 @@
                 <span class="stat-card__label">存储总量</span>
                 <span class="stat-card__value">
                   <SizeDisplay
-                    v-if="overview?.storage_size != null"
-                    :bytes="overview.storage_size"
+                    v-if="overview?.total_storage_used != null"
+                    :bytes="overview.total_storage_used"
                   />
                   <template v-else>-</template>
                 </span>
@@ -72,7 +72,7 @@
               <div class="stat-card__body">
                 <span class="stat-card__label">分享总数</span>
                 <span class="stat-card__value">
-                  {{ overview?.share_count ?? '-' }}
+                  {{ overview?.active_shares ?? '-' }}
                 </span>
               </div>
             </div>
@@ -92,46 +92,26 @@
             </div>
             <div class="status-card__body">
               <div class="status-row">
-                <span class="status-row__label">版本</span>
-                <span class="status-row__value">
-                  {{ system?.version ?? '-' }}
-                </span>
-              </div>
-              <div class="status-row">
                 <span class="status-row__label">运行时间</span>
                 <span class="status-row__value">
-                  {{ formatUptime(system?.uptime) }}
+                  {{ formatUptime(system?.uptime_seconds) }}
                 </span>
               </div>
             </div>
           </div>
 
-          <!-- MySQL -->
+          <!-- Database -->
           <div class="status-card">
             <div class="status-card__header">
               <el-icon><Coin /></el-icon>
-              <span>MySQL</span>
+              <span>数据库</span>
               <el-tag
                 size="small"
-                :type="system?.mysql?.connected ? 'success' : 'danger'"
+                :type="system?.db_connected ? 'success' : 'danger'"
                 class="status-tag"
               >
-                {{ system?.mysql?.connected ? '已连接' : '未连接' }}
+                {{ system?.db_connected ? '已连接' : '未连接' }}
               </el-tag>
-            </div>
-            <div class="status-card__body">
-              <div class="status-row">
-                <span class="status-row__label">延迟</span>
-                <span class="status-row__value">
-                  {{ system?.mysql?.latency_ms != null ? `${system.mysql.latency_ms} ms` : '-' }}
-                </span>
-              </div>
-              <div class="status-row">
-                <span class="status-row__label">连接数</span>
-                <span class="status-row__value">
-                  {{ system?.mysql?.connection_count ?? '-' }}
-                </span>
-              </div>
             </div>
           </div>
 
@@ -142,19 +122,11 @@
               <span>Redis</span>
               <el-tag
                 size="small"
-                :type="system?.redis?.connected ? 'success' : 'danger'"
+                :type="system?.redis_connected ? 'success' : 'danger'"
                 class="status-tag"
               >
-                {{ system?.redis?.connected ? '已连接' : '未连接' }}
+                {{ system?.redis_connected ? '已连接' : '未连接' }}
               </el-tag>
-            </div>
-            <div class="status-card__body">
-              <div class="status-row">
-                <span class="status-row__label">延迟</span>
-                <span class="status-row__value">
-                  {{ system?.redis?.latency_ms != null ? `${system.redis.latency_ms} ms` : '-' }}
-                </span>
-              </div>
             </div>
           </div>
 
@@ -166,7 +138,7 @@
             </div>
             <div class="status-card__body">
               <el-progress
-                :percentage="system?.disk?.percentage ?? 0"
+                :percentage="diskPercentage"
                 :stroke-width="12"
                 :color="diskColor"
                 class="disk-progress"
@@ -174,9 +146,9 @@
               <div class="status-row">
                 <span class="status-row__label">已用 / 总量</span>
                 <span class="status-row__value">
-                  <template v-if="system?.disk">
-                    <SizeDisplay :bytes="system.disk.used" /> /
-                    <SizeDisplay :bytes="system.disk.total" />
+                  <template v-if="system">
+                    <SizeDisplay :bytes="system.disk_used" /> /
+                    <SizeDisplay :bytes="system.disk_total" />
                   </template>
                   <template v-else>-</template>
                 </span>
@@ -184,7 +156,7 @@
               <div class="status-row">
                 <span class="status-row__label">可用空间</span>
                 <span class="status-row__value">
-                  <SizeDisplay v-if="system?.disk" :bytes="system.disk.free" />
+                  <SizeDisplay v-if="system" :bytes="system.disk_free" />
                   <template v-else>-</template>
                 </span>
               </div>
@@ -208,9 +180,9 @@
           <el-col :xs="12" :sm="8" :md="4">
             <div class="mini-stat">
               <span class="mini-stat__value">
-                {{ storage?.active_user_count ?? '-' }}
+                {{ storage?.active_shares ?? '-' }}
               </span>
-              <span class="mini-stat__label">活跃用户</span>
+              <span class="mini-stat__label">活跃分享</span>
             </div>
           </el-col>
           <el-col :xs="12" :sm="8" :md="4">
@@ -224,17 +196,9 @@
           <el-col :xs="12" :sm="8" :md="4">
             <div class="mini-stat">
               <span class="mini-stat__value">
-                {{ storage?.total_folders ?? '-' }}
-              </span>
-              <span class="mini-stat__label">总目录</span>
-            </div>
-          </el-col>
-          <el-col :xs="12" :sm="8" :md="4">
-            <div class="mini-stat">
-              <span class="mini-stat__value">
                 <SizeDisplay
-                  v-if="storage?.total_size != null"
-                  :bytes="storage.total_size"
+                  v-if="storage?.total_storage_used != null"
+                  :bytes="storage.total_storage_used"
                 />
                 <template v-else>-</template>
               </span>
@@ -244,9 +208,13 @@
           <el-col :xs="12" :sm="8" :md="4">
             <div class="mini-stat">
               <span class="mini-stat__value">
-                {{ storage?.user_count ?? '-' }}
+                <SizeDisplay
+                  v-if="storage?.total_storage_quota != null"
+                  :bytes="storage.total_storage_quota"
+                />
+                <template v-else>-</template>
               </span>
-              <span class="mini-stat__label">已注册用户</span>
+              <span class="mini-stat__label">总配额</span>
             </div>
           </el-col>
         </el-row>
@@ -301,8 +269,13 @@ function formatUptime(seconds?: number): string {
   return parts.join(' ')
 }
 
+const diskPercentage = computed(() => {
+  if (!system.value || system.value.disk_total === 0) return 0
+  return Math.round((system.value.disk_used / system.value.disk_total) * 100)
+})
+
 const diskColor = computed(() => {
-  const pct = system.value?.disk?.percentage ?? 0
+  const pct = diskPercentage.value
   if (pct >= 90) return '#f56c6c'
   if (pct >= 70) return '#e6a23c'
   return '#67c23a'

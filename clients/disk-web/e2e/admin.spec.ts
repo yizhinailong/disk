@@ -43,21 +43,11 @@ test.describe('Admin Panel', () => {
       await expect(page.locator(AdminSelectors.adminTag)).toHaveText('管理员')
     })
 
-    test('user dropdown shows "返回网盘" and "退出登录"', async ({ page }) => {
+    test('user dropdown shows only "退出登录"', async ({ page }) => {
       await page.locator('.header-user').click()
-      await expect(page.getByRole('menuitem', { name: '返回网盘' })).toBeVisible()
       await expect(page.getByRole('menuitem', { name: '退出登录' })).toBeVisible()
-    })
-
-    test('back button navigates to drive', async ({ page }) => {
-      await page.locator('.back-btn').click()
-      await expect(page).toHaveURL(/\/drive/)
-    })
-
-    test('"返回网盘" dropdown item navigates to drive', async ({ page }) => {
-      await page.locator('.header-user').click()
-      await page.getByRole('menuitem', { name: '返回网盘' }).click()
-      await expect(page).toHaveURL(/\/drive/)
+      // "返回网盘" was removed from admin layout
+      await expect(page.getByRole('menuitem', { name: '返回网盘' })).not.toBeVisible()
     })
   })
 
@@ -194,7 +184,7 @@ test.describe('Admin Panel', () => {
     })
 
     test('"强制取消" button shows confirmation dialog', async ({ page }) => {
-      // NOTE: Mock shares with active status (status=0) to show cancel button.
+      // NOTE: Mock shares with active status (status=1) to show cancel button.
       const cancelBtn = page.getByText('强制取消')
       if (await cancelBtn.first().isVisible()) {
         await cancelBtn.first().click()
@@ -214,7 +204,7 @@ test.describe('Admin Panel', () => {
 
   test.describe('Admin Logs', () => {
     test.beforeEach(async ({ page }) => {
-      // NOTE: Mock GET /api/admin/logs (via listLogs in admin store) with sample log data.
+      // NOTE: Mock GET /api/admin/logs (via fetchAdminLogs in admin store) with sample log data.
       await loginViaUI(page, TEST_ADMIN.username, TEST_ADMIN.password)
       await navigateTo(page, Routes.adminLogs)
     })
@@ -263,14 +253,23 @@ test.describe('Admin Panel', () => {
       await page.getByText('上传').click()
       await page.waitForLoadState('networkidle')
     })
+
+    test('logs table shows user_id column', async ({ page }) => {
+      const table = page.locator(AdminLogsSelectors.table)
+      await expect(table.locator('th').filter({ hasText: '目标ID' })).toBeVisible()
+    })
+
+    test('logs data comes from /api/admin/logs endpoint', async ({ page }) => {
+      await expect(page.locator(AdminLogsSelectors.table + ' tbody tr')).toHaveCount.greaterThan(0)
+    })
   })
 
   test.describe('Admin System Monitoring', () => {
     test.beforeEach(async ({ page }) => {
       // NOTE: Mock all three system endpoints:
-      //   GET /api/admin/stats/overview → { user_count, file_count, storage_size, share_count }
-      //   GET /api/admin/stats/system → { version, uptime, mysql, redis, disk }
-      //   GET /api/admin/storage/stats → { total_users, active_user_count, total_files, total_folders, total_size }
+      //   GET /api/admin/stats/overview → { total_users, total_files, total_storage_used, active_shares }
+      //   GET /api/admin/stats/system → { db_connected, redis_connected, disk_total, disk_used, disk_free, uptime_seconds }
+      //   GET /api/admin/storage/stats → { total_users, total_files, total_storage_used, total_storage_quota, active_shares }
       await loginViaUI(page, TEST_ADMIN.username, TEST_ADMIN.password)
       await navigateTo(page, Routes.adminSystem)
     })
@@ -303,10 +302,10 @@ test.describe('Admin Panel', () => {
       await expect(statusCards).toHaveCount(4)
     })
 
-    test('MySQL status shows connected/disconnected tag', async ({ page }) => {
-      const mysqlSection = page.locator(AdminSystemSelectors.statusCard).filter({ hasText: 'MySQL' })
-      await expect(mysqlSection).toBeVisible()
-      await expect(mysqlSection.locator('.el-tag')).toBeVisible()
+    test('database status shows connected/disconnected tag', async ({ page }) => {
+      const dbSection = page.locator(AdminSystemSelectors.statusCard).filter({ hasText: '数据库' })
+      await expect(dbSection).toBeVisible()
+      await expect(dbSection.locator('.el-tag')).toBeVisible()
     })
 
     test('Redis status shows connected/disconnected tag', async ({ page }) => {
@@ -324,7 +323,7 @@ test.describe('Admin Panel', () => {
     test('displays storage statistics mini cards', async ({ page }) => {
       // NOTE: Mock storage stats API.
       const miniStats = page.locator(AdminSystemSelectors.miniStat)
-      await expect(miniStats).toHaveCount(6)
+      await expect(miniStats).toHaveCount(5)
     })
 
     test('refresh button reloads all data', async ({ page }) => {
@@ -360,6 +359,31 @@ test.describe('Admin Panel', () => {
         // Alternative: check the class exists
         expect(activeItem.count()).resolves.toBeGreaterThan(0)
       })
+    })
+  })
+
+  test.describe('Admin Route Restrictions', () => {
+    test.beforeEach(async ({ page }) => {
+      await loginViaUI(page, TEST_ADMIN.username, TEST_ADMIN.password)
+    })
+
+    test('admin is redirected to /admin after login', async ({ page }) => {
+      await expect(page).toHaveURL(/\/admin/)
+    })
+
+    test('admin accessing /drive is redirected to /admin', async ({ page }) => {
+      await page.goto('/drive')
+      await expect(page).toHaveURL(/\/admin/)
+    })
+
+    test('admin accessing /trash is redirected to /admin', async ({ page }) => {
+      await page.goto('/trash')
+      await expect(page).toHaveURL(/\/admin/)
+    })
+
+    test('admin accessing /settings is redirected to /admin', async ({ page }) => {
+      await page.goto('/settings')
+      await expect(page).toHaveURL(/\/admin/)
     })
   })
 })

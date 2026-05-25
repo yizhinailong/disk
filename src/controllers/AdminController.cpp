@@ -391,4 +391,27 @@ namespace disk::controllers {
         co_return Response::Success(result->ToJson());
     }
 
+    auto AdminController::GetAdminLogs(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        LOG_INFO << "Admin list logs request: " << request->getPeerAddr().toIpPort();
+
+        auto parse_result = admin::AdminLogListRequest::FromRequest(request);
+        if (!parse_result) {
+            LOG_WARN << "List logs request validation failed: " << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+
+        auto service = services::AdminService::GetInstance();
+        auto result = co_await service->GetAdminLogs(*parse_result);
+
+        if (!result) {
+            LOG_ERROR << "Failed to list logs: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        LOG_INFO << "Admin list logs successful";
+        co_return Response::Success(result->ToJson());
+    }
+
 } // namespace disk::controllers

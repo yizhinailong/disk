@@ -10,7 +10,7 @@ import {
   listShares,
   getShareDetail,
   deleteShare as apiDeleteShare,
-  listLogs,
+  getAdminLogs,
   getStatsOverview,
   getStatsSystem,
   getStorageStats,
@@ -24,8 +24,8 @@ import type {
   AdminStatsSystemResponse,
   AdminStorageStatsResponse,
   AdminListUsersQuery,
-  LogItem,
-  LogsQuery,
+  AdminLogListQuery,
+  AdminLogItem,
   Pagination,
 } from '@/types';
 
@@ -35,7 +35,7 @@ export const useAdminStore = defineStore('admin', () => {
   const currentUserDetail = ref<AdminUserDetailResponse | null>(null);
   const shares = ref<AdminShareItem[]>([]);
   const currentShareDetail = ref<AdminShareDetailResponse | null>(null);
-  const logs = ref<LogItem[]>([]);
+  const adminLogs = ref<AdminLogItem[]>([]);
   const statsOverview = ref<AdminStatsOverviewResponse | null>(null);
   const statsSystem = ref<AdminStatsSystemResponse | null>(null);
   const storageStats = ref<AdminStorageStatsResponse | null>(null);
@@ -69,22 +69,24 @@ export const useAdminStore = defineStore('admin', () => {
     userId: number,
     status: number,
   ): Promise<void> {
-    const res = await apiChangeUserStatus(userId, { status });
+    await apiChangeUserStatus(userId, { status });
     const idx = users.value.findIndex((u) => u.id === userId);
     if (idx !== -1) {
-      users.value[idx] = { ...users.value[idx], status: res.status, updated_at: res.updated_at };
+      users.value[idx] = { ...users.value[idx], status };
     }
+    ElMessage.success('状态修改成功');
   }
 
   async function changeUserRole(
     userId: number,
     role: number,
   ): Promise<void> {
-    const res = await apiChangeUserRole(userId, { role });
+    await apiChangeUserRole(userId, { role });
     const idx = users.value.findIndex((u) => u.id === userId);
     if (idx !== -1) {
-      users.value[idx] = { ...users.value[idx], role: res.role, updated_at: res.updated_at };
+      users.value[idx] = { ...users.value[idx], role };
     }
+    ElMessage.success('角色修改成功');
   }
 
   async function deleteUser(userId: number): Promise<void> {
@@ -124,7 +126,7 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  async function fetchShareDetail(shareId: string): Promise<void> {
+  async function fetchShareDetail(shareId: number): Promise<void> {
     loading.value = true;
     try {
       currentShareDetail.value = await getShareDetail(shareId);
@@ -133,12 +135,12 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  async function deleteShare(shareId: string): Promise<void> {
+  async function deleteShare(shareId: number): Promise<void> {
     loading.value = true;
     try {
       await apiDeleteShare(shareId);
-      shares.value = shares.value.filter((s) => s.share_id !== shareId);
-      if (currentShareDetail.value?.share_id === shareId) {
+      shares.value = shares.value.filter((s) => s.id !== shareId);
+      if (currentShareDetail.value?.id === shareId) {
         currentShareDetail.value = null;
       }
       if (sharePagination.value) {
@@ -152,17 +154,12 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  async function fetchLogs(params: LogsQuery): Promise<void> {
+  async function fetchAdminLogs(params: AdminLogListQuery): Promise<void> {
     loading.value = true;
     try {
-      const res = await listLogs(params);
-      logs.value = [...res.items];
-      logPagination.value = {
-        page: res.page,
-        page_size: res.page_size,
-        total: res.total,
-        total_pages: Math.ceil(res.total / res.page_size),
-      };
+      const res = await getAdminLogs(params);
+      adminLogs.value = [...res.items];
+      logPagination.value = { ...res.pagination };
     } catch {
       ElMessage.error('加载操作日志失败');
     } finally {
@@ -203,7 +200,7 @@ export const useAdminStore = defineStore('admin', () => {
     currentUserDetail,
     shares,
     currentShareDetail,
-    logs,
+    adminLogs,
     statsOverview,
     statsSystem,
     storageStats,
@@ -220,7 +217,7 @@ export const useAdminStore = defineStore('admin', () => {
     fetchShares,
     fetchShareDetail,
     deleteShare,
-    fetchLogs,
+    fetchAdminLogs,
     fetchStatsOverview,
     fetchStatsSystem,
     fetchStorageStats,

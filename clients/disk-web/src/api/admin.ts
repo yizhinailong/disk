@@ -15,6 +15,8 @@ import type {
   AdminDeleteShareResponse,
   AdminStatsOverviewResponse,
   AdminStatsSystemResponse,
+  AdminLogListQuery,
+  AdminLogListResponse,
   LogsQuery,
   LogsResponse,
 } from '@/types'
@@ -53,12 +55,12 @@ export function listShares(params: AdminListSharesQuery): Promise<AdminShareList
   return apiClient.get('/admin/shares', { params }) as Promise<AdminShareListResponse>
 }
 
-export function getShareDetail(shareId: string): Promise<AdminShareDetailResponse> {
-  return apiClient.get(`/admin/shares/${encodeURIComponent(shareId)}`) as Promise<AdminShareDetailResponse>
+export function getShareDetail(shareId: number): Promise<AdminShareDetailResponse> {
+  return apiClient.get(`/admin/shares/${shareId}`) as Promise<AdminShareDetailResponse>
 }
 
-export function deleteShare(shareId: string): Promise<AdminDeleteShareResponse> {
-  return apiClient.delete(`/admin/shares/${encodeURIComponent(shareId)}`) as Promise<AdminDeleteShareResponse>
+export function deleteShare(shareId: number): Promise<AdminDeleteShareResponse> {
+  return apiClient.delete(`/admin/shares/${shareId}`) as Promise<AdminDeleteShareResponse>
 }
 
 export function getStatsOverview(): Promise<AdminStatsOverviewResponse> {
@@ -67,6 +69,10 @@ export function getStatsOverview(): Promise<AdminStatsOverviewResponse> {
 
 export function getStatsSystem(): Promise<AdminStatsSystemResponse> {
   return apiClient.get('/admin/stats/system') as Promise<AdminStatsSystemResponse>
+}
+
+export function getAdminLogs(params: AdminLogListQuery): Promise<AdminLogListResponse> {
+  return apiClient.get('/admin/logs', { params }) as Promise<AdminLogListResponse>
 }
 
 export function listLogs(params: LogsQuery): Promise<LogsResponse> {

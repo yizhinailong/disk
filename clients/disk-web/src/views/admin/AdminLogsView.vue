@@ -41,7 +41,7 @@
     >
       <el-table
         v-loading="adminStore.loading"
-        :data="adminStore.logs"
+        :data="adminStore.adminLogs"
         class="admin-logs-page__table"
         @row-click="handleRowClick"
       >
@@ -55,9 +55,9 @@
 
         <el-table-column label="目标类型" width="120" prop="target_type" />
 
-        <el-table-column label="目标名称" min-width="200">
+        <el-table-column label="目标ID" min-width="120">
           <template #default="{ row }">
-            <span :title="row.target_name">{{ row.target_name ?? '—' }}</span>
+            <span>{{ row.target_id ?? '—' }}</span>
           </template>
         </el-table-column>
 
@@ -101,9 +101,6 @@
           <el-descriptions-item label="目标 ID">
             {{ detailLog.target_id ?? '—' }}
           </el-descriptions-item>
-          <el-descriptions-item label="目标名称">
-            {{ detailLog.target_name ?? '—' }}
-          </el-descriptions-item>
           <el-descriptions-item label="IP 地址">
             {{ detailLog.ip_address }}
           </el-descriptions-item>
@@ -125,7 +122,7 @@ import { useAdminStore } from '@/stores/admin'
 import PageState from '@/components/base/PageState.vue'
 import Pagination from '@/components/base/Pagination.vue'
 import TimeDisplay from '@/components/base/TimeDisplay.vue'
-import type { LogItem } from '@/types'
+import type { AdminLogItem } from '@/types'
 
 const adminStore = useAdminStore()
 
@@ -147,7 +144,7 @@ const actionOptions = [
 // ==================== Detail Dialog ====================
 
 const detailVisible = ref(false)
-const detailLog = ref<LogItem | null>(null)
+const detailLog = ref<AdminLogItem | null>(null)
 
 const parsedDetails = computed(() => {
   if (!detailLog.value?.details) return null
@@ -162,8 +159,8 @@ const parsedDetails = computed(() => {
 // ==================== Computed ====================
 
 const pageState = computed<'loading' | 'empty' | 'content'>(() => {
-  if (adminStore.loading && adminStore.logs.length === 0) return 'loading'
-  if (adminStore.logs.length === 0) return 'empty'
+  if (adminStore.loading && adminStore.adminLogs.length === 0) return 'loading'
+  if (adminStore.adminLogs.length === 0) return 'empty'
   return 'content'
 })
 
@@ -209,7 +206,7 @@ function loadLogs(page?: number): void {
     params.start_date = filterDateRange.value[0]
     params.end_date = filterDateRange.value[1]
   }
-  adminStore.fetchLogs(params as Parameters<typeof adminStore.fetchLogs>[0])
+  adminStore.fetchAdminLogs(params as Parameters<typeof adminStore.fetchAdminLogs>[0])
 }
 
 function onFilterChange(): void {
@@ -222,7 +219,7 @@ function onPageChange(page: number): void {
 
 // ==================== Row Click ====================
 
-function handleRowClick(row: LogItem): void {
+function handleRowClick(row: AdminLogItem): void {
   detailLog.value = row
   detailVisible.value = true
 }

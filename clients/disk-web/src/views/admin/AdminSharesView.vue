@@ -28,9 +28,9 @@
         style="width: 140px"
         @change="handleFilterChange"
       >
-        <el-option label="有效" :value="0" />
-        <el-option label="已过期" :value="1" />
-        <el-option label="已取消" :value="2" />
+        <el-option label="已取消" :value="0" />
+        <el-option label="有效" :value="1" />
+        <el-option label="已过期" :value="2" />
       </el-select>
     </div>
 
@@ -47,23 +47,17 @@
         stripe
         style="width: 100%"
       >
-        <el-table-column prop="share_id" label="分享ID" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="id" label="分享ID" min-width="120" show-overflow-tooltip />
         <el-table-column prop="username" label="用户" min-width="100" show-overflow-tooltip />
         <el-table-column prop="file_name" label="文件名" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="file_count" label="文件数" width="80" align="center" />
         <el-table-column label="密码" width="70" align="center">
           <template #default="{ row }">
-            <el-icon v-if="row.has_password" :size="16" color="var(--el-color-warning)">
+            <el-icon v-if="row.password_set" :size="16" color="var(--el-color-warning)">
               <Lock />
             </el-icon>
             <el-icon v-else :size="16" color="var(--el-color-info)">
               <Open />
             </el-icon>
-          </template>
-        </el-table-column>
-        <el-table-column label="权限" width="80" align="center">
-          <template #default="{ row }">
-            {{ row.permission === 'download' ? '下载' : '查看' }}
           </template>
         </el-table-column>
         <el-table-column label="状态" width="90" align="center">
@@ -85,11 +79,11 @@
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openDetail(row.share_id)">
+            <el-button link type="primary" size="small" @click="openDetail(row.id)">
               详情
             </el-button>
             <el-button
-              v-if="row.status === 0"
+              v-if="row.status === 1"
               link
               type="danger"
               size="small"
@@ -126,38 +120,38 @@
         <!-- 基本信息 -->
         <el-descriptions :column="2" border>
           <el-descriptions-item label="分享ID">
-            {{ adminStore.currentShareDetail.share_id }}
+            {{ adminStore.currentShareDetail.id }}
           </el-descriptions-item>
           <el-descriptions-item label="用户">
             {{ adminStore.currentShareDetail.username }}
           </el-descriptions-item>
-          <el-descriptions-item label="分享链接">
+          <el-descriptions-item label="文件ID">
+            {{ adminStore.currentShareDetail.file_id }}
+          </el-descriptions-item>
+          <el-descriptions-item label="文件名">
+            {{ adminStore.currentShareDetail.file_name }}
+          </el-descriptions-item>
+          <el-descriptions-item label="分享码">
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="share-link-text">{{ adminStore.currentShareDetail.share_link }}</span>
+              <span class="share-link-text">{{ adminStore.currentShareDetail.share_code }}</span>
               <el-button link type="primary" size="small" @click="copyLink">
-                复制链接
+                复制分享码
               </el-button>
             </div>
           </el-descriptions-item>
           <el-descriptions-item label="访问密码">
-            <el-icon v-if="adminStore.currentShareDetail.has_password" :size="16" color="var(--el-color-warning)">
+            <el-icon v-if="adminStore.currentShareDetail.password_set" :size="16" color="var(--el-color-warning)">
               <Lock />
             </el-icon>
             <span v-else>无</span>
           </el-descriptions-item>
-          <el-descriptions-item label="权限">
-            {{ adminStore.currentShareDetail.permission === 'download' ? '下载' : '查看' }}
-          </el-descriptions-item>
           <el-descriptions-item label="状态">
-            <el-tag :type="statusTagType(Number(adminStore.currentShareDetail.status))" size="small">
-              {{ statusLabel(Number(adminStore.currentShareDetail.status)) }}
+            <el-tag :type="statusTagType(adminStore.currentShareDetail.status)" size="small">
+              {{ statusLabel(adminStore.currentShareDetail.status) }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="浏览次数">
-            {{ adminStore.currentShareDetail.view_count }}
-          </el-descriptions-item>
-          <el-descriptions-item label="下载次数">
-            {{ adminStore.currentShareDetail.download_count }}
+          <el-descriptions-item label="访问次数">
+            {{ adminStore.currentShareDetail.access_count }}
           </el-descriptions-item>
           <el-descriptions-item label="创建时间">
             <TimeDisplay :time="adminStore.currentShareDetail.created_at" format="absolute" />
@@ -166,27 +160,6 @@
             <TimeDisplay :time="adminStore.currentShareDetail.expires_at" format="absolute" />
           </el-descriptions-item>
         </el-descriptions>
-
-        <!-- 关联文件列表 -->
-        <h4 class="detail-files-title">关联文件</h4>
-        <el-table
-          :data="adminStore.currentShareDetail.files"
-          stripe
-          size="small"
-          max-height="280"
-        >
-          <el-table-column prop="name" label="文件名" min-width="200" show-overflow-tooltip />
-          <el-table-column label="大小" width="100" align="right">
-            <template #default="{ row }">
-              {{ formatFileSize(row.size) }}
-            </template>
-          </el-table-column>
-          <el-table-column label="类型" width="80" align="center">
-            <template #default="{ row }">
-              {{ row.type === 'folder' ? '文件夹' : '文件' }}
-            </template>
-          </el-table-column>
-        </el-table>
       </template>
     </el-dialog>
   </div>
@@ -218,27 +191,20 @@ const pageState = computed<'loading' | 'empty' | 'error' | 'content'>(() => {
 
 function statusLabel(status: number): string {
   switch (status) {
-    case 0: return '有效';
-    case 1: return '已过期';
-    case 2: return '已取消';
+    case 0: return '已取消';
+    case 1: return '有效';
+    case 2: return '已过期';
     default: return '未知';
   }
 }
 
-function statusTagType(status: number): 'success' | 'info' | 'danger' {
+function statusTagType(status: number): 'success' | 'warning' | 'info' | 'danger' {
   switch (status) {
-    case 0: return 'success';
-    case 1: return 'info';
-    case 2: return 'danger';
-    default: return 'info';
+    case 0: return 'info';
+    case 1: return 'success';
+    case 2: return 'warning';
+    default: return 'danger';
   }
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
 // ==================== 数据加载 ====================
@@ -270,12 +236,12 @@ function handleSizeChange(size: number) {
 
 // ==================== 操作 ====================
 
-async function openDetail(shareId: string) {
+async function openDetail(shareId: number) {
   detailVisible.value = true;
   await adminStore.fetchShareDetail(shareId);
 }
 
-async function handleForceCancel(row: { share_id: string; file_name: string }) {
+async function handleForceCancel(row: { id: number; file_name: string }) {
   try {
     await ElMessageBox.confirm(
       `确定要强制取消分享「${row.file_name}」吗？此操作不可恢复。`,
@@ -287,7 +253,7 @@ async function handleForceCancel(row: { share_id: string; file_name: string }) {
         confirmButtonClass: 'el-button--danger',
       },
     );
-    await adminStore.deleteShare(row.share_id);
+    await adminStore.deleteShare(row.id);
     ElMessage.success('已强制取消分享');
   } catch {
     // 用户取消或删除失败，静默处理
@@ -295,10 +261,10 @@ async function handleForceCancel(row: { share_id: string; file_name: string }) {
 }
 
 async function copyLink() {
-  if (!adminStore.currentShareDetail?.share_link) return;
+  if (!adminStore.currentShareDetail?.share_code) return;
   try {
-    await navigator.clipboard.writeText(adminStore.currentShareDetail.share_link);
-    ElMessage.success('分享链接已复制');
+    await navigator.clipboard.writeText(adminStore.currentShareDetail.share_code);
+    ElMessage.success('分享码已复制');
   } catch {
     ElMessage.error('复制失败，请手动复制');
   }

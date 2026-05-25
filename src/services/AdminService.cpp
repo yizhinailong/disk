@@ -800,6 +800,77 @@ namespace disk::services {
         co_return response;
     }
 
+    auto AdminService::GetAdminLogs(const admin::AdminLogListRequest& req)
+        -> drogon::Task<Result<admin::AdminLogListResponse>> {
+
+        LOG_INFO << "Admin list logs: page=" << req.page
+                 << " page_size=" << req.page_size;
+
+        try {
+            std::string where_clause = " WHERE 1=1";
+            if (req.action.has_value()) {
+                where_clause += " AND action = '" + *req.action + "'";
+            }
+            if (req.start_date.has_value()) {
+                where_clause += " AND created_at >= '" + *req.start_date + " 00:00:00'::timestamp";
+            }
+            if (req.end_date.has_value()) {
+                where_clause += " AND created_at <= '" + *req.end_date + " 23:59:59'::timestamp";
+            }
+
+            auto count_result = co_await m_db_client->execSqlCoro(
+                "SELECT COUNT(*) AS total FROM operation_logs" + where_clause
+            );
+
+            int total = 0;
+            if (!count_result.empty()) {
+                total = count_result[0]["total"].as<int>();
+            }
+
+            int offset = (req.page - 1) * req.page_size;
+            int total_pages = req.page_size > 0
+                ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size))
+                : 0;
+
+            auto result = co_await m_db_client->execSqlCoro(
+                "SELECT id, user_id, action, target_type, target_id, details, ip_address, created_at "
+                "FROM operation_logs" + where_clause +
+                " ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+                req.page_size,
+                offset
+            );
+
+            admin::AdminLogListResponse response;
+            response.pagination.page = req.page;
+            response.pagination.page_size = req.page_size;
+            response.pagination.total = total;
+            response.pagination.total_pages = total_pages;
+
+            for (const auto& row : result) {
+                admin::AdminLogDetailResponse log;
+                log.id = row["id"].as<uint64_t>();
+                log.user_id = row["user_id"].as<uint64_t>();
+                log.action = row["action"].as<std::string>();
+                log.target_type = row["target_type"].isNull() ? "" : row["target_type"].as<std::string>();
+                log.target_id = row["target_id"].isNull() ? std::optional<uint64_t>{} : std::optional<uint64_t>{row["target_id"].as<uint64_t>()};
+                log.details = row["details"].isNull() ? std::optional<std::string>{} : std::optional<std::string>{row["details"].as<std::string>()};
+                log.ip_address = row["ip_address"].as<std::string>();
+                log.created_at = row["created_at"].as<std::string>();
+                response.items.push_back(std::move(log));
+            }
+
+            LOG_INFO << "Admin list logs successful: total=" << total;
+            co_return response;
+
+        } catch (const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Admin list logs database error: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to list operation logs"
+            ));
+        }
+    }
+
     auto AdminService::LogOperation(uint64_t operator_id,
                                      const std::string& action,
                                      const std::string& target_type,

@@ -42,6 +42,7 @@ export {
   deleteShare as deleteAdminShare,
   getStatsOverview,
   getStatsSystem,
-  listLogs as listAdminLogs,
+  getAdminLogs,
+  listLogs,
 } from './admin'
 export { healthCheck, getSystemInfo, getLogs } from './system'

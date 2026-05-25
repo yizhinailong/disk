@@ -182,12 +182,6 @@
           <el-descriptions-item label="存储配额">
             <SizeDisplay :bytes="store.currentUserDetail.storage_quota" />
           </el-descriptions-item>
-          <el-descriptions-item label="文件数">
-            {{ store.currentUserDetail.file_count }}
-          </el-descriptions-item>
-          <el-descriptions-item label="文件夹数">
-            {{ store.currentUserDetail.folder_count }}
-          </el-descriptions-item>
           <el-descriptions-item label="注册时间">
             <TimeDisplay :time="store.currentUserDetail.created_at" format="absolute" />
           </el-descriptions-item>

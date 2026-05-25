@@ -528,6 +528,107 @@ namespace disk::admin {
         }
     };
 
+    /**
+     * @brief 获取操作日志列表请求 DTO
+     *
+     * @details
+     * 验证规则：
+     * - page: 默认 1，必须 >= 1
+     * - page_size: 默认 20，必须 >= 1 且 <= 100
+     * - action: 可选，筛选操作类型
+     * - start_date: 可选，筛选开始日期（YYYY-MM-DD）
+     * - end_date: 可选，筛选结束日期（YYYY-MM-DD）
+     *
+     * 从 URL 查询参数解析。
+     */
+    struct AdminLogListRequest {
+        int page{ 1 };
+        int page_size{ 20 };
+        std::optional<std::string> action;
+        std::optional<std::string> start_date;
+        std::optional<std::string> end_date;
+
+        /// 从 HTTP 请求查询参数解析并验证，返回 Result
+        [[nodiscard]]
+        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<AdminLogListRequest> {
+            LOG_DEBUG << "Start parsing admin log list request parameters";
+
+            AdminLogListRequest request;
+
+            // 解析可选参数 page
+            auto page_str = req->getParameter("page");
+            if (!page_str.empty()) {
+                try {
+                    size_t pos = 0;
+                    auto value = std::stoi(page_str, &pos);
+                    if (pos != page_str.length() || value < 1) {
+                        LOG_WARN << "Parameter 'page' invalid value: " << page_str;
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::ValidationFailed,
+                            "Parameter 'page' must be a positive integer"
+                        ));
+                    }
+                    request.page = value;
+                } catch (const std::exception& e) {
+                    LOG_WARN << "Parameter 'page' invalid format: " << page_str;
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'page' invalid format"
+                    ));
+                }
+            }
+
+            // 解析可选参数 page_size
+            auto page_size_str = req->getParameter("page_size");
+            if (!page_size_str.empty()) {
+                try {
+                    size_t pos = 0;
+                    auto value = std::stoi(page_size_str, &pos);
+                    if (pos != page_size_str.length() || value < 1 || value > 100) {
+                        LOG_WARN << "Parameter 'page_size' invalid value: " << page_size_str;
+                        return std::unexpected(ErrorInfo(
+                            ErrorCode::ValidationFailed,
+                            "Parameter 'page_size' must be an integer between 1-100"
+                        ));
+                    }
+                    request.page_size = value;
+                } catch (const std::exception& e) {
+                    LOG_WARN << "Parameter 'page_size' invalid format: " << page_size_str;
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'page_size' invalid format"
+                    ));
+                }
+            }
+
+            // 解析可选参数 action
+            auto action_str = req->getParameter("action");
+            if (!action_str.empty()) {
+                request.action = action_str;
+            }
+
+            // 解析可选参数 start_date
+            auto start_date_str = req->getParameter("start_date");
+            if (!start_date_str.empty()) {
+                request.start_date = start_date_str;
+            }
+
+            // 解析可选参数 end_date
+            auto end_date_str = req->getParameter("end_date");
+            if (!end_date_str.empty()) {
+                request.end_date = end_date_str;
+            }
+
+            LOG_DEBUG << "Parsed admin log list request: page=" << request.page
+                      << ", page_size=" << request.page_size
+                      << ", action=" << (request.action.has_value() ? *request.action : "null")
+                      << ", start_date=" << (request.start_date.has_value() ? *request.start_date : "null")
+                      << ", end_date=" << (request.end_date.has_value() ? *request.end_date : "null");
+
+            return request;
+        }
+    };
+
     // ==================== Response DTOs ====================
 
     /**
@@ -694,6 +795,70 @@ namespace disk::admin {
      */
     struct ShareListResponse {
         std::vector<ShareDetailResponse> items;
+        PaginationInfo pagination;
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            Json::Value items_array(Json::arrayValue);
+            for (const auto& item : items) {
+                items_array.append(item.ToJson());
+            }
+            json["items"] = items_array;
+            json["pagination"] = pagination.ToJson();
+            return json;
+        }
+    };
+
+    /**
+     * @brief 操作日志详情响应 DTO
+     *
+     * @details
+     * 包含单条操作日志的完整信息。
+     */
+    struct AdminLogDetailResponse {
+        uint64_t id;
+        uint64_t user_id;
+        std::string action;
+        std::string target_type;
+        std::optional<uint64_t> target_id;
+        std::optional<std::string> details;
+        std::string ip_address;
+        std::string created_at;
+
+        /// 转换为 JSON
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["id"] = static_cast<Json::UInt64>(id);
+            json["user_id"] = static_cast<Json::UInt64>(user_id);
+            json["action"] = action;
+            json["target_type"] = target_type;
+            if (target_id.has_value()) {
+                json["target_id"] = static_cast<Json::UInt64>(*target_id);
+            } else {
+                json["target_id"] = Json::nullValue;
+            }
+            if (details.has_value()) {
+                json["details"] = *details;
+            } else {
+                json["details"] = Json::nullValue;
+            }
+            json["ip_address"] = ip_address;
+            json["created_at"] = created_at;
+            return json;
+        }
+    };
+
+    /**
+     * @brief 操作日志列表响应 DTO
+     *
+     * @details
+     * 包含操作日志列表和分页信息。
+     */
+    struct AdminLogListResponse {
+        std::vector<AdminLogDetailResponse> items;
         PaginationInfo pagination;
 
         /// 转换为 JSON

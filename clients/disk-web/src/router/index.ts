@@ -32,26 +32,31 @@ const routes: RouteRecordRaw[] = [
         path: 'drive',
         name: 'drive',
         component: () => import('@/views/drive/DriveView.vue'),
+        meta: { requiresNonAdmin: true },
       },
       {
         path: 'transfers',
         name: 'transfers',
         component: () => import('@/views/transfer/TransferView.vue'),
+        meta: { requiresNonAdmin: true },
       },
       {
         path: 'settings',
         name: 'settings',
         component: () => import('@/views/settings/SettingsView.vue'),
+        meta: { requiresNonAdmin: true },
       },
       {
         path: 'shares',
         name: 'shares',
         component: () => import('@/views/drive/SharesView.vue'),
+        meta: { requiresNonAdmin: true },
       },
       {
         path: 'trash',
         name: 'trash',
         component: () => import('@/views/drive/TrashView.vue'),
+        meta: { requiresNonAdmin: true },
       },
     ],
   },
@@ -130,7 +135,7 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth === false && hasToken) {
     const authStore = useAuthStore()
     if (authStore.isAuthenticated) {
-      return '/drive'
+      return authStore.isAdmin ? '/admin' : '/drive'
     }
   }
 
@@ -139,6 +144,13 @@ router.beforeEach((to) => {
     return {
       path: '/login',
       query: { redirect: to.fullPath },
+    }
+  }
+
+  if (to.matched.some((record) => record.meta.requiresNonAdmin)) {
+    const authStore = useAuthStore()
+    if (authStore.isAdmin) {
+      return '/admin'
     }
   }
 

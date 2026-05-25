@@ -122,6 +122,13 @@ namespace disk::controllers {
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
         );
+        ADD_METHOD_TO(
+            AdminController::GetAdminLogs,
+            "/api/admin/logs",
+            drogon::Get,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::AdminAuthFilter",
+        );
         METHOD_LIST_END
 
         [[nodiscard]]
@@ -170,6 +177,10 @@ namespace disk::controllers {
 
         [[nodiscard]]
         auto GetSystemStatus(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto GetAdminLogs(drogon::HttpRequestPtr request)
             -> drogon::Task<drogon::HttpResponsePtr>;
     };
 

@@ -47,12 +47,6 @@
       <!-- Header -->
       <el-header class="admin-header" height="56px">
         <div class="header-left">
-          <el-button
-            class="back-btn"
-            :icon="Back"
-            text
-            @click="router.push('/drive')"
-          />
           <span class="header-title">管理后台</span>
         </div>
 
@@ -70,11 +64,7 @@
             </div>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="drive">
-                  <el-icon><FolderOpened /></el-icon>
-                  返回网盘
-                </el-dropdown-item>
-                <el-dropdown-item command="logout" divided>
+                <el-dropdown-item command="logout">
                   <el-icon><SwitchButton /></el-icon>
                   退出登录
                 </el-dropdown-item>
@@ -94,19 +84,16 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
   User,
   Share,
   Document,
   Monitor,
-  Back,
   SwitchButton,
-  FolderOpened,
 } from '@element-plus/icons-vue'
 
-const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
@@ -128,9 +115,7 @@ const userInitial = computed(() => {
 })
 
 function handleUserCommand(command: string) {
-  if (command === 'drive') {
-    router.push('/drive')
-  } else if (command === 'logout') {
+  if (command === 'logout') {
     authStore.logout()
   }
 }

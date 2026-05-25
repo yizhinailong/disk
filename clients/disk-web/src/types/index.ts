@@ -140,9 +140,6 @@ export type {
   AdminShareDetailResponse,
   AdminDeleteShareResponse,
   AdminStatsOverviewResponse,
-  MysqlStatus,
-  RedisStatus,
-  DiskUsage,
   AdminStatsSystemResponse,
   HealthComponent,
   HealthResponse,
@@ -152,4 +149,7 @@ export type {
   LogItem,
   LogsQuery,
   LogsResponse,
+  AdminLogItem,
+  AdminLogListQuery,
+  AdminLogListResponse,
 } from './admin';
