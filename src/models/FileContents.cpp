@@ -8,6 +8,15 @@
 #include "FileContents.hpp"
 #include <drogon/utils/Utilities.h>
 #include <string>
+#include <cstddef>
+
+static inline std::size_t utf8CharCount(const char *s) noexcept
+{
+    std::size_t n = 0;
+    for (; *s; ++s)
+        n += ((*s & 0xC0) != 0x80);
+    return n;
+}
 
 using namespace drogon;
 using namespace drogon::orm;
@@ -1488,8 +1497,7 @@ bool FileContents::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                .from_bytes(pJson.asCString()).size() > 512)
+            if(pJson.isString() && utf8CharCount(pJson.asCString()) > 512)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
@@ -1507,8 +1515,7 @@ bool FileContents::validJsonOfField(size_t index,
                 err="Type error in the "+fieldName+" field";
                 return false;
             }
-            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                .from_bytes(pJson.asCString()).size() > 128)
+            if(pJson.isString() && utf8CharCount(pJson.asCString()) > 128)
             {
                 err="String length exceeds limit for the " +
                     fieldName +
