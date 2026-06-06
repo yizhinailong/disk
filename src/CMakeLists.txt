@@ -41,17 +41,27 @@ set(Dtos_HEADERS
 # Filter
 set(Filters_HEADERS
     filters/AdminAuthFilter.hpp
+    filters/AdminRateLimitFilter.hpp
     filters/JwtAuthFilter.hpp
     filters/RateLimitFilter.hpp
+    filters/RegisterRateLimitFilter.hpp
     filters/ShareAuthFilter.hpp
+    filters/SharePublicRateLimitFilter.hpp
     filters/UploadRateLimitFilter.hpp
+    filters/DownloadRateLimitFilter.hpp
+    filters/FolderRateLimitFilter.hpp
 )
 set(Filters_SOURCES
     filters/AdminAuthFilter.cpp
+    filters/AdminRateLimitFilter.cpp
     filters/JwtAuthFilter.cpp
     filters/RateLimitFilter.cpp
+    filters/RegisterRateLimitFilter.cpp
     filters/ShareAuthFilter.cpp
+    filters/SharePublicRateLimitFilter.cpp
     filters/UploadRateLimitFilter.cpp
+    filters/DownloadRateLimitFilter.cpp
+    filters/FolderRateLimitFilter.cpp
 )
 
 # Model
