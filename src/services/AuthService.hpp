@@ -134,7 +134,7 @@ namespace disk::auth {
         auto IncrementLoginAttempts(uint64_t user_id) -> drogon::Task<void>;
 
         drogon::orm::DbClientPtr m_db_client;                          ///< 数据库客户端
-        std::shared_ptr<disk::services::RedisService> m_redis_service; ///< Redis服务
+        std::shared_ptr<disk::services::RedisService> m_redis_service{}; ///< Redis服务
         static constexpr uint64_t DEFAULT_STORAGE_QUOTA = 10737418240; ///< 默认存储配额 10GB
     };
 

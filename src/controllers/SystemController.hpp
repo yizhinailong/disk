@@ -30,7 +30,7 @@ namespace disk::system {
         auto GetInfo(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
-        std::unique_ptr<SystemService> m_system_service;
+        std::unique_ptr<SystemService> m_system_service{};
     };
 
 } // namespace disk::system

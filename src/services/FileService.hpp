@@ -484,7 +484,7 @@ namespace disk::file {
         ) const -> drogon::Task<std::optional<UploadedChunkCoverage>>;
 
         drogon::orm::DbClientPtr m_db_client;                                      ///< 数据库客户端
-        storage::IFileStorage* m_storage;                                          ///< 文件存储接口
+        storage::IFileStorage* m_storage{};                                          ///< 文件存储接口
         std::unordered_map<std::string, UploadTaskCacheEntry> m_upload_task_cache; ///< 上传任务元数据缓存
         std::shared_mutex m_upload_task_cache_mutex;                               ///< 上传任务缓存读写锁
     };

@@ -68,7 +68,7 @@ namespace disk::services {
          */
         ScheduledTasks() = default;
 
-        std::shared_ptr<CleanupService> m_cleanup_service;
+        std::shared_ptr<CleanupService> m_cleanup_service{};
     };
 
 } // namespace disk::services

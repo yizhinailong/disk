@@ -30,7 +30,7 @@ namespace disk::log {
         auto GetList(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
-        std::unique_ptr<OperationLogService> m_log_service;
+        std::unique_ptr<OperationLogService> m_log_service{};
     };
 
 } // namespace disk::log

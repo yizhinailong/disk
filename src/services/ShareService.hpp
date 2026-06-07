@@ -385,7 +385,7 @@ namespace disk::share {
     private:
         drogon::orm::DbClientPtr m_db_client;                          ///< 数据库客户端
         drogon::nosql::RedisClientPtr m_redis_client;                  ///< Redis客户端
-        std::shared_ptr<disk::services::RedisService> m_redis_service; ///< Redis服务
+        std::shared_ptr<disk::services::RedisService> m_redis_service{}; ///< Redis服务
         std::string m_jwt_secret;                                      ///< JWT密钥
     };
 

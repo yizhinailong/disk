@@ -45,7 +45,7 @@ namespace disk::filters {
         static constexpr int WINDOW_SECONDS = 300;
 
     private:
-        std::shared_ptr<disk::services::RedisService> m_redis_service;
+        std::shared_ptr<disk::services::RedisService> m_redis_service{};
 
         [[nodiscard]]
         static auto GetCurrentWindow() -> int64_t {

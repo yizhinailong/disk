@@ -42,4 +42,5 @@ Diagnostics:
         cppcoreguidelines-macro-usage,
         cppcoreguidelines-avoid-c-arrays,
         cppcoreguidelines-avoid-reference-coroutine-parameters,
+        readability-redundant-member-init,
       ]

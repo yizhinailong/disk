@@ -60,7 +60,7 @@ namespace disk::auth {
         auto Logout(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
-        std::unique_ptr<AuthService> m_auth_service;
+        std::unique_ptr<AuthService> m_auth_service{};
     };
 
 } // namespace disk::auth

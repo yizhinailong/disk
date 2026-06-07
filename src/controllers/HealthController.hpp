@@ -46,7 +46,7 @@ namespace disk::health {
         auto Check(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
-        std::unique_ptr<HealthService> m_health_service;
+        std::unique_ptr<HealthService> m_health_service{};
     };
 
 } // namespace disk::health

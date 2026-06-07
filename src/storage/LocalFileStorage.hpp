@@ -167,9 +167,9 @@ namespace disk::storage {
         [[nodiscard]]
         auto GetAssembleFilePath(const std::string& upload_id) const -> std::filesystem::path;
 
-        std::shared_ptr<disk::utils::ConfigMgr> m_config_mgr;                  ///< 配置管理器
-        std::shared_ptr<trantor::ConcurrentTaskQueue> m_worker_queue;          ///< 短时文件系统阻塞操作工作队列
-        std::shared_ptr<trantor::ConcurrentTaskQueue> m_assembly_worker_queue; ///< 分片组装专用工作队列
+        std::shared_ptr<disk::utils::ConfigMgr> m_config_mgr{};                  ///< 配置管理器
+        std::shared_ptr<trantor::ConcurrentTaskQueue> m_worker_queue{};          ///< 短时文件系统阻塞操作工作队列
+        std::shared_ptr<trantor::ConcurrentTaskQueue> m_assembly_worker_queue{}; ///< 分片组装专用工作队列
     };
 
 } // namespace disk::storage

@@ -228,8 +228,8 @@ namespace disk::file {
         auto Search(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
-        std::unique_ptr<FileService> m_file_service;
-        disk::storage::IFileStorage* m_storage;
+        std::unique_ptr<FileService> m_file_service{};
+        disk::storage::IFileStorage* m_storage{};
     };
 
 } // namespace disk::file

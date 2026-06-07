@@ -124,7 +124,7 @@ namespace disk::user {
         auto GetStorage(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
-        std::unique_ptr<disk::user::UserService> m_user_service;
+        std::unique_ptr<disk::user::UserService> m_user_service{};
     };
 
 } // namespace disk::user

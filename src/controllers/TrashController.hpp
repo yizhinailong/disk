@@ -130,7 +130,7 @@ namespace disk::trash {
         auto DeleteAll(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
-        std::unique_ptr<TrashService> m_trash_service;
+        std::unique_ptr<TrashService> m_trash_service{};
     };
 
 } // namespace disk::trash

@@ -481,7 +481,7 @@ namespace disk::services {
         JwtVerifier m_jwt_verifier;
         JwtVerifier m_share_jwt_verifier;
         drogon::nosql::RedisClientPtr m_redis_client;
-        std::shared_ptr<RedisService> m_redis_service;
+        std::shared_ptr<RedisService> m_redis_service{};
         mutable std::shared_mutex m_cache_mutex;
         mutable ExpiryCache<std::string, RevocationCacheEntry> m_revocation_cache;
         mutable std::shared_mutex m_share_cache_mutex;
