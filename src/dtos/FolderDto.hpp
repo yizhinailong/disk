@@ -28,6 +28,7 @@
 #include <drogon/HttpRequest.h>
 #include <json/json.h>
 
+#include "utils/DtoBase.hpp"
 #include "utils/ErrorCode.hpp"
 #include "utils/NameValidation.hpp"
 
@@ -47,7 +48,7 @@ namespace disk::folder {
      * - name: 必须是合法 UTF-8，禁止控制字符
      * - parent_id: 默认 0（根目录）
      */
-    struct CreateFolderRequest {
+    struct CreateFolderRequest : DtoBase<CreateFolderRequest> {
         std::string name;
         uint64_t parent_id{ 0 };
 
@@ -56,46 +57,20 @@ namespace disk::folder {
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<CreateFolderRequest> {
             LOG_DEBUG << "Start parsing create folder request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
-
-            // 检查必填字段
-            if (!json.isMember("name")) {
-                LOG_WARN << "Missing required parameter: name";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: name")
-                );
-            }
-
-            // 检查字段类型
-            if (!json["name"].isString()) {
-                LOG_WARN << "Parameter 'name' type error: expected string";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'name' type error: expected string"
-                ));
-            }
+            auto name_result = RequireString(json, "name");
+            if (!name_result) return std::unexpected(name_result.error());
 
             CreateFolderRequest request;
-            request.name = json["name"].asString();
+            request.name = std::move(*name_result);
 
-            // 处理可选参数 parent_id
-            if (json.isMember("parent_id")) {
-                if (!json["parent_id"].isIntegral()) {
-                    LOG_WARN << "Parameter 'parent_id' type error: expected integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'parent_id' type error: expected integer"
-                    ));
-                }
-                request.parent_id = json["parent_id"].asUInt64();
+            auto parent_id_result = OptionalUInt64(json, "parent_id");
+            if (!parent_id_result) return std::unexpected(parent_id_result.error());
+            if (parent_id_result->has_value()) {
+                request.parent_id = **parent_id_result;
             }
 
             // 规则 6：去除首尾空格
@@ -213,7 +188,7 @@ namespace disk::folder {
     /**
      * @brief 重命名文件夹请求 DTO
      */
-    struct RenameFolderRequest {
+    struct RenameFolderRequest : DtoBase<RenameFolderRequest> {
         uint64_t folder_id{ 0 };
         std::string new_name;
 
@@ -250,29 +225,16 @@ namespace disk::folder {
                 );
             }
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
-            if (!json.isMember("new_name")) {
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: new_name")
-                );
-            }
-            if (!json["new_name"].isString()) {
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'new_name' type error: expected string"
-                ));
-            }
+            auto new_name_result = RequireString(json, "new_name");
+            if (!new_name_result) return std::unexpected(new_name_result.error());
 
             RenameFolderRequest request;
             request.folder_id = folder_id;
-            request.new_name = json["new_name"].asString();
+            request.new_name = std::move(*new_name_result);
             request.TrimName();
 
             if (!request.ValidateLength()) {
@@ -359,7 +321,7 @@ namespace disk::folder {
      * @details
      * 包含新建文件夹的基本信息。
      */
-    struct CreateFolderResponse {
+    struct CreateFolderResponse : DtoBase<CreateFolderResponse> {
         uint64_t id;
         std::string name;
         uint64_t parent_id;
@@ -370,16 +332,16 @@ namespace disk::folder {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["name"] = name;
-            json["parent_id"] = static_cast<Json::UInt64>(parent_id);
-            json["path"] = path;
-            json["created_at"] = created_at;
+            SetField(json, "id", id);
+            SetField(json, "name", name);
+            SetField(json, "parent_id", parent_id);
+            SetField(json, "path", path);
+            SetField(json, "created_at", created_at);
             return json;
         }
     };
 
-    struct RenameFolderResponse {
+    struct RenameFolderResponse : DtoBase<RenameFolderResponse> {
         uint64_t id{ 0 };
         std::string name;
         std::string path;
@@ -388,10 +350,10 @@ namespace disk::folder {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["name"] = name;
-            json["path"] = path;
-            json["updated_at"] = updated_at;
+            SetField(json, "id", id);
+            SetField(json, "name", name);
+            SetField(json, "path", path);
+            SetField(json, "updated_at", updated_at);
             return json;
         }
     };
@@ -408,7 +370,7 @@ namespace disk::folder {
      *
      * 从 URL 查询参数解析：parent_id, depth
      */
-    struct FolderTreeRequest {
+    struct FolderTreeRequest : DtoBase<FolderTreeRequest> {
         uint64_t parent_id{ 0 };
         int depth{ -1 };
 
@@ -420,29 +382,13 @@ namespace disk::folder {
             FolderTreeRequest request;
 
             // 解析可选参数 parent_id
-            auto parent_id_str = req->getParameter("parent_id");
-            if (!parent_id_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoull(parent_id_str, &pos);
-                    if (pos != parent_id_str.length()) {
-                        LOG_WARN << "Parameter 'parent_id' invalid format: " << parent_id_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'parent_id' invalid format"
-                        ));
-                    }
-                    request.parent_id = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'parent_id' invalid format: " << parent_id_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'parent_id' invalid format"
-                    ));
-                }
+            auto parent_id_result = QueryUInt64(req, "parent_id");
+            if (!parent_id_result) return std::unexpected(parent_id_result.error());
+            if (parent_id_result->has_value()) {
+                request.parent_id = **parent_id_result;
             }
 
-            // 解析可选参数 depth
+            // 解析可选参数 depth（允许 -1，不能用 QueryPositiveInt）
             auto depth_str = req->getParameter("depth");
             if (!depth_str.empty()) {
                 try {
@@ -499,7 +445,7 @@ namespace disk::folder {
      * 用于构建递归的文件夹树结构。
      * 包含文件夹基本信息和子节点列表。
      */
-    struct FolderTreeNode {
+    struct FolderTreeNode : DtoBase<FolderTreeNode> {
         uint64_t id;
         std::string name;
         std::vector<FolderTreeNode> children;
@@ -508,15 +454,9 @@ namespace disk::folder {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["name"] = name;
-
-            Json::Value children_array(Json::arrayValue);
-            for (const auto& child : children) {
-                children_array.append(child.ToJson());
-            }
-            json["children"] = children_array;
-
+            SetField(json, "id", id);
+            SetField(json, "name", name);
+            SetArray(json, "children", children);
             return json;
         }
     };
@@ -529,7 +469,7 @@ namespace disk::folder {
      * @details
      * 表示路径中的单个文件夹节点。
      */
-    struct BreadcrumbItem {
+    struct BreadcrumbItem : DtoBase<BreadcrumbItem> {
         uint64_t id;
         std::string name;
 
@@ -537,8 +477,8 @@ namespace disk::folder {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["name"] = name;
+            SetField(json, "id", id);
+            SetField(json, "name", name);
             return json;
         }
     };
@@ -549,18 +489,14 @@ namespace disk::folder {
      * @details
      * 包含从根目录到当前文件夹的完整路径。
      */
-    struct BreadcrumbResponse {
+    struct BreadcrumbResponse : DtoBase<BreadcrumbResponse> {
         std::vector<BreadcrumbItem> path;
 
         /// 转换为 JSON
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            Json::Value path_array(Json::arrayValue);
-            for (const auto& item : path) {
-                path_array.append(item.ToJson());
-            }
-            json["path"] = path_array;
+            SetArray(json, "path", path);
             return json;
         }
     };

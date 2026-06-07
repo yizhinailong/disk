@@ -26,6 +26,7 @@
 #include <drogon/HttpRequest.h>
 #include <json/json.h>
 
+#include "utils/DtoBase.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::auth {
@@ -41,7 +42,7 @@ namespace disk::auth {
      * - email: 有效邮箱格式
      * - password: 8-64字符，仅含字母和数字，且需同时包含大小写字母和数字
      */
-    struct RegisterRequest {
+    struct RegisterRequest : DtoBase<RegisterRequest> {
         std::string username;
         std::string email;
         std::string password;
@@ -51,63 +52,23 @@ namespace disk::auth {
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<RegisterRequest> {
             LOG_DEBUG << "Start parsing register request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
+            auto username_result = RequireString(json, "username");
+            if (!username_result) return std::unexpected(username_result.error());
 
-            // 检查必填字段
-            if (!json.isMember("username")) {
-                LOG_WARN << "Missing required parameter: username";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: username")
-                );
-            }
-            if (!json.isMember("email")) {
-                LOG_WARN << "Missing required parameter: email";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: email")
-                );
-            }
-            if (!json.isMember("password")) {
-                LOG_WARN << "Missing required parameter: password";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: password")
-                );
-            }
+            auto email_result = RequireString(json, "email");
+            if (!email_result) return std::unexpected(email_result.error());
 
-            // 检查字段类型
-            if (!json["username"].isString()) {
-                LOG_WARN << "Parameter 'username' type error: expected string";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'username' type error: expected string"
-                ));
-            }
-            if (!json["email"].isString()) {
-                LOG_WARN << "Parameter 'email' type error: expected string";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'email' type error: expected string"
-                ));
-            }
-            if (!json["password"].isString()) {
-                LOG_WARN << "Parameter 'password' type error: expected string";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'password' type error: expected string"
-                ));
-            }
+            auto password_result = RequireString(json, "password");
+            if (!password_result) return std::unexpected(password_result.error());
 
             RegisterRequest request;
-            request.username = json["username"].asString();
-            request.email = json["email"].asString();
-            request.password = json["password"].asString();
+            request.username = std::move(*username_result);
+            request.email = std::move(*email_result);
+            request.password = std::move(*password_result);
 
             LOG_DEBUG << "Parsed register request: " << request.username << " <" << request.email
                       << ">";
@@ -176,7 +137,7 @@ namespace disk::auth {
      * - account: 用户名或邮箱（必填，字符串）
      * - password: 密码（必填，字符串）
      */
-    struct LoginRequest {
+    struct LoginRequest : DtoBase<LoginRequest> {
         std::string account;
         std::string password;
 
@@ -184,49 +145,19 @@ namespace disk::auth {
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<LoginRequest> {
             LOG_DEBUG << "Start parsing login request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
+            auto account_result = RequireString(json, "account");
+            if (!account_result) return std::unexpected(account_result.error());
 
-            // 检查必填字段
-            if (!json.isMember("account")) {
-                LOG_WARN << "Missing required parameter: account";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: account")
-                );
-            }
-            if (!json.isMember("password")) {
-                LOG_WARN << "Missing required parameter: password";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: password")
-                );
-            }
-
-            // 检查字段类型
-            if (!json["account"].isString()) {
-                LOG_WARN << "Parameter 'account' type error: expected string";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'account' type error: expected string"
-                ));
-            }
-            if (!json["password"].isString()) {
-                LOG_WARN << "Parameter 'password' type error: expected string";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'password' type error: expected string"
-                ));
-            }
+            auto password_result = RequireString(json, "password");
+            if (!password_result) return std::unexpected(password_result.error());
 
             LoginRequest request;
-            request.account = json["account"].asString();
-            request.password = json["password"].asString();
+            request.account = std::move(*account_result);
+            request.password = std::move(*password_result);
 
             if (request.account.empty()) {
                 LOG_WARN << "Account cannot be empty";
@@ -254,43 +185,22 @@ namespace disk::auth {
      * 验证规则：
      * - refresh_token: 必填，有效的 JWT 字符串
      */
-    struct RefreshTokenRequest {
+    struct RefreshTokenRequest : DtoBase<RefreshTokenRequest> {
         std::string refresh_token;
 
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<RefreshTokenRequest> {
             LOG_DEBUG << "Start parsing refresh token request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
-
-            // 检查必填字段
-            if (!json.isMember("refresh_token")) {
-                LOG_WARN << "Missing required parameter: refresh_token";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Missing required parameter: refresh_token"
-                ));
-            }
-
-            // 检查字段类型
-            if (!json["refresh_token"].isString()) {
-                LOG_WARN << "Parameter 'refresh_token' type error: expected string";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'refresh_token' type error: expected string"
-                ));
-            }
+            auto token_result = RequireString(json, "refresh_token");
+            if (!token_result) return std::unexpected(token_result.error());
 
             RefreshTokenRequest request;
-            request.refresh_token = json["refresh_token"].asString();
+            request.refresh_token = std::move(*token_result);
 
             LOG_DEBUG << "Parsed refresh token request";
 
@@ -306,7 +216,7 @@ namespace disk::auth {
      * @details
      * 包含用户的基本信息和存储配额。
      */
-    struct RegisterResponse {
+    struct RegisterResponse : DtoBase<RegisterResponse> {
         uint64_t id;
         std::string username;
         std::string email;
@@ -319,13 +229,13 @@ namespace disk::auth {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["username"] = username;
-            json["email"] = email;
-            json["nickname"] = nickname;
-            json["storage_quota"] = static_cast<Json::UInt64>(storage_quota);
-            json["storage_used"] = static_cast<Json::UInt64>(storage_used);
-            json["created_at"] = created_at;
+            SetField(json, "id", id);
+            SetField(json, "username", username);
+            SetField(json, "email", email);
+            SetField(json, "nickname", nickname);
+            SetField(json, "storage_quota", storage_quota);
+            SetField(json, "storage_used", storage_used);
+            SetField(json, "created_at", created_at);
             return json;
         }
     };
@@ -336,7 +246,7 @@ namespace disk::auth {
      * @details
      * 包含访问令牌、刷新令牌和用户信息。
      */
-    struct LoginResponse {
+    struct LoginResponse : DtoBase<LoginResponse> {
         std::string access_token;
         std::string refresh_token;
         std::string token_type;
@@ -347,11 +257,11 @@ namespace disk::auth {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["access_token"] = access_token;
-            json["refresh_token"] = refresh_token;
-            json["token_type"] = token_type;
-            json["expires_in"] = expires_in;
-            json["user"] = user.ToJson();
+            SetField(json, "access_token", access_token);
+            SetField(json, "refresh_token", refresh_token);
+            SetField(json, "token_type", token_type);
+            SetField(json, "expires_in", expires_in);
+            SetField(json, "user", user);
             return json;
         }
     };
@@ -362,7 +272,7 @@ namespace disk::auth {
      * @details
      * 包含新的访问令牌和刷新令牌。
      */
-    struct RefreshTokenResponse {
+    struct RefreshTokenResponse : DtoBase<RefreshTokenResponse> {
         std::string access_token;
         std::string refresh_token;
         int expires_in;
@@ -371,9 +281,9 @@ namespace disk::auth {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["access_token"] = access_token;
-            json["refresh_token"] = refresh_token;
-            json["expires_in"] = expires_in;
+            SetField(json, "access_token", access_token);
+            SetField(json, "refresh_token", refresh_token);
+            SetField(json, "expires_in", expires_in);
             return json;
         }
     };

@@ -43,6 +43,7 @@
 #include <drogon/HttpRequest.h>
 #include <json/json.h>
 
+#include "utils/DtoBase.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::share {
@@ -52,7 +53,7 @@ namespace disk::share {
     /**
      * @brief 分页信息
      */
-    struct Pagination {
+    struct Pagination : DtoBase<Pagination> {
         int page{ 1 };
         int page_size{ 20 };
         int total{ 0 };
@@ -62,10 +63,10 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["page"] = page;
-            json["page_size"] = page_size;
-            json["total"] = total;
-            json["total_pages"] = total_pages;
+            SetField(json, "page", page);
+            SetField(json, "page_size", page_size);
+            SetField(json, "total", total);
+            SetField(json, "total_pages", total_pages);
             return json;
         }
     };
@@ -128,44 +129,6 @@ namespace disk::share {
         return std::nullopt;
     }
 
-    [[nodiscard]]
-    inline auto ParseOptionalPositiveIdArray(
-        const Json::Value& json,
-        const char* field,
-        std::vector<uint64_t>& ids
-    ) -> Result<void> {
-        if (!json.isMember(field)) {
-            return {};
-        }
-        if (!json[field].isArray()) {
-            LOG_WARN << "Parameter '" << field << "' type error: expected array";
-            return std::unexpected(ErrorInfo(
-                ErrorCode::InvalidParameter,
-                std::string("Parameter '") + field + "' type error: expected array"
-            ));
-        }
-
-        for (const auto& item : json[field]) {
-            if (!item.isIntegral()) {
-                LOG_WARN << "Element in parameter '" << field << "' type error: expected integer";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::InvalidParameter,
-                    std::string("Element in parameter '") + field + "' type error: expected integer"
-                ));
-            }
-            auto id = item.asUInt64();
-            if (id == 0) {
-                LOG_WARN << "Element in parameter '" << field << "' must be a positive integer";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::InvalidParameter,
-                    std::string("Element in parameter '") + field + "' must be a positive integer"
-                ));
-            }
-            ids.push_back(id);
-        }
-        return {};
-    }
-
     // ==================== 共享组件 ====================
 
     /**
@@ -174,7 +137,7 @@ namespace disk::share {
      * @details
      * 用于表示分享中的单个文件/文件夹信息。
      */
-    struct ShareFile {
+    struct ShareFile : DtoBase<ShareFile> {
         uint64_t id;
         std::string name;
         std::string type; // "file" 或 "folder"
@@ -185,12 +148,12 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["name"] = name;
-            json["type"] = type;
-            json["size"] = static_cast<Json::UInt64>(size);
+            SetField(json, "id", id);
+            SetField(json, "name", name);
+            SetField(json, "type", type);
+            SetField(json, "size", size);
             if (type == "folder") {
-                json["item_count"] = item_count;
+                SetField(json, "item_count", item_count);
             }
             return json;
         }
@@ -208,7 +171,7 @@ namespace disk::share {
      * - password: 可选，4-8 字符
      * - permission: 默认 download，可选值 view/download
      */
-    struct CreateShareRequest {
+    struct CreateShareRequest : DtoBase<CreateShareRequest> {
         std::vector<uint64_t> file_ids;
         std::vector<uint64_t> folder_ids;
         int expire_days{ 7 };
@@ -220,25 +183,19 @@ namespace disk::share {
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<CreateShareRequest> {
             LOG_DEBUG << "Start parsing create share request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
             CreateShareRequest request;
 
-            auto file_ids_result = ParseOptionalPositiveIdArray(json, "file_ids", request.file_ids);
-            if (!file_ids_result) {
-                return std::unexpected(file_ids_result.error());
-            }
-            auto folder_ids_result = ParseOptionalPositiveIdArray(json, "folder_ids", request.folder_ids);
-            if (!folder_ids_result) {
-                return std::unexpected(folder_ids_result.error());
-            }
+            auto file_ids_result = OptionalPositiveIdArray(json, "file_ids");
+            if (!file_ids_result) return std::unexpected(file_ids_result.error());
+            request.file_ids = std::move(*file_ids_result);
+
+            auto folder_ids_result = OptionalPositiveIdArray(json, "folder_ids");
+            if (!folder_ids_result) return std::unexpected(folder_ids_result.error());
+            request.folder_ids = std::move(*folder_ids_result);
 
             if (request.file_ids.empty() && request.folder_ids.empty()) {
                 LOG_WARN << "Create share request must contain file_ids or folder_ids";
@@ -328,7 +285,7 @@ namespace disk::share {
      * @details
      * 包含分享的基本信息。
      */
-    struct CreateShareResponse {
+    struct CreateShareResponse : DtoBase<CreateShareResponse> {
         std::string share_id;
         std::string share_link;
         std::optional<std::string> password;
@@ -340,14 +297,12 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["share_id"] = share_id;
-            json["share_link"] = share_link;
-            if (password.has_value()) {
-                json["password"] = *password;
-            }
-            json["permission"] = permission;
-            json["expires_at"] = expires_at;
-            json["created_at"] = created_at;
+            SetField(json, "share_id", share_id);
+            SetField(json, "share_link", share_link);
+            SetOptional(json, "password", password);
+            SetField(json, "permission", permission);
+            SetField(json, "expires_at", expires_at);
+            SetField(json, "created_at", created_at);
             return json;
         }
     };
@@ -365,7 +320,7 @@ namespace disk::share {
      *
      * 从 URL 查询参数解析。
      */
-    struct ShareListRequest {
+    struct ShareListRequest : DtoBase<ShareListRequest> {
         std::string status{ "all" };
         int page{ 1 };
         int page_size{ 20 };
@@ -397,49 +352,17 @@ namespace disk::share {
             }
 
             // 解析可选参数 page
-            auto page_str = req->getParameter("page");
-            if (!page_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_str, &pos);
-                    if (pos != page_str.length() || value <= 0) {
-                        LOG_WARN << "Parameter 'page' invalid format or value: " << page_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page' must be a positive integer"
-                        ));
-                    }
-                    request.page = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page' invalid format: " << page_str;
-                    return std::unexpected(
-                        ErrorInfo(ErrorCode::ValidationFailed, "Parameter 'page' invalid format")
-                    );
-                }
+            auto page_result = QueryPositiveInt(req, "page");
+            if (!page_result) return std::unexpected(page_result.error());
+            if (page_result->has_value()) {
+                request.page = **page_result;
             }
 
             // 解析可选参数 page_size
-            auto page_size_str = req->getParameter("page_size");
-            if (!page_size_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_size_str, &pos);
-                    if (pos != page_size_str.length() || value <= 0 || value > 100) {
-                        LOG_WARN << "Parameter 'page_size' invalid format or value: "
-                                 << page_size_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page_size' must be an integer between 1-100"
-                        ));
-                    }
-                    request.page_size = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page_size' invalid format: " << page_size_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'page_size' invalid format"
-                    ));
-                }
+            auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
+            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (page_size_result->has_value()) {
+                request.page_size = **page_size_result;
             }
 
             LOG_DEBUG << "Parsed share list request: status=" << request.status
@@ -455,7 +378,7 @@ namespace disk::share {
      * @details
      * 用于表示分享列表中的单个分享项。
      */
-    struct ShareItem {
+    struct ShareItem : DtoBase<ShareItem> {
         std::string share_id;
         std::string file_name;
         int file_count{ 0 };
@@ -472,17 +395,17 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["share_id"] = share_id;
-            json["file_name"] = file_name;
-            json["file_count"] = file_count;
-            json["share_link"] = share_link;
-            json["has_password"] = has_password;
-            json["permission"] = permission;
-            json["view_count"] = view_count;
-            json["download_count"] = download_count;
-            json["created_at"] = created_at;
-            json["expires_at"] = expires_at;
-            json["status"] = status;
+            SetField(json, "share_id", share_id);
+            SetField(json, "file_name", file_name);
+            SetField(json, "file_count", file_count);
+            SetField(json, "share_link", share_link);
+            SetField(json, "has_password", has_password);
+            SetField(json, "permission", permission);
+            SetField(json, "view_count", view_count);
+            SetField(json, "download_count", download_count);
+            SetField(json, "created_at", created_at);
+            SetField(json, "expires_at", expires_at);
+            SetField(json, "status", status);
             return json;
         }
     };
@@ -493,7 +416,7 @@ namespace disk::share {
      * @details
      * 包含分享项列表和分页信息。
      */
-    struct ShareListResponse {
+    struct ShareListResponse : DtoBase<ShareListResponse> {
         std::vector<ShareItem> items;
         Pagination pagination;
 
@@ -501,12 +424,8 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            Json::Value items_array(Json::arrayValue);
-            for (const auto& item : items) {
-                items_array.append(item.ToJson());
-            }
-            json["items"] = items_array;
-            json["pagination"] = pagination.ToJson();
+            SetArray(json, "items", items);
+            SetField(json, "pagination", pagination);
             return json;
         }
     };
@@ -522,7 +441,7 @@ namespace disk::share {
      *
      * 从 URL 路径参数解析。
      */
-    struct ShareDetailRequest {
+    struct ShareDetailRequest : DtoBase<ShareDetailRequest> {
         std::string share_id;
 
         /// 从路径参数解析并验证，返回 Result
@@ -552,7 +471,7 @@ namespace disk::share {
      * @details
      * 包含分享的详细信息和文件列表。
      */
-    struct ShareDetailResponse {
+    struct ShareDetailResponse : DtoBase<ShareDetailResponse> {
         std::string share_id;
         std::vector<ShareFile> files;
         std::string share_link;
@@ -568,22 +487,16 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["share_id"] = share_id;
-
-            Json::Value files_array(Json::arrayValue);
-            for (const auto& file : files) {
-                files_array.append(file.ToJson());
-            }
-            json["files"] = files_array;
-
-            json["share_link"] = share_link;
-            json["has_password"] = has_password;
-            json["permission"] = permission;
-            json["view_count"] = view_count;
-            json["download_count"] = download_count;
-            json["created_at"] = created_at;
-            json["expires_at"] = expires_at;
-            json["status"] = status;
+            SetField(json, "share_id", share_id);
+            SetArray(json, "files", files);
+            SetField(json, "share_link", share_link);
+            SetField(json, "has_password", has_password);
+            SetField(json, "permission", permission);
+            SetField(json, "view_count", view_count);
+            SetField(json, "download_count", download_count);
+            SetField(json, "created_at", created_at);
+            SetField(json, "expires_at", expires_at);
+            SetField(json, "status", status);
             return json;
         }
     };
@@ -600,7 +513,7 @@ namespace disk::share {
      * - password: 可选，4-8 字符，空字符串表示移除密码
      * - permission: 可选，view/download
      */
-    struct UpdateShareRequest {
+    struct UpdateShareRequest : DtoBase<UpdateShareRequest> {
         std::string share_id;
         std::optional<int> expire_days;
         std::optional<std::string> password; // 空字符串表示移除密码
@@ -620,15 +533,9 @@ namespace disk::share {
                 );
             }
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
-
-            const auto& json = *json_ptr;
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
             UpdateShareRequest request;
             request.share_id = share_id_str;
@@ -716,7 +623,7 @@ namespace disk::share {
      * @details
      * 包含更新后的分享信息。
      */
-    struct UpdateShareResponse {
+    struct UpdateShareResponse : DtoBase<UpdateShareResponse> {
         std::string share_id;
         std::string expires_at;
         bool has_password{ false };
@@ -727,11 +634,11 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["share_id"] = share_id;
-            json["expires_at"] = expires_at;
-            json["has_password"] = has_password;
-            json["permission"] = permission;
-            json["updated_at"] = updated_at;
+            SetField(json, "share_id", share_id);
+            SetField(json, "expires_at", expires_at);
+            SetField(json, "has_password", has_password);
+            SetField(json, "permission", permission);
+            SetField(json, "updated_at", updated_at);
             return json;
         }
     };
@@ -745,7 +652,7 @@ namespace disk::share {
      * 验证规则：
      * - share_ids: 非空数组，每个元素为非空字符串
      */
-    struct CancelShareRequest {
+    struct CancelShareRequest : DtoBase<CancelShareRequest> {
         std::vector<std::string> share_ids;
 
         /// 从 HTTP 请求解析并验证，返回 Result
@@ -753,15 +660,9 @@ namespace disk::share {
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<CancelShareRequest> {
             LOG_DEBUG << "Start parsing cancel share request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
-
-            const auto& json = *json_ptr;
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
             // 检查必填字段 share_ids
             if (!json.isMember("share_ids")) {
@@ -820,7 +721,7 @@ namespace disk::share {
     /**
      * @brief 取消分享单项错误信息
      */
-    struct CancelShareError {
+    struct CancelShareError : DtoBase<CancelShareError> {
         int code{ 0 };
         std::string message;
         std::string reason;
@@ -829,9 +730,9 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["code"] = code;
-            json["message"] = message;
-            json["reason"] = reason;
+            SetField(json, "code", code);
+            SetField(json, "message", message);
+            SetField(json, "reason", reason);
             return json;
         }
     };
@@ -839,7 +740,7 @@ namespace disk::share {
     /**
      * @brief 取消分享单项结果
      */
-    struct CancelShareResult {
+    struct CancelShareResult : DtoBase<CancelShareResult> {
         std::string share_id;
         std::string status; // "success" 或 "failed"
         std::optional<CancelShareError> error;
@@ -848,10 +749,10 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["share_id"] = share_id;
-            json["status"] = status;
+            SetField(json, "share_id", share_id);
+            SetField(json, "status", status);
             if (error.has_value()) {
-                json["error"] = error->ToJson();
+                SetField(json, "error", *error);
             }
             return json;
         }
@@ -860,7 +761,7 @@ namespace disk::share {
     /**
      * @brief 取消分享汇总
      */
-    struct CancelShareSummary {
+    struct CancelShareSummary : DtoBase<CancelShareSummary> {
         int total{ 0 };
         int succeeded{ 0 };
         int failed{ 0 };
@@ -869,9 +770,9 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["total"] = total;
-            json["succeeded"] = succeeded;
-            json["failed"] = failed;
+            SetField(json, "total", total);
+            SetField(json, "succeeded", succeeded);
+            SetField(json, "failed", failed);
             return json;
         }
     };
@@ -882,7 +783,7 @@ namespace disk::share {
      * @details
      * 包含取消操作的汇总和每项结果。
      */
-    struct CancelShareResponse {
+    struct CancelShareResponse : DtoBase<CancelShareResponse> {
         CancelShareSummary summary;
         std::vector<CancelShareResult> results;
 
@@ -890,14 +791,8 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["summary"] = summary.ToJson();
-
-            Json::Value results_array(Json::arrayValue);
-            for (const auto& result : results) {
-                results_array.append(result.ToJson());
-            }
-            json["results"] = results_array;
-
+            SetField(json, "summary", summary);
+            SetArray(json, "results", results);
             return json;
         }
     };
@@ -912,7 +807,7 @@ namespace disk::share {
      * - share_id: 非空字符串（路径参数）
      * - password: 可选，访问密码
      */
-    struct AccessShareRequest {
+    struct AccessShareRequest : DtoBase<AccessShareRequest> {
         std::string share_id;
         std::optional<std::string> password;
 
@@ -967,7 +862,7 @@ namespace disk::share {
      * @details
      * 包含分享令牌和文件列表。
      */
-    struct AccessShareResponse {
+    struct AccessShareResponse : DtoBase<AccessShareResponse> {
         std::string share_token;
         int expires_in{ 0 };
         std::string permission;
@@ -977,16 +872,10 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["share_token"] = share_token;
-            json["expires_in"] = expires_in;
-            json["permission"] = permission;
-
-            Json::Value files_array(Json::arrayValue);
-            for (const auto& file : files) {
-                files_array.append(file.ToJson());
-            }
-            json["files"] = files_array;
-
+            SetField(json, "share_token", share_token);
+            SetField(json, "expires_in", expires_in);
+            SetField(json, "permission", permission);
+            SetArray(json, "files", files);
             return json;
         }
     };
@@ -1003,7 +892,7 @@ namespace disk::share {
      *
      * 从 URL 路径和查询参数解析。
      */
-    struct BrowseShareRequest {
+    struct BrowseShareRequest : DtoBase<BrowseShareRequest> {
         std::string share_id;
         std::optional<uint64_t> folder_id;
 
@@ -1025,27 +914,9 @@ namespace disk::share {
             request.share_id = share_id_str;
 
             // 解析可选参数 folder_id
-            auto folder_id_str = req->getParameter("folder_id");
-            if (!folder_id_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoull(folder_id_str, &pos);
-                    if (pos != folder_id_str.length()) {
-                        LOG_WARN << "Parameter 'folder_id' invalid format: " << folder_id_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'folder_id' invalid format"
-                        ));
-                    }
-                    request.folder_id = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'folder_id' invalid format: " << folder_id_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'folder_id' invalid format"
-                    ));
-                }
-            }
+            auto folder_id_result = QueryUInt64(req, "folder_id");
+            if (!folder_id_result) return std::unexpected(folder_id_result.error());
+            request.folder_id = *folder_id_result;
 
             LOG_DEBUG << "Parsed browse share content request: share_id=" << request.share_id
                       << ", folder_id="
@@ -1059,7 +930,7 @@ namespace disk::share {
     /**
      * @brief 浏览内容项
      */
-    struct BrowseItem {
+    struct BrowseItem : DtoBase<BrowseItem> {
         uint64_t id;
         std::string name;
         std::string type; // "file" 或 "folder"
@@ -1070,12 +941,12 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["name"] = name;
-            json["type"] = type;
-            json["size"] = static_cast<Json::UInt64>(size);
+            SetField(json, "id", id);
+            SetField(json, "name", name);
+            SetField(json, "type", type);
+            SetField(json, "size", size);
             if (type == "folder") {
-                json["item_count"] = item_count;
+                SetField(json, "item_count", item_count);
             }
             return json;
         }
@@ -1084,7 +955,7 @@ namespace disk::share {
     /**
      * @brief 浏览面包屑项
      */
-    struct BrowseBreadcrumb {
+    struct BrowseBreadcrumb : DtoBase<BrowseBreadcrumb> {
         uint64_t id;
         std::string name;
 
@@ -1092,8 +963,8 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["name"] = name;
+            SetField(json, "id", id);
+            SetField(json, "name", name);
             return json;
         }
     };
@@ -1104,7 +975,7 @@ namespace disk::share {
      * @details
      * 包含内容项列表和面包屑导航。
      */
-    struct BrowseShareResponse {
+    struct BrowseShareResponse : DtoBase<BrowseShareResponse> {
         std::vector<BrowseItem> items;
         std::vector<BrowseBreadcrumb> breadcrumb;
 
@@ -1112,19 +983,8 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-
-            Json::Value items_array(Json::arrayValue);
-            for (const auto& item : items) {
-                items_array.append(item.ToJson());
-            }
-            json["items"] = items_array;
-
-            Json::Value breadcrumb_array(Json::arrayValue);
-            for (const auto& item : breadcrumb) {
-                breadcrumb_array.append(item.ToJson());
-            }
-            json["breadcrumb"] = breadcrumb_array;
-
+            SetArray(json, "items", items);
+            SetArray(json, "breadcrumb", breadcrumb);
             return json;
         }
     };
@@ -1141,7 +1001,7 @@ namespace disk::share {
      *
      * 从 URL 路径参数解析。
      */
-    struct DownloadShareRequest {
+    struct DownloadShareRequest : DtoBase<DownloadShareRequest> {
         std::string share_id;
         uint64_t file_id{ 0 };
 
@@ -1207,7 +1067,7 @@ namespace disk::share {
 
     // ==================== Save Share Items ====================
 
-    struct SaveShareItemsRequest {
+    struct SaveShareItemsRequest : DtoBase<SaveShareItemsRequest> {
         std::string share_id;
         std::vector<uint64_t> file_ids;
         std::vector<uint64_t> folder_ids;
@@ -1225,26 +1085,20 @@ namespace disk::share {
                 );
             }
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
             SaveShareItemsRequest request;
             request.share_id = share_id_str;
 
-            auto file_ids_result = ParseOptionalPositiveIdArray(json, "file_ids", request.file_ids);
-            if (!file_ids_result) {
-                return std::unexpected(file_ids_result.error());
-            }
-            auto folder_ids_result = ParseOptionalPositiveIdArray(json, "folder_ids", request.folder_ids);
-            if (!folder_ids_result) {
-                return std::unexpected(folder_ids_result.error());
-            }
+            auto file_ids_result = OptionalPositiveIdArray(json, "file_ids");
+            if (!file_ids_result) return std::unexpected(file_ids_result.error());
+            request.file_ids = std::move(*file_ids_result);
+
+            auto folder_ids_result = OptionalPositiveIdArray(json, "folder_ids");
+            if (!folder_ids_result) return std::unexpected(folder_ids_result.error());
+            request.folder_ids = std::move(*folder_ids_result);
 
             if (request.file_ids.empty() && request.folder_ids.empty()) {
                 LOG_WARN << "Save share request must contain file_ids or folder_ids";
@@ -1274,7 +1128,7 @@ namespace disk::share {
         }
     };
 
-    struct SaveShareItemsResponse {
+    struct SaveShareItemsResponse : DtoBase<SaveShareItemsResponse> {
         int saved_count{ 0 };
         int saved_file_count{ 0 };
         int saved_folder_count{ 0 };
@@ -1282,9 +1136,9 @@ namespace disk::share {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["saved_count"] = saved_count;
-            json["saved_file_count"] = saved_file_count;
-            json["saved_folder_count"] = saved_folder_count;
+            SetField(json, "saved_count", saved_count);
+            SetField(json, "saved_file_count", saved_file_count);
+            SetField(json, "saved_folder_count", saved_folder_count);
             return json;
         }
     };

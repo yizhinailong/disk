@@ -28,6 +28,7 @@
 #include <drogon/HttpRequest.h>
 #include <json/json.h>
 
+#include "utils/DtoBase.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::trash {
@@ -42,7 +43,7 @@ namespace disk::trash {
      * - page: 可选，默认1，最小值1
      * - page_size: 可选，默认20，范围1-100
      */
-    struct TrashListRequest {
+    struct TrashListRequest : DtoBase<TrashListRequest> {
         int page{ 1 };
         int page_size{ 20 };
 
@@ -53,48 +54,16 @@ namespace disk::trash {
 
             TrashListRequest request;
 
-            // 解析 page（可选，默认1）
-            auto page_str = req->getParameter("page");
-            if (!page_str.empty()) {
-                try {
-                    int page_value = std::stoi(page_str);
-                    if (page_value < 1) {
-                        LOG_WARN << "Parameter 'page' must be greater than or equal to 1";
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page' must be greater than or equal to 1"
-                        ));
-                    }
-                    request.page = page_value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page' invalid format: " << page_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'page' invalid format: expected positive integer"
-                    ));
-                }
+            auto page_result = QueryPositiveInt(req, "page", 1);
+            if (!page_result) return std::unexpected(page_result.error());
+            if (page_result->has_value()) {
+                request.page = **page_result;
             }
 
-            // 解析 page_size（可选，默认20）
-            auto page_size_str = req->getParameter("page_size");
-            if (!page_size_str.empty()) {
-                try {
-                    int page_size_value = std::stoi(page_size_str);
-                    if (page_size_value < 1 || page_size_value > 100) {
-                        LOG_WARN << "Parameter 'page_size' must be between 1-100";
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page_size' must be between 1-100"
-                        ));
-                    }
-                    request.page_size = page_size_value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page_size' invalid format: " << page_size_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'page_size' invalid format: expected integer between 1-100"
-                    ));
-                }
+            auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
+            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (page_size_result->has_value()) {
+                request.page_size = **page_size_result;
             }
 
             LOG_DEBUG << "Parsed trash list request: page=" << request.page
@@ -112,7 +81,7 @@ namespace disk::trash {
      * - trash_ids: 必填，非空数组，元素为正整数
      * - 数组长度限制：1-100
      */
-    struct TrashBatchRequest {
+    struct TrashBatchRequest : DtoBase<TrashBatchRequest> {
         std::vector<uint64_t> trash_ids;
 
         /// 从 HTTP 请求解析并验证，返回 Result
@@ -120,75 +89,15 @@ namespace disk::trash {
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<TrashBatchRequest> {
             LOG_DEBUG << "Start parsing batch operation request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
-
-            // 检查必填字段
-            if (!json.isMember("trash_ids")) {
-                LOG_WARN << "Missing required parameter: trash_ids";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: trash_ids")
-                );
-            }
-
-            // 检查字段类型
-            if (!json["trash_ids"].isArray()) {
-                LOG_WARN << "Parameter 'trash_ids' type error: expected array";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'trash_ids' type error: expected array"
-                ));
-            }
-
-            const auto& ids_array = json["trash_ids"];
-            if (ids_array.empty()) {
-                LOG_WARN << "Parameter 'trash_ids' cannot be empty array";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'trash_ids' cannot be empty array"
-                ));
-            }
-
-            if (ids_array.size() > 100) {
-                LOG_WARN << "Parameter 'trash_ids' exceeds maximum length limit (100)";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'trash_ids' supports at most 100 IDs"
-                ));
-            }
+            auto ids_result = RequirePositiveIdArray(json, "trash_ids");
+            if (!ids_result) return std::unexpected(ids_result.error());
 
             TrashBatchRequest request;
-            request.trash_ids.reserve(ids_array.size());
-
-            for (Json::ArrayIndex i = 0; i < ids_array.size(); ++i) {
-                if (!ids_array[i].isIntegral()) {
-                    LOG_WARN << "Parameter 'trash_ids[" << i
-                             << "]' type error: expected positive integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        std::string("Parameter 'trash_ids[") + std::to_string(i) +
-                            "]' type error: expected positive integer"
-                    ));
-                }
-
-                auto id_value = ids_array[i].asUInt64();
-                if (id_value == 0) {
-                    LOG_WARN << "Parameter 'trash_ids[" << i << "]' must be a positive integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        std::string("Parameter 'trash_ids[") + std::to_string(i) +
-                            "]' must be a positive integer"
-                    ));
-                }
-                request.trash_ids.push_back(id_value);
-            }
+            request.trash_ids = std::move(*ids_result);
 
             LOG_DEBUG << "Parsed batch operation request: " << request.trash_ids.size() << " IDs";
 
@@ -204,7 +113,7 @@ namespace disk::trash {
      * @details
      * 包含批量操作的成功/失败统计。
      */
-    struct BatchSummary {
+    struct BatchSummary : DtoBase<BatchSummary> {
         int total{ 0 };
         int success_count{ 0 };
         int failure_count{ 0 };
@@ -213,9 +122,9 @@ namespace disk::trash {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["total"] = total;
-            json["success_count"] = success_count;
-            json["failure_count"] = failure_count;
+            SetField(json, "total", total);
+            SetField(json, "success_count", success_count);
+            SetField(json, "failure_count", failure_count);
             return json;
         }
     };
@@ -230,7 +139,7 @@ namespace disk::trash {
      * - 成功删除：{trash_id, status, freed_space}
      * - 失败：{trash_id, status, error: {code, message, field?, value?}}
      */
-    struct BatchResultItem {
+    struct BatchResultItem : DtoBase<BatchResultItem> {
         uint64_t trash_id{ 0 };
         std::string status; // "success" or "failed"
 
@@ -252,8 +161,8 @@ namespace disk::trash {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["trash_id"] = static_cast<Json::UInt64>(trash_id);
-            json["status"] = status;
+            SetField(json, "trash_id", trash_id);
+            SetField(json, "status", status);
 
             if (status == "failed") {
                 Json::Value error_obj;
@@ -271,19 +180,10 @@ namespace disk::trash {
                 }
                 json["error"] = error_obj;
             } else {
-                // 成功时：扁平化字段，不嵌套 data 对象
-                if (file_id.has_value()) {
-                    json["file_id"] = static_cast<Json::UInt64>(file_id.value());
-                }
-                if (folder_id.has_value()) {
-                    json["folder_id"] = static_cast<Json::UInt64>(folder_id.value());
-                }
-                if (path.has_value()) {
-                    json["path"] = path.value();
-                }
-                if (freed_space.has_value()) {
-                    json["freed_space"] = static_cast<Json::UInt64>(freed_space.value());
-                }
+                SetOptional(json, "file_id", file_id);
+                SetOptional(json, "folder_id", folder_id);
+                SetOptional(json, "path", path);
+                SetOptional(json, "freed_space", freed_space);
             }
 
             return json;
@@ -297,7 +197,7 @@ namespace disk::trash {
      * 包含回收站项目的完整信息。
      * 字段命名与 API 文档合同一致。
      */
-    struct TrashItemResponse {
+    struct TrashItemResponse : DtoBase<TrashItemResponse> {
         uint64_t id;
         std::string type; // "file" or "folder"
         uint64_t original_id;
@@ -311,14 +211,14 @@ namespace disk::trash {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["type"] = type;
-            json["original_id"] = static_cast<Json::UInt64>(original_id);
-            json["name"] = name;
-            json["size"] = static_cast<Json::UInt64>(size);
-            json["original_path"] = original_path;
-            json["deleted_at"] = deleted_at;
-            json["expires_at"] = expires_at;
+            SetField(json, "id", id);
+            SetField(json, "type", type);
+            SetField(json, "original_id", original_id);
+            SetField(json, "name", name);
+            SetField(json, "size", size);
+            SetField(json, "original_path", original_path);
+            SetField(json, "deleted_at", deleted_at);
+            SetField(json, "expires_at", expires_at);
             return json;
         }
     };
@@ -329,7 +229,7 @@ namespace disk::trash {
      * @details
      * 包含批量恢复操作的摘要和每个项目的结果。
      */
-    struct BatchRestoreResponse {
+    struct BatchRestoreResponse : DtoBase<BatchRestoreResponse> {
         BatchSummary summary;
         std::vector<BatchResultItem> results;
 
@@ -337,14 +237,8 @@ namespace disk::trash {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["summary"] = summary.ToJson();
-
-            Json::Value results_array(Json::arrayValue);
-            for (const auto& item : results) {
-                results_array.append(item.ToJson());
-            }
-            json["results"] = results_array;
-
+            SetField(json, "summary", summary);
+            SetArray(json, "results", results);
             return json;
         }
     };
@@ -355,7 +249,7 @@ namespace disk::trash {
      * @details
      * 包含批量删除操作的摘要和每个项目的结果。
      */
-    struct BatchDeleteResponse {
+    struct BatchDeleteResponse : DtoBase<BatchDeleteResponse> {
         BatchSummary summary;
         std::vector<BatchResultItem> results;
 
@@ -363,14 +257,8 @@ namespace disk::trash {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["summary"] = summary.ToJson();
-
-            Json::Value results_array(Json::arrayValue);
-            for (const auto& item : results) {
-                results_array.append(item.ToJson());
-            }
-            json["results"] = results_array;
-
+            SetField(json, "summary", summary);
+            SetArray(json, "results", results);
             return json;
         }
     };
@@ -381,7 +269,7 @@ namespace disk::trash {
      * @details
      * 包含清空回收站的统计信息。
      */
-    struct DeleteAllResponse {
+    struct DeleteAllResponse : DtoBase<DeleteAllResponse> {
         int deleted_count{ 0 };
         uint64_t freed_space{ 0 };
 
@@ -389,8 +277,8 @@ namespace disk::trash {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["deleted_count"] = deleted_count;
-            json["freed_space"] = static_cast<Json::UInt64>(freed_space);
+            SetField(json, "deleted_count", deleted_count);
+            SetField(json, "freed_space", freed_space);
             return json;
         }
     };

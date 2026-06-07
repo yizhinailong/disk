@@ -32,6 +32,7 @@
 #include <drogon/HttpRequest.h>
 #include <json/json.h>
 
+#include "utils/DtoBase.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::admin {
@@ -41,7 +42,7 @@ namespace disk::admin {
     /**
      * @brief 分页信息
      */
-    struct PaginationInfo {
+    struct PaginationInfo : DtoBase<PaginationInfo> {
         int page{ 1 };
         int page_size{ 20 };
         int total{ 0 };
@@ -51,10 +52,10 @@ namespace disk::admin {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["page"] = page;
-            json["page_size"] = page_size;
-            json["total"] = total;
-            json["total_pages"] = total_pages;
+            SetField(json, "page", page);
+            SetField(json, "page_size", page_size);
+            SetField(json, "total", total);
+            SetField(json, "total_pages", total_pages);
             return json;
         }
     };
@@ -75,7 +76,7 @@ namespace disk::admin {
      *
      * 从 URL 查询参数解析。
      */
-    struct ListUsersRequest {
+    struct ListUsersRequest : DtoBase<ListUsersRequest> {
         int page{ 1 };
         int page_size{ 20 };
         std::optional<std::string> username;
@@ -91,48 +92,17 @@ namespace disk::admin {
             ListUsersRequest request;
 
             // 解析可选参数 page
-            auto page_str = req->getParameter("page");
-            if (!page_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_str, &pos);
-                    if (pos != page_str.length() || value < 1) {
-                        LOG_WARN << "Parameter 'page' invalid value: " << page_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page' must be a positive integer"
-                        ));
-                    }
-                    request.page = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page' invalid format: " << page_str;
-                    return std::unexpected(
-                        ErrorInfo(ErrorCode::ValidationFailed, "Parameter 'page' invalid format")
-                    );
-                }
+            auto page_result = QueryPositiveInt(req, "page", 1);
+            if (!page_result) return std::unexpected(page_result.error());
+            if (page_result->has_value()) {
+                request.page = **page_result;
             }
 
             // 解析可选参数 page_size
-            auto page_size_str = req->getParameter("page_size");
-            if (!page_size_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_size_str, &pos);
-                    if (pos != page_size_str.length() || value < 1 || value > 100) {
-                        LOG_WARN << "Parameter 'page_size' invalid value: " << page_size_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page_size' must be an integer between 1-100"
-                        ));
-                    }
-                    request.page_size = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page_size' invalid format: " << page_size_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'page_size' invalid format"
-                    ));
-                }
+            auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
+            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (page_size_result->has_value()) {
+                request.page_size = **page_size_result;
             }
 
             // 解析可选参数 username
@@ -225,7 +195,7 @@ namespace disk::admin {
      *
      * 注意：user_id 从 URL 路径参数获取，不在本 DTO 中
      */
-    struct ChangeStatusRequest {
+    struct ChangeStatusRequest : DtoBase<ChangeStatusRequest> {
         int status{ 0 };
 
         /// 从 HTTP 请求解析并验证，返回 Result
@@ -233,42 +203,22 @@ namespace disk::admin {
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<ChangeStatusRequest> {
             LOG_DEBUG << "Start parsing change status request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
+            auto status_result = RequireInt(json, "status");
+            if (!status_result) return std::unexpected(status_result.error());
 
-            if (!json.isMember("status")) {
-                LOG_WARN << "Missing required parameter: status";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Missing required parameter: status"
-                ));
-            }
-
-            if (!json["status"].isIntegral()) {
-                LOG_WARN << "Parameter 'status' type error: expected integer";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'status' type error: expected integer"
-                ));
-            }
-
-            auto status = json["status"].asInt();
-            if (status < 0 || status > 2) {
-                LOG_WARN << "Parameter 'status' invalid value: " << status;
+            if (*status_result < 0 || *status_result > 2) {
+                LOG_WARN << "Parameter 'status' invalid value: " << *status_result;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::AdminInvalidStatus, "Invalid status value")
                 );
             }
 
             ChangeStatusRequest request;
-            request.status = status;
+            request.status = *status_result;
 
             LOG_DEBUG << "Parsed change status request: status=" << request.status;
 
@@ -285,7 +235,7 @@ namespace disk::admin {
      *
      * 注意：user_id 从 URL 路径参数获取，不在本 DTO 中
      */
-    struct ChangeRoleRequest {
+    struct ChangeRoleRequest : DtoBase<ChangeRoleRequest> {
         int role{ 0 };
 
         /// 从 HTTP 请求解析并验证，返回 Result
@@ -293,42 +243,22 @@ namespace disk::admin {
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<ChangeRoleRequest> {
             LOG_DEBUG << "Start parsing change role request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
+            auto role_result = RequireInt(json, "role");
+            if (!role_result) return std::unexpected(role_result.error());
 
-            if (!json.isMember("role")) {
-                LOG_WARN << "Missing required parameter: role";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Missing required parameter: role"
-                ));
-            }
-
-            if (!json["role"].isIntegral()) {
-                LOG_WARN << "Parameter 'role' type error: expected integer";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'role' type error: expected integer"
-                ));
-            }
-
-            auto role = json["role"].asInt();
-            if (role < 0 || role > 1) {
-                LOG_WARN << "Parameter 'role' invalid value: " << role;
+            if (*role_result < 0 || *role_result > 1) {
+                LOG_WARN << "Parameter 'role' invalid value: " << *role_result;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::AdminInvalidRole, "Invalid role value")
                 );
             }
 
             ChangeRoleRequest request;
-            request.role = role;
+            request.role = *role_result;
 
             LOG_DEBUG << "Parsed change role request: role=" << request.role;
 
@@ -345,7 +275,7 @@ namespace disk::admin {
      *
      * 注意：user_id 从 URL 路径参数获取，不在本 DTO 中
      */
-    struct ChangeAvailableSpaceRequest {
+    struct ChangeAvailableSpaceRequest : DtoBase<ChangeAvailableSpaceRequest> {
         static constexpr uint64_t BytesPerG = 1024ULL * 1024ULL * 1024ULL;
 
         uint64_t available_space_g{ 0 };
@@ -354,35 +284,15 @@ namespace disk::admin {
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<ChangeAvailableSpaceRequest> {
             LOG_DEBUG << "Start parsing change available space request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
+            auto space_result = RequireUInt64(json, "available_space_g");
+            if (!space_result) return std::unexpected(space_result.error());
 
-            if (!json.isMember("available_space_g")) {
-                LOG_WARN << "Missing required parameter: available_space_g";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Missing required parameter: available_space_g"
-                ));
-            }
-
-            if (!json["available_space_g"].isUInt64()) {
-                LOG_WARN << "Parameter 'available_space_g' type error: expected non-negative integer";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'available_space_g' type error: expected non-negative integer"
-                ));
-            }
-
-            auto available_space_g = json["available_space_g"].asUInt64();
-            if (available_space_g > std::numeric_limits<uint64_t>::max() / BytesPerG) {
-                LOG_WARN << "Parameter 'available_space_g' is too large: " << available_space_g;
+            if (*space_result > std::numeric_limits<uint64_t>::max() / BytesPerG) {
+                LOG_WARN << "Parameter 'available_space_g' is too large: " << *space_result;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Parameter 'available_space_g' is too large"
@@ -390,7 +300,7 @@ namespace disk::admin {
             }
 
             ChangeAvailableSpaceRequest request;
-            request.available_space_g = available_space_g;
+            request.available_space_g = *space_result;
 
             LOG_DEBUG << "Parsed change available space request: available_space_g="
                       << request.available_space_g;
@@ -400,7 +310,7 @@ namespace disk::admin {
     };
 
 
-    struct ListSharesRequest {
+    struct ListSharesRequest : DtoBase<ListSharesRequest> {
         int page{ 1 };
         int page_size{ 20 };
         std::optional<int> status;
@@ -415,49 +325,17 @@ namespace disk::admin {
             ListSharesRequest request;
 
             // 解析可选参数 page
-            auto page_str = req->getParameter("page");
-            if (!page_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_str, &pos);
-                    if (pos != page_str.length() || value < 1) {
-                        LOG_WARN << "Parameter 'page' invalid value: " << page_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page' must be a positive integer"
-                        ));
-                    }
-                    request.page = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page' invalid format: " << page_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'page' invalid format"
-                    ));
-                }
+            auto page_result = QueryPositiveInt(req, "page", 1);
+            if (!page_result) return std::unexpected(page_result.error());
+            if (page_result->has_value()) {
+                request.page = **page_result;
             }
 
             // 解析可选参数 page_size
-            auto page_size_str = req->getParameter("page_size");
-            if (!page_size_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_size_str, &pos);
-                    if (pos != page_size_str.length() || value < 1 || value > 100) {
-                        LOG_WARN << "Parameter 'page_size' invalid value: " << page_size_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page_size' must be an integer between 1-100"
-                        ));
-                    }
-                    request.page_size = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page_size' invalid format: " << page_size_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'page_size' invalid format"
-                    ));
-                }
+            auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
+            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (page_size_result->has_value()) {
+                request.page_size = **page_size_result;
             }
 
             // 解析可选参数 status
@@ -490,27 +368,9 @@ namespace disk::admin {
             }
 
             // 解析可选参数 user_id
-            auto user_id_str = req->getParameter("user_id");
-            if (!user_id_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoull(user_id_str, &pos);
-                    if (pos != user_id_str.length()) {
-                        LOG_WARN << "Parameter 'user_id' invalid format: " << user_id_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'user_id' invalid format"
-                        ));
-                    }
-                    request.user_id = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'user_id' invalid format: " << user_id_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'user_id' invalid format"
-                    ));
-                }
-            }
+            auto user_id_result = QueryUInt64(req, "user_id");
+            if (!user_id_result) return std::unexpected(user_id_result.error());
+            request.user_id = *user_id_result;
 
             // 解析可选参数 username
             auto username = req->getParameter("username");
@@ -541,7 +401,7 @@ namespace disk::admin {
      *
      * 从 URL 查询参数解析。
      */
-    struct AdminLogListRequest {
+    struct AdminLogListRequest : DtoBase<AdminLogListRequest> {
         int page{ 1 };
         int page_size{ 20 };
         std::optional<std::string> action;
@@ -556,49 +416,17 @@ namespace disk::admin {
             AdminLogListRequest request;
 
             // 解析可选参数 page
-            auto page_str = req->getParameter("page");
-            if (!page_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_str, &pos);
-                    if (pos != page_str.length() || value < 1) {
-                        LOG_WARN << "Parameter 'page' invalid value: " << page_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page' must be a positive integer"
-                        ));
-                    }
-                    request.page = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page' invalid format: " << page_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'page' invalid format"
-                    ));
-                }
+            auto page_result = QueryPositiveInt(req, "page", 1);
+            if (!page_result) return std::unexpected(page_result.error());
+            if (page_result->has_value()) {
+                request.page = **page_result;
             }
 
             // 解析可选参数 page_size
-            auto page_size_str = req->getParameter("page_size");
-            if (!page_size_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_size_str, &pos);
-                    if (pos != page_size_str.length() || value < 1 || value > 100) {
-                        LOG_WARN << "Parameter 'page_size' invalid value: " << page_size_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page_size' must be an integer between 1-100"
-                        ));
-                    }
-                    request.page_size = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page_size' invalid format: " << page_size_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'page_size' invalid format"
-                    ));
-                }
+            auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
+            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (page_size_result->has_value()) {
+                request.page_size = **page_size_result;
             }
 
             // 解析可选参数 action
@@ -637,7 +465,7 @@ namespace disk::admin {
      * @details
      * 包含用户的完整信息，用于管理员查看用户详情。
      */
-    struct UserDetailResponse {
+    struct UserDetailResponse : DtoBase<UserDetailResponse> {
         uint64_t id;
         std::string username;
         std::string email;
@@ -655,18 +483,18 @@ namespace disk::admin {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["username"] = username;
-            json["email"] = email;
-            json["nickname"] = nickname;
-            json["avatar"] = avatar;
-            json["role"] = role;
-            json["status"] = status;
-            json["storage_quota"] = static_cast<Json::UInt64>(storage_quota);
-            json["storage_used"] = static_cast<Json::UInt64>(storage_used);
-            json["storage_reserved"] = static_cast<Json::UInt64>(storage_reserved);
-            json["created_at"] = created_at;
-            json["last_login_at"] = last_login_at;
+            SetField(json, "id", id);
+            SetField(json, "username", username);
+            SetField(json, "email", email);
+            SetField(json, "nickname", nickname);
+            SetField(json, "avatar", avatar);
+            SetField(json, "role", role);
+            SetField(json, "status", status);
+            SetField(json, "storage_quota", storage_quota);
+            SetField(json, "storage_used", storage_used);
+            SetField(json, "storage_reserved", storage_reserved);
+            SetField(json, "created_at", created_at);
+            SetField(json, "last_login_at", last_login_at);
             return json;
         }
     };
@@ -677,7 +505,7 @@ namespace disk::admin {
      * @details
      * 包含用户列表和分页信息。
      */
-    struct UserListResponse {
+    struct UserListResponse : DtoBase<UserListResponse> {
         std::vector<UserDetailResponse> items;
         PaginationInfo pagination;
 
@@ -685,12 +513,8 @@ namespace disk::admin {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            Json::Value items_array(Json::arrayValue);
-            for (const auto& item : items) {
-                items_array.append(item.ToJson());
-            }
-            json["items"] = items_array;
-            json["pagination"] = pagination.ToJson();
+            SetArray(json, "items", items);
+            SetField(json, "pagination", pagination);
             return json;
         }
     };
@@ -701,7 +525,7 @@ namespace disk::admin {
      * @details
      * 包含系统整体存储统计信息。
      */
-    struct StorageStatsResponse {
+    struct StorageStatsResponse : DtoBase<StorageStatsResponse> {
         int total_users{ 0 };
         int total_files{ 0 };
         uint64_t total_storage_used{ 0 };
@@ -712,11 +536,11 @@ namespace disk::admin {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["total_users"] = total_users;
-            json["total_files"] = total_files;
-            json["total_storage_used"] = static_cast<Json::UInt64>(total_storage_used);
-            json["total_storage_quota"] = static_cast<Json::UInt64>(total_storage_quota);
-            json["active_shares"] = active_shares;
+            SetField(json, "total_users", total_users);
+            SetField(json, "total_files", total_files);
+            SetField(json, "total_storage_used", total_storage_used);
+            SetField(json, "total_storage_quota", total_storage_quota);
+            SetField(json, "active_shares", active_shares);
             return json;
         }
     };
@@ -727,7 +551,7 @@ namespace disk::admin {
      * @details
      * 包含系统运行状态和资源使用情况。
      */
-    struct SystemStatusResponse {
+    struct SystemStatusResponse : DtoBase<SystemStatusResponse> {
         bool db_connected{ false };
         bool redis_connected{ false };
         uint64_t disk_total{ 0 };
@@ -739,12 +563,12 @@ namespace disk::admin {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["db_connected"] = db_connected;
-            json["redis_connected"] = redis_connected;
-            json["disk_total"] = static_cast<Json::UInt64>(disk_total);
-            json["disk_used"] = static_cast<Json::UInt64>(disk_used);
-            json["disk_free"] = static_cast<Json::UInt64>(disk_free);
-            json["uptime_seconds"] = static_cast<Json::UInt64>(uptime_seconds);
+            SetField(json, "db_connected", db_connected);
+            SetField(json, "redis_connected", redis_connected);
+            SetField(json, "disk_total", disk_total);
+            SetField(json, "disk_used", disk_used);
+            SetField(json, "disk_free", disk_free);
+            SetField(json, "uptime_seconds", uptime_seconds);
             return json;
         }
     };
@@ -755,7 +579,7 @@ namespace disk::admin {
      * @details
      * 包含分享的详细信息，用于管理员查看分享详情。
      */
-    struct ShareDetailResponse {
+    struct ShareDetailResponse : DtoBase<ShareDetailResponse> {
         uint64_t id;
         uint64_t user_id;
         std::string username;
@@ -772,17 +596,17 @@ namespace disk::admin {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["user_id"] = static_cast<Json::UInt64>(user_id);
-            json["username"] = username;
-            json["file_id"] = static_cast<Json::UInt64>(file_id);
-            json["file_name"] = file_name;
-            json["share_code"] = share_code;
-            json["status"] = status;
-            json["access_count"] = access_count;
-            json["password_set"] = password_set;
-            json["created_at"] = created_at;
-            json["expires_at"] = expires_at;
+            SetField(json, "id", id);
+            SetField(json, "user_id", user_id);
+            SetField(json, "username", username);
+            SetField(json, "file_id", file_id);
+            SetField(json, "file_name", file_name);
+            SetField(json, "share_code", share_code);
+            SetField(json, "status", status);
+            SetField(json, "access_count", access_count);
+            SetField(json, "password_set", password_set);
+            SetField(json, "created_at", created_at);
+            SetField(json, "expires_at", expires_at);
             return json;
         }
     };
@@ -793,7 +617,7 @@ namespace disk::admin {
      * @details
      * 包含分享列表和分页信息。
      */
-    struct ShareListResponse {
+    struct ShareListResponse : DtoBase<ShareListResponse> {
         std::vector<ShareDetailResponse> items;
         PaginationInfo pagination;
 
@@ -801,12 +625,8 @@ namespace disk::admin {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            Json::Value items_array(Json::arrayValue);
-            for (const auto& item : items) {
-                items_array.append(item.ToJson());
-            }
-            json["items"] = items_array;
-            json["pagination"] = pagination.ToJson();
+            SetArray(json, "items", items);
+            SetField(json, "pagination", pagination);
             return json;
         }
     };
@@ -817,7 +637,7 @@ namespace disk::admin {
      * @details
      * 包含单条操作日志的完整信息。
      */
-    struct AdminLogDetailResponse {
+    struct AdminLogDetailResponse : DtoBase<AdminLogDetailResponse> {
         uint64_t id;
         uint64_t user_id;
         std::string action;
@@ -831,22 +651,14 @@ namespace disk::admin {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["user_id"] = static_cast<Json::UInt64>(user_id);
-            json["action"] = action;
-            json["target_type"] = target_type;
-            if (target_id.has_value()) {
-                json["target_id"] = static_cast<Json::UInt64>(*target_id);
-            } else {
-                json["target_id"] = Json::nullValue;
-            }
-            if (details.has_value()) {
-                json["details"] = *details;
-            } else {
-                json["details"] = Json::nullValue;
-            }
-            json["ip_address"] = ip_address;
-            json["created_at"] = created_at;
+            SetField(json, "id", id);
+            SetField(json, "user_id", user_id);
+            SetField(json, "action", action);
+            SetField(json, "target_type", target_type);
+            SetOptionalOrNull(json, "target_id", target_id);
+            SetOptionalOrNull(json, "details", details);
+            SetField(json, "ip_address", ip_address);
+            SetField(json, "created_at", created_at);
             return json;
         }
     };
@@ -857,7 +669,7 @@ namespace disk::admin {
      * @details
      * 包含操作日志列表和分页信息。
      */
-    struct AdminLogListResponse {
+    struct AdminLogListResponse : DtoBase<AdminLogListResponse> {
         std::vector<AdminLogDetailResponse> items;
         PaginationInfo pagination;
 
@@ -865,12 +677,8 @@ namespace disk::admin {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            Json::Value items_array(Json::arrayValue);
-            for (const auto& item : items) {
-                items_array.append(item.ToJson());
-            }
-            json["items"] = items_array;
-            json["pagination"] = pagination.ToJson();
+            SetArray(json, "items", items);
+            SetField(json, "pagination", pagination);
             return json;
         }
     };

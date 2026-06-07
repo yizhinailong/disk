@@ -49,6 +49,7 @@
 #include <drogon/HttpResponse.h>
 #include <json/json.h>
 
+#include "utils/DtoBase.hpp"
 #include "utils/ErrorCode.hpp"
 #include "utils/NameValidation.hpp"
 #include "utils/Response.hpp"
@@ -64,7 +65,7 @@ namespace disk::file {
      * 用于表示单个文件的基本信息。
      * 可在多种响应中复用（如列表、详情、上传完成等）。
      */
-    struct FileItem {
+    struct FileItem : DtoBase<FileItem> {
         uint64_t id;
         std::string name;
         uint64_t size;
@@ -77,13 +78,13 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["name"] = name;
-            json["size"] = static_cast<Json::UInt64>(size);
-            json["hash"] = hash;
-            json["mime_type"] = mime_type;
-            json["parent_id"] = static_cast<Json::UInt64>(parent_id);
-            json["created_at"] = created_at;
+            SetField(json, "id", id);
+            SetField(json, "name", name);
+            SetField(json, "size", size);
+            SetField(json, "hash", hash);
+            SetField(json, "mime_type", mime_type);
+            SetField(json, "parent_id", parent_id);
+            SetField(json, "created_at", created_at);
             return json;
         }
     };
@@ -103,7 +104,7 @@ namespace disk::file {
      * - file_hash: 32字符的十六进制字符串（MD5）
      * - parent_id: 默认 0（根目录）
      */
-    struct InitUploadRequest {
+    struct InitUploadRequest : DtoBase<InitUploadRequest> {
         std::string filename;
         uint64_t file_size{ 0 };
         std::string file_hash;
@@ -114,74 +115,28 @@ namespace disk::file {
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<InitUploadRequest> {
             LOG_DEBUG << "Start parsing init upload request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
+            auto filename_result = RequireString(json, "filename");
+            if (!filename_result) return std::unexpected(filename_result.error());
 
-            // 检查必填字段
-            if (!json.isMember("filename")) {
-                LOG_WARN << "Missing required parameter: filename";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: filename")
-                );
-            }
-            if (!json.isMember("file_size")) {
-                LOG_WARN << "Missing required parameter: file_size";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: file_size")
-                );
-            }
-            if (!json.isMember("file_hash")) {
-                LOG_WARN << "Missing required parameter: file_hash";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: file_hash")
-                );
-            }
+            auto file_size_result = RequireUInt64(json, "file_size");
+            if (!file_size_result) return std::unexpected(file_size_result.error());
 
-            // 检查字段类型
-            if (!json["filename"].isString()) {
-                LOG_WARN << "Parameter 'filename' type error: expected string";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'filename' type error: expected string"
-                ));
-            }
-            if (!json["file_size"].isIntegral()) {
-                LOG_WARN << "Parameter 'file_size' type error: expected integer";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'file_size' type error: expected integer"
-                ));
-            }
-            if (!json["file_hash"].isString()) {
-                LOG_WARN << "Parameter 'file_hash' type error: expected string";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'file_hash' type error: expected string"
-                ));
-            }
+            auto file_hash_result = RequireString(json, "file_hash");
+            if (!file_hash_result) return std::unexpected(file_hash_result.error());
+
+            auto parent_id_result = OptionalUInt64(json, "parent_id");
+            if (!parent_id_result) return std::unexpected(parent_id_result.error());
 
             InitUploadRequest request;
-            request.filename = json["filename"].asString();
-            request.file_size = json["file_size"].asUInt64();
-            request.file_hash = json["file_hash"].asString();
-
-            // 处理可选参数 parent_id
-            if (json.isMember("parent_id")) {
-                if (!json["parent_id"].isIntegral()) {
-                    LOG_WARN << "Parameter 'parent_id' type error: expected integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'parent_id' type error: expected integer"
-                    ));
-                }
-                request.parent_id = json["parent_id"].asUInt64();
+            request.filename = std::move(*filename_result);
+            request.file_size = *file_size_result;
+            request.file_hash = std::move(*file_hash_result);
+            if (parent_id_result->has_value()) {
+                request.parent_id = **parent_id_result;
             }
 
             LOG_DEBUG << "Parsed init upload request: filename=\"" << request.filename
@@ -326,7 +281,7 @@ namespace disk::file {
      * - 秒传: instant_upload=true, 返回 file 对象
      * - 断点续传: 返回已上传的分片列表
      */
-    struct InitUploadResponse {
+    struct InitUploadResponse : DtoBase<InitUploadResponse> {
         std::string upload_id;                 ///< 上传会话ID（秒传时为空）
         uint32_t chunk_size{ 0 };              ///< 分片大小
         uint32_t total_chunks{ 0 };            ///< 总分片数
@@ -338,22 +293,12 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["upload_id"] = upload_id;
-            json["chunk_size"] = chunk_size;
-            json["total_chunks"] = total_chunks;
-
-            Json::Value chunks_array(Json::arrayValue);
-            for (const auto& chunk : uploaded_chunks) {
-                chunks_array.append(chunk);
-            }
-            json["uploaded_chunks"] = chunks_array;
-
-            json["instant_upload"] = instant_upload;
-
-            if (file.has_value()) {
-                json["file"] = file->ToJson();
-            }
-
+            SetField(json, "upload_id", upload_id);
+            SetField(json, "chunk_size", chunk_size);
+            SetField(json, "total_chunks", total_chunks);
+            SetArray(json, "uploaded_chunks", uploaded_chunks);
+            SetField(json, "instant_upload", instant_upload);
+            SetOptional(json, "file", file);
             return json;
         }
     };
@@ -366,7 +311,7 @@ namespace disk::file {
      * @details
      * 包含分片上传结果。
      */
-    struct UploadChunkResponse {
+    struct UploadChunkResponse : DtoBase<UploadChunkResponse> {
         uint32_t chunk_index{ 0 }; ///< 分片索引
         bool uploaded{ false };    ///< 是否上传成功
 
@@ -374,8 +319,8 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["chunk_index"] = chunk_index;
-            json["uploaded"] = uploaded;
+            SetField(json, "chunk_index", chunk_index);
+            SetField(json, "uploaded", uploaded);
             return json;
         }
     };
@@ -389,7 +334,7 @@ namespace disk::file {
      * 验证规则：
      * - upload_id: 非空字符串
      */
-    struct CompleteUploadRequest {
+    struct CompleteUploadRequest : DtoBase<CompleteUploadRequest> {
         std::string upload_id;
 
         /// 从 HTTP 请求解析并验证，返回 Result
@@ -398,35 +343,15 @@ namespace disk::file {
             -> Result<CompleteUploadRequest> {
             LOG_DEBUG << "Start parsing complete upload request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
-
-            // 检查必填字段
-            if (!json.isMember("upload_id")) {
-                LOG_WARN << "Missing required parameter: upload_id";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: upload_id")
-                );
-            }
-
-            // 检查字段类型
-            if (!json["upload_id"].isString()) {
-                LOG_WARN << "Parameter 'upload_id' type error: expected string";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'upload_id' type error: expected string"
-                ));
-            }
+            auto upload_id_result = RequireString(json, "upload_id");
+            if (!upload_id_result) return std::unexpected(upload_id_result.error());
 
             CompleteUploadRequest request;
-            request.upload_id = json["upload_id"].asString();
+            request.upload_id = std::move(*upload_id_result);
 
             LOG_DEBUG << "Parsed complete upload request: upload_id=" << request.upload_id;
 
@@ -449,14 +374,14 @@ namespace disk::file {
      * @details
      * 包含上传完成后的文件信息。
      */
-    struct CompleteUploadResponse {
+    struct CompleteUploadResponse : DtoBase<CompleteUploadResponse> {
         FileItem file; ///< 文件信息
 
         /// 转换为 JSON
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["file"] = file.ToJson();
+            SetField(json, "file", file);
             return json;
         }
     };
@@ -477,7 +402,7 @@ namespace disk::file {
      *
      * 从 URL 查询参数解析。
      */
-    struct FileListRequest {
+    struct FileListRequest : DtoBase<FileListRequest> {
         uint64_t parent_id{ 0 };
         int page{ 1 };
         int page_size{ 20 };
@@ -505,72 +430,24 @@ namespace disk::file {
             static const std::set<std::string> valid_types = { "all", "file", "folder" };
 
             // 解析可选参数 parent_id
-            auto parent_id_str = req->getParameter("parent_id");
-            if (!parent_id_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoull(parent_id_str, &pos);
-                    if (pos != parent_id_str.length()) {
-                        LOG_WARN << "Parameter 'parent_id' invalid format: " << parent_id_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'parent_id' invalid format"
-                        ));
-                    }
-                    request.parent_id = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'parent_id' invalid format: " << parent_id_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'parent_id' invalid format"
-                    ));
-                }
+            auto parent_id_result = QueryUInt64(req, "parent_id");
+            if (!parent_id_result) return std::unexpected(parent_id_result.error());
+            if (parent_id_result->has_value()) {
+                request.parent_id = **parent_id_result;
             }
 
             // 解析可选参数 page
-            auto page_str = req->getParameter("page");
-            if (!page_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_str, &pos);
-                    if (pos != page_str.length() || value <= 0) {
-                        LOG_WARN << "Parameter 'page' invalid format or value: " << page_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page' must be a positive integer"
-                        ));
-                    }
-                    request.page = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page' invalid format: " << page_str;
-                    return std::unexpected(
-                        ErrorInfo(ErrorCode::ValidationFailed, "Parameter 'page' invalid format")
-                    );
-                }
+            auto page_result = QueryPositiveInt(req, "page", 1);
+            if (!page_result) return std::unexpected(page_result.error());
+            if (page_result->has_value()) {
+                request.page = **page_result;
             }
 
             // 解析可选参数 page_size
-            auto page_size_str = req->getParameter("page_size");
-            if (!page_size_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_size_str, &pos);
-                    if (pos != page_size_str.length() || value <= 0 || value > 100) {
-                        LOG_WARN << "Parameter 'page_size' invalid format or value: "
-                                 << page_size_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page_size' must be an integer between 1-100"
-                        ));
-                    }
-                    request.page_size = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page_size' invalid format: " << page_size_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'page_size' invalid format"
-                    ));
-                }
+            auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
+            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (page_size_result->has_value()) {
+                request.page_size = **page_size_result;
             }
 
             // 解析可选参数 sort_by
@@ -627,7 +504,7 @@ namespace disk::file {
      * @details
      * 用于表示文件列表中的单个文件或文件夹项。
      */
-    struct FileListItem {
+    struct FileListItem : DtoBase<FileListItem> {
         uint64_t id;
         std::string name;
         std::string type; ///< "file" 或 "folder"
@@ -645,20 +522,20 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["name"] = name;
-            json["type"] = type;
+            SetField(json, "id", id);
+            SetField(json, "name", name);
+            SetField(json, "type", type);
 
             if (type == "file") {
-                json["size"] = static_cast<Json::UInt64>(size);
-                json["mime_type"] = mime_type;
-                json["hash"] = hash;
+                SetField(json, "size", size);
+                SetField(json, "mime_type", mime_type);
+                SetField(json, "hash", hash);
             } else {
-                json["item_count"] = item_count;
+                SetField(json, "item_count", item_count);
             }
 
-            json["created_at"] = created_at;
-            json["updated_at"] = updated_at;
+            SetField(json, "created_at", created_at);
+            SetField(json, "updated_at", updated_at);
             return json;
         }
     };
@@ -669,7 +546,7 @@ namespace disk::file {
      * @details
      * 包含文件列表项和分页信息。
      */
-    struct FileListResponse {
+    struct FileListResponse : DtoBase<FileListResponse> {
         std::vector<FileListItem> items;
         Pagination pagination;
 
@@ -677,12 +554,8 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            Json::Value items_array(Json::arrayValue);
-            for (const auto& item : items) {
-                items_array.append(item.ToJson());
-            }
-            json["items"] = items_array;
-            json["pagination"] = pagination.ToJson();
+            SetArray(json, "items", items);
+            SetField(json, "pagination", pagination);
             return json;
         }
     };
@@ -698,7 +571,7 @@ namespace disk::file {
      *
      * 从 URL 路径参数解析。
      */
-    struct DownloadInfoRequest {
+    struct DownloadInfoRequest : DtoBase<DownloadInfoRequest> {
         uint64_t file_id{ 0 };
 
         /// 从路径参数解析并验证，返回 Result
@@ -706,42 +579,11 @@ namespace disk::file {
         static auto FromPath(const std::string& file_id_str) -> Result<DownloadInfoRequest> {
             LOG_DEBUG << "Start parsing download info request parameters";
 
-            if (file_id_str.empty()) {
-                LOG_WARN << "Missing required parameter: file_id";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: file_id")
-                );
-            }
-
-            // 检查是否为负数（stoull 会将负数回绕）
-            if (file_id_str[0] == '-') {
-                LOG_WARN << "Parameter 'file_id' must be a positive integer: " << file_id_str;
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::InvalidParameter,
-                    "Parameter 'file_id' must be a positive integer"
-                ));
-            }
-
-            uint64_t file_id = 0;
-            try {
-                size_t pos = 0;
-                file_id = std::stoull(file_id_str, &pos);
-                if (pos != file_id_str.length() || file_id == 0) {
-                    LOG_WARN << "Parameter 'file_id' must be a positive integer: " << file_id_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        "Parameter 'file_id' must be a positive integer"
-                    ));
-                }
-            } catch (const std::exception& e) {
-                LOG_WARN << "Parameter 'file_id' invalid format: " << file_id_str;
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::InvalidParameter, "Parameter 'file_id' invalid format")
-                );
-            }
+            auto file_id_result = ParsePositiveUInt64(file_id_str, "file_id");
+            if (!file_id_result) return std::unexpected(file_id_result.error());
 
             DownloadInfoRequest request;
-            request.file_id = file_id;
+            request.file_id = *file_id_result;
 
             LOG_DEBUG << "Parsed download info request: file_id=" << request.file_id;
 
@@ -755,7 +597,7 @@ namespace disk::file {
      * @details
      * 包含文件下载所需的元数据。
      */
-    struct DownloadInfoResponse {
+    struct DownloadInfoResponse : DtoBase<DownloadInfoResponse> {
         uint64_t file_id{ 0 };
         std::string filename;
         uint64_t file_size{ 0 };
@@ -767,12 +609,12 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["file_id"] = static_cast<Json::UInt64>(file_id);
-            json["filename"] = filename;
-            json["file_size"] = static_cast<Json::UInt64>(file_size);
-            json["file_hash"] = file_hash;
-            json["mime_type"] = mime_type;
-            json["supports_range"] = supports_range;
+            SetField(json, "file_id", file_id);
+            SetField(json, "filename", filename);
+            SetField(json, "file_size", file_size);
+            SetField(json, "file_hash", file_hash);
+            SetField(json, "mime_type", mime_type);
+            SetField(json, "supports_range", supports_range);
             return json;
         }
     };
@@ -783,7 +625,7 @@ namespace disk::file {
      * @details
      * GET /api/file/{file_id} 返回的扁平文件详情字段。
      */
-    struct FileDetailResponse {
+    struct FileDetailResponse : DtoBase<FileDetailResponse> {
         uint64_t id{ 0 };
         std::string name;
         std::string type; ///< "file" 或 "folder"
@@ -799,16 +641,16 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["name"] = name;
-            json["type"] = type;
-            json["size"] = static_cast<Json::Int64>(size);
-            json["hash"] = hash;
-            json["mime_type"] = mime_type;
-            json["parent_id"] = static_cast<Json::UInt64>(parent_id);
-            json["path"] = path;
-            json["created_at"] = created_at;
-            json["updated_at"] = updated_at;
+            SetField(json, "id", id);
+            SetField(json, "name", name);
+            SetField(json, "type", type);
+            SetField(json, "size", size);
+            SetField(json, "hash", hash);
+            SetField(json, "mime_type", mime_type);
+            SetField(json, "parent_id", parent_id);
+            SetField(json, "path", path);
+            SetField(json, "created_at", created_at);
+            SetField(json, "updated_at", updated_at);
             return json;
         }
     };
@@ -825,7 +667,7 @@ namespace disk::file {
      * 从 URL 路径参数解析。
      * Range 请求头通过 RangeRequest 结构体解析（参考 ShareDto.hpp 模式）。
      */
-    struct DownloadRequest {
+    struct DownloadRequest : DtoBase<DownloadRequest> {
         uint64_t file_id{ 0 };
 
         /// 从路径参数解析并验证，返回 Result
@@ -833,42 +675,11 @@ namespace disk::file {
         static auto FromPath(const std::string& file_id_str) -> Result<DownloadRequest> {
             LOG_DEBUG << "Start parsing download file request parameters";
 
-            if (file_id_str.empty()) {
-                LOG_WARN << "Missing required parameter: file_id";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: file_id")
-                );
-            }
-
-            // 检查是否为负数（stoull 会将负数回绕）
-            if (file_id_str[0] == '-') {
-                LOG_WARN << "Parameter 'file_id' must be a positive integer: " << file_id_str;
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::InvalidParameter,
-                    "Parameter 'file_id' must be a positive integer"
-                ));
-            }
-
-            uint64_t file_id = 0;
-            try {
-                size_t pos = 0;
-                file_id = std::stoull(file_id_str, &pos);
-                if (pos != file_id_str.length() || file_id == 0) {
-                    LOG_WARN << "Parameter 'file_id' must be a positive integer: " << file_id_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        "Parameter 'file_id' must be a positive integer"
-                    ));
-                }
-            } catch (const std::exception& e) {
-                LOG_WARN << "Parameter 'file_id' invalid format: " << file_id_str;
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::InvalidParameter, "Parameter 'file_id' invalid format")
-                );
-            }
+            auto file_id_result = ParsePositiveUInt64(file_id_str, "file_id");
+            if (!file_id_result) return std::unexpected(file_id_result.error());
 
             DownloadRequest request;
-            request.file_id = file_id;
+            request.file_id = *file_id_result;
 
             LOG_DEBUG << "Parsed download file request: file_id=" << request.file_id;
 
@@ -975,7 +786,7 @@ namespace disk::file {
      *
      * 从 URL 路径参数和请求体解析。
      */
-    struct RenameRequest {
+    struct RenameRequest : DtoBase<RenameRequest> {
         uint64_t file_id{ 0 };
         std::string new_name;
 
@@ -987,69 +798,19 @@ namespace disk::file {
             LOG_DEBUG << "Start parsing rename request parameters";
 
             // 验证路径参数 file_id
-            if (file_id_str.empty()) {
-                LOG_WARN << "Missing required parameter: file_id";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: file_id")
-                );
-            }
+            auto file_id_result = ParsePositiveUInt64(file_id_str, "file_id");
+            if (!file_id_result) return std::unexpected(file_id_result.error());
 
-            // 检查是否为负数
-            if (file_id_str[0] == '-') {
-                LOG_WARN << "Parameter 'file_id' must be a positive integer: " << file_id_str;
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::InvalidParameter,
-                    "Parameter 'file_id' must be a positive integer"
-                ));
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            uint64_t file_id = 0;
-            try {
-                size_t pos = 0;
-                file_id = std::stoull(file_id_str, &pos);
-                if (pos != file_id_str.length() || file_id == 0) {
-                    LOG_WARN << "Parameter 'file_id' must be a positive integer: " << file_id_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        "Parameter 'file_id' must be a positive integer"
-                    ));
-                }
-            } catch (const std::exception& e) {
-                LOG_WARN << "Parameter 'file_id' invalid format: " << file_id_str;
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::InvalidParameter, "Parameter 'file_id' invalid format")
-                );
-            }
-
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
-
-            const auto& json = *json_ptr;
-
-            // 检查必填字段 new_name
-            if (!json.isMember("new_name")) {
-                LOG_WARN << "Missing required parameter: new_name";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: new_name")
-                );
-            }
-
-            if (!json["new_name"].isString()) {
-                LOG_WARN << "Parameter 'new_name' type error: expected string";
-                return std::unexpected(ErrorInfo(
-                    ErrorCode::ValidationFailed,
-                    "Parameter 'new_name' type error: expected string"
-                ));
-            }
+            auto new_name_result = RequireString(json, "new_name");
+            if (!new_name_result) return std::unexpected(new_name_result.error());
 
             RenameRequest request;
-            request.file_id = file_id;
-            request.new_name = json["new_name"].asString();
+            request.file_id = *file_id_result;
+            request.new_name = std::move(*new_name_result);
 
             LOG_DEBUG << "Parsed rename request: file_id=" << request.file_id << ", new_name=\""
                       << request.new_name << "\"";
@@ -1150,7 +911,7 @@ namespace disk::file {
      * @details
      * 包含重命名后的文件信息。
      */
-    struct RenameResponse {
+    struct RenameResponse : DtoBase<RenameResponse> {
         uint64_t id{ 0 };
         std::string name;
         std::string updated_at;
@@ -1159,9 +920,9 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(id);
-            json["name"] = name;
-            json["updated_at"] = updated_at;
+            SetField(json, "id", id);
+            SetField(json, "name", name);
+            SetField(json, "updated_at", updated_at);
             return json;
         }
     };
@@ -1178,7 +939,7 @@ namespace disk::file {
      *
      * 从请求体解析。
      */
-    struct MoveRequest {
+    struct MoveRequest : DtoBase<MoveRequest> {
         std::vector<uint64_t> file_ids;
         std::vector<uint64_t> folder_ids;
         uint64_t target_folder_id{ 0 };
@@ -1188,64 +949,19 @@ namespace disk::file {
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<MoveRequest> {
             LOG_DEBUG << "Start parsing move drive items request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
             MoveRequest request;
 
-            auto parse_ids = [](const Json::Value& json,
-                                const char* field,
-                                std::vector<uint64_t>& ids) -> Result<void> {
-                if (!json.isMember(field)) {
-                    return {};
-                }
-                if (!json[field].isArray()) {
-                    LOG_WARN << "Parameter '" << field << "' type error: expected array";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        std::string("Parameter '") + field + "' type error: expected array"
-                    ));
-                }
+            auto file_ids_result = OptionalPositiveIdArray(json, "file_ids");
+            if (!file_ids_result) return std::unexpected(file_ids_result.error());
+            request.file_ids = std::move(*file_ids_result);
 
-                for (const auto& item : json[field]) {
-                    if (!item.isIntegral()) {
-                        LOG_WARN << "Element in parameter '" << field
-                                  << "' type error: expected integer";
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::InvalidParameter,
-                            std::string("Element in parameter '") + field +
-                                "' type error: expected integer"
-                        ));
-                    }
-                    auto id = item.asUInt64();
-                    if (id == 0) {
-                        LOG_WARN << "Element in parameter '" << field
-                                  << "' must be a positive integer";
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::InvalidParameter,
-                            std::string("Element in parameter '") + field +
-                                "' must be a positive integer"
-                        ));
-                    }
-                    ids.push_back(id);
-                }
-                return {};
-            };
-
-            auto file_ids_result = parse_ids(json, "file_ids", request.file_ids);
-            if (!file_ids_result) {
-                return std::unexpected(file_ids_result.error());
-            }
-            auto folder_ids_result = parse_ids(json, "folder_ids", request.folder_ids);
-            if (!folder_ids_result) {
-                return std::unexpected(folder_ids_result.error());
-            }
+            auto folder_ids_result = OptionalPositiveIdArray(json, "folder_ids");
+            if (!folder_ids_result) return std::unexpected(folder_ids_result.error());
+            request.folder_ids = std::move(*folder_ids_result);
 
             if (request.file_ids.empty() && request.folder_ids.empty()) {
                 LOG_WARN << "Move request must contain file_ids or folder_ids";
@@ -1256,15 +972,10 @@ namespace disk::file {
             }
 
             // 解析可选参数 target_folder_id
-            if (json.isMember("target_folder_id")) {
-                if (!json["target_folder_id"].isIntegral()) {
-                    LOG_WARN << "Parameter 'target_folder_id' type error: expected integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'target_folder_id' type error: expected integer"
-                    ));
-                }
-                request.target_folder_id = json["target_folder_id"].asUInt64();
+            auto target_folder_id_result = OptionalUInt64(json, "target_folder_id");
+            if (!target_folder_id_result) return std::unexpected(target_folder_id_result.error());
+            if (target_folder_id_result->has_value()) {
+                request.target_folder_id = **target_folder_id_result;
             }
 
             LOG_DEBUG << "Parsed move request: file_ids.size()=" << request.file_ids.size()
@@ -1281,7 +992,7 @@ namespace disk::file {
      * @details
      * 包含移动操作的结果统计。
      */
-    struct MoveResponse {
+    struct MoveResponse : DtoBase<MoveResponse> {
         int moved_count{ 0 };
         int moved_file_count{ 0 };
         int moved_folder_count{ 0 };
@@ -1290,9 +1001,9 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["moved_count"] = moved_count;
-            json["moved_file_count"] = moved_file_count;
-            json["moved_folder_count"] = moved_folder_count;
+            SetField(json, "moved_count", moved_count);
+            SetField(json, "moved_file_count", moved_file_count);
+            SetField(json, "moved_folder_count", moved_folder_count);
             return json;
         }
     };
@@ -1305,7 +1016,7 @@ namespace disk::file {
      * @details
      * 用于复制操作中记录旧ID和新ID的映射关系。
      */
-    struct FileIdMapping {
+    struct FileIdMapping : DtoBase<FileIdMapping> {
         uint64_t old_id{ 0 };
         uint64_t new_id{ 0 };
 
@@ -1313,8 +1024,8 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["old_id"] = static_cast<Json::UInt64>(old_id);
-            json["new_id"] = static_cast<Json::UInt64>(new_id);
+            SetField(json, "old_id", old_id);
+            SetField(json, "new_id", new_id);
             return json;
         }
     };
@@ -1329,7 +1040,7 @@ namespace disk::file {
      *
      * 从请求体解析。
      */
-    struct CopyRequest {
+    struct CopyRequest : DtoBase<CopyRequest> {
         std::vector<uint64_t> file_ids;
         std::vector<uint64_t> folder_ids;
         uint64_t target_folder_id{ 0 };
@@ -1339,64 +1050,19 @@ namespace disk::file {
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<CopyRequest> {
             LOG_DEBUG << "Start parsing copy drive items request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
             CopyRequest request;
 
-            auto parse_ids = [](const Json::Value& json,
-                                const char* field,
-                                std::vector<uint64_t>& ids) -> Result<void> {
-                if (!json.isMember(field)) {
-                    return {};
-                }
-                if (!json[field].isArray()) {
-                    LOG_WARN << "Parameter '" << field << "' type error: expected array";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        std::string("Parameter '") + field + "' type error: expected array"
-                    ));
-                }
+            auto file_ids_result = OptionalPositiveIdArray(json, "file_ids");
+            if (!file_ids_result) return std::unexpected(file_ids_result.error());
+            request.file_ids = std::move(*file_ids_result);
 
-                for (const auto& item : json[field]) {
-                    if (!item.isIntegral()) {
-                        LOG_WARN << "Element in parameter '" << field
-                                  << "' type error: expected integer";
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::InvalidParameter,
-                            std::string("Element in parameter '") + field +
-                                "' type error: expected integer"
-                        ));
-                    }
-                    auto id = item.asUInt64();
-                    if (id == 0) {
-                        LOG_WARN << "Element in parameter '" << field
-                                  << "' must be a positive integer";
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::InvalidParameter,
-                            std::string("Element in parameter '") + field +
-                                "' must be a positive integer"
-                        ));
-                    }
-                    ids.push_back(id);
-                }
-                return {};
-            };
-
-            auto file_ids_result = parse_ids(json, "file_ids", request.file_ids);
-            if (!file_ids_result) {
-                return std::unexpected(file_ids_result.error());
-            }
-            auto folder_ids_result = parse_ids(json, "folder_ids", request.folder_ids);
-            if (!folder_ids_result) {
-                return std::unexpected(folder_ids_result.error());
-            }
+            auto folder_ids_result = OptionalPositiveIdArray(json, "folder_ids");
+            if (!folder_ids_result) return std::unexpected(folder_ids_result.error());
+            request.folder_ids = std::move(*folder_ids_result);
 
             if (request.file_ids.empty() && request.folder_ids.empty()) {
                 LOG_WARN << "Copy request must contain file_ids or folder_ids";
@@ -1407,15 +1073,10 @@ namespace disk::file {
             }
 
             // 解析可选参数 target_folder_id
-            if (json.isMember("target_folder_id")) {
-                if (!json["target_folder_id"].isIntegral()) {
-                    LOG_WARN << "Parameter 'target_folder_id' type error: expected integer";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'target_folder_id' type error: expected integer"
-                    ));
-                }
-                request.target_folder_id = json["target_folder_id"].asUInt64();
+            auto target_folder_id_result = OptionalUInt64(json, "target_folder_id");
+            if (!target_folder_id_result) return std::unexpected(target_folder_id_result.error());
+            if (target_folder_id_result->has_value()) {
+                request.target_folder_id = **target_folder_id_result;
             }
 
             LOG_DEBUG << "Parsed copy request: file_ids.size()=" << request.file_ids.size()
@@ -1432,7 +1093,7 @@ namespace disk::file {
      * @details
      * 包含复制操作的结果统计和ID映射。
      */
-    struct CopyResponse {
+    struct CopyResponse : DtoBase<CopyResponse> {
         int copied_count{ 0 };
         int copied_file_count{ 0 };
         int copied_folder_count{ 0 };
@@ -1443,22 +1104,11 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["copied_count"] = copied_count;
-            json["copied_file_count"] = copied_file_count;
-            json["copied_folder_count"] = copied_folder_count;
-
-            Json::Value files_array(Json::arrayValue);
-            for (const auto& mapping : new_files) {
-                files_array.append(mapping.ToJson());
-            }
-            json["new_files"] = files_array;
-
-            Json::Value folders_array(Json::arrayValue);
-            for (const auto& mapping : new_folders) {
-                folders_array.append(mapping.ToJson());
-            }
-            json["new_folders"] = folders_array;
-
+            SetField(json, "copied_count", copied_count);
+            SetField(json, "copied_file_count", copied_file_count);
+            SetField(json, "copied_folder_count", copied_folder_count);
+            SetArray(json, "new_files", new_files);
+            SetArray(json, "new_folders", new_folders);
             return json;
         }
     };
@@ -1475,7 +1125,7 @@ namespace disk::file {
      * 从请求体解析。
      * 注意：删除操作为软删除，文件移入回收站。
      */
-    struct DeleteRequest {
+    struct DeleteRequest : DtoBase<DeleteRequest> {
         std::vector<uint64_t> file_ids;
         std::vector<uint64_t> folder_ids;
 
@@ -1484,67 +1134,19 @@ namespace disk::file {
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<DeleteRequest> {
             LOG_DEBUG << "Start parsing delete file request parameters";
 
-            auto json_ptr = req->getJsonObject();
-            if (!json_ptr) {
-                LOG_WARN << "Request body is not valid JSON";
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
-                );
-            }
+            auto json_result = RequireJsonBody(req);
+            if (!json_result) return std::unexpected(json_result.error());
+            const auto& json = *json_result.value();
 
-            const auto& json = *json_ptr;
             DeleteRequest request;
 
-            const auto parse_ids = [&](const char* field_name, std::vector<uint64_t>& ids)
-                -> Result<void> {
-                if (!json.isMember(field_name)) {
-                    return {};
-                }
+            auto file_ids_result = OptionalPositiveIdArray(json, "file_ids");
+            if (!file_ids_result) return std::unexpected(file_ids_result.error());
+            request.file_ids = std::move(*file_ids_result);
 
-                const auto& id_array = json[field_name];
-                if (!id_array.isArray()) {
-                    LOG_WARN << "Parameter '" << field_name << "' type error: expected array";
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::InvalidParameter,
-                        std::string("Parameter '") + field_name + "' type error: expected array"
-                    ));
-                }
-
-                for (const auto& item : id_array) {
-                    if (!item.isIntegral()) {
-                        LOG_WARN << "Element in parameter '" << field_name
-                                 << "' type error: expected integer";
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::InvalidParameter,
-                            std::string("Element in parameter '") + field_name +
-                                "' type error: expected integer"
-                        ));
-                    }
-                    auto id = item.asUInt64();
-                    if (id == 0) {
-                        LOG_WARN << "Element in parameter '" << field_name
-                                 << "' must be a positive integer";
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::InvalidParameter,
-                            std::string("Element in parameter '") + field_name +
-                                "' must be a positive integer"
-                        ));
-                    }
-                    ids.push_back(id);
-                }
-
-                return {};
-            };
-
-            auto file_parse_result = parse_ids("file_ids", request.file_ids);
-            if (!file_parse_result) {
-                return std::unexpected(file_parse_result.error());
-            }
-
-            auto folder_parse_result = parse_ids("folder_ids", request.folder_ids);
-            if (!folder_parse_result) {
-                return std::unexpected(folder_parse_result.error());
-            }
+            auto folder_ids_result = OptionalPositiveIdArray(json, "folder_ids");
+            if (!folder_ids_result) return std::unexpected(folder_ids_result.error());
+            request.folder_ids = std::move(*folder_ids_result);
 
             if (request.file_ids.empty() && request.folder_ids.empty()) {
                 LOG_WARN << "Delete request requires at least one file_id or folder_id";
@@ -1567,7 +1169,7 @@ namespace disk::file {
      * @details
      * 包含删除操作的结果统计。
      */
-    struct DeleteResponse {
+    struct DeleteResponse : DtoBase<DeleteResponse> {
         int deleted_count{ 0 };
         int deleted_file_count{ 0 };
         int deleted_folder_count{ 0 };
@@ -1576,9 +1178,9 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            json["deleted_count"] = deleted_count;
-            json["deleted_file_count"] = deleted_file_count;
-            json["deleted_folder_count"] = deleted_folder_count;
+            SetField(json, "deleted_count", deleted_count);
+            SetField(json, "deleted_file_count", deleted_file_count);
+            SetField(json, "deleted_folder_count", deleted_folder_count);
             return json;
         }
     };
@@ -1617,7 +1219,7 @@ namespace disk::file {
      *
      * 从 URL 查询参数解析。
      */
-    struct SearchRequest {
+    struct SearchRequest : DtoBase<SearchRequest> {
         std::string keyword;
         std::string type{ "all" };
         std::optional<uint64_t> folder_id;
@@ -1679,72 +1281,22 @@ namespace disk::file {
             }
 
             // 解析可选参数 folder_id
-            auto folder_id_str = req->getParameter("folder_id");
-            if (!folder_id_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoull(folder_id_str, &pos);
-                    if (pos != folder_id_str.length()) {
-                        LOG_WARN << "Parameter 'folder_id' invalid format: " << folder_id_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'folder_id' invalid format"
-                        ));
-                    }
-                    request.folder_id = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'folder_id' invalid format: " << folder_id_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'folder_id' invalid format"
-                    ));
-                }
-            }
+            auto folder_id_result = QueryUInt64(req, "folder_id");
+            if (!folder_id_result) return std::unexpected(folder_id_result.error());
+            request.folder_id = *folder_id_result;
 
             // 解析可选参数 page
-            auto page_str = req->getParameter("page");
-            if (!page_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_str, &pos);
-                    if (pos != page_str.length() || value <= 0) {
-                        LOG_WARN << "Parameter 'page' invalid format or value: " << page_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page' must be a positive integer"
-                        ));
-                    }
-                    request.page = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page' invalid format: " << page_str;
-                    return std::unexpected(
-                        ErrorInfo(ErrorCode::ValidationFailed, "Parameter 'page' invalid format")
-                    );
-                }
+            auto page_result = QueryPositiveInt(req, "page", 1);
+            if (!page_result) return std::unexpected(page_result.error());
+            if (page_result->has_value()) {
+                request.page = **page_result;
             }
 
             // 解析可选参数 page_size
-            auto page_size_str = req->getParameter("page_size");
-            if (!page_size_str.empty()) {
-                try {
-                    size_t pos = 0;
-                    auto value = std::stoi(page_size_str, &pos);
-                    if (pos != page_size_str.length() || value <= 0 || value > 100) {
-                        LOG_WARN << "Parameter 'page_size' invalid format or value: "
-                                 << page_size_str;
-                        return std::unexpected(ErrorInfo(
-                            ErrorCode::ValidationFailed,
-                            "Parameter 'page_size' must be an integer between 1-100"
-                        ));
-                    }
-                    request.page_size = value;
-                } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'page_size' invalid format: " << page_size_str;
-                    return std::unexpected(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Parameter 'page_size' invalid format"
-                    ));
-                }
+            auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
+            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (page_size_result->has_value()) {
+                request.page_size = **page_size_result;
             }
 
             LOG_DEBUG << "Parsed file search request: keyword=\"" << request.keyword
@@ -1770,7 +1322,7 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             auto json = FileListItem::ToJson();
-            json["path"] = path;
+            SetField(json, "path", path);
             return json;
         }
     };
@@ -1781,7 +1333,7 @@ namespace disk::file {
      * @details
      * 包含搜索结果项和分页信息。
      */
-    struct SearchResponse {
+    struct SearchResponse : DtoBase<SearchResponse> {
         std::vector<SearchResultItem> items;
         Pagination pagination;
 
@@ -1789,12 +1341,8 @@ namespace disk::file {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            Json::Value items_array(Json::arrayValue);
-            for (const auto& item : items) {
-                items_array.append(item.ToJson());
-            }
-            json["items"] = items_array;
-            json["pagination"] = pagination.ToJson();
+            SetArray(json, "items", items);
+            SetField(json, "pagination", pagination);
             return json;
         }
     };
