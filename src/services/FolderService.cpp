@@ -496,7 +496,7 @@ namespace disk::folder {
         // 1. 特殊情况：根目录
         if (folder_id == 0) {
             BreadcrumbResponse response;
-            response.path.push_back({ 0, "根目录" });
+            response.path.push_back(BreadcrumbItem{ .id = 0, .name = "根目录" });
             co_return response;
         }
 
@@ -531,7 +531,7 @@ namespace disk::folder {
             visited.insert(current.getValueOfId());
 
             // 添加当前文件夹到路径
-            path.push_back({ current.getValueOfId(), current.getValueOfName() });
+            path.push_back(BreadcrumbItem{ .id = current.getValueOfId(), .name = current.getValueOfName() });
 
             // 到达根目录
             if (current.getValueOfParentId() == 0) {
@@ -549,7 +549,7 @@ namespace disk::folder {
         }
 
         // 4. 添加根目录并反转
-        path.push_back({ 0, "根目录" });
+        path.push_back(BreadcrumbItem{ .id = 0, .name = "根目录" });
         std::ranges::reverse(path);
 
         // 5. 构建响应

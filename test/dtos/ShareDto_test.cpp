@@ -824,12 +824,12 @@ TEST(CancelShareResponse, ToJsonPartialSuccess) {
     CancelShareResult result2;
     result2.share_id = "sh_invalid";
     result2.status = "failed";
-    result2.error = CancelShareError{ 60001, "分享不存在", "分享不存在或不属于当前用户" };
+    result2.error = CancelShareError{ .code = 60001, .message = "分享不存在", .reason = "分享不存在或不属于当前用户" };
 
     CancelShareResult result3;
     result3.share_id = "sh_expired";
     result3.status = "failed";
-    result3.error = CancelShareError{ 60002, "分享已过期", "分享已超过有效期，无法取消" };
+    result3.error = CancelShareError{ .code = 60002, .message = "分享已过期", .reason = "分享已超过有效期，无法取消" };
 
     response.results.push_back(result1);
     response.results.push_back(result2);
