@@ -45,6 +45,7 @@ set(Filters_HEADERS
     filters/JwtAuthFilter.hpp
     filters/RateLimitFilter.hpp
     filters/RegisterRateLimitFilter.hpp
+    filters/RequestTraceFilter.hpp
     filters/ShareAuthFilter.hpp
     filters/SharePublicRateLimitFilter.hpp
     filters/UploadRateLimitFilter.hpp
@@ -57,6 +58,7 @@ set(Filters_SOURCES
     filters/JwtAuthFilter.cpp
     filters/RateLimitFilter.cpp
     filters/RegisterRateLimitFilter.cpp
+    filters/RequestTraceFilter.cpp
     filters/ShareAuthFilter.cpp
     filters/SharePublicRateLimitFilter.cpp
     filters/UploadRateLimitFilter.cpp

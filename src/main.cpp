@@ -66,6 +66,16 @@ auto main() -> int {
         disk::services::TokenService::GetInstance()->StartCacheMaintenance();
     });
 
+    // 为所有响应添加 X-Request-Id 头（从 RequestTraceFilter 设置的 attributes 中读取）
+    drogon::app().registerPostHandlingAdvice(
+        [](const drogon::HttpRequestPtr& req, const drogon::HttpResponsePtr& resp) {
+            auto attrs = req->attributes();
+            if (attrs->find("request_id")) {
+                resp->addHeader("X-Request-Id", attrs->get<std::string>("request_id"));
+            }
+        }
+    );
+
     drogon::app().run();
 
     return 0;
