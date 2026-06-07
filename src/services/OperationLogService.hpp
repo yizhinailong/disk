@@ -13,6 +13,7 @@
 #include <string>
 
 #include <drogon/orm/DbClient.h>
+#include <json/json.h>
 
 #include "utils/ErrorCode.hpp"
 
@@ -59,6 +60,20 @@ namespace disk::log {
         std::string details;
         std::string ip_address;
         std::string created_at;
+
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["id"] = static_cast<Json::UInt64>(id);
+            json["action"] = action;
+            json["target_type"] = target_type;
+            json["target_id"] = static_cast<Json::UInt64>(target_id);
+            json["target_name"] = target_name;
+            json["details"] = details;
+            json["ip_address"] = ip_address;
+            json["created_at"] = created_at;
+            return json;
+        }
     };
 
     struct OperationLogListResponse {

@@ -28,24 +28,7 @@ namespace disk::health {
 
         auto health_result = co_await m_health_service->Check();
 
-        Json::Value data;
-        data["overall_status"] = health_result.overall_status;
-        data["version"] = health_result.version;
-        data["uptime"] = health_result.uptime;
-        data["total_check_ms"] = health_result.total_check_ms;
-        data["timestamp"] = health_result.timestamp;
-
-        Json::Value components;
-        for (const auto& [name, status] : health_result.components) {
-            Json::Value component;
-            component["status"] = status.status;
-            if (!status.message.empty()) {
-                component["message"] = status.message;
-            }
-            component["latency_ms"] = status.latency_ms;
-            components[name] = component;
-        }
-        data["components"] = components;
+        auto data = health_result.ToJson();
 
         if (health_result.overall_status == "healthy") {
             co_return Response::Success(data);

@@ -41,27 +41,7 @@ namespace disk::system {
         }
 
         // 构造响应
-        Json::Value data;
-        data["version"] = info_result->version;
-        data["drogon_version"] = info_result->drogon_version;
-        data["build_time"] = info_result->build_time;
-        data["uptime"] = info_result->uptime;
-
-        Json::Value connections;
-        connections["current"] = info_result->connections.current;
-        connections["peak"] = info_result->connections.peak;
-        connections["db_pool_size"] = info_result->connections.db_pool_size;
-        connections["redis_pool_size"] = info_result->connections.redis_pool_size;
-        data["connections"] = connections;
-
-        Json::Value storage;
-        storage["total_users"] = info_result->storage.total_users;
-        storage["total_files"] = info_result->storage.total_files;
-        storage["total_folders"] = info_result->storage.total_folders;
-        storage["total_size"] = info_result->storage.total_size;
-        data["storage"] = storage;
-
-        co_return Response::Success(data);
+        co_return Response::Success(info_result->ToJson());
     }
 
 } // namespace disk::system

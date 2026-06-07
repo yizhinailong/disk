@@ -62,16 +62,7 @@ namespace disk::log {
 
         Json::Value items(Json::arrayValue);
         for (const auto& item : result->items) {
-            Json::Value json;
-            json["id"] = static_cast<Json::UInt64>(item.id);
-            json["action"] = item.action;
-            json["target_type"] = item.target_type;
-            json["target_id"] = static_cast<Json::UInt64>(item.target_id);
-            json["target_name"] = item.target_name;
-            json["details"] = item.details;
-            json["ip_address"] = item.ip_address;
-            json["created_at"] = item.created_at;
-            items.append(json);
+            items.append(item.ToJson());
         }
 
         Json::Value data;

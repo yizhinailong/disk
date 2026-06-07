@@ -70,15 +70,8 @@ namespace disk::auth {
         }
 
         // 3. 构造响应
-        Json::Value data;
-        data["access_token"] = login_result->access_token;
-        data["refresh_token"] = login_result->refresh_token;
-        data["token_type"] = login_result->token_type;
-        data["expires_in"] = login_result->expires_in;
-        data["user"] = login_result->user.ToJson();
-
         LOG_INFO << "Login successful: " << parse_result->account;
-        co_return Response::Success(data);
+        co_return Response::Success(login_result->ToJson());
     }
 
     auto AuthController::RefreshTokens(drogon::HttpRequestPtr request)
@@ -102,13 +95,8 @@ namespace disk::auth {
         }
 
         // 3. 构造响应
-        Json::Value data;
-        data["access_token"] = refresh_result->access_token;
-        data["refresh_token"] = refresh_result->refresh_token;
-        data["expires_in"] = refresh_result->expires_in;
-
         LOG_INFO << "Refresh token successful";
-        co_return Response::Success(data);
+        co_return Response::Success(refresh_result->ToJson());
     }
 
     auto AuthController::Logout(drogon::HttpRequestPtr request)

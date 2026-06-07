@@ -16,6 +16,8 @@
 #include <drogon/nosql/RedisClient.h>
 #include <drogon/orm/DbClient.h>
 
+#include <json/json.h>
+
 #include "utils/ErrorCode.hpp"
 
 namespace disk::system {
@@ -25,6 +27,16 @@ namespace disk::system {
         int64_t peak{ 0 };
         int64_t db_pool_size{ 0 };
         int64_t redis_pool_size{ 0 };
+
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["current"] = static_cast<Json::Int64>(current);
+            json["peak"] = static_cast<Json::Int64>(peak);
+            json["db_pool_size"] = static_cast<Json::Int64>(db_pool_size);
+            json["redis_pool_size"] = static_cast<Json::Int64>(redis_pool_size);
+            return json;
+        }
     };
 
     struct StorageStats {
@@ -32,6 +44,16 @@ namespace disk::system {
         int64_t total_files{ 0 };
         int64_t total_folders{ 0 };
         int64_t total_size{ 0 };
+
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["total_users"] = static_cast<Json::Int64>(total_users);
+            json["total_files"] = static_cast<Json::Int64>(total_files);
+            json["total_folders"] = static_cast<Json::Int64>(total_folders);
+            json["total_size"] = static_cast<Json::Int64>(total_size);
+            return json;
+        }
     };
 
     struct SystemInfo {
@@ -41,6 +63,18 @@ namespace disk::system {
         int64_t uptime{ 0 };
         ConnectionStats connections;
         StorageStats storage;
+
+        [[nodiscard]]
+        auto ToJson() const -> Json::Value {
+            Json::Value json;
+            json["version"] = version;
+            json["drogon_version"] = drogon_version;
+            json["build_time"] = build_time;
+            json["uptime"] = static_cast<Json::Int64>(uptime);
+            json["connections"] = connections.ToJson();
+            json["storage"] = storage.ToJson();
+            return json;
+        }
     };
 
     class SystemService {
