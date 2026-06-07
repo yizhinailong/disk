@@ -40,7 +40,7 @@ namespace disk::filters {
 
         auto incr_result = co_await m_redis_service->IncrWithExpire(key, WINDOW_SECONDS);
         if (!incr_result) {
-            LOG_ERROR << "Redis IncrWithExpire failed: " << incr_result.error().message;
+            Logger::Error() << "Redis IncrWithExpire failed: " << incr_result.error().message;
             co_return nullptr;
         }
 
@@ -53,7 +53,7 @@ namespace disk::filters {
                 std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
             const auto retry_after = std::max<int64_t>(1, reset_time - now_seconds);
 
-            LOG_WARN << "Register rate limit: ip=" << ip
+            Logger::Warn() << "Register rate limit: ip=" << ip
                      << ", count=" << current_count;
 
             auto response = disk::Response::Error(disk::error::Code::TooManyRequests);
@@ -65,7 +65,7 @@ namespace disk::filters {
             co_return response;
         }
 
-        LOG_DEBUG << "Register rate limit check passed: ip=" << ip
+        Logger::Debug() << "Register rate limit check passed: ip=" << ip
                   << ", count=" << current_count << "/" << DEFAULT_LIMIT;
 
         co_return nullptr;

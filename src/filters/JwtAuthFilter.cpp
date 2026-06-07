@@ -32,7 +32,7 @@ namespace disk::filters {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[jwt_auth_filter] duration_us=" << duration_us << " outcome=failure";
+            Logger::Info() << "[jwt_auth_filter] duration_us=" << duration_us << " outcome=failure";
             co_return disk::Response::Error(disk::error::Code::TokenMissing);
         }
 
@@ -40,7 +40,7 @@ namespace disk::filters {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[jwt_auth_filter] duration_us=" << duration_us << " outcome=failure";
+            Logger::Info() << "[jwt_auth_filter] duration_us=" << duration_us << " outcome=failure";
             co_return disk::Response::Error(disk::error::Code::TokenMalformed);
         }
 
@@ -54,19 +54,19 @@ namespace disk::filters {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[jwt_auth_filter] duration_us=" << duration_us << " outcome=failure";
+            Logger::Info() << "[jwt_auth_filter] duration_us=" << duration_us << " outcome=failure";
             co_return disk::Response::Error(verify_result.error());
         }
 
         const auto& claims = verify_result.value();
 
         if (co_await token_service->IsAccessTokenRevoked(claims.jti)) {
-            LOG_WARN << "Token revoked: user_id=" << claims.user_id << ", jti=" << claims.jti;
+            Logger::Warn() << "Token revoked: user_id=" << claims.user_id << ", jti=" << claims.jti;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[jwt_auth_filter] duration_us=" << duration_us
+            Logger::Info() << "[jwt_auth_filter] duration_us=" << duration_us
                      << " outcome=failure user_id=" << claims.user_id;
             co_return disk::Response::Error(disk::error::Code::TokenRevoked);
         }
@@ -79,7 +79,7 @@ namespace disk::filters {
         auto end = std::chrono::steady_clock::now();
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        LOG_INFO << "[jwt_auth_filter] duration_us=" << duration_us
+        Logger::Info() << "[jwt_auth_filter] duration_us=" << duration_us
                  << " outcome=success user_id=" << claims.user_id;
 
         co_return nullptr;

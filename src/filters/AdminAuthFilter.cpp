@@ -29,18 +29,18 @@ namespace disk::filters {
         auto status = request->attributes()->get<int>("status");
 
         if (role != 1) {
-            LOG_WARN << "[admin_auth_filter] Non-admin access attempt: user_id=" << user_id
+            Logger::Warn() << "[admin_auth_filter] Non-admin access attempt: user_id=" << user_id
                      << " role=" << role << " path=" << path;
             co_return disk::Response::Error(disk::error::Code::AdminRequired);
         }
 
         if (status != 1) {
-            LOG_WARN << "[admin_auth_filter] Disabled admin access: user_id=" << user_id
+            Logger::Warn() << "[admin_auth_filter] Disabled admin access: user_id=" << user_id
                      << " status=" << status << " path=" << path;
             co_return disk::Response::Error(disk::error::Code::AdminRequired);
         }
 
-        LOG_TRACE << "[admin_auth_filter] Admin access granted: user_id=" << user_id
+        Logger::Trace() << "[admin_auth_filter] Admin access granted: user_id=" << user_id
                   << " path=" << path;
 
         co_return nullptr;

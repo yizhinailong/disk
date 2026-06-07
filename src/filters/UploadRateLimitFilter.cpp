@@ -32,7 +32,7 @@ namespace disk::filters {
         // 从 request attributes 获取 user_id（由 JwtAuthFilter 设置）
         auto attrs = request->attributes();
         if (!attrs) {
-            LOG_WARN << "Cannot get request attributes";
+            Logger::Warn() << "Cannot get request attributes";
             co_return nullptr;
         }
 
@@ -51,7 +51,7 @@ namespace disk::filters {
         // 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
         auto incr_result = co_await m_redis_service->IncrWithExpire(key, WINDOW_SECONDS);
         if (!incr_result) {
-            LOG_ERROR << "Redis IncrWithExpire failed: " << incr_result.error().message;
+            Logger::Error() << "Redis IncrWithExpire failed: " << incr_result.error().message;
             // Redis 失败时不阻止请求
             co_return nullptr;
         }
@@ -68,7 +68,7 @@ namespace disk::filters {
                                          .count();
             const auto retry_after = std::max<int64_t>(1, reset_time - now_seconds);
 
-            LOG_WARN << "Upload rate limit: user_id=" << user_id
+            Logger::Warn() << "Upload rate limit: user_id=" << user_id
                      << ", path=" << request->path()
                      << ", count=" << current_count;
 
@@ -81,7 +81,7 @@ namespace disk::filters {
             co_return response;
         }
 
-        LOG_DEBUG << "Upload rate limit check passed: user_id=" << user_id
+        Logger::Debug() << "Upload rate limit check passed: user_id=" << user_id
                   << ", count=" << current_count << "/" << limit;
 
         co_return nullptr;

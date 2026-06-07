@@ -16,7 +16,7 @@
 #include <chrono>
 #include <string>
 
-#include <trantor/utils/Logger.h>
+#include "utils/LogHelper.hpp"
 
 namespace disk::utils {
 
@@ -46,7 +46,7 @@ namespace disk::utils {
             const auto end = std::chrono::steady_clock::now();
             const auto duration_ms =
                 std::chrono::duration_cast<std::chrono::milliseconds>(end - m_start).count();
-            LOG_INFO << "[stage_timer] " << m_stage_name << " duration_ms=" << duration_ms;
+            Logger::Info() << "[stage_timer] " << m_stage_name << " duration_ms=" << duration_ms;
         }
 
         StageTimer(const StageTimer&) = delete;

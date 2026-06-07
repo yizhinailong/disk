@@ -87,7 +87,7 @@ namespace disk::admin {
         /// 从 HTTP 请求查询参数解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<ListUsersRequest> {
-            LOG_DEBUG << "Start parsing list users request parameters";
+            Logger::Debug() << "Start parsing list users request parameters";
 
             ListUsersRequest request;
 
@@ -124,21 +124,21 @@ namespace disk::admin {
                     size_t pos = 0;
                     auto value = std::stoi(status_str, &pos);
                     if (pos != status_str.length()) {
-                        LOG_WARN << "Parameter 'status' invalid format: " << status_str;
+                        Logger::Warn() << "Parameter 'status' invalid format: " << status_str;
                         return std::unexpected(ErrorInfo(
                             ErrorCode::ValidationFailed,
                             "Parameter 'status' invalid format"
                         ));
                     }
                     if (value < 0 || value > 2) {
-                        LOG_WARN << "Parameter 'status' invalid value: " << status_str;
+                        Logger::Warn() << "Parameter 'status' invalid value: " << status_str;
                         return std::unexpected(
                             ErrorInfo(ErrorCode::AdminInvalidStatus, "Invalid status value")
                         );
                     }
                     request.status = value;
                 } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'status' invalid format: " << status_str;
+                    Logger::Warn() << "Parameter 'status' invalid format: " << status_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'status' invalid format"
@@ -153,21 +153,21 @@ namespace disk::admin {
                     size_t pos = 0;
                     auto value = std::stoi(role_str, &pos);
                     if (pos != role_str.length()) {
-                        LOG_WARN << "Parameter 'role' invalid format: " << role_str;
+                        Logger::Warn() << "Parameter 'role' invalid format: " << role_str;
                         return std::unexpected(ErrorInfo(
                             ErrorCode::ValidationFailed,
                             "Parameter 'role' invalid format"
                         ));
                     }
                     if (value < 0 || value > 1) {
-                        LOG_WARN << "Parameter 'role' invalid value: " << role_str;
+                        Logger::Warn() << "Parameter 'role' invalid value: " << role_str;
                         return std::unexpected(
                             ErrorInfo(ErrorCode::AdminInvalidRole, "Invalid role value")
                         );
                     }
                     request.role = value;
                 } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'role' invalid format: " << role_str;
+                    Logger::Warn() << "Parameter 'role' invalid format: " << role_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'role' invalid format"
@@ -175,7 +175,7 @@ namespace disk::admin {
                 }
             }
 
-            LOG_DEBUG << "Parsed list users request: page=" << request.page
+            Logger::Debug() << "Parsed list users request: page=" << request.page
                       << ", page_size=" << request.page_size
                       << ", username=" << (request.username.has_value() ? "set" : "null")
                       << ", email=" << (request.email.has_value() ? "set" : "null")
@@ -201,7 +201,7 @@ namespace disk::admin {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<ChangeStatusRequest> {
-            LOG_DEBUG << "Start parsing change status request parameters";
+            Logger::Debug() << "Start parsing change status request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -211,7 +211,7 @@ namespace disk::admin {
             if (!status_result) return std::unexpected(status_result.error());
 
             if (*status_result < 0 || *status_result > 2) {
-                LOG_WARN << "Parameter 'status' invalid value: " << *status_result;
+                Logger::Warn() << "Parameter 'status' invalid value: " << *status_result;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::AdminInvalidStatus, "Invalid status value")
                 );
@@ -220,7 +220,7 @@ namespace disk::admin {
             ChangeStatusRequest request;
             request.status = *status_result;
 
-            LOG_DEBUG << "Parsed change status request: status=" << request.status;
+            Logger::Debug() << "Parsed change status request: status=" << request.status;
 
             return request;
         }
@@ -241,7 +241,7 @@ namespace disk::admin {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<ChangeRoleRequest> {
-            LOG_DEBUG << "Start parsing change role request parameters";
+            Logger::Debug() << "Start parsing change role request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -251,7 +251,7 @@ namespace disk::admin {
             if (!role_result) return std::unexpected(role_result.error());
 
             if (*role_result < 0 || *role_result > 1) {
-                LOG_WARN << "Parameter 'role' invalid value: " << *role_result;
+                Logger::Warn() << "Parameter 'role' invalid value: " << *role_result;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::AdminInvalidRole, "Invalid role value")
                 );
@@ -260,7 +260,7 @@ namespace disk::admin {
             ChangeRoleRequest request;
             request.role = *role_result;
 
-            LOG_DEBUG << "Parsed change role request: role=" << request.role;
+            Logger::Debug() << "Parsed change role request: role=" << request.role;
 
             return request;
         }
@@ -282,7 +282,7 @@ namespace disk::admin {
 
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<ChangeAvailableSpaceRequest> {
-            LOG_DEBUG << "Start parsing change available space request parameters";
+            Logger::Debug() << "Start parsing change available space request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -292,7 +292,7 @@ namespace disk::admin {
             if (!space_result) return std::unexpected(space_result.error());
 
             if (*space_result > std::numeric_limits<uint64_t>::max() / BytesPerG) {
-                LOG_WARN << "Parameter 'available_space_g' is too large: " << *space_result;
+                Logger::Warn() << "Parameter 'available_space_g' is too large: " << *space_result;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Parameter 'available_space_g' is too large"
@@ -302,7 +302,7 @@ namespace disk::admin {
             ChangeAvailableSpaceRequest request;
             request.available_space_g = *space_result;
 
-            LOG_DEBUG << "Parsed change available space request: available_space_g="
+            Logger::Debug() << "Parsed change available space request: available_space_g="
                       << request.available_space_g;
 
             return request;
@@ -320,7 +320,7 @@ namespace disk::admin {
         /// 从 HTTP 请求查询参数解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<ListSharesRequest> {
-            LOG_DEBUG << "Start parsing list shares request parameters";
+            Logger::Debug() << "Start parsing list shares request parameters";
 
             ListSharesRequest request;
 
@@ -345,21 +345,21 @@ namespace disk::admin {
                     size_t pos = 0;
                     auto value = std::stoi(status_str, &pos);
                     if (pos != status_str.length()) {
-                        LOG_WARN << "Parameter 'status' invalid format: " << status_str;
+                        Logger::Warn() << "Parameter 'status' invalid format: " << status_str;
                         return std::unexpected(ErrorInfo(
                             ErrorCode::ValidationFailed,
                             "Parameter 'status' invalid format"
                         ));
                     }
                     if (value < 0 || value > 2) {
-                        LOG_WARN << "Parameter 'status' invalid value: " << status_str;
+                        Logger::Warn() << "Parameter 'status' invalid value: " << status_str;
                         return std::unexpected(
                             ErrorInfo(ErrorCode::AdminInvalidStatus, "Invalid status value")
                         );
                     }
                     request.status = value;
                 } catch (const std::exception& e) {
-                    LOG_WARN << "Parameter 'status' invalid format: " << status_str;
+                    Logger::Warn() << "Parameter 'status' invalid format: " << status_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'status' invalid format"
@@ -378,7 +378,7 @@ namespace disk::admin {
                 request.username = username;
             }
 
-            LOG_DEBUG << "Parsed list shares request: page=" << request.page
+            Logger::Debug() << "Parsed list shares request: page=" << request.page
                       << ", page_size=" << request.page_size
                       << ", status=" << (request.status.has_value() ? std::to_string(*request.status) : "null")
                       << ", user_id=" << (request.user_id.has_value() ? std::to_string(*request.user_id) : "null")
@@ -411,7 +411,7 @@ namespace disk::admin {
         /// 从 HTTP 请求查询参数解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<AdminLogListRequest> {
-            LOG_DEBUG << "Start parsing admin log list request parameters";
+            Logger::Debug() << "Start parsing admin log list request parameters";
 
             AdminLogListRequest request;
 
@@ -447,7 +447,7 @@ namespace disk::admin {
                 request.end_date = end_date_str;
             }
 
-            LOG_DEBUG << "Parsed admin log list request: page=" << request.page
+            Logger::Debug() << "Parsed admin log list request: page=" << request.page
                       << ", page_size=" << request.page_size
                       << ", action=" << (request.action.has_value() ? *request.action : "null")
                       << ", start_date=" << (request.start_date.has_value() ? *request.start_date : "null")

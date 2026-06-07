@@ -50,7 +50,7 @@ namespace disk::auth {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<RegisterRequest> {
-            LOG_DEBUG << "Start parsing register request parameters";
+            Logger::Debug() << "Start parsing register request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -70,28 +70,28 @@ namespace disk::auth {
             request.email = std::move(*email_result);
             request.password = std::move(*password_result);
 
-            LOG_DEBUG << "Parsed register request: " << request.username << " <" << request.email
+            Logger::Debug() << "Parsed register request: " << request.username << " <" << request.email
                       << ">";
 
             if (!request.ValidateUsername()) {
-                LOG_WARN << "Username format error: " << request.username;
+                Logger::Warn() << "Username format error: " << request.username;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Username format error")
                 );
             }
             if (!request.ValidateEmail()) {
-                LOG_WARN << "Email format error: " << request.email;
+                Logger::Warn() << "Email format error: " << request.email;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Email format error")
                 );
             }
             if (!request.ValidatePassword()) {
-                LOG_WARN << "Password format error: " << request.username;
+                Logger::Warn() << "Password format error: " << request.username;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Password format error")
                 );
             }
-            LOG_DEBUG << "Request parameters validated";
+            Logger::Debug() << "Request parameters validated";
 
             return request;
         }
@@ -143,7 +143,7 @@ namespace disk::auth {
 
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<LoginRequest> {
-            LOG_DEBUG << "Start parsing login request parameters";
+            Logger::Debug() << "Start parsing login request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -160,19 +160,19 @@ namespace disk::auth {
             request.password = std::move(*password_result);
 
             if (request.account.empty()) {
-                LOG_WARN << "Account cannot be empty";
+                Logger::Warn() << "Account cannot be empty";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Account cannot be empty")
                 );
             }
             if (request.password.empty()) {
-                LOG_WARN << "Password cannot be empty";
+                Logger::Warn() << "Password cannot be empty";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Password cannot be empty")
                 );
             }
 
-            LOG_DEBUG << "Parsed login request: " << request.account;
+            Logger::Debug() << "Parsed login request: " << request.account;
 
             return request;
         }
@@ -190,7 +190,7 @@ namespace disk::auth {
 
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<RefreshTokenRequest> {
-            LOG_DEBUG << "Start parsing refresh token request parameters";
+            Logger::Debug() << "Start parsing refresh token request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -202,7 +202,7 @@ namespace disk::auth {
             RefreshTokenRequest request;
             request.refresh_token = std::move(*token_result);
 
-            LOG_DEBUG << "Parsed refresh token request";
+            Logger::Debug() << "Parsed refresh token request";
 
             return request;
         }

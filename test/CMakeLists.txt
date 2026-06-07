@@ -68,11 +68,17 @@ set(TEST_SOURCES
 
 add_executable(disk-test ${TEST_SOURCES})
 
-# ConfigMgr.cpp and AdminAuthFilter use symbols provided by the main target PCH.
-# The test target does not use that PCH, so force-include Drogon where needed.
+# Source files from the main target lack its PCH. Force-include Drogon + LogHelper
+# so that all symbols and the Log class are available without the precompiled header.
 set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
+    ${CMAKE_SOURCE_DIR}/src/storage/StorageMgr.cpp
+    ${CMAKE_SOURCE_DIR}/src/controllers/DownloadResponder.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/TokenService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/RedisService.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminAuthFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/ShareAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/RegisterRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/DownloadRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/SharePublicRateLimitFilter.cpp
@@ -84,7 +90,7 @@ set_source_files_properties(
     filters/SharePublicRateLimit_test.cpp
     filters/AdminRateLimit_test.cpp
     filters/FolderRateLimit_test.cpp
-    PROPERTIES COMPILE_FLAGS "-include drogon/HttpAppFramework.h"
+    PROPERTIES COMPILE_FLAGS "-include drogon/HttpAppFramework.h -include utils/LogHelper.hpp"
 )
 
 target_include_directories(disk-test PRIVATE 

@@ -20,7 +20,7 @@ namespace disk::log {
     auto OperationLogController::GetList(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        LOG_INFO << "Received get operation logs request: " << request->getPeerAddr().toIpPort();
+        Logger::Info() << "Received get operation logs request: " << request->getPeerAddr().toIpPort();
 
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
@@ -56,7 +56,7 @@ namespace disk::log {
 
         auto result = co_await m_log_service->GetList(user_id, page, page_size);
         if (!result) {
-            LOG_ERROR << "Failed to get operation logs: " << result.error().message;
+            Logger::Error() << "Failed to get operation logs: " << result.error().message;
             co_return Response::Error(result.error());
         }
 

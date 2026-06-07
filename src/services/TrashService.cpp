@@ -233,7 +233,7 @@ namespace disk::trash {
             co_return Result<void>();
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to batch update ref_count: " << e.base().what();
+            Logger::Error() << "Failed to batch update ref_count: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to update file content reference count"
@@ -243,7 +243,7 @@ namespace disk::trash {
 
     TrashService::TrashService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        LOG_DEBUG << "TrashService initialization completed";
+        Logger::Debug() << "TrashService initialization completed";
     }
 
     // ==================== 公共方法实现 ====================
@@ -251,7 +251,7 @@ namespace disk::trash {
     auto TrashService::List(uint64_t user_id, int page, int page_size)
         -> drogon::Task<Result<std::vector<TrashItemResponse>>> {
 
-        LOG_INFO << "Fetching trash list: user_id=" << user_id << ", page=" << page
+        Logger::Info() << "Fetching trash list: user_id=" << user_id << ", page=" << page
                  << ", page_size=" << page_size;
 
         try {
@@ -281,18 +281,18 @@ namespace disk::trash {
                 responses.push_back(response);
             }
 
-            LOG_DEBUG << "Found " << responses.size() << " trash items";
+            Logger::Debug() << "Found " << responses.size() << " trash items";
             co_return responses;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Database error fetching trash list: user_id=" << user_id << " - "
+            Logger::Error() << "Database error fetching trash list: user_id=" << user_id << " - "
                       << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to fetch trash list, please try again later"
             ));
         } catch (const std::exception& e) {
-            LOG_ERROR << "Unknown error fetching trash list: user_id=" << user_id << " - "
+            Logger::Error() << "Unknown error fetching trash list: user_id=" << user_id << " - "
                       << e.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
@@ -302,7 +302,7 @@ namespace disk::trash {
     }
 
     auto TrashService::Count(uint64_t user_id) -> drogon::Task<Result<int>> {
-        LOG_DEBUG << "Counting trash items: user_id=" << user_id;
+        Logger::Debug() << "Counting trash items: user_id=" << user_id;
 
         try {
             CoroMapper<Trash> mapper(m_db_client);
@@ -312,7 +312,7 @@ namespace disk::trash {
             co_return static_cast<int>(count);
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to count trash items: " << e.base().what();
+            Logger::Error() << "Failed to count trash items: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to count trash items")
             );
@@ -322,7 +322,7 @@ namespace disk::trash {
     auto TrashService::Restore(uint64_t user_id, const std::vector<uint64_t>& trash_ids)
         -> drogon::Task<Result<BatchRestoreResponse>> {
 
-        LOG_INFO << "Batch restoring trash items: user_id=" << user_id
+        Logger::Info() << "Batch restoring trash items: user_id=" << user_id
                  << ", count=" << trash_ids.size();
 
         BatchRestoreResponse response;
@@ -362,7 +362,7 @@ namespace disk::trash {
                 }
             }
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to batch fetch trash items for restore: user_id=" << user_id
+            Logger::Error() << "Failed to batch fetch trash items for restore: user_id=" << user_id
                       << " - " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
@@ -415,7 +415,7 @@ namespace disk::trash {
             response.results.push_back(result);
         }
 
-        LOG_INFO << "Batch restore completed: total=" << response.summary.total
+        Logger::Info() << "Batch restore completed: total=" << response.summary.total
                  << ", success=" << response.summary.success_count
                  << ", failure=" << response.summary.failure_count;
 
@@ -425,7 +425,7 @@ namespace disk::trash {
     auto TrashService::Delete(uint64_t user_id, const std::vector<uint64_t>& trash_ids)
         -> drogon::Task<Result<BatchDeleteResponse>> {
 
-        LOG_INFO << "Batch permanently deleting trash items: user_id=" << user_id
+        Logger::Info() << "Batch permanently deleting trash items: user_id=" << user_id
                  << ", count=" << trash_ids.size();
 
         BatchDeleteResponse response;
@@ -467,7 +467,7 @@ namespace disk::trash {
                 }
             }
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to batch fetch trash items for delete: user_id=" << user_id
+            Logger::Error() << "Failed to batch fetch trash items for delete: user_id=" << user_id
                       << " - " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
@@ -517,7 +517,7 @@ namespace disk::trash {
                             trash_item.item_data
                         );
                     if (!content_id_result.has_value()) {
-                        LOG_WARN << "Cannot permanently delete trash file without valid content_id: trash_id="
+                        Logger::Warn() << "Cannot permanently delete trash file without valid content_id: trash_id="
                                  << trash_id;
                         result.status = "failed";
                         result.code = static_cast<uint16_t>(content_id_result.error().code);
@@ -532,7 +532,7 @@ namespace disk::trash {
 
                     if (content_id_result->source ==
                         disk::services::trash_content_internal::ContentIdSource::ItemData) {
-                        LOG_DEBUG << "Resolved legacy trash content_id from item_data during delete: trash_id="
+                        Logger::Debug() << "Resolved legacy trash content_id from item_data during delete: trash_id="
                                   << trash_id << ", content_id=" << content_id_result->value;
                     }
 
@@ -546,7 +546,7 @@ namespace disk::trash {
                             );
 
                             if (decrement_result.affectedRows() == 0) {
-                                LOG_DEBUG << "File content ref count already 0 or content missing, not decrementing: content_id="
+                                Logger::Debug() << "File content ref count already 0 or content missing, not decrementing: content_id="
                                           << content_id;
                             } else {
                                 CoroMapper<FileContents> content_mapper(m_db_client);
@@ -554,7 +554,7 @@ namespace disk::trash {
                                     Criteria(FileContents::Cols::_id, CompareOperator::EQ, content_id)
                                 );
 
-                                LOG_DEBUG << "Updated file content ref count: content_id=" << content_id
+                                Logger::Debug() << "Updated file content ref count: content_id=" << content_id
                                           << ", ref_count=" << content.getValueOfRefCount();
 
                                 if (content.getValueOfRefCount() == 0) {
@@ -562,7 +562,7 @@ namespace disk::trash {
                                 }
                             }
                         } catch (const drogon::orm::DrogonDbException& e) {
-                            LOG_WARN << "Failed to update file content ref count: content_id="
+                            Logger::Warn() << "Failed to update file content ref count: content_id="
                                      << content_id;
                         }
                     }
@@ -574,11 +574,11 @@ namespace disk::trash {
                     result.freed_space = item_size;
                     freed_space = item_size;
 
-                    LOG_INFO << "File permanently deleted: trash_id=" << trash_id
+                    Logger::Info() << "File permanently deleted: trash_id=" << trash_id
                              << ", freed_space=" << item_size;
 
                 } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_ERROR << "Failed to permanently delete file: trash_id=" << trash_item.id << " - "
+                    Logger::Error() << "Failed to permanently delete file: trash_id=" << trash_item.id << " - "
                               << e.base().what();
                     result.status = "failed";
                     result.code = static_cast<uint16_t>(ErrorCode::InternalError);
@@ -605,7 +605,7 @@ namespace disk::trash {
         if (!paths_to_delete.empty()) {
             auto* storage = disk::storage::StorageMgr::GetStorage();
             if (storage == nullptr) {
-                LOG_WARN << "Storage manager is not initialized, skip blob cleanup: blob_count="
+                Logger::Warn() << "Storage manager is not initialized, skip blob cleanup: blob_count="
                          << paths_to_delete.size();
             } else {
                 auto delete_results = co_await ParallelDeletePaths(
@@ -613,12 +613,12 @@ namespace disk::trash {
                 );
                 for (size_t i = 0; i < delete_results.size(); ++i) {
                     if (!delete_results[i].has_value()) {
-                        LOG_WARN << "Failed to cleanup blob after batch delete: storage_path="
+                        Logger::Warn() << "Failed to cleanup blob after batch delete: storage_path="
                                  << paths_to_delete[i] << ", error_code="
                                  << static_cast<uint32_t>(delete_results[i].error().code)
                                  << ", error_message=" << delete_results[i].error().message;
                     } else {
-                        LOG_INFO << "Blob cleanup completed after batch delete: storage_path="
+                        Logger::Info() << "Blob cleanup completed after batch delete: storage_path="
                                  << paths_to_delete[i];
                     }
                 }
@@ -627,11 +627,11 @@ namespace disk::trash {
 
         if (total_freed_space > 0) {
             co_await UpdateStorageUsed(user_id, -static_cast<int64_t>(total_freed_space));
-            LOG_DEBUG << "Storage space freed: user_id=" << user_id
+            Logger::Debug() << "Storage space freed: user_id=" << user_id
                       << ", freed=" << total_freed_space;
         }
 
-        LOG_INFO << "Batch delete completed: total=" << response.summary.total
+        Logger::Info() << "Batch delete completed: total=" << response.summary.total
                  << ", success=" << response.summary.success_count
                  << ", failure=" << response.summary.failure_count
                  << ", freed_space=" << total_freed_space;
@@ -640,7 +640,7 @@ namespace disk::trash {
     }
 
     auto TrashService::DeleteAll(uint64_t user_id) -> drogon::Task<Result<DeleteAllResponse>> {
-        LOG_INFO << "Emptying trash: user_id=" << user_id;
+        Logger::Info() << "Emptying trash: user_id=" << user_id;
 
         DeleteAllResponse response;
         response.deleted_count = 0;
@@ -700,14 +700,14 @@ namespace disk::trash {
                                     item.item_data
                                 );
                             if (!content_id_result.has_value()) {
-                                LOG_WARN << "Skip DeleteAll for legacy trash file without valid content_id: trash_id="
+                                Logger::Warn() << "Skip DeleteAll for legacy trash file without valid content_id: trash_id="
                                          << item.id << ", user_id=" << user_id;
                                 continue;
                             }
 
                             if (content_id_result->source ==
                                 disk::services::trash_content_internal::ContentIdSource::ItemData) {
-                                LOG_DEBUG << "Resolved legacy trash content_id from item_data during DeleteAll: trash_id="
+                                Logger::Debug() << "Resolved legacy trash content_id from item_data during DeleteAll: trash_id="
                                           << item.id << ", content_id=" << content_id_result->value;
                             }
 
@@ -749,13 +749,13 @@ namespace disk::trash {
                     if (!zero_ref_paths.empty()) {
                         auto* storage = disk::storage::StorageMgr::GetStorage();
                         if (storage == nullptr) {
-                            LOG_WARN << "Storage manager is not initialized, skip blob cleanup for chunk: user_id="
+                            Logger::Warn() << "Storage manager is not initialized, skip blob cleanup for chunk: user_id="
                                      << user_id << ", blob_count=" << zero_ref_paths.size();
                         } else {
                             auto blob_results = co_await ParallelDeletePaths(storage, zero_ref_paths);
                             for (size_t i = 0; i < blob_results.size(); ++i) {
                                 if (!blob_results[i].has_value()) {
-                                    LOG_WARN << "Failed to cleanup blob after DeleteAll: path=" << zero_ref_paths[i]
+                                    Logger::Warn() << "Failed to cleanup blob after DeleteAll: path=" << zero_ref_paths[i]
                                              << ", error=" << blob_results[i].error().message;
                                 }
                             }
@@ -767,12 +767,12 @@ namespace disk::trash {
                         try {
                             transaction->rollback();
                         } catch (const std::exception& rollback_e) {
-                            LOG_ERROR << "Chunk rollback failed when emptying trash: user_id="
+                            Logger::Error() << "Chunk rollback failed when emptying trash: user_id="
                                       << user_id << " - " << rollback_e.what();
                         }
                     }
 
-                    LOG_ERROR << "Failed to process DeleteAll chunk atomically: user_id="
+                    Logger::Error() << "Failed to process DeleteAll chunk atomically: user_id="
                               << user_id << " - " << e.what();
                     continue;
                 }
@@ -782,20 +782,20 @@ namespace disk::trash {
                 co_await UpdateStorageUsed(user_id, -static_cast<int64_t>(response.freed_space));
             }
 
-            LOG_INFO << "Trash emptied: user_id=" << user_id
+            Logger::Info() << "Trash emptied: user_id=" << user_id
                      << ", deleted=" << response.deleted_count
                      << ", freed_space=" << response.freed_space;
 
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Database error emptying trash: user_id=" << user_id << " - "
+            Logger::Error() << "Database error emptying trash: user_id=" << user_id << " - "
                       << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to empty trash, please try again later")
             );
         } catch (const std::exception& e) {
-            LOG_ERROR << "Unknown error emptying trash: user_id=" << user_id << " - " << e.what();
+            Logger::Error() << "Unknown error emptying trash: user_id=" << user_id << " - " << e.what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to empty trash, please try again later")
             );
@@ -830,7 +830,7 @@ namespace disk::trash {
 
             co_await RestoreFile(trash_item, user_id, result);
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to restore file: trash_id=" << trash_id << " - "
+            Logger::Error() << "Failed to restore file: trash_id=" << trash_id << " - "
                       << e.base().what();
             result.status = "failed";
             result.code = static_cast<uint16_t>(ErrorCode::InternalError);
@@ -853,7 +853,7 @@ namespace disk::trash {
             std::string parent_path = "/";
 
             if (!co_await IsFolderExists(original_folder_id, user_id)) {
-                LOG_DEBUG << "Original folder not found, restoring to root: original_folder_id="
+                Logger::Debug() << "Original folder not found, restoring to root: original_folder_id="
                           << original_folder_id;
                 target_folder_id = 0;
             }
@@ -866,7 +866,7 @@ namespace disk::trash {
                     );
                     parent_path = parent_folder.getValueOfPath();
                 } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_WARN << "Failed to get parent folder path, using root: folder_id="
+                    Logger::Warn() << "Failed to get parent folder path, using root: folder_id="
                              << target_folder_id;
                     target_folder_id = 0;
                     parent_path = "/";
@@ -877,7 +877,7 @@ namespace disk::trash {
             if (co_await IsFilenameExists(target_folder_id, item_name, user_id)) {
                 final_name =
                     co_await GenerateUniqueFilename(target_folder_id, item_name, user_id, true);
-                LOG_DEBUG << "Filename conflict, auto-renamed: " << item_name << " -> "
+                Logger::Debug() << "Filename conflict, auto-renamed: " << item_name << " -> "
                           << final_name;
             }
 
@@ -887,7 +887,7 @@ namespace disk::trash {
                     trash_item.item_data
                 );
             if (!content_id_result.has_value()) {
-                LOG_WARN << "Cannot restore trash file without valid content_id: trash_id=" << trash_id;
+                Logger::Warn() << "Cannot restore trash file without valid content_id: trash_id=" << trash_id;
                 result.status = "failed";
                 result.code = static_cast<uint16_t>(content_id_result.error().code);
                 result.message = content_id_result.error().message;
@@ -898,7 +898,7 @@ namespace disk::trash {
 
             if (content_id_result->source ==
                 disk::services::trash_content_internal::ContentIdSource::ItemData) {
-                LOG_DEBUG << "Resolved legacy trash content_id from item_data during restore: trash_id="
+                Logger::Debug() << "Resolved legacy trash content_id from item_data during restore: trash_id="
                           << trash_id << ", content_id=" << content_id_result->value;
             }
 
@@ -932,12 +932,12 @@ namespace disk::trash {
             result.file_id = inserted_file.getValueOfId();
             result.path = file_path;
 
-            LOG_INFO << "File restored successfully: trash_id=" << trash_id
+            Logger::Info() << "File restored successfully: trash_id=" << trash_id
                      << ", file_id=" << inserted_file.getValueOfId() << ", name=" << final_name
                      << ", path=" << file_path;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to restore file: trash_id=" << trash_item.id << " - "
+            Logger::Error() << "Failed to restore file: trash_id=" << trash_item.id << " - "
                       << e.base().what();
             result.status = "failed";
             result.code = static_cast<uint16_t>(ErrorCode::InternalError);
@@ -971,7 +971,7 @@ namespace disk::trash {
 
             co_await RestoreFolder(trash_item, user_id, result);
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to restore folder: trash_id=" << trash_id << " - "
+            Logger::Error() << "Failed to restore folder: trash_id=" << trash_id << " - "
                       << e.base().what();
             result.status = "failed";
             result.code = static_cast<uint16_t>(ErrorCode::InternalError);
@@ -1010,7 +1010,7 @@ namespace disk::trash {
                     parent_path = parent_folder.getValueOfPath();
                     parent_depth = parent_folder.getValueOfDepth();
                 } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_WARN << "Failed to get parent folder info, using root: folder_id="
+                    Logger::Warn() << "Failed to get parent folder info, using root: folder_id="
                              << target_parent_id;
                     target_parent_id = 0;
                     parent_path = "/";
@@ -1022,7 +1022,7 @@ namespace disk::trash {
             if (co_await IsFolderNameExists(target_parent_id, item_name, user_id)) {
                 final_name =
                     co_await GenerateUniqueFilename(target_parent_id, item_name, user_id, false);
-                LOG_DEBUG << "Folder name conflict, auto-renamed: " << item_name << " -> "
+                Logger::Debug() << "Folder name conflict, auto-renamed: " << item_name << " -> "
                           << final_name;
             }
 
@@ -1052,7 +1052,7 @@ namespace disk::trash {
                 result.folder_id = inserted_folder.getValueOfId();
                 result.path = folder_path;
 
-                LOG_INFO << "Folder restored successfully: trash_id=" << trash_id
+                Logger::Info() << "Folder restored successfully: trash_id=" << trash_id
                          << ", folder_id=" << inserted_folder.getValueOfId() << ", name=" << final_name
                          << ", path=" << folder_path << ", depth=" << folder_depth;
                 co_return;
@@ -1145,18 +1145,18 @@ namespace disk::trash {
             result.folder_id = root_new_id;
             result.path = folder_path;
 
-            LOG_INFO << "Folder tree restored successfully: trash_id=" << trash_id
+            Logger::Info() << "Folder tree restored successfully: trash_id=" << trash_id
                      << ", folder_id=" << root_new_id << ", folder_count="
                      << (snapshot->folders.size() + 1) << ", file_count=" << snapshot->files.size();
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to restore folder: trash_id=" << trash_item.id << " - "
+            Logger::Error() << "Failed to restore folder: trash_id=" << trash_item.id << " - "
                       << e.base().what();
             result.status = "failed";
             result.code = static_cast<uint16_t>(ErrorCode::InternalError);
             result.message = "Failed to restore folder";
         } catch (const std::exception& e) {
-            LOG_ERROR << "Failed to restore folder: trash_id=" << trash_item.id << " - "
+            Logger::Error() << "Failed to restore folder: trash_id=" << trash_item.id << " - "
                       << e.what();
             result.status = "failed";
             result.code = static_cast<uint16_t>(ErrorCode::InternalError);
@@ -1190,7 +1190,7 @@ namespace disk::trash {
 
             co_return co_await DeleteFile(trash_item, user_id, result);
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to permanently delete file: trash_id=" << trash_id << " - "
+            Logger::Error() << "Failed to permanently delete file: trash_id=" << trash_id << " - "
                       << e.base().what();
             result.status = "failed";
             result.code = static_cast<uint16_t>(ErrorCode::InternalError);
@@ -1215,7 +1215,7 @@ namespace disk::trash {
                     trash_item.item_data
                 );
             if (!content_id_result.has_value()) {
-                LOG_WARN << "Cannot permanently delete trash file without valid content_id: trash_id="
+                Logger::Warn() << "Cannot permanently delete trash file without valid content_id: trash_id="
                          << trash_id;
                 result.status = "failed";
                 result.code = static_cast<uint16_t>(content_id_result.error().code);
@@ -1227,7 +1227,7 @@ namespace disk::trash {
 
             if (content_id_result->source ==
                 disk::services::trash_content_internal::ContentIdSource::ItemData) {
-                LOG_DEBUG << "Resolved legacy trash content_id from item_data during delete: trash_id="
+                Logger::Debug() << "Resolved legacy trash content_id from item_data during delete: trash_id="
                           << trash_id << ", content_id=" << content_id_result->value;
             }
 
@@ -1241,7 +1241,7 @@ namespace disk::trash {
                     );
 
                     if (decrement_result.affectedRows() == 0) {
-                        LOG_DEBUG << "File content ref count already 0 or content missing, not decrementing during DeleteFile: content_id="
+                        Logger::Debug() << "File content ref count already 0 or content missing, not decrementing during DeleteFile: content_id="
                                   << content_id;
                     } else {
                         CoroMapper<FileContents> content_mapper(m_db_client);
@@ -1249,19 +1249,19 @@ namespace disk::trash {
                             Criteria(FileContents::Cols::_id, CompareOperator::EQ, content_id)
                         );
 
-                        LOG_DEBUG << "Updated file content ref count: content_id=" << content_id
+                        Logger::Debug() << "Updated file content ref count: content_id=" << content_id
                                   << ", ref_count=" << content.getValueOfRefCount();
 
                         if (content.getValueOfRefCount() == 0) {
                             auto* storage = disk::storage::StorageMgr::GetStorage();
                             if (storage == nullptr) {
-                                LOG_WARN << "Storage manager is not initialized, skip blob cleanup: content_id="
+                                Logger::Warn() << "Storage manager is not initialized, skip blob cleanup: content_id="
                                          << content_id << ", storage_path=" << content.getValueOfStoragePath();
                             } else {
                                 auto delete_result =
                                     co_await storage->DeletePath(content.getValueOfStoragePath());
                                 if (!delete_result.has_value()) {
-                                    LOG_WARN << "Failed to cleanup blob after ref_count reached zero: content_id="
+                                    Logger::Warn() << "Failed to cleanup blob after ref_count reached zero: content_id="
                                              << content_id
                                              << ", storage_path=" << content.getValueOfStoragePath()
                                              << ", error_code="
@@ -1277,7 +1277,7 @@ namespace disk::trash {
                         }
                     }
                 } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_WARN << "Failed to update file content ref count: content_id="
+                    Logger::Warn() << "Failed to update file content ref count: content_id="
                              << content_id;
                 }
             }
@@ -1288,13 +1288,13 @@ namespace disk::trash {
             result.status = "success";
             result.freed_space = item_size;
 
-            LOG_INFO << "File permanently deleted: trash_id=" << trash_id
+            Logger::Info() << "File permanently deleted: trash_id=" << trash_id
                      << ", freed_space=" << item_size;
 
             co_return item_size;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to permanently delete file: trash_id=" << trash_item.id << " - "
+            Logger::Error() << "Failed to permanently delete file: trash_id=" << trash_item.id << " - "
                       << e.base().what();
             result.status = "failed";
             result.code = static_cast<uint16_t>(ErrorCode::InternalError);
@@ -1329,7 +1329,7 @@ namespace disk::trash {
 
             co_return co_await DeleteFolder(trash_item, user_id, result);
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to permanently delete folder: trash_id=" << trash_id << " - "
+            Logger::Error() << "Failed to permanently delete folder: trash_id=" << trash_id << " - "
                       << e.base().what();
             result.status = "failed";
             result.code = static_cast<uint16_t>(ErrorCode::InternalError);
@@ -1356,13 +1356,13 @@ namespace disk::trash {
 
             auto* storage = disk::storage::StorageMgr::GetStorage();
             if (storage == nullptr && !zero_ref_paths.empty()) {
-                LOG_WARN << "Storage manager is not initialized, skip folder blob cleanup: trash_id="
+                Logger::Warn() << "Storage manager is not initialized, skip folder blob cleanup: trash_id="
                          << trash_id << ", blob_count=" << zero_ref_paths.size();
             } else if (storage != nullptr && !zero_ref_paths.empty()) {
                 auto delete_results = co_await ParallelDeletePaths(storage, zero_ref_paths);
                 for (size_t i = 0; i < delete_results.size(); ++i) {
                     if (!delete_results[i].has_value()) {
-                        LOG_WARN << "Failed to cleanup blob after folder delete: path=" << zero_ref_paths[i]
+                        Logger::Warn() << "Failed to cleanup blob after folder delete: path=" << zero_ref_paths[i]
                                  << ", error=" << delete_results[i].error().message;
                     }
                 }
@@ -1371,14 +1371,14 @@ namespace disk::trash {
             result.status = "success";
             result.freed_space = item_size;
 
-            LOG_INFO << "Folder permanently deleted: trash_id=" << trash_id
+            Logger::Info() << "Folder permanently deleted: trash_id=" << trash_id
                      << ", freed_space=" << item_size
                      << ", snapshot_file_count=" << snapshot_content_ids.size();
 
             co_return item_size;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to permanently delete folder: trash_id=" << trash_item.id << " - "
+            Logger::Error() << "Failed to permanently delete folder: trash_id=" << trash_item.id << " - "
                       << e.base().what();
             result.status = "failed";
             result.code = static_cast<uint16_t>(ErrorCode::InternalError);
@@ -1425,7 +1425,7 @@ namespace disk::trash {
             counter++;
 
             if (counter > 1000) {
-                LOG_WARN << "Unable to generate unique filename, max attempts reached: " << name;
+                Logger::Warn() << "Unable to generate unique filename, max attempts reached: " << name;
                 co_return new_name;
             }
         }
@@ -1448,7 +1448,7 @@ namespace disk::trash {
             co_return count > 0;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to check filename: " << e.base().what();
+            Logger::Error() << "Failed to check filename: " << e.base().what();
             co_return false;
         }
     }
@@ -1470,7 +1470,7 @@ namespace disk::trash {
             co_return count > 0;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to check folder name: " << e.base().what();
+            Logger::Error() << "Failed to check folder name: " << e.base().what();
             co_return false;
         }
     }
@@ -1490,7 +1490,7 @@ namespace disk::trash {
             co_return folder.getValueOfUserId() == user_id;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_DEBUG << "Folder not found: folder_id=" << folder_id;
+            Logger::Debug() << "Folder not found: folder_id=" << folder_id;
             co_return false;
         }
     }
@@ -1509,11 +1509,11 @@ namespace disk::trash {
             user.setStorageUsed(static_cast<uint64_t>(new_used));
             co_await mapper.update(user);
 
-            LOG_DEBUG << "Storage usage updated: user_id=" << user_id << ", delta=" << delta
+            Logger::Debug() << "Storage usage updated: user_id=" << user_id << ", delta=" << delta
                       << ", new_used=" << new_used;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to update storage usage: " << e.base().what();
+            Logger::Error() << "Failed to update storage usage: " << e.base().what();
         }
     }
 

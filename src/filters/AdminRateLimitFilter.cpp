@@ -43,7 +43,7 @@ namespace disk::filters {
 
         auto incr_result = co_await m_redis_service->IncrWithExpire(key, WINDOW_SECONDS);
         if (!incr_result) {
-            LOG_ERROR << "Redis IncrWithExpire failed: " << incr_result.error().message;
+            Logger::Error() << "Redis IncrWithExpire failed: " << incr_result.error().message;
             co_return nullptr;
         }
 
@@ -56,7 +56,7 @@ namespace disk::filters {
                 std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
             const auto retry_after = std::max<int64_t>(1, reset_time - now_seconds);
 
-            LOG_WARN << "Admin rate limit: user_id=" << user_id
+            Logger::Warn() << "Admin rate limit: user_id=" << user_id
                      << ", count=" << current_count;
 
             auto response = disk::Response::Error(disk::error::Code::TooManyRequests);
@@ -68,7 +68,7 @@ namespace disk::filters {
             co_return response;
         }
 
-        LOG_DEBUG << "Admin rate limit check passed: user_id=" << user_id
+        Logger::Debug() << "Admin rate limit check passed: user_id=" << user_id
                   << ", count=" << current_count << "/" << DEFAULT_LIMIT;
 
         co_return nullptr;

@@ -27,63 +27,63 @@ namespace disk::utils {
             // 从配置读取 storage_base_path
             if (app_config.isMember("storage_base_path")) {
                 m_storage_base_path = app_config["storage_base_path"].asString();
-                LOG_INFO << "Loaded storage_base_path from config: " << m_storage_base_path;
+                Logger::Info() << "Loaded storage_base_path from config: " << m_storage_base_path;
             } else {
-                LOG_WARN << "storage_base_path not found in config, using default: " << m_storage_base_path;
+                Logger::Warn() << "storage_base_path not found in config, using default: " << m_storage_base_path;
             }
 
             // 从配置读取 temp_upload_path
             if (app_config.isMember("temp_upload_path")) {
                 m_temp_upload_path = app_config["temp_upload_path"].asString();
-                LOG_INFO << "Loaded temp_upload_path from config: " << m_temp_upload_path;
+                Logger::Info() << "Loaded temp_upload_path from config: " << m_temp_upload_path;
             } else {
-                LOG_WARN << "temp_upload_path not found in config, using default: " << m_temp_upload_path;
+                Logger::Warn() << "temp_upload_path not found in config, using default: " << m_temp_upload_path;
             }
 
             // 从配置读取 chunk_size
             if (app_config.isMember("chunk_size")) {
                 m_chunk_size = static_cast<uint32_t>(app_config["chunk_size"].asUInt());
-                LOG_INFO << "Loaded chunk_size from config: " << m_chunk_size;
+                Logger::Info() << "Loaded chunk_size from config: " << m_chunk_size;
             }
 
             // 从配置读取 max_file_size
             if (app_config.isMember("max_file_size")) {
                 m_max_file_size = static_cast<uint64_t>(app_config["max_file_size"].asUInt64());
-                LOG_INFO << "Loaded max_file_size from config: " << m_max_file_size;
+                Logger::Info() << "Loaded max_file_size from config: " << m_max_file_size;
             }
 
             // 从配置读取 upload_task_expiry_seconds
             if (app_config.isMember("upload_task_expiry_seconds")) {
                 m_upload_task_expiry_seconds = app_config["upload_task_expiry_seconds"].asInt();
-                LOG_INFO << "Loaded upload_task_expiry_seconds from config: " << m_upload_task_expiry_seconds;
+                Logger::Info() << "Loaded upload_task_expiry_seconds from config: " << m_upload_task_expiry_seconds;
             }
 
             // 从配置读取 assembly_max_concurrent
             if (app_config.isMember("assembly_max_concurrent")) {
                 m_assembly_max_concurrent = static_cast<uint32_t>(app_config["assembly_max_concurrent"].asUInt());
-                LOG_INFO << "Loaded assembly_max_concurrent from config: " << m_assembly_max_concurrent;
+                Logger::Info() << "Loaded assembly_max_concurrent from config: " << m_assembly_max_concurrent;
             }
 
             // 从配置读取 assemble_buffer_size_bytes
             if (app_config.isMember("assemble_buffer_size_bytes")) {
                 m_assemble_buffer_size_bytes = static_cast<uint32_t>(app_config["assemble_buffer_size_bytes"].asUInt());
-                LOG_INFO << "Loaded assemble_buffer_size_bytes from config: " << m_assemble_buffer_size_bytes;
+                Logger::Info() << "Loaded assemble_buffer_size_bytes from config: " << m_assemble_buffer_size_bytes;
             }
 
             // 从配置读取 file_io_threads
             m_file_io_threads = static_cast<uint32_t>(app_config.get("file_io_threads", 0).asUInt());
             if (m_file_io_threads > 0) {
-                LOG_INFO << "Loaded file_io_threads from config: " << m_file_io_threads;
+                Logger::Info() << "Loaded file_io_threads from config: " << m_file_io_threads;
             }
 
             // 从配置读取 upload_rate_limit_per_minute
             if (app_config.isMember("upload_rate_limit_per_minute")) {
                 m_upload_rate_limit_per_minute = app_config["upload_rate_limit_per_minute"].asInt();
-                LOG_INFO << "Loaded upload_rate_limit_per_minute from config: "
+                Logger::Info() << "Loaded upload_rate_limit_per_minute from config: "
                          << m_upload_rate_limit_per_minute;
             }
         } else {
-            LOG_WARN << "'disk' section not found in custom config, using default values";
+            Logger::Warn() << "'disk' section not found in custom config, using default values";
         }
 
         // 读取数据库和 Redis 连接池大小
@@ -123,7 +123,7 @@ namespace disk::utils {
         } else {
             error_msg = "JWT_SECRET is too short (" + std::to_string(std::strlen(env_secret)) + " chars). A minimum of " + std::to_string(MIN_SECRET_LENGTH) + " characters is required in all environments.";
         }
-        LOG_ERROR << error_msg;
+        Logger::Error() << error_msg;
         throw std::runtime_error(error_msg);
     }
 
@@ -202,17 +202,17 @@ namespace disk::utils {
         const auto* jwt_secret = std::getenv("JWT_SECRET");
         if (jwt_secret == nullptr || std::strlen(jwt_secret) < MIN_JWT_SECRET_LENGTH) {
             std::string error_msg = "JWT_SECRET environment variable is missing or too short. " "A minimum of " + std::to_string(MIN_JWT_SECRET_LENGTH) + " characters is required in all environments.";
-            LOG_ERROR << error_msg;
+            Logger::Error() << error_msg;
             throw std::runtime_error(error_msg);
         }
 
         // Only validate DATABASE_PASSWORD and REDIS_PASSWORD in secure mode
         if (!IsSecureMode()) {
-            LOG_INFO << "Running in development mode - skipping DATABASE/REDIS password validation";
+            Logger::Info() << "Running in development mode - skipping DATABASE/REDIS password validation";
             return;
         }
 
-        LOG_INFO << "Running in secure mode - validating required environment variables";
+        Logger::Info() << "Running in secure mode - validating required environment variables";
 
         std::vector<std::string> missing_vars;
 
@@ -234,11 +234,11 @@ namespace disk::utils {
                 }
                 error_msg += missing_vars[i];
             }
-            LOG_ERROR << error_msg;
+            Logger::Error() << error_msg;
             throw std::runtime_error(error_msg);
         }
 
-        LOG_INFO << "All required environment variables validated successfully";
+        Logger::Info() << "All required environment variables validated successfully";
     }
 
     auto ConfigMgr::GetDbPoolSize() const noexcept -> int64_t {

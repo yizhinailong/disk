@@ -50,7 +50,7 @@ namespace disk::trash {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<TrashListRequest> {
-            LOG_DEBUG << "Start parsing trash list request parameters";
+            Logger::Debug() << "Start parsing trash list request parameters";
 
             TrashListRequest request;
 
@@ -66,7 +66,7 @@ namespace disk::trash {
                 request.page_size = **page_size_result;
             }
 
-            LOG_DEBUG << "Parsed trash list request: page=" << request.page
+            Logger::Debug() << "Parsed trash list request: page=" << request.page
                       << ", page_size=" << request.page_size;
 
             return request;
@@ -87,7 +87,7 @@ namespace disk::trash {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<TrashBatchRequest> {
-            LOG_DEBUG << "Start parsing batch operation request parameters";
+            Logger::Debug() << "Start parsing batch operation request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -99,7 +99,7 @@ namespace disk::trash {
             TrashBatchRequest request;
             request.trash_ids = std::move(*ids_result);
 
-            LOG_DEBUG << "Parsed batch operation request: " << request.trash_ids.size() << " IDs";
+            Logger::Debug() << "Parsed batch operation request: " << request.trash_ids.size() << " IDs";
 
             return request;
         }

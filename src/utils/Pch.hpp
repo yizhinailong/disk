@@ -72,11 +72,10 @@
 #include <sodium/crypto_hash_sha256.h>
 #include <sodium/crypto_pwhash.h>
 
-// ==================== Trantor 库头文件（Drogon 底层网络库）====================
-#include <trantor/utils/Date.h>
-#include <trantor/utils/Logger.h>
+// ==================== 日志库头文件 ====================
+#include "utils/LogHelper.hpp"
 
-// ==================== 后端 ORM 模型头文件 ====================
+// ==================== 后端 ORM 模型头文件（auto-generated）====================
 #include "models/FileContents.hpp"
 #include "models/Files.hpp"
 #include "models/Folders.hpp"

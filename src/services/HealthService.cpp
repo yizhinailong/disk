@@ -25,7 +25,7 @@ namespace disk::health {
         : m_db_client(std::move(db_client)),
           m_redis_client(std::move(redis_client)),
           m_start_time(std::chrono::steady_clock::now()) {
-        LOG_DEBUG << "HealthService initialization completed";
+        Logger::Debug() << "HealthService initialization completed";
     }
 
     auto HealthService::Check() -> drogon::Task<HealthResult> {
