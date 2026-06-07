@@ -30,21 +30,21 @@ namespace disk::services {
         drogon::app().getLoop()->runEvery(
             3600.0,
             drogon::async_func([cleanup_service = instance->m_cleanup_service]() -> drogon::Task<void> {
-                LOG_INFO << "Scheduled cleanup task started";
+                Logger::Info() << "Scheduled cleanup task started";
                 const auto& service = cleanup_service;
                 auto trash_result = co_await service->CleanupExpiredTrash();
                 if (!trash_result) {
-                    LOG_ERROR << "Scheduled trash cleanup failed: " << trash_result.error().message;
+                    Logger::Error() << "Scheduled trash cleanup failed: " << trash_result.error().message;
                 }
 
                 auto upload_result = co_await service->CleanupExpiredUploadTasks();
                 if (!upload_result) {
-                    LOG_ERROR << "Scheduled upload task cleanup failed: " << upload_result.error().message;
+                    Logger::Error() << "Scheduled upload task cleanup failed: " << upload_result.error().message;
                 }
             })
         );
 
-        LOG_INFO << "Scheduled cleanup tasks registered (runs every hour)";
+        Logger::Info() << "Scheduled cleanup tasks registered (runs every hour)";
     }
 
 } // namespace disk::services

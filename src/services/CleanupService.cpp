@@ -42,11 +42,11 @@ namespace disk::services {
 
     CleanupService::CleanupService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        LOG_DEBUG << "CleanupService initialization completed";
+        Logger::Debug() << "CleanupService initialization completed";
     }
 
     auto CleanupService::CleanupExpiredTrash() -> drogon::Task<Result<int>> {
-        LOG_INFO << "Starting cleanup of expired trash items";
+        Logger::Info() << "Starting cleanup of expired trash items";
 
         struct ExpiredTrashItem {
             uint64_t id;
@@ -136,14 +136,14 @@ namespace disk::services {
                                         item.item_data
                                     );
                                 if (!content_id_result.has_value()) {
-                                    LOG_WARN << "Skip expired trash cleanup for legacy row without valid content_id: trash_id="
+                                    Logger::Warn() << "Skip expired trash cleanup for legacy row without valid content_id: trash_id="
                                              << item.id << ", user_id=" << item.user_id;
                                     continue;
                                 }
 
                                 if (content_id_result->source ==
                                     trash_content_internal::ContentIdSource::ItemData) {
-                                    LOG_DEBUG << "Resolved legacy trash content_id from item_data during cleanup: trash_id="
+                                    Logger::Debug() << "Resolved legacy trash content_id from item_data during cleanup: trash_id="
                                               << item.id << ", content_id=" << content_id_result->value;
                                 }
 
@@ -208,11 +208,11 @@ namespace disk::services {
                             try {
                                 transaction->rollback();
                             } catch (const std::exception& rollback_error) {
-                                LOG_ERROR << "Rollback failed for expired trash cleanup chunk: "
+                                Logger::Error() << "Rollback failed for expired trash cleanup chunk: "
                                           << rollback_error.what();
                             }
                         }
-                        LOG_ERROR << "Failed to cleanup expired trash chunk atomically: " << e.what();
+                        Logger::Error() << "Failed to cleanup expired trash chunk atomically: " << e.what();
                         chunks_failed++;
                         continue;
                     }
@@ -229,7 +229,7 @@ namespace disk::services {
                             blobs_verified += static_cast<int>(verified_rows.size());
 
                             if (verified_rows.size() < zero_ref_paths.size()) {
-                                LOG_INFO << "[cleanup_batch] blob safety check: candidates="
+                                Logger::Info() << "[cleanup_batch] blob safety check: candidates="
                                          << zero_ref_paths.size()
                                          << " verified=" << verified_rows.size()
                                          << " reclaimed_by_concurrent="
@@ -238,32 +238,32 @@ namespace disk::services {
 
                             auto* storage = disk::storage::StorageMgr::GetStorage();
                             if (storage == nullptr) {
-                                LOG_WARN << "Storage manager is not initialized, skip expired-trash blob cleanup for chunk: blob_count="
+                                Logger::Warn() << "Storage manager is not initialized, skip expired-trash blob cleanup for chunk: blob_count="
                                          << verified_rows.size();
                             } else {
                                 for (const auto& row : verified_rows) {
                                     auto path = row["storage_path"].as<std::string>();
                                     auto blob_delete_result = co_await storage->DeletePath(path);
                                     if (!blob_delete_result.has_value()) {
-                                        LOG_WARN << "Failed to cleanup expired-trash blob after chunk: storage_path="
+                                        Logger::Warn() << "Failed to cleanup expired-trash blob after chunk: storage_path="
                                                  << path << ", error_code="
                                                  << static_cast<uint32_t>(blob_delete_result.error().code)
                                                  << ", error_message=" << blob_delete_result.error().message;
                                     } else {
                                         blobs_deleted++;
-                                        LOG_INFO << "Expired-trash blob cleanup completed after chunk: storage_path="
+                                        Logger::Info() << "Expired-trash blob cleanup completed after chunk: storage_path="
                                                  << path;
                                     }
                                 }
                             }
                         } catch (const std::exception& e) {
-                            LOG_ERROR << "[cleanup_batch] blob re-verification failed, skipping blob deletion for chunk: "
+                            Logger::Error() << "[cleanup_batch] blob re-verification failed, skipping blob deletion for chunk: "
                                       << e.what();
                         }
                     }
                 }
 
-                LOG_INFO << "[cleanup_batch] trash batch_iteration="
+                Logger::Info() << "[cleanup_batch] trash batch_iteration="
                          << batch_iteration
                          << " fetch_size=" << result.size()
                          << " rows_deleted_so_far=" << deleted_count
@@ -286,7 +286,7 @@ namespace disk::services {
             }
 
             if (batch_iteration >= kMaxTrashBatchesPerRun) {
-                LOG_INFO << "[cleanup_batch] trash reached max batches per run cap: max="
+                Logger::Info() << "[cleanup_batch] trash reached max batches per run cap: max="
                          << kMaxTrashBatchesPerRun << " rows_deleted=" << deleted_count;
             }
 
@@ -296,16 +296,16 @@ namespace disk::services {
                 }
             }
 
-            LOG_INFO << "Trash cleanup completed: deleted_count=" << deleted_count;
+            Logger::Info() << "Trash cleanup completed: deleted_count=" << deleted_count;
             co_return deleted_count;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Database error cleaning expired trash: " << e.base().what();
+            Logger::Error() << "Database error cleaning expired trash: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to clean expired trash")
             );
         } catch (const std::exception& e) {
-            LOG_ERROR << "Unknown error cleaning expired trash: " << e.what();
+            Logger::Error() << "Unknown error cleaning expired trash: " << e.what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to clean expired trash")
             );
@@ -313,7 +313,7 @@ namespace disk::services {
     }
 
     auto CleanupService::CleanupExpiredUploadTasks() -> drogon::Task<Result<int>> {
-        LOG_INFO << "Starting cleanup of expired upload tasks";
+        Logger::Info() << "Starting cleanup of expired upload tasks";
 
         auto batch_start = std::chrono::steady_clock::now();
         try {
@@ -341,12 +341,12 @@ namespace disk::services {
                 if (storage != nullptr) {
                     auto delete_result = co_await storage->CleanupTemp(task_id);
                     if (!delete_result.has_value()) {
-                        LOG_WARN << "Failed to cleanup temp file for expired upload task: task_id="
+                        Logger::Warn() << "Failed to cleanup temp file for expired upload task: task_id="
                                  << task_id << ", temp_path=" << temp_path
                                  << ", error_code=" << static_cast<uint32_t>(delete_result.error().code)
                                  << ", error_message=" << delete_result.error().message;
                     } else {
-                        LOG_DEBUG << "Temp file cleaned for expired upload task: task_id="
+                        Logger::Debug() << "Temp file cleaned for expired upload task: task_id="
                                   << task_id << ", temp_path=" << temp_path;
                     }
                 }
@@ -357,7 +357,7 @@ namespace disk::services {
 
                 cleaned_count++;
 
-                LOG_DEBUG << "Expired upload task marked as expired: task_id=" << task_id
+                Logger::Debug() << "Expired upload task marked as expired: task_id=" << task_id
                           << ", user_id=" << user_id << ", reserved_bytes=" << reserved_bytes;
             }
 
@@ -375,11 +375,11 @@ namespace disk::services {
                     delta,
                     user_id
                 );
-                LOG_DEBUG << "Released reserved storage for expired upload tasks: user_id=" << user_id
+                Logger::Debug() << "Released reserved storage for expired upload tasks: user_id=" << user_id
                           << ", released_bytes=" << delta;
             }
 
-            LOG_INFO << "[cleanup_batch] upload_tasks batch_size="
+            Logger::Info() << "[cleanup_batch] upload_tasks batch_size="
                      << result.size()
                      << " cleaned_count=" << cleaned_count
                      << " batch_duration_ms="
@@ -388,16 +388,16 @@ namespace disk::services {
                         )
                             .count();
 
-            LOG_INFO << "Upload task cleanup completed: cleaned_count=" << cleaned_count;
+            Logger::Info() << "Upload task cleanup completed: cleaned_count=" << cleaned_count;
             co_return cleaned_count;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Database error cleaning expired upload tasks: " << e.base().what();
+            Logger::Error() << "Database error cleaning expired upload tasks: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to clean expired upload tasks")
             );
         } catch (const std::exception& e) {
-            LOG_ERROR << "Unknown error cleaning expired upload tasks: " << e.what();
+            Logger::Error() << "Unknown error cleaning expired upload tasks: " << e.what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to clean expired upload tasks")
             );
@@ -414,7 +414,7 @@ namespace disk::services {
             );
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to update storage usage: user_id=" << user_id << " - "
+            Logger::Error() << "Failed to update storage usage: user_id=" << user_id << " - "
                       << e.base().what();
         }
     }
@@ -427,7 +427,7 @@ namespace disk::services {
             );
 
             if (decrement_result.affectedRows() == 0) {
-                LOG_DEBUG << "File content reference count already 0 or content missing, skip decrement: content_id="
+                Logger::Debug() << "File content reference count already 0 or content missing, skip decrement: content_id="
                           << content_id;
                 co_return;
             }
@@ -437,7 +437,7 @@ namespace disk::services {
                 Criteria(FileContents::Cols::_id, CompareOperator::EQ, content_id)
             );
 
-            LOG_DEBUG << "File content reference count decremented: content_id=" << content_id
+            Logger::Debug() << "File content reference count decremented: content_id=" << content_id
                       << ", ref_count=" << content.getValueOfRefCount();
 
             if (content.getValueOfRefCount() == 0) {
@@ -462,7 +462,7 @@ namespace disk::services {
                 }
             }
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "Failed to update file content reference count: content_id=" << content_id
+            Logger::Warn() << "Failed to update file content reference count: content_id=" << content_id
                      << " - " << e.base().what();
         }
     }

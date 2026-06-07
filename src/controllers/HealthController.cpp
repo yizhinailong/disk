@@ -24,7 +24,7 @@ namespace disk::health {
 
     auto HealthController::Check(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
-        LOG_DEBUG << "Received health check request: " << request->getPeerAddr().toIpPort();
+        Logger::Debug() << "Received health check request: " << request->getPeerAddr().toIpPort();
 
         auto health_result = co_await m_health_service->Check();
 

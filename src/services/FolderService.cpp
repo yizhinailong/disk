@@ -25,7 +25,7 @@ namespace disk::folder {
 
     FolderService::FolderService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        LOG_DEBUG << "FolderService initialization completed";
+        Logger::Debug() << "FolderService initialization completed";
     }
 
     namespace {
@@ -43,7 +43,7 @@ namespace disk::folder {
     auto FolderService::CreateFolder(CreateFolderRequest request, uint64_t user_id)
         -> drogon::Task<Result<CreateFolderResponse>> {
 
-        LOG_DEBUG << "Starting create folder: name=\"" << request.name
+        Logger::Debug() << "Starting create folder: name=\"" << request.name
                   << "\", parent_id=" << request.parent_id << ", user_id=" << user_id;
 
         // 1. 验证父文件夹（如果 parent_id > 0）
@@ -53,20 +53,20 @@ namespace disk::folder {
         if (request.parent_id > 0) {
             auto parent_result = co_await FindAndValidateParent(request.parent_id, user_id);
             if (!parent_result) {
-                LOG_WARN << "Parent folder validation failed: parent_id=" << request.parent_id;
+                Logger::Warn() << "Parent folder validation failed: parent_id=" << request.parent_id;
                 co_return std::unexpected(parent_result.error());
             }
 
             const auto& parent = *parent_result;
             parent_path = parent.getValueOfPath();
             parent_depth = parent.getValueOfDepth();
-            LOG_DEBUG << "Parent folder validated: path=" << parent_path
+            Logger::Debug() << "Parent folder validated: path=" << parent_path
                       << ", depth=" << parent_depth;
         }
 
         // 2. 检查同名文件夹是否已存在
         if (co_await IsFolderNameExists(request.name, request.parent_id, user_id)) {
-            LOG_WARN << "Folder with same name already exists: name=\"" << request.name
+            Logger::Warn() << "Folder with same name already exists: name=\"" << request.name
                      << "\", parent_id=" << request.parent_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FolderAlreadyExists));
         }
@@ -75,7 +75,7 @@ namespace disk::folder {
         std::string folder_path = parent_path + request.name + "/";
         uint32_t folder_depth = parent_depth + 1;
 
-        LOG_DEBUG << "Calculated folder path: path=\"" << folder_path
+        Logger::Debug() << "Calculated folder path: path=\"" << folder_path
                   << "\", depth=" << folder_depth;
 
         // 4. 创建文件夹记录
@@ -93,10 +93,10 @@ namespace disk::folder {
         try {
             CoroMapper<Folders> mapper(m_db_client);
             folder = co_await mapper.insert(folder);
-            LOG_INFO << "Folder created successfully: name=\"" << request.name
+            Logger::Info() << "Folder created successfully: name=\"" << request.name
                      << "\" (ID: " << folder.getValueOfId() << ", user_id: " << user_id << ")";
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Folder creation failed: name=\"" << request.name << "\" - "
+            Logger::Error() << "Folder creation failed: name=\"" << request.name << "\" - "
                       << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
@@ -123,7 +123,7 @@ namespace disk::folder {
     auto FolderService::Rename(uint64_t folder_id, std::string new_name, uint64_t user_id)
         -> drogon::Task<Result<RenameFolderResponse>> {
 
-        LOG_DEBUG << "Starting rename folder: folder_id=" << folder_id << ", new_name=\""
+        Logger::Debug() << "Starting rename folder: folder_id=" << folder_id << ", new_name=\""
                   << new_name << "\", user_id=" << user_id;
 
         try {
@@ -246,24 +246,24 @@ namespace disk::folder {
                     }
                 }
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_ERROR << "Rename folder transaction failed (DB): " << e.base().what();
+                Logger::Error() << "Rename folder transaction failed (DB): " << e.base().what();
                 if (txn) {
                     try {
                         txn->rollback();
                     } catch (const std::exception& rb_e) {
-                        LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                        Logger::Error() << "Transaction rollback failed: " << rb_e.what();
                     }
                 }
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Failed to rename folder")
                 );
             } catch (const std::exception& e) {
-                LOG_ERROR << "Rename folder transaction failed: " << e.what();
+                Logger::Error() << "Rename folder transaction failed: " << e.what();
                 if (txn) {
                     try {
                         txn->rollback();
                     } catch (const std::exception& rb_e) {
-                        LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                        Logger::Error() << "Transaction rollback failed: " << rb_e.what();
                     }
                 }
                 co_return std::unexpected(
@@ -278,7 +278,7 @@ namespace disk::folder {
             response.updated_at = trantor::Date::now().toDbStringLocal();
             co_return response;
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "Folder not found or no permission: folder_id=" << folder_id << " - "
+            Logger::Warn() << "Folder not found or no permission: folder_id=" << folder_id << " - "
                      << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
         }
@@ -296,7 +296,7 @@ namespace disk::folder {
 
             // 验证文件夹属于当前用户
             if (parent.getValueOfUserId() != user_id) {
-                LOG_WARN << "Parent folder does not belong to current user: parent_id=" << parent_id
+                Logger::Warn() << "Parent folder does not belong to current user: parent_id=" << parent_id
                          << ", owner_id=" << parent.getValueOfUserId() << ", user_id=" << user_id;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::FolderNotFound, "Parent folder not found")
@@ -306,7 +306,7 @@ namespace disk::folder {
             co_return parent;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "Parent folder does not exist: parent_id=" << parent_id << " - "
+            Logger::Warn() << "Parent folder does not exist: parent_id=" << parent_id << " - "
                      << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
         }
@@ -327,14 +327,14 @@ namespace disk::folder {
                 Criteria(Folders::Cols::_name, CompareOperator::EQ, name)
             );
 
-            LOG_DEBUG << "Checking folder name existence: name=\"" << name
+            Logger::Debug() << "Checking folder name existence: name=\"" << name
                       << "\", parent_id=" << parent_id << " - "
                       << (count > 0 ? "exists" : "does not exist");
 
             co_return count > 0;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to check folder name: name=\"" << name << "\" - "
+            Logger::Error() << "Failed to check folder name: name=\"" << name << "\" - "
                       << e.base().what();
             co_return false;
         }
@@ -352,11 +352,11 @@ namespace disk::folder {
             parent.setUpdatedAt(trantor::Date::now());
 
             co_await mapper.update(parent);
-            LOG_DEBUG << "Updated parent folder item_count: parent_id=" << parent_id
+            Logger::Debug() << "Updated parent folder item_count: parent_id=" << parent_id
                       << ", new_count=" << parent.getValueOfItemCount();
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "Failed to update parent folder item_count: parent_id=" << parent_id
+            Logger::Warn() << "Failed to update parent folder item_count: parent_id=" << parent_id
                      << " - " << e.base().what();
         }
     }
@@ -364,14 +364,14 @@ namespace disk::folder {
     auto FolderService::GetFolderTree(uint64_t user_id, uint64_t parent_id, int depth)
         -> drogon::Task<Result<FolderTreeNode>> {
 
-        LOG_DEBUG << "Starting get folder tree: user_id=" << user_id << ", parent_id=" << parent_id
+        Logger::Debug() << "Starting get folder tree: user_id=" << user_id << ", parent_id=" << parent_id
                   << ", depth=" << depth;
 
         // 1. 验证父文件夹归属（如果 parent_id > 0）
         if (parent_id > 0) {
             auto validate_result = co_await ValidateParentOwnership(parent_id, user_id);
             if (!validate_result) {
-                LOG_WARN << "Parent folder validation failed: parent_id=" << parent_id;
+                Logger::Warn() << "Parent folder validation failed: parent_id=" << parent_id;
                 co_return std::unexpected(validate_result.error());
             }
         }
@@ -391,7 +391,7 @@ namespace disk::folder {
             );
 
             if (result.size() == 0) {
-                LOG_DEBUG << "Folder tree is empty, returning root node";
+                Logger::Debug() << "Folder tree is empty, returning root node";
                 FolderTreeNode root;
                 root.id = parent_id;
                 root.name = (parent_id == 0) ? "根目录" : "";
@@ -406,10 +406,10 @@ namespace disk::folder {
                 nodes.push_back(node);
             }
 
-            LOG_DEBUG << "Found " << nodes.size() << " folder nodes";
+            Logger::Debug() << "Found " << nodes.size() << " folder nodes";
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to query folder tree: " << e.base().what();
+            Logger::Error() << "Failed to query folder tree: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get folder tree, please try again later"
@@ -433,7 +433,7 @@ namespace disk::folder {
             );
 
             if (parent.getValueOfUserId() != user_id) {
-                LOG_WARN << "Parent folder does not belong to current user: parent_id=" << parent_id
+                Logger::Warn() << "Parent folder does not belong to current user: parent_id=" << parent_id
                          << ", owner_id=" << parent.getValueOfUserId() << ", user_id=" << user_id;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::FolderNotFound, "Parent folder not found")
@@ -443,7 +443,7 @@ namespace disk::folder {
             co_return {};
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "Parent folder does not exist: parent_id=" << parent_id << " - "
+            Logger::Warn() << "Parent folder does not exist: parent_id=" << parent_id << " - "
                      << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
         }
@@ -491,19 +491,19 @@ namespace disk::folder {
     auto FolderService::GetBreadcrumb(uint64_t folder_id, uint64_t user_id)
         -> drogon::Task<Result<BreadcrumbResponse>> {
 
-        LOG_DEBUG << "Starting get breadcrumb: folder_id=" << folder_id << ", user_id=" << user_id;
+        Logger::Debug() << "Starting get breadcrumb: folder_id=" << folder_id << ", user_id=" << user_id;
 
         // 1. 特殊情况：根目录
         if (folder_id == 0) {
             BreadcrumbResponse response;
-            response.path.push_back(BreadcrumbItem{ .id = 0, .name = "根目录" });
+            response.path.push_back({ 0, "根目录" });
             co_return response;
         }
 
         // 2. 查找文件夹并验证归属
         auto folder_result = co_await FindAndValidateParent(folder_id, user_id);
         if (!folder_result) {
-            LOG_WARN << "Folder validation failed: folder_id=" << folder_id;
+            Logger::Warn() << "Folder validation failed: folder_id=" << folder_id;
             co_return std::unexpected(folder_result.error());
         }
 
@@ -515,7 +515,7 @@ namespace disk::folder {
         while (true) {
             // 检查深度限制
             if (path.size() >= 50) {
-                LOG_ERROR << "Breadcrumb depth limit exceeded: folder_id=" << folder_id;
+                Logger::Error() << "Breadcrumb depth limit exceeded: folder_id=" << folder_id;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Folder hierarchy too deep")
                 );
@@ -523,7 +523,7 @@ namespace disk::folder {
 
             // 检测循环引用
             if (visited.contains(current.getValueOfId())) {
-                LOG_ERROR << "Circular reference detected: folder_id=" << current.getValueOfId();
+                Logger::Error() << "Circular reference detected: folder_id=" << current.getValueOfId();
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Folder structure anomaly")
                 );
@@ -531,7 +531,7 @@ namespace disk::folder {
             visited.insert(current.getValueOfId());
 
             // 添加当前文件夹到路径
-            path.push_back(BreadcrumbItem{ .id = current.getValueOfId(), .name = current.getValueOfName() });
+            path.push_back({ current.getValueOfId(), current.getValueOfName() });
 
             // 到达根目录
             if (current.getValueOfParentId() == 0) {
@@ -541,7 +541,7 @@ namespace disk::folder {
             // 获取父文件夹
             auto parent_result = co_await FindFolderById(current.getValueOfParentId());
             if (!parent_result) {
-                LOG_WARN << "Parent chain broken: folder_id=" << current.getValueOfId()
+                Logger::Warn() << "Parent chain broken: folder_id=" << current.getValueOfId()
                          << ", missing_parent_id=" << current.getValueOfParentId();
                 break;
             }
@@ -549,14 +549,14 @@ namespace disk::folder {
         }
 
         // 4. 添加根目录并反转
-        path.push_back(BreadcrumbItem{ .id = 0, .name = "根目录" });
+        path.push_back({ 0, "根目录" });
         std::ranges::reverse(path);
 
         // 5. 构建响应
         BreadcrumbResponse response;
         response.path = std::move(path);
 
-        LOG_DEBUG << "Breadcrumb retrieved successfully: folder_id=" << folder_id
+        Logger::Debug() << "Breadcrumb retrieved successfully: folder_id=" << folder_id
                   << ", depth=" << response.path.size();
 
         co_return response;
@@ -575,7 +575,7 @@ namespace disk::folder {
             co_return folder;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_DEBUG << "Folder does not exist: folder_id=" << folder_id;
+            Logger::Debug() << "Folder does not exist: folder_id=" << folder_id;
             co_return std::nullopt;
         }
     }

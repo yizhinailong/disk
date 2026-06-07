@@ -124,7 +124,7 @@ namespace disk::file {
                 co_return FolderLocation{ .path = result[0]["path"].as<std::string>(),
                                           .depth = result[0]["depth"].as<uint32_t>() };
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "Folder location lookup failed: folder_id=" << folder_id << " - "
+                Logger::Warn() << "Folder location lookup failed: folder_id=" << folder_id << " - "
                          << e.base().what();
                 co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
             }
@@ -240,7 +240,7 @@ namespace disk::file {
                 );
                 co_return true;
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "Batch trash insert failed: " << e.base().what();
+                Logger::Warn() << "Batch trash insert failed: " << e.base().what();
                 co_return false;
             }
         }
@@ -530,7 +530,7 @@ namespace disk::file {
                 );
                 co_return static_cast<int>(result.affectedRows());
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "Batch folder delete failed: " << e.base().what();
+                Logger::Warn() << "Batch folder delete failed: " << e.base().what();
                 co_return 0;
             }
         }
@@ -643,7 +643,7 @@ namespace disk::file {
     FileService::FileService(drogon::orm::DbClientPtr db_client, storage::IFileStorage* storage)
         : m_db_client(std::move(db_client)), m_storage(storage) {
         StartUploadTaskCacheMaintenance();
-        LOG_DEBUG << "FileService initialization completed";
+        Logger::Debug() << "FileService initialization completed";
     }
 
     // ==================== InitUpload ====================
@@ -651,14 +651,14 @@ namespace disk::file {
     auto FileService::InitUpload(InitUploadRequest request, uint64_t user_id)
         -> drogon::Task<Result<InitUploadResponse>> {
 
-        LOG_DEBUG << "Starting initialize upload: filename=\"" << request.filename
+        Logger::Debug() << "Starting initialize upload: filename=\"" << request.filename
                   << "\", file_size=" << request.file_size << ", file_hash=" << request.file_hash
                   << ", parent_id=" << request.parent_id << ", user_id=" << user_id;
 
         auto config = ConfigMgr::GetInstance();
         auto max_file_size = config->GetMaxFileSize();
         if (request.file_size > max_file_size) {
-            LOG_WARN << "Upload file exceeds max size: filename=\"" << request.filename
+            Logger::Warn() << "Upload file exceeds max size: filename=\"" << request.filename
                      << "\", file_size=" << request.file_size
                      << ", max_file_size=" << max_file_size << ", user_id=" << user_id;
             co_return std::unexpected(
@@ -673,7 +673,7 @@ namespace disk::file {
         }
 
         if (co_await IsFilenameExists(request.parent_id, request.filename, user_id)) {
-            LOG_WARN << "File with same name already exists during upload init: "
+            Logger::Warn() << "File with same name already exists during upload init: "
                      << request.filename << ", parent_id=" << request.parent_id
                      << ", user_id=" << user_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
@@ -684,7 +684,7 @@ namespace disk::file {
             co_await LookupExistingContentMetadata(m_db_client, request.file_hash);
         if (existing_content_meta.has_value()) {
             const auto& meta = existing_content_meta.value();
-            LOG_DEBUG << "Instant upload check successful: file_hash=" << request.file_hash
+            Logger::Debug() << "Instant upload check successful: file_hash=" << request.file_hash
                       << ", content_id=" << meta.id;
 
             std::shared_ptr<drogon::orm::Transaction> transaction;
@@ -698,7 +698,7 @@ namespace disk::file {
                         request.filename,
                         user_id
                     )) {
-                    LOG_WARN << "File with same name already exists: " << request.filename;
+                    Logger::Warn() << "File with same name already exists: " << request.filename;
                     co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
                 }
 
@@ -708,7 +708,7 @@ namespace disk::file {
                     meta.id
                 );
                 if (increment_result.affectedRows() == 0) {
-                    LOG_WARN << "File content not found for instant upload: content_id="
+                    Logger::Warn() << "File content not found for instant upload: content_id="
                              << meta.id;
                     throw std::runtime_error("Failed to increment file content reference count");
                 }
@@ -749,28 +749,28 @@ namespace disk::file {
                               .parent_id = file.getValueOfFolderId(),
                               .created_at = file.getValueOfCreatedAt().toDbStringLocal() };
 
-                LOG_DEBUG << "Instant upload completed: file_id=" << file.getValueOfId();
+                Logger::Debug() << "Instant upload completed: file_id=" << file.getValueOfId();
                 co_return response;
 
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_ERROR << "Instant upload create file record failed: " << e.base().what();
+                Logger::Error() << "Instant upload create file record failed: " << e.base().what();
                 if (transaction) {
                     try {
                         transaction->rollback();
                     } catch (const std::exception& rollback_e) {
-                        LOG_ERROR << "Transaction rollback failed: " << rollback_e.what();
+                        Logger::Error() << "Transaction rollback failed: " << rollback_e.what();
                     }
                 }
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Failed to create file record")
                 );
             } catch (const std::exception& e) {
-                LOG_ERROR << "Instant upload create file record failed: " << e.what();
+                Logger::Error() << "Instant upload create file record failed: " << e.what();
                 if (transaction) {
                     try {
                         transaction->rollback();
                     } catch (const std::exception& rollback_e) {
-                        LOG_ERROR << "Transaction rollback failed: " << rollback_e.what();
+                        Logger::Error() << "Transaction rollback failed: " << rollback_e.what();
                     }
                 }
                 co_return std::unexpected(
@@ -786,7 +786,7 @@ namespace disk::file {
             const auto& task_id = task.getValueOfId();
 
             if (task.getValueOfExpiresAt() < trantor::Date::now()) {
-                LOG_INFO << "Expired upload task found, discarding: upload_id=" << task_id;
+                Logger::Info() << "Expired upload task found, discarding: upload_id=" << task_id;
                 InvalidateUploadTaskCache(task_id);
 
                 try {
@@ -795,15 +795,15 @@ namespace disk::file {
                         task_id
                     );
                 } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_WARN << "Failed to delete expired upload task: " << e.base().what();
+                    Logger::Warn() << "Failed to delete expired upload task: " << e.base().what();
                 }
 
                 auto cleanup_result = co_await m_storage->CleanupTemp(task_id);
                 if (!cleanup_result) {
-                    LOG_WARN << "Failed to cleanup temp for expired task: upload_id=" << task_id;
+                    Logger::Warn() << "Failed to cleanup temp for expired task: upload_id=" << task_id;
                 }
             } else {
-                LOG_DEBUG << "Resume upload check successful: upload_id=" << task_id;
+                Logger::Debug() << "Resume upload check successful: upload_id=" << task_id;
                 InvalidateUploadTaskCache(task_id);
 
                 auto chunk_result = co_await m_db_client->execSqlCoro(
@@ -829,14 +829,14 @@ namespace disk::file {
         // 3. 预留存储配额
         auto quota_result = co_await ReserveStorageQuota(user_id, request.file_size);
         if (!quota_result) {
-            LOG_WARN << "Storage quota reservation failed: user_id=" << user_id;
+            Logger::Warn() << "Storage quota reservation failed: user_id=" << user_id;
             co_return std::unexpected(quota_result.error());
         }
 
         // 4. 创建新的上传任务
         auto chunk_size = config->GetChunkSize();
         if (chunk_size == 0) {
-            LOG_ERROR << "Invalid upload chunk size configured: 0";
+            Logger::Error() << "Invalid upload chunk size configured: 0";
             co_await ReleaseReservedQuota(user_id, request.file_size);
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Invalid upload chunk size configuration")
@@ -845,7 +845,7 @@ namespace disk::file {
 
         const auto total_chunks_u64 = ((request.file_size - 1) / chunk_size) + 1;
         if (total_chunks_u64 > std::numeric_limits<uint32_t>::max()) {
-            LOG_WARN << "Upload requires too many chunks: filename=\"" << request.filename
+            Logger::Warn() << "Upload requires too many chunks: filename=\"" << request.filename
                      << "\", file_size=" << request.file_size
                      << ", chunk_size=" << chunk_size
                      << ", total_chunks=" << total_chunks_u64;
@@ -879,14 +879,14 @@ namespace disk::file {
             CoroMapper<UploadTasks> mapper(m_db_client);
             task = co_await mapper.insert(task);
 
-            LOG_DEBUG << "Upload task created successfully: upload_id=" << task.getValueOfId()
+            Logger::Debug() << "Upload task created successfully: upload_id=" << task.getValueOfId()
                       << ", total_chunks=" << total_chunks;
             InvalidateUploadTaskCache(task.getValueOfId());
 
             // 预创建临时上传目录，避免每个分片写入时重复创建
             auto ensure_result = co_await m_storage->EnsureUploadTempDir(task.getValueOfId());
             if (!ensure_result) {
-                LOG_WARN << "Failed to ensure upload temp directory: upload_id="
+                Logger::Warn() << "Failed to ensure upload temp directory: upload_id="
                          << task.getValueOfId();
             }
 
@@ -900,7 +900,7 @@ namespace disk::file {
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to create upload task: " << e.base().what();
+            Logger::Error() << "Failed to create upload task: " << e.base().what();
             create_task_failed = true;
         }
 
@@ -928,7 +928,7 @@ namespace disk::file {
 
         auto start = std::chrono::steady_clock::now();
 
-        LOG_DEBUG << "Starting upload chunk: upload_id=" << upload_id
+        Logger::Debug() << "Starting upload chunk: upload_id=" << upload_id
                   << ", chunk_index=" << chunk_index << ", chunk_hash=" << chunk_hash
                   << ", data_size=" << chunk_data.size();
 
@@ -937,12 +937,12 @@ namespace disk::file {
         if (!cached_task.has_value()) {
             auto task_result = co_await FindUploadTask(upload_id, user_id);
             if (!task_result) {
-                LOG_WARN << "Upload task verification failed: " << upload_id;
+                Logger::Warn() << "Upload task verification failed: " << upload_id;
 
                 auto end = std::chrono::steady_clock::now();
                 auto duration_us =
                     std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-                LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+                Logger::Info() << "[upload_chunk] duration_us=" << duration_us
                          << " outcome=failure upload_id=" << upload_id
                          << " chunk_index=" << chunk_index
                          << " data_size=" << chunk_data.size();
@@ -959,13 +959,13 @@ namespace disk::file {
 
         // 2. 验证任务未过期
         if (task.expires_at < trantor::Date::now()) {
-            LOG_WARN << "Upload task expired: " << upload_id;
+            Logger::Warn() << "Upload task expired: " << upload_id;
             InvalidateUploadTaskCache(upload_id);
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+            Logger::Info() << "[upload_chunk] duration_us=" << duration_us
                      << " outcome=failure upload_id=" << upload_id
                      << " chunk_index=" << chunk_index
                      << " data_size=" << chunk_data.size();
@@ -977,13 +977,13 @@ namespace disk::file {
 
         // 3. 验证分片索引有效
         if (chunk_index >= task.total_chunks) {
-            LOG_WARN << "Chunk index out of range: chunk_index=" << chunk_index
+            Logger::Warn() << "Chunk index out of range: chunk_index=" << chunk_index
                      << ", total_chunks=" << task.total_chunks;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+            Logger::Info() << "[upload_chunk] duration_us=" << duration_us
                      << " outcome=failure upload_id=" << upload_id
                      << " chunk_index=" << chunk_index
                      << " data_size=" << chunk_data.size();
@@ -998,7 +998,7 @@ namespace disk::file {
         const auto remaining_bytes = task.file_size - chunk_offset;
         const auto expected_size = std::min<uint64_t>(task.chunk_size, remaining_bytes);
         if (chunk_data.size() != expected_size) {
-            LOG_WARN << "Unexpected chunk size: upload_id=" << upload_id
+            Logger::Warn() << "Unexpected chunk size: upload_id=" << upload_id
                      << ", chunk_index=" << chunk_index
                      << ", expected_size=" << expected_size
                      << ", actual_size=" << chunk_data.size()
@@ -1008,7 +1008,7 @@ namespace disk::file {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+            Logger::Info() << "[upload_chunk] duration_us=" << duration_us
                      << " outcome=failure upload_id=" << upload_id
                      << " chunk_index=" << chunk_index
                      << " data_size=" << chunk_data.size();
@@ -1022,13 +1022,13 @@ namespace disk::file {
         std::string chunk_payload{ chunk_data };
         auto actual_hash = FileHashUtil::HashMd5(chunk_payload);
         if (actual_hash != chunk_hash) {
-            LOG_WARN << "Chunk hash mismatch: expected=" << chunk_hash
+            Logger::Warn() << "Chunk hash mismatch: expected=" << chunk_hash
                      << ", actual=" << actual_hash;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+            Logger::Info() << "[upload_chunk] duration_us=" << duration_us
                      << " outcome=failure upload_id=" << upload_id
                      << " chunk_index=" << chunk_index
                      << " data_size=" << chunk_data.size();
@@ -1041,14 +1041,14 @@ namespace disk::file {
         // 6. 创建临时目录并写入分片
         auto write_result = co_await m_storage->WriteChunk(upload_id, chunk_index, std::move(chunk_payload));
         if (!write_result) {
-            LOG_ERROR << "Failed to write chunk file: upload_id=" << upload_id
+            Logger::Error() << "Failed to write chunk file: upload_id=" << upload_id
                       << ", chunk_index=" << chunk_index << ", error="
                       << static_cast<int>(write_result.error().code);
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+            Logger::Info() << "[upload_chunk] duration_us=" << duration_us
                      << " outcome=failure upload_id=" << upload_id
                      << " chunk_index=" << chunk_index
                      << " data_size=" << chunk_data.size();
@@ -1064,13 +1064,13 @@ namespace disk::file {
                 chunk_index
             );
 
-            LOG_DEBUG << "Chunk upload successful: upload_id=" << upload_id
+            Logger::Debug() << "Chunk upload successful: upload_id=" << upload_id
                       << ", chunk_index=" << chunk_index;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_DEBUG << "[upload_chunk] duration_us=" << duration_us
+            Logger::Debug() << "[upload_chunk] duration_us=" << duration_us
                       << " outcome=success upload_id=" << upload_id
                       << " chunk_index=" << chunk_index
                       << " data_size=" << chunk_data.size();
@@ -1082,12 +1082,12 @@ namespace disk::file {
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to record chunk upload: " << e.base().what();
+            Logger::Error() << "Failed to record chunk upload: " << e.base().what();
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[upload_chunk] duration_us=" << duration_us
+            Logger::Info() << "[upload_chunk] duration_us=" << duration_us
                      << " outcome=failure upload_id=" << upload_id
                      << " chunk_index=" << chunk_index
                      << " data_size=" << chunk_data.size();
@@ -1105,17 +1105,17 @@ namespace disk::file {
 
         auto start = std::chrono::steady_clock::now();
 
-        LOG_DEBUG << "Starting complete upload: upload_id=" << upload_id << ", user_id=" << user_id;
+        Logger::Debug() << "Starting complete upload: upload_id=" << upload_id << ", user_id=" << user_id;
 
         // 1. 查找并验证上传任务
         auto task_result = co_await FindUploadTask(upload_id, user_id);
         if (!task_result) {
-            LOG_WARN << "Upload task verification failed: " << upload_id;
+            Logger::Warn() << "Upload task verification failed: " << upload_id;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+            Logger::Info() << "[complete_upload] duration_us=" << duration_us
                      << " outcome=failure upload_id=" << upload_id;
 
             co_return std::unexpected(task_result.error());
@@ -1125,13 +1125,13 @@ namespace disk::file {
 
         // 2. Check idempotency: already completed
         if (task.getValueOfStatus() == 1) {
-            LOG_DEBUG << "Upload task already completed: upload_id=" << upload_id;
+            Logger::Debug() << "Upload task already completed: upload_id=" << upload_id;
             InvalidateUploadTaskCache(upload_id);
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_DEBUG << "[complete_upload] duration_us=" << duration_us
+            Logger::Debug() << "[complete_upload] duration_us=" << duration_us
                       << " outcome=success upload_id=" << upload_id
                       << " total_chunks=" << task.getValueOfTotalChunks();
 
@@ -1141,7 +1141,7 @@ namespace disk::file {
         // 3. 单次聚合查询校验分片完整性
         auto chunk_scan_start = std::chrono::steady_clock::now();
         const auto LogChunkScanDuration = [&chunk_scan_start, &upload_id]() {
-            LOG_DEBUG << "[stage_timer] chunk_scan duration_ms="
+            Logger::Debug() << "[stage_timer] chunk_scan duration_ms="
                       << std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now() - chunk_scan_start
                          )
@@ -1152,12 +1152,12 @@ namespace disk::file {
         auto coverage_result = co_await GetUploadedChunkCoverage(m_db_client, upload_id);
         if (!coverage_result.has_value()) {
             LogChunkScanDuration();
-            LOG_ERROR << "Failed to query chunk coverage: upload_id=" << upload_id;
+            Logger::Error() << "Failed to query chunk coverage: upload_id=" << upload_id;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+            Logger::Info() << "[complete_upload] duration_us=" << duration_us
                      << " outcome=failure upload_id=" << upload_id
                      << " total_chunks=" << task.getValueOfTotalChunks();
 
@@ -1182,14 +1182,14 @@ namespace disk::file {
         LogChunkScanDuration();
 
         if (!chunks_valid) {
-            LOG_WARN << "Not all chunks uploaded: uploaded=" << coverage.uploaded_count
+            Logger::Warn() << "Not all chunks uploaded: uploaded=" << coverage.uploaded_count
                      << ", total=" << total_chunks
                      << ", max_index=" << coverage.max_chunk_index;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+            Logger::Info() << "[complete_upload] duration_us=" << duration_us
                      << " outcome=failure upload_id=" << upload_id
                      << " total_chunks=" << total_chunks;
 
@@ -1201,7 +1201,7 @@ namespace disk::file {
         // 3. 组装分片（同时计算 MD5 + SHA256）
         auto assemble_start = std::chrono::steady_clock::now();
         auto assemble_result = co_await m_storage->AssembleChunks(upload_id, task.getValueOfTotalChunks());
-        LOG_DEBUG << "[stage_timer] assemble duration_ms="
+        Logger::Debug() << "[stage_timer] assemble duration_ms="
                   << std::chrono::duration_cast<std::chrono::milliseconds>(
                          std::chrono::steady_clock::now() - assemble_start
                      )
@@ -1209,13 +1209,13 @@ namespace disk::file {
                   << " upload_id=" << upload_id
                   << " total_chunks=" << task.getValueOfTotalChunks();
         if (!assemble_result) {
-            LOG_ERROR << "Failed to assemble chunks: upload_id=" << upload_id
+            Logger::Error() << "Failed to assemble chunks: upload_id=" << upload_id
                       << ", error=" << static_cast<int>(assemble_result.error().code);
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+            Logger::Info() << "[complete_upload] duration_us=" << duration_us
                      << " outcome=failure upload_id=" << upload_id
                      << " total_chunks=" << task.getValueOfTotalChunks();
 
@@ -1228,18 +1228,18 @@ namespace disk::file {
         const auto& final_hash = assembled.md5_hash;
         const auto& precomputed_sha256 = assembled.sha256_hash;
         if (final_hash != task.getValueOfFileHash()) {
-            LOG_ERROR << "File hash mismatch: expected=" << task.getValueOfFileHash()
+            Logger::Error() << "File hash mismatch: expected=" << task.getValueOfFileHash()
                       << ", actual=" << final_hash;
             auto delete_result = co_await m_storage->DeletePath(assemble_path);
             if (!delete_result) {
-                LOG_WARN << "Failed to cleanup assemble file after hash mismatch: "
+                Logger::Warn() << "Failed to cleanup assemble file after hash mismatch: "
                          << static_cast<int>(delete_result.error().code);
             }
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+            Logger::Info() << "[complete_upload] duration_us=" << duration_us
                      << " outcome=failure upload_id=" << upload_id
                      << " total_chunks=" << task.getValueOfTotalChunks();
 
@@ -1248,7 +1248,7 @@ namespace disk::file {
             );
         }
 
-        LOG_DEBUG << "File hash verification passed: " << final_hash;
+        Logger::Debug() << "File hash verification passed: " << final_hash;
 
         struct FinalizeLookupResult {
             std::optional<uint64_t> existing_content_id;
@@ -1279,27 +1279,27 @@ namespace disk::file {
 
                 co_return lookup;
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_ERROR << "Failed to query finalize upload metadata: " << e.base().what();
+                Logger::Error() << "Failed to query finalize upload metadata: " << e.base().what();
                 co_return FinalizeLookupResult{};
             }
         }();
 
         if (lookup_result.filename_exists) {
-            LOG_WARN << "File with same name already exists: " << task.getValueOfFilename();
+            Logger::Warn() << "File with same name already exists: " << task.getValueOfFilename();
             auto delete_result = co_await m_storage->DeletePath(assemble_path);
             if (!delete_result) {
-                LOG_WARN << "Failed to cleanup assemble file on duplicate name: "
+                Logger::Warn() << "Failed to cleanup assemble file on duplicate name: "
                          << static_cast<int>(delete_result.error().code);
             }
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+            Logger::Info() << "[complete_upload] duration_us=" << duration_us
                      << " outcome=failure upload_id=" << upload_id
                      << " total_chunks=" << task.getValueOfTotalChunks();
 
-            LOG_INFO << "[stage_timer] dedup_lookup duration_ms="
+            Logger::Info() << "[stage_timer] dedup_lookup duration_ms="
                      << std::chrono::duration_cast<std::chrono::milliseconds>(
                             std::chrono::steady_clock::now() - dedup_start
                         )
@@ -1319,25 +1319,25 @@ namespace disk::file {
         if (existing_content.has_value()) {
             auto delete_result = co_await m_storage->DeletePath(assemble_path);
             if (!delete_result) {
-                LOG_WARN << "Failed to cleanup assemble file after dedup: "
+                Logger::Warn() << "Failed to cleanup assemble file after dedup: "
                          << static_cast<int>(delete_result.error().code);
             }
-            LOG_DEBUG << "File dedup successful: content_id=" << existing_content.value();
+            Logger::Debug() << "File dedup successful: content_id=" << existing_content.value();
         } else {
             auto promote_result = co_await m_storage->PromoteToFinal(assemble_path, final_hash);
             if (!promote_result) {
-                LOG_ERROR << "Failed to move file to final storage: error="
+                Logger::Error() << "Failed to move file to final storage: error="
                           << static_cast<int>(promote_result.error().code);
                 auto cleanup_result = co_await m_storage->DeletePath(assemble_path);
                 if (!cleanup_result) {
-                    LOG_WARN << "Failed to cleanup assemble file after promote failure: "
+                    Logger::Warn() << "Failed to cleanup assemble file after promote failure: "
                              << static_cast<int>(cleanup_result.error().code);
                 }
 
                 auto end = std::chrono::steady_clock::now();
                 auto duration_us =
                     std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-                LOG_INFO << "[complete_upload] duration_us=" << duration_us
+                Logger::Info() << "[complete_upload] duration_us=" << duration_us
                          << " outcome=failure upload_id=" << upload_id
                          << " total_chunks=" << task.getValueOfTotalChunks();
 
@@ -1348,7 +1348,7 @@ namespace disk::file {
             final_sha256 = precomputed_sha256;
             should_compensate_storage_file = true;
         }
-        LOG_DEBUG << "[stage_timer] dedup_lookup duration_ms="
+        Logger::Debug() << "[stage_timer] dedup_lookup duration_ms="
                   << std::chrono::duration_cast<std::chrono::milliseconds>(
                          std::chrono::steady_clock::now() - dedup_start
                      )
@@ -1375,7 +1375,7 @@ namespace disk::file {
                     content_id
                 );
                 if (increment_result.affectedRows() == 0) {
-                    LOG_WARN << "File content not found when finalizing upload: content_id="
+                    Logger::Warn() << "File content not found when finalizing upload: content_id="
                              << content_id;
                     throw std::runtime_error("Failed to increment file content reference count");
                 }
@@ -1390,7 +1390,7 @@ namespace disk::file {
 
                 content = co_await content_mapper.insert(content);
                 content_id = content.getValueOfId();
-                LOG_DEBUG << "FileContents created successfully: content_id=" << content_id;
+                Logger::Debug() << "FileContents created successfully: content_id=" << content_id;
             }
 
             auto parent_location_result =
@@ -1437,27 +1437,27 @@ namespace disk::file {
             );
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Database operation failed: " << e.base().what();
+            Logger::Error() << "Database operation failed: " << e.base().what();
             if (transaction) {
                 try {
                     transaction->rollback();
                 } catch (const std::exception& rollback_e) {
-                    LOG_ERROR << "Transaction rollback failed: " << rollback_e.what();
+                    Logger::Error() << "Transaction rollback failed: " << rollback_e.what();
                 }
             }
             db_operation_failed = true;
         } catch (const std::exception& e) {
-            LOG_ERROR << "Database operation failed: " << e.what();
+            Logger::Error() << "Database operation failed: " << e.what();
             if (transaction) {
                 try {
                     transaction->rollback();
                 } catch (const std::exception& rollback_e) {
-                    LOG_ERROR << "Transaction rollback failed: " << rollback_e.what();
+                    Logger::Error() << "Transaction rollback failed: " << rollback_e.what();
                 }
             }
             db_operation_failed = true;
         }
-        LOG_DEBUG << "[stage_timer] tx duration_ms="
+        Logger::Debug() << "[stage_timer] tx duration_ms="
                   << std::chrono::duration_cast<std::chrono::milliseconds>(
                          std::chrono::steady_clock::now() - tx_start
                      )
@@ -1470,11 +1470,11 @@ namespace disk::file {
             if (should_compensate_storage_file) {
                 auto cleanup_result = co_await m_storage->DeletePath(final_storage_path);
                 if (!cleanup_result) {
-                    LOG_ERROR << "Compensation failed, orphan storage file may remain: "
+                    Logger::Error() << "Compensation failed, orphan storage file may remain: "
                               << final_storage_path;
                 }
             }
-            LOG_INFO << "[stage_timer] compensation_cleanup duration_ms="
+            Logger::Info() << "[stage_timer] compensation_cleanup duration_ms="
                      << std::chrono::duration_cast<std::chrono::milliseconds>(
                             std::chrono::steady_clock::now() - compensation_start
                         )
@@ -1484,7 +1484,7 @@ namespace disk::file {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[complete_upload] duration_us=" << duration_us
+            Logger::Info() << "[complete_upload] duration_us=" << duration_us
                      << " outcome=failure upload_id=" << upload_id
                      << " total_chunks=" << task.getValueOfTotalChunks();
 
@@ -1493,20 +1493,20 @@ namespace disk::file {
             );
         }
 
-        LOG_DEBUG << "Files record created successfully: file_id=" << file.getValueOfId();
+        Logger::Debug() << "Files record created successfully: file_id=" << file.getValueOfId();
         InvalidateUploadTaskCache(upload_id);
 
         // 7. Cleanup temp directory
         auto temp_cleanup_start = std::chrono::steady_clock::now();
         auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
-        LOG_DEBUG << "[stage_timer] temp_cleanup duration_ms="
+        Logger::Debug() << "[stage_timer] temp_cleanup duration_ms="
                   << std::chrono::duration_cast<std::chrono::milliseconds>(
                          std::chrono::steady_clock::now() - temp_cleanup_start
                      )
                          .count()
                   << " upload_id=" << upload_id;
         if (!cleanup_result) {
-            LOG_WARN << "Failed to cleanup temp artifacts: "
+            Logger::Warn() << "Failed to cleanup temp artifacts: "
                      << static_cast<int>(cleanup_result.error().code);
         }
 
@@ -1519,13 +1519,13 @@ namespace disk::file {
                                   .parent_id = file.getValueOfFolderId(),
                                   .created_at = file.getValueOfCreatedAt().toDbStringLocal() };
 
-        LOG_DEBUG << "File upload completed: file_id=" << file.getValueOfId()
+        Logger::Debug() << "File upload completed: file_id=" << file.getValueOfId()
                   << ", filename=" << task.getValueOfFilename();
 
         auto end = std::chrono::steady_clock::now();
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        LOG_DEBUG << "[complete_upload] duration_us=" << duration_us
+        Logger::Debug() << "[complete_upload] duration_us=" << duration_us
                   << " outcome=success upload_id=" << upload_id
                   << " total_chunks=" << task.getValueOfTotalChunks();
 
@@ -1535,19 +1535,19 @@ namespace disk::file {
     auto FileService::CancelUpload(std::string upload_id, uint64_t user_id)
         -> drogon::Task<Result<void>> {
 
-        LOG_DEBUG << "Starting cancel upload: upload_id=" << upload_id << ", user_id=" << user_id;
+        Logger::Debug() << "Starting cancel upload: upload_id=" << upload_id << ", user_id=" << user_id;
 
         // 1. 查找并验证上传任务
         auto task_result = co_await FindUploadTask(upload_id, user_id);
         if (!task_result) {
-            LOG_WARN << "Upload task verification failed: " << upload_id;
+            Logger::Warn() << "Upload task verification failed: " << upload_id;
             co_return std::unexpected(task_result.error());
         }
         const auto task = task_result.value();
 
         // 2. Check idempotency: already in terminal state
         if (task.getValueOfStatus() != 0) {
-            LOG_DEBUG << "Upload task already in terminal state: upload_id=" << upload_id
+            Logger::Debug() << "Upload task already in terminal state: upload_id=" << upload_id
                       << ", status=" << task.getValueOfStatus();
             co_return {};
         }
@@ -1563,7 +1563,7 @@ namespace disk::file {
             );
             InvalidateUploadTaskCache(upload_id);
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to set cancel terminal state: " << e.base().what();
+            Logger::Error() << "Failed to set cancel terminal state: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to cancel upload task")
             );
@@ -1576,17 +1576,17 @@ namespace disk::file {
                 upload_id
             );
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "Failed to cleanup upload_task_chunks: " << e.base().what();
+            Logger::Warn() << "Failed to cleanup upload_task_chunks: " << e.base().what();
         }
 
         // 6. Cleanup temp directory
         auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
         if (!cleanup_result) {
-            LOG_WARN << "Failed to delete temp directory: upload_id=" << upload_id
+            Logger::Warn() << "Failed to delete temp directory: upload_id=" << upload_id
                      << ", error=" << static_cast<int>(cleanup_result.error().code);
         }
 
-        LOG_DEBUG << "Upload task cancelled: upload_id=" << upload_id;
+        Logger::Debug() << "Upload task cancelled: upload_id=" << upload_id;
         co_return {};
     }
 
@@ -1595,7 +1595,7 @@ namespace disk::file {
     auto FileService::GetFileList(FileListRequest request, uint64_t user_id)
         -> drogon::Task<Result<FileListResponse>> {
 
-        LOG_DEBUG << "Starting get file list: parent_id=" << request.parent_id
+        Logger::Debug() << "Starting get file list: parent_id=" << request.parent_id
                   << ", page=" << request.page << ", page_size=" << request.page_size
                   << ", sort_by=" << request.sort_by << ", sort_order=" << request.sort_order
                   << ", type=" << request.type << ", user_id=" << user_id;
@@ -1608,9 +1608,9 @@ namespace disk::file {
                     Criteria(Folders::Cols::_id, CompareOperator::EQ, request.parent_id) &&
                     Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id)
                 );
-                LOG_DEBUG << "Folder verification passed: folder_id=" << request.parent_id;
+                Logger::Debug() << "Folder verification passed: folder_id=" << request.parent_id;
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "Folder not found or no permission: folder_id=" << request.parent_id;
+                Logger::Warn() << "Folder not found or no permission: folder_id=" << request.parent_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
             }
         }
@@ -1759,7 +1759,7 @@ namespace disk::file {
             total_pages = request.page_size > 0 ? (total + request.page_size - 1) / request.page_size : 0;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "Failed to query file list: " << e.base().what();
+            Logger::Warn() << "Failed to query file list: " << e.base().what();
         }
 
         // 3. 构造响应
@@ -1770,7 +1770,7 @@ namespace disk::file {
                                 .total = total,
                                 .total_pages = total_pages };
 
-        LOG_DEBUG << "File list retrieved successfully: total=" << total
+        Logger::Debug() << "File list retrieved successfully: total=" << total
                   << ", page=" << request.page;
         co_return response;
     }
@@ -1780,7 +1780,7 @@ namespace disk::file {
     auto FileService::GetFileDetail(uint64_t file_id, uint64_t user_id)
         -> drogon::Task<Result<FileDetailResponse>> {
 
-        LOG_DEBUG << "Starting get file detail: file_id=" << file_id << ", user_id=" << user_id;
+        Logger::Debug() << "Starting get file detail: file_id=" << file_id << ", user_id=" << user_id;
 
         try {
             CoroMapper<Files> file_mapper(m_db_client);
@@ -1815,11 +1815,11 @@ namespace disk::file {
             response.created_at = file.getValueOfCreatedAt().toDbStringLocal();
             response.updated_at = file.getValueOfUpdatedAt().toDbStringLocal();
 
-            LOG_DEBUG << "File detail retrieved successfully: name=" << response.name;
+            Logger::Debug() << "File detail retrieved successfully: name=" << response.name;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "File not found or no permission: file_id=" << file_id;
+            Logger::Warn() << "File not found or no permission: file_id=" << file_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
         }
     }
@@ -1829,7 +1829,7 @@ namespace disk::file {
     auto FileService::GetDownloadInfo(uint64_t file_id, uint64_t user_id)
         -> drogon::Task<Result<DownloadInfoResponse>> {
 
-        LOG_DEBUG << "Starting get download info: file_id=" << file_id << ", user_id=" << user_id;
+        Logger::Debug() << "Starting get download info: file_id=" << file_id << ", user_id=" << user_id;
 
         // 1. 查找文件并验证归属
         try {
@@ -1841,7 +1841,7 @@ namespace disk::file {
 
             // 2. 获取文件内容信息
             if (!file.getContentId()) {
-                LOG_ERROR << "File missing content_id: file_id=" << file_id;
+                Logger::Error() << "File missing content_id: file_id=" << file_id;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::FileReadError, "File content info missing")
                 );
@@ -1862,12 +1862,12 @@ namespace disk::file {
                                                                      file.getValueOfMimeType();
             response.supports_range = true;
 
-            LOG_DEBUG << "Download info retrieved successfully: filename=" << response.filename
+            Logger::Debug() << "Download info retrieved successfully: filename=" << response.filename
                       << ", size=" << response.file_size;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "File not found or no permission: file_id=" << file_id;
+            Logger::Warn() << "File not found or no permission: file_id=" << file_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
         }
     }
@@ -1877,7 +1877,7 @@ namespace disk::file {
     auto FileService::GetDownloadData(uint64_t file_id, uint64_t user_id)
         -> drogon::Task<Result<DownloadInfo>> {
 
-        LOG_DEBUG << "Starting get download data: file_id=" << file_id << ", user_id=" << user_id;
+        Logger::Debug() << "Starting get download data: file_id=" << file_id << ", user_id=" << user_id;
 
         // 1. 查找文件并验证归属
         try {
@@ -1889,7 +1889,7 @@ namespace disk::file {
 
             // 2. 获取文件内容信息
             if (!file.getContentId()) {
-                LOG_ERROR << "File missing content_id: file_id=" << file_id;
+                Logger::Error() << "File missing content_id: file_id=" << file_id;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::FileReadError, "File content info missing")
                 );
@@ -1911,12 +1911,12 @@ namespace disk::file {
             info.storage_path = content.getValueOfStoragePath();
             info.supports_range = true;
 
-            LOG_DEBUG << "Download data retrieved successfully: filename=" << info.filename
+            Logger::Debug() << "Download data retrieved successfully: filename=" << info.filename
                       << ", storage_path=" << info.storage_path;
             co_return info;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "File not found or no permission: file_id=" << file_id;
+            Logger::Warn() << "File not found or no permission: file_id=" << file_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
         }
     }
@@ -1926,7 +1926,7 @@ namespace disk::file {
     auto FileService::Rename(uint64_t file_id, std::string new_name, uint64_t user_id)
         -> drogon::Task<Result<RenameResponse>> {
 
-        LOG_DEBUG << "Starting rename file: file_id=" << file_id << ", new_name=\"" << new_name
+        Logger::Debug() << "Starting rename file: file_id=" << file_id << ", new_name=\"" << new_name
                   << "\""
                   << ", user_id=" << user_id;
 
@@ -1939,7 +1939,7 @@ namespace disk::file {
 
             auto folder_id = file.getValueOfFolderId();
             if (file.getValueOfName() != new_name && co_await IsFilenameExists(folder_id, new_name, user_id)) {
-                LOG_WARN << "Target folder already has file with same name: " << new_name;
+                Logger::Warn() << "Target folder already has file with same name: " << new_name;
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
             }
 
@@ -1964,7 +1964,7 @@ namespace disk::file {
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
             }
 
-            LOG_INFO << "File rename successful: file_id=" << file_id << ", new_name=\"" << new_name
+            Logger::Info() << "File rename successful: file_id=" << file_id << ", new_name=\"" << new_name
                      << "\"";
 
             RenameResponse response;
@@ -1974,7 +1974,7 @@ namespace disk::file {
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "File not found or no permission: file_id=" << file_id;
+            Logger::Warn() << "File not found or no permission: file_id=" << file_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
         }
     }
@@ -1984,7 +1984,7 @@ namespace disk::file {
     auto FileService::Move(MoveRequest request, uint64_t user_id)
         -> drogon::Task<Result<MoveResponse>> {
 
-        LOG_DEBUG << "Starting move drive items: file_ids.size()=" << request.file_ids.size()
+        Logger::Debug() << "Starting move drive items: file_ids.size()=" << request.file_ids.size()
                   << ", folder_ids.size()=" << request.folder_ids.size()
                   << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
@@ -2049,7 +2049,7 @@ namespace disk::file {
                     for (const auto file_id : chunk) {
                         auto it = files.find(file_id);
                         if (it == files.end()) {
-                            LOG_WARN << "File not found or no permission, skipping move: file_id="
+                            Logger::Warn() << "File not found or no permission, skipping move: file_id="
                                      << file_id;
                             continue;
                         }
@@ -2062,7 +2062,7 @@ namespace disk::file {
                         }
 
                         if (occupied_names.contains(name)) {
-                            LOG_WARN << "Target folder already has file with same name, skipping: "
+                            Logger::Warn() << "Target folder already has file with same name, skipping: "
                                      << name;
                             continue;
                         }
@@ -2133,7 +2133,7 @@ namespace disk::file {
             for (const auto folder_id : top_level_folder_ids) {
                 auto plan_it = folder_plans.find(folder_id);
                 if (plan_it == folder_plans.end()) {
-                    LOG_WARN << "Folder not found or no permission, skipping move: folder_id="
+                    Logger::Warn() << "Folder not found or no permission, skipping move: folder_id="
                              << folder_id;
                     continue;
                 }
@@ -2163,7 +2163,7 @@ namespace disk::file {
                 }
 
                 if (occupied_folder_names.contains(folder_name)) {
-                    LOG_WARN << "Target folder already has folder with same name, skipping: "
+                    Logger::Warn() << "Target folder already has folder with same name, skipping: "
                              << folder_name;
                     continue;
                 }
@@ -2247,33 +2247,33 @@ namespace disk::file {
                 try {
                     txn->rollback();
                 } catch (const std::exception& rb_e) {
-                    LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                    Logger::Error() << "Transaction rollback failed: " << rb_e.what();
                 }
             }
             co_return std::unexpected(e.error);
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Move transaction failed (DB): " << e.base().what();
+            Logger::Error() << "Move transaction failed (DB): " << e.base().what();
             if (txn) {
                 try {
                     txn->rollback();
                 } catch (const std::exception& rb_e) {
-                    LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                    Logger::Error() << "Transaction rollback failed: " << rb_e.what();
                 }
             }
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to move items"));
         } catch (const std::exception& e) {
-            LOG_ERROR << "Move transaction failed: " << e.what();
+            Logger::Error() << "Move transaction failed: " << e.what();
             if (txn) {
                 try {
                     txn->rollback();
                 } catch (const std::exception& rb_e) {
-                    LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                    Logger::Error() << "Transaction rollback failed: " << rb_e.what();
                 }
             }
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to move items"));
         }
 
-        LOG_INFO << "Move completed: moved_file_count=" << moved_file_count
+        Logger::Info() << "Move completed: moved_file_count=" << moved_file_count
                  << ", moved_folder_count=" << moved_folder_count;
 
         MoveResponse response;
@@ -2288,7 +2288,7 @@ namespace disk::file {
     auto FileService::Copy(CopyRequest request, uint64_t user_id)
         -> drogon::Task<Result<CopyResponse>> {
 
-        LOG_DEBUG << "Starting copy items: file_ids.size()=" << request.file_ids.size()
+        Logger::Debug() << "Starting copy items: file_ids.size()=" << request.file_ids.size()
                   << ", folder_ids.size()=" << request.folder_ids.size()
                   << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
@@ -2307,7 +2307,7 @@ namespace disk::file {
             user_id
         );
         if (!target_location_result) {
-            LOG_WARN << "Target folder not found or no permission: folder_id="
+            Logger::Warn() << "Target folder not found or no permission: folder_id="
                      << request.target_folder_id;
             co_return std::unexpected(target_location_result.error());
         }
@@ -2322,7 +2322,7 @@ namespace disk::file {
         explicit_file_ids.reserve(requested_file_ids.size());
         for (const auto file_id : requested_file_ids) {
             if (covered_file_ids.contains(file_id)) {
-                LOG_DEBUG << "Skipping explicit file copy covered by folder copy: file_id=" << file_id;
+                Logger::Debug() << "Skipping explicit file copy covered by folder copy: file_id=" << file_id;
                 continue;
             }
             explicit_file_ids.push_back(file_id);
@@ -2353,14 +2353,14 @@ namespace disk::file {
                     file_map[file.getValueOfId()] = std::move(file);
                 }
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "File batch fetch failed in copy, skipping chunk: " << e.base().what();
+                Logger::Warn() << "File batch fetch failed in copy, skipping chunk: " << e.base().what();
                 continue;
             }
 
             for (const auto file_id : chunk) {
                 auto it = file_map.find(file_id);
                 if (it == file_map.end()) {
-                    LOG_WARN << "File not found or no permission, skipping: file_id=" << file_id;
+                    Logger::Warn() << "File not found or no permission, skipping: file_id=" << file_id;
                     continue;
                 }
                 total_copy_size += it->second.getValueOfSize();
@@ -2379,7 +2379,7 @@ namespace disk::file {
         if (total_copy_size > 0) {
             auto quota_result = co_await CheckStorageQuota(m_db_client, user_id, total_copy_size);
             if (!quota_result) {
-                LOG_WARN << "Storage quota check failed for copy: user_id=" << user_id
+                Logger::Warn() << "Storage quota check failed for copy: user_id=" << user_id
                          << ", total_copy_size=" << total_copy_size;
                 co_return std::unexpected(quota_result.error());
             }
@@ -2412,7 +2412,7 @@ namespace disk::file {
                     candidate_names
                 );
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "Filename conflict query failed in copy, skipping chunk: "
+                Logger::Warn() << "Filename conflict query failed in copy, skipping chunk: "
                          << e.base().what();
                 continue;
             }
@@ -2428,7 +2428,7 @@ namespace disk::file {
 
             for (const auto& [old_id, file] : chunk) {
                 if (occupied_names.contains(file.getValueOfName())) {
-                    LOG_WARN << "Target folder already has file with same name, skipping: "
+                    Logger::Warn() << "Target folder already has file with same name, skipping: "
                              << file.getValueOfName();
                     continue;
                 }
@@ -2457,7 +2457,7 @@ namespace disk::file {
                         existing_content_ids.insert(row["id"].as<uint64_t>());
                     }
                 } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_WARN << "File content batch query failed in copy, skipping chunk: "
+                    Logger::Warn() << "File content batch query failed in copy, skipping chunk: "
                              << e.base().what();
                     continue;
                 }
@@ -2468,7 +2468,7 @@ namespace disk::file {
             for (const auto& pending : pending_items) {
                 auto content_id_ptr = pending.file.getContentId();
                 if (content_id_ptr && !existing_content_ids.contains(*content_id_ptr)) {
-                    LOG_WARN << "File content not found during copy: content_id=" << *content_id_ptr;
+                    Logger::Warn() << "File content not found during copy: content_id=" << *content_id_ptr;
                     continue;
                 }
                 valid_items.emplace_back(pending.old_id, &pending.file);
@@ -2498,7 +2498,7 @@ namespace disk::file {
                 for (const auto& [old_id, file_ptr] : valid_items) {
                     auto cid = file_ptr->getContentId();
                     if (cid && !incremented_ids.contains(*cid)) {
-                        LOG_WARN << "Content ref_count increment skipped in txn, dropping file: content_id="
+                        Logger::Warn() << "Content ref_count increment skipped in txn, dropping file: content_id="
                                  << *cid;
                         continue;
                     }
@@ -2518,12 +2518,12 @@ namespace disk::file {
                     new_files.push_back({ .old_id = old_id, .new_id = new_id });
                 }
             } catch (const std::exception& e) {
-                LOG_ERROR << "Copy file batch transaction failed: " << e.what();
+                Logger::Error() << "Copy file batch transaction failed: " << e.what();
                 if (txn) {
                     try {
                         txn->rollback();
                     } catch (const std::exception& rb_e) {
-                        LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                        Logger::Error() << "Transaction rollback failed: " << rb_e.what();
                     }
                 }
             }
@@ -2547,7 +2547,7 @@ namespace disk::file {
                 root_folder_names
             );
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "Folder conflict query failed in copy: " << e.base().what();
+            Logger::Warn() << "Folder conflict query failed in copy: " << e.base().what();
             occupied_root_folder_names.clear();
         }
 
@@ -2566,14 +2566,14 @@ namespace disk::file {
                 }
             );
             if (target_inside_source) {
-                LOG_WARN << "Cannot copy folder into itself or descendant, skipping: folder_id="
+                Logger::Warn() << "Cannot copy folder into itself or descendant, skipping: folder_id="
                          << folder_id;
                 continue;
             }
 
             auto root_name = plan.root.getValueOfName();
             if (occupied_root_folder_names.contains(root_name)) {
-                LOG_WARN << "Target folder already has folder with same name, skipping: " << root_name;
+                Logger::Warn() << "Target folder already has folder with same name, skipping: " << root_name;
                 continue;
             }
             occupied_root_folder_names.insert(root_name);
@@ -2602,7 +2602,7 @@ namespace disk::file {
                         existing_content_ids.insert(row["id"].as<uint64_t>());
                     }
                 } catch (const drogon::orm::DrogonDbException& e) {
-                    LOG_WARN << "Folder copy content query failed, skipping folder_id=" << folder_id
+                    Logger::Warn() << "Folder copy content query failed, skipping folder_id=" << folder_id
                              << ": " << e.base().what();
                     continue;
                 }
@@ -2695,7 +2695,7 @@ namespace disk::file {
 
                     auto content_id_ptr = file.getContentId();
                     if (content_id_ptr && !incremented_ids.contains(*content_id_ptr)) {
-                        LOG_WARN << "Content ref_count increment skipped in folder copy, dropping file: content_id="
+                        Logger::Warn() << "Content ref_count increment skipped in folder copy, dropping file: content_id="
                                  << *content_id_ptr;
                         continue;
                     }
@@ -2739,13 +2739,13 @@ namespace disk::file {
                 new_folders.insert(new_folders.end(), folder_mappings.begin(), folder_mappings.end());
                 new_files.insert(new_files.end(), file_mappings.begin(), file_mappings.end());
             } catch (const std::exception& e) {
-                LOG_ERROR << "Folder copy transaction failed: folder_id=" << folder_id
+                Logger::Error() << "Folder copy transaction failed: folder_id=" << folder_id
                           << ", error=" << e.what();
                 if (txn) {
                     try {
                         txn->rollback();
                     } catch (const std::exception& rb_e) {
-                        LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                        Logger::Error() << "Transaction rollback failed: " << rb_e.what();
                     }
                 }
             }
@@ -2765,7 +2765,7 @@ namespace disk::file {
         response.new_files = std::move(new_files);
         response.new_folders = std::move(new_folders);
 
-        LOG_INFO << "Copy completed: copied_files=" << response.copied_file_count
+        Logger::Info() << "Copy completed: copied_files=" << response.copied_file_count
                  << ", copied_folders=" << response.copied_folder_count
                  << ", total_size=" << actual_copy_size;
 
@@ -2777,7 +2777,7 @@ namespace disk::file {
     auto FileService::Delete(DeleteRequest request, uint64_t user_id)
         -> drogon::Task<Result<DeleteResponse>> {
 
-        LOG_DEBUG << "Starting delete items: file_ids.size()=" << request.file_ids.size()
+        Logger::Debug() << "Starting delete items: file_ids.size()=" << request.file_ids.size()
                   << ", folder_ids.size()=" << request.folder_ids.size() << ", user_id=" << user_id;
 
         auto delete_start = std::chrono::steady_clock::now();
@@ -2801,7 +2801,7 @@ namespace disk::file {
         explicit_file_ids.reserve(requested_file_ids.size());
         for (const auto file_id : requested_file_ids) {
             if (covered_file_ids.contains(file_id)) {
-                LOG_DEBUG << "Skipping explicit file delete covered by folder delete: file_id=" << file_id;
+                Logger::Debug() << "Skipping explicit file delete covered by folder delete: file_id=" << file_id;
                 continue;
             }
             explicit_file_ids.push_back(file_id);
@@ -2828,7 +2828,7 @@ namespace disk::file {
                     file_map[file.getValueOfId()] = std::move(file);
                 }
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "File batch fetch failed in delete, skipping chunk: " << e.base().what();
+                Logger::Warn() << "File batch fetch failed in delete, skipping chunk: " << e.base().what();
             }
         }
 
@@ -2842,7 +2842,7 @@ namespace disk::file {
         for (const auto file_id : explicit_file_ids) {
             auto it = file_map.find(file_id);
             if (it == file_map.end()) {
-                LOG_WARN << "File not found or delete failed, skipping: file_id=" << file_id;
+                Logger::Warn() << "File not found or delete failed, skipping: file_id=" << file_id;
                 continue;
             }
 
@@ -2973,7 +2973,7 @@ namespace disk::file {
                 cancelled_empty_shares += static_cast<int>(result.affectedRows());
             }
 
-            LOG_DEBUG << "Cleaned share links during delete: file_links=" << deleted_file_share_links
+            Logger::Debug() << "Cleaned share links during delete: file_links=" << deleted_file_share_links
                       << ", folder_links=" << deleted_folder_share_links
                       << ", cancelled_empty_shares=" << cancelled_empty_shares;
 
@@ -2987,22 +2987,22 @@ namespace disk::file {
                 throw std::runtime_error("Failed to delete all folder rows");
             }
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Delete transaction failed (DB): " << e.base().what();
+            Logger::Error() << "Delete transaction failed (DB): " << e.base().what();
             if (txn) {
                 try {
                     txn->rollback();
                 } catch (const std::exception& rb_e) {
-                    LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                    Logger::Error() << "Transaction rollback failed: " << rb_e.what();
                 }
             }
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to delete items"));
         } catch (const std::exception& e) {
-            LOG_ERROR << "Delete transaction failed: " << e.what();
+            Logger::Error() << "Delete transaction failed: " << e.what();
             if (txn) {
                 try {
                     txn->rollback();
                 } catch (const std::exception& rb_e) {
-                    LOG_ERROR << "Transaction rollback failed: " << rb_e.what();
+                    Logger::Error() << "Transaction rollback failed: " << rb_e.what();
                 }
             }
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to delete items"));
@@ -3010,7 +3010,7 @@ namespace disk::file {
 
         auto deleted_count = deleted_file_count + deleted_folder_count;
         auto delete_elapsed = std::chrono::steady_clock::now() - delete_start;
-        LOG_INFO << "FileService::Delete completed: deleted_count=" << deleted_count
+        Logger::Info() << "FileService::Delete completed: deleted_count=" << deleted_count
                  << ", deleted_file_count=" << deleted_file_count
                  << ", deleted_folder_count=" << deleted_folder_count
                  << ", removed_file_rows=" << file_ids_to_delete.size()
@@ -3030,7 +3030,7 @@ namespace disk::file {
     auto FileService::Search(SearchRequest request, uint64_t user_id)
         -> drogon::Task<Result<SearchResponse>> {
 
-        LOG_DEBUG << "Starting search file: keyword=\"" << request.keyword
+        Logger::Debug() << "Starting search file: keyword=\"" << request.keyword
                   << "\", type=" << request.type << ", folder_id="
                   << (request.folder_id.has_value() ? std::to_string(*request.folder_id) : "null")
                   << ", page=" << request.page << ", page_size=" << request.page_size
@@ -3313,7 +3313,7 @@ namespace disk::file {
             total_pages = request.page_size > 0 ? (total + request.page_size - 1) / request.page_size : 0;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "Failed to search: " << e.base().what();
+            Logger::Warn() << "Failed to search: " << e.base().what();
         }
 
         SearchResponse response;
@@ -3323,7 +3323,7 @@ namespace disk::file {
                                 .total = total,
                                 .total_pages = total_pages };
 
-        LOG_DEBUG << "Search completed: total=" << total << ", page=" << request.page;
+        Logger::Debug() << "Search completed: total=" << total << ", page=" << request.page;
         co_return response;
     }
 
@@ -3346,17 +3346,17 @@ namespace disk::file {
             );
 
             if (result.affectedRows() == 0) {
-                LOG_WARN << "Insufficient storage quota for reservation: user_id=" << user_id
+                Logger::Warn() << "Insufficient storage quota for reservation: user_id=" << user_id
                          << ", file_size=" << file_size;
                 co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
             }
 
-            LOG_DEBUG << "Storage quota reserved: user_id=" << user_id
+            Logger::Debug() << "Storage quota reserved: user_id=" << user_id
                       << ", file_size=" << file_size;
             co_return {};
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to reserve storage quota: " << e.base().what();
+            Logger::Error() << "Failed to reserve storage quota: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to reserve storage quota")
             );
@@ -3377,11 +3377,11 @@ namespace disk::file {
                 user_id
             );
 
-            LOG_DEBUG << "Reserved quota released: user_id=" << user_id
+            Logger::Debug() << "Reserved quota released: user_id=" << user_id
                       << ", reserved_bytes=" << reserved_bytes;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to release reserved quota: " << e.base().what();
+            Logger::Error() << "Failed to release reserved quota: " << e.base().what();
         }
     }
 
@@ -3427,7 +3427,7 @@ namespace disk::file {
             auto task = co_await mapper.findByPrimaryKey(upload_id);
 
             if (task.getValueOfUserId() != user_id) {
-                LOG_WARN << "Upload task does not belong to current user: upload_id=" << upload_id
+                Logger::Warn() << "Upload task does not belong to current user: upload_id=" << upload_id
                          << ", task_user_id=" << task.getValueOfUserId()
                          << ", request_user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
@@ -3436,7 +3436,7 @@ namespace disk::file {
             co_return task;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to query upload task: " << e.base().what();
+            Logger::Error() << "Failed to query upload task: " << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
         }
     }
@@ -3505,7 +3505,7 @@ namespace disk::file {
                 UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS,
                 [this]() { EvictExpiredUploadTaskCacheEntries(); }
             );
-            LOG_DEBUG << "Upload task cache maintenance timer started (interval="
+            Logger::Debug() << "Upload task cache maintenance timer started (interval="
                       << UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS << "s)";
         }
     }
@@ -3543,7 +3543,7 @@ namespace disk::file {
             co_return count > 0;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to check filename: " << e.base().what();
+            Logger::Error() << "Failed to check filename: " << e.base().what();
             co_return false;
         }
     }
@@ -3577,17 +3577,17 @@ namespace disk::file {
             );
 
             if (result.affectedRows() == 0) {
-                LOG_WARN << "Insufficient storage space: user_id=" << user_id
+                Logger::Warn() << "Insufficient storage space: user_id=" << user_id
                          << ", file_size=" << file_size;
                 co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
             }
 
-            LOG_DEBUG << "Storage quota check passed and reserved: user_id=" << user_id
+            Logger::Debug() << "Storage quota check passed and reserved: user_id=" << user_id
                       << ", file_size=" << file_size;
             co_return {};
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to reserve user storage quota: " << e.base().what();
+            Logger::Error() << "Failed to reserve user storage quota: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to reserve storage quota")
             );
@@ -3610,7 +3610,7 @@ namespace disk::file {
                 );
 
                 if (result.affectedRows() == 0) {
-                    LOG_WARN << "Skipped storage usage increment due to quota limit: user_id="
+                    Logger::Warn() << "Skipped storage usage increment due to quota limit: user_id="
                              << user_id << ", delta=" << delta;
                     co_return;
                 }
@@ -3622,10 +3622,10 @@ namespace disk::file {
                 );
             }
 
-            LOG_DEBUG << "Storage usage updated: user_id=" << user_id << ", delta=" << delta;
+            Logger::Debug() << "Storage usage updated: user_id=" << user_id << ", delta=" << delta;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to update storage usage: " << e.base().what();
+            Logger::Error() << "Failed to update storage usage: " << e.base().what();
         }
     }
 
@@ -3674,7 +3674,7 @@ namespace disk::file {
                     incremented_ids.insert(id);
                 }
             } catch (const drogon::orm::DrogonDbException& e) {
-                LOG_WARN << "File content batch ref_count update failed: " << e.base().what();
+                Logger::Warn() << "File content batch ref_count update failed: " << e.base().what();
             }
         }
 
@@ -3745,7 +3745,7 @@ namespace disk::file {
                 }
             }
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Batch file insert failed in copy: " << e.base().what();
+            Logger::Error() << "Batch file insert failed in copy: " << e.base().what();
         }
 
         co_return id_mappings;
@@ -3767,7 +3767,7 @@ namespace disk::file {
             );
             co_return static_cast<int>(result.affectedRows());
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_WARN << "Batch file delete failed: " << e.base().what();
+            Logger::Warn() << "Batch file delete failed: " << e.base().what();
             co_return 0;
         }
     }
@@ -3793,7 +3793,7 @@ namespace disk::file {
             co_return metadata;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to lookup existing content metadata: " << e.base().what();
+            Logger::Error() << "Failed to lookup existing content metadata: " << e.base().what();
             co_return std::nullopt;
         }
     }
@@ -3819,7 +3819,7 @@ namespace disk::file {
             co_return false;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to check filename (transaction): " << e.base().what();
+            Logger::Error() << "Failed to check filename (transaction): " << e.base().what();
             co_return false;
         }
     }
@@ -3845,7 +3845,7 @@ namespace disk::file {
             co_return coverage;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to get uploaded chunk coverage: " << e.base().what();
+            Logger::Error() << "Failed to get uploaded chunk coverage: " << e.base().what();
             co_return std::nullopt;
         }
     }

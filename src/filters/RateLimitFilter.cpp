@@ -32,7 +32,7 @@ namespace disk::filters {
         // 从 request attributes 获取 user_id（由 JwtAuthFilter 设置）
         auto attrs = request->attributes();
         if (!attrs) {
-            LOG_WARN << "Cannot get request attributes";
+            Logger::Warn() << "Cannot get request attributes";
             co_return nullptr;
         }
 
@@ -48,7 +48,7 @@ namespace disk::filters {
         // 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
         auto incr_result = co_await m_redis_service->IncrWithExpire(key, WINDOW_SECONDS);
         if (!incr_result) {
-            LOG_ERROR << "Redis IncrWithExpire failed: " << incr_result.error().message;
+            Logger::Error() << "Redis IncrWithExpire failed: " << incr_result.error().message;
             // Redis 失败时不阻止请求
             co_return nullptr;
         }
@@ -57,12 +57,12 @@ namespace disk::filters {
 
         // 检查是否超过限制
         if (current_count > DEFAULT_LIMIT) {
-            LOG_WARN << "API rate limit: user_id=" << user_id << ", count=" << current_count;
+            Logger::Warn() << "API rate limit: user_id=" << user_id << ", count=" << current_count;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[rate_limit_filter] duration_us=" << duration_us
+            Logger::Info() << "[rate_limit_filter] duration_us=" << duration_us
                      << " outcome=failure user_id=" << user_id;
 
             auto response = disk::Response::Error(disk::error::Code::TooManyRequests);
@@ -73,13 +73,13 @@ namespace disk::filters {
             co_return response;
         }
 
-        LOG_DEBUG << "API rate limit check passed: user_id=" << user_id
+        Logger::Debug() << "API rate limit check passed: user_id=" << user_id
                   << ", count=" << current_count << "/" << DEFAULT_LIMIT;
 
         auto end = std::chrono::steady_clock::now();
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        LOG_INFO << "[rate_limit_filter] duration_us=" << duration_us
+        Logger::Info() << "[rate_limit_filter] duration_us=" << duration_us
                  << " outcome=success user_id=" << user_id;
 
         co_return nullptr;

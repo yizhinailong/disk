@@ -17,7 +17,7 @@ namespace disk::log {
 
     OperationLogService::OperationLogService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        LOG_DEBUG << "OperationLogService initialization completed";
+        Logger::Debug() << "OperationLogService initialization completed";
     }
 
     auto OperationLogService::Log(const OperationLogEntry& entry) -> drogon::Task<Result<void>> {
@@ -46,7 +46,7 @@ namespace disk::log {
 
             co_return {};
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to record operation log: " << e.base().what();
+            Logger::Error() << "Failed to record operation log: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to record operation log")
             );
@@ -98,7 +98,7 @@ namespace disk::log {
 
             co_return response;
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to query operation logs: " << e.base().what();
+            Logger::Error() << "Failed to query operation logs: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to query operation logs")
             );

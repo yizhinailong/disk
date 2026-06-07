@@ -29,7 +29,7 @@ namespace disk::system {
         : m_db_client(std::move(db_client)),
           m_redis_client(std::move(redis_client)),
           m_start_time(std::chrono::steady_clock::now()) {
-        LOG_DEBUG << "SystemService initialization completed";
+        Logger::Debug() << "SystemService initialization completed";
     }
 
     auto SystemService::GetInfo(uint64_t user_id) -> drogon::Task<Result<SystemInfo>> {
@@ -100,7 +100,7 @@ namespace disk::system {
                 stats.total_folders = folders_result[0]["count"].as<int64_t>();
             }
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to get storage stats: " << e.base().what();
+            Logger::Error() << "Failed to get storage stats: " << e.base().what();
         }
 
         co_return stats;

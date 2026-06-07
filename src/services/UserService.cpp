@@ -26,11 +26,11 @@ namespace disk::user {
 
     UserService::UserService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        LOG_DEBUG << "UserService initialization completed";
+        Logger::Debug() << "UserService initialization completed";
     }
 
     auto UserService::GetProfile(uint64_t user_id) -> drogon::Task<Result<UserProfileResponse>> {
-        LOG_INFO << "Get user profile request: user_id=" << user_id;
+        Logger::Info() << "Get user profile request: user_id=" << user_id;
 
         try {
             // 单次聚合查询：用户基本信息 + 文件数量 + 文件夹数量
@@ -40,12 +40,12 @@ namespace disk::user {
             );
 
             if (result.empty()) {
-                LOG_WARN << "User not found: user_id=" << user_id;
+                Logger::Warn() << "User not found: user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
             }
 
             const auto& row = result[0];
-            LOG_DEBUG << "Found user: " << row["username"].as<std::string>() << " (ID: " << user_id
+            Logger::Debug() << "Found user: " << row["username"].as<std::string>() << " (ID: " << user_id
                       << ")";
 
             UserProfileResponse response;
@@ -74,18 +74,18 @@ namespace disk::user {
             response.created_at = row["created_at"].as<std::string>();
             response.updated_at = row["updated_at"].as<std::string>();
 
-            LOG_INFO << "Get user profile successful: user_id=" << user_id;
+            Logger::Info() << "Get user profile successful: user_id=" << user_id;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Get user profile database error: user_id=" << user_id << " - "
+            Logger::Error() << "Get user profile database error: user_id=" << user_id << " - "
                       << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get user profile, please try again later"
             ));
         } catch (const std::exception& e) {
-            LOG_ERROR << "Get user profile unknown error: user_id=" << user_id << " - " << e.what();
+            Logger::Error() << "Get user profile unknown error: user_id=" << user_id << " - " << e.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get user profile, please try again later"
@@ -96,7 +96,7 @@ namespace disk::user {
     auto UserService::ChangePassword(uint64_t user_id, ChangePasswordRequest request)
         -> drogon::Task<Result<void>> {
 
-        LOG_INFO << "Change password request: user_id=" << user_id;
+        Logger::Info() << "Change password request: user_id=" << user_id;
 
         try {
             CoroMapper<Users> mapper(m_db_client);
@@ -104,21 +104,21 @@ namespace disk::user {
             // 步骤 1: 查找用户
             auto user =
                 co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
-            LOG_DEBUG << "Found user: " << user.getValueOfUsername() << " (ID: " << user_id << ")";
+            Logger::Debug() << "Found user: " << user.getValueOfUsername() << " (ID: " << user_id << ")";
 
             // 步骤 2: 验证旧密码
             if (!HashUtil::VerifyPassword(request.old_password, user.getValueOfPasswordHash())) {
-                LOG_WARN << "Old password is incorrect: user_id=" << user_id;
+                Logger::Warn() << "Old password is incorrect: user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidCredentials,
                     "Old password is incorrect"
                 ));
             }
-            LOG_DEBUG << "Old password verified successfully: user_id=" << user_id;
+            Logger::Debug() << "Old password verified successfully: user_id=" << user_id;
 
             // 步骤 3: 拒绝与当前密码相同的密码
             if (request.old_password == request.new_password) {
-                LOG_WARN << "New password cannot be the same as old password: user_id=" << user_id;
+                Logger::Warn() << "New password cannot be the same as old password: user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "New password cannot be the same as old password"
@@ -126,40 +126,40 @@ namespace disk::user {
             }
 
             // 步骤 4: 加密新密码
-            LOG_DEBUG << "Starting password hash computation: user_id=" << user_id;
+            Logger::Debug() << "Starting password hash computation: user_id=" << user_id;
             auto hash_result = HashUtil::HashPassword(request.new_password);
             if (!hash_result) {
-                LOG_ERROR << "Password hash failed: user_id=" << user_id;
+                Logger::Error() << "Password hash failed: user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::InternalError,
                     "Password encryption failed, please try again later"
                 ));
             }
-            LOG_DEBUG << "Password hash completed: user_id=" << user_id;
+            Logger::Debug() << "Password hash completed: user_id=" << user_id;
 
             // 步骤 5: 更新数据库
             user.setPasswordHash(hash_result.value());
             co_await mapper.update(user);
 
-            LOG_INFO << "Password changed successfully: user_id=" << user_id;
+            Logger::Info() << "Password changed successfully: user_id=" << user_id;
             co_return {};
 
         } catch (const drogon::orm::DrogonDbException& e) {
             const auto error_msg = std::string(e.base().what());
             if (error_msg.find("condition") != std::string::npos ||
                 error_msg.find("empty") != std::string::npos) {
-                LOG_WARN << "User not found: user_id=" << user_id;
+                Logger::Warn() << "User not found: user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
             }
 
-            LOG_ERROR << "Change password database error: user_id=" << user_id << " - "
+            Logger::Error() << "Change password database error: user_id=" << user_id << " - "
                       << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to change password, please try again later"
             ));
         } catch (const std::exception& e) {
-            LOG_ERROR << "Change password unknown error: user_id=" << user_id << " - " << e.what();
+            Logger::Error() << "Change password unknown error: user_id=" << user_id << " - " << e.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to change password, please try again later"
@@ -170,7 +170,7 @@ namespace disk::user {
     auto UserService::UpdateProfile(uint64_t user_id, UpdateProfileRequest request)
         -> drogon::Task<Result<UserProfileResponse>> {
 
-        LOG_INFO << "Update user profile request: user_id=" << user_id;
+        Logger::Info() << "Update user profile request: user_id=" << user_id;
 
         try {
             CoroMapper<Users> mapper(m_db_client);
@@ -178,21 +178,21 @@ namespace disk::user {
             // 步骤 1: 查找用户
             auto user =
                 co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
-            LOG_DEBUG << "Found user: " << user.getValueOfUsername();
+            Logger::Debug() << "Found user: " << user.getValueOfUsername();
 
             // 步骤 2: 更新提供的字段
             if (request.nickname.has_value()) {
                 user.setNickname(*request.nickname);
-                LOG_DEBUG << "Updating nickname: " << *request.nickname;
+                Logger::Debug() << "Updating nickname: " << *request.nickname;
             }
             if (request.avatar.has_value()) {
                 user.setAvatar(*request.avatar);
-                LOG_DEBUG << "Updating avatar: " << *request.avatar;
+                Logger::Debug() << "Updating avatar: " << *request.avatar;
             }
 
             // 步骤 3: 保存到数据库
             co_await mapper.update(user);
-            LOG_INFO << "User profile updated successfully: user_id=" << user_id;
+            Logger::Info() << "User profile updated successfully: user_id=" << user_id;
 
             // 步骤 4: 构建响应
             UserProfileResponse response;
@@ -214,18 +214,18 @@ namespace disk::user {
             const auto error_msg = std::string(e.base().what());
             if (error_msg.find("condition") != std::string::npos ||
                 error_msg.find("empty") != std::string::npos) {
-                LOG_WARN << "User not found: user_id=" << user_id;
+                Logger::Warn() << "User not found: user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
             }
 
-            LOG_ERROR << "Update user profile database error: user_id=" << user_id << " - "
+            Logger::Error() << "Update user profile database error: user_id=" << user_id << " - "
                       << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to update user profile, please try again later"
             ));
         } catch (const std::exception& e) {
-            LOG_ERROR << "Update user profile unknown error: user_id=" << user_id << " - "
+            Logger::Error() << "Update user profile unknown error: user_id=" << user_id << " - "
                       << e.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
@@ -235,7 +235,7 @@ namespace disk::user {
     }
 
     auto UserService::GetStorage(uint64_t user_id) -> drogon::Task<Result<StorageResponse>> {
-        LOG_DEBUG << "Get user storage stats: user_id=" << user_id;
+        Logger::Debug() << "Get user storage stats: user_id=" << user_id;
 
         try {
             // 单次聚合查询：配额 + 已使用 + 文件数量 + 文件夹数量
@@ -245,7 +245,7 @@ namespace disk::user {
             );
 
             if (result.empty()) {
-                LOG_ERROR << "User not found for storage stats: user_id=" << user_id;
+                Logger::Error() << "User not found for storage stats: user_id=" << user_id;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Failed to get storage stats")
                 );
@@ -271,13 +271,13 @@ namespace disk::user {
                                       .file_count = file_count,
                                       .folder_count = folder_count };
 
-            LOG_DEBUG << "Storage stats: used=" << used << ", quota=" << quota
+            Logger::Debug() << "Storage stats: used=" << used << ", quota=" << quota
                       << ", percentage=" << percentage << "%"
                       << ", files=" << file_count << ", folders=" << folder_count;
 
             co_return response;
         } catch (const drogon::orm::DrogonDbException& e) {
-            LOG_ERROR << "Failed to get storage stats: " << e.base().what();
+            Logger::Error() << "Failed to get storage stats: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to get storage stats")
             );

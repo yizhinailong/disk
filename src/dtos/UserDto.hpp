@@ -50,7 +50,7 @@ namespace disk::user {
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req)
             -> Result<ChangePasswordRequest> {
-            LOG_DEBUG << "Start parsing change password request parameters";
+            Logger::Debug() << "Start parsing change password request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -66,24 +66,24 @@ namespace disk::user {
             request.old_password = std::move(*old_pwd);
             request.new_password = std::move(*new_pwd);
 
-            LOG_DEBUG << "Parsed change password request";
+            Logger::Debug() << "Parsed change password request";
 
             if (!request.ValidateNewPassword()) {
-                LOG_WARN << "New password format error";
+                Logger::Warn() << "New password format error";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "New password format error")
                 );
             }
 
             if (request.old_password == request.new_password) {
-                LOG_WARN << "New password cannot be the same as old password";
+                Logger::Warn() << "New password cannot be the same as old password";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "New password cannot be the same as old password"
                 ));
             }
 
-            LOG_DEBUG << "Request parameters validated";
+            Logger::Debug() << "Request parameters validated";
 
             return request;
         }
@@ -119,7 +119,7 @@ namespace disk::user {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<UpdateProfileRequest> {
-            LOG_DEBUG << "Start parsing update profile request parameters";
+            Logger::Debug() << "Start parsing update profile request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -130,7 +130,7 @@ namespace disk::user {
             // 解析 nickname（可选，显式 null 无效）
             if (json.isMember("nickname")) {
                 if (json["nickname"].isNull()) {
-                    LOG_WARN << "Parameter 'nickname' cannot be null";
+                    Logger::Warn() << "Parameter 'nickname' cannot be null";
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'nickname' cannot be null"
@@ -147,7 +147,7 @@ namespace disk::user {
             // 解析 avatar（可选，显式 null 无效）
             if (json.isMember("avatar")) {
                 if (json["avatar"].isNull()) {
-                    LOG_WARN << "Parameter 'avatar' cannot be null";
+                    Logger::Warn() << "Parameter 'avatar' cannot be null";
                     return std::unexpected(
                         ErrorInfo(ErrorCode::ValidationFailed, "Parameter 'avatar' cannot be null")
                     );
@@ -162,7 +162,7 @@ namespace disk::user {
 
             // 验证字段长度
             if (request.nickname.has_value() && !request.ValidateNickname()) {
-                LOG_WARN << "Nickname format error";
+                Logger::Warn() << "Nickname format error";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Nickname length must be between 1-64 characters"
@@ -170,7 +170,7 @@ namespace disk::user {
             }
 
             if (request.avatar.has_value() && !request.ValidateAvatar()) {
-                LOG_WARN << "Avatar format error";
+                Logger::Warn() << "Avatar format error";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Avatar URL length must be between 1-512 characters"
@@ -179,14 +179,14 @@ namespace disk::user {
 
             // 至少提供一个字段
             if (!request.nickname.has_value() && !request.avatar.has_value()) {
-                LOG_WARN << "At least one field must be provided";
+                Logger::Warn() << "At least one field must be provided";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "At least one field must be provided (nickname or avatar)"
                 ));
             }
 
-            LOG_DEBUG << "Request parameters validated";
+            Logger::Debug() << "Request parameters validated";
 
             return request;
         }

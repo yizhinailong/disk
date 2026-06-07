@@ -15,7 +15,7 @@
 #include <sodium/crypto_hash_sha256.h>
 #include <trantor/net/EventLoop.h>
 #include <trantor/utils/ConcurrentTaskQueue.h>
-#include <trantor/utils/Logger.h>
+#include "utils/LogHelper.hpp"
 
 #include "storage/AssemblyWorkerPool.hpp"
 #include "utils/ConfigMgr.hpp"
@@ -204,7 +204,7 @@ namespace disk::storage {
             std::string(LOCAL_FILE_ASSEMBLY_QUEUE_NAME)
         );
 
-        LOG_INFO << "LocalFileStorage worker queues initialized: io_threads=" << worker_thread_count
+        Logger::Info() << "LocalFileStorage worker queues initialized: io_threads=" << worker_thread_count
                  << ", assembly_threads=" << assembly_worker_thread_count;
     }
 
@@ -283,7 +283,7 @@ namespace disk::storage {
         auto start = std::chrono::steady_clock::now();
         auto& pool = AssemblyWorkerPool::GetInstance();
 
-        LOG_DEBUG << "[assemble_chunks] start active_count=" << pool.ActiveCount()
+        Logger::Debug() << "[assemble_chunks] start active_count=" << pool.ActiveCount()
                   << " max_concurrent=" << pool.MaxConcurrent()
                   << " upload_id=" << upload_id;
 
@@ -293,7 +293,7 @@ namespace disk::storage {
             const auto* message = upload_already_active ? "Upload assembly already in progress for this upload_id, please retry later" : "Too many concurrent assembly operations, please retry later";
 
             const auto* reason = upload_already_active ? "upload_already_active" : "pool_saturated";
-            LOG_WARN << "Assembly admission rejected: upload_id=" << upload_id
+            Logger::Warn() << "Assembly admission rejected: upload_id=" << upload_id
                      << ", reason=" << reason
                      << ", running=" << pool.ActiveCount()
                      << ", max_concurrent=" << pool.MaxConcurrent();
@@ -301,7 +301,7 @@ namespace disk::storage {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[assemble_chunks] duration_us=" << duration_us
+            Logger::Info() << "[assemble_chunks] duration_us=" << duration_us
                      << " outcome=failure reason=" << reason
                      << " active_count=" << pool.ActiveCount()
                      << " max_concurrent=" << pool.MaxConcurrent();
@@ -311,7 +311,7 @@ namespace disk::storage {
             );
         }
 
-        LOG_DEBUG << "Assembly started: upload_id=" << upload_id << ", running=" << pool.ActiveCount()
+        Logger::Debug() << "Assembly started: upload_id=" << upload_id << ", running=" << pool.ActiveCount()
                   << ", max_concurrent=" << pool.MaxConcurrent();
 
         const auto temp_dir = GetTempDirPath(upload_id);
@@ -407,19 +407,19 @@ namespace disk::storage {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[assemble_chunks] duration_us=" << duration_us
+            Logger::Info() << "[assemble_chunks] duration_us=" << duration_us
                      << " outcome=failure active_count=" << pool.ActiveCount()
                      << " max_concurrent=" << pool.MaxConcurrent();
             co_return result;
         }
 
-        LOG_DEBUG << "Assembly completed: upload_id=" << upload_id << ", running=" << pool.ActiveCount()
+        Logger::Debug() << "Assembly completed: upload_id=" << upload_id << ", running=" << pool.ActiveCount()
                   << ", max_concurrent=" << pool.MaxConcurrent();
 
         auto end = std::chrono::steady_clock::now();
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        LOG_DEBUG << "[assemble_chunks] duration_us=" << duration_us
+        Logger::Debug() << "[assemble_chunks] duration_us=" << duration_us
                   << " outcome=success active_count=" << pool.ActiveCount()
                   << " max_concurrent=" << pool.MaxConcurrent();
 

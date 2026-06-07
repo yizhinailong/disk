@@ -24,11 +24,11 @@ namespace disk::system {
 
     auto SystemController::GetInfo(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
-        LOG_DEBUG << "Received system info request: " << request->getPeerAddr().toIpPort();
+        Logger::Debug() << "Received system info request: " << request->getPeerAddr().toIpPort();
 
         // 提取 user_id（由 JwtAuthFilter 设置）
         if (!request->attributes()->find("user_id")) {
-            LOG_WARN << "System info request missing user_id attribute";
+            Logger::Warn() << "System info request missing user_id attribute";
             co_return Response::Error(ErrorInfo(ErrorCode::TokenMissing));
         }
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -36,7 +36,7 @@ namespace disk::system {
         // 获取系统信息
         auto info_result = co_await m_system_service->GetInfo(user_id);
         if (!info_result) {
-            LOG_ERROR << "Failed to get system info: " << info_result.error().message;
+            Logger::Error() << "Failed to get system info: " << info_result.error().message;
             co_return Response::Error(info_result.error());
         }
 

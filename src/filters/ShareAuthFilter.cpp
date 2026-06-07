@@ -28,7 +28,7 @@ namespace disk::filters {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[share_auth_filter] duration_us=" << duration_us << " outcome=failure";
+            Logger::Info() << "[share_auth_filter] duration_us=" << duration_us << " outcome=failure";
             co_return disk::Response::Error(disk::error::Code::TokenMissing);
         }
 
@@ -41,7 +41,7 @@ namespace disk::filters {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            LOG_INFO << "[share_auth_filter] duration_us=" << duration_us << " outcome=failure";
+            Logger::Info() << "[share_auth_filter] duration_us=" << duration_us << " outcome=failure";
 
             switch (error.code) {
                 case disk::error::Code::TokenExpired:
@@ -60,7 +60,7 @@ namespace disk::filters {
         auto end = std::chrono::steady_clock::now();
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        LOG_INFO << "[share_auth_filter] duration_us=" << duration_us
+        Logger::Info() << "[share_auth_filter] duration_us=" << duration_us
                  << " outcome=success share_code=" << claims.share_code;
 
         co_return nullptr;

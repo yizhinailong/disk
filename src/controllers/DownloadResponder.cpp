@@ -46,7 +46,7 @@ namespace disk::controllers {
 
         // (a) 无效 Range → 416 JSON 响应
         if (range_request.has_range && !range_request.satisfiable) {
-            LOG_WARN << "Range request not satisfiable: " << params.range_header
+            Logger::Warn() << "Range request not satisfiable: " << params.range_header
                      << ", file_size=" << file_size;
 
             auto resp = drogon::HttpResponse::newHttpResponse();
@@ -101,7 +101,7 @@ namespace disk::controllers {
                     drogon::CT_CUSTOM,
                     params.mime_type
                 );
-                LOG_INFO << "Sending partial content via sendfile: start=" << start
+                Logger::Info() << "Sending partial content via sendfile: start=" << start
                          << ", end=" << end << ", total=" << file_size;
             } else {
                 // 全文件下载 → Drogon 自动设置 200
@@ -111,7 +111,7 @@ namespace disk::controllers {
                     drogon::CT_CUSTOM,
                     params.mime_type
                 );
-                LOG_INFO << "Sending full file via sendfile: size=" << file_size;
+                Logger::Info() << "Sending full file via sendfile: size=" << file_size;
             }
 
             // 补充 newFileResponse 未设置的响应头
@@ -132,12 +132,12 @@ namespace disk::controllers {
         // 适用于小文件或需要显式流控制的场景。保留作为 sendfile 不可用时的回退。
         auto open_result = co_await storage->OpenForRead(params.storage_path);
         if (!open_result) {
-            LOG_ERROR << "Cannot open file: " << params.storage_path;
+            Logger::Error() << "Cannot open file: " << params.storage_path;
             co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "Cannot open file"));
         }
         auto file = std::move(*open_result);
         if (start > static_cast<uint64_t>(std::numeric_limits<std::streamoff>::max())) {
-            LOG_ERROR << "Range start exceeds stream offset limit: " << start;
+            Logger::Error() << "Range start exceeds stream offset limit: " << start;
             co_return Response::Error(
                 ErrorInfo(ErrorCode::ValidationFailed, "Invalid request range")
             );
@@ -191,12 +191,12 @@ namespace disk::controllers {
                 "bytes " + std::to_string(start) + "-" + std::to_string(end) + "/" +
                     std::to_string(file_size)
             );
-            LOG_INFO << "Returning partial content: start=" << start << ", end=" << end
+            Logger::Info() << "Returning partial content: start=" << start << ", end=" << end
                      << ", total=" << file_size;
         } else {
             // (c) 无 Range → 200 全文件
             resp->setStatusCode(drogon::HttpStatusCode::k200OK);
-            LOG_INFO << "Returning full file: size=" << file_size;
+            Logger::Info() << "Returning full file: size=" << file_size;
         }
 
         // 设置公共响应头

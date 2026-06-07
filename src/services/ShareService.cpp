@@ -84,14 +84,14 @@ namespace disk::share {
           m_jwt_secret(std::move(jwt_secret)) {
         // 初始化 RedisService 单例（如果尚未初始化）
         disk::services::RedisService::Initialize(m_redis_client);
-        LOG_DEBUG << "ShareService initialization completed";
+        Logger::Debug() << "ShareService initialization completed";
     }
 
     // ==================== 公共方法 ====================
 
     auto ShareService::Create(CreateShareRequest request, uint64_t user_id)
         -> drogon::Task<Result<CreateShareResponse>> {
-        LOG_INFO << "Creating share: user_id=" << user_id
+        Logger::Info() << "Creating share: user_id=" << user_id
                  << ", file_ids.size()=" << request.file_ids.size()
                  << ", folder_ids.size()=" << request.folder_ids.size();
 
@@ -129,7 +129,7 @@ namespace disk::share {
         if (request.password.has_value() && !request.password->empty()) {
             auto hash_result = utils::HashUtil::HashPassword(*request.password);
             if (!hash_result) {
-                LOG_ERROR << "Password hashing failed";
+                Logger::Error() << "Password hashing failed";
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Password encryption failed")
                 );
@@ -214,12 +214,12 @@ namespace disk::share {
                 }
             }
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to create share (transaction): " << e.base().what();
+            Logger::Error() << "Failed to create share (transaction): " << e.base().what();
             if (transaction) {
                 try {
                     transaction->rollback();
                 } catch (const std::exception& rollback_e) {
-                    LOG_ERROR << "Transaction rollback failed: " << rollback_e.what();
+                    Logger::Error() << "Transaction rollback failed: " << rollback_e.what();
                 }
             }
             co_return std::unexpected(
@@ -238,13 +238,13 @@ namespace disk::share {
         response.expires_at = expires_at.has_value() ? FormatDateTime(*expires_at) : "";
         response.created_at = FormatDateTime(created_share.getValueOfCreatedAt());
 
-        LOG_INFO << "Share created successfully: share_code=" << share_code;
+        Logger::Info() << "Share created successfully: share_code=" << share_code;
         co_return response;
     }
 
     auto ShareService::List(const ShareListRequest& request, uint64_t user_id)
         -> drogon::Task<Result<ShareListResponse>> {
-        LOG_DEBUG << "Getting share list: user_id=" << user_id << ", status=" << request.status;
+        Logger::Debug() << "Getting share list: user_id=" << user_id << ", status=" << request.status;
 
         CoroMapper<Shares> mapper(m_db_client);
 
@@ -270,7 +270,7 @@ namespace disk::share {
                 total = co_await mapper.count(criteria);
             }
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to get share count: " << e.base().what();
+            Logger::Error() << "Failed to get share count: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to get share list")
             );
@@ -298,7 +298,7 @@ namespace disk::share {
                              .findBy(criteria);
             }
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to get share list: " << e.base().what();
+            Logger::Error() << "Failed to get share list: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to get share list")
             );
@@ -365,7 +365,7 @@ namespace disk::share {
 
     auto ShareService::Detail(const ShareDetailRequest& request, uint64_t user_id)
         -> drogon::Task<Result<ShareDetailResponse>> {
-        LOG_DEBUG << "Getting share details: share_id=" << request.share_id
+        Logger::Debug() << "Getting share details: share_id=" << request.share_id
                   << ", user_id=" << user_id;
 
         // 验证分享所有权
@@ -421,7 +421,7 @@ namespace disk::share {
 
     auto ShareService::Update(const UpdateShareRequest& request, uint64_t user_id)
         -> drogon::Task<Result<UpdateShareResponse>> {
-        LOG_INFO << "Updating share settings: share_id=" << request.share_id
+        Logger::Info() << "Updating share settings: share_id=" << request.share_id
                  << ", user_id=" << user_id;
 
         // 验证分享所有权
@@ -476,7 +476,7 @@ namespace disk::share {
         try {
             co_await mapper.update(share);
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to update share: " << e.base().what();
+            Logger::Error() << "Failed to update share: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to update share")
             );
@@ -494,13 +494,13 @@ namespace disk::share {
         response.permission = share.getValueOfPermission();
         response.updated_at = FormatDateTime(now);
 
-        LOG_INFO << "Share updated successfully: share_id=" << request.share_id;
+        Logger::Info() << "Share updated successfully: share_id=" << request.share_id;
         co_return response;
     }
 
     auto ShareService::Cancel(const CancelShareRequest& request, uint64_t user_id)
         -> drogon::Task<Result<CancelShareResponse>> {
-        LOG_INFO << "Batch cancel shares: user_id=" << user_id
+        Logger::Info() << "Batch cancel shares: user_id=" << user_id
                  << ", share_ids.size()=" << request.share_ids.size();
 
         CancelShareResponse response;
@@ -512,7 +512,7 @@ namespace disk::share {
                 request.share_ids,
                 std::numeric_limits<size_t>::max()
             )) {
-            LOG_INFO << "Batch cancel shares completed: succeeded=" << response.summary.succeeded
+            Logger::Info() << "Batch cancel shares completed: succeeded=" << response.summary.succeeded
                      << ", failed=" << response.summary.failed;
             co_return response;
         }
@@ -542,7 +542,7 @@ namespace disk::share {
                     );
                 }
             } catch (const DrogonDbException& e) {
-                LOG_ERROR << "Failed to fetch shares for cancel: " << e.base().what();
+                Logger::Error() << "Failed to fetch shares for cancel: " << e.base().what();
 
                 for (const auto& share_id : chunk) {
                     CancelShareResult result;
@@ -627,7 +627,7 @@ namespace disk::share {
                 try {
                     co_await m_db_client->execSqlCoro(update_sql, std::as_const(update_args));
                 } catch (const DrogonDbException& e) {
-                    LOG_ERROR << "Failed to cancel share: " << e.base().what();
+                    Logger::Error() << "Failed to cancel share: " << e.base().what();
 
                     for (auto& result : response.results) {
                         if (result.status == "success" && valid_codes_to_cancel.contains(result.share_id) && result.error == std::nullopt) {
@@ -641,7 +641,7 @@ namespace disk::share {
             }
         }
 
-        LOG_INFO << "Batch cancel shares completed: succeeded=" << response.summary.succeeded
+        Logger::Info() << "Batch cancel shares completed: succeeded=" << response.summary.succeeded
                  << ", failed=" << response.summary.failed;
 
         co_return response;
@@ -649,7 +649,7 @@ namespace disk::share {
 
     auto ShareService::Access(const AccessShareRequest& request, const std::string& ip_address)
         -> drogon::Task<Result<AccessShareResponse>> {
-        LOG_INFO << "Verifying share access: share_id=" << request.share_id;
+        Logger::Info() << "Verifying share access: share_id=" << request.share_id;
 
         // 查找分享
         auto share_result = co_await FindShareByCode(request.share_id);
@@ -712,13 +712,13 @@ namespace disk::share {
         response.permission = share.getValueOfPermission();
         response.files = share_files;
 
-        LOG_INFO << "Share access verified successfully: share_id=" << request.share_id;
+        Logger::Info() << "Share access verified successfully: share_id=" << request.share_id;
         co_return response;
     }
 
     auto ShareService::Browse(const BrowseShareRequest& request, uint64_t share_id)
         -> drogon::Task<Result<BrowseShareResponse>> {
-        LOG_DEBUG << "Browsing share content: share_id=" << request.share_id
+        Logger::Debug() << "Browsing share content: share_id=" << request.share_id
                   << ", internal_share_id=" << share_id;
 
         auto active_result = co_await ValidateShareActive(share_id);
@@ -804,7 +804,7 @@ namespace disk::share {
                 response.breadcrumb.push_back(crumb);
             }
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to browse share folder: " << e.base().what();
+            Logger::Error() << "Failed to browse share folder: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to browse share content")
             );
@@ -815,7 +815,7 @@ namespace disk::share {
 
     auto ShareService::DownloadMeta(const DownloadShareRequest& request, uint64_t share_id)
         -> drogon::Task<Result<ShareFile>> {
-        LOG_DEBUG << "Getting download metadata: share_id=" << request.share_id
+        Logger::Debug() << "Getting download metadata: share_id=" << request.share_id
                   << ", file_id=" << request.file_id;
 
         // 单次 JOIN 查询：验证分享状态、文件属于分享内容并获取元数据
@@ -850,7 +850,7 @@ namespace disk::share {
             co_await IncrementDownloadCount(share_id);
             co_return file;
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to get download metadata: " << e.base().what();
+            Logger::Error() << "Failed to get download metadata: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to get download metadata")
             );
@@ -859,7 +859,7 @@ namespace disk::share {
 
     auto ShareService::GetDownloadInfo(const DownloadShareRequest& request, uint64_t share_id)
         -> drogon::Task<Result<DownloadInfo>> {
-        LOG_DEBUG << "Getting download info: share_id=" << request.share_id
+        Logger::Debug() << "Getting download info: share_id=" << request.share_id
                   << ", file_id=" << request.file_id;
 
         // 单次 4 表 JOIN 查询：shares + share_files + files + file_contents
@@ -889,7 +889,7 @@ namespace disk::share {
             auto permission = row["permission"].as<std::string>();
 
             if (permission != "download") {
-                LOG_WARN << "Insufficient share permissions: share_id=" << share_id
+                Logger::Warn() << "Insufficient share permissions: share_id=" << share_id
                          << ", permission=" << permission;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::ShareAccessDenied, "Share is view-only, download not allowed")
@@ -907,7 +907,7 @@ namespace disk::share {
 
             co_return info;
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to get download info: " << e.base().what();
+            Logger::Error() << "Failed to get download info: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to get download info")
             );
@@ -919,7 +919,7 @@ namespace disk::share {
         uint64_t share_id,
         uint64_t target_user_id
     ) -> drogon::Task<Result<SaveShareItemsResponse>> {
-        LOG_DEBUG << "Saving share items: internal_share_id=" << share_id
+        Logger::Debug() << "Saving share items: internal_share_id=" << share_id
                   << ", target_user_id=" << target_user_id;
 
         std::shared_ptr<drogon::orm::Transaction> transaction;
@@ -1206,24 +1206,24 @@ namespace disk::share {
 
             co_return response;
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to save share items: " << e.base().what();
+            Logger::Error() << "Failed to save share items: " << e.base().what();
             if (transaction) {
                 try {
                     transaction->rollback();
                 } catch (const std::exception& rollback_e) {
-                    LOG_ERROR << "Transaction rollback failed: " << rollback_e.what();
+                    Logger::Error() << "Transaction rollback failed: " << rollback_e.what();
                 }
             }
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to save share items")
             );
         } catch (const std::exception& e) {
-            LOG_ERROR << "Failed to save share items: " << e.what();
+            Logger::Error() << "Failed to save share items: " << e.what();
             if (transaction) {
                 try {
                     transaction->rollback();
                 } catch (const std::exception& rollback_e) {
-                    LOG_ERROR << "Transaction rollback failed: " << rollback_e.what();
+                    Logger::Error() << "Transaction rollback failed: " << rollback_e.what();
                 }
             }
             co_return std::unexpected(
@@ -1246,7 +1246,7 @@ namespace disk::share {
                 error_msg.find("condition") != std::string::npos) {
                 co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "Share not found"));
             }
-            LOG_ERROR << "Failed to find share: " << e.base().what();
+            Logger::Error() << "Failed to find share: " << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to find share"));
         }
     }
@@ -1313,7 +1313,7 @@ namespace disk::share {
             for (auto file_id : file_ids) {
                 auto it = file_index_by_id.find(file_id);
                 if (it == file_index_by_id.end()) {
-                    LOG_WARN << "File not found or not owned by user: file_id=" << file_id;
+                    Logger::Warn() << "File not found or not owned by user: file_id=" << file_id;
                     co_return std::unexpected(
                         ErrorInfo(ErrorCode::FileNotFound, "File not found or no permission")
                     );
@@ -1321,7 +1321,7 @@ namespace disk::share {
                 files.push_back(matched_files[it->second]);
             }
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to validate file ownership: " << e.base().what();
+            Logger::Error() << "Failed to validate file ownership: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to validate file ownership")
             );
@@ -1371,7 +1371,7 @@ namespace disk::share {
             for (auto folder_id : folder_ids) {
                 auto it = folder_index_by_id.find(folder_id);
                 if (it == folder_index_by_id.end()) {
-                    LOG_WARN << "Folder not found or not owned by user: folder_id=" << folder_id;
+                    Logger::Warn() << "Folder not found or not owned by user: folder_id=" << folder_id;
                     co_return std::unexpected(
                         ErrorInfo(ErrorCode::FolderNotFound, "Folder not found or no permission")
                     );
@@ -1379,7 +1379,7 @@ namespace disk::share {
                 folders.push_back(matched_folders[it->second]);
             }
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to validate folder ownership: " << e.base().what();
+            Logger::Error() << "Failed to validate folder ownership: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to validate folder ownership")
             );
@@ -1461,7 +1461,7 @@ namespace disk::share {
                 result.push_back(std::move(item.share_file));
             }
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to get share file list: " << e.base().what();
+            Logger::Error() << "Failed to get share file list: " << e.base().what();
         }
 
         co_return result;
@@ -1535,7 +1535,7 @@ namespace disk::share {
                 }
             }
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to get share file list: " << e.base().what();
+            Logger::Error() << "Failed to get share file list: " << e.base().what();
         }
 
         co_return result;
@@ -1568,7 +1568,7 @@ namespace disk::share {
         } catch (const UnexpectedRows&) {
             co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "Share not found"));
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to validate share active state: " << e.base().what();
+            Logger::Error() << "Failed to validate share active state: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to validate share status")
             );
@@ -1591,7 +1591,7 @@ namespace disk::share {
                 share_id
             );
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to update view count: " << e.base().what();
+            Logger::Error() << "Failed to update view count: " << e.base().what();
         }
     }
 
@@ -1602,7 +1602,7 @@ namespace disk::share {
                 share_id
             );
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to update download count: " << e.base().what();
+            Logger::Error() << "Failed to update download count: " << e.base().what();
         }
     }
 
@@ -1614,7 +1614,7 @@ namespace disk::share {
                 share_id
             );
         } catch (const DrogonDbException& e) {
-            LOG_ERROR << "Failed to update timestamp: " << e.base().what();
+            Logger::Error() << "Failed to update timestamp: " << e.base().what();
         }
     }
 
@@ -1662,7 +1662,7 @@ namespace disk::share {
         auto incr_result = co_await m_redis_service->IncrWithExpire(key, 900);
 
         if (!incr_result) {
-            LOG_ERROR << "Redis IncrWithExpire failed: " << incr_result.error().message;
+            Logger::Error() << "Redis IncrWithExpire failed: " << incr_result.error().message;
             co_return {};
         }
 

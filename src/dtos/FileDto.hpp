@@ -113,7 +113,7 @@ namespace disk::file {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<InitUploadRequest> {
-            LOG_DEBUG << "Start parsing init upload request parameters";
+            Logger::Debug() << "Start parsing init upload request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -139,13 +139,13 @@ namespace disk::file {
                 request.parent_id = **parent_id_result;
             }
 
-            LOG_DEBUG << "Parsed init upload request: filename=\"" << request.filename
+            Logger::Debug() << "Parsed init upload request: filename=\"" << request.filename
                       << "\", file_size=" << request.file_size
                       << ", file_hash=" << request.file_hash << ", parent_id=" << request.parent_id;
 
             // 验证文件名
             if (!request.ValidateFilenameLength()) {
-                LOG_WARN << "Invalid filename length: " << request.filename.length();
+                Logger::Warn() << "Invalid filename length: " << request.filename.length();
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Filename length must be between 1-255 characters"
@@ -153,7 +153,7 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameForbiddenChars()) {
-                LOG_WARN << "Filename contains forbidden characters: " << request.filename;
+                Logger::Warn() << "Filename contains forbidden characters: " << request.filename;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
                     "Filename contains forbidden characters: / \\ : * ? \" < > | or " "control " "c" "h" "a" "r" "a" "c" "t" "e" "r" "s"
@@ -161,7 +161,7 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameReservedNames()) {
-                LOG_WARN << "Filename is a reserved name: " << request.filename;
+                Logger::Warn() << "Filename is a reserved name: " << request.filename;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
                     "Filename cannot be reserved name \".\" or \"..\""
@@ -169,14 +169,14 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameNotHidden()) {
-                LOG_WARN << "Filename starts with a dot (hidden file): " << request.filename;
+                Logger::Warn() << "Filename starts with a dot (hidden file): " << request.filename;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidFilename, "Filename cannot start with \".\"")
                 );
             }
 
             if (!request.ValidateFilenameCharset()) {
-                LOG_WARN << "Filename contains invalid UTF-8 or control characters: "
+                Logger::Warn() << "Filename contains invalid UTF-8 or control characters: "
                          << request.filename;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
@@ -186,7 +186,7 @@ namespace disk::file {
 
             // 验证文件大小
             if (!request.ValidateFileSize()) {
-                LOG_WARN << "Invalid file size: " << request.file_size;
+                Logger::Warn() << "Invalid file size: " << request.file_size;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "File size must be greater than 0 and not exceed the maximum limit"
@@ -195,14 +195,14 @@ namespace disk::file {
 
             // 验证文件哈希
             if (!request.ValidateFileHash()) {
-                LOG_WARN << "Invalid file hash format: " << request.file_hash;
+                Logger::Warn() << "Invalid file hash format: " << request.file_hash;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "File hash must be a 32-character lowercase hexadecimal string"
                 ));
             }
 
-            LOG_DEBUG << "Request parameters validation passed";
+            Logger::Debug() << "Request parameters validation passed";
             return request;
         }
 
@@ -341,7 +341,7 @@ namespace disk::file {
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req)
             -> Result<CompleteUploadRequest> {
-            LOG_DEBUG << "Start parsing complete upload request parameters";
+            Logger::Debug() << "Start parsing complete upload request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -353,17 +353,17 @@ namespace disk::file {
             CompleteUploadRequest request;
             request.upload_id = std::move(*upload_id_result);
 
-            LOG_DEBUG << "Parsed complete upload request: upload_id=" << request.upload_id;
+            Logger::Debug() << "Parsed complete upload request: upload_id=" << request.upload_id;
 
             // 验证 upload_id 非空
             if (request.upload_id.empty()) {
-                LOG_WARN << "upload_id cannot be empty";
+                Logger::Warn() << "upload_id cannot be empty";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "upload_id cannot be empty")
                 );
             }
 
-            LOG_DEBUG << "Request parameters validation passed";
+            Logger::Debug() << "Request parameters validation passed";
             return request;
         }
     };
@@ -413,7 +413,7 @@ namespace disk::file {
         /// 从 HTTP 请求查询参数解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<FileListRequest> {
-            LOG_DEBUG << "Start parsing file list request parameters";
+            Logger::Debug() << "Start parsing file list request parameters";
 
             FileListRequest request;
 
@@ -454,7 +454,7 @@ namespace disk::file {
             auto sort_by_str = req->getParameter("sort_by");
             if (!sort_by_str.empty()) {
                 if (valid_sort_by.find(sort_by_str) == valid_sort_by.end()) {
-                    LOG_WARN << "Parameter 'sort_by' invalid value: " << sort_by_str;
+                    Logger::Warn() << "Parameter 'sort_by' invalid value: " << sort_by_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'sort_by' invalid value, must be name/size/created_at/updated_at"
@@ -467,7 +467,7 @@ namespace disk::file {
             auto sort_order_str = req->getParameter("sort_order");
             if (!sort_order_str.empty()) {
                 if (valid_sort_order.find(sort_order_str) == valid_sort_order.end()) {
-                    LOG_WARN << "Parameter 'sort_order' invalid value: " << sort_order_str;
+                    Logger::Warn() << "Parameter 'sort_order' invalid value: " << sort_order_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'sort_order' invalid value, must be asc/desc"
@@ -480,7 +480,7 @@ namespace disk::file {
             auto type_str = req->getParameter("type");
             if (!type_str.empty()) {
                 if (valid_types.find(type_str) == valid_types.end()) {
-                    LOG_WARN << "Parameter 'type' invalid value: " << type_str;
+                    Logger::Warn() << "Parameter 'type' invalid value: " << type_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'type' invalid value, must be all/file/folder"
@@ -489,7 +489,7 @@ namespace disk::file {
                 request.type = type_str;
             }
 
-            LOG_DEBUG << "Parsed file list request: parent_id=" << request.parent_id
+            Logger::Debug() << "Parsed file list request: parent_id=" << request.parent_id
                       << ", page=" << request.page << ", page_size=" << request.page_size
                       << ", sort_by=" << request.sort_by << ", sort_order=" << request.sort_order
                       << ", type=" << request.type;
@@ -577,7 +577,7 @@ namespace disk::file {
         /// 从路径参数解析并验证，返回 Result
         [[nodiscard]]
         static auto FromPath(const std::string& file_id_str) -> Result<DownloadInfoRequest> {
-            LOG_DEBUG << "Start parsing download info request parameters";
+            Logger::Debug() << "Start parsing download info request parameters";
 
             auto file_id_result = ParsePositiveUInt64(file_id_str, "file_id");
             if (!file_id_result) return std::unexpected(file_id_result.error());
@@ -585,7 +585,7 @@ namespace disk::file {
             DownloadInfoRequest request;
             request.file_id = *file_id_result;
 
-            LOG_DEBUG << "Parsed download info request: file_id=" << request.file_id;
+            Logger::Debug() << "Parsed download info request: file_id=" << request.file_id;
 
             return request;
         }
@@ -673,7 +673,7 @@ namespace disk::file {
         /// 从路径参数解析并验证，返回 Result
         [[nodiscard]]
         static auto FromPath(const std::string& file_id_str) -> Result<DownloadRequest> {
-            LOG_DEBUG << "Start parsing download file request parameters";
+            Logger::Debug() << "Start parsing download file request parameters";
 
             auto file_id_result = ParsePositiveUInt64(file_id_str, "file_id");
             if (!file_id_result) return std::unexpected(file_id_result.error());
@@ -681,7 +681,7 @@ namespace disk::file {
             DownloadRequest request;
             request.file_id = *file_id_result;
 
-            LOG_DEBUG << "Parsed download file request: file_id=" << request.file_id;
+            Logger::Debug() << "Parsed download file request: file_id=" << request.file_id;
 
             return request;
         }
@@ -795,7 +795,7 @@ namespace disk::file {
         static auto
         FromPathAndRequest(const std::string& file_id_str, const drogon::HttpRequestPtr& req)
             -> Result<RenameRequest> {
-            LOG_DEBUG << "Start parsing rename request parameters";
+            Logger::Debug() << "Start parsing rename request parameters";
 
             // 验证路径参数 file_id
             auto file_id_result = ParsePositiveUInt64(file_id_str, "file_id");
@@ -812,12 +812,12 @@ namespace disk::file {
             request.file_id = *file_id_result;
             request.new_name = std::move(*new_name_result);
 
-            LOG_DEBUG << "Parsed rename request: file_id=" << request.file_id << ", new_name=\""
+            Logger::Debug() << "Parsed rename request: file_id=" << request.file_id << ", new_name=\""
                       << request.new_name << "\"";
 
             // 验证新文件名
             if (!request.ValidateFilenameLength()) {
-                LOG_WARN << "Invalid filename length: " << request.new_name.length();
+                Logger::Warn() << "Invalid filename length: " << request.new_name.length();
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Filename length must be between 1-255 characters"
@@ -825,7 +825,7 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameForbiddenChars()) {
-                LOG_WARN << "Filename contains forbidden characters: " << request.new_name;
+                Logger::Warn() << "Filename contains forbidden characters: " << request.new_name;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
                     "Filename contains forbidden characters: / \\ : * ? \" < > | or " "control " "c" "h" "a" "r" "a" "c" "t" "e" "r" "s"
@@ -833,7 +833,7 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameReservedNames()) {
-                LOG_WARN << "Filename is a reserved name: " << request.new_name;
+                Logger::Warn() << "Filename is a reserved name: " << request.new_name;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
                     "Filename cannot be reserved name \".\" or \"..\""
@@ -841,14 +841,14 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameNotHidden()) {
-                LOG_WARN << "Filename starts with a dot (hidden file): " << request.new_name;
+                Logger::Warn() << "Filename starts with a dot (hidden file): " << request.new_name;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidFilename, "Filename cannot start with \".\"")
                 );
             }
 
             if (!request.ValidateFilenameCharset()) {
-                LOG_WARN << "Filename contains invalid UTF-8 or control characters: "
+                Logger::Warn() << "Filename contains invalid UTF-8 or control characters: "
                          << request.new_name;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
@@ -856,7 +856,7 @@ namespace disk::file {
                 ));
             }
 
-            LOG_DEBUG << "Request parameters validation passed";
+            Logger::Debug() << "Request parameters validation passed";
             return request;
         }
 
@@ -947,7 +947,7 @@ namespace disk::file {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<MoveRequest> {
-            LOG_DEBUG << "Start parsing move drive items request parameters";
+            Logger::Debug() << "Start parsing move drive items request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -964,7 +964,7 @@ namespace disk::file {
             request.folder_ids = std::move(*folder_ids_result);
 
             if (request.file_ids.empty() && request.folder_ids.empty()) {
-                LOG_WARN << "Move request must contain file_ids or folder_ids";
+                Logger::Warn() << "Move request must contain file_ids or folder_ids";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     "Move request must contain file_ids or folder_ids"
@@ -978,7 +978,7 @@ namespace disk::file {
                 request.target_folder_id = **target_folder_id_result;
             }
 
-            LOG_DEBUG << "Parsed move request: file_ids.size()=" << request.file_ids.size()
+            Logger::Debug() << "Parsed move request: file_ids.size()=" << request.file_ids.size()
                       << ", folder_ids.size()=" << request.folder_ids.size()
                       << ", target_folder_id=" << request.target_folder_id;
 
@@ -1048,7 +1048,7 @@ namespace disk::file {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<CopyRequest> {
-            LOG_DEBUG << "Start parsing copy drive items request parameters";
+            Logger::Debug() << "Start parsing copy drive items request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -1065,7 +1065,7 @@ namespace disk::file {
             request.folder_ids = std::move(*folder_ids_result);
 
             if (request.file_ids.empty() && request.folder_ids.empty()) {
-                LOG_WARN << "Copy request must contain file_ids or folder_ids";
+                Logger::Warn() << "Copy request must contain file_ids or folder_ids";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     "Copy request must contain file_ids or folder_ids"
@@ -1079,7 +1079,7 @@ namespace disk::file {
                 request.target_folder_id = **target_folder_id_result;
             }
 
-            LOG_DEBUG << "Parsed copy request: file_ids.size()=" << request.file_ids.size()
+            Logger::Debug() << "Parsed copy request: file_ids.size()=" << request.file_ids.size()
                       << ", folder_ids.size()=" << request.folder_ids.size()
                       << ", target_folder_id=" << request.target_folder_id;
 
@@ -1132,7 +1132,7 @@ namespace disk::file {
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<DeleteRequest> {
-            LOG_DEBUG << "Start parsing delete file request parameters";
+            Logger::Debug() << "Start parsing delete file request parameters";
 
             auto json_result = RequireJsonBody(req);
             if (!json_result) return std::unexpected(json_result.error());
@@ -1149,14 +1149,14 @@ namespace disk::file {
             request.folder_ids = std::move(*folder_ids_result);
 
             if (request.file_ids.empty() && request.folder_ids.empty()) {
-                LOG_WARN << "Delete request requires at least one file_id or folder_id";
+                Logger::Warn() << "Delete request requires at least one file_id or folder_id";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     "At least one file_id or folder_id is required"
                 ));
             }
 
-            LOG_DEBUG << "Parsed delete request: file_ids.size()=" << request.file_ids.size()
+            Logger::Debug() << "Parsed delete request: file_ids.size()=" << request.file_ids.size()
                       << ", folder_ids.size()=" << request.folder_ids.size();
 
             return request;
@@ -1229,7 +1229,7 @@ namespace disk::file {
         /// 从 HTTP 请求查询参数解析并验证，返回 Result
         [[nodiscard]]
         static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<SearchRequest> {
-            LOG_DEBUG << "Start parsing file search request parameters";
+            Logger::Debug() << "Start parsing file search request parameters";
 
             SearchRequest request;
 
@@ -1239,7 +1239,7 @@ namespace disk::file {
             // 解析必填参数 keyword
             auto keyword_str = req->getParameter("keyword");
             if (keyword_str.empty()) {
-                LOG_WARN << "Missing required parameter: keyword";
+                Logger::Warn() << "Missing required parameter: keyword";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: keyword")
                 );
@@ -1247,7 +1247,7 @@ namespace disk::file {
 
             // 验证 keyword 长度
             if (keyword_str.length() < 1 || keyword_str.length() > 100) {
-                LOG_WARN << "Parameter 'keyword' invalid length: " << keyword_str.length();
+                Logger::Warn() << "Parameter 'keyword' invalid length: " << keyword_str.length();
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Parameter 'keyword' length must be between 1-100 characters"
@@ -1257,7 +1257,7 @@ namespace disk::file {
             // 过滤 keyword 中的特殊字符（防止 SQL 注入）
             for (char c : keyword_str) {
                 if (c == '%' || c == '_' || c == '\\' || c == '\'' || c == '"') {
-                    LOG_WARN << "Parameter 'keyword' contains forbidden characters: " << c;
+                    Logger::Warn() << "Parameter 'keyword' contains forbidden characters: " << c;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'keyword' contains forbidden characters"
@@ -1271,7 +1271,7 @@ namespace disk::file {
             auto type_str = req->getParameter("type");
             if (!type_str.empty()) {
                 if (valid_types.find(type_str) == valid_types.end()) {
-                    LOG_WARN << "Parameter 'type' invalid value: " << type_str;
+                    Logger::Warn() << "Parameter 'type' invalid value: " << type_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'type' invalid value, must be all/file/folder"
@@ -1299,7 +1299,7 @@ namespace disk::file {
                 request.page_size = **page_size_result;
             }
 
-            LOG_DEBUG << "Parsed file search request: keyword=\"" << request.keyword
+            Logger::Debug() << "Parsed file search request: keyword=\"" << request.keyword
                       << "\", type=" << request.type << ", folder_id="
                       << (request.folder_id.has_value() ? std::to_string(*request.folder_id) :
                                                           "null")
