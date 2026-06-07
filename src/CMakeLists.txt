@@ -196,4 +196,5 @@ target_link_libraries(${PROJECT_NAME}
     Drogon::Drogon
     jwt-cpp::jwt-cpp
     unofficial-sodium::sodium
+    spdlog::spdlog
 )

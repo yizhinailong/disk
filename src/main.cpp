@@ -1,5 +1,10 @@
 #include <drogon/drogon.h>
 
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/rotating_file_sink.h>
+#include <trantor/utils/Logger.h>
+
 #include "services/ScheduledTasks.hpp"
 #include "services/TokenService.hpp"
 #include "storage/LocalFileStorage.hpp"
@@ -7,6 +12,26 @@
 #include "utils/ConfigMgr.hpp"
 
 auto main() -> int {
+    // 初始化 spdlog：控制台 + 文件轮转
+    auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    auto file_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+        "build/log/disk.log", 10485760, 10);
+    auto logger = std::make_shared<spdlog::logger>(
+        "disk", spdlog::sinks_init_list{console_sink, file_sink});
+    logger->set_pattern("%v");
+    logger->flush_on(spdlog::level::err);
+    spdlog::set_default_logger(logger);
+
+    // 将 Trantor 日志输出重定向到 spdlog（Trantor 已格式化消息，spdlog 仅负责分发到各 sink）
+    trantor::Logger::setOutputFunction(
+        [](const char* msg, uint64_t len) {
+            spdlog::default_logger_raw()->info(std::string_view(msg, len));
+        },
+        []() {
+            spdlog::default_logger_raw()->flush();
+        }
+    );
+
     LOG_INFO << "Disk system starting...";
 
     // 初始化 libsodium 加密库

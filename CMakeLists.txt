@@ -9,6 +9,7 @@ find_package(Drogon CONFIG REQUIRED)
 find_package(jwt-cpp CONFIG REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
 
 enable_testing()
 

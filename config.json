@@ -86,18 +86,6 @@
         ],
         "exempt": []
       }
-    },
-    {
-      "name": "drogon::plugin::AccessLogger",
-      "config": {
-        "log_path": "build/log",
-        "log_file": "log",
-        "log_level": "INFO",
-        "log_size_limit": 10485760,
-        "max_files": 10,
-        "use_spdlog": true,
-        "log_format": "[$request_date] [$thread] ($remote_addr) \"$request\" $status $body_bytes_sent $processing_time"
-      }
     }
   ]
 }
