@@ -103,6 +103,7 @@ target_link_libraries(disk-test
     Drogon::Drogon
     jwt-cpp::jwt-cpp
     unofficial-sodium::sodium
+    spdlog::spdlog
     GTest::gtest
     GTest::gtest_main
 )
