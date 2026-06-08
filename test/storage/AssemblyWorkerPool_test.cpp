@@ -291,5 +291,5 @@ namespace disk::storage {
             EXPECT_EQ(&a, &b);
         }
 
-    } // namespace
-} // namespace disk::storage
+    } ///< namespace
+} ///< namespace disk::storage

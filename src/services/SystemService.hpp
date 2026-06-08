@@ -101,4 +101,4 @@ namespace disk::system {
         std::chrono::steady_clock::time_point m_start_time;
     };
 
-} // namespace disk::system
+} ///< namespace disk::system

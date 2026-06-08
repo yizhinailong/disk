@@ -35,9 +35,9 @@ namespace disk::auth {
     AuthService::AuthService(const drogon::nosql::RedisClientPtr& redis_client)
         : m_db_client(drogon::app().getDbClient()),
           m_redis_service(disk::services::RedisService::GetInstance()) {
-        // 如果尚未初始化，则初始化 RedisService 单例
+        /// 如果尚未初始化，则初始化 RedisService 单例
         disk::services::RedisService::Initialize(redis_client);
-        // 初始化 TokenService 单例
+        /// 初始化 TokenService 单例
         disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
 
         Logger::Debug() << "AuthService initialization completed";
@@ -46,7 +46,7 @@ namespace disk::auth {
     auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {
         Logger::Debug() << "Starting user registration: " << request.username;
 
-        // 1. 检查用户名和邮箱是否已存在（单次查询）
+        /// 1. 检查用户名和邮箱是否已存在（单次查询）
         try {
             auto result = co_await m_db_client->execSqlCoro(
                 "SELECT "
@@ -78,7 +78,7 @@ namespace disk::auth {
             );
         }
 
-        // 2. 加密密码（使用 libsodium Argon2id）
+        /// 2. 加密密码（使用 libsodium Argon2id）
         Logger::Debug() << "Starting password hash: " << request.username;
         auto hash_result = co_await RunOnAuthCpuPool(
             [password = std::move(request.password)]() {
@@ -91,18 +91,18 @@ namespace disk::auth {
         }
         Logger::Debug() << "Password hash completed: " << request.username;
 
-        // 3. 创建用户记录
+        /// 3. 创建用户记录
         Users user;
         user.setUsername(request.username);
         user.setEmail(request.email);
         user.setPasswordHash(hash_result.value());
-        user.setNickname(request.username); // 默认昵称为用户名
+        user.setNickname(request.username); ///< 默认昵称为用户名
         user.setStorageQuota(DEFAULT_STORAGE_QUOTA);
         user.setStorageUsed(0);
-        user.setStatus(1); // 正常状态
+        user.setStatus(1); ///< 正常状态
         user.setLoginAttempts(0);
 
-        // 4. 插入数据库
+        /// 4. 插入数据库
         try {
             CoroMapper<Users> mapper(m_db_client);
             user = co_await mapper.insert(user);
@@ -116,7 +116,7 @@ namespace disk::auth {
             );
         }
 
-        // 5. 返回用户信息
+        /// 5. 返回用户信息
         auto response = UserToResponse(user);
         Logger::Info() << "User registration process completed: " << response.username
                  << " (ID: " << response.id << ")";
@@ -128,16 +128,16 @@ namespace disk::auth {
 
         Logger::Debug() << "User login attempt: " << request.account;
 
-        // 0. 检查 IP 登录频率限制
+        /// 0. 检查 IP 登录频率限制
         const std::string rate_key =
             disk::redis::RedisKeyPrefix::BuildLoginRateLimitKey(ip_address);
 
-        // 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
+        /// 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
         auto incr_result = co_await m_redis_service->IncrWithExpire(rate_key, 300);
         if (incr_result.has_value()) {
             const auto count = incr_result.value();
 
-            // 检查是否超过阈值（5 次）
+            /// 检查是否超过阈值（5 次）
             if (count > 5) {
                 const std::string ip_only = disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address);
                 Logger::Warn() << "Login rate limit triggered: ip=" << ip_only << ", attempts=" << count;
@@ -147,11 +147,11 @@ namespace disk::auth {
                 ));
             }
         } else {
-            // 失败开放策略：Redis 失败时只记录警告，不阻止登录
+            /// 失败开放策略：Redis 失败时只记录警告，不阻止登录
             Logger::Warn() << "Redis rate limit check failed: " << incr_result.error().message;
         }
 
-        // 1. 查找用户（用户名或邮箱）
+        /// 1. 查找用户（用户名或邮箱）
         auto user_result = co_await FindUser(request.account);
         if (!user_result) {
             Logger::Warn() << "User not found: " << request.account;
@@ -160,7 +160,7 @@ namespace disk::auth {
 
         const auto& user = *user_result;
 
-        // 2. 检查账户状态
+        /// 2. 检查账户状态
         const auto status = user.getValueOfStatus();
         if (status == 0) {
             Logger::Warn() << "Account disabled: " << request.account;
@@ -172,7 +172,7 @@ namespace disk::auth {
             co_return std::unexpected(ErrorInfo(ErrorCode::AccountLocked));
         }
 
-        // 3. 验证密码
+        /// 3. 验证密码
         const auto stored_password_hash = user.getValueOfPasswordHash();
         auto password_matches = co_await RunOnAuthCpuPool(
             [password = request.password, stored_password_hash]() {
@@ -185,21 +185,21 @@ namespace disk::auth {
             co_return std::unexpected(ErrorInfo(ErrorCode::InvalidCredentials));
         }
 
-        // 4. 生成令牌
+        /// 4. 生成令牌
         auto [access_token, refresh_token] =
             TokenService::GetInstance()->GenerateTokens(user.getValueOfId(), user.getValueOfUsername(), user.getValueOfRole(), user.getValueOfStatus());
 
-        // 5. 存储 refresh_token 到 Redis
+        /// 5. 存储 refresh_token 到 Redis
         auto store_result =
             co_await TokenService::GetInstance()->StoreRefreshToken(user.getValueOfId(), refresh_token);
         if (!store_result.has_value()) {
             Logger::Warn() << "Failed to store refresh_token in Redis: " << user.getValueOfId();
         }
 
-        // 6. 更新登录信息
+        /// 6. 更新登录信息
         co_await UpdateLoginInfo(user.getValueOfId(), ip_address);
 
-        // 7. 构造响应
+        /// 7. 构造响应
         LoginResponse response;
         response.access_token = access_token;
         response.refresh_token = refresh_token;
@@ -216,7 +216,7 @@ namespace disk::auth {
         -> drogon::Task<Result<RefreshTokenResponse>> {
         Logger::Debug() << "Starting token refresh";
 
-        // 1. 验证刷新令牌
+        /// 1. 验证刷新令牌
         auto verify_result = TokenService::GetInstance()->VerifyRefreshToken(request.refresh_token);
         if (!verify_result) {
             Logger::Warn() << "Refresh token verification failed";
@@ -226,7 +226,7 @@ namespace disk::auth {
         const auto [user_id, jti] = verify_result.value();
         Logger::Debug() << "Refresh token verified successfully: user_id=" << user_id << ", jti=" << jti;
 
-        // 2. 查询用户信息
+        /// 2. 查询用户信息
         try {
             CoroMapper<Users> mapper(m_db_client);
 
@@ -234,7 +234,7 @@ namespace disk::auth {
                 co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
             Logger::Debug() << "Found user: " << user.getValueOfUsername();
 
-            // 3. 检查账户状态
+            /// 3. 检查账户状态
             const auto status = user.getValueOfStatus();
             if (status == 0) {
                 Logger::Warn() << "Account disabled: " << user.getValueOfUsername();
@@ -246,11 +246,11 @@ namespace disk::auth {
                 co_return std::unexpected(ErrorInfo(ErrorCode::AccountLocked));
             }
 
-            // 4. 生成新的令牌对
+            /// 4. 生成新的令牌对
             auto [access_token, new_refresh_token] =
                 TokenService::GetInstance()->GenerateTokens(user.getValueOfId(), user.getValueOfUsername(), user.getValueOfRole(), user.getValueOfStatus());
 
-            // 5. 刷新 Redis 中的 token（原子操作）
+            /// 5. 刷新 Redis 中的 token（原子操作）
             auto refresh_result = co_await TokenService::GetInstance()->RefreshRefreshToken(
                 user.getValueOfId(),
                 request.refresh_token,
@@ -261,7 +261,7 @@ namespace disk::auth {
                 co_return std::unexpected(refresh_result.error());
             }
 
-            // 7. 构造响应
+            /// 7. 构造响应
             RefreshTokenResponse response;
             response.access_token = access_token;
             response.refresh_token = new_refresh_token;
@@ -287,7 +287,7 @@ namespace disk::auth {
 
         Logger::Info() << "User logout: user_id=" << user_id << ", ip=" << ip_address;
 
-        // 步骤 1: 使访问令牌失效
+        /// 步骤 1: 使访问令牌失效
         auto invalidate_result = co_await TokenService::GetInstance()->InvalidateAccessToken(access_token);
         if (!invalidate_result.has_value()) {
             Logger::Warn() << "Access token invalidation failed: user_id=" << user_id;
@@ -296,14 +296,14 @@ namespace disk::auth {
             );
         }
 
-        // 步骤 2: 撤销刷新令牌
+        /// 步骤 2: 撤销刷新令牌
         auto revoke_result = co_await TokenService::GetInstance()->RevokeRefreshToken(user_id);
         if (!revoke_result) {
             Logger::Warn() << "Refresh token revocation failed: user_id=" << user_id;
-            // 不中断流程，继续返回成功
+            /// 不中断流程，继续返回成功
         }
 
-        // 步骤 3: 记录登出日志到 operation_logs
+        /// 步骤 3: 记录登出日志到 operation_logs
         try {
             drogon::orm::CoroMapper<drogon_model::disk::OperationLogs> mapper(m_db_client);
 
@@ -324,7 +324,7 @@ namespace disk::auth {
             Logger::Debug() << "Logout log recorded: user_id=" << user_id;
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Warn() << "Failed to record logout log: " << e.base().what();
-            // 不中断流程
+            /// 不中断流程
         }
 
         Logger::Info() << "User logout successful: user_id=" << user_id;
@@ -370,12 +370,12 @@ namespace disk::auth {
     }
 
     auto AuthService::CheckAccountLocked(const Users& user) const -> bool {
-        // 检查 status 字段（2 = 锁定）
+        /// 检查 status 字段（2 = 锁定）
         if (user.getValueOfStatus() == 2) {
             return true;
         }
 
-        // 检查 locked_until 字段
+        /// 检查 locked_until 字段
         if (user.getLockedUntil()) {
             const auto& locked_until = user.getValueOfLockedUntil();
             const auto now = trantor::Date::now();
@@ -402,7 +402,7 @@ namespace disk::auth {
             co_await mapper.update(user);
             Logger::Debug() << "Login info updated successfully: " << user_id;
 
-            // 清除 IP 频率限制计数器
+            /// 清除 IP 频率限制计数器
             const std::string rate_key =
                 disk::redis::RedisKeyPrefix::BuildLoginRateLimitKey(ip_address);
 
@@ -424,15 +424,15 @@ namespace disk::auth {
         try {
             CoroMapper<Users> mapper(m_db_client);
 
-            // 查询当前失败次数
+            /// 查询当前失败次数
             auto user =
                 co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
 
             auto attempts = user.getValueOfLoginAttempts() + 1;
 
-            // 检查是否需要锁定
+            /// 检查是否需要锁定
             if (attempts >= 5) {
-                // 锁定账户 15 分钟
+                /// 锁定账户 15 分钟
                 auto locked_until = trantor::Date::now().after(15 * 60);
                 user.setLockedUntil(locked_until);
                 user.setStatus(2);
@@ -449,4 +449,4 @@ namespace disk::auth {
                       << e.base().what();
         }
     }
-} // namespace disk::auth
+} ///< namespace disk::auth

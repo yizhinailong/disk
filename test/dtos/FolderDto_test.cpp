@@ -76,7 +76,7 @@ static auto CreateRenameFolderRequest(const std::string& new_name) -> drogon::Ht
     return req;
 }
 
-// ==================== CreateFolderRequest Tests ====================
+/// ==================== CreateFolderRequest Tests ====================
 
 TEST(CreateFolderRequest, CreateFolderRequestValidName) {
     auto req = CreateCreateFolderRequest("Documents");
@@ -114,7 +114,7 @@ TEST(CreateFolderRequest, CreateFolderRequestDefaultParent) {
     EXPECT_EQ(result->parent_id, 0);
 }
 
-// 规则 1：长度验证（1-255字符）-> ValidationFailed
+/// 规则 1：长度验证（1-255字符）-> ValidationFailed
 
 TEST(CreateFolderRequest, CreateFolderRequestNameTooLong) {
     std::string name(256, 'a');
@@ -146,7 +146,7 @@ TEST(CreateFolderRequest, CreateFolderRequestNameEmpty) {
     }
 }
 
-// 规则 2：禁止字符 -> InvalidFilename
+/// 规则 2：禁止字符 -> InvalidFilename
 
 TEST(CreateFolderRequest, CreateFolderRequestForbiddenCharSlash) {
     auto req = CreateCreateFolderRequest("My/Folder");
@@ -238,7 +238,7 @@ TEST(CreateFolderRequest, CreateFolderRequestForbiddenCharPipe) {
     }
 }
 
-// 规则 3：保留名称（. 和 ..）-> InvalidFilename
+/// 规则 3：保留名称（. 和 ..）-> InvalidFilename
 
 TEST(CreateFolderRequest, CreateFolderRequestReservedNameDot) {
     auto req = CreateCreateFolderRequest(".");
@@ -260,7 +260,7 @@ TEST(CreateFolderRequest, CreateFolderRequestReservedNameDoubleDot) {
     }
 }
 
-// 规则 4：隐藏文件夹（以 . 开头）-> InvalidFilename
+/// 规则 4：隐藏文件夹（以 . 开头）-> InvalidFilename
 
 TEST(CreateFolderRequest, CreateFolderRequestHiddenFolder) {
     auto req = CreateCreateFolderRequest(".hidden");
@@ -272,7 +272,7 @@ TEST(CreateFolderRequest, CreateFolderRequestHiddenFolder) {
     }
 }
 
-// 规则 5：字符集（合法 UTF-8，且不含控制字符）-> InvalidFilename
+/// 规则 5：字符集（合法 UTF-8，且不含控制字符）-> InvalidFilename
 
 TEST(CreateFolderRequest, CreateFolderRequestControlChar) {
     auto req = CreateCreateFolderRequest("Folder\x01Name");
@@ -284,7 +284,7 @@ TEST(CreateFolderRequest, CreateFolderRequestControlChar) {
     }
 }
 
-// 规则 6：空白字符修剪
+/// 规则 6：空白字符修剪
 
 TEST(CreateFolderRequest, CreateFolderRequestWhitespaceTrim) {
     auto req = CreateCreateFolderRequest("  test  ");
@@ -304,7 +304,7 @@ TEST(CreateFolderRequest, CreateFolderRequestWhitespaceOnly) {
     }
 }
 
-// 其他边界情况
+/// 其他边界情况
 
 TEST(CreateFolderRequest, CreateFolderRequestMissingName) {
     Json::Value json;
@@ -368,7 +368,7 @@ TEST(CreateFolderRequest, CreateFolderRequestParentIdWrongType) {
     EXPECT_FALSE(result.has_value()) << "parent_id with wrong type should fail";
 }
 
-// 允许特殊字符的有效名称
+/// 允许特殊字符的有效名称
 
 TEST(CreateFolderRequest, CreateFolderRequestValidNameWithUnderscore) {
     auto req = CreateCreateFolderRequest("Project_Alpha");
@@ -402,7 +402,7 @@ TEST(CreateFolderRequest, CreateFolderRequestValidNameWithSpace) {
     EXPECT_EQ(result->name, "My Folder");
 }
 
-// ==================== CreateFolderResponse Tests ====================
+/// ==================== CreateFolderResponse Tests ====================
 
 TEST(CreateFolderResponse, CreateFolderResponseToJsonCorrectFields) {
     CreateFolderResponse response;
@@ -438,7 +438,7 @@ TEST(CreateFolderResponse, CreateFolderResponseToJsonWithParent) {
     EXPECT_EQ(json["created_at"].asString(), "2026-02-14T12:30:00Z");
 }
 
-// ==================== FolderTreeRequest Helper ====================
+/// ==================== FolderTreeRequest Helper ====================
 
 static auto CreateFolderTreeRequest(
     const std::string& parent_id = "",
@@ -454,7 +454,7 @@ static auto CreateFolderTreeRequest(
     return req;
 }
 
-// ==================== FolderTreeRequest Tests ====================
+/// ==================== FolderTreeRequest Tests ====================
 
 TEST(FolderTreeRequest, DefaultParams) {
     auto req = CreateFolderTreeRequest();
@@ -512,7 +512,7 @@ TEST(FolderTreeRequest, DepthBelowNegativeOne) {
     }
 }
 
-// ==================== FolderTreeNode Tests ====================
+/// ==================== FolderTreeNode Tests ====================
 
 TEST(FolderTreeNode, ToJsonEmptyChildren) {
     disk::folder::FolderTreeNode node;
@@ -560,7 +560,7 @@ TEST(FolderTreeNode, ToJsonNestedChildren) {
     EXPECT_EQ(grandchild_json["name"].asString(), "Grandchild");
 }
 
-// ==================== BreadcrumbItem Tests ====================
+/// ==================== BreadcrumbItem Tests ====================
 
 TEST(BreadcrumbItem, ToJsonCorrectFields) {
     BreadcrumbItem item;
@@ -584,7 +584,7 @@ TEST(BreadcrumbItem, ToJsonWithValidFolder) {
     EXPECT_EQ(json["name"].asString(), "Documents");
 }
 
-// ==================== BreadcrumbResponse Tests ====================
+/// ==================== BreadcrumbResponse Tests ====================
 
 TEST(BreadcrumbResponse, ToJsonEmptyPath) {
     BreadcrumbResponse response;
@@ -613,7 +613,7 @@ TEST(BreadcrumbResponse, ToJsonSingleItem) {
     EXPECT_EQ(json["path"][0]["name"].asString(), "根目录");
 }
 
-// ==================== RenameFolderRequest Tests ====================
+/// ==================== RenameFolderRequest Tests ====================
 
 TEST(RenameFolderRequest, ValidRequest) {
     auto req = CreateRenameFolderRequest("Renamed");

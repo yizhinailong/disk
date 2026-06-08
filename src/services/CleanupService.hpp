@@ -93,4 +93,4 @@ namespace disk::services {
         auto DecrementContentRefCount(uint64_t content_id) -> drogon::Task<void>;
     };
 
-} // namespace disk::services
+} ///< namespace disk::services

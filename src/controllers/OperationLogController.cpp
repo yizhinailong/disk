@@ -74,4 +74,4 @@ namespace disk::log {
         co_return Response::Success(data);
     }
 
-} // namespace disk::log
+} ///< namespace disk::log

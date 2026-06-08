@@ -14,7 +14,7 @@
 
 namespace disk::trash {
 
-    // ==================== Controller ====================
+    /// ==================== Controller ====================
 
     /**
      * @brief 回收站控制器
@@ -133,4 +133,4 @@ namespace disk::trash {
         std::unique_ptr<TrashService> m_trash_service{};
     };
 
-} // namespace disk::trash
+} ///< namespace disk::trash

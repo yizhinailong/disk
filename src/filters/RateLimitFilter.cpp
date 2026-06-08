@@ -19,17 +19,17 @@ namespace disk::filters {
 
     RateLimitFilter::RateLimitFilter()
         : m_redis_service(disk::services::RedisService::GetInstance()) {
-        // 初始化 RedisService 单例（如果尚未初始化）
+        /// 初始化 RedisService 单例（如果尚未初始化）
         disk::services::RedisService::Initialize(drogon::app().getRedisClient());
     }
 
     auto RateLimitFilter::doFilter(const drogon::HttpRequestPtr& request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        // 可观测性：记录请求处理开始时间
+        /// 可观测性：记录请求处理开始时间
         auto start = std::chrono::steady_clock::now();
 
-        // 从 request attributes 获取 user_id（由 JwtAuthFilter 设置）
+        /// 从 request attributes 获取 user_id（由 JwtAuthFilter 设置）
         auto attrs = request->attributes();
         if (!attrs) {
             Logger::Warn() << "Cannot get request attributes";
@@ -37,7 +37,7 @@ namespace disk::filters {
         }
 
         if (!attrs->find("user_id")) {
-            // 没有 user_id，跳过频率限制（可能是 exempt 的路径）
+            /// 没有 user_id，跳过频率限制（可能是 exempt 的路径）
             co_return nullptr;
         }
 
@@ -45,17 +45,17 @@ namespace disk::filters {
         const auto window = GetCurrentWindow();
         const auto key = RedisKeyPrefix::BuildApiRateLimitKey(user_id, window);
 
-        // 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
+        /// 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
         auto incr_result = co_await m_redis_service->IncrWithExpire(key, WINDOW_SECONDS);
         if (!incr_result) {
             Logger::Error() << "Redis IncrWithExpire failed: " << incr_result.error().message;
-            // Redis 失败时不阻止请求
+            /// Redis 失败时不阻止请求
             co_return nullptr;
         }
 
         const int64_t current_count = incr_result.value();
 
-        // 检查是否超过限制
+        /// 检查是否超过限制
         if (current_count > DEFAULT_LIMIT) {
             Logger::Warn() << "API rate limit: user_id=" << user_id << ", count=" << current_count;
 
@@ -85,4 +85,4 @@ namespace disk::filters {
         co_return nullptr;
     }
 
-} // namespace disk::filters
+} ///< namespace disk::filters

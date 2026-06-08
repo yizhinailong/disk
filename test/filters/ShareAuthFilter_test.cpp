@@ -278,4 +278,4 @@ namespace {
         EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
     }
 
-} // namespace
+} ///< namespace

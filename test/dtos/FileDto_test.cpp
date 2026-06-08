@@ -39,7 +39,7 @@ using disk::file::SearchResultItem;
 
 using disk::file::UploadChunkResponse;
 
-// ==================== Helper Functions ====================
+/// ==================== Helper Functions ====================
 
 static auto CreateJsonRequest(const Json::Value& json) -> drogon::HttpRequestPtr {
     Json::StreamWriterBuilder builder;
@@ -75,7 +75,7 @@ static auto CreateCompleteUploadRequest(const std::string& upload_id) -> drogon:
     return CreateJsonRequest(json);
 }
 
-// ==================== FileItem Tests ====================
+/// ==================== FileItem Tests ====================
 
 TEST(FileItem, ToJsonCorrectFields) {
     FileItem item;
@@ -114,7 +114,7 @@ TEST(FileItem, ToJsonMinimalFields) {
     EXPECT_EQ(json["name"].asString(), "test.txt");
 }
 
-// ==================== InitUploadRequest Tests ====================
+/// ==================== InitUploadRequest Tests ====================
 
 TEST(InitUploadRequest, ValidParameters) {
     auto req = CreateInitUploadRequest(
@@ -180,7 +180,7 @@ TEST(InitUploadRequest, InvalidFileHashLength) {
     auto req = CreateInitUploadRequest(
         "test.txt",
         1024,
-        "abc123", // 过短
+        "abc123", ///< 过短
         0
     );
     auto result = InitUploadRequest::FromRequest(req);
@@ -195,7 +195,7 @@ TEST(InitUploadRequest, InvalidFileHashNonHex) {
     auto req = CreateInitUploadRequest(
         "test.txt",
         1024,
-        "ghijklmnopqrstuvwxijklmnopqrstuv", // 非十六进制字符
+        "ghijklmnopqrstuvwxijklmnopqrstuv", ///< 非十六进制字符
         0
     );
     auto result = InitUploadRequest::FromRequest(req);
@@ -210,7 +210,7 @@ TEST(InitUploadRequest, InvalidFileHashUppercase) {
     auto req = CreateInitUploadRequest(
         "test.txt",
         1024,
-        "ABCDEF1234567890ABCDEF1234567890", // 大写（应失败）
+        "ABCDEF1234567890ABCDEF1234567890", ///< 大写（应失败）
         0
     );
     auto result = InitUploadRequest::FromRequest(req);
@@ -222,7 +222,7 @@ TEST(InitUploadRequest, InvalidFileHashUppercase) {
 }
 
 TEST(InitUploadRequest, FilenameTooLong) {
-    std::string filename(256, 'a'); // 256 chars
+    std::string filename(256, 'a'); ///< 256 chars
     auto req = CreateInitUploadRequest(
         filename,
         1024,
@@ -238,7 +238,7 @@ TEST(InitUploadRequest, FilenameTooLong) {
 }
 
 TEST(InitUploadRequest, FilenameMaxLength) {
-    std::string filename(255, 'a'); // 255 chars (max valid)
+    std::string filename(255, 'a'); ///< 255 chars (max valid)
     auto req = CreateInitUploadRequest(
         filename,
         1024,
@@ -327,7 +327,7 @@ TEST(InitUploadRequest, FilenameForbiddenCharColon) {
 TEST(InitUploadRequest, FileSizeZero) {
     auto req = CreateInitUploadRequest(
         "test.txt",
-        0, // 零大小
+        0, ///< 零大小
         "d41d8cd98f00b204e9800998ecf8427e",
         0
     );
@@ -362,7 +362,7 @@ TEST(InitUploadRequest, FilenameWrongType) {
     EXPECT_FALSE(result.has_value()) << "Filename with wrong type should fail";
 }
 
-// ==================== InitUploadResponse Tests ====================
+/// ==================== InitUploadResponse Tests ====================
 
 TEST(InitUploadResponse, ToJsonNormalUpload) {
     InitUploadResponse response;
@@ -414,7 +414,7 @@ TEST(InitUploadResponse, ToJsonResumeUpload) {
     response.upload_id = "up_resume_123";
     response.chunk_size = 5242880;
     response.total_chunks = 10;
-    response.uploaded_chunks = { 0, 1, 2, 3, 4 }; // 前5个分片已上传
+    response.uploaded_chunks = { 0, 1, 2, 3, 4 }; ///< 前5个分片已上传
     response.instant_upload = false;
 
     auto json = response.ToJson();
@@ -424,7 +424,7 @@ TEST(InitUploadResponse, ToJsonResumeUpload) {
     EXPECT_EQ(json["uploaded_chunks"][4].asUInt(), 4);
 }
 
-// ==================== UploadChunkResponse Tests ====================
+/// ==================== UploadChunkResponse Tests ====================
 
 TEST(UploadChunkResponse, ToJsonSuccess) {
     UploadChunkResponse response;
@@ -448,7 +448,7 @@ TEST(UploadChunkResponse, ToJsonFailure) {
     EXPECT_FALSE(json["uploaded"].asBool());
 }
 
-// ==================== CompleteUploadRequest Tests ====================
+/// ==================== CompleteUploadRequest Tests ====================
 
 TEST(CompleteUploadRequest, ValidParameters) {
     auto req = CreateCompleteUploadRequest("up_abc123def456");
@@ -490,7 +490,7 @@ TEST(CompleteUploadRequest, InvalidJSON) {
     EXPECT_FALSE(result.has_value()) << "Invalid JSON should fail";
 }
 
-// ==================== CompleteUploadResponse Tests ====================
+/// ==================== CompleteUploadResponse Tests ====================
 
 TEST(CompleteUploadResponse, ToJsonCorrectFields) {
     CompleteUploadResponse response;
@@ -514,7 +514,7 @@ TEST(CompleteUploadResponse, ToJsonCorrectFields) {
     EXPECT_EQ(json["file"]["created_at"].asString(), "2026-02-14T11:00:00Z");
 }
 
-// ==================== FileListRequest Tests ====================
+/// ==================== FileListRequest Tests ====================
 
 TEST(FileListRequest, ValidParameters) {
     auto req = drogon::HttpRequest::newHttpRequest();
@@ -603,7 +603,7 @@ TEST(FileListRequest, InvalidType) {
     }
 }
 
-// ==================== DownloadInfoRequest Tests ====================
+/// ==================== DownloadInfoRequest Tests ====================
 
 TEST(DownloadInfoRequest, ValidFileId) {
     auto result = DownloadInfoRequest::FromPath("123");
@@ -643,7 +643,7 @@ TEST(DownloadInfoRequest, InvalidFileIdEmpty) {
     }
 }
 
-// ==================== RenameRequest Tests ====================
+/// ==================== RenameRequest Tests ====================
 
 static auto CreateRenameRequest(uint64_t file_id, const std::string& new_name) -> drogon::HttpRequestPtr {
     Json::Value json;
@@ -761,7 +761,7 @@ TEST(RenameRequest, MissingNewName) {
     }
 }
 
-// ==================== MoveRequest Tests ====================
+/// ==================== MoveRequest Tests ====================
 
 static auto CreateMoveRequest(
     const std::vector<uint64_t>& file_ids,
@@ -882,7 +882,7 @@ TEST(MoveResponse, ToJsonIncludesFileAndFolderCounts) {
     EXPECT_EQ(json["moved_folder_count"].asInt(), 1);
 }
 
-// ==================== CopyRequest Tests ====================
+/// ==================== CopyRequest Tests ====================
 
 static auto CreateCopyRequest(
     const std::vector<uint64_t>& file_ids,
@@ -1009,7 +1009,7 @@ TEST(CopyRequest, InvalidFolderIdItemType) {
     }
 }
 
-// ==================== DeleteRequest Tests ====================
+/// ==================== DeleteRequest Tests ====================
 
 static auto CreateDeleteRequest(
     const std::vector<uint64_t>& file_ids,
@@ -1137,7 +1137,7 @@ TEST(DeleteResponse, ToJsonIncludesFileAndFolderCounts) {
     EXPECT_EQ(json["deleted_folder_count"].asInt(), 2);
 }
 
-// ==================== FileListItem Tests ====================
+/// ==================== FileListItem Tests ====================
 
 TEST(FileListItem, ToJsonFileType) {
     FileListItem item;
@@ -1160,7 +1160,7 @@ TEST(FileListItem, ToJsonFileType) {
     EXPECT_EQ(json["hash"].asString(), "d41d8cd98f00b204e9800998ecf8427e");
     EXPECT_EQ(json["created_at"].asString(), "2026-02-14T10:30:00Z");
     EXPECT_EQ(json["updated_at"].asString(), "2026-02-15T11:00:00Z");
-    // File type should NOT have item_count
+    /// File type should NOT have item_count
     EXPECT_FALSE(json.isMember("item_count"));
 }
 
@@ -1181,13 +1181,13 @@ TEST(FileListItem, ToJsonFolderType) {
     EXPECT_EQ(json["item_count"].asInt(), 42);
     EXPECT_EQ(json["created_at"].asString(), "2026-02-14T10:30:00Z");
     EXPECT_EQ(json["updated_at"].asString(), "2026-02-15T11:00:00Z");
-    // Folder type should NOT have size, mime_type, hash
+    /// Folder type should NOT have size, mime_type, hash
     EXPECT_FALSE(json.isMember("size"));
     EXPECT_FALSE(json.isMember("mime_type"));
     EXPECT_FALSE(json.isMember("hash"));
 }
 
-// ==================== FileListResponse Tests ====================
+/// ==================== FileListResponse Tests ====================
 
 TEST(FileListResponse, ToJsonWithPaginationMetadata) {
     FileListResponse response;
@@ -1220,13 +1220,13 @@ TEST(FileListResponse, ToJsonWithPaginationMetadata) {
 
     auto json = response.ToJson();
 
-    // Verify items array
+    /// Verify items array
     ASSERT_TRUE(json.isMember("items"));
     EXPECT_EQ(json["items"].size(), 2U);
     EXPECT_EQ(json["items"][0]["name"].asString(), "file1.txt");
     EXPECT_EQ(json["items"][1]["name"].asString(), "folder1");
 
-    // Verify pagination metadata structure
+    /// Verify pagination metadata structure
     ASSERT_TRUE(json.isMember("pagination"));
     EXPECT_EQ(json["pagination"]["page"].asInt(), 2);
     EXPECT_EQ(json["pagination"]["page_size"].asInt(), 20);
@@ -1235,7 +1235,7 @@ TEST(FileListResponse, ToJsonWithPaginationMetadata) {
 }
 
 TEST(FileListResponse, PaginationMetadataFieldNames) {
-    // Regression test: ensure pagination field names are stable
+    /// Regression test: ensure pagination field names are stable
     FileListResponse response;
     response.pagination.page = 1;
     response.pagination.page_size = 10;
@@ -1245,13 +1245,13 @@ TEST(FileListResponse, PaginationMetadataFieldNames) {
     auto json = response.ToJson();
     auto pagination = json["pagination"];
 
-    // Verify exact field names
+    /// Verify exact field names
     EXPECT_TRUE(pagination.isMember("page"));
     EXPECT_TRUE(pagination.isMember("page_size"));
     EXPECT_TRUE(pagination.isMember("total"));
     EXPECT_TRUE(pagination.isMember("total_pages"));
 
-    // Verify field types
+    /// Verify field types
     EXPECT_TRUE(pagination["page"].isInt());
     EXPECT_TRUE(pagination["page_size"].isInt());
     EXPECT_TRUE(pagination["total"].isInt());
@@ -1273,7 +1273,7 @@ TEST(FileListResponse, EmptyListWithPagination) {
     EXPECT_EQ(json["pagination"]["total_pages"].asInt(), 0);
 }
 
-// ==================== SearchRequest Tests ====================
+/// ==================== SearchRequest Tests ====================
 
 TEST(SearchRequest, ValidParameters) {
     auto req = drogon::HttpRequest::newHttpRequest();
@@ -1386,7 +1386,7 @@ TEST(SearchRequest, InvalidPageSizeTooLarge) {
     }
 }
 
-// ==================== SearchResultItem Tests ====================
+/// ==================== SearchResultItem Tests ====================
 
 TEST(SearchResultItem, ToJsonIncludesPath) {
     SearchResultItem item;
@@ -1402,7 +1402,7 @@ TEST(SearchResultItem, ToJsonIncludesPath) {
 
     auto json = item.ToJson();
 
-    // Inherited fields from FileListItem
+    /// Inherited fields from FileListItem
     EXPECT_EQ(json["id"].asUInt64(), 123);
     EXPECT_EQ(json["name"].asString(), "report.pdf");
     EXPECT_EQ(json["type"].asString(), "file");
@@ -1410,7 +1410,7 @@ TEST(SearchResultItem, ToJsonIncludesPath) {
     EXPECT_EQ(json["mime_type"].asString(), "application/pdf");
     EXPECT_EQ(json["hash"].asString(), "abc123def456789012345678901234ab");
 
-    // Search-specific field
+    /// Search-specific field
     EXPECT_EQ(json["path"].asString(), "/Documents/2026/report.pdf");
 }
 
@@ -1433,7 +1433,7 @@ TEST(SearchResultItem, ToJsonFolderWithPath) {
     EXPECT_EQ(json["path"].asString(), "/Documents/Projects");
 }
 
-// ==================== SearchResponse Tests ====================
+/// ==================== SearchResponse Tests ====================
 
 TEST(SearchResponse, ToJsonWithPaginationMetadata) {
     SearchResponse response;
@@ -1468,7 +1468,7 @@ TEST(SearchResponse, ToJsonWithPaginationMetadata) {
 
     auto json = response.ToJson();
 
-    // Verify items array
+    /// Verify items array
     ASSERT_TRUE(json.isMember("items"));
     EXPECT_EQ(json["items"].size(), 2U);
     EXPECT_EQ(json["items"][0]["name"].asString(), "doc1.pdf");
@@ -1476,7 +1476,7 @@ TEST(SearchResponse, ToJsonWithPaginationMetadata) {
     EXPECT_EQ(json["items"][1]["name"].asString(), "folder1");
     EXPECT_EQ(json["items"][1]["path"].asString(), "/docs/folder1");
 
-    // Verify pagination metadata
+    /// Verify pagination metadata
     ASSERT_TRUE(json.isMember("pagination"));
     EXPECT_EQ(json["pagination"]["page"].asInt(), 1);
     EXPECT_EQ(json["pagination"]["page_size"].asInt(), 20);
@@ -1485,7 +1485,7 @@ TEST(SearchResponse, ToJsonWithPaginationMetadata) {
 }
 
 TEST(SearchResponse, PaginationMetadataFieldNames) {
-    // Regression test: ensure search pagination field names match list pagination
+    /// Regression test: ensure search pagination field names match list pagination
     SearchResponse response;
     response.pagination.page = 1;
     response.pagination.page_size = 10;
@@ -1495,7 +1495,7 @@ TEST(SearchResponse, PaginationMetadataFieldNames) {
     auto json = response.ToJson();
     auto pagination = json["pagination"];
 
-    // Field names must match FileListResponse pagination
+    /// Field names must match FileListResponse pagination
     EXPECT_TRUE(pagination.isMember("page"));
     EXPECT_TRUE(pagination.isMember("page_size"));
     EXPECT_TRUE(pagination.isMember("total"));
@@ -1517,31 +1517,31 @@ TEST(SearchResponse, EmptySearchWithPagination) {
     EXPECT_EQ(json["pagination"]["total_pages"].asInt(), 0);
 }
 
-// ==================== Pagination Create Factory Tests ====================
+/// ==================== Pagination Create Factory Tests ====================
 
 TEST(Pagination, CreateFactoryCalculatesTotalPages) {
-    // Test the Pagination::Create factory method for correct total_pages calculation
+    /// Test the Pagination::Create factory method for correct total_pages calculation
 
-    // Case 1: Exact multiple
+    /// Case 1: Exact multiple
     auto p1 = Pagination::Create(1, 20, 100);
     EXPECT_EQ(p1.page, 1);
     EXPECT_EQ(p1.page_size, 20);
     EXPECT_EQ(p1.total, 100);
     EXPECT_EQ(p1.total_pages, 5);
 
-    // Case 2: Non-exact multiple (round up)
+    /// Case 2: Non-exact multiple (round up)
     auto p2 = Pagination::Create(1, 20, 45);
-    EXPECT_EQ(p2.total_pages, 3); // ceil(45/20) = 3
+    EXPECT_EQ(p2.total_pages, 3); ///< ceil(45/20) = 3
 
-    // Case 3: Empty result
+    /// Case 3: Empty result
     auto p3 = Pagination::Create(1, 20, 0);
     EXPECT_EQ(p3.total_pages, 0);
 
-    // Case 4: Single item
+    /// Case 4: Single item
     auto p4 = Pagination::Create(1, 20, 1);
     EXPECT_EQ(p4.total_pages, 1);
 
-    // Case 5: Items less than page_size
+    /// Case 5: Items less than page_size
     auto p5 = Pagination::Create(1, 20, 15);
     EXPECT_EQ(p5.total_pages, 1);
 }

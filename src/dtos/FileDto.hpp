@@ -56,7 +56,7 @@
 
 namespace disk::file {
 
-    // ==================== FileItem（共享响应组件）====================
+    /// ==================== FileItem（共享响应组件）====================
 
     /**
      * @brief 文件项数据
@@ -89,7 +89,7 @@ namespace disk::file {
         }
     };
 
-    // ==================== Init Upload ====================
+    /// ==================== Init Upload ====================
 
     /**
      * @brief 初始化上传请求 DTO
@@ -143,7 +143,7 @@ namespace disk::file {
                       << "\", file_size=" << request.file_size
                       << ", file_hash=" << request.file_hash << ", parent_id=" << request.parent_id;
 
-            // 验证文件名
+            /// 验证文件名
             if (!request.ValidateFilenameLength()) {
                 Logger::Warn() << "Invalid filename length: " << request.filename.length();
                 return std::unexpected(ErrorInfo(
@@ -184,7 +184,7 @@ namespace disk::file {
                 ));
             }
 
-            // 验证文件大小
+            /// 验证文件大小
             if (!request.ValidateFileSize()) {
                 Logger::Warn() << "Invalid file size: " << request.file_size;
                 return std::unexpected(ErrorInfo(
@@ -193,7 +193,7 @@ namespace disk::file {
                 ));
             }
 
-            // 验证文件哈希
+            /// 验证文件哈希
             if (!request.ValidateFileHash()) {
                 Logger::Warn() << "Invalid file hash format: " << request.file_hash;
                 return std::unexpected(ErrorInfo(
@@ -218,11 +218,11 @@ namespace disk::file {
         auto ValidateFilenameForbiddenChars() const -> bool {
             static const char forbidden_chars[] = "/\\:*?\"<>|";
             for (char c : filename) {
-                // 检查控制字符 (0x00-0x1F)
+                /// 检查控制字符 (0x00-0x1F)
                 if (static_cast<unsigned char>(c) <= 0x1F) {
                     return false;
                 }
-                // 检查文件系统保留字符
+                /// 检查文件系统保留字符
                 for (char fc : forbidden_chars) {
                     if (c == fc) {
                         return false;
@@ -303,7 +303,7 @@ namespace disk::file {
         }
     };
 
-    // ==================== Upload Chunk ====================
+    /// ==================== Upload Chunk ====================
 
     /**
      * @brief 上传分片响应 DTO
@@ -325,7 +325,7 @@ namespace disk::file {
         }
     };
 
-    // ==================== Complete Upload ====================
+    /// ==================== Complete Upload ====================
 
     /**
      * @brief 完成上传请求 DTO
@@ -355,7 +355,7 @@ namespace disk::file {
 
             Logger::Debug() << "Parsed complete upload request: upload_id=" << request.upload_id;
 
-            // 验证 upload_id 非空
+            /// 验证 upload_id 非空
             if (request.upload_id.empty()) {
                 Logger::Warn() << "upload_id cannot be empty";
                 return std::unexpected(
@@ -386,7 +386,7 @@ namespace disk::file {
         }
     };
 
-    // ==================== File List ====================
+    /// ==================== File List ====================
 
     /**
      * @brief 获取文件列表请求 DTO
@@ -417,40 +417,40 @@ namespace disk::file {
 
             FileListRequest request;
 
-            // 有效排序字段
+            /// 有效排序字段
             static const std::set<std::string> valid_sort_by = { "name",
                                                                  "size",
                                                                  "created_at",
                                                                  "updated_at" };
 
-            // 有效排序方向
+            /// 有效排序方向
             static const std::set<std::string> valid_sort_order = { "asc", "desc" };
 
-            // 有效类型
+            /// 有效类型
             static const std::set<std::string> valid_types = { "all", "file", "folder" };
 
-            // 解析可选参数 parent_id
+            /// 解析可选参数 parent_id
             auto parent_id_result = QueryUInt64(req, "parent_id");
             if (!parent_id_result) return std::unexpected(parent_id_result.error());
             if (parent_id_result->has_value()) {
                 request.parent_id = **parent_id_result;
             }
 
-            // 解析可选参数 page
+            /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page", 1);
             if (!page_result) return std::unexpected(page_result.error());
             if (page_result->has_value()) {
                 request.page = **page_result;
             }
 
-            // 解析可选参数 page_size
+            /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
             if (!page_size_result) return std::unexpected(page_size_result.error());
             if (page_size_result->has_value()) {
                 request.page_size = **page_size_result;
             }
 
-            // 解析可选参数 sort_by
+            /// 解析可选参数 sort_by
             auto sort_by_str = req->getParameter("sort_by");
             if (!sort_by_str.empty()) {
                 if (valid_sort_by.find(sort_by_str) == valid_sort_by.end()) {
@@ -463,7 +463,7 @@ namespace disk::file {
                 request.sort_by = sort_by_str;
             }
 
-            // 解析可选参数 sort_order
+            /// 解析可选参数 sort_order
             auto sort_order_str = req->getParameter("sort_order");
             if (!sort_order_str.empty()) {
                 if (valid_sort_order.find(sort_order_str) == valid_sort_order.end()) {
@@ -476,7 +476,7 @@ namespace disk::file {
                 request.sort_order = sort_order_str;
             }
 
-            // 解析可选参数 type
+            /// 解析可选参数 type
             auto type_str = req->getParameter("type");
             if (!type_str.empty()) {
                 if (valid_types.find(type_str) == valid_types.end()) {
@@ -508,13 +508,13 @@ namespace disk::file {
         uint64_t id;
         std::string name;
         std::string type; ///< "file" 或 "folder"
-        // 对于文件：文件特有字段
+        /// 对于文件：文件特有字段
         uint64_t size{ 0 };
         std::string mime_type;
         std::string hash;
-        // 对于文件夹：文件夹特有字段
+        /// 对于文件夹：文件夹特有字段
         int item_count{ 0 };
-        // 公共：公共字段
+        /// 公共：公共字段
         std::string created_at;
         std::string updated_at;
 
@@ -560,7 +560,7 @@ namespace disk::file {
         }
     };
 
-    // ==================== Download Info ====================
+    /// ==================== Download Info ====================
 
     /**
      * @brief 获取下载信息请求 DTO（路径参数）
@@ -655,7 +655,7 @@ namespace disk::file {
         }
     };
 
-    // ==================== Download ====================
+    /// ==================== Download ====================
 
     /**
      * @brief 下载文件请求 DTO（路径参数）
@@ -771,7 +771,7 @@ namespace disk::file {
         }
     };
 
-    // ==================== Rename ====================
+    /// ==================== Rename ====================
 
     /**
      * @brief 重命名请求 DTO
@@ -797,7 +797,7 @@ namespace disk::file {
             -> Result<RenameRequest> {
             Logger::Debug() << "Start parsing rename request parameters";
 
-            // 验证路径参数 file_id
+            /// 验证路径参数 file_id
             auto file_id_result = ParsePositiveUInt64(file_id_str, "file_id");
             if (!file_id_result) return std::unexpected(file_id_result.error());
 
@@ -815,7 +815,7 @@ namespace disk::file {
             Logger::Debug() << "Parsed rename request: file_id=" << request.file_id << ", new_name=\""
                       << request.new_name << "\"";
 
-            // 验证新文件名
+            /// 验证新文件名
             if (!request.ValidateFilenameLength()) {
                 Logger::Warn() << "Invalid filename length: " << request.new_name.length();
                 return std::unexpected(ErrorInfo(
@@ -872,11 +872,11 @@ namespace disk::file {
         auto ValidateFilenameForbiddenChars() const -> bool {
             static const char forbidden_chars[] = "/\\:*?\"<>|";
             for (char c : new_name) {
-                // 检查控制字符 (0x00-0x1F)
+                /// 检查控制字符 (0x00-0x1F)
                 if (static_cast<unsigned char>(c) <= 0x1F) {
                     return false;
                 }
-                // 检查文件系统保留字符
+                /// 检查文件系统保留字符
                 for (char fc : forbidden_chars) {
                     if (c == fc) {
                         return false;
@@ -927,7 +927,7 @@ namespace disk::file {
         }
     };
 
-    // ==================== Move ====================
+    /// ==================== Move ====================
 
     /**
      * @brief 移动文件请求 DTO
@@ -971,7 +971,7 @@ namespace disk::file {
                 ));
             }
 
-            // 解析可选参数 target_folder_id
+            /// 解析可选参数 target_folder_id
             auto target_folder_id_result = OptionalUInt64(json, "target_folder_id");
             if (!target_folder_id_result) return std::unexpected(target_folder_id_result.error());
             if (target_folder_id_result->has_value()) {
@@ -1008,7 +1008,7 @@ namespace disk::file {
         }
     };
 
-    // ==================== Copy ====================
+    /// ==================== Copy ====================
 
     /**
      * @brief 文件ID映射
@@ -1072,7 +1072,7 @@ namespace disk::file {
                 ));
             }
 
-            // 解析可选参数 target_folder_id
+            /// 解析可选参数 target_folder_id
             auto target_folder_id_result = OptionalUInt64(json, "target_folder_id");
             if (!target_folder_id_result) return std::unexpected(target_folder_id_result.error());
             if (target_folder_id_result->has_value()) {
@@ -1113,7 +1113,7 @@ namespace disk::file {
         }
     };
 
-    // ==================== Delete ====================
+    /// ==================== Delete ====================
 
     /**
      * @brief 删除文件请求 DTO
@@ -1185,7 +1185,7 @@ namespace disk::file {
         }
     };
 
-    // ==================== DownloadInfo（内部服务使用）====================
+    /// ==================== DownloadInfo（内部服务使用）====================
 
     /**
      * @brief 下载信息结构（内部服务使用）
@@ -1204,7 +1204,7 @@ namespace disk::file {
         bool supports_range{ true };
     };
 
-    // ==================== Search ====================
+    /// ==================== Search ====================
 
     /**
      * @brief 文件搜索请求 DTO
@@ -1233,10 +1233,10 @@ namespace disk::file {
 
             SearchRequest request;
 
-            // 有效类型
+            /// 有效类型
             static const std::set<std::string> valid_types = { "all", "file", "folder" };
 
-            // 解析必填参数 keyword
+            /// 解析必填参数 keyword
             auto keyword_str = req->getParameter("keyword");
             if (keyword_str.empty()) {
                 Logger::Warn() << "Missing required parameter: keyword";
@@ -1245,7 +1245,7 @@ namespace disk::file {
                 );
             }
 
-            // 验证 keyword 长度
+            /// 验证 keyword 长度
             if (keyword_str.length() < 1 || keyword_str.length() > 100) {
                 Logger::Warn() << "Parameter 'keyword' invalid length: " << keyword_str.length();
                 return std::unexpected(ErrorInfo(
@@ -1254,7 +1254,7 @@ namespace disk::file {
                 ));
             }
 
-            // 过滤 keyword 中的特殊字符（防止 SQL 注入）
+            /// 过滤 keyword 中的特殊字符（防止 SQL 注入）
             for (char c : keyword_str) {
                 if (c == '%' || c == '_' || c == '\\' || c == '\'' || c == '"') {
                     Logger::Warn() << "Parameter 'keyword' contains forbidden characters: " << c;
@@ -1267,7 +1267,7 @@ namespace disk::file {
 
             request.keyword = keyword_str;
 
-            // 解析可选参数 type
+            /// 解析可选参数 type
             auto type_str = req->getParameter("type");
             if (!type_str.empty()) {
                 if (valid_types.find(type_str) == valid_types.end()) {
@@ -1280,19 +1280,19 @@ namespace disk::file {
                 request.type = type_str;
             }
 
-            // 解析可选参数 folder_id
+            /// 解析可选参数 folder_id
             auto folder_id_result = QueryUInt64(req, "folder_id");
             if (!folder_id_result) return std::unexpected(folder_id_result.error());
             request.folder_id = *folder_id_result;
 
-            // 解析可选参数 page
+            /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page", 1);
             if (!page_result) return std::unexpected(page_result.error());
             if (page_result->has_value()) {
                 request.page = **page_result;
             }
 
-            // 解析可选参数 page_size
+            /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
             if (!page_size_result) return std::unexpected(page_size_result.error());
             if (page_size_result->has_value()) {
@@ -1347,4 +1347,4 @@ namespace disk::file {
         }
     };
 
-} // namespace disk::file
+} ///< namespace disk::file

@@ -104,4 +104,4 @@ namespace disk::log {
         drogon::orm::DbClientPtr m_db_client;
     };
 
-} // namespace disk::log
+} ///< namespace disk::log

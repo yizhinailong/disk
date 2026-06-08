@@ -34,7 +34,7 @@
 
 namespace disk::folder {
 
-    // ==================== Request DTOs ====================
+    /// ==================== Request DTOs ====================
 
     /**
      * @brief 创建文件夹请求 DTO
@@ -73,13 +73,13 @@ namespace disk::folder {
                 request.parent_id = **parent_id_result;
             }
 
-            // 规则 6：去除首尾空格
+            /// 规则 6：去除首尾空格
             request.TrimName();
 
             Logger::Debug() << "Parsed create folder request: name=\"" << request.name
                       << "\", parent_id=" << request.parent_id;
 
-            // 规则 1：长度验证 (1-255)
+            /// 规则 1：长度验证 (1-255)
             if (!request.ValidateLength()) {
                 Logger::Warn() << "Invalid folder name length: " << request.name.length();
                 return std::unexpected(ErrorInfo(
@@ -88,7 +88,7 @@ namespace disk::folder {
                 ));
             }
 
-            // 规则 2：禁止字符验证
+            /// 规则 2：禁止字符验证
             if (!request.ValidateForbiddenChars()) {
                 Logger::Warn() << "Folder name contains forbidden characters: " << request.name;
                 return std::unexpected(ErrorInfo(
@@ -97,7 +97,7 @@ namespace disk::folder {
                 ));
             }
 
-            // 规则 3：保留名称验证
+            /// 规则 3：保留名称验证
             if (!request.ValidateReservedNames()) {
                 Logger::Warn() << "Folder name is a reserved name: " << request.name;
                 return std::unexpected(ErrorInfo(
@@ -106,7 +106,7 @@ namespace disk::folder {
                 ));
             }
 
-            // 规则 4：隐藏文件夹验证
+            /// 规则 4：隐藏文件夹验证
             if (!request.ValidateNotHidden()) {
                 Logger::Warn() << "Folder name starts with a dot (hidden folder): " << request.name;
                 return std::unexpected(
@@ -114,7 +114,7 @@ namespace disk::folder {
                 );
             }
 
-            // 规则 5：字符集验证（合法 UTF-8，且不含控制字符）
+            /// 规则 5：字符集验证（合法 UTF-8，且不含控制字符）
             if (!request.ValidateCharset()) {
                 Logger::Warn() << "Folder name contains invalid UTF-8 or control characters: "
                          << request.name;
@@ -131,7 +131,7 @@ namespace disk::folder {
     private:
         /// 去除首尾空格
         auto TrimName() -> void {
-            // 去除首尾空格
+            /// 去除首尾空格
             auto start = name.find_first_not_of(' ');
             if (start == std::string::npos) {
                 name.clear();
@@ -152,11 +152,11 @@ namespace disk::folder {
         auto ValidateForbiddenChars() const -> bool {
             static const char forbidden_chars[] = "/\\:*?\"<>|";
             for (char c : name) {
-                // 检查控制字符 (0x00-0x1F)
+                /// 检查控制字符 (0x00-0x1F)
                 if (static_cast<unsigned char>(c) <= 0x1F) {
                     return false;
                 }
-                // 检查文件系统保留字符
+                /// 检查文件系统保留字符
                 for (char fc : forbidden_chars) {
                     if (c == fc) {
                         return false;
@@ -313,7 +313,7 @@ namespace disk::folder {
         }
     };
 
-    // ==================== Response DTOs ====================
+    /// ==================== Response DTOs ====================
 
     /**
      * @brief 创建文件夹响应 DTO
@@ -358,7 +358,7 @@ namespace disk::folder {
         }
     };
 
-    // ==================== Folder Tree DTOs ====================
+    /// ==================== Folder Tree DTOs ====================
 
     /**
      * @brief 获取文件夹树请求 DTO
@@ -381,14 +381,14 @@ namespace disk::folder {
 
             FolderTreeRequest request;
 
-            // 解析可选参数 parent_id
+            /// 解析可选参数 parent_id
             auto parent_id_result = QueryUInt64(req, "parent_id");
             if (!parent_id_result) return std::unexpected(parent_id_result.error());
             if (parent_id_result->has_value()) {
                 request.parent_id = **parent_id_result;
             }
 
-            // 解析可选参数 depth（允许 -1，不能用 QueryPositiveInt）
+            /// 解析可选参数 depth（允许 -1，不能用 QueryPositiveInt）
             auto depth_str = req->getParameter("depth");
             if (!depth_str.empty()) {
                 try {
@@ -410,7 +410,7 @@ namespace disk::folder {
                 }
             }
 
-            // 验证 depth >= -1
+            /// 验证 depth >= -1
             if (request.depth < -1) {
                 Logger::Warn() << "Parameter 'depth' cannot be less than -1: " << request.depth;
                 return std::unexpected(ErrorInfo(
@@ -461,7 +461,7 @@ namespace disk::folder {
         }
     };
 
-    // ==================== Breadcrumb DTOs ====================
+    /// ==================== Breadcrumb DTOs ====================
 
     /**
      * @brief 面包屑导航项
@@ -501,4 +501,4 @@ namespace disk::folder {
         }
     };
 
-} // namespace disk::folder
+} ///< namespace disk::folder

@@ -135,4 +135,4 @@ namespace disk::storage {
             -> drogon::Task<Result<uint64_t>> = 0;
     };
 
-} // namespace disk::storage
+} ///< namespace disk::storage

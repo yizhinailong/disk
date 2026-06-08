@@ -17,7 +17,7 @@
 namespace disk::system {
     namespace {
 
-        // ==================== StorageStats 结构体测试 ====================
+        /// ==================== StorageStats 结构体测试 ====================
 
         class StorageStatsTest : public ::testing::Test {};
 
@@ -43,7 +43,7 @@ namespace disk::system {
             EXPECT_EQ(stats.total_size, 1024 * 1024 * 512);
         }
 
-        // ==================== ConnectionStats 结构体测试 ====================
+        /// ==================== ConnectionStats 结构体测试 ====================
 
         class ConnectionStatsTest : public ::testing::Test {};
 
@@ -63,7 +63,7 @@ namespace disk::system {
             EXPECT_EQ(stats.peak, 128);
         }
 
-        // ==================== SystemInfo 结构体测试 ====================
+        /// ==================== SystemInfo 结构体测试 ====================
 
         class SystemInfoTest : public ::testing::Test {};
 
@@ -105,15 +105,15 @@ namespace disk::system {
             EXPECT_EQ(info.storage.total_size, 1073741824);
         }
 
-        // ==================== SQL 查询正确性验证 ====================
-        // 确保 GetStorageStats() 中的 SQL 不引用不存在的 deleted_at 列。
-        // files/folders 表不含 deleted_at 列（软删除由 trash 表承载），
-        // 因此 SQL 查询不应包含 WHERE deleted_at IS NULL 条件。
+        /// ==================== SQL 查询正确性验证 ====================
+        /// 确保 GetStorageStats() 中的 SQL 不引用不存在的 deleted_at 列。
+        /// files/folders 表不含 deleted_at 列（软删除由 trash 表承载），
+        /// 因此 SQL 查询不应包含 WHERE deleted_at IS NULL 条件。
 
         class SystemServiceSqlCorrectnessTest : public ::testing::Test {};
 
         TEST_F(SystemServiceSqlCorrectnessTest, FilesQueryNoDeletedAt) {
-            // 这是 GetStorageStats() 中应使用的文件统计 SQL 模式
+            /// 这是 GetStorageStats() 中应使用的文件统计 SQL 模式
             std::string files_sql =
                 "SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as total_size FROM files";
 
@@ -122,7 +122,7 @@ namespace disk::system {
         }
 
         TEST_F(SystemServiceSqlCorrectnessTest, FoldersQueryNoDeletedAt) {
-            // 这是 GetStorageStats() 中应使用的文件夹统计 SQL 模式
+            /// 这是 GetStorageStats() 中应使用的文件夹统计 SQL 模式
             std::string folders_sql = "SELECT COUNT(*) as count FROM folders";
 
             EXPECT_EQ(folders_sql.find("deleted_at"), std::string::npos)
@@ -133,13 +133,13 @@ namespace disk::system {
             std::string users_sql =
                 "SELECT COUNT(*) as count FROM users WHERE status != -1";
 
-            // users 表确实有 status 列，过滤禁用账户是合理的
+            /// users 表确实有 status 列，过滤禁用账户是合理的
             EXPECT_NE(users_sql.find("status"), std::string::npos);
             EXPECT_EQ(users_sql.find("deleted_at"), std::string::npos)
                 << "users 表不含 deleted_at 列，SQL 不应引用它";
         }
 
-        // ==================== StorageStats 数值溢出防护测试 ====================
+        /// ==================== StorageStats 数值溢出防护测试 ====================
 
         class StorageStatsBoundaryTest : public ::testing::Test {};
 
@@ -164,5 +164,5 @@ namespace disk::system {
             EXPECT_EQ(stats.total_users, 1000000);
         }
 
-    } // namespace
-} // namespace disk::system
+    } ///< namespace
+} ///< namespace disk::system

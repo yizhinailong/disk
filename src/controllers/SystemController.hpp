@@ -33,4 +33,4 @@ namespace disk::system {
         std::unique_ptr<SystemService> m_system_service{};
     };
 
-} // namespace disk::system
+} ///< namespace disk::system

@@ -22,8 +22,8 @@
 #include "../../src/utils/ConfigMgr.hpp"
 #include "../../src/utils/FileHashUtil.hpp"
 
-// disk-test 未直接链接 LocalFileStorage.cpp，这里按测试翻译单元引入实现，
-// 以便对真实分片写入与组装路径做特征回归保护。
+/// disk-test 未直接链接 LocalFileStorage.cpp，这里按测试翻译单元引入实现，
+/// 以便对真实分片写入与组装路径做特征回归保护。
 #include "../../src/storage/LocalFileStorage.cpp"
 
 namespace disk::file {
@@ -108,57 +108,57 @@ namespace disk::file {
             std::unique_ptr<LocalFileStorage> m_storage;
         };
 
-        // ============================================================================
-        // Transaction Boundary Analysis Baseline (FileService::CompleteUpload)
-        // Source: src/services/FileService.cpp lines 307-570
-        // ============================================================================
-        //
-        // Flow mapping (exact sequence from current implementation):
-        //  1) [307-320] Load and validate upload task ownership/state.
-        //  2) [321-326] Idempotency short-circuit if status == 1.
-        //  3) [329-341] Validate chunk count from upload_task_chunks.
-        //  4) [344-350] Assemble temp file from chunks.
-        //  5) [353-378] Compute/verify final MD5.
-        //  6) [382-390] Duplicate filename guard.
-        //  7) [392-434] Dedup branch:
-        //      - existing content: delete assemble artifact only
-        //      - new content: promote to final storage + compute sha256
-        //  8) [436-504] ZONE A (transaction scope):
-        //      - newTransactionCoro()
-        //      - insert/update file_contents
-        //      - insert files row
-        //      - rollback on DB exception
-        //  9) [506-517] DB failure compensation:
-        //      - delete promoted storage file when needed
-        // 10) [522-538] ZONE B (inside transaction): quota transfer
-        //      UPDATE users
-        //      SET storage_reserved = GREATEST(storage_reserved - ?, 0),
-        //          storage_used = storage_used + ?
-        //      Failure throws std::runtime_error to force rollback.
-        // 11) [540-555] ZONE C (inside transaction): task finalization
-        //      - UPDATE upload_tasks SET status = 1, finalized_at = NOW()
-        //      - DELETE upload_task_chunks
-        //      Failure throws std::runtime_error to force rollback.
-        // 12) [557-562] Temp directory cleanup.
-        // 13) [564-570] Build response payload (file item + hash).
-        //
-        // Consistency guarantees after T7 optimization:
-        //  - Zone A (440-504): transactional for file_contents + files tables.
-        //  - Zone B (522-538): quota transfer inside transaction; failure triggers rollback.
-        //  - Zone C (540-555): task finalization inside transaction; failure triggers rollback.
-        //
-        // Post-optimization failure behavior:
-        //  - Zone B failure: entire transaction rolls back; file not committed.
-        //  - Zone C failure: entire transaction rolls back; upload task remains pending.
-        //  - All-or-nothing consistency: partial success is impossible.
-        //
-        // Instant-upload path consistency note (optimized):
-        //  - ref_count increment + files insert now wrapped in newTransactionCoro().
-        //  - Transaction-aware IsFilenameExists used for duplicate check within transaction.
-        //  - Redundant content re-read eliminated; mime_type from LookupExistingContentMetadata.
-        //  - All-or-nothing consistency: rollback on any DB failure within the instant-upload branch.
+        /// ============================================================================
+        /// Transaction Boundary Analysis Baseline (FileService::CompleteUpload)
+        /// Source: src/services/FileService.cpp lines 307-570
+        /// ============================================================================
+        ///
+        /// Flow mapping (exact sequence from current implementation):
+        ///  1) [307-320] Load and validate upload task ownership/state.
+        ///  2) [321-326] Idempotency short-circuit if status == 1.
+        ///  3) [329-341] Validate chunk count from upload_task_chunks.
+        ///  4) [344-350] Assemble temp file from chunks.
+        ///  5) [353-378] Compute/verify final MD5.
+        ///  6) [382-390] Duplicate filename guard.
+        ///  7) [392-434] Dedup branch:
+        ///      - existing content: delete assemble artifact only
+        ///      - new content: promote to final storage + compute sha256
+        ///  8) [436-504] ZONE A (transaction scope):
+        ///      - newTransactionCoro()
+        ///      - insert/update file_contents
+        ///      - insert files row
+        ///      - rollback on DB exception
+        ///  9) [506-517] DB failure compensation:
+        ///      - delete promoted storage file when needed
+        /// 10) [522-538] ZONE B (inside transaction): quota transfer
+        ///      UPDATE users
+        ///      SET storage_reserved = GREATEST(storage_reserved - ?, 0),
+        ///          storage_used = storage_used + ?
+        ///      Failure throws std::runtime_error to force rollback.
+        /// 11) [540-555] ZONE C (inside transaction): task finalization
+        ///      - UPDATE upload_tasks SET status = 1, finalized_at = NOW()
+        ///      - DELETE upload_task_chunks
+        ///      Failure throws std::runtime_error to force rollback.
+        /// 12) [557-562] Temp directory cleanup.
+        /// 13) [564-570] Build response payload (file item + hash).
+        ///
+        /// Consistency guarantees after T7 optimization:
+        ///  - Zone A (440-504): transactional for file_contents + files tables.
+        ///  - Zone B (522-538): quota transfer inside transaction; failure triggers rollback.
+        ///  - Zone C (540-555): task finalization inside transaction; failure triggers rollback.
+        ///
+        /// Post-optimization failure behavior:
+        ///  - Zone B failure: entire transaction rolls back; file not committed.
+        ///  - Zone C failure: entire transaction rolls back; upload task remains pending.
+        ///  - All-or-nothing consistency: partial success is impossible.
+        ///
+        /// Instant-upload path consistency note (optimized):
+        ///  - ref_count increment + files insert now wrapped in newTransactionCoro().
+        ///  - Transaction-aware IsFilenameExists used for duplicate check within transaction.
+        ///  - Redundant content re-read eliminated; mime_type from LookupExistingContentMetadata.
+        ///  - All-or-nothing consistency: rollback on any DB failure within the instant-upload branch.
 
-        // ==================== Upload DTO Contract Tests ====================
+        /// ==================== Upload DTO Contract Tests ====================
 
         class FileUploadDtoContractTest : public ::testing::Test {};
 
@@ -227,7 +227,7 @@ namespace disk::file {
             EXPECT_EQ(json["file"]["parent_id"].asUInt64(), 12U);
         }
 
-        // ==================== Upload Task Status Contract Tests ====================
+        /// ==================== Upload Task Status Contract Tests ====================
 
         enum class UploadTaskStatusContract : int8_t {
             Pending = 0,
@@ -239,7 +239,7 @@ namespace disk::file {
             EXPECT_EQ(static_cast<int>(UploadTaskStatusContract::Completed), 1);
         }
 
-        // ==================== LocalFileStorage 上传一致性测试 ====================
+        /// ==================== LocalFileStorage 上传一致性测试 ====================
 
         TEST_F(LocalFileStorageUploadConsistencyTest, WriteChunkPersistsExactBytesAndSizeOnDisk) {
             const std::string upload_id = "write-chunk-integrity";
@@ -295,75 +295,75 @@ namespace disk::file {
             EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
         }
 
-        // ==================== Fault Injection Scenario Tests (DB-dependent) ====================
+        /// ==================== Fault Injection Scenario Tests (DB-dependent) ====================
 
         TEST(FileUploadConsistencyFaultInjection, DISABLED_ZoneBQuotaTransferFailureLeavesFreeStorageLeak) {
-            // 【需要 MySQL + 可注入故障环境】Zone B 配额转移失败场景
-            //
-            // Baseline expectation (optimization BEFORE state):
-            // - Zone A 已提交（files/file_contents 成功）
-            // - Zone B quota transfer 失败仅记录 warning，不触发回滚
-            // - 结果：文件可见，但 storage_used 未增加（免费存储）
-            //
-            // Test procedure:
-            // 1. 构造 upload_tasks(status=0) + upload_task_chunks 全部分片记录
-            // 2. 触发 CompleteUpload 到达 Zone A 并成功提交文件记录
-            // 3. 对 Zone B 的 users UPDATE 注入失败（mock DB exception / permission deny）
-            // 4. 断言 files 记录存在（提交成功）
-            // 5. 断言 users.storage_used 未按 file_size 增长
-            // 6. 记录该行为为优化前一致性基线
+            /// 【需要 MySQL + 可注入故障环境】Zone B 配额转移失败场景
+            ///
+            /// Baseline expectation (optimization BEFORE state):
+            /// - Zone A 已提交（files/file_contents 成功）
+            /// - Zone B quota transfer 失败仅记录 warning，不触发回滚
+            /// - 结果：文件可见，但 storage_used 未增加（免费存储）
+            ///
+            /// Test procedure:
+            /// 1. 构造 upload_tasks(status=0) + upload_task_chunks 全部分片记录
+            /// 2. 触发 CompleteUpload 到达 Zone A 并成功提交文件记录
+            /// 3. 对 Zone B 的 users UPDATE 注入失败（mock DB exception / permission deny）
+            /// 4. 断言 files 记录存在（提交成功）
+            /// 5. 断言 users.storage_used 未按 file_size 增长
+            /// 6. 记录该行为为优化前一致性基线
             SUCCEED() << "Skipped: requires DB fault-injection harness";
         }
 
         TEST(FileUploadConsistencyFaultInjection, DISABLED_ZoneCTaskFinalizationFailureLeavesTaskInProgress) {
-            // 【需要 MySQL + 可注入故障环境】Zone C 任务终态失败场景
-            //
-            // Baseline expectation (optimization BEFORE state):
-            // - Zone A 已提交文件
-            // - Zone C 更新 upload_tasks.status=1 / 删除 chunks 失败仅 warning
-            // - 结果：upload_tasks.status 可能仍为 0，表现为“上传中”卡住
-            //
-            // Test procedure:
-            // 1. 准备 upload task 与分片记录，触发 CompleteUpload 主流程
-            // 2. 在 Zone C 注入 UPDATE upload_tasks 或 DELETE upload_task_chunks 失败
-            // 3. 断言 files 记录已存在（文件对用户可见）
-            // 4. 查询 upload_tasks.status，预期仍可能为 0（pending）
-            // 5. 查询 upload_task_chunks，预期仍有残留行
+            /// 【需要 MySQL + 可注入故障环境】Zone C 任务终态失败场景
+            ///
+            /// Baseline expectation (optimization BEFORE state):
+            /// - Zone A 已提交文件
+            /// - Zone C 更新 upload_tasks.status=1 / 删除 chunks 失败仅 warning
+            /// - 结果：upload_tasks.status 可能仍为 0，表现为“上传中”卡住
+            ///
+            /// Test procedure:
+            /// 1. 准备 upload task 与分片记录，触发 CompleteUpload 主流程
+            /// 2. 在 Zone C 注入 UPDATE upload_tasks 或 DELETE upload_task_chunks 失败
+            /// 3. 断言 files 记录已存在（文件对用户可见）
+            /// 4. 查询 upload_tasks.status，预期仍可能为 0（pending）
+            /// 5. 查询 upload_task_chunks，预期仍有残留行
             SUCCEED() << "Skipped: requires DB fault-injection harness";
         }
 
         TEST(FileUploadConsistencyFaultInjection, DISABLED_OrphanedFileDetectionQueryBaseline) {
-            // 【需要 MySQL 环境】孤儿文件（任务未终态但文件已创建）探测基线
-            //
-            // Suggested detection query (baseline):
-            // SELECT f.id, f.user_id, f.name, t.id AS task_id, t.status
-            // FROM files f
-            // JOIN upload_tasks t ON t.user_id = f.user_id AND t.filename = f.name
-            // WHERE t.status = 0 AND f.deleted_at IS NULL;
-            //
-            // Test procedure:
-            // 1. 制造 Zone C 失败样本（可重用前置 fixture）
-            // 2. 执行上述查询
-            // 3. 断言返回记录数 > 0（存在 orphan baseline）
-            // 4. 输出样本行供后续优化验收对比
+            /// 【需要 MySQL 环境】孤儿文件（任务未终态但文件已创建）探测基线
+            ///
+            /// Suggested detection query (baseline):
+            /// SELECT f.id, f.user_id, f.name, t.id AS task_id, t.status
+            /// FROM files f
+            /// JOIN upload_tasks t ON t.user_id = f.user_id AND t.filename = f.name
+            /// WHERE t.status = 0 AND f.deleted_at IS NULL;
+            ///
+            /// Test procedure:
+            /// 1. 制造 Zone C 失败样本（可重用前置 fixture）
+            /// 2. 执行上述查询
+            /// 3. 断言返回记录数 > 0（存在 orphan baseline）
+            /// 4. 输出样本行供后续优化验收对比
             SUCCEED() << "Skipped: requires DB fixture and SQL assertions";
         }
 
         TEST(FileUploadConsistencyFaultInjection, DISABLED_UploadTaskStuckInProgressDetectionBaseline) {
-            // 【需要 MySQL 环境】上传任务 stuck-in-progress 探测基线
-            //
-            // Suggested detection query (baseline):
-            // SELECT id, user_id, filename, status, created_at, updated_at
-            // FROM upload_tasks
-            // WHERE status = 0 AND updated_at < NOW() - INTERVAL 10 MINUTE;
-            //
-            // Test procedure:
-            // 1. 构造状态=0 且更新时间超过阈值的上传任务
-            // 2. 保留其 chunks 记录（模拟 Zone C cleanup 失败）
-            // 3. 执行检测查询
-            // 4. 断言命中该任务，建立优化前监控基线
+            /// 【需要 MySQL 环境】上传任务 stuck-in-progress 探测基线
+            ///
+            /// Suggested detection query (baseline):
+            /// SELECT id, user_id, filename, status, created_at, updated_at
+            /// FROM upload_tasks
+            /// WHERE status = 0 AND updated_at < NOW() - INTERVAL 10 MINUTE;
+            ///
+            /// Test procedure:
+            /// 1. 构造状态=0 且更新时间超过阈值的上传任务
+            /// 2. 保留其 chunks 记录（模拟 Zone C cleanup 失败）
+            /// 3. 执行检测查询
+            /// 4. 断言命中该任务，建立优化前监控基线
             SUCCEED() << "Skipped: requires DB fixture and clock-controlled test environment";
         }
 
-    } // namespace
-} // namespace disk::file
+    } ///< namespace
+} ///< namespace disk::file

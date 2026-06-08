@@ -35,7 +35,7 @@ namespace disk::test {
         MockDbClient(MockDbClient&&) = delete;
         MockDbClient& operator=(MockDbClient&&) = delete;
 
-        // Mock 计数操作的同步 SQL 执行
+        /// Mock 计数操作的同步 SQL 执行
         MOCK_METHOD(
             std::size_t,
             execSqlSync,
@@ -43,7 +43,7 @@ namespace disk::test {
             (noexcept)
         );
 
-        // Mock 插入/更新操作的同步 SQL 执行
+        /// Mock 插入/更新操作的同步 SQL 执行
         MOCK_METHOD(
             std::size_t,
             execSqlSync,
@@ -56,4 +56,4 @@ namespace disk::test {
         return std::make_shared<MockDbClient>();
     }
 
-} // namespace disk::test
+} ///< namespace disk::test

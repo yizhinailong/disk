@@ -184,4 +184,4 @@ namespace disk::controllers {
             -> drogon::Task<drogon::HttpResponsePtr>;
     };
 
-} // namespace disk::controllers
+} ///< namespace disk::controllers

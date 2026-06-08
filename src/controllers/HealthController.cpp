@@ -34,10 +34,10 @@ namespace disk::health {
             co_return Response::Success(data);
         }
 
-        // degraded 或 unhealthy 状态返回 503
+        /// degraded 或 unhealthy 状态返回 503
         auto response = Response::Success(data);
         response->setStatusCode(drogon::k503ServiceUnavailable);
         co_return response;
     }
 
-} // namespace disk::health
+} ///< namespace disk::health

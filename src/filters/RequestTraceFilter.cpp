@@ -16,7 +16,7 @@
 namespace disk::filters {
 
     auto RequestTraceFilter::GenerateRequestId() -> std::string {
-        // UUID v4: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+        /// UUID v4: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
         thread_local std::random_device rd;
         thread_local std::mt19937 gen(rd());
         std::uniform_int_distribution<uint32_t> dist(0, 15);
@@ -28,10 +28,10 @@ namespace disk::filters {
         buf[8] = '-';
         for (int i = 9; i < 13; ++i) buf[i] = hex[dist(gen)];
         buf[13] = '-';
-        buf[14] = '4'; // version 4
+        buf[14] = '4'; ///< version 4
         for (int i = 15; i < 18; ++i) buf[i] = hex[dist(gen)];
         buf[18] = '-';
-        buf[19] = hex[dist_y(gen)]; // variant: 8/9/a/b
+        buf[19] = hex[dist_y(gen)]; ///< variant: 8/9/a/b
         for (int i = 20; i < 23; ++i) buf[i] = hex[dist(gen)];
         buf[23] = '-';
         for (int i = 24; i < 36; ++i) buf[i] = hex[dist(gen)];
@@ -48,4 +48,4 @@ namespace disk::filters {
         co_return nullptr;
     }
 
-} // namespace disk::filters
+} ///< namespace disk::filters

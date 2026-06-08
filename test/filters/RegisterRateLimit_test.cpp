@@ -25,7 +25,7 @@ namespace {
         return req;
     }
 
-} // namespace
+} ///< namespace
 
 TEST(RegisterRateLimitFilterTest, LoginPath_Skipped) {
     disk::filters::RegisterRateLimitFilter filter;

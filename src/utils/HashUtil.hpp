@@ -31,7 +31,7 @@ namespace disk::utils {
      */
     class HashUtil {
     public:
-        // ==================== 密码哈希（Argon2id）====================
+        /// ==================== 密码哈希（Argon2id）====================
 
         /**
          * @brief 加密密码（使用 libsodium Argon2id 算法）
@@ -52,16 +52,16 @@ namespace disk::utils {
                 );
             }
 
-            // 使用 libsodium 的 Argon2id 算法
-            // crypto_pwhash_STRBYTES 是输出缓冲区的大小（128 字节）
+            /// 使用 libsodium 的 Argon2id 算法
+            /// crypto_pwhash_STRBYTES 是输出缓冲区的大小（128 字节）
             std::array<char, crypto_pwhash_STRBYTES> hashed_password{};
 
             if (crypto_pwhash_str(
                     hashed_password.data(),
                     password.c_str(),
                     password.length(),
-                    crypto_pwhash_OPSLIMIT_INTERACTIVE, // 适合交互式应用的计算强度
-                    crypto_pwhash_MEMLIMIT_INTERACTIVE  // 适合交互式应用的内存限制
+                    crypto_pwhash_OPSLIMIT_INTERACTIVE, ///< 适合交互式应用的计算强度
+                    crypto_pwhash_MEMLIMIT_INTERACTIVE  ///< 适合交互式应用的内存限制
                 ) != 0) {
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InternalError,
@@ -84,7 +84,7 @@ namespace disk::utils {
             return crypto_pwhash_str_verify(hash.c_str(), password.c_str(), password.length()) == 0;
         }
 
-        // ==================== Token 哈希（SHA256）====================
+        /// ==================== Token 哈希（SHA256）====================
 
         /**
          * @brief Token 哈希结果（32 字节 SHA256）
@@ -141,4 +141,4 @@ namespace disk::utils {
         }
     };
 
-} // namespace disk::utils
+} ///< namespace disk::utils

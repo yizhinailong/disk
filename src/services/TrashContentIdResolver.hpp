@@ -61,4 +61,4 @@ namespace disk::services::trash_content_internal {
         };
     }
 
-} // namespace disk::services::trash_content_internal
+} ///< namespace disk::services::trash_content_internal

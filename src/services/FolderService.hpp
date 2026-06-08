@@ -168,4 +168,4 @@ namespace disk::folder {
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
     };
 
-} // namespace disk::folder
+} ///< namespace disk::folder

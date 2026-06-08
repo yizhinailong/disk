@@ -751,7 +751,7 @@ namespace disk::services {
 
         admin::SystemStatusResponse response;
 
-        // Database check
+        /// Database check
         try {
             co_await m_db_client->execSqlCoro("SELECT 1");
             response.db_connected = true;
@@ -760,7 +760,7 @@ namespace disk::services {
             response.db_connected = false;
         }
 
-        // Redis check
+        /// Redis check
         try {
             auto redis_client = drogon::app().getRedisClient();
             if (redis_client) {
@@ -777,7 +777,7 @@ namespace disk::services {
             response.redis_connected = false;
         }
 
-        // Disk space
+        /// Disk space
         try {
             auto storage_path = utils::ConfigMgr::GetInstance()->GetStorageBasePath();
             auto space_info = std::filesystem::space(storage_path);
@@ -791,7 +791,7 @@ namespace disk::services {
             response.disk_free = 0;
         }
 
-        // Uptime
+        /// Uptime
         auto now = std::chrono::steady_clock::now();
         auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - m_start_time);
         response.uptime_seconds = static_cast<uint64_t>(uptime.count());
@@ -894,4 +894,4 @@ namespace disk::services {
         }
     }
 
-} // namespace disk::services
+} ///< namespace disk::services

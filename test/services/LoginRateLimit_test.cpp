@@ -41,9 +41,9 @@ namespace {
         );
     }
 
-    // ================================================================================
-    // Auth error code contract tests — login failure paths
-    // ================================================================================
+    /// ================================================================================
+    /// Auth error code contract tests — login failure paths
+    /// ================================================================================
 
     TEST(LoginRateLimit, InvalidCredentialsErrorCodeValue) {
         EXPECT_EQ(static_cast<uint32_t>(Code::InvalidCredentials), 40101u);
@@ -111,4 +111,4 @@ namespace {
         }
     }
 
-} // namespace
+} ///< namespace

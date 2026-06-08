@@ -26,13 +26,13 @@ namespace disk::filters {
     auto RegisterRateLimitFilter::doFilter(const drogon::HttpRequestPtr& request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        // 仅对注册路径生效
+        /// 仅对注册路径生效
         const auto& path = request->path();
         if (path != "/api/auth/register") {
             co_return nullptr;
         }
 
-        // 从请求获取 IP 地址
+        /// 从请求获取 IP 地址
         const auto ip = RedisKeyPrefix::ExtractIPOnly(request->peerAddr().toIp());
         const auto window = GetCurrentWindow();
         const auto key =
@@ -71,4 +71,4 @@ namespace disk::filters {
         co_return nullptr;
     }
 
-} // namespace disk::filters
+} ///< namespace disk::filters

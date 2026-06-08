@@ -26,13 +26,13 @@ namespace disk::filters {
     auto DownloadRateLimitFilter::doFilter(const drogon::HttpRequestPtr& request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        // 仅对下载路径生效
+        /// 仅对下载路径生效
         const auto& path = request->path();
         if (!path.starts_with("/api/file/download/")) {
             co_return nullptr;
         }
 
-        // 从 request attributes 获取 user_id（由 JwtAuthFilter 设置）
+        /// 从 request attributes 获取 user_id（由 JwtAuthFilter 设置）
         auto attrs = request->attributes();
         if (!attrs || !attrs->find("user_id")) {
             co_return nullptr;
@@ -76,4 +76,4 @@ namespace disk::filters {
         co_return nullptr;
     }
 
-} // namespace disk::filters
+} ///< namespace disk::filters

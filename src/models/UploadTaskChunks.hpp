@@ -53,7 +53,7 @@ class UploadTaskChunks
     static const std::string tableName;
     static const bool hasPrimaryKey;
     static const std::vector<std::string> primaryKeyName;
-    using PrimaryKeyType = std::tuple<std::string,uint32_t>;//task_id,chunk_index
+    using PrimaryKeyType = std::tuple<std::string,uint32_t>;///< task_id,chunk_index
     PrimaryKeyType getPrimaryKey() const;
 
     /**
@@ -230,5 +230,5 @@ class UploadTaskChunks
         return sql;
     }
 };
-} // namespace disk
-} // namespace drogon_model
+} ///< namespace disk
+} ///< namespace drogon_model

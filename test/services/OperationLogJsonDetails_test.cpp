@@ -31,20 +31,20 @@ namespace {
      * This test replicates that exact pattern and verifies the round-trip.
      */
     TEST(OperationLogJsonDetails, RoundTrip) {
-        // 构建与 AuthService::Logout 中生产代码相同的 JSON
+        /// 构建与 AuthService::Logout 中生产代码相同的 JSON
         Json::Value details_json;
         details_json["message"] = "User logged out";
 
-        // 使用项目标准的紧凑序列化模式
+        /// 使用项目标准的紧凑序列化模式
         Json::StreamWriterBuilder builder;
         builder["indentation"] = "";
         std::string serialized = Json::writeString(builder, details_json);
 
-        // 验证序列化字符串是有效的紧凑 JSON
+        /// 验证序列化字符串是有效的紧凑 JSON
         EXPECT_FALSE(serialized.empty()) << "Serialized JSON should not be empty";
         EXPECT_EQ(serialized, R"({"message":"User logged out"})") << "Compact JSON format mismatch";
 
-        // 使用 Json::CharReaderBuilder 解析序列化字符串
+        /// 使用 Json::CharReaderBuilder 解析序列化字符串
         Json::Value parsed;
         Json::CharReaderBuilder reader_builder;
         std::string parse_errors;
@@ -54,13 +54,13 @@ namespace {
         ASSERT_TRUE(parse_ok) << "Parsing serialized JSON failed: " << parse_errors;
         EXPECT_TRUE(parse_errors.empty()) << "Expected no parse errors: " << parse_errors;
 
-        // 断言解析值等于原始值
+        /// 断言解析值等于原始值
         ASSERT_TRUE(parsed.isObject()) << "Parsed value should be a JSON object";
         ASSERT_TRUE(parsed.isMember("message")) << "Parsed object should have 'message' field";
         EXPECT_EQ(parsed["message"].asString(), "User logged out")
             << "Parsed 'message' field should match original";
 
-        // 完整对象相等性检查
+        /// 完整对象相等性检查
         EXPECT_EQ(parsed, details_json) << "Parsed value should equal original JSON object";
     }
 
@@ -84,4 +84,4 @@ namespace {
         EXPECT_FALSE(parse_ok) << "Parsing plain string as JSON should fail";
     }
 
-} // namespace
+} ///< namespace

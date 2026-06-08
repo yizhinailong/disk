@@ -86,7 +86,7 @@ namespace disk::utils {
         [[nodiscard]]
         auto GetRefreshTokenExpireSeconds() const -> int;
 
-        // ==================== 存储配置 ====================
+        /// ==================== 存储配置 ====================
 
         /**
          * @brief 获取存储基础路径
@@ -151,7 +151,7 @@ namespace disk::utils {
         [[nodiscard]]
         auto GetUploadRateLimitPerMinute() const noexcept -> int;
 
-        // ==================== 数据库配置 ====================
+        /// ==================== 数据库配置 ====================
 
         /**
          * @brief 获取数据库密码（从环境变量DATABASE_PASSWORD读取）
@@ -189,11 +189,11 @@ namespace disk::utils {
         auto GetRedisPoolSize() const noexcept -> int64_t;
 
     private:
-        // JWT 配置
+        /// JWT 配置
         int m_access_token_expire_seconds{ 7200 };
         int m_refresh_token_expire_seconds{ 604800 };
 
-        // 存储配置
+        /// 存储配置
         std::string m_storage_base_path{ "build/uploaded" };
         std::string m_temp_upload_path{ "build/temp_uploads" };
         uint32_t m_chunk_size{ 5242880 };
@@ -208,4 +208,4 @@ namespace disk::utils {
         int64_t m_redis_pool_size{ 0 };
     };
 
-} // namespace disk::utils
+} ///< namespace disk::utils

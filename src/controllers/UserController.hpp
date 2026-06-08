@@ -14,7 +14,7 @@
 
 namespace disk::user {
 
-    // ==================== Controller ====================
+    /// ==================== Controller ====================
 
     /**
      * @brief 用户控制器
@@ -127,4 +127,4 @@ namespace disk::user {
         std::unique_ptr<disk::user::UserService> m_user_service{};
     };
 
-} // namespace disk::user
+} ///< namespace disk::user

@@ -297,4 +297,4 @@ namespace disk::trash {
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
     };
 
-} // namespace disk::trash
+} ///< namespace disk::trash

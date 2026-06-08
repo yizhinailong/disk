@@ -204,7 +204,7 @@ TEST(ChangePasswordRequest, NewPasswordValidComplex) {
     EXPECT_EQ(result->new_password, "SecurePass456");
 }
 
-// ==================== UpdateProfileRequest Tests ====================
+/// ==================== UpdateProfileRequest Tests ====================
 
 static auto CreateUpdateProfileRequest(
     const std::optional<std::string>& nickname,
@@ -332,7 +332,7 @@ TEST(UpdateProfileRequest, WhitespaceTrimmed) {
     EXPECT_EQ(result->avatar.value(), "https://example.com/avatar.png");
 }
 
-// ==================== StorageResponse Tests ====================
+/// ==================== StorageResponse Tests ====================
 
 TEST(StorageResponse, ToJsonReturnsCorrectFormat) {
     disk::user::StorageResponse response{

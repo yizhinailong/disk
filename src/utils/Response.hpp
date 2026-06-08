@@ -66,7 +66,7 @@ namespace disk {
      */
     class Response {
     public:
-        // ==================== 成功响应 ====================
+        /// ==================== 成功响应 ====================
         /// 成功响应（无数据）
         [[nodiscard]]
         static auto Success() -> drogon::HttpResponsePtr {
@@ -106,7 +106,7 @@ namespace disk {
             return Success(data);
         }
 
-        // ==================== 错误响应 ====================
+        /// ==================== 错误响应 ====================
         /// 错误响应（从 Err 结构体）
         [[nodiscard]]
         static auto Error(const ::ErrorInfo& err) -> drogon::HttpResponsePtr {
@@ -143,7 +143,7 @@ namespace disk {
             return Error(ErrorInfo(code, message));
         }
 
-        // ==================== Result 类型支持 ====================
+        /// ==================== Result 类型支持 ====================
 
         /// 从 Result<T> 构造响应
         /**
@@ -175,4 +175,4 @@ namespace disk {
             return Error(result.error());
         }
     };
-} // namespace disk
+} ///< namespace disk

@@ -238,5 +238,5 @@ namespace disk::file {
             EXPECT_EQ(pool.ActiveCount(), baseline);
         }
 
-    } // namespace
-} // namespace disk::file
+    } ///< namespace
+} ///< namespace disk::file

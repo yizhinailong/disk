@@ -389,4 +389,4 @@ namespace disk::share {
         std::string m_jwt_secret;                                      ///< JWT密钥
     };
 
-} // namespace disk::share
+} ///< namespace disk::share

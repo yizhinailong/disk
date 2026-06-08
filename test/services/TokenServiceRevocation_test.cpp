@@ -55,9 +55,9 @@ namespace {
             .sign(jwt::algorithm::hs256{ secret });
     }
 
-    // ================================================================================
-    // Fixture: 初始化 TokenService 单例
-    // ================================================================================
+    /// ================================================================================
+    /// Fixture: 初始化 TokenService 单例
+    /// ================================================================================
 
     class TokenServiceRevocationTest : public ::testing::Test {
     protected:
@@ -80,39 +80,39 @@ namespace {
         std::shared_ptr<disk::services::TokenService> m_service;
     };
 
-    // ================================================================================
-    // (a) 登出后 access token 被撤销 — 缓存命中 revoked=true
-    // ================================================================================
+    /// ================================================================================
+    /// (a) 登出后 access token 被撤销 — 缓存命中 revoked=true
+    /// ================================================================================
 
     TEST_F(TokenServiceRevocationTest, RevokedTokenInCacheIsRejectedOnVerify) {
-        // VerifyAccessToken 仅检查签名/类型/过期 — 不检查撤销状态。
-        // 撤销检查由 IsAccessTokenRevoked（协程，需 Redis）在 JwtAuthFilter 中执行。
-        // 本测试验证：通过 SetRevocationCacheEntryForTest 模拟 InvalidateAccessToken
-        // 的本地缓存更新后，缓存条目正确反映 revoked=true。
+        /// VerifyAccessToken 仅检查签名/类型/过期 — 不检查撤销状态。
+        /// 撤销检查由 IsAccessTokenRevoked（协程，需 Redis）在 JwtAuthFilter 中执行。
+        /// 本测试验证：通过 SetRevocationCacheEntryForTest 模拟 InvalidateAccessToken
+        /// 的本地缓存更新后，缓存条目正确反映 revoked=true。
 
         const std::string jti = "jti-logout-revoked";
 
-        // 步骤 1：初始状态缓存为空
+        /// 步骤 1：初始状态缓存为空
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
 
-        // 步骤 2：VerifyAccessToken 成功（签名验证，不涉及撤销）
+        /// 步骤 2：VerifyAccessToken 成功（签名验证，不涉及撤销）
         auto token = BuildAccessToken(42, "logout_user", jti);
         auto verify_result = m_service->VerifyAccessToken(token);
         ASSERT_TRUE(verify_result.has_value()) << "Token should verify before revocation";
         EXPECT_EQ(verify_result.value().jti, jti);
 
-        // 步骤 3：模拟登出 — InvalidateAccessToken 内部会执行此缓存操作
-        //   m_revocation_cache[jti] = { .is_revoked = true, .expires_at = now + 7200s }
+        /// 步骤 3：模拟登出 — InvalidateAccessToken 内部会执行此缓存操作
+        ///   m_revocation_cache[jti] = { .is_revoked = true, .expires_at = now + 7200s }
         m_service->SetRevocationCacheEntryForTest(jti, true, 7200);
 
-        // 步骤 4：VerifyAccessToken 仍然成功（签名未变）
+        /// 步骤 4：VerifyAccessToken 仍然成功（签名未变）
         auto verify_after = m_service->VerifyAccessToken(token);
         ASSERT_TRUE(verify_after.has_value())
             << "VerifyAccessToken is signature-only; revocation is separate";
 
-        // 步骤 5：验证缓存中存在 revoked=true 条目
+        /// 步骤 5：验证缓存中存在 revoked=true 条目
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
-        // 同一 jti 覆盖后仍是 1 条
+        /// 同一 jti 覆盖后仍是 1 条
         m_service->SetRevocationCacheEntryForTest(jti, true, 7200);
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u)
             << "Same jti should overwrite, not duplicate";
@@ -129,8 +129,8 @@ namespace {
     }
 
     TEST_F(TokenServiceRevocationTest, RevokeAccessTokenSetsCacheToRevokedWithLongTtl) {
-        // 模拟 InvalidateAccessToken 的本地缓存行为：
-        // revoked=true 的条目 TTL = 7200s（与 access token 过期时间一致）
+        /// 模拟 InvalidateAccessToken 的本地缓存行为：
+        /// revoked=true 的条目 TTL = 7200s（与 access token 过期时间一致）
         const std::string jti = "jti-revoke-long-ttl";
 
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
@@ -138,14 +138,14 @@ namespace {
 
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
 
-        // 同一 jti 再次设为 revoked=true，仍为 1 条
+        /// 同一 jti 再次设为 revoked=true，仍为 1 条
         m_service->SetRevocationCacheEntryForTest(jti, true, TokenService::GetAccessTokenExpireSeconds());
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
     }
 
     TEST_F(TokenServiceRevocationTest, NonRevokedTokenHasShortNegativeCacheTtl) {
-        // 模拟 IsAccessTokenRevoked 查询 Redis 后缓存 revoked=false 的行为：
-        // 否定缓存 TTL = 5s，确保撤销操作能在短时间内生效
+        /// 模拟 IsAccessTokenRevoked 查询 Redis 后缓存 revoked=false 的行为：
+        /// 否定缓存 TTL = 5s，确保撤销操作能在短时间内生效
         const std::string jti = "jti-non-revoked";
 
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
@@ -155,54 +155,54 @@ namespace {
     }
 
     TEST_F(TokenServiceRevocationTest, FullRevocationFlowViaCache) {
-        // 完整撤销流程模拟：verify → revoke(缓存插入) → verify → 确认缓存状态
+        /// 完整撤销流程模拟：verify → revoke(缓存插入) → verify → 确认缓存状态
         const std::string jti = "jti-full-flow";
 
-        // 1. 初始状态：缓存为空，token 验证通过
+        /// 1. 初始状态：缓存为空，token 验证通过
         auto token = BuildAccessToken(100, "flow_user", jti);
         auto result = m_service->VerifyAccessToken(token);
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u)
             << "VerifyAccessToken should not populate revocation cache";
 
-        // 2. 模拟登出：缓存设为 revoked=true
+        /// 2. 模拟登出：缓存设为 revoked=true
         m_service->SetRevocationCacheEntryForTest(jti, true, TokenService::GetAccessTokenExpireSeconds());
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
 
-        // 3. VerifyAccessToken 仍成功（签名级验证，不查撤销缓存）
+        /// 3. VerifyAccessToken 仍成功（签名级验证，不查撤销缓存）
         result = m_service->VerifyAccessToken(token);
         ASSERT_TRUE(result.has_value())
             << "VerifyAccessToken is signature-only; actual revocation check is in JwtAuthFilter";
 
-        // 4. 缓存中存在 revoked=true 条目
+        /// 4. 缓存中存在 revoked=true 条目
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
 
-        // 5. 清除缓存后（模拟 Redis + 本地缓存均过期）
+        /// 5. 清除缓存后（模拟 Redis + 本地缓存均过期）
         m_service->ClearRevocationCache();
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
     }
 
-    // ================================================================================
-    // (b) 过期本地缓存条目不保留旧的认证成功状态
-    //     热路径 IsAccessTokenRevoked 仅擦除当前访问的单条过期条目，不做全量扫描。
-    //     全量清理由后台维护回调 EvictExpiredCacheEntries 负责。
-    // ================================================================================
+    /// ================================================================================
+    /// (b) 过期本地缓存条目不保留旧的认证成功状态
+    ///     热路径 IsAccessTokenRevoked 仅擦除当前访问的单条过期条目，不做全量扫描。
+    ///     全量清理由后台维护回调 EvictExpiredCacheEntries 负责。
+    /// ================================================================================
 
     TEST_F(TokenServiceRevocationTest, StaleCacheEntryEvictedOnNextLookup) {
-        // 插入一条过期条目（TTL=-1 → expires_at 在过去）
+        /// 插入一条过期条目（TTL=-1 → expires_at 在过去）
         m_service->SetRevocationCacheEntryForTest("jti-stale-entry", true, -1);
         ASSERT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
 
-        // IsAccessTokenRevoked 是协程，无法在单元测试中直接调用。
-        // 但 ClearRevocationCache 可以模拟"过期条目被清理"的效果：
-        // 热路径会对被查找的过期条目执行 erase(it)，这里验证清理后缓存确实为空。
+        /// IsAccessTokenRevoked 是协程，无法在单元测试中直接调用。
+        /// 但 ClearRevocationCache 可以模拟"过期条目被清理"的效果：
+        /// 热路径会对被查找的过期条目执行 erase(it)，这里验证清理后缓存确实为空。
         m_service->ClearRevocationCache();
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u)
             << "Evicted entry should be removed from cache";
     }
 
     TEST_F(TokenServiceRevocationTest, ExpiredEntryInsertedAndThenCleared) {
-        // 验证过期条目插入后确实存在，清除后确实消失
+        /// 验证过期条目插入后确实存在，清除后确实消失
         m_service->SetRevocationCacheEntryForTest("jti-expired-a", true, -10);
         m_service->SetRevocationCacheEntryForTest("jti-expired-b", false, -5);
         ASSERT_EQ(m_service->GetRevocationCacheSizeForTest(), 2u);
@@ -213,31 +213,31 @@ namespace {
     }
 
     TEST_F(TokenServiceRevocationTest, NonExpiredCacheEntrySurvivesAfterLookup) {
-        // 非过期条目不应被清理
+        /// 非过期条目不应被清理
         m_service->SetRevocationCacheEntryForTest("jti-fresh-entry", true, 7200);
         ASSERT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
 
-        // 插入另一条非过期条目
+        /// 插入另一条非过期条目
         m_service->SetRevocationCacheEntryForTest("jti-fresh-entry-2", false, 5);
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 2u);
 
-        // 缓存大小不变 — 非过期条目不会被热路径擦除
+        /// 缓存大小不变 — 非过期条目不会被热路径擦除
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 2u)
             << "Non-expired entries should not be evicted";
     }
 
     TEST_F(TokenServiceRevocationTest, MixedExpiredAndFreshEntries) {
-        // 2 条过期 + 1 条有效
+        /// 2 条过期 + 1 条有效
         m_service->SetRevocationCacheEntryForTest("jti-expired-a", true, -1);
         m_service->SetRevocationCacheEntryForTest("jti-expired-b", false, -1);
         m_service->SetRevocationCacheEntryForTest("jti-valid", true, 7200);
         ASSERT_EQ(m_service->GetRevocationCacheSizeForTest(), 3u);
 
-        // 热路径不调用 EvictExpiredCacheEntries()，所有条目仍在缓存中
+        /// 热路径不调用 EvictExpiredCacheEntries()，所有条目仍在缓存中
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 3u)
             << "Hot path does not perform bulk sweep";
 
-        // 清除后验证：全部移除
+        /// 清除后验证：全部移除
         m_service->ClearRevocationCache();
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
     }
@@ -250,9 +250,9 @@ namespace {
             << "Hot path does not perform bulk sweep";
     }
 
-    // ================================================================================
-    // (c) 被撤销令牌路径仍映射到 Code::TokenRevoked
-    // ================================================================================
+    /// ================================================================================
+    /// (c) 被撤销令牌路径仍映射到 Code::TokenRevoked
+    /// ================================================================================
 
     TEST_F(TokenServiceRevocationTest, TokenRevokedErrorCodeHasCorrectHttpStatus) {
         auto http_status = disk::error::GetHttpStatus(Code::TokenRevoked);
@@ -276,9 +276,9 @@ namespace {
         EXPECT_EQ(static_cast<uint32_t>(Code::TokenRevoked), 40111u);
     }
 
-    // ================================================================================
-    // (d) 成功认证仍暴露 user_id / username
-    // ================================================================================
+    /// ================================================================================
+    /// (d) 成功认证仍暴露 user_id / username
+    /// ================================================================================
 
     TEST_F(TokenServiceRevocationTest, VerifyAccessTokenExposesUserId) {
         auto token = BuildAccessToken(42, "attr_user", "jti-attr-user-id");
@@ -315,9 +315,9 @@ namespace {
         EXPECT_EQ(claims.jti, "jti-full-attrs");
     }
 
-    // ================================================================================
-    // 撤销缓存边界回归测试
-    // ================================================================================
+    /// ================================================================================
+    /// 撤销缓存边界回归测试
+    /// ================================================================================
 
     TEST_F(TokenServiceRevocationTest, ClearCacheDropsAllEntries) {
         for (int i = 0; i < 10; ++i) {
@@ -347,9 +347,9 @@ namespace {
         EXPECT_EQ(result.value().user_id, 7u);
     }
 
-    // ================================================================================
-    // 否定缓存 TTL 常量测试
-    // ================================================================================
+    /// ================================================================================
+    /// 否定缓存 TTL 常量测试
+    /// ================================================================================
 
     TEST_F(TokenServiceRevocationTest, NegativeCacheTtlIsFiveSeconds) {
         EXPECT_EQ(TokenService::GetNegativeCacheTtlSeconds(), 5);
@@ -362,14 +362,14 @@ namespace {
         ) << "Positive cache entries should outlive negative cache entries";
     }
 
-    // ================================================================================
-    // Simulated JwtAuthFilter flow — verify → revoke → verify → cache check
-    //
-    // This replicates the JwtAuthFilter::doFilter logic at the unit-test level:
-    //   1. VerifyAccessToken (signature/type/expiry) — should succeed
-    //   2. IsAccessTokenRevoked — checked via local cache (simulated)
-    //   3. After revocation, cache reflects revoked=true
-    // ================================================================================
+    /// ================================================================================
+    /// Simulated JwtAuthFilter flow — verify → revoke → verify → cache check
+    ///
+    /// This replicates the JwtAuthFilter::doFilter logic at the unit-test level:
+    ///   1. VerifyAccessToken (signature/type/expiry) — should succeed
+    ///   2. IsAccessTokenRevoked — checked via local cache (simulated)
+    ///   3. After revocation, cache reflects revoked=true
+    /// ================================================================================
 
     TEST_F(TokenServiceRevocationTest, SimulatedFilterFlowBeforeRevocation) {
         const std::string jti = "jti-filter-sim-before";
@@ -386,7 +386,7 @@ namespace {
             << "VerifyAccessToken does not populate revocation cache";
 
         m_service->SetRevocationCacheEntryForTest(jti, false, TokenService::GetNegativeCacheTtlSeconds());
-        // Simulate IsAccessTokenRevoked → Redis miss → cache false (not revoked)
+        /// Simulate IsAccessTokenRevoked → Redis miss → cache false (not revoked)
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
     }
 
@@ -395,23 +395,23 @@ namespace {
 
         auto token = BuildAccessToken(42, "revoked_user", jti);
 
-        // Step 1: VerifyAccessToken succeeds
+        /// Step 1: VerifyAccessToken succeeds
         auto verify_result = m_service->VerifyAccessToken(token);
         ASSERT_TRUE(verify_result.has_value());
         EXPECT_EQ(verify_result.value().user_id, 42u);
 
-        // Step 2: Simulate InvalidateAccessToken — local cache set to revoked=true
+        /// Step 2: Simulate InvalidateAccessToken — local cache set to revoked=true
         m_service->SetRevocationCacheEntryForTest(jti, true, TokenService::GetAccessTokenExpireSeconds());
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
 
-        // Step 3: VerifyAccessToken still succeeds (signature-level only)
+        /// Step 3: VerifyAccessToken still succeeds (signature-level only)
         auto verify_after = m_service->VerifyAccessToken(token);
         ASSERT_TRUE(verify_after.has_value())
             << "VerifyAccessToken is signature-only; revocation is checked separately";
 
-        // Step 4: Cache correctly reflects revoked=true
-        // In real JwtAuthFilter, co_await IsAccessTokenRevoked(jti) would return true
-        // and the filter would return Response::Error(Code::TokenRevoked)
+        /// Step 4: Cache correctly reflects revoked=true
+        /// In real JwtAuthFilter, co_await IsAccessTokenRevoked(jti) would return true
+        /// and the filter would return Response::Error(Code::TokenRevoked)
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
     }
 
@@ -420,7 +420,7 @@ namespace {
 
         auto token = BuildAccessToken(100, "valid_user", jti);
 
-        // Step 1: VerifyAccessToken succeeds with correct claims
+        /// Step 1: VerifyAccessToken succeeds with correct claims
         auto verify_result = m_service->VerifyAccessToken(token);
         ASSERT_TRUE(verify_result.has_value());
         const auto& claims = verify_result.value();
@@ -428,21 +428,21 @@ namespace {
         EXPECT_EQ(claims.username, "valid_user");
         EXPECT_EQ(claims.jti, jti);
 
-        // Step 2: Cache is empty — no prior revocation check
+        /// Step 2: Cache is empty — no prior revocation check
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
 
-        // Step 3: Simulate IsAccessTokenRevoked → not revoked
-        // Cache false with short negative TTL
+        /// Step 3: Simulate IsAccessTokenRevoked → not revoked
+        /// Cache false with short negative TTL
         m_service->SetRevocationCacheEntryForTest(jti, false, TokenService::GetNegativeCacheTtlSeconds());
 
-        // Step 4: JwtAuthFilter would set request attributes and return nullptr
-        // attributes: user_id=100, username="valid_user"
+        /// Step 4: JwtAuthFilter would set request attributes and return nullptr
+        /// attributes: user_id=100, username="valid_user"
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
     }
 
-    // ================================================================================
-    // TTL contract tests — revoked vs non-revoked cache TTLs
-    // ================================================================================
+    /// ================================================================================
+    /// TTL contract tests — revoked vs non-revoked cache TTLs
+    /// ================================================================================
 
     TEST_F(TokenServiceRevocationTest, RevokedEntryUsesAccessTokenTtl) {
         const std::string jti = "jti-ttl-revoked";
@@ -464,4 +464,4 @@ namespace {
         EXPECT_EQ(TokenService::GetRefreshTokenExpireSeconds(), 604800);
     }
 
-} // namespace
+} ///< namespace

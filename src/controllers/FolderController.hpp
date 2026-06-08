@@ -14,7 +14,7 @@
 
 namespace disk::folder {
 
-    // ==================== Controller ====================
+    /// ==================== Controller ====================
 
     class FolderController : public drogon::HttpController<FolderController> {
     public:
@@ -81,4 +81,4 @@ namespace disk::folder {
         std::unique_ptr<FolderService> m_folder_service{};
     };
 
-} // namespace disk::folder
+} ///< namespace disk::folder

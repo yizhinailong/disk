@@ -328,7 +328,7 @@ namespace disk::file {
         static constexpr auto UPLOAD_TASK_CACHE_TTL = std::chrono::seconds(60);
         static constexpr double UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS = 60.0;
 
-        // ── 原有私有方法（使用 m_db_client） ──
+        /// ── 原有私有方法（使用 m_db_client） ──
 
         [[nodiscard]]
         static auto BuildUploadTaskCacheEntry(const drogon_model::disk::UploadTasks& task)
@@ -383,7 +383,7 @@ namespace disk::file {
         [[nodiscard]]
         static auto IsImageMimeType(const std::string& mime_type) -> bool;
 
-        // ── 事务感知辅助方法（接受 DbClientPtr，可传入事务或普通连接） ──
+        /// ── 事务感知辅助方法（接受 DbClientPtr，可传入事务或普通连接） ──
 
         /**
          * @brief 检查并扣除存储配额（事务版）
@@ -489,4 +489,4 @@ namespace disk::file {
         std::shared_mutex m_upload_task_cache_mutex;                               ///< 上传任务缓存读写锁
     };
 
-} // namespace disk::file
+} ///< namespace disk::file

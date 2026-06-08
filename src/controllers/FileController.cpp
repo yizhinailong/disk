@@ -30,7 +30,7 @@ namespace disk::file {
 
         Logger::Debug() << "Received initialize upload request: " << request->getPeerAddr().toIpPort();
 
-        // 1. 解析并验证请求参数
+        /// 1. 解析并验证请求参数
         auto parse_result = InitUploadRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "Initialize upload request parameter validation failed: "
@@ -41,10 +41,10 @@ namespace disk::file {
                   << "\", file_size=" << parse_result->file_size
                   << ", parent_id=" << parse_result->parent_id;
 
-        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 调用 Service 层初始化上传
+        /// 3. 调用 Service 层初始化上传
         auto result = co_await m_file_service->InitUpload(*parse_result, user_id);
         if (!result) {
             Logger::Error() << "Initialize upload failed: " << result.error().message
@@ -52,7 +52,7 @@ namespace disk::file {
             co_return Response::Error(result.error());
         }
 
-        // 4. 构造响应
+        /// 4. 构造响应
         Logger::Debug() << "Initialize upload successful: upload_id=" << result->upload_id
                   << ", instant_upload=" << result->instant_upload << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
@@ -63,16 +63,16 @@ namespace disk::file {
 
         Logger::Debug() << "Received upload chunk request: " << request->getPeerAddr().toIpPort();
 
-        // 1. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        /// 1. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 2. 从查询参数提取元数据
-        // 注意：UploadChunk 使用查询参数 (upload_id, chunk_index, chunk_hash) + 原始二进制请求体 (application/octet-stream)
+        /// 2. 从查询参数提取元数据
+        /// 注意：UploadChunk 使用查询参数 (upload_id, chunk_index, chunk_hash) + 原始二进制请求体 (application/octet-stream)
         const auto upload_id = std::string(request->getParameter("upload_id"));
         const auto chunk_index_str = std::string(request->getParameter("chunk_index"));
         const auto chunk_hash = std::string(request->getParameter("chunk_hash"));
 
-        // 验证必填参数
+        /// 验证必填参数
         if (upload_id.empty()) {
             Logger::Warn() << "Upload chunk request missing upload_id parameter";
             co_return Response::Error(
@@ -92,7 +92,7 @@ namespace disk::file {
             );
         }
 
-        // 解析 chunk_index
+        /// 解析 chunk_index
         uint32_t chunk_index = 0;
         try {
             chunk_index = static_cast<uint32_t>(std::stoul(chunk_index_str));
@@ -103,7 +103,7 @@ namespace disk::file {
             );
         }
 
-        // 验证 chunk_hash 格式（32位小写十六进制）
+        /// 验证 chunk_hash 格式（32位小写十六进制）
         if (chunk_hash.length() != 32) {
             Logger::Warn() << "Invalid chunk_hash format: " << chunk_hash;
             co_return Response::Error(ErrorInfo(
@@ -121,7 +121,7 @@ namespace disk::file {
             }
         }
 
-        // 3. 获取分片数据（从请求体）
+        /// 3. 获取分片数据（从请求体）
         std::string_view chunk_data = request->body();
         if (chunk_data.empty()) {
             Logger::Warn() << "Upload chunk request missing chunk data";
@@ -131,7 +131,7 @@ namespace disk::file {
         Logger::Debug() << "Upload chunk parameters validated: upload_id=" << upload_id
                   << ", chunk_index=" << chunk_index << ", chunk_size=" << chunk_data.size();
 
-        // 4. 调用 Service 层上传分片
+        /// 4. 调用 Service 层上传分片
         auto result =
             co_await m_file_service
                 ->UploadChunk(upload_id, chunk_index, chunk_hash, chunk_data, user_id);
@@ -141,7 +141,7 @@ namespace disk::file {
             co_return Response::Error(result.error());
         }
 
-        // 5. 构造响应
+        /// 5. 构造响应
         Logger::Debug() << "Upload chunk successful: chunk_index=" << result->chunk_index
                   << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";
         co_return Response::Success(result->ToJson());
@@ -152,7 +152,7 @@ namespace disk::file {
 
         Logger::Debug() << "Received complete upload request: " << request->getPeerAddr().toIpPort();
 
-        // 1. 解析并验证请求参数
+        /// 1. 解析并验证请求参数
         auto parse_result = CompleteUploadRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "Complete upload request parameter validation failed: "
@@ -161,10 +161,10 @@ namespace disk::file {
         }
         Logger::Debug() << "Complete upload parameters validated: upload_id=" << parse_result->upload_id;
 
-        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 调用 Service 层完成上传
+        /// 3. 调用 Service 层完成上传
         auto result = co_await m_file_service->CompleteUpload(parse_result->upload_id, user_id);
         if (!result) {
             Logger::Error() << "Complete upload failed: " << result.error().message
@@ -173,7 +173,7 @@ namespace disk::file {
             co_return Response::Error(result.error());
         }
 
-        // 4. 构造响应
+        /// 4. 构造响应
         Logger::Debug() << "Complete upload successful: file_id=" << result->file.id << ", filename=\""
                   << result->file.name << "\""
                   << " (user_id=" << user_id << ")";
@@ -186,16 +186,16 @@ namespace disk::file {
         Logger::Debug() << "Received cancel upload request: " << request->getPeerAddr().toIpPort()
                   << ", upload_id=" << upload_id;
 
-        // 1. 验证 upload_id 非空
+        /// 1. 验证 upload_id 非空
         if (upload_id.empty()) {
             Logger::Warn() << "Cancel upload request missing upload_id";
             co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "Missing upload_id"));
         }
 
-        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 调用 Service 层取消上传
+        /// 3. 调用 Service 层取消上传
         auto result = co_await m_file_service->CancelUpload(upload_id, user_id);
         if (!result) {
             Logger::Error() << "Cancel upload failed: " << result.error().message
@@ -203,7 +203,7 @@ namespace disk::file {
             co_return Response::Error(result.error());
         }
 
-        // 4. 返回成功响应
+        /// 4. 返回成功响应
         Logger::Debug() << "Cancel upload successful: upload_id=" << upload_id << " (user_id=" << user_id
                   << ")";
         co_return Response::Success({});
@@ -214,7 +214,7 @@ namespace disk::file {
 
         Logger::Info() << "Received file list request: " << request->getPeerAddr().toIpPort();
 
-        // 1. 解析并验证请求参数
+        /// 1. 解析并验证请求参数
         auto parse_result = FileListRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "File list request parameter validation failed: "
@@ -226,10 +226,10 @@ namespace disk::file {
                   << ", sort_by=" << parse_result->sort_by
                   << ", sort_order=" << parse_result->sort_order << ", type=" << parse_result->type;
 
-        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 调用 Service 层获取文件列表
+        /// 3. 调用 Service 层获取文件列表
         auto result = co_await m_file_service->GetFileList(*parse_result, user_id);
         if (!result) {
             Logger::Error() << "Get file list failed: " << result.error().message
@@ -237,7 +237,7 @@ namespace disk::file {
             co_return Response::Error(result.error());
         }
 
-        // 4. 构造响应
+        /// 4. 构造响应
         Logger::Info() << "Get file list successful: items=" << result->items.size()
                  << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
@@ -249,7 +249,7 @@ namespace disk::file {
         Logger::Info() << "Received get file detail request: " << request->getPeerAddr().toIpPort()
                  << ", file_id=" << file_id;
 
-        // 1. 解析并验证路径参数
+        /// 1. 解析并验证路径参数
         auto parse_result = DownloadInfoRequest::FromPath(file_id);
         if (!parse_result) {
             Logger::Warn() << "Get file detail request parameter validation failed: "
@@ -258,10 +258,10 @@ namespace disk::file {
         }
         Logger::Debug() << "Get file detail parameters validated: file_id=" << parse_result->file_id;
 
-        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 调用 Service 层获取文件详情
+        /// 3. 调用 Service 层获取文件详情
         auto result = co_await m_file_service->GetFileDetail(parse_result->file_id, user_id);
         if (!result) {
             Logger::Error() << "Get file detail failed: " << result.error().message
@@ -269,7 +269,7 @@ namespace disk::file {
             co_return Response::Error(result.error());
         }
 
-        // 4. 构造响应
+        /// 4. 构造响应
         Logger::Info() << "Get file detail successful: name=" << result->name
                  << " (user_id=" << user_id << ", file_id=" << file_id << ")";
         co_return Response::Success(result->ToJson());
@@ -281,7 +281,7 @@ namespace disk::file {
         Logger::Info() << "Received get download info request: " << request->getPeerAddr().toIpPort()
                  << ", file_id=" << file_id;
 
-        // 1. 解析并验证路径参数
+        /// 1. 解析并验证路径参数
         auto parse_result = disk::file::DownloadInfoRequest::FromPath(file_id);
         if (!parse_result) {
             Logger::Warn() << "Get download info request parameter validation failed: "
@@ -290,10 +290,10 @@ namespace disk::file {
         }
         Logger::Debug() << "Get download info parameters validated: file_id=" << parse_result->file_id;
 
-        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 调用 Service 层获取下载信息
+        /// 3. 调用 Service 层获取下载信息
         auto result = co_await m_file_service->GetDownloadInfo(parse_result->file_id, user_id);
         if (!result) {
             Logger::Error() << "Get download info failed: " << result.error().message
@@ -301,7 +301,7 @@ namespace disk::file {
             co_return Response::Error(result.error());
         }
 
-        // 4. 构造响应
+        /// 4. 构造响应
         Logger::Info() << "Get download info successful: filename=" << result->filename
                  << ", size=" << result->file_size << " (user_id=" << user_id
                  << ", file_id=" << file_id << ")";
@@ -314,7 +314,7 @@ namespace disk::file {
         Logger::Info() << "Received download file request: " << request->getPeerAddr().toIpPort()
                  << ", file_id=" << file_id;
 
-        // 1. 解析并验证路径参数
+        /// 1. 解析并验证路径参数
         auto parse_result = disk::file::DownloadRequest::FromPath(file_id);
         if (!parse_result) {
             Logger::Warn() << "Download file request parameter validation failed: "
@@ -323,10 +323,10 @@ namespace disk::file {
         }
         Logger::Debug() << "Download file parameters validated: file_id=" << parse_result->file_id;
 
-        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 获取下载文件信息
+        /// 3. 获取下载文件信息
         auto info_result = co_await m_file_service->GetDownloadData(parse_result->file_id, user_id);
         if (!info_result) {
             Logger::Error() << "Get download data failed: " << info_result.error().message
@@ -339,7 +339,7 @@ namespace disk::file {
                  << ", filename=" << download_info.filename << ", size=" << download_info.file_size
                  << ", storage_path=" << download_info.storage_path;
 
-        // 4. 委托下载响应构造
+        /// 4. 委托下载响应构造
         co_return co_await BuildDownloadResponse(
             disk::controllers::DownloadParams{
                 .storage_path = download_info.storage_path,
@@ -359,7 +359,7 @@ namespace disk::file {
         Logger::Info() << "Received rename request: " << request->getPeerAddr().toIpPort()
                  << ", file_id=" << file_id;
 
-        // 1. 解析并验证路径参数和请求体
+        /// 1. 解析并验证路径参数和请求体
         auto parse_result = RenameRequest::FromPathAndRequest(file_id, request);
         if (!parse_result) {
             Logger::Warn() << "Rename request parameter validation failed: "
@@ -369,10 +369,10 @@ namespace disk::file {
         Logger::Debug() << "Rename parameters validated: file_id=" << parse_result->file_id
                   << ", new_name=\"" << parse_result->new_name << "\"";
 
-        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 调用 Service 层重命名文件
+        /// 3. 调用 Service 层重命名文件
         auto result = co_await m_file_service->Rename(
             parse_result->file_id,
             std::move(parse_result->new_name),
@@ -384,7 +384,7 @@ namespace disk::file {
             co_return Response::Error(result.error());
         }
 
-        // 4. 构造响应
+        /// 4. 构造响应
         Logger::Info() << "Rename successful: file_id=" << file_id << ", new_name=\"" << result->name
                  << "\""
                  << " (user_id=" << user_id << ")";
@@ -396,7 +396,7 @@ namespace disk::file {
 
         Logger::Info() << "Received move file request: " << request->getPeerAddr().toIpPort();
 
-        // 1. 解析并验证请求参数
+        /// 1. 解析并验证请求参数
         auto parse_result = MoveRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "Move file request parameter validation failed: "
@@ -407,10 +407,10 @@ namespace disk::file {
                   << parse_result->file_ids.size()
                   << ", target_folder_id=" << parse_result->target_folder_id;
 
-        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 调用 Service 层移动文件
+        /// 3. 调用 Service 层移动文件
         auto result = co_await m_file_service->Move(*parse_result, user_id);
         if (!result) {
             Logger::Error() << "Move file failed: " << result.error().message << " (user_id=" << user_id
@@ -418,7 +418,7 @@ namespace disk::file {
             co_return Response::Error(result.error());
         }
 
-        // 4. 构造响应
+        /// 4. 构造响应
         Logger::Info() << "Move file successful: moved_count=" << result->moved_count
                  << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
@@ -429,7 +429,7 @@ namespace disk::file {
 
         Logger::Info() << "Received copy file request: " << request->getPeerAddr().toIpPort();
 
-        // 1. 解析并验证请求参数
+        /// 1. 解析并验证请求参数
         auto parse_result = CopyRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "Copy file request parameter validation failed: "
@@ -440,10 +440,10 @@ namespace disk::file {
                   << parse_result->file_ids.size()
                   << ", target_folder_id=" << parse_result->target_folder_id;
 
-        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 调用 Service 层复制文件
+        /// 3. 调用 Service 层复制文件
         auto result = co_await m_file_service->Copy(*parse_result, user_id);
         if (!result) {
             Logger::Error() << "Copy file failed: " << result.error().message << " (user_id=" << user_id
@@ -451,7 +451,7 @@ namespace disk::file {
             co_return Response::Error(result.error());
         }
 
-        // 4. 构造响应
+        /// 4. 构造响应
         Logger::Info() << "Copy file successful: copied_count=" << result->copied_count
                  << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
@@ -462,7 +462,7 @@ namespace disk::file {
 
         Logger::Info() << "Received delete file request: " << request->getPeerAddr().toIpPort();
 
-        // 1. 解析并验证请求参数
+        /// 1. 解析并验证请求参数
         auto parse_result = DeleteRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "Delete file request parameter validation failed: "
@@ -473,10 +473,10 @@ namespace disk::file {
                   << parse_result->file_ids.size()
                   << ", folder_ids.size()=" << parse_result->folder_ids.size();
 
-        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 调用 Service 层删除文件（异常边界：防止未捕获异常导致连接中断）
+        /// 3. 调用 Service 层删除文件（异常边界：防止未捕获异常导致连接中断）
         try {
             auto result = co_await m_file_service->Delete(*parse_result, user_id);
             if (!result) {
@@ -485,7 +485,7 @@ namespace disk::file {
                 co_return Response::Error(result.error());
             }
 
-            // 4. 构造响应
+            /// 4. 构造响应
             Logger::Info() << "Delete file successful: deleted_count=" << result->deleted_count
                      << ", deleted_file_count=" << result->deleted_file_count
                      << ", deleted_folder_count=" << result->deleted_folder_count
@@ -505,7 +505,7 @@ namespace disk::file {
 
         Logger::Info() << "Received file search request: " << request->getPeerAddr().toIpPort();
 
-        // 1. 解析并验证请求参数
+        /// 1. 解析并验证请求参数
         auto parse_result = SearchRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "File search request parameter validation failed: "
@@ -515,10 +515,10 @@ namespace disk::file {
         Logger::Debug() << "File search parameters validated: keyword=\"" << parse_result->keyword
                   << "\"";
 
-        // 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
+        /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 3. 调用 Service 层搜索文件
+        /// 3. 调用 Service 层搜索文件
         auto result = co_await m_file_service->Search(*parse_result, user_id);
         if (!result) {
             Logger::Error() << "File search failed: " << result.error().message << " (user_id=" << user_id
@@ -526,10 +526,10 @@ namespace disk::file {
             co_return Response::Error(result.error());
         }
 
-        // 4. 构造响应
+        /// 4. 构造响应
         Logger::Info() << "File search successful: total=" << result->pagination.total
                  << ", page=" << result->pagination.page << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
-} // namespace disk::file
+} ///< namespace disk::file

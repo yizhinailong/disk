@@ -33,7 +33,7 @@ namespace disk::user {
         Logger::Info() << "Get user profile request: user_id=" << user_id;
 
         try {
-            // 单次聚合查询：用户基本信息 + 文件数量 + 文件夹数量
+            /// 单次聚合查询：用户基本信息 + 文件数量 + 文件夹数量
             auto result = co_await m_db_client->execSqlCoro(
                 "SELECT u.id, u.username, u.email, u.nickname, u.avatar, " "       u.storage_quota, u.storage_used, " "       u.created_at, u.updated_at, " "       (SELECT COUNT(*) FROM files WHERE user_id = u.id) AS file_count, " "       (SELECT COUNT(*) FROM folders WHERE user_id = u.id) AS folder_count " "FROM users u " "WHERE u.id = $1",
                 user_id
@@ -53,24 +53,24 @@ namespace disk::user {
             response.username = row["username"].as<std::string>();
             response.email = row["email"].as<std::string>();
 
-            // 处理可空 nickname
+            /// 处理可空 nickname
             if (!row["nickname"].isNull()) {
                 response.nickname = row["nickname"].as<std::string>();
             }
 
-            // 处理可空 avatar
+            /// 处理可空 avatar
             if (!row["avatar"].isNull()) {
                 response.avatar = row["avatar"].as<std::string>();
             }
 
-            // 复制存储信息
+            /// 复制存储信息
             response.storage_quota = row["storage_quota"].as<uint64_t>();
             response.storage_used = row["storage_used"].as<uint64_t>();
 
             response.file_count = row["file_count"].as<uint32_t>();
             response.folder_count = row["folder_count"].as<uint32_t>();
 
-            // 格式化时间戳
+            /// 格式化时间戳
             response.created_at = row["created_at"].as<std::string>();
             response.updated_at = row["updated_at"].as<std::string>();
 
@@ -101,12 +101,12 @@ namespace disk::user {
         try {
             CoroMapper<Users> mapper(m_db_client);
 
-            // 步骤 1: 查找用户
+            /// 步骤 1: 查找用户
             auto user =
                 co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
             Logger::Debug() << "Found user: " << user.getValueOfUsername() << " (ID: " << user_id << ")";
 
-            // 步骤 2: 验证旧密码
+            /// 步骤 2: 验证旧密码
             if (!HashUtil::VerifyPassword(request.old_password, user.getValueOfPasswordHash())) {
                 Logger::Warn() << "Old password is incorrect: user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(
@@ -116,7 +116,7 @@ namespace disk::user {
             }
             Logger::Debug() << "Old password verified successfully: user_id=" << user_id;
 
-            // 步骤 3: 拒绝与当前密码相同的密码
+            /// 步骤 3: 拒绝与当前密码相同的密码
             if (request.old_password == request.new_password) {
                 Logger::Warn() << "New password cannot be the same as old password: user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(
@@ -125,7 +125,7 @@ namespace disk::user {
                 ));
             }
 
-            // 步骤 4: 加密新密码
+            /// 步骤 4: 加密新密码
             Logger::Debug() << "Starting password hash computation: user_id=" << user_id;
             auto hash_result = HashUtil::HashPassword(request.new_password);
             if (!hash_result) {
@@ -137,7 +137,7 @@ namespace disk::user {
             }
             Logger::Debug() << "Password hash completed: user_id=" << user_id;
 
-            // 步骤 5: 更新数据库
+            /// 步骤 5: 更新数据库
             user.setPasswordHash(hash_result.value());
             co_await mapper.update(user);
 
@@ -175,12 +175,12 @@ namespace disk::user {
         try {
             CoroMapper<Users> mapper(m_db_client);
 
-            // 步骤 1: 查找用户
+            /// 步骤 1: 查找用户
             auto user =
                 co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
             Logger::Debug() << "Found user: " << user.getValueOfUsername();
 
-            // 步骤 2: 更新提供的字段
+            /// 步骤 2: 更新提供的字段
             if (request.nickname.has_value()) {
                 user.setNickname(*request.nickname);
                 Logger::Debug() << "Updating nickname: " << *request.nickname;
@@ -190,11 +190,11 @@ namespace disk::user {
                 Logger::Debug() << "Updating avatar: " << *request.avatar;
             }
 
-            // 步骤 3: 保存到数据库
+            /// 步骤 3: 保存到数据库
             co_await mapper.update(user);
             Logger::Info() << "User profile updated successfully: user_id=" << user_id;
 
-            // 步骤 4: 构建响应
+            /// 步骤 4: 构建响应
             UserProfileResponse response;
             response.id = user.getValueOfId();
             response.username = user.getValueOfUsername();
@@ -203,7 +203,7 @@ namespace disk::user {
             response.avatar = user.getAvatar() ? *user.getAvatar() : "";
             response.storage_quota = user.getValueOfStorageQuota();
             response.storage_used = user.getValueOfStorageUsed();
-            response.file_count = 0; // 下次 GetProfile 时会准确
+            response.file_count = 0; ///< 下次 GetProfile 时会准确
             response.folder_count = 0;
             response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
             response.updated_at = user.getValueOfUpdatedAt().toDbStringLocal();
@@ -238,7 +238,7 @@ namespace disk::user {
         Logger::Debug() << "Get user storage stats: user_id=" << user_id;
 
         try {
-            // 单次聚合查询：配额 + 已使用 + 文件数量 + 文件夹数量
+            /// 单次聚合查询：配额 + 已使用 + 文件数量 + 文件夹数量
             auto result = co_await m_db_client->execSqlCoro(
                 "SELECT u.storage_quota, " "       COALESCE((SELECT SUM(f.size) FROM files f WHERE f.user_id = u.id), 0) AS used, " "       (SELECT COUNT(*) FROM files WHERE user_id = u.id) AS file_count, " "       (SELECT COUNT(*) FROM folders WHERE user_id = u.id) AS folder_count " "FROM users u " "WHERE u.id = $1",
                 user_id
@@ -257,7 +257,7 @@ namespace disk::user {
             uint32_t file_count = row["file_count"].as<uint32_t>();
             uint32_t folder_count = row["folder_count"].as<uint32_t>();
 
-            // 百分比（1位小数）
+            /// 百分比（1位小数）
             double percentage = 0.0;
             if (quota > 0) {
                 percentage =
@@ -284,4 +284,4 @@ namespace disk::user {
         }
     }
 
-} // namespace disk::user
+} ///< namespace disk::user

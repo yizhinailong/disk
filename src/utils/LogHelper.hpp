@@ -58,7 +58,7 @@ public:
     static LogStream Fatal() { return LogStream(spdlog::level::critical); }
 };
 
-} // namespace disk::utils
+} ///< namespace disk::utils
 
-// Import Logger into disk namespace so it's accessible as Logger:: inside disk::*
+/// Import Logger into disk namespace so it's accessible as Logger:: inside disk::*
 namespace disk { using utils::Logger; }

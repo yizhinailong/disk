@@ -15,7 +15,7 @@
 namespace disk::trash {
     namespace {
 
-        // ==================== TrashService Test Fixtures ====================
+        /// ==================== TrashService Test Fixtures ====================
 
         class TrashServiceTest : public ::testing::Test {
         protected:
@@ -24,8 +24,8 @@ namespace disk::trash {
             void TearDown() override {}
         };
 
-        // ==================== TrashService Response DTO Tests ====================
-        // 这些测试验证 TrashService 方法使用的 DTO 结构
+        /// ==================== TrashService Response DTO Tests ====================
+        /// 这些测试验证 TrashService 方法使用的 DTO 结构
 
         class TrashServiceResponseDtoTest : public ::testing::Test {};
 
@@ -108,8 +108,8 @@ namespace disk::trash {
             EXPECT_EQ(json["size"].asUInt64(), 0U);
         }
 
-        // ==================== TrashService Batch Result Tests ====================
-        // 测试 Restore/Delete 操作返回的单项结果
+        /// ==================== TrashService Batch Result Tests ====================
+        /// 测试 Restore/Delete 操作返回的单项结果
 
         class TrashServiceBatchResultTest : public ::testing::Test {};
 
@@ -200,7 +200,7 @@ namespace disk::trash {
             );
         }
 
-        // ==================== TrashService Batch Summary Tests ====================
+        /// ==================== TrashService Batch Summary Tests ====================
 
         class TrashServiceBatchSummaryTest : public ::testing::Test {};
 
@@ -239,7 +239,7 @@ namespace disk::trash {
             );
         }
 
-        // ==================== TrashService Batch Response Tests ====================
+        /// ==================== TrashService Batch Response Tests ====================
 
         class TrashServiceBatchResponseTest : public ::testing::Test {};
 
@@ -309,7 +309,7 @@ namespace disk::trash {
             EXPECT_EQ(json["results"][1]["freed_space"].asUInt64(), 2048U);
         }
 
-        // ==================== TrashService DeleteAll Response Tests ====================
+        /// ==================== TrashService DeleteAll Response Tests ====================
 
         class TrashServiceDeleteAllTest : public ::testing::Test {};
 
@@ -342,47 +342,47 @@ namespace disk::trash {
             EXPECT_EQ(json["freed_space"].asUInt64(), 0U);
         }
 
-        // ==================== TrashService Path Computation Tests ====================
-        // 测试验证恢复项的预期路径格式
+        /// ==================== TrashService Path Computation Tests ====================
+        /// 测试验证恢复项的预期路径格式
 
         class TrashServicePathTest : public ::testing::Test {};
 
         TEST_F(TrashServicePathTest, RootFilePathFormat) {
-            // Files restored to root should have path: /filename.ext
+            /// Files restored to root should have path: /filename.ext
             std::string expected_path = "/document.pdf";
             EXPECT_TRUE(expected_path.starts_with("/"));
             EXPECT_TRUE(expected_path.ends_with(".pdf"));
         }
 
         TEST_F(TrashServicePathTest, NestedFilePathFormat) {
-            // Files restored to nested folder should have path: /parent/filename.ext
+            /// Files restored to nested folder should have path: /parent/filename.ext
             std::string expected_path = "/docs/reports/summary.pdf";
             EXPECT_TRUE(expected_path.starts_with("/"));
             EXPECT_TRUE(expected_path.find("/reports/") != std::string::npos);
         }
 
         TEST_F(TrashServicePathTest, RootFolderPathFormat) {
-            // Folders restored to root should have path: /foldername/
+            /// Folders restored to root should have path: /foldername/
             std::string expected_path = "/Projects/";
             EXPECT_TRUE(expected_path.starts_with("/"));
             EXPECT_TRUE(expected_path.ends_with("/"));
         }
 
         TEST_F(TrashServicePathTest, NestedFolderPathFormat) {
-            // Folders restored to nested location should have path: /parent/foldername/
+            /// Folders restored to nested location should have path: /parent/foldername/
             std::string expected_path = "/docs/archives/2024/";
             EXPECT_TRUE(expected_path.starts_with("/"));
             EXPECT_TRUE(expected_path.ends_with("/"));
             EXPECT_EQ(std::count(expected_path.begin(), expected_path.end(), '/'), 4);
         }
 
-        // ==================== TrashService Auto-Rename Pattern Tests ====================
-        // Tests verifying the expected rename format: name (n).ext
+        /// ==================== TrashService Auto-Rename Pattern Tests ====================
+        /// Tests verifying the expected rename format: name (n).ext
 
         class TrashServiceAutoRenameTest : public ::testing::Test {};
 
         TEST_F(TrashServiceAutoRenameTest, FileRenamePattern) {
-            // Auto-renamed files should follow: basename (n).ext
+            /// Auto-renamed files should follow: basename (n).ext
             std::string original = "report.pdf";
             std::string renamed = "report (1).pdf";
 
@@ -392,7 +392,7 @@ namespace disk::trash {
         }
 
         TEST_F(TrashServiceAutoRenameTest, FileRenameMultipleConflicts) {
-            // Multiple conflicts increment the number
+            /// Multiple conflicts increment the number
             std::vector<std::string> conflicts = { "report (1).pdf",
                                                    "report (2).pdf",
                                                    "report (10).pdf" };
@@ -404,7 +404,7 @@ namespace disk::trash {
         }
 
         TEST_F(TrashServiceAutoRenameTest, FolderRenamePattern) {
-            // Auto-renamed folders should follow: foldername (n)
+            /// Auto-renamed folders should follow: foldername (n)
             std::string original = "Documents";
             std::string renamed = "Documents (1)";
 
@@ -414,11 +414,11 @@ namespace disk::trash {
         }
 
         TEST_F(TrashServiceAutoRenameTest, NoExtensionFileRename) {
-            // Files without extension should still get renamed: filename (n)
+            /// Files without extension should still get renamed: filename (n)
             std::string renamed = "Makefile (1)";
 
             EXPECT_TRUE(renamed.find(" (1)") != std::string::npos);
         }
 
-    } // namespace
-} // namespace disk::trash
+    } ///< namespace
+} ///< namespace disk::trash

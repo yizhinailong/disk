@@ -353,5 +353,5 @@ namespace disk::trash {
             EXPECT_EQ(del_all.freed_space, 77U);
         }
 
-    } // namespace
-} // namespace disk::trash
+    } ///< namespace
+} ///< namespace disk::trash

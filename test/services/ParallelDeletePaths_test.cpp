@@ -28,27 +28,27 @@
 namespace disk::trash {
     namespace {
 
-        // ==================== 并行删除常量测试 ====================
+        /// ==================== 并行删除常量测试 ====================
 
         class ParallelDeletePathsTest : public ::testing::Test {};
 
         TEST_F(ParallelDeletePathsTest, MaxParallelDeletePathsConstant) {
-            // 验证并行删除的最大并行度常量
+            /// 验证并行删除的最大并行度常量
             constexpr size_t max_parallel = 4;
             EXPECT_EQ(max_parallel, 4u);
         }
 
-        // ==================== 空路径列表场景 ====================
+        /// ==================== 空路径列表场景 ====================
 
         TEST_F(ParallelDeletePathsTest, EmptyPathListChunkReturnsEmpty) {
-            // 空路径列表分块后应返回空
+            /// 空路径列表分块后应返回空
             std::vector<std::filesystem::path> empty;
             auto chunks = utils::BatchUtils::Chunk(empty, 4);
             EXPECT_TRUE(chunks.empty());
         }
 
         TEST_F(ParallelDeletePathsTest, EmptyPathListBatchDeleteResponse) {
-            // 空路径列表的 BatchDeleteResponse 应为空摘要
+            /// 空路径列表的 BatchDeleteResponse 应为空摘要
             BatchDeleteResponse response;
             response.summary.total = 0;
             response.summary.success_count = 0;
@@ -64,10 +64,10 @@ namespace disk::trash {
             EXPECT_EQ(json["results"].size(), 0u);
         }
 
-        // ==================== 单路径场景 ====================
+        /// ==================== 单路径场景 ====================
 
         TEST_F(ParallelDeletePathsTest, SinglePathChunkProducesOneChunk) {
-            // 单路径分块后应只有一个分块
+            /// 单路径分块后应只有一个分块
             std::vector<std::filesystem::path> single = { "/data/content/ab/cd/abcdef123456" };
             auto chunks = utils::BatchUtils::Chunk(single, 4);
 
@@ -77,7 +77,7 @@ namespace disk::trash {
         }
 
         TEST_F(ParallelDeletePathsTest, SinglePathDeleteResponse) {
-            // 单路径删除的 BatchDeleteResponse
+            /// 单路径删除的 BatchDeleteResponse
             BatchDeleteResponse response;
             response.summary.total = 1;
             response.summary.success_count = 1;
@@ -99,10 +99,10 @@ namespace disk::trash {
             EXPECT_EQ(json["results"][0]["freed_space"].asUInt64(), 1024u);
         }
 
-        // ==================== 多路径场景 ====================
+        /// ==================== 多路径场景 ====================
 
         TEST_F(ParallelDeletePathsTest, MultiplePathsChunkWithinSingleBatch) {
-            // 3 个路径（不超过 max_parallel=4）应在单个分块中
+            /// 3 个路径（不超过 max_parallel=4）应在单个分块中
             std::vector<std::filesystem::path> paths = {
                 "/data/content/ab/cd/abcdef123456",
                 "/data/content/ef/gh/efgh789012",
@@ -115,7 +115,7 @@ namespace disk::trash {
         }
 
         TEST_F(ParallelDeletePathsTest, MultiplePathsChunkSplitsAcrossBatches) {
-            // 7 个路径在 max_parallel=4 时应拆为 2 个分块
+            /// 7 个路径在 max_parallel=4 时应拆为 2 个分块
             std::vector<std::filesystem::path> paths = {
                 "/data/a1", "/data/a2", "/data/a3", "/data/a4",
                 "/data/b1", "/data/b2", "/data/b3",
@@ -128,7 +128,7 @@ namespace disk::trash {
         }
 
         TEST_F(ParallelDeletePathsTest, MultiplePathsExactBatchBoundary) {
-            // 恰好 4 个路径应在单个分块中
+            /// 恰好 4 个路径应在单个分块中
             std::vector<std::filesystem::path> paths = {
                 "/data/a", "/data/b", "/data/c", "/data/d",
             };
@@ -139,7 +139,7 @@ namespace disk::trash {
         }
 
         TEST_F(ParallelDeletePathsTest, ManyPathsProduceCorrectChunkCount) {
-            // 13 个路径在 chunk_size=4 时产生 4 个分块 (4+4+4+1)
+            /// 13 个路径在 chunk_size=4 时产生 4 个分块 (4+4+4+1)
             std::vector<std::filesystem::path> paths;
             for (int i = 0; i < 13; ++i) {
                 paths.emplace_back("/data/path_" + std::to_string(i));
@@ -154,7 +154,7 @@ namespace disk::trash {
         }
 
         TEST_F(ParallelDeletePathsTest, MultiplePathsBatchDeleteResponse) {
-            // 多路径部分成功、部分失败的 BatchDeleteResponse
+            /// 多路径部分成功、部分失败的 BatchDeleteResponse
             BatchDeleteResponse response;
             response.summary.total = 3;
             response.summary.success_count = 2;
@@ -187,13 +187,13 @@ namespace disk::trash {
             EXPECT_EQ(json["summary"]["failure_count"].asInt(), 1);
             ASSERT_EQ(json["results"].size(), 3u);
 
-            // 验证成功项
+            /// 验证成功项
             EXPECT_EQ(json["results"][0]["status"].asString(), "success");
             EXPECT_EQ(json["results"][0]["freed_space"].asUInt64(), 512u);
             EXPECT_EQ(json["results"][1]["status"].asString(), "success");
             EXPECT_EQ(json["results"][1]["freed_space"].asUInt64(), 1024u);
 
-            // 验证失败项
+            /// 验证失败项
             EXPECT_EQ(json["results"][2]["status"].asString(), "failed");
             ASSERT_TRUE(json["results"][2].isMember("error"));
             EXPECT_EQ(
@@ -202,7 +202,7 @@ namespace disk::trash {
             );
         }
 
-        // ==================== DeleteAllResponse 测试 ====================
+        /// ==================== DeleteAllResponse 测试 ====================
 
         class ParallelDeleteAllResponseTest : public ::testing::Test {};
 
@@ -218,7 +218,7 @@ namespace disk::trash {
         }
 
         TEST_F(ParallelDeleteAllResponseTest, AggregatedResponse) {
-            // 模拟并行删除多条路径后的汇总响应
+            /// 模拟并行删除多条路径后的汇总响应
             DeleteAllResponse response;
             response.deleted_count = 10;
             response.freed_space = 40960;
@@ -240,12 +240,12 @@ namespace disk::trash {
             EXPECT_EQ(json["freed_space"].asUInt64(), 0u);
         }
 
-        // ==================== BatchResultItem 删除场景测试 ====================
+        /// ==================== BatchResultItem 删除场景测试 ====================
 
         class ParallelDeleteResultItemTest : public ::testing::Test {};
 
         TEST_F(ParallelDeleteResultItemTest, SuccessItemOnlyHasFreedSpace) {
-            // 成功删除项应只包含 freed_space，不含 error 或 file_id
+            /// 成功删除项应只包含 freed_space，不含 error 或 file_id
             BatchResultItem item;
             item.trash_id = 100;
             item.status = "success";
@@ -297,5 +297,5 @@ namespace disk::trash {
             EXPECT_EQ(json["error"]["value"].asString(), "300");
         }
 
-    } // namespace
-} // namespace disk::trash
+    } ///< namespace
+} ///< namespace disk::trash

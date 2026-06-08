@@ -13,7 +13,7 @@
 
 namespace disk::health {
 
-    // ==================== Controller ====================
+    /// ==================== Controller ====================
 
     /**
      * @brief 健康检查控制器
@@ -49,4 +49,4 @@ namespace disk::health {
         std::unique_ptr<HealthService> m_health_service{};
     };
 
-} // namespace disk::health
+} ///< namespace disk::health

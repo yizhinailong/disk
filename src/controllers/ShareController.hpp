@@ -15,7 +15,7 @@
 
 namespace disk::share {
 
-    // ==================== Controller ====================
+    /// ==================== Controller ====================
 
     /**
      * @brief 分享控制器
@@ -185,4 +185,4 @@ namespace disk::share {
         disk::storage::IFileStorage* m_storage{};
     };
 
-} // namespace disk::share
+} ///< namespace disk::share

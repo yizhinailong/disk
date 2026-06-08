@@ -49,4 +49,4 @@ auto RunOnAuthCpuPool(Func func)
     co_return result;
 }
 
-} // namespace disk::utils
+} ///< namespace disk::utils

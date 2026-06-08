@@ -21,4 +21,4 @@ namespace disk::filters {
         [[nodiscard]]
         static auto GenerateRequestId() -> std::string;
     };
-} // namespace disk::filters
+} ///< namespace disk::filters

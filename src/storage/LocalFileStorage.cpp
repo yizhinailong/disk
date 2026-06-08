@@ -67,7 +67,7 @@ namespace disk::storage {
                   m_resume_loop(resume_loop) {}
 
             auto await_suspend(std::coroutine_handle<> handle) -> void {
-                // 先在线程池执行阻塞文件系统任务，再切回原协程继续处理结果。
+                /// 先在线程池执行阻塞文件系统任务，再切回原协程继续处理结果。
                 m_worker_queue->runTaskInQueue([this, handle]() mutable {
                     try {
                         this->setValue(m_task());
@@ -85,7 +85,7 @@ namespace disk::storage {
                     return;
                 }
 
-                // 某些单元测试可能不在事件循环线程内，此时直接恢复协程即可。
+                /// 某些单元测试可能不在事件循环线程内，此时直接恢复协程即可。
                 handle.resume();
             }
 
@@ -187,7 +187,7 @@ namespace disk::storage {
             );
         }
 
-    } // namespace
+    } ///< namespace
 
     using disk::utils::FileHashUtil;
 
@@ -241,7 +241,7 @@ namespace disk::storage {
         auto result = co_await RunBlockingFilesystemTask(
             m_worker_queue,
             [temp_dir, chunk_path, chunk_data = std::move(data)]() -> Result<void> {
-                // 防御性回退：目录应由 EnsureUploadTempDir 预创建，此处仅处理意外丢失。
+                /// 防御性回退：目录应由 EnsureUploadTempDir 预创建，此处仅处理意外丢失。
                 std::error_code ec;
                 if (!std::filesystem::exists(temp_dir, ec) || ec) {
                     std::filesystem::create_directories(temp_dir, ec);
@@ -627,4 +627,4 @@ namespace disk::storage {
         return std::filesystem::path(m_config_mgr->GetTempUploadPath()) / (upload_id + ".tmp");
     }
 
-} // namespace disk::storage
+} ///< namespace disk::storage

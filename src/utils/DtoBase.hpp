@@ -32,7 +32,7 @@ namespace disk {
 template <typename Derived>
 struct DtoBase {
 protected:
-    // ==================== FromRequest Helpers ====================
+    /// ==================== FromRequest Helpers ====================
 
     /// 提取 JSON body，无效时返回错误
     [[nodiscard]]
@@ -408,7 +408,7 @@ protected:
         return ids;
     }
 
-    // ==================== ToJson Helpers ====================
+    /// ==================== ToJson Helpers ====================
 
     /// 设置 uint64 字段（自动 UInt64 转换）
     static void SetField(Json::Value& json, const char* key, uint64_t value) {
@@ -533,4 +533,4 @@ protected:
     }
 };
 
-} // namespace disk
+} ///< namespace disk

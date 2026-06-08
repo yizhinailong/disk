@@ -186,4 +186,4 @@ namespace disk::storage {
         std::unordered_set<std::string> m_active_upload_ids;
     };
 
-} // namespace disk::storage
+} ///< namespace disk::storage

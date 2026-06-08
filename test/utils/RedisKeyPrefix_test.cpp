@@ -75,7 +75,7 @@ TEST(RedisKeyPrefix, BuildLoginRateLimitKeyIPv6WithPort) {
     EXPECT_EQ(result, "rate:login:2001:db8::1");
 }
 
-// ==================== Share Token Redis Key Tests ====================
+/// ==================== Share Token Redis Key Tests ====================
 
 TEST(RedisKeyPrefix, BuildShareTokenKeyValidShareCodeAndHash) {
     std::string share_code = "AbCd1234";

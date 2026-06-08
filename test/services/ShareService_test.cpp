@@ -14,8 +14,8 @@
 namespace disk::share {
     namespace {
 
-        // ==================== ShareService Response DTO Tests ====================
-        // 这些测试验证 ShareService 方法使用的 DTO 结构
+        /// ==================== ShareService Response DTO Tests ====================
+        /// 这些测试验证 ShareService 方法使用的 DTO 结构
 
         class ShareServiceResponseDtoTest : public ::testing::Test {};
 
@@ -182,7 +182,7 @@ namespace disk::share {
             EXPECT_EQ(json["updated_at"].asString(), "2026-02-15 12:00:00");
         }
 
-        // ==================== Cancel Share Response Tests ====================
+        /// ==================== Cancel Share Response Tests ====================
 
         class ShareServiceCancelTest : public ::testing::Test {};
 
@@ -262,13 +262,13 @@ namespace disk::share {
             EXPECT_EQ(json["summary"]["succeeded"].asInt(), 2);
             EXPECT_EQ(json["summary"]["failed"].asInt(), 1);
 
-            // 验证确定性顺序
+            /// 验证确定性顺序
             EXPECT_EQ(json["results"][0]["status"].asString(), "success");
             EXPECT_EQ(json["results"][1]["status"].asString(), "success");
             EXPECT_EQ(json["results"][2]["status"].asString(), "failed");
         }
 
-        // ==================== Access Share Response Tests ====================
+        /// ==================== Access Share Response Tests ====================
 
         class ShareServiceAccessTest : public ::testing::Test {};
 
@@ -295,7 +295,7 @@ namespace disk::share {
             EXPECT_EQ(json["files"][0]["name"].asString(), "shared_file.pdf");
         }
 
-        // ==================== Browse Share Response Tests ====================
+        /// ==================== Browse Share Response Tests ====================
 
         class ShareServiceBrowseTest : public ::testing::Test {};
 
@@ -343,7 +343,7 @@ namespace disk::share {
             EXPECT_EQ(json["name"].asString(), "Documents");
         }
 
-        // ==================== Share Status Enum Tests ====================
+        /// ==================== Share Status Enum Tests ====================
 
         class ShareServiceStatusTest : public ::testing::Test {};
 
@@ -359,7 +359,7 @@ namespace disk::share {
             EXPECT_EQ(ShareStatusToString(ShareStatus::Cancelled), "cancelled");
         }
 
-        // ==================== Share Permission Enum Tests ====================
+        /// ==================== Share Permission Enum Tests ====================
 
         class ShareServicePermissionTest : public ::testing::Test {};
 
@@ -389,7 +389,7 @@ namespace disk::share {
             EXPECT_FALSE(empty_opt.has_value());
         }
 
-        // ==================== ShareFile Tests ====================
+        /// ==================== ShareFile Tests ====================
 
         class ShareServiceFileTest : public ::testing::Test {};
 
@@ -408,7 +408,7 @@ namespace disk::share {
             EXPECT_EQ(json["size"].asUInt64(), 1234567U);
         }
 
-        // ==================== Pagination Tests ====================
+        /// ==================== Pagination Tests ====================
 
         class ShareServicePaginationTest : public ::testing::Test {};
 
@@ -427,7 +427,7 @@ namespace disk::share {
             pagination.page_size = 20;
             pagination.total = 45;
 
-            // 预期：(45 + 20 - 1) / 20 = 64 / 20 = 3
+            /// 预期：(45 + 20 - 1) / 20 = 64 / 20 = 3
             pagination.total_pages =
                 pagination.page_size > 0 ?
                     (pagination.total + pagination.page_size - 1) / pagination.page_size :
@@ -451,7 +451,7 @@ namespace disk::share {
             EXPECT_EQ(json["total_pages"].asInt(), 10);
         }
 
-        // ==================== Error Code Mapping Tests ====================
+        /// ==================== Error Code Mapping Tests ====================
 
         class ShareServiceErrorCodeTest : public ::testing::Test {};
 
@@ -475,14 +475,14 @@ namespace disk::share {
             EXPECT_EQ(status, drogon::k403Forbidden);
         }
 
-        // ==================== Contract Verification Tests ====================
+        /// ==================== Contract Verification Tests ====================
 
         class ShareServiceContractTest : public ::testing::Test {};
 
         TEST_F(ShareServiceContractTest, CancelShareResponseAlwaysHttp200) {
-            // 根据文档：批量取消即使有部分失败也返回 200
-            // 无论成功/失败计数如何，响应均有效
-            // 批量操作应始终返回 HTTP 200
+            /// 根据文档：批量取消即使有部分失败也返回 200
+            /// 无论成功/失败计数如何，响应均有效
+            /// 批量操作应始终返回 HTTP 200
             CancelShareResponse response;
             response.summary.total = 3;
             response.summary.succeeded = 2;
@@ -493,29 +493,29 @@ namespace disk::share {
         }
 
         TEST_F(ShareServiceContractTest, ShareIdIsExternalIdentifier) {
-            // 响应中的 share_id 是 share_code，不是内部 DB id
+            /// 响应中的 share_id 是 share_code，不是内部 DB id
             CreateShareResponse response;
             response.share_id = "abc12345";
 
-            // share_id 应为字符串 share_code，不是数字 id
+            /// share_id 应为字符串 share_code，不是数字 id
             EXPECT_TRUE(response.share_id.find_first_not_of("0123456789") != std::string::npos);
         }
 
         TEST_F(ShareServiceContractTest, ExpiresAtEmptyMeansPermanent) {
-            // 空的 expires_at 表示永久分享
+            /// 空的 expires_at 表示永久分享
             ShareDetailResponse response;
             response.expires_at = "";
 
-            // 永久分享的 expires_at 为空
+            /// 永久分享的 expires_at 为空
             EXPECT_TRUE(response.expires_at.empty());
         }
 
-        // ==================== Share API Regression Tests ====================
-        // 这些测试验证 API 规范要求的特定错误码分支
+        /// ==================== Share API Regression Tests ====================
+        /// 这些测试验证 API 规范要求的特定错误码分支
 
         class ShareApiRegressionTest : public ::testing::Test {};
 
-        // ==================== ShareListRequest Validation Tests ====================
+        /// ==================== ShareListRequest Validation Tests ====================
 
         class ShareListRequestTest : public ::testing::Test {};
 
@@ -609,7 +609,7 @@ namespace disk::share {
             }
         }
 
-        // ==================== ShareListResponse Ordering Tests ====================
+        /// ==================== ShareListResponse Ordering Tests ====================
 
         class ShareListOrderingTest : public ::testing::Test {};
 
@@ -657,7 +657,7 @@ namespace disk::share {
             EXPECT_TRUE(pagination.isMember("total_pages"));
         }
 
-        // ==================== ShareItem Field Contract Tests ====================
+        /// ==================== ShareItem Field Contract Tests ====================
 
         class ShareItemContractTest : public ::testing::Test {};
 
@@ -719,7 +719,7 @@ namespace disk::share {
             EXPECT_TRUE(json["status"].isString());
         }
 
-        // ==================== Pagination Consistency Tests ====================
+        /// ==================== Pagination Consistency Tests ====================
 
         class PaginationConsistencyTest : public ::testing::Test {};
 
@@ -761,7 +761,7 @@ namespace disk::share {
             EXPECT_EQ(p3.total_pages, 0);
         }
 
-        // ==================== CreateShareRequest Validation Tests ====================
+        /// ==================== CreateShareRequest Validation Tests ====================
 
         class CreateShareRequestTest : public ::testing::Test {};
 
@@ -956,12 +956,12 @@ namespace disk::share {
             EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
         }
 
-        // ==================== CreateShareResponse Contract Tests ====================
+        /// ==================== CreateShareResponse Contract Tests ====================
 
         class CreateShareResponseContractTest : public ::testing::Test {};
 
         TEST_F(CreateShareResponseContractTest, SingleFileCreateResponseFormat) {
-            // 验证单文件分享创建成功后的响应格式
+            /// 验证单文件分享创建成功后的响应格式
             CreateShareResponse response;
             response.share_id = "abc12345";
             response.share_link = "/s/abc12345";
@@ -971,7 +971,7 @@ namespace disk::share {
 
             auto json = response.ToJson();
 
-            // share_id 是 share_code 字符串，不是内部数字 ID
+            /// share_id 是 share_code 字符串，不是内部数字 ID
             EXPECT_EQ(json["share_id"].asString(), "abc12345");
             EXPECT_EQ(json["share_link"].asString(), "/s/abc12345");
             EXPECT_FALSE(json.isMember("password"));
@@ -981,7 +981,7 @@ namespace disk::share {
         }
 
         TEST_F(CreateShareResponseContractTest, MultiFileCreateResponseUsesShareCode) {
-            // 多文件分享的响应仍然是一个 share_code（不是多个）
+            /// 多文件分享的响应仍然是一个 share_code（不是多个）
             CreateShareResponse response;
             response.share_id = "xyz789";
             response.share_link = "/s/xyz789";
@@ -997,7 +997,7 @@ namespace disk::share {
         }
 
         TEST_F(CreateShareResponseContractTest, CreateWithPasswordReturnsPlaintextPassword) {
-            // 创建分享时如果有密码，响应中包含明文密码（只返回一次）
+            /// 创建分享时如果有密码，响应中包含明文密码（只返回一次）
             CreateShareResponse response;
             response.share_id = "pass123";
             response.share_link = "/s/pass123";
@@ -1013,7 +1013,7 @@ namespace disk::share {
         }
 
         TEST_F(CreateShareResponseContractTest, CreateWithPermanentExpiryReturnsEmptyExpiresAt) {
-            // expire_days=0 表示永久分享，expires_at 为空字符串
+            /// expire_days=0 表示永久分享，expires_at 为空字符串
             CreateShareResponse response;
             response.share_id = "perm123";
             response.share_link = "/s/perm123";
@@ -1027,7 +1027,7 @@ namespace disk::share {
         }
 
         TEST_F(CreateShareResponseContractTest, CreateWithSevenDayExpiryReturnsCalculatedExpiresAt) {
-            // expire_days=7 时，expires_at 为 created_at + 7 天
+            /// expire_days=7 时，expires_at 为 created_at + 7 天
             CreateShareResponse response;
             response.share_id = "week123";
             response.share_link = "/s/week123";
@@ -1041,78 +1041,78 @@ namespace disk::share {
             EXPECT_EQ(json["created_at"].asString(), "2026-04-12 10:00:00");
         }
 
-        // ==================== Create Share Atomicity Contract Tests ====================
-        // 这些测试验证 Create 操作的原子性期望：
-        // - 成功：share 行 + share_files 行全部写入
-        // - 失败：share_files 插入异常不应留下孤立的 share 行
-        //
-        // 注意：当前实现没有事务包装，rollback 测试将作为未来的行为规范。
-        // 当 Task 5 添加事务后，这些测试会验证回滚行为。
+        /// ==================== Create Share Atomicity Contract Tests ====================
+        /// 这些测试验证 Create 操作的原子性期望：
+        /// - 成功：share 行 + share_files 行全部写入
+        /// - 失败：share_files 插入异常不应留下孤立的 share 行
+        ///
+        /// 注意：当前实现没有事务包装，rollback 测试将作为未来的行为规范。
+        /// 当 Task 5 添加事务后，这些测试会验证回滚行为。
 
         class ShareServiceCreateAtomicityTest : public ::testing::Test {};
 
         TEST_F(ShareServiceCreateAtomicityTest, CreateFlowStepsAreIdentified) {
-            // 验证 Create 流程的步骤数量和依赖关系：
-            // 1. ValidateFileOwnership — 查询 files 表验证所有权
-            // 2. GenerateShareCode — 纯计算，无 DB 操作
-            // 3. 计算 expires_at — 纯计算
-            // 4. HashPassword — 纯计算
-            // 5. Insert share row — 写入 shares 表
-            // 6. Loop: Insert share_files rows — 写入 share_files 表
-            // 7. Build response — 纯构造
+            /// 验证 Create 流程的步骤数量和依赖关系：
+            /// 1. ValidateFileOwnership — 查询 files 表验证所有权
+            /// 2. GenerateShareCode — 纯计算，无 DB 操作
+            /// 3. 计算 expires_at — 纯计算
+            /// 4. HashPassword — 纯计算
+            /// 5. Insert share row — 写入 shares 表
+            /// 6. Loop: Insert share_files rows — 写入 share_files 表
+            /// 7. Build response — 纯构造
 
-            // Create 流程步骤计数
-            constexpr std::size_t kDbWriteSteps = 2; // share insert + share_files loop
-            constexpr std::size_t kDbReadSteps = 1;  // ValidateFileOwnership
+            /// Create 流程步骤计数
+            constexpr std::size_t kDbWriteSteps = 2; ///< share insert + share_files loop
+            constexpr std::size_t kDbReadSteps = 1;  ///< ValidateFileOwnership
             constexpr std::size_t kTotalSteps = 7;
 
             EXPECT_EQ(kDbWriteSteps + kDbReadSteps + 4, kTotalSteps);
         }
 
         TEST_F(ShareServiceCreateAtomicityTest, FailureDuringShareFilesInsertReturnsInternalError) {
-            // 当 share_files 插入失败时，Create 返回 InternalError
-            // 错误码应与 Create 流程的 catch 块一致
+            /// 当 share_files 插入失败时，Create 返回 InternalError
+            /// 错误码应与 Create 流程的 catch 块一致
             auto error = ErrorInfo(ErrorCode::InternalError, "Failed to create share-file association");
             EXPECT_EQ(error.code, ErrorCode::InternalError);
         }
 
-        // ==================== Share Create Ownership Validation Tests ====================
+        /// ==================== Share Create Ownership Validation Tests ====================
 
         class ShareCreateOwnershipTest : public ::testing::Test {};
 
         TEST_F(ShareCreateOwnershipTest, OwnershipValidationErrorUsesFileNotFound) {
-            // 当文件不属于用户时，ValidateFileOwnership 返回 FileNotFound
+            /// 当文件不属于用户时，ValidateFileOwnership 返回 FileNotFound
             auto error = ErrorInfo(ErrorCode::FileNotFound, "File not found");
             EXPECT_EQ(error.code, ErrorCode::FileNotFound);
             EXPECT_EQ(Error::GetHttpStatus(ErrorCode::FileNotFound), drogon::k404NotFound);
         }
 
         TEST_F(ShareCreateOwnershipTest, OwnershipValidationQueriesFilesTable) {
-            // ValidateFileOwnership 通过 user_id + file_ids 查询 files 表
-            // 返回的文件数量应与请求的 file_ids 数量匹配
-            // 如果不匹配（部分文件不属于用户），应返回错误
+            /// ValidateFileOwnership 通过 user_id + file_ids 查询 files 表
+            /// 返回的文件数量应与请求的 file_ids 数量匹配
+            /// 如果不匹配（部分文件不属于用户），应返回错误
 
-            // 模拟：请求 3 个 file_ids，但只有 2 个属于用户
+            /// 模拟：请求 3 个 file_ids，但只有 2 个属于用户
             std::vector<uint64_t> requested_ids = { 1, 2, 3 };
             std::vector<uint64_t> owned_ids = { 1, 2 };
 
-            // 文件数量不匹配表示有文件不属于当前用户
+            /// 文件数量不匹配表示有文件不属于当前用户
             EXPECT_NE(requested_ids.size(), owned_ids.size());
         }
 
-        // ==================== Share Create Expiry Calculation Tests ====================
+        /// ==================== Share Create Expiry Calculation Tests ====================
 
         class ShareCreateExpiryTest : public ::testing::Test {};
 
         TEST_F(ShareCreateExpiryTest, ExpireDaysZeroMeansPermanent) {
-            // expire_days=0 → 不设置 expires_at → 永久分享
+            /// expire_days=0 → 不设置 expires_at → 永久分享
             int expire_days = 0;
             bool has_expiry = expire_days > 0;
             EXPECT_FALSE(has_expiry);
         }
 
         TEST_F(ShareCreateExpiryTest, ExpireDaysPositiveSetsExpiresAt) {
-            // expire_days>0 → expires_at = now + expire_days * 86400
+            /// expire_days>0 → expires_at = now + expire_days * 86400
             int expire_days = 7;
             bool has_expiry = expire_days > 0;
             EXPECT_TRUE(has_expiry);
@@ -1136,5 +1136,5 @@ namespace disk::share {
             EXPECT_EQ(expected_offset_seconds, 2592000);
         }
 
-    } // namespace
-} // namespace disk::share
+    } ///< namespace
+} ///< namespace disk::share

@@ -20,12 +20,12 @@
 
 namespace disk::health {
 
-    // ==================== 数据结构 ====================
+    /// ==================== 数据结构 ====================
 
     struct ComponentStatus {
-        std::string status;      // "healthy" or "unhealthy"
-        std::string message;     // 错误信息（可选）
-        int64_t latency_ms{ 0 }; // 响应延迟（毫秒）
+        std::string status;      ///< "healthy" or "unhealthy"
+        std::string message;     ///< 错误信息（可选）
+        int64_t latency_ms{ 0 }; ///< 响应延迟（毫秒）
 
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
@@ -40,12 +40,12 @@ namespace disk::health {
     };
 
     struct HealthResult {
-        std::string overall_status;                        // "healthy", "degraded", "unhealthy"
-        std::string version;                               // 系统版本
-        int64_t uptime{ 0 };                               // 运行时间（秒）
-        std::string timestamp;                             // ISO 8601 时间戳
-        int64_t total_check_ms{ 0 };                       // 健康检查总耗时（毫秒）
-        std::map<std::string, ComponentStatus> components; // 各组件状态
+        std::string overall_status;                        ///< "healthy", "degraded", "unhealthy"
+        std::string version;                               ///< 系统版本
+        int64_t uptime{ 0 };                               ///< 运行时间（秒）
+        std::string timestamp;                             ///< ISO 8601 时间戳
+        int64_t total_check_ms{ 0 };                       ///< 健康检查总耗时（毫秒）
+        std::map<std::string, ComponentStatus> components; ///< 各组件状态
 
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
@@ -65,7 +65,7 @@ namespace disk::health {
         }
     };
 
-    // ==================== Service ====================
+    /// ==================== Service ====================
 
     class HealthService {
     public:
@@ -91,4 +91,4 @@ namespace disk::health {
         std::chrono::steady_clock::time_point m_start_time;
     };
 
-} // namespace disk::health
+} ///< namespace disk::health

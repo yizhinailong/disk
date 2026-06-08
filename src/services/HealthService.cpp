@@ -33,13 +33,13 @@ namespace disk::health {
         result.version = "1.0.0";
         result.timestamp = GetTimestamp();
 
-        // 计算运行时间
+        /// 计算运行时间
         auto now = std::chrono::steady_clock::now();
         auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - m_start_time);
         result.uptime = uptime.count();
 
-        // 并行检查各组件：通过 co_future 启动 Redis 检查为独立异步任务，
-        // 同时 co_await 数据库检查，两者在不同连接上交错执行
+        /// 并行检查各组件：通过 co_future 启动 Redis 检查为独立异步任务，
+        /// 同时 co_await 数据库检查，两者在不同连接上交错执行
         auto check_start = std::chrono::steady_clock::now();
         auto redis_future = drogon::co_future(CheckRedis());
         auto db_status = co_await CheckDatabase();
@@ -51,7 +51,7 @@ namespace disk::health {
         result.components["database"] = db_status;
         result.components["redis"] = redis_status;
 
-        // 计算整体状态
+        /// 计算整体状态
         bool all_healthy = true;
         bool any_unhealthy = false;
 
@@ -82,7 +82,7 @@ namespace disk::health {
         auto start = std::chrono::steady_clock::now();
 
         try {
-            // 执行简单查询测试连接
+            /// 执行简单查询测试连接
             auto result = co_await m_db_client->execSqlCoro("SELECT 1");
             auto end = std::chrono::steady_clock::now();
             status.latency_ms =
@@ -138,4 +138,4 @@ namespace disk::health {
         return ss.str();
     }
 
-} // namespace disk::health
+} ///< namespace disk::health

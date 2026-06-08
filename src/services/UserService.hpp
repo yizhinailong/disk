@@ -137,4 +137,4 @@ namespace disk::user {
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
     };
 
-} // namespace disk::user
+} ///< namespace disk::user

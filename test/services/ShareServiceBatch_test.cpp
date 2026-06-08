@@ -259,7 +259,7 @@ namespace disk::share {
             EXPECT_EQ(cancel.results[0].error->reason, "internal_error");
         }
 
-        // ==================== Multi-File Create Characterization Tests ====================
+        /// ==================== Multi-File Create Characterization Tests ====================
 
         enum class CreateProbeState {
             Success,
@@ -447,11 +447,11 @@ namespace disk::share {
         }
 
         TEST_F(ShareServiceCreateCharacterizationTest, PartialShareFilesInsertLeavesNoOrphanRow) {
-            // 关键测试：当 share_files 插入部分失败时，
-            // 不应留下孤立的 share 行（无匹配的 share_files 行）。
-            //
-            // 当前行为（无事务）：share 行已存在但 share_files 不完整 → 孤立行
-            // 期望行为（Task 5 添加事务后）：事务回滚，share 行也被清除
+            /// 关键测试：当 share_files 插入部分失败时，
+            /// 不应留下孤立的 share 行（无匹配的 share_files 行）。
+            ///
+            /// 当前行为（无事务）：share 行已存在但 share_files 不完整 → 孤立行
+            /// 期望行为（Task 5 添加事务后）：事务回滚，share 行也被清除
             CreateProbe probe{
                 .files = {
                           CreateFileProbe{ .file_id = 1, .name = "ok.txt" },
@@ -464,13 +464,13 @@ namespace disk::share {
             EXPECT_FALSE(result.has_value());
             EXPECT_EQ(result.error().code, ErrorCode::InternalError);
 
-            // 验证：失败后 share 行存在但 share_files 行数为 0
-            // 这就是"孤立行"的定义：share 存在但没有 share_files
+            /// 验证：失败后 share 行存在但 share_files 行数为 0
+            /// 这就是"孤立行"的定义：share 存在但没有 share_files
             bool share_row_exists = ShareRowExists("any_code", probe, false);
             auto share_file_count = CountShareFiles("any_code", probe, false);
 
-            // 关键断言：如果 share 行存在，则 share_files 必须也有行
-            // 如果 share_files 为 0，则 share 行也不应存在
+            /// 关键断言：如果 share 行存在，则 share_files 必须也有行
+            /// 如果 share_files 为 0，则 share 行也不应存在
             if (share_file_count == 0) {
                 EXPECT_FALSE(share_row_exists)
                     << "Orphan share row detected: share exists with 0 share_files. "
@@ -496,5 +496,5 @@ namespace disk::share {
             EXPECT_EQ(CountShareFiles(result->share_id, probe, true), 50U);
         }
 
-    } // namespace
-} // namespace disk::share
+    } ///< namespace
+} ///< namespace disk::share

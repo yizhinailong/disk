@@ -30,9 +30,9 @@ namespace {
 
     using disk::error::Code;
 
-    // ================================================================================
-    // Helper: 创建带有路径、角色和状态的请求
-    // ================================================================================
+    /// ================================================================================
+    /// Helper: 创建带有路径、角色和状态的请求
+    /// ================================================================================
 
     auto CreateRequest(
         const std::string& path,
@@ -49,11 +49,11 @@ namespace {
         return req;
     }
 
-} // namespace
+} ///< namespace
 
-// ================================================================================
-// 决策矩阵测试（管理员路径 /api/admin/*）
-// ================================================================================
+/// ================================================================================
+/// 决策矩阵测试（管理员路径 /api/admin/*）
+/// ================================================================================
 
 TEST(AdminAuthFilterTest, AdminPath_AdminRole_ActiveStatus_Pass) {
     disk::filters::AdminAuthFilter filter;
@@ -103,7 +103,7 @@ TEST(AdminAuthFilterTest, AdminPath_InvalidRole2_ActiveStatus_Reject) {
 }
 
 TEST(AdminAuthFilterTest, AdminPath_RoleCheckedBeforeStatus) {
-    // role=0, status=0 → 应先因 role 拒绝（两个条件都不满足，但 role 检查在前）
+    /// role=0, status=0 → 应先因 role 拒绝（两个条件都不满足，但 role 检查在前）
     disk::filters::AdminAuthFilter filter;
     auto req = CreateRequest("/api/admin/users", 0, 0);
     auto resp = drogon::sync_wait(filter.doFilter(req));
@@ -111,9 +111,9 @@ TEST(AdminAuthFilterTest, AdminPath_RoleCheckedBeforeStatus) {
     EXPECT_EQ(resp->getStatusCode(), drogon::k403Forbidden);
 }
 
-// ================================================================================
-// 路径前缀测试（非管理员路径始终放行）
-// ================================================================================
+/// ================================================================================
+/// 路径前缀测试（非管理员路径始终放行）
+/// ================================================================================
 
 TEST(AdminAuthFilterTest, AuthLoginPath_PassRegardlessOfRole) {
     disk::filters::AdminAuthFilter filter;
@@ -151,7 +151,7 @@ TEST(AdminAuthFilterTest, RootPath_Pass) {
 }
 
 TEST(AdminAuthFilterTest, AdminPrefixExactPath_Pass) {
-    // /api/admin/ 精确匹配 starts_with("/api/admin/")
+    /// /api/admin/ 精确匹配 starts_with("/api/admin/")
     disk::filters::AdminAuthFilter filter;
     auto req = CreateRequest("/api/admin/", 1, 1);
     auto resp = drogon::sync_wait(filter.doFilter(req));
@@ -159,16 +159,16 @@ TEST(AdminAuthFilterTest, AdminPrefixExactPath_Pass) {
 }
 
 TEST(AdminAuthFilterTest, AdminPathWithoutTrailingSlash_Pass) {
-    // /api/admin 不以 "/" 结尾，不匹配 starts_with("/api/admin/")
+    /// /api/admin 不以 "/" 结尾，不匹配 starts_with("/api/admin/")
     disk::filters::AdminAuthFilter filter;
     auto req = CreateRequest("/api/admin", 0, 0);
     auto resp = drogon::sync_wait(filter.doFilter(req));
     EXPECT_EQ(resp, nullptr);
 }
 
-// ================================================================================
-// 管理员子路径测试（所有 /api/admin/* 路径均受检查）
-// ================================================================================
+/// ================================================================================
+/// 管理员子路径测试（所有 /api/admin/* 路径均受检查）
+/// ================================================================================
 
 TEST(AdminAuthFilterTest, AdminSharesPath_AdminPass) {
     disk::filters::AdminAuthFilter filter;
@@ -214,9 +214,9 @@ TEST(AdminAuthFilterTest, AdminStatsPath_NonAdminReject) {
     EXPECT_EQ(resp->getStatusCode(), drogon::k403Forbidden);
 }
 
-// ================================================================================
-// 错误响应体验证
-// ================================================================================
+/// ================================================================================
+/// 错误响应体验证
+/// ================================================================================
 
 TEST(AdminAuthFilterTest, RejectResponse_ContainsErrorCode) {
     disk::filters::AdminAuthFilter filter;
@@ -249,7 +249,7 @@ TEST(AdminAuthFilterTest, RejectResponse_ContainsNullData) {
 }
 
 TEST(AdminAuthFilterTest, RejectResponse_DisabledStatus_SameErrorCode) {
-    // 无论因 role 还是 status 拒绝，都返回 AdminRequired (80001)
+    /// 无论因 role 还是 status 拒绝，都返回 AdminRequired (80001)
     disk::filters::AdminAuthFilter filter;
     auto req = CreateRequest("/api/admin/users", 1, 0);
     auto resp = drogon::sync_wait(filter.doFilter(req));
@@ -259,9 +259,9 @@ TEST(AdminAuthFilterTest, RejectResponse_DisabledStatus_SameErrorCode) {
     EXPECT_EQ((*json)["code"].asUInt(), static_cast<Json::UInt>(80001));
 }
 
-// ================================================================================
-// 错误码 HTTP 状态映射契约测试
-// ================================================================================
+/// ================================================================================
+/// 错误码 HTTP 状态映射契约测试
+/// ================================================================================
 
 TEST(AdminAuthFilterTest, AdminRequired_MapsTo403) {
     EXPECT_EQ(disk::error::GetHttpStatus(Code::AdminRequired), drogon::k403Forbidden);
@@ -291,33 +291,33 @@ TEST(AdminAuthFilterTest, AdminInvalidRole_MapsTo400) {
     EXPECT_EQ(disk::error::GetHttpStatus(Code::AdminInvalidRole), drogon::k400BadRequest);
 }
 
-// ================================================================================
-// 过滤器无状态测试（多次调用互不影响）
-// ================================================================================
+/// ================================================================================
+/// 过滤器无状态测试（多次调用互不影响）
+/// ================================================================================
 
 TEST(AdminAuthFilterTest, FilterIsStateless_MultipleSequentialCalls) {
     disk::filters::AdminAuthFilter filter;
 
-    // 第一次调用：admin 放行
+    /// 第一次调用：admin 放行
     auto req1 = CreateRequest("/api/admin/users", 1, 1);
     auto resp1 = drogon::sync_wait(filter.doFilter(req1));
     EXPECT_EQ(resp1, nullptr);
 
-    // 第二次调用：非 admin 拒绝
+    /// 第二次调用：非 admin 拒绝
     auto req2 = CreateRequest("/api/admin/users", 0, 1);
     auto resp2 = drogon::sync_wait(filter.doFilter(req2));
     ASSERT_NE(resp2, nullptr);
     EXPECT_EQ(resp2->getStatusCode(), drogon::k403Forbidden);
 
-    // 第三次调用：admin 再次放行
+    /// 第三次调用：admin 再次放行
     auto req3 = CreateRequest("/api/admin/stats", 1, 1);
     auto resp3 = drogon::sync_wait(filter.doFilter(req3));
     EXPECT_EQ(resp3, nullptr);
 }
 
-// ================================================================================
-// 不同用户 ID 测试（user_id 不影响过滤决策）
-// ================================================================================
+/// ================================================================================
+/// 不同用户 ID 测试（user_id 不影响过滤决策）
+/// ================================================================================
 
 TEST(AdminAuthFilterTest, DifferentUserIds_SameRoleStatus_SameResult) {
     disk::filters::AdminAuthFilter filter;

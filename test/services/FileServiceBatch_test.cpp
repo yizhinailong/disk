@@ -186,5 +186,5 @@ namespace disk::file {
             EXPECT_EQ(del.deleted_count, 1);
         }
 
-    } // namespace
-} // namespace disk::file
+    } ///< namespace
+} ///< namespace disk::file

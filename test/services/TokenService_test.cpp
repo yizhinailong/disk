@@ -31,9 +31,9 @@ namespace {
 
     constexpr const char* TEST_JWT_SECRET = "test_secret_key_for_share_token_32b";
 
-    // ================================================================================
-    // 统一 TokenService 分享令牌静态 API 测试
-    // ================================================================================
+    /// ================================================================================
+    /// 统一 TokenService 分享令牌静态 API 测试
+    /// ================================================================================
 
     /**
      * @brief 测试统一 TokenService 是否提供 GenerateShareToken 静态方法
@@ -72,7 +72,7 @@ namespace {
         auto token_result = TokenService::GenerateShareToken(jwt_secret, share_code, share_id);
         ASSERT_TRUE(token_result.has_value()) << "Token generation should succeed";
 
-        // 解码并验证 claims
+        /// 解码并验证 claims
         auto decoded = jwt::decode<traits>(token_result.value());
 
         EXPECT_EQ(decoded.get_issuer(), "disk_share") << "Issuer should be 'disk_share'";
@@ -306,9 +306,9 @@ namespace {
         EXPECT_NE(token1.value(), token2.value()) << "Different share codes should produce different tokens";
     }
 
-    // ================================================================================
-    // 撤销令牌负路径断言（Redis 异步路径契约）
-    // ================================================================================
+    /// ================================================================================
+    /// 撤销令牌负路径断言（Redis 异步路径契约）
+    /// ================================================================================
 
     /**
      * @brief 验证静态 VerifyShareToken 不返回 TokenRevoked 错误
@@ -328,12 +328,12 @@ namespace {
         auto token_result = TokenService::GenerateShareToken(jwt_secret, share_code, share_id);
         ASSERT_TRUE(token_result.has_value()) << "Token generation should succeed";
 
-        // 静态验证不应返回 TokenRevoked（即使令牌可能已被撤销）
-        // 撤销状态检查需要 Redis，属于 VerifyShareTokenWithRedis 的职责
+        /// 静态验证不应返回 TokenRevoked（即使令牌可能已被撤销）
+        /// 撤销状态检查需要 Redis，属于 VerifyShareTokenWithRedis 的职责
         auto verify_result = TokenService::VerifyShareToken(jwt_secret, token_result.value());
 
         EXPECT_TRUE(verify_result.has_value()) << "Static verify should succeed for valid token";
-        // 如果失败，错误码不应该是 TokenRevoked
+        /// 如果失败，错误码不应该是 TokenRevoked
         if (!verify_result.has_value()) {
             EXPECT_NE(verify_result.error().code, Code::TokenRevoked)
                 << "Static VerifyShareToken should never return TokenRevoked";
@@ -348,22 +348,22 @@ namespace {
      * 此测试验证错误码本身的定义。
      */
     TEST(TokenServiceShareTest, TokenRevokedErrorCodeContractDefined) {
-        // 验证 TokenRevoked 错误码存在
+        /// 验证 TokenRevoked 错误码存在
         auto http_status = disk::error::GetHttpStatus(Code::TokenRevoked);
         EXPECT_EQ(http_status, drogon::k401Unauthorized);
 
         auto message = disk::error::GetErrorMessage(Code::TokenRevoked);
         EXPECT_FALSE(message.empty()) << "TokenRevoked should have an error message";
 
-        // 验证 TokenRevoked 与其他分享令牌错误码不同
+        /// 验证 TokenRevoked 与其他分享令牌错误码不同
         EXPECT_NE(static_cast<uint32_t>(Code::TokenRevoked), static_cast<uint32_t>(Code::TokenMalformed));
         EXPECT_NE(static_cast<uint32_t>(Code::TokenRevoked), static_cast<uint32_t>(Code::TokenExpired));
         EXPECT_NE(static_cast<uint32_t>(Code::TokenRevoked), static_cast<uint32_t>(Code::TokenWrongType));
     }
 
-    // ================================================================================
-    // 迁移连续性测试（已统一，此测试已过时）
-    // ================================================================================
+    /// ================================================================================
+    /// 迁移连续性测试（已统一，此测试已过时）
+    /// ================================================================================
 
     /**
      * @brief 迁移连续性测试（已过时）
@@ -378,13 +378,13 @@ namespace {
      * - TTL = 3600 秒
      */
     TEST(TokenServiceShareTest, MigrationContinuityLegacyTokenVerifiableByUnified) {
-        // 永久跳过 - 旧服务已移除，迁移已完成
+        /// 永久跳过 - 旧服务已移除，迁移已完成
         GTEST_SKIP() << "Migration complete: share token APIs unified into TokenService";
     }
 
-    // ================================================================================
-    // 分享令牌撤销缓存单元测试
-    // ================================================================================
+    /// ================================================================================
+    /// 分享令牌撤销缓存单元测试
+    /// ================================================================================
 
     class ShareRevocationCacheTest : public ::testing::Test {
     protected:
@@ -441,9 +441,9 @@ namespace {
         EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
     }
 
-    // ================================================================================
-    // Access/Refresh token generation — instance method tests
-    // ================================================================================
+    /// ================================================================================
+    /// Access/Refresh token generation — instance method tests
+    /// ================================================================================
 
     class TokenServiceInstanceTest : public ::testing::Test {
     protected:
@@ -491,4 +491,4 @@ namespace {
         EXPECT_EQ(TokenService::GetShareTokenExpireSeconds(), 3600);
     }
 
-} // namespace
+} ///< namespace

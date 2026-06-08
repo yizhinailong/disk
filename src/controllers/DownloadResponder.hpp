@@ -38,4 +38,4 @@ namespace disk::controllers {
         disk::storage::IFileStorage* storage
     ) -> drogon::Task<drogon::HttpResponsePtr>;
 
-} // namespace disk::controllers
+} ///< namespace disk::controllers

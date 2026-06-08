@@ -246,7 +246,7 @@ namespace disk::trash {
         Logger::Debug() << "TrashService initialization completed";
     }
 
-    // ==================== 公共方法实现 ====================
+    /// ==================== 公共方法实现 ====================
 
     auto TrashService::List(uint64_t user_id, int page, int page_size)
         -> drogon::Task<Result<std::vector<TrashItemResponse>>> {
@@ -475,7 +475,7 @@ namespace disk::trash {
             ));
         }
 
-        // Phase 1: Process all items — DB operations only, collect storage paths for batch deletion
+        /// Phase 1: Process all items — DB operations only, collect storage paths for batch deletion
         std::vector<std::filesystem::path> paths_to_delete;
 
         for (auto trash_id : trash_ids) {
@@ -601,7 +601,7 @@ namespace disk::trash {
             response.results.push_back(result);
         }
 
-        // Phase 2: Batch delete physical files in parallel (up to MAX_PARALLEL_DELETE_PATHS concurrent)
+        /// Phase 2: Batch delete physical files in parallel (up to MAX_PARALLEL_DELETE_PATHS concurrent)
         if (!paths_to_delete.empty()) {
             auto* storage = disk::storage::StorageMgr::GetStorage();
             if (storage == nullptr) {
@@ -802,7 +802,7 @@ namespace disk::trash {
         }
     }
 
-    // ==================== 私有方法实现 ====================
+    /// ==================== 私有方法实现 ====================
 
     auto TrashService::RestoreFile(uint64_t trash_id, uint64_t user_id, BatchResultItem& result)
         -> drogon::Task<void> {
@@ -1545,4 +1545,4 @@ namespace disk::trash {
         return filename.substr(0, pos);
     }
 
-} // namespace disk::trash
+} ///< namespace disk::trash

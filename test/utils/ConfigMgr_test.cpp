@@ -26,9 +26,9 @@ namespace {
 
     using disk::utils::ConfigMgr;
 
-    // ================================================================================
-    // EnvVarGuard — RAII helper for save/set/restore environment variables
-    // ================================================================================
+    /// ================================================================================
+    /// EnvVarGuard — RAII helper for save/set/restore environment variables
+    /// ================================================================================
 
     class EnvVarGuard {
     public:
@@ -37,12 +37,12 @@ namespace {
 
         ~EnvVarGuard() { Restore(); }
 
-        // Disallow copy
+        /// Disallow copy
         EnvVarGuard(const EnvVarGuard&) = delete;
         EnvVarGuard& operator=(const EnvVarGuard&) = delete;
 
         void Set(const char* value) {
-            // Unset first to avoid leaks from setenv replacing
+            /// Unset first to avoid leaks from setenv replacing
             unsetenv(m_name.c_str());
             if (value != nullptr) {
                 setenv(m_name.c_str(), value, 1);
@@ -70,14 +70,14 @@ namespace {
         char* m_saved_value;
     };
 
-    // ================================================================================
-    // Fixture — guards all relevant env vars for each test
-    // ================================================================================
+    /// ================================================================================
+    /// Fixture — guards all relevant env vars for each test
+    /// ================================================================================
 
     class ConfigMgrJwtTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            // Unset JWT_SECRET by default so tests start clean
+            /// Unset JWT_SECRET by default so tests start clean
             jwt_guard.Unset();
             secure_guard.Unset();
             mysql_guard.Unset();
@@ -90,9 +90,9 @@ namespace {
         EnvVarGuard redis_guard{ "REDIS_PASSWORD" };
     };
 
-    // ================================================================================
-    // GetJwtSecret — throws when JWT_SECRET is unset
-    // ================================================================================
+    /// ================================================================================
+    /// GetJwtSecret — throws when JWT_SECRET is unset
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, GetJwtSecretThrowsWhenEnvNotSet) {
         EXPECT_THROW(
@@ -101,9 +101,9 @@ namespace {
         );
     }
 
-    // ================================================================================
-    // GetJwtSecret — throws when JWT_SECRET is empty string
-    // ================================================================================
+    /// ================================================================================
+    /// GetJwtSecret — throws when JWT_SECRET is empty string
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, GetJwtSecretThrowsWhenEmpty) {
         jwt_guard.Set("");
@@ -113,9 +113,9 @@ namespace {
         );
     }
 
-    // ================================================================================
-    // GetJwtSecret — throws when JWT_SECRET < 32 chars
-    // ================================================================================
+    /// ================================================================================
+    /// GetJwtSecret — throws when JWT_SECRET < 32 chars
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, GetJwtSecretThrowsWhenTooShort) {
         jwt_guard.Set("short_key_only_20_chars");
@@ -125,9 +125,9 @@ namespace {
         );
     }
 
-    // ================================================================================
-    // GetJwtSecret — throws when JWT_SECRET is exactly 31 chars
-    // ================================================================================
+    /// ================================================================================
+    /// GetJwtSecret — throws when JWT_SECRET is exactly 31 chars
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, GetJwtSecretThrowsWhenExactly31Chars) {
         jwt_guard.Set("1234567890123456789012345678901");
@@ -137,9 +137,9 @@ namespace {
         );
     }
 
-    // ================================================================================
-    // GetJwtSecret — returns value when exactly 32 chars
-    // ================================================================================
+    /// ================================================================================
+    /// GetJwtSecret — returns value when exactly 32 chars
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, GetJwtSecretReturnsWhenExactly32Chars) {
         const char* valid_32 = "12345678901234567890123456789012";
@@ -147,9 +147,9 @@ namespace {
         EXPECT_EQ(ConfigMgr::GetInstance()->GetJwtSecret(), valid_32);
     }
 
-    // ================================================================================
-    // GetJwtSecret — returns value when valid (> 32 chars)
-    // ================================================================================
+    /// ================================================================================
+    /// GetJwtSecret — returns value when valid (> 32 chars)
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, GetJwtSecretReturnsWhenValidLongSecret) {
         const char* long_secret = "this_is_a_very_long_jwt_secret_key_that_is_definitely_over_32_chars";
@@ -157,9 +157,9 @@ namespace {
         EXPECT_EQ(ConfigMgr::GetInstance()->GetJwtSecret(), long_secret);
     }
 
-    // ================================================================================
-    // ValidateSecureConfig — always checks JWT_SECRET, even without DISK_SECURE_MODE
-    // ================================================================================
+    /// ================================================================================
+    /// ValidateSecureConfig — always checks JWT_SECRET, even without DISK_SECURE_MODE
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, ValidateSecureConfigThrowsOnMissingJwtSecretWithoutSecureMode) {
         EXPECT_THROW(
@@ -177,10 +177,10 @@ namespace {
         );
     }
 
-    // ================================================================================
-    // ValidateSecureConfig — passes with valid JWT_SECRET but no DISK_SECURE_MODE
-    // (MYSQL_PASSWORD/REDIS_PASSWORD not required in dev mode)
-    // ================================================================================
+    /// ================================================================================
+    /// ValidateSecureConfig — passes with valid JWT_SECRET but no DISK_SECURE_MODE
+    /// (MYSQL_PASSWORD/REDIS_PASSWORD not required in dev mode)
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, ValidateSecureConfigPassesWithValidJwtSecretNoSecureMode) {
         secure_guard.Unset();
@@ -188,9 +188,9 @@ namespace {
         EXPECT_NO_THROW({ ConfigMgr::GetInstance()->ValidateSecureConfig(); });
     }
 
-    // ================================================================================
-    // ValidateSecureConfig — in secure mode, missing DATABASE_PASSWORD throws
-    // ================================================================================
+    /// ================================================================================
+    /// ValidateSecureConfig — in secure mode, missing DATABASE_PASSWORD throws
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, ValidateSecureConfigThrowsOnMissingMysqlPasswordInSecureMode) {
         secure_guard.Set("true");
@@ -203,9 +203,9 @@ namespace {
         );
     }
 
-    // ================================================================================
-    // ValidateSecureConfig — in secure mode, missing REDIS_PASSWORD throws
-    // ================================================================================
+    /// ================================================================================
+    /// ValidateSecureConfig — in secure mode, missing REDIS_PASSWORD throws
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, ValidateSecureConfigThrowsOnMissingRedisPasswordInSecureMode) {
         secure_guard.Set("true");
@@ -218,9 +218,9 @@ namespace {
         );
     }
 
-    // ================================================================================
-    // ValidateSecureConfig — in secure mode with all vars set, passes
-    // ================================================================================
+    /// ================================================================================
+    /// ValidateSecureConfig — in secure mode with all vars set, passes
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, ValidateSecureConfigPassesWithAllVarsInSecureMode) {
         secure_guard.Set("true");
@@ -230,9 +230,9 @@ namespace {
         EXPECT_NO_THROW({ ConfigMgr::GetInstance()->ValidateSecureConfig(); });
     }
 
-    // ================================================================================
-    // ValidateSecureConfig — DISK_SECURE_MODE=1 also enables secure mode
-    // ================================================================================
+    /// ================================================================================
+    /// ValidateSecureConfig — DISK_SECURE_MODE=1 also enables secure mode
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, ValidateSecureModeWithNumericOne) {
         secure_guard.Set("1");
@@ -242,9 +242,9 @@ namespace {
         EXPECT_NO_THROW({ ConfigMgr::GetInstance()->ValidateSecureConfig(); });
     }
 
-    // ================================================================================
-    // ValidateSecureConfig — DISK_SECURE_MODE=1, missing DATABASE_PASSWORD throws
-    // ================================================================================
+    /// ================================================================================
+    /// ValidateSecureConfig — DISK_SECURE_MODE=1, missing DATABASE_PASSWORD throws
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, ValidateSecureModeWithOneMissingMysqlThrows) {
         secure_guard.Set("1");
@@ -257,9 +257,9 @@ namespace {
         );
     }
 
-    // ================================================================================
-    // ValidateSecureConfig — short JWT_SECRET throws even in secure mode with DB passwords
-    // ================================================================================
+    /// ================================================================================
+    /// ValidateSecureConfig — short JWT_SECRET throws even in secure mode with DB passwords
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, ValidateSecureConfigShortJwtSecretThrowsEvenWithDbPasswords) {
         secure_guard.Set("true");
@@ -272,25 +272,25 @@ namespace {
         );
     }
 
-    // ================================================================================
-    // GetAssemblyMaxConcurrent — returns default value when not loaded
-    // ================================================================================
+    /// ================================================================================
+    /// GetAssemblyMaxConcurrent — returns default value when not loaded
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, GetAssemblyMaxConcurrentReturnsDefault) {
         EXPECT_EQ(ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent(), 4);
     }
 
-    // ================================================================================
-    // GetAssembleBufferSizeBytes — returns default value when not loaded
-    // ================================================================================
+    /// ================================================================================
+    /// GetAssembleBufferSizeBytes — returns default value when not loaded
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, GetAssembleBufferSizeBytesReturnsDefault) {
         EXPECT_EQ(ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes(), 1048576);
     }
 
-    // ================================================================================
-    // Assembly config — getters are accessible and return uint32_t
-    // ================================================================================
+    /// ================================================================================
+    /// Assembly config — getters are accessible and return uint32_t
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, AssemblyGettersAreAccessible) {
         auto assembly_max_concurrent = ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent();
@@ -300,9 +300,9 @@ namespace {
         EXPECT_GT(assemble_buffer_size_bytes, 0);
     }
 
-    // ================================================================================
-    // Helper — restore assembly config to defaults after each LoadConfig test
-    // ================================================================================
+    /// ================================================================================
+    /// Helper — restore assembly config to defaults after each LoadConfig test
+    /// ================================================================================
 
     static auto RestoreAssemblyDefaults() -> void {
         Json::Value cfg;
@@ -312,9 +312,9 @@ namespace {
         ConfigMgr::GetInstance()->LoadConfig();
     }
 
-    // ================================================================================
-    // LoadConfig — explicit assembly values are read correctly
-    // ================================================================================
+    /// ================================================================================
+    /// LoadConfig — explicit assembly values are read correctly
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, LoadConfigWithExplicitAssemblyValues) {
         Json::Value cfg;
@@ -330,9 +330,9 @@ namespace {
         RestoreAssemblyDefaults();
     }
 
-    // ================================================================================
-    // LoadConfig — missing assembly keys fall back to defaults
-    // ================================================================================
+    /// ================================================================================
+    /// LoadConfig — missing assembly keys fall back to defaults
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, LoadConfigWithoutAssemblyKeysFallsBackToDefaults) {
         Json::Value cfg;
@@ -347,9 +347,9 @@ namespace {
         RestoreAssemblyDefaults();
     }
 
-    // ================================================================================
-    // LoadConfig — only assembly_max_concurrent present, buffer falls back
-    // ================================================================================
+    /// ================================================================================
+    /// LoadConfig — only assembly_max_concurrent present, buffer falls back
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, LoadConfigOnlyMaxConcurrentBufferFallsBack) {
         Json::Value cfg;
@@ -364,9 +364,9 @@ namespace {
         RestoreAssemblyDefaults();
     }
 
-    // ================================================================================
-    // LoadConfig — only assemble_buffer_size_bytes present, concurrent falls back
-    // ================================================================================
+    /// ================================================================================
+    /// LoadConfig — only assemble_buffer_size_bytes present, concurrent falls back
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, LoadConfigOnlyBufferSizeConcurrentFallsBack) {
         Json::Value cfg;
@@ -381,9 +381,9 @@ namespace {
         RestoreAssemblyDefaults();
     }
 
-    // ================================================================================
-    // LoadConfig — no disk section at all, all values stay at defaults
-    // ================================================================================
+    /// ================================================================================
+    /// LoadConfig — no disk section at all, all values stay at defaults
+    /// ================================================================================
 
     TEST_F(ConfigMgrJwtTest, LoadConfigNoDiskSectionStaysDefaults) {
         Json::Value cfg;
@@ -398,4 +398,4 @@ namespace {
         RestoreAssemblyDefaults();
     }
 
-} // namespace
+} ///< namespace

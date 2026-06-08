@@ -131,4 +131,4 @@ namespace disk::log {
         }
     }
 
-} // namespace disk::log
+} ///< namespace disk::log

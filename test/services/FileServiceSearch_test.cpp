@@ -134,5 +134,5 @@ namespace disk::file {
             }
         }
 
-    } // namespace
-} // namespace disk::file
+    } ///< namespace
+} ///< namespace disk::file

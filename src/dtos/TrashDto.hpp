@@ -33,7 +33,7 @@
 
 namespace disk::trash {
 
-    // ==================== Request DTOs ====================
+    /// ==================== Request DTOs ====================
 
     /**
      * @brief 回收站列表请求 DTO
@@ -105,7 +105,7 @@ namespace disk::trash {
         }
     };
 
-    // ==================== Response DTOs ====================
+    /// ==================== Response DTOs ====================
 
     /**
      * @brief 批量操作摘要
@@ -141,20 +141,20 @@ namespace disk::trash {
      */
     struct BatchResultItem : DtoBase<BatchResultItem> {
         uint64_t trash_id{ 0 };
-        std::string status; // "success" or "failed"
+        std::string status; ///< "success" or "failed"
 
-        // 失败时的错误信息
+        /// 失败时的错误信息
         std::optional<uint16_t> code;
         std::optional<std::string> message;
-        std::optional<std::string> field; // 错误字段名（可选）
-        std::optional<std::string> value; // 错误字段值（可选）
+        std::optional<std::string> field; ///< 错误字段名（可选）
+        std::optional<std::string> value; ///< 错误字段值（可选）
 
-        // 成功恢复时的信息
+        /// 成功恢复时的信息
         std::optional<uint64_t> file_id;
         std::optional<uint64_t> folder_id;
         std::optional<std::string> path;
 
-        // 成功删除时的信息
+        /// 成功删除时的信息
         std::optional<uint64_t> freed_space;
 
         /// 转换为 JSON
@@ -199,7 +199,7 @@ namespace disk::trash {
      */
     struct TrashItemResponse : DtoBase<TrashItemResponse> {
         uint64_t id;
-        std::string type; // "file" or "folder"
+        std::string type; ///< "file" or "folder"
         uint64_t original_id;
         std::string name;
         uint64_t size;
@@ -283,4 +283,4 @@ namespace disk::trash {
         }
     };
 
-} // namespace disk::trash
+} ///< namespace disk::trash

@@ -18,17 +18,17 @@
 namespace disk::user {
     namespace {
 
-        // ==================== GetProfile SQL 字段测试 ====================
+        /// ==================== GetProfile SQL 字段测试 ====================
 
         TEST(UserService, GetProfileSqlReturnsExpectedFields) {
-            // 验证 GetProfile SQL 查询返回的字段名与 UserProfileResponse 构造一致
-            // SQL: SELECT u.id, u.username, u.email, u.nickname, u.avatar,
-            //        u.storage_quota, u.storage_used, u.created_at, u.updated_at,
-            //        (SELECT COUNT(*) FROM files WHERE user_id = u.id) AS file_count,
-            //        (SELECT COUNT(*) FROM folders WHERE user_id = u.id) AS folder_count
-            // FROM users u WHERE u.id = ?
+            /// 验证 GetProfile SQL 查询返回的字段名与 UserProfileResponse 构造一致
+            /// SQL: SELECT u.id, u.username, u.email, u.nickname, u.avatar,
+            ///        u.storage_quota, u.storage_used, u.created_at, u.updated_at,
+            ///        (SELECT COUNT(*) FROM files WHERE user_id = u.id) AS file_count,
+            ///        (SELECT COUNT(*) FROM folders WHERE user_id = u.id) AS folder_count
+            /// FROM users u WHERE u.id = ?
 
-            // 验证 SQL 中所有列名与 UserProfileResponse 字段对应
+            /// 验证 SQL 中所有列名与 UserProfileResponse 字段对应
             const std::string sql =
                 "SELECT u.id, u.username, u.email, u.nickname, u.avatar, " "u.storage_quota, u.storage_used, u.created_at, u.updated_at, " "(SELECT COUNT(*) FROM files WHERE user_id = u.id) AS file_count, " "(SELECT COUNT(*) FROM folders WHERE user_id = u.id) AS folder_count " "FROM users u WHERE u.id = ?";
 
@@ -47,10 +47,10 @@ namespace disk::user {
             EXPECT_NE(sql.find("WHERE u.id = ?"), std::string::npos);
         }
 
-        // ==================== GetStorage SQL 字段测试 ====================
+        /// ==================== GetStorage SQL 字段测试 ====================
 
         TEST(UserService, GetStorageSqlReturnsExpectedFields) {
-            // 验证 GetStorage SQL 查询返回的字段名与 StorageResponse 构造一致
+            /// 验证 GetStorage SQL 查询返回的字段名与 StorageResponse 构造一致
             const std::string sql =
                 "SELECT u.storage_quota, " "COALESCE((SELECT SUM(f.size) FROM files f WHERE f.user_id = u.id), 0) AS used, " "(SELECT COUNT(*) FROM files WHERE user_id = u.id) AS file_count, " "(SELECT COUNT(*) FROM folders WHERE user_id = u.id) AS folder_count " "FROM users u WHERE u.id = ?";
 
@@ -64,7 +64,7 @@ namespace disk::user {
             EXPECT_NE(sql.find("WHERE u.id = ?"), std::string::npos);
         }
 
-        // ==================== 百分比舍入测试 ====================
+        /// ==================== 百分比舍入测试 ====================
 
         TEST(UserService, GetStoragePercentageRounding) {
             auto calc_percentage = [](uint64_t used, uint64_t quota) -> double {
@@ -75,52 +75,52 @@ namespace disk::user {
                        10.0;
             };
 
-            // used=0 → 0.0
+            /// used=0 → 0.0
             EXPECT_DOUBLE_EQ(calc_percentage(0, 1000), 0.0);
 
-            // used=quota → 100.0
+            /// used=quota → 100.0
             EXPECT_DOUBLE_EQ(calc_percentage(1000, 1000), 100.0);
 
-            // used > quota → > 100.0
+            /// used > quota → > 100.0
             EXPECT_DOUBLE_EQ(calc_percentage(1500, 1000), 150.0);
 
-            // 正常中间值 50%
+            /// 正常中间值 50%
             EXPECT_DOUBLE_EQ(calc_percentage(500, 1000), 50.0);
 
-            // 四舍五入到1位小数: 33.33% → 33.3
+            /// 四舍五入到1位小数: 33.33% → 33.3
             EXPECT_DOUBLE_EQ(calc_percentage(1, 3), 33.3);
 
-            // 四舍五入到1位小数: 66.67% → 66.7
+            /// 四舍五入到1位小数: 66.67% → 66.7
             EXPECT_DOUBLE_EQ(calc_percentage(2, 3), 66.7);
 
-            // quota=0 → 0.0 (避免除零)
+            /// quota=0 → 0.0 (避免除零)
             EXPECT_DOUBLE_EQ(calc_percentage(500, 0), 0.0);
 
-            // 极小配额 1/1 = 100%
+            /// 极小配额 1/1 = 100%
             EXPECT_DOUBLE_EQ(calc_percentage(1, 1), 100.0);
 
-            // 999/1000 = 99.9%
+            /// 999/1000 = 99.9%
             EXPECT_DOUBLE_EQ(calc_percentage(999, 1000), 99.9);
         }
 
-        // ==================== 错误映射测试 ====================
+        /// ==================== 错误映射测试 ====================
 
         TEST(UserService, GetProfileUserNotFoundMapping) {
-            // GetProfile 空结果集 → UserNotFound (40100, 404)
+            /// GetProfile 空结果集 → UserNotFound (40100, 404)
             ErrorInfo error(ErrorCode::UserNotFound);
             EXPECT_EQ(error.CodeInt(), 40100u);
             EXPECT_EQ(error.HttpStatus(), drogon::k404NotFound);
         }
 
         TEST(UserService, GetStorageUserNotFoundMapping) {
-            // GetStorage 空结果集 → InternalError (10006, 500)
+            /// GetStorage 空结果集 → InternalError (10006, 500)
             ErrorInfo error(ErrorCode::InternalError, "Failed to get storage stats");
             EXPECT_EQ(error.CodeInt(), 10006u);
             EXPECT_EQ(error.HttpStatus(), drogon::k500InternalServerError);
             EXPECT_EQ(error.message, "Failed to get storage stats");
         }
 
-        // ==================== UserProfileResponse 格式测试 ====================
+        /// ==================== UserProfileResponse 格式测试 ====================
 
         TEST(UserService, UserProfileResponseFormat) {
             UserProfileResponse response;
@@ -174,7 +174,7 @@ namespace disk::user {
             EXPECT_EQ(json["folder_count"].asUInt(), 0u);
         }
 
-        // ==================== StorageResponse 格式测试 ====================
+        /// ==================== StorageResponse 格式测试 ====================
 
         TEST(UserService, StorageResponseFormat) {
             StorageResponse response;
@@ -192,5 +192,5 @@ namespace disk::user {
             EXPECT_EQ(json["file_count"].asUInt(), 100u);
             EXPECT_EQ(json["folder_count"].asUInt(), 10u);
         }
-    } // namespace
-} // namespace disk::user
+    } ///< namespace
+} ///< namespace disk::user

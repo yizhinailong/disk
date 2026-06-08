@@ -107,8 +107,8 @@
 #include "../../src/utils/ConfigMgr.hpp"
 #include "../../src/utils/FileHashUtil.hpp"
 
-// LocalFileStorage.cpp implementation is provided by FileUploadConsistency_test.cpp
-// in the same disk-test binary; do not include it again (ODR violation).
+/// LocalFileStorage.cpp implementation is provided by FileUploadConsistency_test.cpp
+/// in the same disk-test binary; do not include it again (ODR violation).
 
 namespace disk::file {
     namespace {
@@ -153,7 +153,7 @@ namespace disk::file {
             };
         }
 
-        // Generate deterministic content of given size using a simple pattern
+        /// Generate deterministic content of given size using a simple pattern
         auto MakePattern(size_t size, uint8_t seed = 0xAA) -> std::string {
             std::string result(size, '\0');
             for (size_t i = 0; i < size; ++i) {
@@ -201,19 +201,19 @@ namespace disk::file {
             std::unique_ptr<LocalFileStorage> m_storage;
         };
 
-        // =====================================================================
-        // 1. Upload Init: DTO contract and storage directory creation
-        // =====================================================================
+        /// =====================================================================
+        /// 1. Upload Init: DTO contract and storage directory creation
+        /// =====================================================================
 
         class UploadPathInitTest : public ::testing::Test {};
 
         TEST_F(UploadPathInitTest, InitUploadRequestValidatesFilenameCorrectly) {
-            // Simulate what FileController does: parse JSON, validate DTO
+            /// Simulate what FileController does: parse JSON, validate DTO
             auto req = drogon::HttpRequest::newHttpJsonRequest(
                 [] {
                     Json::Value json;
                     json["filename"] = "test_file.dat";
-                    json["file_size"] = 10485760;  // 10 MB
+                    json["file_size"] = 10485760;  ///< 10 MB
                     json["file_hash"] = "d41d8cd98f00b204e9800998ecf8427e";
                     json["parent_id"] = 0;
                     return json;
@@ -291,9 +291,9 @@ namespace disk::file {
             EXPECT_TRUE(std::filesystem::is_directory(m_temp_base / upload_id));
         }
 
-        // =====================================================================
-        // 2. Chunk Upload: single chunk write and verification
-        // =====================================================================
+        /// =====================================================================
+        /// 2. Chunk Upload: single chunk write and verification
+        /// =====================================================================
 
         TEST_F(UploadPathTest, WriteSingleChunkPersistsExactBytesOnDisk) {
             const std::string upload_id = "single-chunk-test";
@@ -314,7 +314,7 @@ namespace disk::file {
 
         TEST_F(UploadPathTest, WriteChunkWithEmbeddedNullsPreservesBinaryIntegrity) {
             const std::string upload_id = "binary-null-test";
-            // Data with embedded null bytes
+            /// Data with embedded null bytes
             const std::string chunk_data = std::string("AB\0CD\0\0EF", 9) + MakePattern(1000, 0xFF);
 
             ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
@@ -337,15 +337,15 @@ namespace disk::file {
             ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, first_data)).has_value());
             ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, second_data)).has_value());
 
-            // Second write should have overwritten the first
+            /// Second write should have overwritten the first
             const auto on_disk = ReadBinaryFile(ChunkPath(upload_id, 0));
             EXPECT_EQ(on_disk, second_data);
             EXPECT_EQ(std::filesystem::file_size(ChunkPath(upload_id, 0)), static_cast<uintmax_t>(1024));
         }
 
-        // =====================================================================
-        // 3. Multiple Chunks: sequential writes and independent verification
-        // =====================================================================
+        /// =====================================================================
+        /// 3. Multiple Chunks: sequential writes and independent verification
+        /// =====================================================================
 
         TEST_F(UploadPathTest, WriteMultipleChunksCreatesSeparateFiles) {
             const std::string upload_id = "multi-chunk-test";
@@ -364,7 +364,7 @@ namespace disk::file {
                 ASSERT_TRUE(result.has_value()) << "Failed to write chunk " << i;
             }
 
-            // Verify each chunk independently
+            /// Verify each chunk independently
             for (uint32_t i = 0; i < chunks.size(); ++i) {
                 const auto path = ChunkPath(upload_id, i);
                 ASSERT_TRUE(std::filesystem::exists(path)) << "Chunk " << i << " missing";
@@ -373,7 +373,7 @@ namespace disk::file {
         }
 
         TEST_F(UploadPathTest, WriteChunkOutOfOrderSucceeds) {
-            // Chunks may arrive out of order in practice
+            /// Chunks may arrive out of order in practice
             const std::string upload_id = "out-of-order-test";
             const std::vector<std::string> chunks = {
                 MakePattern(512, 0xA0),
@@ -383,7 +383,7 @@ namespace disk::file {
 
             ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
 
-            // Write in reverse order: chunk 2, then 0, then 1
+            /// Write in reverse order: chunk 2, then 0, then 1
             ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 2, chunks[2])).has_value());
             ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, chunks[0])).has_value());
             ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 1, chunks[1])).has_value());
@@ -393,9 +393,9 @@ namespace disk::file {
             }
         }
 
-        // =====================================================================
-        // 4. Upload Complete: assembly and hash verification
-        // =====================================================================
+        /// =====================================================================
+        /// 4. Upload Complete: assembly and hash verification
+        /// =====================================================================
 
         TEST_F(UploadPathTest, AssembleChunksProducesCorrectMergedContent) {
             const std::string upload_id = "assemble-correct-test";
@@ -452,33 +452,33 @@ namespace disk::file {
             ASSERT_TRUE(drogon::sync_wait(
                 m_storage->WriteChunk(upload_id, 0, MakePattern(1024))
             ).has_value());
-            // Chunk 1 is intentionally missing
+            /// Chunk 1 is intentionally missing
 
             auto result = drogon::sync_wait(m_storage->AssembleChunks(upload_id, 2));
             ASSERT_FALSE(result.has_value());
             EXPECT_EQ(result.error().code, ErrorCode::InternalError);
 
-            // Temp artifact must not be left behind
+            /// Temp artifact must not be left behind
             EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
         }
 
-        // =====================================================================
-        // 5. Hash Verification: MD5 hash computation on chunk data
-        // =====================================================================
+        /// =====================================================================
+        /// 5. Hash Verification: MD5 hash computation on chunk data
+        /// =====================================================================
 
         TEST_F(UploadPathTest, HashMd5ComputesCorrectHash) {
-            // Verify that the hash computed in FileService (via HashMd5)
-            // matches what we'd compute independently
-            const std::string data = MakePattern(5 * 1024 * 1024, 0x77);  // 5 MB (default chunk size)
+            /// Verify that the hash computed in FileService (via HashMd5)
+            /// matches what we'd compute independently
+            const std::string data = MakePattern(5 * 1024 * 1024, 0x77);  ///< 5 MB (default chunk size)
             const auto hash = FileHashUtil::HashMd5(data);
 
-            // Hash must be 32-character lowercase hex
+            /// Hash must be 32-character lowercase hex
             EXPECT_EQ(hash.length(), 32U);
             for (char c : hash) {
                 EXPECT_TRUE((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'));
             }
 
-            // Same input must produce same hash
+            /// Same input must produce same hash
             EXPECT_EQ(FileHashUtil::HashMd5(data), hash);
         }
 
@@ -487,7 +487,7 @@ namespace disk::file {
             const auto hash1 = FileHashUtil::HashMd5(data);
             const auto hash2 = FileHashUtil::HashMd5(data);
 
-            // Well-known MD5 for this string: 9e107d9d372bb6826bd81d3542a419d6
+            /// Well-known MD5 for this string: 9e107d9d372bb6826bd81d3542a419d6
             EXPECT_EQ(hash1, hash2);
             EXPECT_EQ(hash1, "9e107d9d372bb6826bd81d3542a419d6");
         }
@@ -496,7 +496,7 @@ namespace disk::file {
             const std::string data;
             const auto hash = FileHashUtil::HashMd5(data);
 
-            // Well-known MD5 of empty string: d41d8cd98f00b204e9800998ecf8427e
+            /// Well-known MD5 of empty string: d41d8cd98f00b204e9800998ecf8427e
             EXPECT_EQ(hash, "d41d8cd98f00b204e9800998ecf8427e");
         }
 
@@ -505,7 +505,7 @@ namespace disk::file {
             const auto hash = FileHashUtil::HashMd5(data);
 
             EXPECT_EQ(hash.length(), 32U);
-            // Verify it's not the empty-string hash
+            /// Verify it's not the empty-string hash
             EXPECT_NE(hash, "d41d8cd98f00b204e9800998ecf8427e");
         }
 
@@ -517,9 +517,9 @@ namespace disk::file {
             EXPECT_FALSE(FileHashUtil::VerifyHash(data, "0123456789abcdef0123456789abcdef"));
         }
 
-        // =====================================================================
-        // 6. End-to-end: full init → chunk → assemble → promote pipeline
-        // =====================================================================
+        /// =====================================================================
+        /// 6. End-to-end: full init → chunk → assemble → promote pipeline
+        /// =====================================================================
 
         TEST_F(UploadPathTest, FullPipelineInitChunkAssemblePromote) {
             const std::string upload_id = "full-pipeline-test";
@@ -530,17 +530,17 @@ namespace disk::file {
             const std::string expected_content = chunks[0] + chunks[1];
             const auto expected_md5 = FileHashUtil::HashMd5(expected_content);
 
-            // Step 1: Init — ensure temp directory
+            /// Step 1: Init — ensure temp directory
             auto init_result = drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id));
             ASSERT_TRUE(init_result.has_value());
             EXPECT_TRUE(std::filesystem::exists(m_temp_base / upload_id));
 
-            // Step 2: Upload chunks
+            /// Step 2: Upload chunks
             for (uint32_t i = 0; i < chunks.size(); ++i) {
-                // Compute chunk hash (as FileService does)
+                /// Compute chunk hash (as FileService does)
                 const auto chunk_hash = FileHashUtil::HashMd5(chunks[i]);
 
-                // Verify hash matches before writing
+                /// Verify hash matches before writing
                 EXPECT_EQ(chunk_hash, FileHashUtil::HashMd5(chunks[i]));
 
                 auto write_result = drogon::sync_wait(
@@ -549,12 +549,12 @@ namespace disk::file {
                 ASSERT_TRUE(write_result.has_value()) << "WriteChunk " << i << " failed";
             }
 
-            // Verify all chunk files on disk
+            /// Verify all chunk files on disk
             for (uint32_t i = 0; i < chunks.size(); ++i) {
                 EXPECT_TRUE(std::filesystem::exists(ChunkPath(upload_id, i)));
             }
 
-            // Step 3: Assemble
+            /// Step 3: Assemble
             auto assemble_result = drogon::sync_wait(
                 m_storage->AssembleChunks(upload_id, static_cast<uint32_t>(chunks.size()))
             );
@@ -564,7 +564,7 @@ namespace disk::file {
             EXPECT_EQ(ReadBinaryFile(assembled.path), expected_content);
             EXPECT_EQ(assembled.md5_hash, expected_md5);
 
-            // Step 4: Promote to final storage
+            /// Step 4: Promote to final storage
             auto promote_result = drogon::sync_wait(
                 m_storage->PromoteToFinal(assembled.path, assembled.md5_hash)
             );
@@ -574,18 +574,18 @@ namespace disk::file {
             EXPECT_TRUE(std::filesystem::exists(final_path));
             EXPECT_EQ(ReadBinaryFile(final_path), expected_content);
 
-            // Verify final storage path matches expected pattern
+            /// Verify final storage path matches expected pattern
             const auto expected_final = m_storage->GetFinalStoragePath(assembled.md5_hash);
             EXPECT_EQ(final_path, expected_final);
 
-            // Step 5: Cleanup temp
+            /// Step 5: Cleanup temp
             auto cleanup_result = drogon::sync_wait(m_storage->CleanupTemp(upload_id));
             ASSERT_TRUE(cleanup_result.has_value());
             EXPECT_FALSE(std::filesystem::exists(m_temp_base / upload_id));
         }
 
         TEST_F(UploadPathTest, FullPipelineSingleChunkFile) {
-            // Edge case: file smaller than chunk_size (1 chunk total)
+            /// Edge case: file smaller than chunk_size (1 chunk total)
             const std::string upload_id = "single-chunk-pipeline";
             const std::string content = MakePattern(1024, 0x99);
             const auto expected_md5 = FileHashUtil::HashMd5(content);
@@ -602,9 +602,9 @@ namespace disk::file {
             EXPECT_EQ(assemble_result->md5_hash, expected_md5);
         }
 
-        // =====================================================================
-        // 7. DTO serialization for upload complete
-        // =====================================================================
+        /// =====================================================================
+        /// 7. DTO serialization for upload complete
+        /// =====================================================================
 
         class UploadPathDtoTest : public ::testing::Test {};
 
@@ -670,32 +670,32 @@ namespace disk::file {
             EXPECT_EQ(json["file"]["hash"].asString(), "abc123def456abc123def456abc123de");
         }
 
-        // =====================================================================
-        // 8. Move semantics verification (characterizes the zero-copy path)
-        // =====================================================================
+        /// =====================================================================
+        /// 8. Move semantics verification (characterizes the zero-copy path)
+        /// =====================================================================
 
         TEST_F(UploadPathTest, WriteChunkAcceptsMovedString) {
-            // Characterize that WriteChunk takes std::string by value,
-            // meaning callers can std::move their string to avoid copies.
+            /// Characterize that WriteChunk takes std::string by value,
+            /// meaning callers can std::move their string to avoid copies.
             const std::string upload_id = "move-semantics-test";
             const std::string original_data = MakePattern(8192, 0x55);
             std::string data_copy = original_data;
 
             ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
 
-            // Move the string into WriteChunk (as FileService does at line 947)
+            /// Move the string into WriteChunk (as FileService does at line 947)
             auto result = drogon::sync_wait(
                 m_storage->WriteChunk(upload_id, 0, std::move(data_copy))
             );
             ASSERT_TRUE(result.has_value());
 
-            // Verify the data on disk matches the original
+            /// Verify the data on disk matches the original
             EXPECT_EQ(ReadBinaryFile(ChunkPath(upload_id, 0)), original_data);
         }
 
-        // =====================================================================
-        // 9. Cleanup verification
-        // =====================================================================
+        /// =====================================================================
+        /// 9. Cleanup verification
+        /// =====================================================================
 
         TEST_F(UploadPathTest, CleanupTempRemovesUploadDirectory) {
             const std::string upload_id = "cleanup-test";
@@ -714,13 +714,13 @@ namespace disk::file {
 
         TEST_F(UploadPathTest, CleanupTempIdempotentOnMissingDirectory) {
             const std::string upload_id = "cleanup-nonexistent";
-            // Never created the directory
+            /// Never created the directory
             EXPECT_FALSE(std::filesystem::exists(m_temp_base / upload_id));
 
             auto result = drogon::sync_wait(m_storage->CleanupTemp(upload_id));
-            // Should succeed even if directory doesn't exist
+            /// Should succeed even if directory doesn't exist
             ASSERT_TRUE(result.has_value());
         }
 
-    } // namespace
-} // namespace disk::file
+    } ///< namespace
+} ///< namespace disk::file

@@ -37,7 +37,7 @@
 
 namespace disk::admin {
 
-    // ==================== 分页结构 ====================
+    /// ==================== 分页结构 ====================
 
     /**
      * @brief 分页信息
@@ -60,7 +60,7 @@ namespace disk::admin {
         }
     };
 
-    // ==================== Request DTOs ====================
+    /// ==================== Request DTOs ====================
 
     /**
      * @brief 获取用户列表请求 DTO
@@ -91,33 +91,33 @@ namespace disk::admin {
 
             ListUsersRequest request;
 
-            // 解析可选参数 page
+            /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page", 1);
             if (!page_result) return std::unexpected(page_result.error());
             if (page_result->has_value()) {
                 request.page = **page_result;
             }
 
-            // 解析可选参数 page_size
+            /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
             if (!page_size_result) return std::unexpected(page_size_result.error());
             if (page_size_result->has_value()) {
                 request.page_size = **page_size_result;
             }
 
-            // 解析可选参数 username
+            /// 解析可选参数 username
             auto username_str = req->getParameter("username");
             if (!username_str.empty()) {
                 request.username = username_str;
             }
 
-            // 解析可选参数 email
+            /// 解析可选参数 email
             auto email_str = req->getParameter("email");
             if (!email_str.empty()) {
                 request.email = email_str;
             }
 
-            // 解析可选参数 status
+            /// 解析可选参数 status
             auto status_str = req->getParameter("status");
             if (!status_str.empty()) {
                 try {
@@ -146,7 +146,7 @@ namespace disk::admin {
                 }
             }
 
-            // 解析可选参数 role
+            /// 解析可选参数 role
             auto role_str = req->getParameter("role");
             if (!role_str.empty()) {
                 try {
@@ -324,21 +324,21 @@ namespace disk::admin {
 
             ListSharesRequest request;
 
-            // 解析可选参数 page
+            /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page", 1);
             if (!page_result) return std::unexpected(page_result.error());
             if (page_result->has_value()) {
                 request.page = **page_result;
             }
 
-            // 解析可选参数 page_size
+            /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
             if (!page_size_result) return std::unexpected(page_size_result.error());
             if (page_size_result->has_value()) {
                 request.page_size = **page_size_result;
             }
 
-            // 解析可选参数 status
+            /// 解析可选参数 status
             auto status_str = req->getParameter("status");
             if (!status_str.empty()) {
                 try {
@@ -367,12 +367,12 @@ namespace disk::admin {
                 }
             }
 
-            // 解析可选参数 user_id
+            /// 解析可选参数 user_id
             auto user_id_result = QueryUInt64(req, "user_id");
             if (!user_id_result) return std::unexpected(user_id_result.error());
             request.user_id = *user_id_result;
 
-            // 解析可选参数 username
+            /// 解析可选参数 username
             auto username = req->getParameter("username");
             if (!username.empty()) {
                 request.username = username;
@@ -415,33 +415,33 @@ namespace disk::admin {
 
             AdminLogListRequest request;
 
-            // 解析可选参数 page
+            /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page", 1);
             if (!page_result) return std::unexpected(page_result.error());
             if (page_result->has_value()) {
                 request.page = **page_result;
             }
 
-            // 解析可选参数 page_size
+            /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
             if (!page_size_result) return std::unexpected(page_size_result.error());
             if (page_size_result->has_value()) {
                 request.page_size = **page_size_result;
             }
 
-            // 解析可选参数 action
+            /// 解析可选参数 action
             auto action_str = req->getParameter("action");
             if (!action_str.empty()) {
                 request.action = action_str;
             }
 
-            // 解析可选参数 start_date
+            /// 解析可选参数 start_date
             auto start_date_str = req->getParameter("start_date");
             if (!start_date_str.empty()) {
                 request.start_date = start_date_str;
             }
 
-            // 解析可选参数 end_date
+            /// 解析可选参数 end_date
             auto end_date_str = req->getParameter("end_date");
             if (!end_date_str.empty()) {
                 request.end_date = end_date_str;
@@ -457,7 +457,7 @@ namespace disk::admin {
         }
     };
 
-    // ==================== Response DTOs ====================
+    /// ==================== Response DTOs ====================
 
     /**
      * @brief 用户详情响应 DTO
@@ -683,4 +683,4 @@ namespace disk::admin {
         }
     };
 
-} // namespace disk::admin
+} ///< namespace disk::admin

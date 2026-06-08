@@ -26,10 +26,10 @@ namespace disk::services {
      *
      * 使用方式：
      * @code
-     * // 在应用启动时初始化（只需调用一次）
+     * ///< 在应用启动时初始化（只需调用一次）
      * ScheduledTasks::Initialize(db_client);
      *
-     * // 注册定时任务
+     * ///< 注册定时任务
      * ScheduledTasks::Register();
      * @endcode
      */
@@ -71,4 +71,4 @@ namespace disk::services {
         std::shared_ptr<CleanupService> m_cleanup_service{};
     };
 
-} // namespace disk::services
+} ///< namespace disk::services

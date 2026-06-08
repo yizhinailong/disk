@@ -32,9 +32,9 @@
 
 namespace {
 
-    // ============================================================
-    // 辅助：解析 JSON body
-    // ============================================================
+    /// ============================================================
+    /// 辅助：解析 JSON body
+    /// ============================================================
     auto ParseJsonBody(const drogon::HttpResponsePtr& resp) -> Json::Value {
         Json::Value root;
         Json::CharReaderBuilder builder;
@@ -45,9 +45,9 @@ namespace {
         return root;
     }
 
-    // ============================================================
-    // MockFileStorage — 仅实现 OpenForRead，其他返回默认成功值
-    // ============================================================
+    /// ============================================================
+    /// MockFileStorage — 仅实现 OpenForRead，其他返回默认成功值
+    /// ============================================================
     class MockFileStorage final : public disk::storage::IFileStorage {
     public:
         explicit MockFileStorage(std::filesystem::path temp_dir)
@@ -58,7 +58,7 @@ namespace {
             std::filesystem::remove_all(m_temp_dir, ec);
         }
 
-        // ---- 测试辅助 ----
+        /// ---- 测试辅助 ----
 
         /// 在临时目录创建文件并写入 content，返回该文件路径
         auto CreateTempFile(const std::string& name, const std::string& content)
@@ -70,7 +70,7 @@ namespace {
             return path;
         }
 
-        // ---- IFileStorage 接口 ----
+        /// ---- IFileStorage 接口 ----
 
         auto EnsureUploadTempDir(const std::string& /*upload_id*/)
             -> drogon::Task<Result<void>> override {
@@ -137,9 +137,9 @@ namespace {
         std::filesystem::path m_temp_dir;
     };
 
-    // ============================================================
-    // RAII 临时目录
-    // ============================================================
+    /// ============================================================
+    /// RAII 临时目录
+    /// ============================================================
     class TempDirGuard {
     public:
         TempDirGuard() {
@@ -166,11 +166,11 @@ namespace {
         std::filesystem::path m_path;
     };
 
-} // namespace
+} ///< namespace
 
-// ================================================================
-// Suite 1: RangeRequest::Parse 纯函数测试
-// ================================================================
+/// ================================================================
+/// Suite 1: RangeRequest::Parse 纯函数测试
+/// ================================================================
 TEST(RangeRequestParseTest, EmptyHeaderReturnsNoRange) {
     auto result = disk::file::RangeRequest::Parse("", 1000);
     EXPECT_FALSE(result.has_range);
@@ -227,9 +227,9 @@ TEST(RangeRequestParseTest, InvalidPrefix) {
     EXPECT_FALSE(result.satisfiable);
 }
 
-// ================================================================
-// Suite 2: BuildDownloadResponse 行为测试
-// ================================================================
+/// ================================================================
+/// Suite 2: BuildDownloadResponse 行为测试
+/// ================================================================
 class DownloadResponderTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -286,8 +286,8 @@ TEST_F(DownloadResponderTest, FullDownloadReturns200) {
     EXPECT_FALSE(resp->getHeader("Content-Disposition").empty());
     EXPECT_EQ(resp->getHeader("ETag"), "\"abc123hash\"");
 
-    // newStreamResponse body is only populated when sent through HTTP;
-    // header verification captures the current behavior characterization.
+    /// newStreamResponse body is only populated when sent through HTTP;
+    /// header verification captures the current behavior characterization.
     EXPECT_TRUE(resp->getBody().empty());
 }
 

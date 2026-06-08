@@ -23,7 +23,7 @@ namespace {
         return req;
     }
 
-} // namespace
+} ///< namespace
 
 TEST(SharePublicRateLimitTest, ShareListPath_Skipped) {
     disk::filters::SharePublicRateLimitFilter filter;

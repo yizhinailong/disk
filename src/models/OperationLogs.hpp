@@ -374,5 +374,5 @@ class OperationLogs
         return sql;
     }
 };
-} // namespace disk
-} // namespace drogon_model
+} ///< namespace disk
+} ///< namespace drogon_model

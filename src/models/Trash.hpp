@@ -419,5 +419,5 @@ class Trash
         return sql;
     }
 };
-} // namespace disk
-} // namespace drogon_model
+} ///< namespace disk
+} ///< namespace drogon_model

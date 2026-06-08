@@ -42,7 +42,7 @@ namespace disk::utils {
      */
     class FileHashUtil {
     public:
-        // ==================== MD5 哈希 ====================
+        /// ==================== MD5 哈希 ====================
 
         /**
          * @brief 计算数据的 MD5 哈希
@@ -62,7 +62,7 @@ namespace disk::utils {
             return BytesToHex(digest, 16);
         }
 
-        // ==================== SHA256 哈希 ====================
+        /// ==================== SHA256 哈希 ====================
 
         /**
          * @brief 计算数据的 SHA256 哈希
@@ -83,7 +83,7 @@ namespace disk::utils {
             return BytesToHex(hash.data(), hash.size());
         }
 
-        // ==================== 文件哈希 ====================
+        /// ==================== 文件哈希 ====================
 
         /**
          * @brief 计算文件的 MD5 哈希
@@ -161,7 +161,7 @@ namespace disk::utils {
             return BytesToHex(hash.data(), hash.size());
         }
 
-        // ==================== 哈希验证 ====================
+        /// ==================== 哈希验证 ====================
 
         /**
          * @brief 验证数据的 MD5 哈希
@@ -176,7 +176,7 @@ namespace disk::utils {
             return actual == expected_md5;
         }
 
-        // ==================== 联合哈希 ====================
+        /// ==================== 联合哈希 ====================
 
         /**
          * @brief 单次文件读取同时计算 MD5 和 SHA256
@@ -228,7 +228,7 @@ namespace disk::utils {
         }
 
     public:
-        // ==================== MD5 增量 API ====================
+        /// ==================== MD5 增量 API ====================
 
         struct Md5Context {
             uint32_t state[4];
@@ -371,7 +371,7 @@ namespace disk::utils {
         }
 
     private:
-        // ==================== MD5 内部实现 ====================
+        /// ==================== MD5 内部实现 ====================
 
         static constexpr uint32_t K[64] = {
             0xd76aa478,
@@ -555,4 +555,4 @@ namespace disk::utils {
         }
     };
 
-} // namespace disk::utils
+} ///< namespace disk::utils

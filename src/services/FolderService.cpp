@@ -46,7 +46,7 @@ namespace disk::folder {
         Logger::Debug() << "Starting create folder: name=\"" << request.name
                   << "\", parent_id=" << request.parent_id << ", user_id=" << user_id;
 
-        // 1. 验证父文件夹（如果 parent_id > 0）
+        /// 1. 验证父文件夹（如果 parent_id > 0）
         std::string parent_path = "/";
         uint32_t parent_depth = 0;
 
@@ -64,21 +64,21 @@ namespace disk::folder {
                       << ", depth=" << parent_depth;
         }
 
-        // 2. 检查同名文件夹是否已存在
+        /// 2. 检查同名文件夹是否已存在
         if (co_await IsFolderNameExists(request.name, request.parent_id, user_id)) {
             Logger::Warn() << "Folder with same name already exists: name=\"" << request.name
                      << "\", parent_id=" << request.parent_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FolderAlreadyExists));
         }
 
-        // 3. 计算路径和深度
+        /// 3. 计算路径和深度
         std::string folder_path = parent_path + request.name + "/";
         uint32_t folder_depth = parent_depth + 1;
 
         Logger::Debug() << "Calculated folder path: path=\"" << folder_path
                   << "\", depth=" << folder_depth;
 
-        // 4. 创建文件夹记录
+        /// 4. 创建文件夹记录
         Folders folder;
         folder.setUserId(user_id);
         folder.setParentId(request.parent_id);
@@ -89,7 +89,7 @@ namespace disk::folder {
         folder.setCreatedAt(trantor::Date::now());
         folder.setUpdatedAt(trantor::Date::now());
 
-        // 5. 插入数据库
+        /// 5. 插入数据库
         try {
             CoroMapper<Folders> mapper(m_db_client);
             folder = co_await mapper.insert(folder);
@@ -104,12 +104,12 @@ namespace disk::folder {
             ));
         }
 
-        // 6. 更新父文件夹的 item_count（如果 parent_id > 0）
+        /// 6. 更新父文件夹的 item_count（如果 parent_id > 0）
         if (request.parent_id > 0) {
             co_await IncrementParentItemCount(request.parent_id);
         }
 
-        // 7. 构造响应
+        /// 7. 构造响应
         CreateFolderResponse response;
         response.id = folder.getValueOfId();
         response.name = folder.getValueOfName();
@@ -294,7 +294,7 @@ namespace disk::folder {
                 Criteria(Folders::Cols::_id, CompareOperator::EQ, parent_id)
             );
 
-            // 验证文件夹属于当前用户
+            /// 验证文件夹属于当前用户
             if (parent.getValueOfUserId() != user_id) {
                 Logger::Warn() << "Parent folder does not belong to current user: parent_id=" << parent_id
                          << ", owner_id=" << parent.getValueOfUserId() << ", user_id=" << user_id;
@@ -367,7 +367,7 @@ namespace disk::folder {
         Logger::Debug() << "Starting get folder tree: user_id=" << user_id << ", parent_id=" << parent_id
                   << ", depth=" << depth;
 
-        // 1. 验证父文件夹归属（如果 parent_id > 0）
+        /// 1. 验证父文件夹归属（如果 parent_id > 0）
         if (parent_id > 0) {
             auto validate_result = co_await ValidateParentOwnership(parent_id, user_id);
             if (!validate_result) {
@@ -376,7 +376,7 @@ namespace disk::folder {
             }
         }
 
-        // 2. 计算最大深度（-1 映射为 100）
+        /// 2. 计算最大深度（-1 映射为 100）
         int max_depth = (depth == -1) ? 100 : depth;
 
         std::vector<FolderNodeData> nodes;
@@ -416,7 +416,7 @@ namespace disk::folder {
             ));
         }
 
-        // 4. 构建树结构
+        /// 4. 构建树结构
         auto tree = BuildTreeFromFlatList(nodes, parent_id);
 
         co_return tree;
@@ -453,14 +453,14 @@ namespace disk::folder {
     FolderService::BuildTreeFromFlatList(std::vector<FolderNodeData>& nodes, uint64_t root_id) const
         -> FolderTreeNode {
 
-        // 构建 parent_id -> children 映射
+        /// 构建 parent_id -> children 映射
         std::unordered_map<uint64_t, std::vector<FolderNodeData>> children_map;
 
         for (auto& node : nodes) {
             children_map[node.parent_id].push_back(std::move(node));
         }
 
-        // 递归构建子树
+        /// 递归构建子树
         std::function<void(FolderTreeNode&, uint64_t)> build_children =
             [&children_map, &build_children](FolderTreeNode& parent, uint64_t parent_id) {
                 auto it = children_map.find(parent_id);
@@ -478,7 +478,7 @@ namespace disk::folder {
                 }
             };
 
-        // 构建根节点
+        /// 构建根节点
         FolderTreeNode root;
         root.id = root_id;
         root.name = (root_id == 0) ? "根目录" : "";
@@ -493,27 +493,27 @@ namespace disk::folder {
 
         Logger::Debug() << "Starting get breadcrumb: folder_id=" << folder_id << ", user_id=" << user_id;
 
-        // 1. 特殊情况：根目录
+        /// 1. 特殊情况：根目录
         if (folder_id == 0) {
             BreadcrumbResponse response;
             response.path.push_back(BreadcrumbItem{ .id = 0, .name = "根目录" });
             co_return response;
         }
 
-        // 2. 查找文件夹并验证归属
+        /// 2. 查找文件夹并验证归属
         auto folder_result = co_await FindAndValidateParent(folder_id, user_id);
         if (!folder_result) {
             Logger::Warn() << "Folder validation failed: folder_id=" << folder_id;
             co_return std::unexpected(folder_result.error());
         }
 
-        // 3. 沿父链遍历
+        /// 3. 沿父链遍历
         std::vector<BreadcrumbItem> path;
         std::unordered_set<uint64_t> visited;
         auto current = *folder_result;
 
         while (true) {
-            // 检查深度限制
+            /// 检查深度限制
             if (path.size() >= 50) {
                 Logger::Error() << "Breadcrumb depth limit exceeded: folder_id=" << folder_id;
                 co_return std::unexpected(
@@ -521,7 +521,7 @@ namespace disk::folder {
                 );
             }
 
-            // 检测循环引用
+            /// 检测循环引用
             if (visited.contains(current.getValueOfId())) {
                 Logger::Error() << "Circular reference detected: folder_id=" << current.getValueOfId();
                 co_return std::unexpected(
@@ -530,15 +530,15 @@ namespace disk::folder {
             }
             visited.insert(current.getValueOfId());
 
-            // 添加当前文件夹到路径
+            /// 添加当前文件夹到路径
             path.push_back(BreadcrumbItem{ .id = current.getValueOfId(), .name = current.getValueOfName() });
 
-            // 到达根目录
+            /// 到达根目录
             if (current.getValueOfParentId() == 0) {
                 break;
             }
 
-            // 获取父文件夹
+            /// 获取父文件夹
             auto parent_result = co_await FindFolderById(current.getValueOfParentId());
             if (!parent_result) {
                 Logger::Warn() << "Parent chain broken: folder_id=" << current.getValueOfId()
@@ -548,11 +548,11 @@ namespace disk::folder {
             current = *parent_result;
         }
 
-        // 4. 添加根目录并反转
+        /// 4. 添加根目录并反转
         path.push_back(BreadcrumbItem{ .id = 0, .name = "根目录" });
         std::ranges::reverse(path);
 
-        // 5. 构建响应
+        /// 5. 构建响应
         BreadcrumbResponse response;
         response.path = std::move(path);
 
@@ -580,4 +580,4 @@ namespace disk::folder {
         }
     }
 
-} // namespace disk::folder
+} ///< namespace disk::folder

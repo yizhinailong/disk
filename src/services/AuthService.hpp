@@ -138,4 +138,4 @@ namespace disk::auth {
         static constexpr uint64_t DEFAULT_STORAGE_QUOTA = 10737418240; ///< 默认存储配额 10GB
     };
 
-} // namespace disk::auth
+} ///< namespace disk::auth

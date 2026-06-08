@@ -70,11 +70,11 @@ namespace disk::services {
             ));
         }
 
-    } // namespace
+    } ///< namespace
 
     using disk::error::ErrorInfo;
 
-    // ==================== 单例初始化 ====================
+    /// ==================== 单例初始化 ====================
 
     auto RedisService::Initialize(drogon::nosql::RedisClientPtr redis_client) -> void {
         auto instance = GetInstance();
@@ -84,7 +84,7 @@ namespace disk::services {
         }
     }
 
-    // ==================== 通用方法实现 ====================
+    /// ==================== 通用方法实现 ====================
 
     auto RedisService::Set(const std::string& key, const std::string& value, int ttl)
         -> drogon::Task<Result<void>> {
@@ -450,4 +450,4 @@ namespace disk::services {
         }
     }
 
-} // namespace disk::services
+} ///< namespace disk::services

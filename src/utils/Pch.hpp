@@ -19,7 +19,7 @@
 
 #pragma once
 
-// C++ 标准库常用头文件
+/// C++ 标准库常用头文件
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -41,7 +41,7 @@
 #include <unordered_map>
 #include <vector>
 
-// ==================== Drogon 框架头文件 ====================
+/// ==================== Drogon 框架头文件 ====================
 #include <drogon/HttpAppFramework.h>
 #include <drogon/HttpClient.h>
 #include <drogon/HttpController.h>
@@ -60,22 +60,22 @@
 #include <drogon/orm/SqlBinder.h>
 #include <drogon/utils/Utilities.h>
 
-// ==================== JSON 库头文件 ====================
+/// ==================== JSON 库头文件 ====================
 #include <json/json.h>
 
-// ==================== JWT 库头文件 ====================
+/// ==================== JWT 库头文件 ====================
 #include <jwt-cpp/jwt.h>
 #include <jwt-cpp/traits/open-source-parsers-jsoncpp/traits.h>
 
-// ==================== libsodium 加密库头文件 ====================
+/// ==================== libsodium 加密库头文件 ====================
 #include <sodium.h>
 #include <sodium/crypto_hash_sha256.h>
 #include <sodium/crypto_pwhash.h>
 
-// ==================== 日志库头文件 ====================
+/// ==================== 日志库头文件 ====================
 #include "utils/LogHelper.hpp"
 
-// ==================== 后端 ORM 模型头文件（auto-generated）====================
+/// ==================== 后端 ORM 模型头文件（auto-generated）====================
 #include "models/FileContents.hpp"
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
@@ -87,6 +87,6 @@
 #include "models/UploadTasks.hpp"
 #include "models/Users.hpp"
 
-// ==================== Google Test 测试框架头文件 ====================
+/// ==================== Google Test 测试框架头文件 ====================
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>

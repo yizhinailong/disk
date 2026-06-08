@@ -14,7 +14,7 @@
 
 namespace disk::auth {
 
-    // ==================== Controller ====================
+    /// ==================== Controller ====================
 
     class AuthController : public drogon::HttpController<AuthController> {
     public:
@@ -63,4 +63,4 @@ namespace disk::auth {
         std::unique_ptr<AuthService> m_auth_service{};
     };
 
-} // namespace disk::auth
+} ///< namespace disk::auth

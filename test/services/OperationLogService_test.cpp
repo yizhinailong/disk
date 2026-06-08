@@ -21,7 +21,7 @@
 namespace disk::log {
     namespace {
 
-        // ==================== NormalizeIpAddress 测试 ====================
+        /// ==================== NormalizeIpAddress 测试 ====================
 
         class NormalizeIpAddressTest : public ::testing::Test {};
 
@@ -51,7 +51,7 @@ namespace disk::log {
             );
         }
 
-        // ==================== OperationLogEntry 默认值测试 ====================
+        /// ==================== OperationLogEntry 默认值测试 ====================
 
         class OperationLogEntryTest : public ::testing::Test {};
 
@@ -70,7 +70,7 @@ namespace disk::log {
             EXPECT_EQ(entry.target_id, 0);
         }
 
-        // ==================== 归一化与 Entry 默认值的集成场景 ====================
+        /// ==================== 归一化与 Entry 默认值的集成场景 ====================
 
         TEST_F(OperationLogEntryTest, DefaultEntryIpNormalizesToUnknown) {
             OperationLogEntry entry;
@@ -85,5 +85,5 @@ namespace disk::log {
             EXPECT_EQ(normalized, "172.16.0.1");
         }
 
-    } // namespace
-} // namespace disk::log
+    } ///< namespace
+} ///< namespace disk::log

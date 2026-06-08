@@ -19,7 +19,7 @@
 
 namespace disk::services {
 
-    // ==================== 辅助类型 ====================
+    /// ==================== 辅助类型 ====================
 
     /**
      * @brief TTL类型枚举
@@ -45,10 +45,10 @@ namespace disk::services {
      *
      * 使用方式：
      * @code
-     * // 在应用启动时初始化（只需调用一次）
+     * ///< 在应用启动时初始化（只需调用一次）
      * RedisService::Initialize(redis_client);
      *
-     * // 在任何地方获取实例
+     * ///< 在任何地方获取实例
      * auto redis = RedisService::GetInstance();
      * co_await redis->Set("key", "value");
      * @endcode
@@ -71,7 +71,7 @@ namespace disk::services {
         auto operator=(const RedisService&) -> RedisService& = delete;
         RedisService(RedisService&&) = delete;
         auto operator=(RedisService&&) -> RedisService& = delete;
-        // ==================== 通用方法 ====================
+        /// ==================== 通用方法 ====================
 
         /**
          * @brief 设置 Redis 键值对
@@ -219,4 +219,4 @@ namespace disk::services {
         drogon::nosql::RedisClientPtr m_redis_client;
     };
 
-} // namespace disk::services
+} ///< namespace disk::services

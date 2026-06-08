@@ -20,4 +20,4 @@ namespace disk::filters {
         auto doFilter(const drogon::HttpRequestPtr& request)
             -> drogon::Task<drogon::HttpResponsePtr> override;
     };
-} // namespace disk::filters
+} ///< namespace disk::filters

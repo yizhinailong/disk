@@ -65,7 +65,7 @@ TEST(TokenHash, ToHexValidHexFormat) {
     const auto hash = hash_result.value();
     const auto hex = HashUtil::TokenHashToHex(hash);
 
-    // 验证所有字符都是十六进制
+    /// 验证所有字符都是十六进制
     for (char c : hex) {
         EXPECT_GE((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'), 0);
     }
@@ -92,16 +92,16 @@ TEST(TokenHash, EmptyToken) {
     }
 }
 
-// ================================================================================
-// Password change flow — exercises HashUtil::VerifyPassword() usage semantics
-//
-// Simulates the password-change path:
-//   1. Retrieve stored hash (simulated by hashing old password)
-//   2. Verify old password: VerifyPassword(old_password, stored_hash) → true
-//   3. Hash new password: HashPassword(new_password)
-//   4. Verify new password: VerifyPassword(new_password, new_hash) → true
-//   5. Old password no longer matches new hash: VerifyPassword(old_password, new_hash) → false
-// ================================================================================
+/// ================================================================================
+/// Password change flow — exercises HashUtil::VerifyPassword() usage semantics
+///
+/// Simulates the password-change path:
+///   1. Retrieve stored hash (simulated by hashing old password)
+///   2. Verify old password: VerifyPassword(old_password, stored_hash) → true
+///   3. Hash new password: HashPassword(new_password)
+///   4. Verify new password: VerifyPassword(new_password, new_hash) → true
+///   5. Old password no longer matches new hash: VerifyPassword(old_password, new_hash) → false
+/// ================================================================================
 
 TEST(PasswordChangeFlow, OldPasswordVerifiesAgainstOldHash) {
     auto old_hash = HashUtil::HashPassword("OldPass123!");

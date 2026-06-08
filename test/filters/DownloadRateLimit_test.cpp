@@ -24,7 +24,7 @@ namespace {
         return req;
     }
 
-} // namespace
+} ///< namespace
 
 TEST(DownloadRateLimitTest, FileListPath_Skipped) {
     disk::filters::DownloadRateLimitFilter filter;

@@ -33,7 +33,7 @@ namespace disk::utils {
      */
     class BatchUtils {
     public:
-        // ==================== 分块操作 ====================
+        /// ==================== 分块操作 ====================
 
         /**
          * @brief 将向量分割为多个分块
@@ -49,7 +49,7 @@ namespace disk::utils {
          * @code
          * std::vector<uint64_t> file_ids = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
          * auto chunks = BatchUtils::Chunk(file_ids, 3);
-         * // chunks = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10}}
+         * ///< chunks = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10}}
          * @endcode
          */
         template <typename T>
@@ -67,7 +67,7 @@ namespace disk::utils {
             return chunks;
         }
 
-        // ==================== SQL 占位符生成 ====================
+        /// ==================== SQL 占位符生成 ====================
 
         /**
          * @brief 构建 SQL IN-clause 占位符字符串
@@ -81,9 +81,9 @@ namespace disk::utils {
          * @code
          * std::vector<uint64_t> file_ids = {1, 2, 3, 4};
          * auto placeholders = BatchUtils::BuildInPlaceholders(file_ids.size());
-         * // placeholders = "?,?,?,?"
+         * ///< placeholders = "?,?,?,?"
          *
-         * // 使用示例
+         * ///< 使用示例
          * auto placeholders = BatchUtils::BuildInPlaceholders(file_ids.size());
          * auto sql = "DELETE FROM files WHERE file_id IN (" + placeholders + ")";
          * auto result = co_await client->execSqlCoro(sql, file_ids);
@@ -121,7 +121,7 @@ namespace disk::utils {
             return BuildInPlaceholders(items.size(), start_index);
         }
 
-        // ==================== 数值 IN 子句 ====================
+        /// ==================== 数值 IN 子句 ====================
 
         /**
          * @brief 构建安全的数字类型 SQL IN 子句
@@ -136,7 +136,7 @@ namespace disk::utils {
          * @code
          * std::vector<uint64_t> file_ids = {1, 2, 3};
          * auto in_clause = BatchUtils::BuildSafeNumericInClause(file_ids);
-         * // in_clause = "1,2,3"
+         * ///< in_clause = "1,2,3"
          * auto sql = "SELECT * FROM files WHERE id IN (" + in_clause + ")";
          * @endcode
          */
@@ -155,7 +155,7 @@ namespace disk::utils {
             return oss.str();
         }
 
-        // ==================== 批量验证 ====================
+        /// ==================== 批量验证 ====================
 
         /**
          * @brief 验证批量操作的输入参数
@@ -174,4 +174,4 @@ namespace disk::utils {
         }
     };
 
-} // namespace disk::utils
+} ///< namespace disk::utils

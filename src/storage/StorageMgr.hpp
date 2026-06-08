@@ -24,10 +24,10 @@ namespace disk::storage {
      *
      * 使用方式：
      * @code
-     * // 在 main.cpp 初始化
+     * ///< 在 main.cpp 初始化
      * StorageMgr::SetInstance(std::make_shared<LocalFileStorage>(config));
      *
-     * // 在控制器中获取
+     * ///< 在控制器中获取
      * auto storage = StorageMgr::GetStorage();
      * @endcode
      */
@@ -57,4 +57,4 @@ namespace disk::storage {
         static std::shared_ptr<IFileStorage> s_storage;
     };
 
-} // namespace disk::storage
+} ///< namespace disk::storage

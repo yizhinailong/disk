@@ -69,4 +69,4 @@ namespace disk::filters {
         }
     };
 
-} // namespace disk::filters
+} ///< namespace disk::filters

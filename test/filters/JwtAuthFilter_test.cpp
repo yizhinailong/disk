@@ -30,9 +30,9 @@ namespace {
 
     constexpr const char* TEST_JWT_SECRET = "test_secret_key_for_share_token_32b";
 
-    // ================================================================================
-    // Helper: Build a valid access token with custom claims
-    // ================================================================================
+    /// ================================================================================
+    /// Helper: Build a valid access token with custom claims
+    /// ================================================================================
 
     auto BuildAccessToken(
         uint64_t user_id,
@@ -56,9 +56,9 @@ namespace {
             .sign(jwt::algorithm::hs256{ secret });
     }
 
-    // ================================================================================
-    // Fixture: Initialize TokenService singleton once per test suite
-    // ================================================================================
+    /// ================================================================================
+    /// Fixture: Initialize TokenService singleton once per test suite
+    /// ================================================================================
 
     class JwtAuthFilterTest : public ::testing::Test {
     protected:
@@ -67,9 +67,9 @@ namespace {
         }
     };
 
-    // ================================================================================
-    // VerifyAccessToken — happy path
-    // ================================================================================
+    /// ================================================================================
+    /// VerifyAccessToken — happy path
+    /// ================================================================================
 
     TEST_F(JwtAuthFilterTest, VerifyAccessTokenValidTokenReturnsUserIdAndUsername) {
         auto token = BuildAccessToken(42, "alice", "jti-test-001");
@@ -94,9 +94,9 @@ namespace {
         EXPECT_EQ(result.value().jti, "jti-large-id");
     }
 
-    // ================================================================================
-    // VerifyAccessToken — expired token
-    // ================================================================================
+    /// ================================================================================
+    /// VerifyAccessToken — expired token
+    /// ================================================================================
 
     TEST_F(JwtAuthFilterTest, VerifyAccessTokenExpiredTokenReturnsTokenExpired) {
         auto now = std::chrono::system_clock::now();
@@ -110,9 +110,9 @@ namespace {
         EXPECT_EQ(result.error().code, Code::TokenExpired);
     }
 
-    // ================================================================================
-    // VerifyAccessToken — wrong type (type != "access")
-    // ================================================================================
+    /// ================================================================================
+    /// VerifyAccessToken — wrong type (type != "access")
+    /// ================================================================================
 
     TEST_F(JwtAuthFilterTest, VerifyAccessTokenWrongTypeReturnsTokenWrongType) {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
@@ -135,9 +135,9 @@ namespace {
         EXPECT_EQ(result.error().code, Code::TokenWrongType);
     }
 
-    // ================================================================================
-    // VerifyAccessToken — malformed / empty token
-    // ================================================================================
+    /// ================================================================================
+    /// VerifyAccessToken — malformed / empty token
+    /// ================================================================================
 
     TEST_F(JwtAuthFilterTest, VerifyAccessTokenEmptyTokenReturnsTokenMalformed) {
         auto result = TokenService::GetInstance()->VerifyAccessToken("");
@@ -160,19 +160,19 @@ namespace {
         EXPECT_EQ(result.error().code, Code::TokenMalformed);
     }
 
-    // ================================================================================
-    // VerifyAccessToken — wrong secret (signature mismatch)
-    // ================================================================================
+    /// ================================================================================
+    /// VerifyAccessToken — wrong secret (signature mismatch)
+    /// ================================================================================
 
     TEST_F(JwtAuthFilterTest, VerifyAccessTokenWrongSecretReturnsInvalidToken) {
         std::string wrong_secret = "wrong_secret_key_for_share_token_";
         auto token = BuildAccessToken(1, "user", "jti-wrong-secret", wrong_secret);
 
-        // Verify with the correct secret — should fail signature verification
+        /// Verify with the correct secret — should fail signature verification
         auto result = TokenService::GetInstance()->VerifyAccessToken(token);
 
         ASSERT_FALSE(result.has_value()) << "Token signed with wrong secret should fail";
-        // jwt-cpp throws token_verification_exception for bad signatures → InvalidToken
+        /// jwt-cpp throws token_verification_exception for bad signatures → InvalidToken
         EXPECT_TRUE(
             result.error().code == Code::InvalidToken ||
             result.error().code == Code::TokenMalformed
@@ -180,9 +180,9 @@ namespace {
           << static_cast<uint32_t>(result.error().code);
     }
 
-    // ================================================================================
-    // VerifyAccessToken — wrong issuer
-    // ================================================================================
+    /// ================================================================================
+    /// VerifyAccessToken — wrong issuer
+    /// ================================================================================
 
     TEST_F(JwtAuthFilterTest, VerifyAccessTokenWrongIssuerReturnsInvalidToken) {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
@@ -203,19 +203,19 @@ namespace {
         auto result = TokenService::GetInstance()->VerifyAccessToken(token);
 
         ASSERT_FALSE(result.has_value()) << "Wrong issuer should fail verification";
-        // Issuer mismatch triggers token_verification_exception → InvalidToken
+        /// Issuer mismatch triggers token_verification_exception → InvalidToken
         EXPECT_TRUE(
             result.error().code == Code::InvalidToken ||
             result.error().code == Code::TokenMalformed
         ) << "Expected InvalidToken or TokenMalformed for wrong issuer";
     }
 
-    // ================================================================================
-    // JwtAuthFilter doFilter — optimized: single decode pattern
-    //
-    // VerifyAccessToken now returns AccessTokenClaims{user_id, username, jti}
-    // from a single JWT decode. The redundant second decode has been eliminated.
-    // ================================================================================
+    /// ================================================================================
+    /// JwtAuthFilter doFilter — optimized: single decode pattern
+    ///
+    /// VerifyAccessToken now returns AccessTokenClaims{user_id, username, jti}
+    /// from a single JWT decode. The redundant second decode has been eliminated.
+    /// ================================================================================
 
     TEST_F(JwtAuthFilterTest, VerifyAccessTokenReturnsAccessTokenClaimsWithJti) {
         auto token = BuildAccessToken(100, "baseline_user", "jti-dup-decode");
@@ -235,15 +235,15 @@ namespace {
         auto verify_result = TokenService::GetInstance()->VerifyAccessToken(token);
         ASSERT_TRUE(verify_result.has_value());
 
-        // JTI is available directly from the verification result — no second decode needed.
+        /// JTI is available directly from the verification result — no second decode needed.
         EXPECT_EQ(verify_result.value().jti, "jti-single-decode");
 
-        // OPTIMIZED: 1 JWT decode operation per authenticated request (was 2).
+        /// OPTIMIZED: 1 JWT decode operation per authenticated request (was 2).
     }
 
-    // ================================================================================
-    // Token structure contract — access token contains required claims
-    // ================================================================================
+    /// ================================================================================
+    /// Token structure contract — access token contains required claims
+    /// ================================================================================
 
     TEST_F(JwtAuthFilterTest, AccessTokenStructureContainsRequiredClaims) {
         auto token = BuildAccessToken(42, "claim_user", "jti-claims-check");
@@ -259,9 +259,9 @@ namespace {
         EXPECT_FALSE(decoded.get_payload_claim("jti").as_string().empty());
     }
 
-    // ================================================================================
-    // Error code contract — auth-related error codes are distinct
-    // ================================================================================
+    /// ================================================================================
+    /// Error code contract — auth-related error codes are distinct
+    /// ================================================================================
 
     TEST_F(JwtAuthFilterTest, AuthErrorCodesAreDistinct) {
         EXPECT_NE(static_cast<uint32_t>(Code::TokenMissing), static_cast<uint32_t>(Code::TokenMalformed));
@@ -307,14 +307,14 @@ namespace {
         SUCCEED() << "Requires Redis/Drogon runtime to validate cache TTL expiry behavior";
     }
 
-    // ================================================================================
-    // JwtAuthFilter doFilter — integration tests (require Drogon runtime)
-    //
-    // The filter's doFilter is a coroutine that requires:
-    //   - drogon::HttpRequestPtr
-    //   - Redis connection for IsAccessTokenRevoked
-    // These are placeholder tests that document the expected behavior.
-    // ================================================================================
+    /// ================================================================================
+    /// JwtAuthFilter doFilter — integration tests (require Drogon runtime)
+    ///
+    /// The filter's doFilter is a coroutine that requires:
+    ///   - drogon::HttpRequestPtr
+    ///   - Redis connection for IsAccessTokenRevoked
+    /// These are placeholder tests that document the expected behavior.
+    /// ================================================================================
 
     TEST_F(JwtAuthFilterTest, DISABLED_FilterMissingAuthorizationHeaderReturnsTokenMissing) {
         SUCCEED() << "Integration test requires Drogon runtime with HTTP request context";
@@ -336,20 +336,20 @@ namespace {
         SUCCEED() << "Integration test requires Drogon runtime with HTTP request context";
     }
 
-    // ================================================================================
-    // Error code contract tests — lock in auth error codes before optimization
-    //
-    // JwtAuthFilter doFilter maps to these error codes:
-    //   empty Authorization   → TokenMissing  (line 32)
-    //   non-Bearer prefix     → TokenMalformed (line 40)
-    //   VerifyAccessToken fail → forwarded error (TokenExpired/InvalidToken/TokenWrongType/TokenMalformed)
-    //   IsAccessTokenRevoked   → TokenRevoked  (line 64)
-    //   success               → user_id + username attributes (line 67-68)
-    //
-    // These tests lock in the numeric values, HTTP status codes, and messages.
-    // ================================================================================
+    /// ================================================================================
+    /// Error code contract tests — lock in auth error codes before optimization
+    ///
+    /// JwtAuthFilter doFilter maps to these error codes:
+    ///   empty Authorization   → TokenMissing  (line 32)
+    ///   non-Bearer prefix     → TokenMalformed (line 40)
+    ///   VerifyAccessToken fail → forwarded error (TokenExpired/InvalidToken/TokenWrongType/TokenMalformed)
+    ///   IsAccessTokenRevoked   → TokenRevoked  (line 64)
+    ///   success               → user_id + username attributes (line 67-68)
+    ///
+    /// These tests lock in the numeric values, HTTP status codes, and messages.
+    /// ================================================================================
 
-    // --- TokenMissing (empty Authorization header) ---
+    /// --- TokenMissing (empty Authorization header) ---
 
     TEST_F(JwtAuthFilterTest, TokenMissingErrorCodeValue) {
         EXPECT_EQ(static_cast<uint32_t>(Code::TokenMissing), 40106u);
@@ -363,7 +363,7 @@ namespace {
         EXPECT_EQ(disk::error::GetErrorMessage(Code::TokenMissing), std::string("Token not provided"));
     }
 
-    // --- TokenMalformed (non-Bearer prefix / garbled token) ---
+    /// --- TokenMalformed (non-Bearer prefix / garbled token) ---
 
     TEST_F(JwtAuthFilterTest, TokenMalformedErrorCodeValue) {
         EXPECT_EQ(static_cast<uint32_t>(Code::TokenMalformed), 40107u);
@@ -377,7 +377,7 @@ namespace {
         EXPECT_EQ(disk::error::GetErrorMessage(Code::TokenMalformed), std::string("Token format error"));
     }
 
-    // --- TokenExpired ---
+    /// --- TokenExpired ---
 
     TEST_F(JwtAuthFilterTest, TokenExpiredErrorCodeValue) {
         EXPECT_EQ(static_cast<uint32_t>(Code::TokenExpired), 40108u);
@@ -391,7 +391,7 @@ namespace {
         EXPECT_EQ(disk::error::GetErrorMessage(Code::TokenExpired), std::string("Token expired"));
     }
 
-    // --- TokenWrongType (refresh token used where access expected) ---
+    /// --- TokenWrongType (refresh token used where access expected) ---
 
     TEST_F(JwtAuthFilterTest, TokenWrongTypeErrorCodeValue) {
         EXPECT_EQ(static_cast<uint32_t>(Code::TokenWrongType), 40109u);
@@ -405,7 +405,7 @@ namespace {
         EXPECT_EQ(disk::error::GetErrorMessage(Code::TokenWrongType), std::string("Token type error"));
     }
 
-    // --- TokenRevoked (post-verification revocation check) ---
+    /// --- TokenRevoked (post-verification revocation check) ---
 
     TEST_F(JwtAuthFilterTest, TokenRevokedErrorCodeValue) {
         EXPECT_EQ(static_cast<uint32_t>(Code::TokenRevoked), 40111u);
@@ -419,7 +419,7 @@ namespace {
         EXPECT_EQ(disk::error::GetErrorMessage(Code::TokenRevoked), std::string("Token revoked"));
     }
 
-    // --- InvalidToken (signature / issuer mismatch) ---
+    /// --- InvalidToken (signature / issuer mismatch) ---
 
     TEST_F(JwtAuthFilterTest, InvalidTokenErrorCodeValue) {
         EXPECT_EQ(static_cast<uint32_t>(Code::InvalidToken), 40104u);
@@ -433,9 +433,9 @@ namespace {
         EXPECT_EQ(disk::error::GetErrorMessage(Code::InvalidToken), std::string("Token invalid or expired"));
     }
 
-    // ================================================================================
-    // VerifyRefreshToken — refresh token validation paths
-    // ================================================================================
+    /// ================================================================================
+    /// VerifyRefreshToken — refresh token validation paths
+    /// ================================================================================
 
     TEST_F(JwtAuthFilterTest, VerifyRefreshTokenValidTokenReturnsUserIdAndJti) {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
@@ -515,9 +515,9 @@ namespace {
           << static_cast<uint32_t>(result.error().code);
     }
 
-    // ================================================================================
-    // GenerateTokens — token pair generation contract
-    // ================================================================================
+    /// ================================================================================
+    /// GenerateTokens — token pair generation contract
+    /// ================================================================================
 
     TEST_F(JwtAuthFilterTest, GenerateTokensReturnsTwoDistinctNonEmptyTokens) {
         auto [access_token, refresh_token] = TokenService::GetInstance()->GenerateTokens(42, "gen_user");
@@ -557,16 +557,16 @@ namespace {
             << "Access and refresh tokens should have different JTIs";
     }
 
-    // ================================================================================
-    // VerifyAccessToken — additional edge cases
-    // ================================================================================
+    /// ================================================================================
+    /// VerifyAccessToken — additional edge cases
+    /// ================================================================================
 
     TEST_F(JwtAuthFilterTest, VerifyAccessTokenTokenWithoutUsernameClaimReturnsMalformed) {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
         auto now = std::chrono::system_clock::now();
         jwt::builder<jwt::default_clock, traits> builder{ jwt::default_clock{} };
-        // Token without username claim — VerifyAccessToken calls
-        // decoded.get_payload_claim("username").as_string() which will throw
+        /// Token without username claim — VerifyAccessToken calls
+        /// decoded.get_payload_claim("username").as_string() which will throw
         auto token = builder
                          .set_issuer("disk")
                          .set_type("JWT")
@@ -578,7 +578,7 @@ namespace {
                          .sign(jwt::algorithm::hs256{ TEST_JWT_SECRET });
 
         auto result = TokenService::GetInstance()->VerifyAccessToken(token);
-        // Missing "username" claim → std::exception → TokenMalformed
+        /// Missing "username" claim → std::exception → TokenMalformed
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error().code, Code::TokenMalformed);
     }
@@ -593,15 +593,15 @@ namespace {
                          .set_subject("1")
                          .set_payload_claim("username", "user")
                          .set_payload_claim("type", "access")
-                         // No jti claim
+                         /// No jti claim
                          .set_issued_at(now)
                          .set_expires_at(now + std::chrono::hours(2))
                          .sign(jwt::algorithm::hs256{ TEST_JWT_SECRET });
 
         auto result = TokenService::GetInstance()->VerifyAccessToken(token);
-        // Missing "jti" claim → std::exception → TokenMalformed
+        /// Missing "jti" claim → std::exception → TokenMalformed
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error().code, Code::TokenMalformed);
     }
 
-} // namespace
+} ///< namespace

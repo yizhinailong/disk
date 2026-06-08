@@ -13,21 +13,21 @@ auto main() -> int {
 
     disk::utils::Logger::Info() << "Disk system starting...";
 
-    // 初始化 libsodium 加密库
+    /// 初始化 libsodium 加密库
     if (sodium_init() < 0) {
         disk::utils::Logger::Error() << "libsodium initialization failed";
         return 1;
     }
     disk::utils::Logger::Info() << "libsodium initialized successfully";
 
-    // 加载配置文件
+    /// 加载配置文件
     drogon::app().loadConfigFile("config.json");
     disk::utils::Logger::Info() << "Configuration file loaded successfully";
 
-    // 使用 config.json 中的值初始化 ConfigMgr
+    /// 使用 config.json 中的值初始化 ConfigMgr
     disk::utils::ConfigMgr::GetInstance()->LoadConfig();
 
-    // 验证配置（JWT_SECRET 所有环境必须设置，DATABASE/REDIS 仅安全模式要求）
+    /// 验证配置（JWT_SECRET 所有环境必须设置，DATABASE/REDIS 仅安全模式要求）
     try {
         disk::utils::ConfigMgr::GetInstance()->ValidateSecureConfig();
     } catch (const std::runtime_error& e) {
@@ -35,13 +35,13 @@ auto main() -> int {
         return 1;
     }
 
-    // 初始化 TokenService 单例（启动时一次性完成）
+    /// 初始化 TokenService 单例（启动时一次性完成）
     disk::services::TokenService::Initialize(
         disk::utils::ConfigMgr::GetInstance()->GetJwtSecret()
     );
     disk::utils::Logger::Info() << "TokenService initialized successfully";
 
-    // 记录有效存储路径
+    /// 记录有效存储路径
     disk::utils::Logger::Info() << "Effective storage configuration:";
     disk::utils::Logger::Info() << "  storage_base_path: "
                 << disk::utils::ConfigMgr::GetInstance()->GetStorageBasePath();
@@ -55,7 +55,7 @@ auto main() -> int {
     disk::utils::Logger::Info() << "  assemble_buffer_size_bytes: "
                 << disk::utils::ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes();
 
-    // 初始化文件存储
+    /// 初始化文件存储
     auto storage = std::make_shared<disk::storage::LocalFileStorage>(disk::utils::ConfigMgr::GetInstance());
     disk::storage::StorageMgr::SetInstance(storage);
     disk::utils::Logger::Info() << "File storage initialized successfully";
@@ -63,14 +63,14 @@ auto main() -> int {
     disk::utils::Logger::Info() << "Drogon framework version: " << drogon::getVersion();
     disk::utils::Logger::Info() << "Web server listening on http://127.0.0.1:8080";
 
-    // 注册启动后定时清理任务
+    /// 注册启动后定时清理任务
     drogon::app().registerBeginningAdvice([]() {
         disk::services::ScheduledTasks::Initialize(drogon::app().getDbClient());
         disk::services::ScheduledTasks::Register();
         disk::services::TokenService::GetInstance()->StartCacheMaintenance();
     });
 
-    // 为所有响应添加 X-Request-Id 头（从 RequestTraceFilter 设置的 attributes 中读取）
+    /// 为所有响应添加 X-Request-Id 头（从 RequestTraceFilter 设置的 attributes 中读取）
     drogon::app().registerPostHandlingAdvice(
         [](const drogon::HttpRequestPtr& req, const drogon::HttpResponsePtr& resp) {
             auto attrs = req->attributes();

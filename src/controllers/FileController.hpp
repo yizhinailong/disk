@@ -15,7 +15,7 @@
 
 namespace disk::file {
 
-    // ==================== Controller ====================
+    /// ==================== Controller ====================
 
     class FileController : public drogon::HttpController<FileController> {
     public:
@@ -232,4 +232,4 @@ namespace disk::file {
         disk::storage::IFileStorage* m_storage{};
     };
 
-} // namespace disk::file
+} ///< namespace disk::file

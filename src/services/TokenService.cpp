@@ -63,7 +63,7 @@ namespace disk::services {
             return pool;
         }
 
-    } // namespace
+    } ///< namespace
 
     using disk::error::ErrorInfo;
 
@@ -86,9 +86,9 @@ namespace disk::services {
             return g_pool_metrics.active_tasks.load(std::memory_order_relaxed);
         }
 
-    } // namespace detail
+    } ///< namespace detail
 
-    // TokenService 私有构造函数（单例模式）
+    /// TokenService 私有构造函数（单例模式）
     TokenService::TokenService()
         : m_jwt_secret(),
           m_jwt_verifier(BuildJwtVerifier("")),
@@ -122,14 +122,14 @@ namespace disk::services {
 
         const auto now = std::chrono::system_clock::now();
 
-        // 定义 traits 别名
+        /// 定义 traits 别名
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
-        // 生成 JTI (Access Token 和 Refresh Token 各有独立的 JTI)
+        /// 生成 JTI (Access Token 和 Refresh Token 各有独立的 JTI)
         const auto access_jti = drogon::utils::getUuid();
         const auto refresh_jti = drogon::utils::getUuid();
 
-        // 生成 Access Token (带唯一 JTI)
+        /// 生成 Access Token (带唯一 JTI)
         jwt::builder<jwt::default_clock, traits> access_builder{ jwt::default_clock{} };
         auto access_token =
             access_builder.set_issuer("disk")
@@ -144,7 +144,7 @@ namespace disk::services {
                 .set_expires_at(now + std::chrono::seconds(GetAccessTokenExpireSeconds()))
                 .sign(jwt::algorithm::hs256{ m_jwt_secret });
 
-        // 生成 Refresh Token (带唯一 JTI)
+        /// 生成 Refresh Token (带唯一 JTI)
         jwt::builder<jwt::default_clock, traits> refresh_builder{ jwt::default_clock{} };
         auto refresh_token =
             refresh_builder.set_issuer("disk")
@@ -303,8 +303,8 @@ namespace disk::services {
         const auto old_hash = disk::utils::HashUtil::TokenHashToHex(old_hash_result.value());
         const auto new_hash = disk::utils::HashUtil::TokenHashToHex(new_hash_result.value());
 
-        // Atomic CAS: compare and swap in one operation
-        // Uses Lua script to ensure exactly one success under concurrency
+        /// Atomic CAS: compare and swap in one operation
+        /// Uses Lua script to ensure exactly one success under concurrency
         auto cas_result = co_await m_redis_service->CompareAndSwap(
             key,
             old_hash,
@@ -335,7 +335,7 @@ namespace disk::services {
 
         const auto jti = jti_result.value();
 
-        // 无论 Redis 结果如何，立即覆盖本地缓存为 revoked=true
+        /// 无论 Redis 结果如何，立即覆盖本地缓存为 revoked=true
         {
             const auto now = std::chrono::steady_clock::now();
             std::unique_lock lock(m_cache_mutex);
@@ -487,7 +487,7 @@ namespace disk::services {
         try {
             auto decoded = jwt::decode<traits>(token);
 
-            // 检查 JTI claim 是否存在（access 和 refresh token 现在都有 JTI）
+            /// 检查 JTI claim 是否存在（access 和 refresh token 现在都有 JTI）
             if (decoded.has_payload_claim("jti")) {
                 const auto jti = decoded.get_payload_claim("jti");
                 return jti.as_string();
@@ -525,7 +525,7 @@ namespace disk::services {
         }
     }
 
-    // ==================== Share Token 静态方法 ====================
+    /// ==================== Share Token 静态方法 ====================
 
     auto TokenService::GenerateShareToken(
         const std::string& jwt_secret,
@@ -611,7 +611,7 @@ namespace disk::services {
         return disk::utils::HashUtil::TokenHashToHex(hash_result.value());
     }
 
-    // ==================== Share Token Redis 异步方法 ====================
+    /// ==================== Share Token Redis 异步方法 ====================
 
     auto TokenService::VerifyShareTokenWithRedis(const std::string& share_code, const std::string& token)
         -> drogon::Task<Result<ShareTokenClaims>> {
@@ -694,4 +694,4 @@ namespace disk::services {
         m_share_revocation_cache.Clear();
     }
 
-} // namespace disk::services
+} ///< namespace disk::services

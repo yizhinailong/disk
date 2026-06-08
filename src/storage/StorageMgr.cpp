@@ -25,4 +25,4 @@ namespace disk::storage {
         return s_storage != nullptr;
     }
 
-} // namespace disk::storage
+} ///< namespace disk::storage

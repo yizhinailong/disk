@@ -23,19 +23,19 @@ namespace disk::user {
 
         Logger::Info() << "Received user info request: " << request->getPeerAddr().toIpPort();
 
-        // 步骤 1: 从请求属性中提取 user_id
+        /// 步骤 1: 从请求属性中提取 user_id
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 步骤 2: 调用服务层
+        /// 步骤 2: 调用服务层
         auto profile_result = co_await m_user_service->GetProfile(user_id);
 
-        // 步骤 3: 处理服务层错误
+        /// 步骤 3: 处理服务层错误
         if (!profile_result) {
             Logger::Error() << "Failed to get user info: " << profile_result.error().message;
             co_return Response::Error(profile_result.error());
         }
 
-        // 步骤 4: 包装成功响应
+        /// 步骤 4: 包装成功响应
         Json::Value data;
         data["user"] = profile_result->ToJson();
 
@@ -48,10 +48,10 @@ namespace disk::user {
 
         Logger::Info() << "Received change password request: " << request->getPeerAddr().toIpPort();
 
-        // 步骤 1: 从请求属性中提取 user_id（由 JwtAuthFilter 设置）
+        /// 步骤 1: 从请求属性中提取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 步骤 2: 解析并验证请求 DTO
+        /// 步骤 2: 解析并验证请求 DTO
         auto parse_result = ChangePasswordRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "Change password request validation failed: "
@@ -59,16 +59,16 @@ namespace disk::user {
             co_return Response::Error(parse_result.error());
         }
 
-        // 步骤 3: 调用服务层
+        /// 步骤 3: 调用服务层
         auto change_result = co_await m_user_service->ChangePassword(user_id, *parse_result);
 
-        // 步骤 4: 处理服务层错误
+        /// 步骤 4: 处理服务层错误
         if (!change_result) {
             Logger::Error() << "Failed to change password: " << change_result.error().message;
             co_return Response::Error(change_result.error());
         }
 
-        // 步骤 5: 返回成功响应（PUT 修改密码时 data 为 null）
+        /// 步骤 5: 返回成功响应（PUT 修改密码时 data 为 null）
         Logger::Info() << "Change password successful: user_id=" << user_id;
         co_return Response::Success();
     }
@@ -78,10 +78,10 @@ namespace disk::user {
 
         Logger::Info() << "Received profile update request: " << request->getPeerAddr().toIpPort();
 
-        // 步骤 1: 从请求属性中提取 user_id（由 JwtAuthFilter 设置）
+        /// 步骤 1: 从请求属性中提取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 步骤 2: 解析并验证请求 DTO
+        /// 步骤 2: 解析并验证请求 DTO
         auto parse_result = UpdateProfileRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "Profile update request validation failed: "
@@ -89,16 +89,16 @@ namespace disk::user {
             co_return Response::Error(parse_result.error());
         }
 
-        // 步骤 3: 调用服务层
+        /// 步骤 3: 调用服务层
         auto update_result = co_await m_user_service->UpdateProfile(user_id, *parse_result);
 
-        // 步骤 4: 处理服务层错误
+        /// 步骤 4: 处理服务层错误
         if (!update_result) {
             Logger::Error() << "Failed to update profile: " << update_result.error().message;
             co_return Response::Error(update_result.error());
         }
 
-        // 步骤 5: 返回更新后的用户资料
+        /// 步骤 5: 返回更新后的用户资料
         Json::Value data;
         data["user"] = update_result->ToJson();
 
@@ -111,17 +111,17 @@ namespace disk::user {
 
         Logger::Info() << "Received storage stats request: " << request->getPeerAddr().toIpPort();
 
-        // 步骤 1: 从请求属性中提取 user_id（由 JwtAuthFilter 设置）
+        /// 步骤 1: 从请求属性中提取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 步骤 2: 调用服务层
+        /// 步骤 2: 调用服务层
         auto result = co_await m_user_service->GetStorage(user_id);
         if (!result) {
             Logger::Error() << "Failed to get storage stats: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
-        // 步骤 3: 返回成功响应
+        /// 步骤 3: 返回成功响应
         Json::Value data;
         data = result->ToJson();
 
@@ -129,4 +129,4 @@ namespace disk::user {
         co_return Response::Success(data);
     }
 
-} // namespace disk::user
+} ///< namespace disk::user

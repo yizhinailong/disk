@@ -26,7 +26,7 @@ using disk::trash::TrashBatchRequest;
 using disk::trash::TrashItemResponse;
 using disk::trash::TrashListRequest;
 
-// ==================== TrashListRequest Tests ====================
+/// ==================== TrashListRequest Tests ====================
 
 static auto CreateListRequest(const std::string& page, const std::string& page_size)
     -> drogon::HttpRequestPtr {
@@ -127,7 +127,7 @@ TEST(TrashListRequest, PageSizeInvalidFormat) {
     EXPECT_FALSE(result.has_value()) << "Non-numeric page_size should fail validation";
 }
 
-// ==================== TrashBatchRequest Tests ====================
+/// ==================== TrashBatchRequest Tests ====================
 
 static auto CreateBatchRequest(const std::string& body) -> drogon::HttpRequestPtr {
     auto req = drogon::HttpRequest::newHttpRequest();
@@ -285,7 +285,7 @@ TEST(TrashBatchRequest, FloatIdConverted) {
     EXPECT_FALSE(result.has_value()) << "Float element in trash_ids should fail validation";
 }
 
-// ==================== Response DTO Tests ====================
+/// ==================== Response DTO Tests ====================
 
 TEST(BatchSummary, ToJsonCorrectFields) {
     BatchSummary summary;

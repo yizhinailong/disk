@@ -45,9 +45,9 @@ namespace disk {
             [[nodiscard]]
             auto GetAuthCpuPoolActiveTaskCount() -> size_t;
 
-        } // namespace detail
-    } // namespace services
-} // namespace disk
+        } ///< namespace detail
+    } ///< namespace services
+} ///< namespace disk
 
 namespace disk::services {
 
@@ -89,13 +89,13 @@ namespace disk::services {
          */
         static void Initialize(std::string jwt_secret);
 
-        // 禁用拷贝和移动操作
+        /// 禁用拷贝和移动操作
         TokenService(const TokenService&) = delete;
         TokenService& operator=(const TokenService&) = delete;
         TokenService(TokenService&&) = delete;
         TokenService& operator=(TokenService&&) = delete;
 
-        // ==================== Access/Refresh Token 实例方法 ====================
+        /// ==================== Access/Refresh Token 实例方法 ====================
 
         /**
          * @brief 生成令牌对
@@ -220,7 +220,7 @@ namespace disk::services {
 
         auto ClearRevocationCache() -> void;
 
-        // ==================== 测试辅助方法 ====================
+        /// ==================== 测试辅助方法 ====================
 
         /**
          * @brief 测试用：直接向本地撤销缓存插入条目
@@ -245,7 +245,7 @@ namespace disk::services {
         [[nodiscard]]
         auto GetRevocationCacheSizeForTest() const -> size_t;
 
-        // ==================== Share Token 静态方法 ====================
+        /// ==================== Share Token 静态方法 ====================
 
         /**
          * @brief 生成分享令牌（静态方法）
@@ -299,7 +299,7 @@ namespace disk::services {
             return 3600;
         }
 
-        // ==================== Share Token Redis 异步方法 ====================
+        /// ==================== Share Token Redis 异步方法 ====================
 
         /**
          * @brief 验证分享令牌（含 Redis 撤销检查）
@@ -490,4 +490,4 @@ namespace disk::services {
         std::chrono::steady_clock::time_point m_metrics_last_reset{ std::chrono::steady_clock::now() };
     };
 
-} // namespace disk::services
+} ///< namespace disk::services

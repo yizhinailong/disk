@@ -21,7 +21,7 @@ namespace disk::auth {
 
         Logger::Info() << "Received user registration request: " << request->getPeerAddr().toIpPort();
 
-        // 1. 解析并验证请求参数
+        /// 1. 解析并验证请求参数
         auto parse_result = RegisterRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "User registration request validation failed: "
@@ -30,7 +30,7 @@ namespace disk::auth {
         }
         Logger::Debug() << "User registration parameters validated: " << parse_result->username;
 
-        // 2. 调用 Service 层注册用户
+        /// 2. 调用 Service 层注册用户
         auto register_result = co_await m_auth_service->Register(*parse_result);
         if (!register_result) {
             Logger::Error() << "User registration business logic failed: "
@@ -39,7 +39,7 @@ namespace disk::auth {
             co_return Response::Error(register_result.error());
         }
 
-        // 3. 构造响应
+        /// 3. 构造响应
         Json::Value data;
         data["user"] = register_result->ToJson();
 
@@ -53,14 +53,14 @@ namespace disk::auth {
 
         Logger::Info() << "Received login request: " << request->getPeerAddr().toIpPort();
 
-        // 1. 解析请求
+        /// 1. 解析请求
         auto parse_result = LoginRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "Login request validation failed: " << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
-        // 2. 调用 Service 登录
+        /// 2. 调用 Service 登录
         const auto ip_address = request->getPeerAddr().toIpPort();
         auto login_result = co_await m_auth_service->Login(*parse_result, ip_address);
 
@@ -69,7 +69,7 @@ namespace disk::auth {
             co_return Response::Error(login_result.error());
         }
 
-        // 3. 构造响应
+        /// 3. 构造响应
         Logger::Info() << "Login successful: " << parse_result->account;
         co_return Response::Success(login_result->ToJson());
     }
@@ -79,14 +79,14 @@ namespace disk::auth {
 
         Logger::Info() << "Received refresh token request: " << request->getPeerAddr().toIpPort();
 
-        // 1. 解析请求
+        /// 1. 解析请求
         auto parse_result = RefreshTokenRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "Refresh token request validation failed: " << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
-        // 2. 调用 Service 刷新令牌
+        /// 2. 调用 Service 刷新令牌
         auto refresh_result = co_await m_auth_service->RefreshTokens(*parse_result);
 
         if (!refresh_result) {
@@ -94,7 +94,7 @@ namespace disk::auth {
             co_return Response::Error(refresh_result.error());
         }
 
-        // 3. 构造响应
+        /// 3. 构造响应
         Logger::Info() << "Refresh token successful";
         co_return Response::Success(refresh_result->ToJson());
     }
@@ -104,7 +104,7 @@ namespace disk::auth {
 
         Logger::Info() << "Received logout request: " << request->getPeerAddr().toIpPort();
 
-        // 步骤 1: 提取 access_token 从 Authorization header
+        /// 步骤 1: 提取 access_token 从 Authorization header
         const auto& auth_header = request->getHeader("Authorization");
         if (auth_header.empty()) {
             Logger::Warn() << "Logout request missing Authorization header";
@@ -118,25 +118,25 @@ namespace disk::auth {
 
         const auto access_token = auth_header.substr(7);
 
-        // 步骤 2: 提取 user_id 从请求属性（由 JwtAuthFilter 设置）
+        /// 步骤 2: 提取 user_id 从请求属性（由 JwtAuthFilter 设置）
         if (!request->attributes()->find("user_id")) {
             Logger::Warn() << "Logout request missing user_id attribute";
             co_return Response::Error(ErrorInfo(ErrorCode::InvalidToken));
         }
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
-        // 步骤 3: 提取 IP 地址
+        /// 步骤 3: 提取 IP 地址
         const auto ip_address = request->getPeerAddr().toIpPort();
 
-        // 步骤 4: 调用 Service 层登出
+        /// 步骤 4: 调用 Service 层登出
         auto logout_result = co_await m_auth_service->Logout(user_id, access_token, ip_address);
         if (!logout_result) {
             Logger::Error() << "Logout failed: " << logout_result.error().message;
             co_return Response::Error(logout_result.error());
         }
 
-        // 步骤 5: 返回成功响应
+        /// 步骤 5: 返回成功响应
         Logger::Info() << "Logout successful: user_id=" << user_id;
         co_return Response::Success({});
     }
-} // namespace disk::auth
+} ///< namespace disk::auth

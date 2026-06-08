@@ -24,7 +24,7 @@ namespace {
         return req;
     }
 
-} // namespace
+} ///< namespace
 
 TEST(FolderRateLimitTest, AuthLoginPath_Skipped) {
     disk::filters::FolderRateLimitFilter filter;

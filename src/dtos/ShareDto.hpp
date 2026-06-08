@@ -48,7 +48,7 @@
 
 namespace disk::share {
 
-    // ==================== 分页结构 ====================
+    /// ==================== 分页结构 ====================
 
     /**
      * @brief 分页信息
@@ -71,7 +71,7 @@ namespace disk::share {
         }
     };
 
-    // ==================== 分享状态枚举 ====================
+    /// ==================== 分享状态枚举 ====================
 
     /**
      * @brief 分享状态
@@ -95,7 +95,7 @@ namespace disk::share {
         }
     }
 
-    // ==================== 权限枚举 ====================
+    /// ==================== 权限枚举 ====================
 
     /**
      * @brief 分享权限
@@ -129,7 +129,7 @@ namespace disk::share {
         return std::nullopt;
     }
 
-    // ==================== 共享组件 ====================
+    /// ==================== 共享组件 ====================
 
     /**
      * @brief 分享文件项
@@ -140,7 +140,7 @@ namespace disk::share {
     struct ShareFile : DtoBase<ShareFile> {
         uint64_t id;
         std::string name;
-        std::string type; // "file" 或 "folder"
+        std::string type; ///< "file" 或 "folder"
         uint64_t size;
         uint32_t item_count{ 0 };
 
@@ -159,7 +159,7 @@ namespace disk::share {
         }
     };
 
-    // ==================== Create Share ====================
+    /// ==================== Create Share ====================
 
     /**
      * @brief 创建分享请求 DTO
@@ -205,7 +205,7 @@ namespace disk::share {
                 ));
             }
 
-            // 解析可选参数 expire_days
+            /// 解析可选参数 expire_days
             if (json.isMember("expire_days")) {
                 if (!json["expire_days"].isIntegral()) {
                     Logger::Warn() << "Parameter 'expire_days' type error: expected integer";
@@ -225,7 +225,7 @@ namespace disk::share {
                 }
             }
 
-            // 解析可选参数 password
+            /// 解析可选参数 password
             if (json.isMember("password")) {
                 if (!json["password"].isString()) {
                     Logger::Warn() << "Parameter 'password' type error: expected string";
@@ -248,7 +248,7 @@ namespace disk::share {
                 }
             }
 
-            // 解析可选参数 permission
+            /// 解析可选参数 permission
             if (json.isMember("permission")) {
                 if (!json["permission"].isString()) {
                     Logger::Warn() << "Parameter 'permission' type error: expected string";
@@ -307,7 +307,7 @@ namespace disk::share {
         }
     };
 
-    // ==================== Share List ====================
+    /// ==================== Share List ====================
 
     /**
      * @brief 获取分享列表请求 DTO
@@ -332,13 +332,13 @@ namespace disk::share {
 
             ShareListRequest request;
 
-            // 有效状态值
+            /// 有效状态值
             static const std::set<std::string> valid_statuses = { "all",
                                                                   "active",
                                                                   "expired",
                                                                   "cancelled" };
 
-            // 解析可选参数 status
+            /// 解析可选参数 status
             auto status_str = req->getParameter("status");
             if (!status_str.empty()) {
                 if (valid_statuses.find(status_str) == valid_statuses.end()) {
@@ -351,14 +351,14 @@ namespace disk::share {
                 request.status = status_str;
             }
 
-            // 解析可选参数 page
+            /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page");
             if (!page_result) return std::unexpected(page_result.error());
             if (page_result->has_value()) {
                 request.page = **page_result;
             }
 
-            // 解析可选参数 page_size
+            /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
             if (!page_size_result) return std::unexpected(page_size_result.error());
             if (page_size_result->has_value()) {
@@ -430,7 +430,7 @@ namespace disk::share {
         }
     };
 
-    // ==================== Share Detail ====================
+    /// ==================== Share Detail ====================
 
     /**
      * @brief 获取分享详情请求 DTO（路径参数）
@@ -501,7 +501,7 @@ namespace disk::share {
         }
     };
 
-    // ==================== Update Share ====================
+    /// ==================== Update Share ====================
 
     /**
      * @brief 更新分享设置请求 DTO
@@ -516,7 +516,7 @@ namespace disk::share {
     struct UpdateShareRequest : DtoBase<UpdateShareRequest> {
         std::string share_id;
         std::optional<int> expire_days;
-        std::optional<std::string> password; // 空字符串表示移除密码
+        std::optional<std::string> password; ///< 空字符串表示移除密码
         std::optional<SharePermission> permission;
 
         /// 从 HTTP 请求解析并验证，返回 Result
@@ -525,7 +525,7 @@ namespace disk::share {
             -> Result<UpdateShareRequest> {
             Logger::Debug() << "Start parsing update share settings request parameters";
 
-            // 验证路径参数 share_id
+            /// 验证路径参数 share_id
             if (share_id_str.empty()) {
                 Logger::Warn() << "Missing required parameter: share_id";
                 return std::unexpected(
@@ -540,7 +540,7 @@ namespace disk::share {
             UpdateShareRequest request;
             request.share_id = share_id_str;
 
-            // 解析可选参数 expire_days
+            /// 解析可选参数 expire_days
             if (json.isMember("expire_days")) {
                 if (!json["expire_days"].isIntegral()) {
                     Logger::Warn() << "Parameter 'expire_days' type error: expected integer";
@@ -560,7 +560,7 @@ namespace disk::share {
                 request.expire_days = expire_days;
             }
 
-            // 解析可选参数 password
+            /// 解析可选参数 password
             if (json.isMember("password")) {
                 if (!json["password"].isString()) {
                     Logger::Warn() << "Parameter 'password' type error: expected string";
@@ -570,7 +570,7 @@ namespace disk::share {
                     ));
                 }
                 std::string pwd = json["password"].asString();
-                // 空字符串表示移除密码，非空时验证长度
+                /// 空字符串表示移除密码，非空时验证长度
                 if (!pwd.empty() && (pwd.length() < 4 || pwd.length() > 8)) {
                     Logger::Warn() << "Access password length must be between 4-8 characters: "
                              << pwd.length();
@@ -582,7 +582,7 @@ namespace disk::share {
                 request.password = pwd;
             }
 
-            // 解析可选参数 permission
+            /// 解析可选参数 permission
             if (json.isMember("permission")) {
                 if (!json["permission"].isString()) {
                     Logger::Warn() << "Parameter 'permission' type error: expected string";
@@ -643,7 +643,7 @@ namespace disk::share {
         }
     };
 
-    // ==================== Cancel Share ====================
+    /// ==================== Cancel Share ====================
 
     /**
      * @brief 取消分享请求 DTO
@@ -664,7 +664,7 @@ namespace disk::share {
             if (!json_result) return std::unexpected(json_result.error());
             const auto& json = *json_result.value();
 
-            // 检查必填字段 share_ids
+            /// 检查必填字段 share_ids
             if (!json.isMember("share_ids")) {
                 Logger::Warn() << "Missing required parameter: share_ids";
                 return std::unexpected(
@@ -682,7 +682,7 @@ namespace disk::share {
 
             CancelShareRequest request;
 
-            // 解析 share_ids
+            /// 解析 share_ids
             const auto& share_ids_array = json["share_ids"];
             if (share_ids_array.empty()) {
                 Logger::Warn() << "Parameter 'share_ids' cannot be empty array";
@@ -742,7 +742,7 @@ namespace disk::share {
      */
     struct CancelShareResult : DtoBase<CancelShareResult> {
         std::string share_id;
-        std::string status; // "success" 或 "failed"
+        std::string status; ///< "success" 或 "failed"
         std::optional<CancelShareError> error;
 
         /// 转换为 JSON
@@ -797,7 +797,7 @@ namespace disk::share {
         }
     };
 
-    // ==================== Access Share ====================
+    /// ==================== Access Share ====================
 
     /**
      * @brief 验证分享访问请求 DTO
@@ -817,7 +817,7 @@ namespace disk::share {
             -> Result<AccessShareRequest> {
             Logger::Debug() << "Start parsing access share verification request parameters";
 
-            // 验证路径参数 share_id
+            /// 验证路径参数 share_id
             if (share_id_str.empty()) {
                 Logger::Warn() << "Missing required parameter: share_id";
                 return std::unexpected(
@@ -828,12 +828,12 @@ namespace disk::share {
             AccessShareRequest request;
             request.share_id = share_id_str;
 
-            // 解析可选的请求体
+            /// 解析可选的请求体
             auto json_ptr = req->getJsonObject();
             if (json_ptr) {
                 const auto& json = *json_ptr;
 
-                // 解析可选参数 password
+                /// 解析可选参数 password
                 if (json.isMember("password")) {
                     if (!json["password"].isString()) {
                         Logger::Warn() << "Parameter 'password' type error: expected string";
@@ -880,7 +880,7 @@ namespace disk::share {
         }
     };
 
-    // ==================== Browse Share ====================
+    /// ==================== Browse Share ====================
 
     /**
      * @brief 浏览分享内容请求 DTO
@@ -902,7 +902,7 @@ namespace disk::share {
             -> Result<BrowseShareRequest> {
             Logger::Debug() << "Start parsing browse share content request parameters";
 
-            // 验证路径参数 share_id
+            /// 验证路径参数 share_id
             if (share_id_str.empty()) {
                 Logger::Warn() << "Missing required parameter: share_id";
                 return std::unexpected(
@@ -913,7 +913,7 @@ namespace disk::share {
             BrowseShareRequest request;
             request.share_id = share_id_str;
 
-            // 解析可选参数 folder_id
+            /// 解析可选参数 folder_id
             auto folder_id_result = QueryUInt64(req, "folder_id");
             if (!folder_id_result) return std::unexpected(folder_id_result.error());
             request.folder_id = *folder_id_result;
@@ -933,7 +933,7 @@ namespace disk::share {
     struct BrowseItem : DtoBase<BrowseItem> {
         uint64_t id;
         std::string name;
-        std::string type; // "file" 或 "folder"
+        std::string type; ///< "file" 或 "folder"
         uint64_t size;
         uint32_t item_count{ 0 };
 
@@ -989,7 +989,7 @@ namespace disk::share {
         }
     };
 
-    // ==================== Download Share ====================
+    /// ==================== Download Share ====================
 
     /**
      * @brief 下载分享文件请求 DTO
@@ -1011,7 +1011,7 @@ namespace disk::share {
             -> Result<DownloadShareRequest> {
             Logger::Debug() << "Start parsing download share file request parameters";
 
-            // 验证路径参数 share_id
+            /// 验证路径参数 share_id
             if (share_id_str.empty()) {
                 Logger::Warn() << "Missing required parameter: share_id";
                 return std::unexpected(
@@ -1019,7 +1019,7 @@ namespace disk::share {
                 );
             }
 
-            // 验证路径参数 file_id
+            /// 验证路径参数 file_id
             if (file_id_str.empty()) {
                 Logger::Warn() << "Missing required parameter: file_id";
                 return std::unexpected(
@@ -1027,7 +1027,7 @@ namespace disk::share {
                 );
             }
 
-            // 检查是否为负数（stoull 会将负数回绕）
+            /// 检查是否为负数（stoull 会将负数回绕）
             if (file_id_str[0] == '-') {
                 Logger::Warn() << "Parameter 'file_id' invalid format or value: " << file_id_str;
                 return std::unexpected(ErrorInfo(
@@ -1065,7 +1065,7 @@ namespace disk::share {
         }
     };
 
-    // ==================== Save Share Items ====================
+    /// ==================== Save Share Items ====================
 
     struct SaveShareItemsRequest : DtoBase<SaveShareItemsRequest> {
         std::string share_id;
@@ -1143,7 +1143,7 @@ namespace disk::share {
         }
     };
 
-    // ==================== Download Info ====================
+    /// ==================== Download Info ====================
 
     /**
      * @brief 下载文件信息
@@ -1160,4 +1160,4 @@ namespace disk::share {
         std::string hash_md5;
     };
 
-    } // namespace disk::share
+    } ///< namespace disk::share

@@ -40,15 +40,15 @@ namespace disk::system {
         info.drogon_version = drogon::getVersion();
         info.build_time = GetBuildTime();
 
-        // 计算运行时间
+        /// 计算运行时间
         auto now = std::chrono::steady_clock::now();
         auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - m_start_time);
         info.uptime = uptime.count();
 
-        // 获取连接统计
+        /// 获取连接统计
         info.connections = co_await GetConnectionStats();
 
-        // 获取存储统计
+        /// 获取存储统计
         info.storage = co_await GetStorageStats();
 
         co_return info;
@@ -61,7 +61,7 @@ namespace disk::system {
         stats.db_pool_size = config->GetDbPoolSize();
         stats.redis_pool_size = config->GetRedisPoolSize();
 
-        // Drogon 不暴露运行时活跃连接数，使用配置池大小作为上限估算
+        /// Drogon 不暴露运行时活跃连接数，使用配置池大小作为上限估算
         stats.current = stats.db_pool_size;
         stats.peak = stats.db_pool_size;
 
@@ -72,7 +72,7 @@ namespace disk::system {
         StorageStats stats;
 
         try {
-            // 获取用户总数
+            /// 获取用户总数
             auto users_result = co_await m_db_client->execSqlCoro(
                 "SELECT COUNT(*) as count FROM users WHERE status != -1"
             );
@@ -80,8 +80,8 @@ namespace disk::system {
                 stats.total_users = users_result[0]["count"].as<int64_t>();
             }
 
-            // 获取文件总数和总大小
-            // files 表只含活跃数据（删除操作会将行移至 trash 表），无需 WHERE 过滤
+            /// 获取文件总数和总大小
+            /// files 表只含活跃数据（删除操作会将行移至 trash 表），无需 WHERE 过滤
             auto files_result =
                 co_await m_db_client->execSqlCoro(
                     "SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as total_size FROM files"
@@ -91,8 +91,8 @@ namespace disk::system {
                 stats.total_size = files_result[0]["total_size"].as<int64_t>();
             }
 
-            // 获取文件夹总数
-            // folders 表只含活跃数据（删除操作会将行移至 trash 表），无需 WHERE 过滤
+            /// 获取文件夹总数
+            /// folders 表只含活跃数据（删除操作会将行移至 trash 表），无需 WHERE 过滤
             auto folders_result = co_await m_db_client->execSqlCoro(
                 "SELECT COUNT(*) as count FROM folders"
             );
@@ -110,4 +110,4 @@ namespace disk::system {
         return std::string(__DATE__) + " " + std::string(__TIME__);
     }
 
-} // namespace disk::system
+} ///< namespace disk::system

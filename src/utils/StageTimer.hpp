@@ -28,8 +28,8 @@ namespace disk::utils {
      * @code
      * {
      *     StageTimer timer("chunk_scan");
-     *     // ... 执行工作 ...
-     * }   // <- 析构时自动输出日志
+     *     ///< ... 执行工作 ...
+     * }   ///< <- 析构时自动输出日志
      * @endcode
      */
     class StageTimer {
@@ -59,4 +59,4 @@ namespace disk::utils {
         std::chrono::steady_clock::time_point m_start;
     };
 
-} // namespace disk::utils
+} ///< namespace disk::utils

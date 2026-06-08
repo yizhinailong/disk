@@ -46,7 +46,7 @@ using disk::share::StringToSharePermission;
 using disk::share::UpdateShareRequest;
 using disk::share::UpdateShareResponse;
 
-// ==================== Helper Functions ====================
+/// ==================== Helper Functions ====================
 
 static auto CreateJsonRequest(const Json::Value& json) -> drogon::HttpRequestPtr {
     Json::StreamWriterBuilder builder;
@@ -68,7 +68,7 @@ static auto CreateQueryRequest(const std::map<std::string, std::string>& params)
     return req;
 }
 
-// ==================== ShareStatus Tests ====================
+/// ==================== ShareStatus Tests ====================
 
 TEST(ShareStatus, ToStringActive) {
     EXPECT_EQ(ShareStatusToString(ShareStatus::Active), "active");
@@ -82,7 +82,7 @@ TEST(ShareStatus, ToStringCancelled) {
     EXPECT_EQ(ShareStatusToString(ShareStatus::Cancelled), "cancelled");
 }
 
-// ==================== SharePermission Tests ====================
+/// ==================== SharePermission Tests ====================
 
 TEST(SharePermission, ToStringView) {
     EXPECT_EQ(SharePermissionToString(SharePermission::View), "view");
@@ -114,7 +114,7 @@ TEST(SharePermission, StringToEmpty) {
     EXPECT_FALSE(result.has_value());
 }
 
-// ==================== Pagination Tests ====================
+/// ==================== Pagination Tests ====================
 
 TEST(Pagination, ToJsonCorrectFields) {
     Pagination pagination;
@@ -131,7 +131,7 @@ TEST(Pagination, ToJsonCorrectFields) {
     EXPECT_EQ(json["total_pages"].asInt(), 3);
 }
 
-// ==================== ShareFile Tests ====================
+/// ==================== ShareFile Tests ====================
 
 TEST(ShareFile, ToJsonCorrectFields) {
     ShareFile file;
@@ -160,7 +160,7 @@ TEST(ShareFile, ToJsonFolder) {
     EXPECT_EQ(json["type"].asString(), "folder");
 }
 
-// ==================== CreateShareRequest Tests ====================
+/// ==================== CreateShareRequest Tests ====================
 
 TEST(CreateShareRequest, ValidParametersMinimal) {
     Json::Value json;
@@ -174,8 +174,8 @@ TEST(CreateShareRequest, ValidParametersMinimal) {
     EXPECT_EQ(result->file_ids.size(), 2);
     EXPECT_EQ(result->file_ids[0], 1);
     EXPECT_EQ(result->file_ids[1], 2);
-    EXPECT_EQ(result->expire_days, 7);                        // 默认值
-    EXPECT_EQ(result->permission, SharePermission::Download); // 默认值
+    EXPECT_EQ(result->expire_days, 7);                        ///< 默认值
+    EXPECT_EQ(result->permission, SharePermission::Download); ///< 默认值
     EXPECT_FALSE(result->password.has_value());
 }
 
@@ -199,7 +199,7 @@ TEST(CreateShareRequest, ValidParametersAllFields) {
 TEST(CreateShareRequest, ValidExpireDaysZero) {
     Json::Value json;
     json["file_ids"].append(1);
-    json["expire_days"] = 0; // 永久
+    json["expire_days"] = 0; ///< 永久
 
     auto req = CreateJsonRequest(json);
     auto result = CreateShareRequest::FromRequest(req);
@@ -249,7 +249,7 @@ TEST(CreateShareRequest, FileIdsNotArray) {
 
 TEST(CreateShareRequest, FileIdZero) {
     Json::Value json;
-    json["file_ids"].append(0); // 无效：必须为正数
+    json["file_ids"].append(0); ///< 无效：必须为正数
 
     auto req = CreateJsonRequest(json);
     auto result = CreateShareRequest::FromRequest(req);
@@ -277,7 +277,7 @@ TEST(CreateShareRequest, NegativeExpireDays) {
 TEST(CreateShareRequest, PasswordTooShort) {
     Json::Value json;
     json["file_ids"].append(1);
-    json["password"] = "abc"; // 3 chars, min is 4
+    json["password"] = "abc"; ///< 3 chars, min is 4
 
     auto req = CreateJsonRequest(json);
     auto result = CreateShareRequest::FromRequest(req);
@@ -291,7 +291,7 @@ TEST(CreateShareRequest, PasswordTooShort) {
 TEST(CreateShareRequest, PasswordTooLong) {
     Json::Value json;
     json["file_ids"].append(1);
-    json["password"] = "abcdefghi"; // 9 chars, max is 8
+    json["password"] = "abcdefghi"; ///< 9 chars, max is 8
 
     auto req = CreateJsonRequest(json);
     auto result = CreateShareRequest::FromRequest(req);
@@ -305,7 +305,7 @@ TEST(CreateShareRequest, PasswordTooLong) {
 TEST(CreateShareRequest, PasswordMinLength) {
     Json::Value json;
     json["file_ids"].append(1);
-    json["password"] = "abcd"; // 4 chars, min
+    json["password"] = "abcd"; ///< 4 chars, min
 
     auto req = CreateJsonRequest(json);
     auto result = CreateShareRequest::FromRequest(req);
@@ -317,7 +317,7 @@ TEST(CreateShareRequest, PasswordMinLength) {
 TEST(CreateShareRequest, PasswordMaxLength) {
     Json::Value json;
     json["file_ids"].append(1);
-    json["password"] = "abcdefgh"; // 8 chars, max
+    json["password"] = "abcdefgh"; ///< 8 chars, max
 
     auto req = CreateJsonRequest(json);
     auto result = CreateShareRequest::FromRequest(req);
@@ -350,7 +350,7 @@ TEST(CreateShareRequest, InvalidJSON) {
     EXPECT_FALSE(result.has_value()) << "Invalid JSON should fail";
 }
 
-// ==================== CreateShareResponse Tests ====================
+/// ==================== CreateShareResponse Tests ====================
 
 TEST(CreateShareResponse, ToJsonWithPassword) {
     CreateShareResponse response;
@@ -386,7 +386,7 @@ TEST(CreateShareResponse, ToJsonWithoutPassword) {
     EXPECT_FALSE(json.isMember("password"));
 }
 
-// ==================== ShareListRequest Tests ====================
+/// ==================== ShareListRequest Tests ====================
 
 TEST(ShareListRequest, ValidDefaultParameters) {
     auto req = CreateQueryRequest({});
@@ -498,7 +498,7 @@ TEST(ShareListRequest, ValidPageSizeMax) {
     EXPECT_EQ(result->page_size, 100);
 }
 
-// ==================== ShareItem Tests ====================
+/// ==================== ShareItem Tests ====================
 
 TEST(ShareItem, ToJsonCorrectFields) {
     ShareItem item;
@@ -526,7 +526,7 @@ TEST(ShareItem, ToJsonCorrectFields) {
     EXPECT_EQ(json["status"].asString(), "active");
 }
 
-// ==================== ShareListResponse Tests ====================
+/// ==================== ShareListResponse Tests ====================
 
 TEST(ShareListResponse, ToJsonCorrectFields) {
     ShareListResponse response;
@@ -548,7 +548,7 @@ TEST(ShareListResponse, ToJsonCorrectFields) {
     EXPECT_TRUE(json.isMember("pagination"));
 }
 
-// ==================== ShareDetailRequest Tests ====================
+/// ==================== ShareDetailRequest Tests ====================
 
 TEST(ShareDetailRequest, ValidShareId) {
     auto result = ShareDetailRequest::FromPath("sh_abc123");
@@ -566,7 +566,7 @@ TEST(ShareDetailRequest, EmptyShareId) {
     }
 }
 
-// ==================== ShareDetailResponse Tests ====================
+/// ==================== ShareDetailResponse Tests ====================
 
 TEST(ShareDetailResponse, ToJsonCorrectFields) {
     ShareDetailResponse response;
@@ -594,7 +594,7 @@ TEST(ShareDetailResponse, ToJsonCorrectFields) {
     EXPECT_EQ(json["status"].asString(), "active");
 }
 
-// ==================== UpdateShareRequest Tests ====================
+/// ==================== UpdateShareRequest Tests ====================
 
 TEST(UpdateShareRequest, ValidUpdateExpireDays) {
     Json::Value json;
@@ -623,7 +623,7 @@ TEST(UpdateShareRequest, ValidUpdatePassword) {
 
 TEST(UpdateShareRequest, ValidRemovePassword) {
     Json::Value json;
-    json["password"] = ""; // 空字符串移除密码
+    json["password"] = ""; ///< 空字符串移除密码
 
     auto req = CreateJsonRequest(json);
     auto result = UpdateShareRequest::FromRequest(req, "sh_abc123");
@@ -673,7 +673,7 @@ TEST(UpdateShareRequest, InvalidExpireDays) {
 
 TEST(UpdateShareRequest, InvalidPasswordLength) {
     Json::Value json;
-    json["password"] = "abc"; // 过短
+    json["password"] = "abc"; ///< 过短
 
     auto req = CreateJsonRequest(json);
     auto result = UpdateShareRequest::FromRequest(req, "sh_abc123");
@@ -697,7 +697,7 @@ TEST(UpdateShareRequest, InvalidPermission) {
     }
 }
 
-// ==================== UpdateShareResponse Tests ====================
+/// ==================== UpdateShareResponse Tests ====================
 
 TEST(UpdateShareResponse, ToJsonCorrectFields) {
     UpdateShareResponse response;
@@ -716,7 +716,7 @@ TEST(UpdateShareResponse, ToJsonCorrectFields) {
     EXPECT_EQ(json["updated_at"].asString(), "2026-02-13T11:00:00Z");
 }
 
-// ==================== CancelShareRequest Tests ====================
+/// ==================== CancelShareRequest Tests ====================
 
 TEST(CancelShareRequest, ValidParameters) {
     Json::Value json;
@@ -783,7 +783,7 @@ TEST(CancelShareRequest, EmptyShareIdInArray) {
     }
 }
 
-// ==================== CancelShareResponse Tests ====================
+/// ==================== CancelShareResponse Tests ====================
 
 TEST(CancelShareResponse, ToJsonAllSuccess) {
     CancelShareResponse response;
@@ -845,7 +845,7 @@ TEST(CancelShareResponse, ToJsonPartialSuccess) {
     EXPECT_FALSE(json["results"][0].isMember("error"));
 }
 
-// ==================== AccessShareRequest Tests ====================
+/// ==================== AccessShareRequest Tests ====================
 
 TEST(AccessShareRequest, ValidWithoutPassword) {
     Json::Value json;
@@ -896,7 +896,7 @@ TEST(AccessShareRequest, PasswordWrongType) {
     }
 }
 
-// ==================== AccessShareResponse Tests ====================
+/// ==================== AccessShareResponse Tests ====================
 
 TEST(AccessShareResponse, ToJsonCorrectFields) {
     AccessShareResponse response;
@@ -918,7 +918,7 @@ TEST(AccessShareResponse, ToJsonCorrectFields) {
     EXPECT_EQ(json["files"].size(), 1);
 }
 
-// ==================== BrowseShareRequest Tests ====================
+/// ==================== BrowseShareRequest Tests ====================
 
 TEST(BrowseShareRequest, ValidWithoutFolderId) {
     auto req = CreateQueryRequest({});
@@ -963,7 +963,7 @@ TEST(BrowseShareRequest, InvalidFolderId) {
     }
 }
 
-// ==================== BrowseShareResponse Tests ====================
+/// ==================== BrowseShareResponse Tests ====================
 
 TEST(BrowseShareResponse, ToJsonCorrectFields) {
     BrowseShareResponse response;
@@ -991,7 +991,7 @@ TEST(BrowseShareResponse, ToJsonCorrectFields) {
     EXPECT_EQ(json["breadcrumb"][0]["name"].asString(), "分享根目录");
 }
 
-// ==================== DownloadShareRequest Tests ====================
+/// ==================== DownloadShareRequest Tests ====================
 
 TEST(DownloadShareRequest, ValidParameters) {
     auto result = DownloadShareRequest::FromPath("sh_abc123", "42");

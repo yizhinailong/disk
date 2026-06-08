@@ -240,5 +240,5 @@ namespace disk::storage {
                 << "Assembly throughput: " << throughput_mbps << " MB/s";
         }
 
-    } // namespace
-} // namespace disk::storage
+    } ///< namespace
+} ///< namespace disk::storage

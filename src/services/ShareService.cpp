@@ -69,9 +69,9 @@ namespace disk::share {
             bind_parameters(binder);
             co_return co_await drogon::orm::internal::SqlAwaiter(std::move(binder));
         }
-    } // namespace
+    } ///< namespace
 
-    // ==================== 构造函数 ====================
+    /// ==================== 构造函数 ====================
 
     ShareService::ShareService(
         DbClientPtr db_client,
@@ -82,12 +82,12 @@ namespace disk::share {
           m_redis_client(std::move(redis_client)),
           m_redis_service(disk::services::RedisService::GetInstance()),
           m_jwt_secret(std::move(jwt_secret)) {
-        // 初始化 RedisService 单例（如果尚未初始化）
+        /// 初始化 RedisService 单例（如果尚未初始化）
         disk::services::RedisService::Initialize(m_redis_client);
         Logger::Debug() << "ShareService initialization completed";
     }
 
-    // ==================== 公共方法 ====================
+    /// ==================== 公共方法 ====================
 
     auto ShareService::Create(CreateShareRequest request, uint64_t user_id)
         -> drogon::Task<Result<CreateShareResponse>> {
@@ -95,7 +95,7 @@ namespace disk::share {
                  << ", file_ids.size()=" << request.file_ids.size()
                  << ", folder_ids.size()=" << request.folder_ids.size();
 
-        // 1. 验证文件和文件夹所有权
+        /// 1. 验证文件和文件夹所有权
         std::vector<Files> files;
         if (!request.file_ids.empty()) {
             auto files_result = co_await ValidateFileOwnership(request.file_ids, user_id);
@@ -114,17 +114,17 @@ namespace disk::share {
             folders = std::move(*folders_result);
         }
 
-        // 2. 生成分享码
+        /// 2. 生成分享码
         auto share_code = GenerateShareCode();
 
-        // 3. 计算过期时间
+        /// 3. 计算过期时间
         auto now = trantor::Date::now();
         std::optional<trantor::Date> expires_at;
         if (request.expire_days > 0) {
             expires_at = now.after(request.expire_days * 86400);
         }
 
-        // 4. 哈希密码（如果有）
+        /// 4. 哈希密码（如果有）
         std::optional<std::string> password_hash;
         if (request.password.has_value() && !request.password->empty()) {
             auto hash_result = utils::HashUtil::HashPassword(*request.password);
@@ -137,7 +137,7 @@ namespace disk::share {
             password_hash = *hash_result;
         }
 
-        // 5. 创建分享记录 + 分享文件关联（事务保证原子性）
+        /// 5. 创建分享记录 + 分享文件关联（事务保证原子性）
         Shares share;
         share.setShareCode(share_code);
         share.setUserId(user_id);
@@ -159,11 +159,11 @@ namespace disk::share {
         try {
             transaction = co_await m_db_client->newTransactionCoro();
 
-            // 插入分享行
+            /// 插入分享行
             CoroMapper<Shares> share_mapper(transaction);
             created_share = co_await share_mapper.insert(share);
 
-            // 批量插入 share_files 关联
+            /// 批量插入 share_files 关联
             if (!files.empty()) {
                 auto chunks = BatchUtils::Chunk(files, DEFAULT_BATCH_CHUNK_SIZE);
                 for (const auto& chunk : chunks) {
@@ -227,7 +227,7 @@ namespace disk::share {
             );
         }
 
-        // 7. 构建响应
+        /// 7. 构建响应
         CreateShareResponse response;
         response.share_id = share_code;
         response.share_link = BuildShareLink(share_code);
@@ -248,7 +248,7 @@ namespace disk::share {
 
         CoroMapper<Shares> mapper(m_db_client);
 
-        // 构建查询条件
+        /// 构建查询条件
         auto criteria = Criteria(Shares::Cols::_user_id, user_id);
 
         auto status_filter = GetStatusFilter(request.status);
@@ -256,7 +256,7 @@ namespace disk::share {
             criteria = criteria && Criteria(Shares::Cols::_status, *status_filter);
         }
 
-        // 获取总数
+        /// 获取总数
         int total = 0;
         try {
             if (request.status == "active") {
@@ -276,7 +276,7 @@ namespace disk::share {
             );
         }
 
-        // 分页查询
+        /// 分页查询
         std::vector<Shares> shares;
         try {
             if (request.status == "active") {
@@ -304,7 +304,7 @@ namespace disk::share {
             );
         }
 
-        // 构建响应
+        /// 构建响应
         ShareListResponse response;
         std::vector<uint64_t> share_ids;
         share_ids.reserve(shares.size());
@@ -336,7 +336,7 @@ namespace disk::share {
                 item.expires_at = "";
             }
 
-            // 状态
+            /// 状态
             auto status_val = share.getValueOfStatus();
             if (status_val == static_cast<int8_t>(ShareStatus::Cancelled)) {
                 item.status = "cancelled";
@@ -353,7 +353,7 @@ namespace disk::share {
             response.items.push_back(item);
         }
 
-        // 分页信息
+        /// 分页信息
         response.pagination.page = request.page;
         response.pagination.page_size = request.page_size;
         response.pagination.total = total;
@@ -368,24 +368,24 @@ namespace disk::share {
         Logger::Debug() << "Getting share details: share_id=" << request.share_id
                   << ", user_id=" << user_id;
 
-        // 验证分享所有权
+        /// 验证分享所有权
         auto share_result = co_await ValidateShareOwnership(request.share_id, user_id);
         if (!share_result) {
             co_return std::unexpected(share_result.error());
         }
         const auto& share = *share_result;
 
-        // 验证分享状态（必须是有效状态）
+        /// 验证分享状态（必须是有效状态）
         if (!IsShareActive(share)) {
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ShareExpired, "Share cancelled or expired")
             );
         }
 
-        // 获取分享文件列表
+        /// 获取分享文件列表
         auto share_files = co_await GetShareFiles(share.getValueOfId());
 
-        // 构建响应
+        /// 构建响应
         ShareDetailResponse response;
         response.share_id = share.getValueOfShareCode();
         response.files = share_files;
@@ -402,7 +402,7 @@ namespace disk::share {
             response.expires_at = "";
         }
 
-        // 状态
+        /// 状态
         auto status_val = share.getValueOfStatus();
         if (status_val == static_cast<int8_t>(ShareStatus::Cancelled)) {
             response.status = "cancelled";
@@ -424,14 +424,14 @@ namespace disk::share {
         Logger::Info() << "Updating share settings: share_id=" << request.share_id
                  << ", user_id=" << user_id;
 
-        // 验证分享所有权
+        /// 验证分享所有权
         auto share_result = co_await ValidateShareOwnership(request.share_id, user_id);
         if (!share_result) {
             co_return std::unexpected(share_result.error());
         }
         auto share = *share_result;
 
-        // 验证分享状态（必须是有效状态）
+        /// 验证分享状态（必须是有效状态）
         if (!IsShareActive(share)) {
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ShareExpired, "Share cancelled or expired, cannot update")
@@ -440,7 +440,7 @@ namespace disk::share {
 
         auto now = trantor::Date::now();
 
-        // 更新过期时间
+        /// 更新过期时间
         if (request.expire_days.has_value()) {
             if (*request.expire_days > 0) {
                 share.setExpiresAt(now.after(*request.expire_days * 86400));
@@ -449,7 +449,7 @@ namespace disk::share {
             }
         }
 
-        // 更新密码
+        /// 更新密码
         if (request.password.has_value()) {
             if (request.password->empty()) {
                 share.setPasswordHashToNull();
@@ -464,14 +464,14 @@ namespace disk::share {
             }
         }
 
-        // 更新权限
+        /// 更新权限
         if (request.permission.has_value()) {
             share.setPermission(SharePermissionToString(*request.permission));
         }
 
         share.setUpdatedAt(now);
 
-        // 保存更新
+        /// 保存更新
         CoroMapper<Shares> mapper(m_db_client);
         try {
             co_await mapper.update(share);
@@ -482,7 +482,7 @@ namespace disk::share {
             );
         }
 
-        // 构建响应
+        /// 构建响应
         UpdateShareResponse response;
         response.share_id = request.share_id;
         if (share.getExpiresAt() != nullptr) {
@@ -651,28 +651,28 @@ namespace disk::share {
         -> drogon::Task<Result<AccessShareResponse>> {
         Logger::Info() << "Verifying share access: share_id=" << request.share_id;
 
-        // 查找分享
+        /// 查找分享
         auto share_result = co_await FindShareByCode(request.share_id);
         if (!share_result) {
             co_return std::unexpected(share_result.error());
         }
         const auto& share = *share_result;
 
-        // 验证分享状态
+        /// 验证分享状态
         if (!IsShareActive(share)) {
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ShareExpired, "Share has been cancelled")
             );
         }
 
-        // 验证是否过期
+        /// 验证是否过期
         if (share.getExpiresAt() != nullptr && IsShareExpired(share)) {
             co_return std::unexpected(ErrorInfo(ErrorCode::ShareExpired, "Share has expired"));
         }
 
-        // 验证密码
+        /// 验证密码
         if (share.getPasswordHash() != nullptr) {
-            // 检查密码尝试限制 (原子递增)
+            /// 检查密码尝试限制 (原子递增)
             auto limit_result = co_await CheckPasswordRateLimit(request.share_id, ip_address);
             if (!limit_result) {
                 co_return std::unexpected(limit_result.error());
@@ -699,13 +699,13 @@ namespace disk::share {
             co_return std::unexpected(token_result.error());
         }
 
-        // 增加访问次数
+        /// 增加访问次数
         co_await IncrementViewCount(share.getValueOfId());
 
-        // 获取分享文件列表
+        /// 获取分享文件列表
         auto share_files = co_await GetShareFiles(share.getValueOfId());
 
-        // 构建响应
+        /// 构建响应
         AccessShareResponse response;
         response.share_token = *token_result;
         response.expires_in = services::TokenService::GetShareTokenExpireSeconds();
@@ -818,7 +818,7 @@ namespace disk::share {
         Logger::Debug() << "Getting download metadata: share_id=" << request.share_id
                   << ", file_id=" << request.file_id;
 
-        // 单次 JOIN 查询：验证分享状态、文件属于分享内容并获取元数据
+        /// 单次 JOIN 查询：验证分享状态、文件属于分享内容并获取元数据
         try {
             auto rows = co_await m_db_client->execSqlCoro(
                 "SELECT s.status, " "(s.expires_at IS NOT NULL AND s.expires_at <= NOW()) AS is_expired, " "sf.id AS share_file_id, f.id, f.name, f.size, 'file' AS type " "FROM shares s " "LEFT JOIN share_files sf ON sf.share_id = s.id " "AND sf.item_type = 'file' AND sf.item_id = $1 " "LEFT JOIN files f ON sf.item_id = f.id " "WHERE s.id = $2",
@@ -846,7 +846,7 @@ namespace disk::share {
             file.type = row["type"].as<std::string>();
             file.size = row["size"].as<uint64_t>();
 
-            // 增加下载次数
+            /// 增加下载次数
             co_await IncrementDownloadCount(share_id);
             co_return file;
         } catch (const DrogonDbException& e) {
@@ -862,7 +862,7 @@ namespace disk::share {
         Logger::Debug() << "Getting download info: share_id=" << request.share_id
                   << ", file_id=" << request.file_id;
 
-        // 单次 4 表 JOIN 查询：shares + share_files + files + file_contents
+        /// 单次 4 表 JOIN 查询：shares + share_files + files + file_contents
         try {
             auto rows = co_await m_db_client->execSqlCoro(
                 "SELECT s.id AS share_id, s.permission, s.status, " "(s.expires_at IS NOT NULL AND s.expires_at <= NOW()) AS is_expired, " "f.id AS file_id, f.name AS file_name, f.size AS file_size, f.content_id, " "fc.storage_path, fc.hash_md5, fc.mime_type " "FROM shares s " "LEFT JOIN files f ON f.id = $1 AND " + BuildSharedFileAccessPredicate("f", 2) + " " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE s.id = $4",
@@ -1241,7 +1241,7 @@ namespace disk::share {
             co_return share;
         } catch (const DrogonDbException& e) {
             const auto error_msg = std::string(e.base().what());
-            // findOne() 抛出异常时，可能是"未找到"或真正的 DB 错误
+            /// findOne() 抛出异常时，可能是"未找到"或真正的 DB 错误
             if (error_msg.find("empty") != std::string::npos ||
                 error_msg.find("condition") != std::string::npos) {
                 co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "Share not found"));
@@ -1251,7 +1251,7 @@ namespace disk::share {
         }
     }
 
-    // ==================== 私有方法 ====================
+    /// ==================== 私有方法 ====================
 
     auto ShareService::GenerateShareCode() -> std::string {
         constexpr const char* chars =
@@ -1658,7 +1658,7 @@ namespace disk::share {
 
         auto key = redis::RedisKeyPrefix::BuildSharePasswordRateLimitKey(share_code, ip_address);
 
-        // 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
+        /// 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
         auto incr_result = co_await m_redis_service->IncrWithExpire(key, 900);
 
         if (!incr_result) {
@@ -1669,7 +1669,7 @@ namespace disk::share {
         constexpr int MAX_ATTEMPTS = 5;
         const int64_t count = incr_result.value();
 
-        // 检查是否超过限制
+        /// 检查是否超过限制
         if (count > MAX_ATTEMPTS) {
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::TooManyRequests,
@@ -1679,4 +1679,4 @@ namespace disk::share {
 
         co_return {};
     }
-} // namespace disk::share
+} ///< namespace disk::share

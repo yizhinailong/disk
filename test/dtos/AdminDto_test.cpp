@@ -24,7 +24,7 @@
 using namespace disk::admin;
 using disk::error::Code;
 
-// ==================== Helper Functions ====================
+/// ==================== Helper Functions ====================
 
 namespace {
     auto CreateJsonRequest(Json::Value&& json) -> drogon::HttpRequestPtr {
@@ -53,9 +53,9 @@ namespace {
             req->setParameter(k, v);
         return req;
     }
-} // namespace
+} ///< namespace
 
-// ==================== ListUsersRequest Tests ====================
+/// ==================== ListUsersRequest Tests ====================
 
 TEST(ListUsersRequest, ValidParameters) {
     auto req = CreateQueryRequest({{"page", "1"}, {"page_size", "20"}});
@@ -250,7 +250,7 @@ TEST(ListUsersRequest, Boundary_PageSize_1) {
 }
 
 TEST(ListUsersRequest, ValidStatus_BoundaryValues) {
-    // status 0 (disabled)
+    /// status 0 (disabled)
     {
         auto req = CreateQueryRequest({{"status", "0"}});
         auto result = ListUsersRequest::FromRequest(req);
@@ -258,7 +258,7 @@ TEST(ListUsersRequest, ValidStatus_BoundaryValues) {
         ASSERT_TRUE(result->status.has_value());
         EXPECT_EQ(*result->status, 0);
     }
-    // status 1 (active)
+    /// status 1 (active)
     {
         auto req = CreateQueryRequest({{"status", "1"}});
         auto result = ListUsersRequest::FromRequest(req);
@@ -266,7 +266,7 @@ TEST(ListUsersRequest, ValidStatus_BoundaryValues) {
         ASSERT_TRUE(result->status.has_value());
         EXPECT_EQ(*result->status, 1);
     }
-    // status 2 (locked)
+    /// status 2 (locked)
     {
         auto req = CreateQueryRequest({{"status", "2"}});
         auto result = ListUsersRequest::FromRequest(req);
@@ -277,7 +277,7 @@ TEST(ListUsersRequest, ValidStatus_BoundaryValues) {
 }
 
 TEST(ListUsersRequest, ValidRole_BoundaryValues) {
-    // role 0 (user)
+    /// role 0 (user)
     {
         auto req = CreateQueryRequest({{"role", "0"}});
         auto result = ListUsersRequest::FromRequest(req);
@@ -285,7 +285,7 @@ TEST(ListUsersRequest, ValidRole_BoundaryValues) {
         ASSERT_TRUE(result->role.has_value());
         EXPECT_EQ(*result->role, 0);
     }
-    // role 1 (admin)
+    /// role 1 (admin)
     {
         auto req = CreateQueryRequest({{"role", "1"}});
         auto result = ListUsersRequest::FromRequest(req);
@@ -316,7 +316,7 @@ TEST(ListUsersRequest, PageWithTrailingChars) {
     }
 }
 
-// ==================== ChangeStatusRequest Tests ====================
+/// ==================== ChangeStatusRequest Tests ====================
 
 TEST(ChangeStatusRequest, ValidStatus_Disabled) {
     Json::Value json;
@@ -444,7 +444,7 @@ TEST(ChangeStatusRequest, WrongType_Boolean) {
     }
 }
 
-// ==================== ChangeRoleRequest Tests ====================
+/// ==================== ChangeRoleRequest Tests ====================
 
 TEST(ChangeRoleRequest, ValidRole_User) {
     Json::Value json;
@@ -538,7 +538,7 @@ TEST(ChangeRoleRequest, InvalidJSON) {
     }
 }
 
-// ==================== ChangeAvailableSpaceRequest Tests ====================
+/// ==================== ChangeAvailableSpaceRequest Tests ====================
 
 TEST(ChangeAvailableSpaceRequest, ValidZero) {
     Json::Value json;
@@ -747,7 +747,7 @@ TEST(ListSharesRequest, UserId_LargeValue) {
     EXPECT_EQ(*result->user_id, 18446744073709551615ULL);
 }
 
-// ==================== PaginationInfo Tests ====================
+/// ==================== PaginationInfo Tests ====================
 
 TEST(PaginationInfo, BasicFields) {
     PaginationInfo pagination;
@@ -827,7 +827,7 @@ TEST(PaginationInfo, DefaultValues) {
     EXPECT_EQ(json["total_pages"].asInt(), 0);
 }
 
-// ==================== UserDetailResponse Tests ====================
+/// ==================== UserDetailResponse Tests ====================
 
 TEST(UserDetailResponse, AllFields) {
     UserDetailResponse response;
@@ -892,7 +892,7 @@ TEST(UserDetailResponse, ZeroStorage) {
     EXPECT_EQ(json["storage_reserved"].asUInt64(), 0ULL);
 }
 
-// ==================== UserListResponse Tests ====================
+/// ==================== UserListResponse Tests ====================
 
 TEST(UserListResponse, WithItems) {
     UserListResponse response;
@@ -932,7 +932,7 @@ TEST(UserListResponse, EmptyItems) {
     EXPECT_EQ(json["pagination"]["total"].asInt(), 0);
 }
 
-// ==================== StorageStatsResponse Tests ====================
+/// ==================== StorageStatsResponse Tests ====================
 
 TEST(StorageStatsResponse, AllFields) {
     StorageStatsResponse response;
@@ -963,7 +963,7 @@ TEST(StorageStatsResponse, ZeroValues) {
     EXPECT_EQ(json["active_shares"].asInt(), 0);
 }
 
-// ==================== SystemStatusResponse Tests ====================
+/// ==================== SystemStatusResponse Tests ====================
 
 TEST(SystemStatusResponse, AllConnected) {
     SystemStatusResponse response;
@@ -1026,7 +1026,7 @@ TEST(SystemStatusResponse, MixedConnectivity) {
     EXPECT_EQ(json["uptime_seconds"].asUInt64(), 86400ULL);
 }
 
-// ==================== ShareDetailResponse Tests ====================
+/// ==================== ShareDetailResponse Tests ====================
 
 TEST(ShareDetailResponse, AllFields) {
     ShareDetailResponse response;
@@ -1075,7 +1075,7 @@ TEST(ShareDetailResponse, NullableFileName) {
     EXPECT_EQ(json["expires_at"].asString(), "");
 }
 
-// ==================== ShareListResponse Tests ====================
+/// ==================== ShareListResponse Tests ====================
 
 TEST(ShareListResponse, WithItems) {
     ShareListResponse response;
@@ -1115,7 +1115,7 @@ TEST(ShareListResponse, EmptyItems) {
     EXPECT_EQ(json["pagination"]["total"].asInt(), 0);
 }
 
-// ==================== Error Code Contract Tests ====================
+/// ==================== Error Code Contract Tests ====================
 
 TEST(AdminErrorCodeContract, AllCodesHaveCorrectValues) {
     EXPECT_EQ(static_cast<int>(Code::AdminRequired), 80001);

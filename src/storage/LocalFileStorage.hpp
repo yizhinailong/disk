@@ -172,4 +172,4 @@ namespace disk::storage {
         std::shared_ptr<trantor::ConcurrentTaskQueue> m_assembly_worker_queue{}; ///< 分片组装专用工作队列
     };
 
-} // namespace disk::storage
+} ///< namespace disk::storage

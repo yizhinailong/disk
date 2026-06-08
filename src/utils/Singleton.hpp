@@ -39,8 +39,8 @@ namespace disk::utils {
         static std::shared_ptr<T> GetInstance() {
             static std::once_flag s_flag;
             std::call_once(s_flag, [&]() {
-                // 通过 friend 声明直接使用 new 访问私有构造函数
-                // 而非 make_shared
+                /// 通过 friend 声明直接使用 new 访问私有构造函数
+                /// 而非 make_shared
                 m_instance = std::shared_ptr<T>(new T());
             });
 
@@ -62,4 +62,4 @@ namespace disk::utils {
     template <typename T>
     std::shared_ptr<T> Singleton<T>::m_instance = nullptr;
 
-} // namespace disk::utils
+} ///< namespace disk::utils

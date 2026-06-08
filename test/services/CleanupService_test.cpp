@@ -138,7 +138,7 @@ namespace disk::services {
                     }
                 }
 
-                // 游标始终推进，不论该批次是否处理失败
+                /// 游标始终推进，不论该批次是否处理失败
                 last_seen_id = batch_max_id;
                 iterations++;
 
@@ -322,5 +322,5 @@ namespace disk::services {
             GTEST_SKIP();
         }
 
-    } // namespace
-} // namespace disk::services
+    } ///< namespace
+} ///< namespace disk::services

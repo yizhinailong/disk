@@ -40,11 +40,11 @@ namespace disk::controllers {
 
         const auto& file_size = params.file_size;
 
-        // 解析 Range 请求头
+        /// 解析 Range 请求头
         auto range_request =
             disk::file::RangeRequest::Parse(params.range_header, file_size);
 
-        // (a) 无效 Range → 416 JSON 响应
+        /// (a) 无效 Range → 416 JSON 响应
         if (range_request.has_range && !range_request.satisfiable) {
             Logger::Warn() << "Range request not satisfiable: " << params.range_header
                      << ", file_size=" << file_size;
@@ -69,18 +69,18 @@ namespace disk::controllers {
             co_return resp;
         }
 
-        // 计算 Range 范围
+        /// 计算 Range 范围
         uint64_t start = range_request.has_range ? range_request.start : 0;
         uint64_t end = range_request.has_range ? range_request.end : file_size - 1;
         uint64_t content_length = end - start + 1;
 
-        // ================================================================
-        // Path A: newFileResponse — sendfile 零拷贝路径
-        // ================================================================
-        // 当传输内容 >= sendfile 阈值时，使用 Drogon 内置的 newFileResponse，
-        // 由 sendfile() 系统调用完成零拷贝传输，避免用户态 read/write 拷贝。
+        /// ================================================================
+        /// Path A: newFileResponse — sendfile 零拷贝路径
+        /// ================================================================
+        /// 当传输内容 >= sendfile 阈值时，使用 Drogon 内置的 newFileResponse，
+        /// 由 sendfile() 系统调用完成零拷贝传输，避免用户态 read/write 拷贝。
         if (content_length >= SENDFILE_THRESHOLD_BYTES) {
-            // 检查文件是否存在
+            /// 检查文件是否存在
             auto exists_result = co_await storage->Exists(params.storage_path);
             if (!exists_result || !*exists_result) {
                 co_return Response::Error(
@@ -91,12 +91,12 @@ namespace disk::controllers {
             drogon::HttpResponsePtr resp;
 
             if (range_request.has_range) {
-                // Range 请求 → Drogon 自动设置 206 + Content-Range
+                /// Range 请求 → Drogon 自动设置 206 + Content-Range
                 resp = drogon::HttpResponse::newFileResponse(
                     params.storage_path,
                     static_cast<size_t>(start),
                     static_cast<size_t>(content_length),
-                    true,  // setContentRange
+                    true,  ///< setContentRange
                     params.filename,
                     drogon::CT_CUSTOM,
                     params.mime_type
@@ -104,7 +104,7 @@ namespace disk::controllers {
                 Logger::Info() << "Sending partial content via sendfile: start=" << start
                          << ", end=" << end << ", total=" << file_size;
             } else {
-                // 全文件下载 → Drogon 自动设置 200
+                /// 全文件下载 → Drogon 自动设置 200
                 resp = drogon::HttpResponse::newFileResponse(
                     params.storage_path,
                     params.filename,
@@ -114,7 +114,7 @@ namespace disk::controllers {
                 Logger::Info() << "Sending full file via sendfile: size=" << file_size;
             }
 
-            // 补充 newFileResponse 未设置的响应头
+            /// 补充 newFileResponse 未设置的响应头
             resp->addHeader("Accept-Ranges", "bytes");
             resp->addHeader(
                 "Content-Disposition", "attachment; filename=\"" + params.filename + "\""
@@ -126,10 +126,10 @@ namespace disk::controllers {
             co_return resp;
         }
 
-        // ================================================================
-        // Path B: newStreamResponse — 流式下载路径（备用）
-        // ================================================================
-        // 适用于小文件或需要显式流控制的场景。保留作为 sendfile 不可用时的回退。
+        /// ================================================================
+        /// Path B: newStreamResponse — 流式下载路径（备用）
+        /// ================================================================
+        /// 适用于小文件或需要显式流控制的场景。保留作为 sendfile 不可用时的回退。
         auto open_result = co_await storage->OpenForRead(params.storage_path);
         if (!open_result) {
             Logger::Error() << "Cannot open file: " << params.storage_path;
@@ -183,7 +183,7 @@ namespace disk::controllers {
             }
         );
 
-        // (b) 有效 Range → 206
+        /// (b) 有效 Range → 206
         if (range_request.has_range) {
             resp->setStatusCode(drogon::HttpStatusCode::k206PartialContent);
             resp->addHeader(
@@ -194,12 +194,12 @@ namespace disk::controllers {
             Logger::Info() << "Returning partial content: start=" << start << ", end=" << end
                      << ", total=" << file_size;
         } else {
-            // (c) 无 Range → 200 全文件
+            /// (c) 无 Range → 200 全文件
             resp->setStatusCode(drogon::HttpStatusCode::k200OK);
             Logger::Info() << "Returning full file: size=" << file_size;
         }
 
-        // 设置公共响应头
+        /// 设置公共响应头
         resp->setContentTypeString(params.mime_type);
         resp->addHeader("Content-Length", std::to_string(content_length));
         resp->addHeader("Accept-Ranges", "bytes");
@@ -212,4 +212,4 @@ namespace disk::controllers {
         co_return resp;
     }
 
-} // namespace disk::controllers
+} ///< namespace disk::controllers

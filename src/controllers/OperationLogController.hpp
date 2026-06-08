@@ -33,4 +33,4 @@ namespace disk::log {
         std::unique_ptr<OperationLogService> m_log_service{};
     };
 
-} // namespace disk::log
+} ///< namespace disk::log

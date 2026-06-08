@@ -31,7 +31,7 @@
 
 namespace disk::user {
 
-    // ==================== Request DTOs ====================
+    /// ==================== Request DTOs ====================
 
     /**
      * @brief 修改密码请求 DTO
@@ -127,7 +127,7 @@ namespace disk::user {
 
             UpdateProfileRequest request;
 
-            // 解析 nickname（可选，显式 null 无效）
+            /// 解析 nickname（可选，显式 null 无效）
             if (json.isMember("nickname")) {
                 if (json["nickname"].isNull()) {
                     Logger::Warn() << "Parameter 'nickname' cannot be null";
@@ -144,7 +144,7 @@ namespace disk::user {
                 }
             }
 
-            // 解析 avatar（可选，显式 null 无效）
+            /// 解析 avatar（可选，显式 null 无效）
             if (json.isMember("avatar")) {
                 if (json["avatar"].isNull()) {
                     Logger::Warn() << "Parameter 'avatar' cannot be null";
@@ -160,7 +160,7 @@ namespace disk::user {
                 }
             }
 
-            // 验证字段长度
+            /// 验证字段长度
             if (request.nickname.has_value() && !request.ValidateNickname()) {
                 Logger::Warn() << "Nickname format error";
                 return std::unexpected(ErrorInfo(
@@ -177,7 +177,7 @@ namespace disk::user {
                 ));
             }
 
-            // 至少提供一个字段
+            /// 至少提供一个字段
             if (!request.nickname.has_value() && !request.avatar.has_value()) {
                 Logger::Warn() << "At least one field must be provided";
                 return std::unexpected(ErrorInfo(
@@ -224,7 +224,7 @@ namespace disk::user {
         }
     };
 
-    // ==================== Response DTOs ====================
+    /// ==================== Response DTOs ====================
 
     /**
      * @brief 用户信息响应 DTO
@@ -292,4 +292,4 @@ namespace disk::user {
         }
     };
 
-} // namespace disk::user
+} ///< namespace disk::user

@@ -31,7 +31,7 @@
 
 namespace disk::auth {
 
-    // ==================== Request DTOs ====================
+    /// ==================== Request DTOs ====================
 
     /**
      * @brief 用户注册请求 DTO
@@ -208,7 +208,7 @@ namespace disk::auth {
         }
     };
 
-    // ==================== Response DTOs ====================
+    /// ==================== Response DTOs ====================
 
     /**
      * @brief 用户注册响应 DTO
@@ -288,4 +288,4 @@ namespace disk::auth {
         }
     };
 
-} // namespace disk::auth
+} ///< namespace disk::auth

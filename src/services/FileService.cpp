@@ -636,9 +636,9 @@ namespace disk::file {
             order_by.append(direction);
             return order_by;
         }
-    } // namespace
+    } ///< namespace
 
-    // ==================== 构造函数 ====================
+    /// ==================== 构造函数 ====================
 
     FileService::FileService(drogon::orm::DbClientPtr db_client, storage::IFileStorage* storage)
         : m_db_client(std::move(db_client)), m_storage(storage) {
@@ -646,7 +646,7 @@ namespace disk::file {
         Logger::Debug() << "FileService initialization completed";
     }
 
-    // ==================== InitUpload ====================
+    /// ==================== InitUpload ====================
 
     auto FileService::InitUpload(InitUploadRequest request, uint64_t user_id)
         -> drogon::Task<Result<InitUploadResponse>> {
@@ -679,7 +679,7 @@ namespace disk::file {
             co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
         }
 
-        // 1. 检测秒传：查找已存在的内容（获取 id + mime_type，避免二次读取）
+        /// 1. 检测秒传：查找已存在的内容（获取 id + mime_type，避免二次读取）
         auto existing_content_meta =
             co_await LookupExistingContentMetadata(m_db_client, request.file_hash);
         if (existing_content_meta.has_value()) {
@@ -691,7 +691,7 @@ namespace disk::file {
             try {
                 transaction = co_await m_db_client->newTransactionCoro();
 
-                // 在事务内检查同名文件
+                /// 在事务内检查同名文件
                 if (co_await IsFilenameExists(
                         transaction,
                         request.parent_id,
@@ -702,7 +702,7 @@ namespace disk::file {
                     co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
                 }
 
-                // 事务内递增引用计数
+                /// 事务内递增引用计数
                 auto increment_result = co_await transaction->execSqlCoro(
                     "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = $1",
                     meta.id
@@ -719,7 +719,7 @@ namespace disk::file {
                     co_return std::unexpected(parent_location_result.error());
                 }
 
-                // 创建文件记录（使用 LookupExistingContentMetadata 提供的 mime_type，无需二次读取）
+                /// 创建文件记录（使用 LookupExistingContentMetadata 提供的 mime_type，无需二次读取）
                 Files file;
                 file.setUserId(user_id);
                 file.setContentId(meta.id);
@@ -735,9 +735,9 @@ namespace disk::file {
                 CoroMapper<Files> file_mapper(transaction);
                 file = co_await file_mapper.insert(file);
 
-                // 注：秒传时 storage_used 不增加，因为物理文件已存在
+                /// 注：秒传时 storage_used 不增加，因为物理文件已存在
 
-                // 构造响应
+                /// 构造响应
                 InitUploadResponse response;
                 response.instant_upload = true;
                 response.file =
@@ -779,7 +779,7 @@ namespace disk::file {
             }
         }
 
-        // 2. 检测断点续传
+        /// 2. 检测断点续传
         auto existing_task = co_await FindExistingTask(user_id, request.file_hash);
         if (existing_task.has_value()) {
             const auto& task = existing_task.value();
@@ -826,14 +826,14 @@ namespace disk::file {
             }
         }
 
-        // 3. 预留存储配额
+        /// 3. 预留存储配额
         auto quota_result = co_await ReserveStorageQuota(user_id, request.file_size);
         if (!quota_result) {
             Logger::Warn() << "Storage quota reservation failed: user_id=" << user_id;
             co_return std::unexpected(quota_result.error());
         }
 
-        // 4. 创建新的上传任务
+        /// 4. 创建新的上传任务
         auto chunk_size = config->GetChunkSize();
         if (chunk_size == 0) {
             Logger::Error() << "Invalid upload chunk size configured: 0";
@@ -857,7 +857,7 @@ namespace disk::file {
         auto total_chunks = static_cast<uint32_t>(total_chunks_u64);
         auto expiry_seconds = config->GetUploadTaskExpirySeconds();
 
-        // 生成上传 ID
+        /// 生成上传 ID
         auto upload_id = drogon::utils::getUuid();
 
         UploadTasks task;
@@ -871,7 +871,7 @@ namespace disk::file {
         task.setTotalChunks(total_chunks);
         task.setReservedBytes(request.file_size);
         task.setTempPath(upload_id);
-        task.setStatus(0); // 进行中
+        task.setStatus(0); ///< 进行中
         task.setExpiresAt(trantor::Date::now().after(expiry_seconds));
 
         bool create_task_failed = false;
@@ -883,7 +883,7 @@ namespace disk::file {
                       << ", total_chunks=" << total_chunks;
             InvalidateUploadTaskCache(task.getValueOfId());
 
-            // 预创建临时上传目录，避免每个分片写入时重复创建
+            /// 预创建临时上传目录，避免每个分片写入时重复创建
             auto ensure_result = co_await m_storage->EnsureUploadTempDir(task.getValueOfId());
             if (!ensure_result) {
                 Logger::Warn() << "Failed to ensure upload temp directory: upload_id="
@@ -916,7 +916,7 @@ namespace disk::file {
         );
     }
 
-    // ==================== UploadChunk ====================
+    /// ==================== UploadChunk ====================
 
     auto FileService::UploadChunk(
         std::string upload_id,
@@ -932,7 +932,7 @@ namespace disk::file {
                   << ", chunk_index=" << chunk_index << ", chunk_hash=" << chunk_hash
                   << ", data_size=" << chunk_data.size();
 
-        // 1. 优先读取短 TTL 上传任务缓存，命中后避免重复查询数据库
+        /// 1. 优先读取短 TTL 上传任务缓存，命中后避免重复查询数据库
         auto cached_task = TryGetUploadTaskCacheEntry(upload_id, user_id);
         if (!cached_task.has_value()) {
             auto task_result = co_await FindUploadTask(upload_id, user_id);
@@ -957,7 +957,7 @@ namespace disk::file {
 
         const auto& task = cached_task.value();
 
-        // 2. 验证任务未过期
+        /// 2. 验证任务未过期
         if (task.expires_at < trantor::Date::now()) {
             Logger::Warn() << "Upload task expired: " << upload_id;
             InvalidateUploadTaskCache(upload_id);
@@ -975,7 +975,7 @@ namespace disk::file {
             );
         }
 
-        // 3. 验证分片索引有效
+        /// 3. 验证分片索引有效
         if (chunk_index >= task.total_chunks) {
             Logger::Warn() << "Chunk index out of range: chunk_index=" << chunk_index
                      << ", total_chunks=" << task.total_chunks;
@@ -993,7 +993,7 @@ namespace disk::file {
             );
         }
 
-        // 4. 验证分片大小符合任务几何信息
+        /// 4. 验证分片大小符合任务几何信息
         const auto chunk_offset = static_cast<uint64_t>(chunk_index) * task.chunk_size;
         const auto remaining_bytes = task.file_size - chunk_offset;
         const auto expected_size = std::min<uint64_t>(task.chunk_size, remaining_bytes);
@@ -1018,7 +1018,7 @@ namespace disk::file {
             );
         }
 
-        // 5. 将请求体复制到拥有所有权的缓冲区，只做一次哈希+落盘复用。
+        /// 5. 将请求体复制到拥有所有权的缓冲区，只做一次哈希+落盘复用。
         std::string chunk_payload{ chunk_data };
         auto actual_hash = FileHashUtil::HashMd5(chunk_payload);
         if (actual_hash != chunk_hash) {
@@ -1038,7 +1038,7 @@ namespace disk::file {
             );
         }
 
-        // 6. 创建临时目录并写入分片
+        /// 6. 创建临时目录并写入分片
         auto write_result = co_await m_storage->WriteChunk(upload_id, chunk_index, std::move(chunk_payload));
         if (!write_result) {
             Logger::Error() << "Failed to write chunk file: upload_id=" << upload_id
@@ -1056,7 +1056,7 @@ namespace disk::file {
             co_return std::unexpected(write_result.error());
         }
 
-        // 7. 记录已上传分片（幂等：INSERT IGNORE 允许重复上传同一分片）
+        /// 7. 记录已上传分片（幂等：INSERT IGNORE 允许重复上传同一分片）
         try {
             co_await m_db_client->execSqlCoro(
                 "INSERT INTO upload_task_chunks (task_id, chunk_index, uploaded_at) VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING",
@@ -1098,7 +1098,7 @@ namespace disk::file {
         }
     }
 
-    // ==================== CompleteUpload ====================
+    /// ==================== CompleteUpload ====================
 
     auto FileService::CompleteUpload(std::string upload_id, uint64_t user_id)
         -> drogon::Task<Result<CompleteUploadResponse>> {
@@ -1107,7 +1107,7 @@ namespace disk::file {
 
         Logger::Debug() << "Starting complete upload: upload_id=" << upload_id << ", user_id=" << user_id;
 
-        // 1. 查找并验证上传任务
+        /// 1. 查找并验证上传任务
         auto task_result = co_await FindUploadTask(upload_id, user_id);
         if (!task_result) {
             Logger::Warn() << "Upload task verification failed: " << upload_id;
@@ -1123,7 +1123,7 @@ namespace disk::file {
 
         auto task = task_result.value();
 
-        // 2. Check idempotency: already completed
+        /// 2. Check idempotency: already completed
         if (task.getValueOfStatus() == 1) {
             Logger::Debug() << "Upload task already completed: upload_id=" << upload_id;
             InvalidateUploadTaskCache(upload_id);
@@ -1138,7 +1138,7 @@ namespace disk::file {
             co_return CompleteUploadResponse{};
         }
 
-        // 3. 单次聚合查询校验分片完整性
+        /// 3. 单次聚合查询校验分片完整性
         auto chunk_scan_start = std::chrono::steady_clock::now();
         const auto LogChunkScanDuration = [&chunk_scan_start, &upload_id]() {
             Logger::Debug() << "[stage_timer] chunk_scan duration_ms="
@@ -1171,10 +1171,10 @@ namespace disk::file {
 
         bool chunks_valid = false;
         if (total_chunks == 0) {
-            // 零分片文件：不期望任何已上传分片
+            /// 零分片文件：不期望任何已上传分片
             chunks_valid = (coverage.uploaded_count == 0);
         } else {
-            // 非零分片：数量和最大索引必须匹配
+            /// 非零分片：数量和最大索引必须匹配
             chunks_valid = (coverage.uploaded_count == static_cast<uint64_t>(total_chunks)) &&
                            (coverage.max_chunk_index == static_cast<int64_t>(total_chunks - 1));
         }
@@ -1198,7 +1198,7 @@ namespace disk::file {
             );
         }
 
-        // 3. 组装分片（同时计算 MD5 + SHA256）
+        /// 3. 组装分片（同时计算 MD5 + SHA256）
         auto assemble_start = std::chrono::steady_clock::now();
         auto assemble_result = co_await m_storage->AssembleChunks(upload_id, task.getValueOfTotalChunks());
         Logger::Debug() << "[stage_timer] assemble duration_ms="
@@ -1224,7 +1224,7 @@ namespace disk::file {
         const auto& assembled = assemble_result.value();
         const auto& assemble_path = assembled.path;
 
-        // 4. 使用组装时计算的哈希值
+        /// 4. 使用组装时计算的哈希值
         const auto& final_hash = assembled.md5_hash;
         const auto& precomputed_sha256 = assembled.sha256_hash;
         if (final_hash != task.getValueOfFileHash()) {
@@ -1496,7 +1496,7 @@ namespace disk::file {
         Logger::Debug() << "Files record created successfully: file_id=" << file.getValueOfId();
         InvalidateUploadTaskCache(upload_id);
 
-        // 7. Cleanup temp directory
+        /// 7. Cleanup temp directory
         auto temp_cleanup_start = std::chrono::steady_clock::now();
         auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
         Logger::Debug() << "[stage_timer] temp_cleanup duration_ms="
@@ -1537,7 +1537,7 @@ namespace disk::file {
 
         Logger::Debug() << "Starting cancel upload: upload_id=" << upload_id << ", user_id=" << user_id;
 
-        // 1. 查找并验证上传任务
+        /// 1. 查找并验证上传任务
         auto task_result = co_await FindUploadTask(upload_id, user_id);
         if (!task_result) {
             Logger::Warn() << "Upload task verification failed: " << upload_id;
@@ -1545,17 +1545,17 @@ namespace disk::file {
         }
         const auto task = task_result.value();
 
-        // 2. Check idempotency: already in terminal state
+        /// 2. Check idempotency: already in terminal state
         if (task.getValueOfStatus() != 0) {
             Logger::Debug() << "Upload task already in terminal state: upload_id=" << upload_id
                       << ", status=" << task.getValueOfStatus();
             co_return {};
         }
 
-        // 3. Release reserved quota
+        /// 3. Release reserved quota
         co_await ReleaseReservedQuota(user_id, task.getValueOfReservedBytes());
 
-        // 4. Set terminal state (status=2 cancelled)
+        /// 4. Set terminal state (status=2 cancelled)
         try {
             co_await m_db_client->execSqlCoro(
                 "UPDATE upload_tasks SET status = 2, finalized_at = NOW(), " "fail_reason = '用户取消' WHERE id = $1 AND status = 0",
@@ -1569,7 +1569,7 @@ namespace disk::file {
             );
         }
 
-        // 5. Cleanup chunk tracking rows
+        /// 5. Cleanup chunk tracking rows
         try {
             co_await m_db_client->execSqlCoro(
                 "DELETE FROM upload_task_chunks WHERE task_id = $1",
@@ -1579,7 +1579,7 @@ namespace disk::file {
             Logger::Warn() << "Failed to cleanup upload_task_chunks: " << e.base().what();
         }
 
-        // 6. Cleanup temp directory
+        /// 6. Cleanup temp directory
         auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
         if (!cleanup_result) {
             Logger::Warn() << "Failed to delete temp directory: upload_id=" << upload_id
@@ -1590,7 +1590,7 @@ namespace disk::file {
         co_return {};
     }
 
-    // ==================== GetFileList ====================
+    /// ==================== GetFileList ====================
 
     auto FileService::GetFileList(FileListRequest request, uint64_t user_id)
         -> drogon::Task<Result<FileListResponse>> {
@@ -1600,7 +1600,7 @@ namespace disk::file {
                   << ", sort_by=" << request.sort_by << ", sort_order=" << request.sort_order
                   << ", type=" << request.type << ", user_id=" << user_id;
 
-        // 1. 验证 parent_id 文件夹存在且属于用户（如果 parent_id != 0）
+        /// 1. 验证 parent_id 文件夹存在且属于用户（如果 parent_id != 0）
         if (request.parent_id != 0) {
             try {
                 CoroMapper<Folders> folder_mapper(m_db_client);
@@ -1615,7 +1615,7 @@ namespace disk::file {
             }
         }
 
-        // 2. 使用 SQL 查询（JOIN 消除 N+1， LIMIT/OFFSET 宻除内存分页）
+        /// 2. 使用 SQL 查询（JOIN 消除 N+1， LIMIT/OFFSET 宻除内存分页）
         std::vector<FileListItem> items;
         int total = 0;
         int total_pages = 0;
@@ -1655,7 +1655,7 @@ namespace disk::file {
                     total += static_cast<int>(folder_count_result[0]["cnt"].as<int64_t>());
                 }
 
-                // 先在窄行结果集上完成分页，再回表补齐详情，避免在宽行 UNION 结果上提前排序。
+                /// 先在窄行结果集上完成分页，再回表补齐详情，避免在宽行 UNION 结果上提前排序。
                 const std::string data_sql =
                     "SELECT page.id, page.name, page.type, page.size, " "       COALESCE(f.mime_type, '') AS mime_type, " "       COALESCE(fc.hash_md5, '') AS hash, " "       COALESCE(fo.item_count, 0) AS item_count, " "       page.created_at, page.updated_at " "FROM (" "  SELECT combined.id, combined.name, combined.type, combined.size, combined.created_at, combined.updated_at " "  FROM (" "    SELECT f.id, f.name, 'file' AS type, f.size, f.created_at, f.updated_at " "    FROM files f " "    WHERE f.folder_id = $1 AND f.user_id = $2 " "    UNION ALL " "    SELECT fo.id, fo.name, 'folder' AS type, 0 AS size, fo.created_at, fo.updated_at " "    FROM folders fo " "    WHERE fo.parent_id = $3 AND fo.user_id = $4 " "  ) AS combined " "  ORDER BY " + inner_order_by + " " "  LIMIT $5 OFFSET $6" ") AS page " "LEFT JOIN files f ON page.type = 'file' AND page.id = f.id " "LEFT JOIN folders fo ON page.type = 'folder' AND page.id = fo.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "ORDER BY " + outer_order_by;
 
@@ -1762,7 +1762,7 @@ namespace disk::file {
             Logger::Warn() << "Failed to query file list: " << e.base().what();
         }
 
-        // 3. 构造响应
+        /// 3. 构造响应
         FileListResponse response;
         response.items = items;
         response.pagination = { .page = request.page,
@@ -1775,7 +1775,7 @@ namespace disk::file {
         co_return response;
     }
 
-    // ==================== GetFileDetail ====================
+    /// ==================== GetFileDetail ====================
 
     auto FileService::GetFileDetail(uint64_t file_id, uint64_t user_id)
         -> drogon::Task<Result<FileDetailResponse>> {
@@ -1824,14 +1824,14 @@ namespace disk::file {
         }
     }
 
-    // ==================== GetDownloadInfo ====================
+    /// ==================== GetDownloadInfo ====================
 
     auto FileService::GetDownloadInfo(uint64_t file_id, uint64_t user_id)
         -> drogon::Task<Result<DownloadInfoResponse>> {
 
         Logger::Debug() << "Starting get download info: file_id=" << file_id << ", user_id=" << user_id;
 
-        // 1. 查找文件并验证归属
+        /// 1. 查找文件并验证归属
         try {
             CoroMapper<Files> file_mapper(m_db_client);
             auto file = co_await file_mapper.findOne(
@@ -1839,7 +1839,7 @@ namespace disk::file {
                 Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
             );
 
-            // 2. 获取文件内容信息
+            /// 2. 获取文件内容信息
             if (!file.getContentId()) {
                 Logger::Error() << "File missing content_id: file_id=" << file_id;
                 co_return std::unexpected(
@@ -1852,7 +1852,7 @@ namespace disk::file {
                 Criteria(FileContents::Cols::_id, CompareOperator::EQ, *file.getContentId())
             );
 
-            // 3. 构造响应
+            /// 3. 构造响应
             DownloadInfoResponse response;
             response.file_id = file.getValueOfId();
             response.filename = file.getValueOfName();
@@ -1872,14 +1872,14 @@ namespace disk::file {
         }
     }
 
-    // ==================== GetDownloadData ====================
+    /// ==================== GetDownloadData ====================
 
     auto FileService::GetDownloadData(uint64_t file_id, uint64_t user_id)
         -> drogon::Task<Result<DownloadInfo>> {
 
         Logger::Debug() << "Starting get download data: file_id=" << file_id << ", user_id=" << user_id;
 
-        // 1. 查找文件并验证归属
+        /// 1. 查找文件并验证归属
         try {
             CoroMapper<Files> file_mapper(m_db_client);
             auto file = co_await file_mapper.findOne(
@@ -1887,7 +1887,7 @@ namespace disk::file {
                 Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
             );
 
-            // 2. 获取文件内容信息
+            /// 2. 获取文件内容信息
             if (!file.getContentId()) {
                 Logger::Error() << "File missing content_id: file_id=" << file_id;
                 co_return std::unexpected(
@@ -1900,7 +1900,7 @@ namespace disk::file {
                 Criteria(FileContents::Cols::_id, CompareOperator::EQ, *file.getContentId())
             );
 
-            // 3. 构造响应
+            /// 3. 构造响应
             DownloadInfo info;
             info.file_id = file.getValueOfId();
             info.filename = file.getValueOfName();
@@ -1921,7 +1921,7 @@ namespace disk::file {
         }
     }
 
-    // ==================== Rename ====================
+    /// ==================== Rename ====================
 
     auto FileService::Rename(uint64_t file_id, std::string new_name, uint64_t user_id)
         -> drogon::Task<Result<RenameResponse>> {
@@ -1979,7 +1979,7 @@ namespace disk::file {
         }
     }
 
-    // ==================== Move ====================
+    /// ==================== Move ====================
 
     auto FileService::Move(MoveRequest request, uint64_t user_id)
         -> drogon::Task<Result<MoveResponse>> {
@@ -2283,7 +2283,7 @@ namespace disk::file {
         co_return response;
     }
 
-    // ==================== Copy ====================
+    /// ==================== Copy ====================
 
     auto FileService::Copy(CopyRequest request, uint64_t user_id)
         -> drogon::Task<Result<CopyResponse>> {
@@ -2772,7 +2772,7 @@ namespace disk::file {
         co_return response;
     }
 
-    // ==================== Delete ====================
+    /// ==================== Delete ====================
 
     auto FileService::Delete(DeleteRequest request, uint64_t user_id)
         -> drogon::Task<Result<DeleteResponse>> {
@@ -3025,7 +3025,7 @@ namespace disk::file {
         co_return response;
     }
 
-    // ==================== Search ====================
+    /// ==================== Search ====================
 
     auto FileService::Search(SearchRequest request, uint64_t user_id)
         -> drogon::Task<Result<SearchResponse>> {
@@ -3044,12 +3044,12 @@ namespace disk::file {
         const bool has_folder_filter = request.folder_id.has_value();
         const auto normalized_keyword = NormalizeFulltextKeyword(request.keyword);
 
-        // Escape underscore for LIKE pattern (treat it literally, not as wildcard)
+        /// Escape underscore for LIKE pattern (treat it literally, not as wildcard)
         std::string escaped_like_keyword = request.keyword;
         size_t pos = 0;
         while ((pos = escaped_like_keyword.find('_', pos)) != std::string::npos) {
             escaped_like_keyword.replace(pos, 1, "\\_");
-            pos += 2; // Skip past the escaped character
+            pos += 2; ///< Skip past the escaped character
         }
 
         const std::string search_param =
@@ -3327,7 +3327,7 @@ namespace disk::file {
         co_return response;
     }
 
-    // ==================== 私有辅助方法 ====================
+    /// ==================== 私有辅助方法 ====================
 
     auto FileService::CheckStorageQuota(uint64_t user_id, uint64_t file_size) const
         -> drogon::Task<Result<void>> {
@@ -3459,7 +3459,7 @@ namespace disk::file {
 
         const auto now = std::chrono::steady_clock::now();
         {
-            // 读路径使用共享锁，降低高频分片上传之间的锁竞争。
+            /// 读路径使用共享锁，降低高频分片上传之间的锁竞争。
             std::shared_lock<std::shared_mutex> lock(m_upload_task_cache_mutex);
             auto it = m_upload_task_cache.find(upload_id);
             if (it == m_upload_task_cache.end()) {
@@ -3475,7 +3475,7 @@ namespace disk::file {
             }
         }
 
-        // 仅在确认缓存过期后切换到写锁做清理，避免读路径长时间持有独占锁。
+        /// 仅在确认缓存过期后切换到写锁做清理，避免读路径长时间持有独占锁。
         std::unique_lock<std::shared_mutex> lock(m_upload_task_cache_mutex);
         auto it = m_upload_task_cache.find(upload_id);
         if (it == m_upload_task_cache.end()) {
@@ -3560,7 +3560,7 @@ namespace disk::file {
         return mime_type.starts_with("image/");
     }
 
-    // ── 事务感知辅助方法实现 ──
+    /// ── 事务感知辅助方法实现 ──
 
     auto FileService::CheckStorageQuota(
         const drogon::orm::DbClientPtr& client,
@@ -3850,4 +3850,4 @@ namespace disk::file {
         }
     }
 
-} // namespace disk::file
+} ///< namespace disk::file

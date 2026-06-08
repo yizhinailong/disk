@@ -11,7 +11,7 @@
 
 namespace disk::services {
 
-    // ==================== 初始化 ====================
+    /// ==================== 初始化 ====================
 
     auto ScheduledTasks::Initialize(drogon::orm::DbClientPtr db_client) -> void {
         auto instance = GetInstance();
@@ -20,13 +20,13 @@ namespace disk::services {
         }
     }
 
-    // ==================== 任务注册 ====================
+    /// ==================== 任务注册 ====================
 
     auto ScheduledTasks::Register() -> void {
         auto instance = GetInstance();
 
-        // async_func 将协程 lambda 包装为 std::function<void()>，保持捕获变量存活
-        // runEvery 将函数存储在程序生命周期内
+        /// async_func 将协程 lambda 包装为 std::function<void()>，保持捕获变量存活
+        /// runEvery 将函数存储在程序生命周期内
         drogon::app().getLoop()->runEvery(
             3600.0,
             drogon::async_func([cleanup_service = instance->m_cleanup_service]() -> drogon::Task<void> {
@@ -47,4 +47,4 @@ namespace disk::services {
         Logger::Info() << "Scheduled cleanup tasks registered (runs every hour)";
     }
 
-} // namespace disk::services
+} ///< namespace disk::services

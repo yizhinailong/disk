@@ -24,7 +24,7 @@ namespace {
         return req;
     }
 
-} // namespace
+} ///< namespace
 
 TEST(AdminRateLimitTest, AuthLoginPath_Skipped) {
     disk::filters::AdminRateLimitFilter filter;
