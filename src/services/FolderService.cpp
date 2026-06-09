@@ -342,19 +342,11 @@ namespace disk::folder {
 
     auto FolderService::IncrementParentItemCount(uint64_t parent_id) -> drogon::Task<void> {
         try {
-            CoroMapper<Folders> mapper(m_db_client);
-
-            auto parent = co_await mapper.findOne(
-                Criteria(Folders::Cols::_id, CompareOperator::EQ, parent_id)
+            co_await m_db_client->execSqlCoro(
+                "UPDATE folders SET item_count = item_count + 1 WHERE id = $1",
+                parent_id
             );
-
-            parent.setItemCount(parent.getValueOfItemCount() + 1);
-            parent.setUpdatedAt(trantor::Date::now());
-
-            co_await mapper.update(parent);
-            Logger::Debug() << "Updated parent folder item_count: parent_id=" << parent_id
-                      << ", new_count=" << parent.getValueOfItemCount();
-
+            Logger::Debug() << "Updated parent folder item_count: parent_id=" << parent_id;
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Warn() << "Failed to update parent folder item_count: parent_id=" << parent_id
                      << " - " << e.base().what();

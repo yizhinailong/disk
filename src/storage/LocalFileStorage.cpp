@@ -241,15 +241,13 @@ namespace disk::storage {
         auto result = co_await RunBlockingFilesystemTask(
             m_worker_queue,
             [temp_dir, chunk_path, chunk_data = std::move(data)]() -> Result<void> {
-                /// 防御性回退：目录应由 EnsureUploadTempDir 预创建，此处仅处理意外丢失。
+                /// create_directories is idempotent, so just ensure the directory exists.
                 std::error_code ec;
-                if (!std::filesystem::exists(temp_dir, ec) || ec) {
-                    std::filesystem::create_directories(temp_dir, ec);
-                    if (ec) {
-                        return std::unexpected(
-                            ErrorInfo(ErrorCode::InternalError, "Failed to create temp upload directory")
-                        );
-                    }
+                std::filesystem::create_directories(temp_dir, ec);
+                if (ec) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Failed to create temp upload directory")
+                    );
                 }
 
                 std::ofstream chunk_file(chunk_path, std::ios::binary);
