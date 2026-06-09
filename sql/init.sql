@@ -137,6 +137,10 @@ CREATE INDEX idx_files_extension ON files (extension);
 CREATE INDEX idx_files_created_at ON files (created_at);
 CREATE INDEX ft_files_name ON files USING GIN (to_tsvector('simple', name));
 
+-- Trigram index for LIKE performance
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX idx_files_name_trgm ON files USING GIN (name gin_trgm_ops);
+
 COMMENT ON TABLE files IS '文件表';
 COMMENT ON COLUMN files.id IS '文件ID';
 COMMENT ON COLUMN files.user_id IS '所属用户ID';

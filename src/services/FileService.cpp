@@ -20,6 +20,7 @@
 
 #include <drogon/drogon.h>
 #include <drogon/utils/Utilities.h>
+#include <json/reader.h>
 #include <json/writer.h>
 
 #include "models/FileContents.hpp"
@@ -31,6 +32,7 @@
 #include "utils/BatchUtils.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
+#include "utils/RedisKeyPrefix.hpp"
 #include "utils/StageTimer.hpp"
 
 namespace disk::file {
@@ -39,6 +41,8 @@ namespace disk::file {
     using disk::utils::ConfigMgr;
     using disk::utils::DEFAULT_BATCH_CHUNK_SIZE;
     using disk::utils::FileHashUtil;
+    using disk::redis::RedisKeyPrefix;
+    using disk::services::RedisService;
     using drogon::orm::CompareOperator;
     using drogon::orm::CoroMapper;
     using drogon::orm::Criteria;
@@ -783,6 +787,7 @@ namespace disk::file {
                               .created_at = file.getValueOfCreatedAt().toDbStringLocal() };
 
                 Logger::Debug() << "Instant upload completed: file_id=" << file.getValueOfId();
+                co_await InvalidateFileListCache(user_id, {request.parent_id});
                 co_return response;
 
             } catch (const drogon::orm::DrogonDbException& e) {
@@ -1565,6 +1570,7 @@ namespace disk::file {
                   << " outcome=success upload_id=" << upload_id
                   << " total_chunks=" << task.getValueOfTotalChunks();
 
+        co_await InvalidateFileListCache(user_id, {file.getValueOfFolderId()});
         co_return response;
     }
 
@@ -1635,6 +1641,26 @@ namespace disk::file {
                   << ", page=" << request.page << ", page_size=" << request.page_size
                   << ", sort_by=" << request.sort_by << ", sort_order=" << request.sort_order
                   << ", type=" << request.type << ", user_id=" << user_id;
+
+        /// 0. Try Redis cache
+        auto cache_key = disk::redis::RedisKeyPrefix::BuildFileListCacheKey(
+            user_id, request.parent_id, request.type,
+            request.sort_by, request.sort_order, request.page
+        );
+
+        auto cache_result = co_await m_redis_service->Get(cache_key);
+        if (cache_result.has_value()) {
+            Logger::Debug() << "File list cache hit: key=" << cache_key;
+            Json::Value cached_json;
+            Json::CharReaderBuilder builder;
+            std::istringstream stream(*cache_result);
+            std::string errors;
+            if (Json::parseFromStream(builder, stream, &cached_json, &errors)) {
+                co_return FileListResponse::FromJson(cached_json);
+            }
+            Logger::Warn() << "File list cache parse error: " << errors;
+        }
+        Logger::Debug() << "File list cache miss: key=" << cache_key;
 
         /// 1. 验证 parent_id 文件夹存在且属于用户（如果 parent_id != 0）
         if (request.parent_id != 0) {
@@ -1808,6 +1834,16 @@ namespace disk::file {
 
         Logger::Debug() << "File list retrieved successfully: total=" << total
                   << ", page=" << request.page;
+
+        /// Cache the response
+        {
+            auto response_json = response.ToJson();
+            Json::StreamWriterBuilder writer_builder;
+            writer_builder["indentation"] = "";
+            auto serialized = Json::writeString(writer_builder, response_json);
+            co_await m_redis_service->Set(cache_key, serialized, 30);
+        }
+
         co_return response;
     }
 
@@ -2007,6 +2043,7 @@ namespace disk::file {
             response.id = file.getValueOfId();
             response.name = new_name;
             response.updated_at = updated_at.toDbStringLocal();
+            co_await InvalidateFileListCache(user_id, {folder_id});
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
@@ -2042,6 +2079,8 @@ namespace disk::file {
 
         int moved_file_count = 0;
         int moved_folder_count = 0;
+
+        std::vector<uint64_t> source_folder_ids;
 
         std::shared_ptr<drogon::orm::Transaction> txn;
         try {
@@ -2120,6 +2159,7 @@ namespace disk::file {
 
                         if (source_folder_id > 0) {
                             source_deltas[source_folder_id] -= 1;
+                            source_folder_ids.push_back(source_folder_id);
                         }
                         if (request.target_folder_id > 0) {
                             source_deltas[request.target_folder_id] += 1;
@@ -2258,6 +2298,7 @@ namespace disk::file {
                 }
 
                 if (old_parent_id > 0) {
+                    source_folder_ids.push_back(old_parent_id);
                     co_await txn->execSqlCoro(
                         "UPDATE folders SET item_count = GREATEST(item_count - 1, 0), "
                         "updated_at = $1 WHERE id = $2 AND user_id = $3",
@@ -2316,6 +2357,11 @@ namespace disk::file {
         response.moved_file_count = moved_file_count;
         response.moved_folder_count = moved_folder_count;
         response.moved_count = moved_file_count + moved_folder_count;
+
+        /// Invalidate cache for source folders + target folder
+        source_folder_ids.push_back(request.target_folder_id);
+        co_await InvalidateFileListCache(user_id, source_folder_ids);
+
         co_return response;
     }
 
@@ -2805,6 +2851,7 @@ namespace disk::file {
                  << ", copied_folders=" << response.copied_folder_count
                  << ", total_size=" << actual_copy_size;
 
+        co_await InvalidateFileListCache(user_id, {request.target_folder_id});
         co_return response;
     }
 
@@ -3058,6 +3105,17 @@ namespace disk::file {
         response.deleted_count = deleted_count;
         response.deleted_file_count = deleted_file_count;
         response.deleted_folder_count = deleted_folder_count;
+
+        /// Invalidate cache for all unique original folder IDs
+        {
+            std::unordered_set<uint64_t> unique_folder_ids;
+            for (const auto& trash_item : trash_items) {
+                unique_folder_ids.insert(trash_item.original_folder_id);
+            }
+            std::vector<uint64_t> folder_ids_vec(unique_folder_ids.begin(), unique_folder_ids.end());
+            co_await InvalidateFileListCache(user_id, folder_ids_vec);
+        }
+
         co_return response;
     }
 
@@ -3883,6 +3941,29 @@ namespace disk::file {
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Error() << "Failed to get uploaded chunk coverage: " << e.base().what();
             co_return std::nullopt;
+        }
+    }
+
+    auto FileService::InvalidateFileListCache(uint64_t user_id, const std::vector<uint64_t>& folder_ids)
+        -> drogon::Task<void> {
+        std::vector<std::string> keys_to_delete;
+        for (const auto folder_id : folder_ids) {
+            for (const auto& type : {"all", "file", "folder"}) {
+                for (const auto& sort : {"name", "size", "created_at", "updated_at"}) {
+                    for (const auto& order : {"asc", "desc"}) {
+                        for (int page = 1; page <= 3; ++page) {
+                            keys_to_delete.push_back(
+                                RedisKeyPrefix::BuildFileListCacheKey(
+                                    user_id, folder_id, type, sort, order, page
+                                )
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        if (!keys_to_delete.empty()) {
+            co_await m_redis_service->MDelete(keys_to_delete);
         }
     }
 

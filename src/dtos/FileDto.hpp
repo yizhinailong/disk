@@ -558,6 +558,40 @@ namespace disk::file {
             SetField(json, "pagination", pagination);
             return json;
         }
+
+        /// 从 JSON 反序列化（用于 Redis 缓存读取）
+        [[nodiscard]]
+        static auto FromJson(const Json::Value& json) -> FileListResponse {
+            FileListResponse response;
+
+            /// 解析分页信息
+            if (json.isMember("pagination") && json["pagination"].isObject()) {
+                const auto& pag = json["pagination"];
+                response.pagination.page = pag.get("page", 1).asInt();
+                response.pagination.page_size = pag.get("page_size", 20).asInt();
+                response.pagination.total = pag.get("total", 0).asInt();
+                response.pagination.total_pages = pag.get("total_pages", 0).asInt();
+            }
+
+            /// 解析 items 数组
+            if (json.isMember("items") && json["items"].isArray()) {
+                for (const auto& item : json["items"]) {
+                    FileListItem fli;
+                    fli.id = item.get("id", 0).asUInt64();
+                    fli.name = item.get("name", "").asString();
+                    fli.type = item.get("type", "file").asString();
+                    fli.size = item.get("size", 0).asUInt64();
+                    fli.mime_type = item.get("mime_type", "").asString();
+                    fli.hash = item.get("hash", "").asString();
+                    fli.item_count = item.get("item_count", 0).asInt();
+                    fli.created_at = item.get("created_at", "").asString();
+                    fli.updated_at = item.get("updated_at", "").asString();
+                    response.items.push_back(std::move(fli));
+                }
+            }
+
+            return response;
+        }
     };
 
     /// ==================== Download Info ====================

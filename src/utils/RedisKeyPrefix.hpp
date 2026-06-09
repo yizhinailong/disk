@@ -39,6 +39,7 @@ namespace disk::redis {
         static constexpr std::string_view SHARE_PASSWORD_RATE_LIMIT_PREFIX = "rate:share_password";
         static constexpr std::string_view API_RATE_LIMIT_PREFIX = "rate:api";
         static constexpr std::string_view UPLOAD_RATE_LIMIT_PREFIX = "rate:upload";
+        static constexpr std::string_view FILE_LIST_CACHE_PREFIX = "file_list";
 
         /// ==================== 键构造方法 ====================
 
@@ -140,6 +141,52 @@ namespace disk::redis {
             -> std::string {
             return std::string(UPLOAD_RATE_LIMIT_PREFIX) + ":" + std::to_string(user_id) + ":" +
                    std::to_string(window_timestamp);
+        }
+
+        /**
+         * @brief Build file list cache key
+         *
+         * @param user_id User ID
+         * @param parent_id Parent folder ID
+         * @param type Item type filter (all/file/folder)
+         * @param sort_by Sort field name
+         * @param sort_order Sort direction (asc/desc)
+         * @param page Page number
+         * @return std::string Redis key format: "file_list:{user_id}:{parent_id}:{type}:{sort_by}:{sort_order}:{page}"
+         */
+        [[nodiscard]]
+        static auto BuildFileListCacheKey(
+            uint64_t user_id,
+            uint64_t parent_id,
+            const std::string& type,
+            const std::string& sort_by,
+            const std::string& sort_order,
+            int page
+        ) -> std::string {
+            return std::string(FILE_LIST_CACHE_PREFIX) + ":" +
+                   std::to_string(user_id) + ":" +
+                   std::to_string(parent_id) + ":" +
+                   type + ":" +
+                   sort_by + ":" +
+                   sort_order + ":" +
+                   std::to_string(page);
+        }
+
+        /**
+         * @brief Build file list cache prefix key for pattern-based invalidation
+         *
+         * @param user_id User ID
+         * @param parent_id Parent folder ID
+         * @return std::string Redis key prefix: "file_list:{user_id}:{parent_id}:"
+         */
+        [[nodiscard]]
+        static auto BuildFileListCachePrefix(
+            uint64_t user_id,
+            uint64_t parent_id
+        ) -> std::string {
+            return std::string(FILE_LIST_CACHE_PREFIX) + ":" +
+                   std::to_string(user_id) + ":" +
+                   std::to_string(parent_id) + ":";
         }
 
         /**
