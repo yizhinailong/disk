@@ -155,16 +155,6 @@ namespace disk::folder {
         auto BuildTreeFromFlatList(std::vector<FolderNodeData>& nodes, uint64_t root_id) const
             -> FolderTreeNode;
 
-        /**
-         * @brief 根据ID查找文件夹（不验证归属）
-         *
-         * @param folder_id 文件夹 ID
-         * @return drogon::Task<std::optional<Folders>> 成功返回文件夹，失败返回空
-         */
-        [[nodiscard]]
-        auto FindFolderById(uint64_t folder_id) const
-            -> drogon::Task<std::optional<drogon_model::disk::Folders>>;
-
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
     };
 

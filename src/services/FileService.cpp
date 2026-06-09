@@ -666,26 +666,59 @@ namespace disk::file {
             );
         }
 
-        auto parent_location_result =
-            co_await ResolveFolderLocation(m_db_client, request.parent_id, user_id);
-        if (!parent_location_result) {
-            co_return std::unexpected(parent_location_result.error());
+        /// 1. Compound pre-check: folder location + filename collision + instant upload + resume
+        auto combined = co_await m_db_client->execSqlCoro(
+            "WITH folder_loc AS ("
+            "  SELECT path, depth FROM folders WHERE id = $1 AND user_id = $2"
+            "), filename_exists AS ("
+            "  SELECT COUNT(*) AS cnt FROM files"
+            "  WHERE user_id = $2 AND folder_id = $1 AND name = $3"
+            "), existing_content AS ("
+            "  SELECT id, mime_type FROM file_contents WHERE hash_md5 = $4 LIMIT 1"
+            "), existing_task AS ("
+            "  SELECT id FROM upload_tasks"
+            "  WHERE user_id = $2 AND file_hash = $4 AND status = 0 LIMIT 1"
+            ")"
+            " SELECT"
+            "   (SELECT path FROM folder_loc) AS folder_path,"
+            "   (SELECT depth FROM folder_loc) AS folder_depth,"
+            "   (SELECT cnt FROM filename_exists) AS filename_count,"
+            "   (SELECT id FROM existing_content) AS content_id,"
+            "   (SELECT mime_type FROM existing_content) AS content_mime_type,"
+            "   (SELECT id FROM existing_task) AS task_id",
+            request.parent_id,
+            user_id,
+            request.filename,
+            request.file_hash
+        );
+
+        const auto& row = combined[0];
+
+        /// Validate folder location
+        if (request.parent_id != 0) {
+            auto folder_path = row["folder_path"].isNull() ? std::string{} : row["folder_path"].as<std::string>();
+            if (row["folder_path"].isNull()) {
+                Logger::Warn() << "Folder not found: parent_id=" << request.parent_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+            }
         }
 
-        if (co_await IsFilenameExists(request.parent_id, request.filename, user_id)) {
+        /// Check filename collision
+        auto filename_count = row["filename_count"].as<int64_t>();
+        if (filename_count > 0) {
             Logger::Warn() << "File with same name already exists during upload init: "
                      << request.filename << ", parent_id=" << request.parent_id
                      << ", user_id=" << user_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
         }
 
-        /// 1. 检测秒传：查找已存在的内容（获取 id + mime_type，避免二次读取）
-        auto existing_content_meta =
-            co_await LookupExistingContentMetadata(m_db_client, request.file_hash);
-        if (existing_content_meta.has_value()) {
-            const auto& meta = existing_content_meta.value();
+        /// Detect instant upload
+        auto content_id = row["content_id"].isNull() ? uint64_t{0} : row["content_id"].as<uint64_t>();
+        auto content_mime_type = row["content_mime_type"].isNull() ? std::string{} : row["content_mime_type"].as<std::string>();
+
+        if (content_id != 0) {
             Logger::Debug() << "Instant upload check successful: file_hash=" << request.file_hash
-                      << ", content_id=" << meta.id;
+                      << ", content_id=" << content_id;
 
             std::shared_ptr<drogon::orm::Transaction> transaction;
             try {
@@ -705,11 +738,11 @@ namespace disk::file {
                 /// 事务内递增引用计数
                 auto increment_result = co_await transaction->execSqlCoro(
                     "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = $1",
-                    meta.id
+                    content_id
                 );
                 if (increment_result.affectedRows() == 0) {
                     Logger::Warn() << "File content not found for instant upload: content_id="
-                             << meta.id;
+                             << content_id;
                     throw std::runtime_error("Failed to increment file content reference count");
                 }
 
@@ -719,15 +752,15 @@ namespace disk::file {
                     co_return std::unexpected(parent_location_result.error());
                 }
 
-                /// 创建文件记录（使用 LookupExistingContentMetadata 提供的 mime_type，无需二次读取）
+                /// 创建文件记录（使用 compound query 提供的 mime_type，无需二次读取）
                 Files file;
                 file.setUserId(user_id);
-                file.setContentId(meta.id);
+                file.setContentId(content_id);
                 file.setFolderId(request.parent_id);
                 file.setName(request.filename);
                 file.setExtension(ExtractExtension(request.filename));
                 file.setSize(request.file_size);
-                file.setMimeType(meta.mime_type);
+                file.setMimeType(content_mime_type);
                 file.setPath(BuildFilePath(parent_location_result->path, request.filename));
                 file.setIsFavorite(0);
                 file.setDownloadCount(0);
@@ -779,50 +812,53 @@ namespace disk::file {
             }
         }
 
-        /// 2. 检测断点续传
-        auto existing_task = co_await FindExistingTask(user_id, request.file_hash);
-        if (existing_task.has_value()) {
-            const auto& task = existing_task.value();
-            const auto& task_id = task.getValueOfId();
+        /// 2. 检测断点续传 (only when task_id is not NULL)
+        auto task_id = row["task_id"].isNull() ? std::string{} : row["task_id"].as<std::string>();
+        if (!task_id.empty()) {
+            auto existing_task = co_await FindExistingTask(user_id, request.file_hash);
+            if (existing_task.has_value()) {
+                const auto& task = existing_task.value();
+                const auto& existing_task_id = task.getValueOfId();
 
-            if (task.getValueOfExpiresAt() < trantor::Date::now()) {
-                Logger::Info() << "Expired upload task found, discarding: upload_id=" << task_id;
-                InvalidateUploadTaskCache(task_id);
+                if (task.getValueOfExpiresAt() < trantor::Date::now()) {
+                    Logger::Info() << "Expired upload task found, discarding: upload_id=" << existing_task_id;
+                    InvalidateUploadTaskCache(existing_task_id);
 
-                try {
-                    co_await m_db_client->execSqlCoro(
-                        "DELETE FROM upload_tasks WHERE id = $1 AND status = 0",
-                        task_id
+                    try {
+                        co_await m_db_client->execSqlCoro(
+                            "DELETE FROM upload_tasks WHERE id = $1 AND status = 0",
+                            existing_task_id
+                        );
+                    } catch (const drogon::orm::DrogonDbException& e) {
+                        Logger::Warn() << "Failed to delete expired upload task: " << e.base().what();
+                    }
+
+                    auto cleanup_result = co_await m_storage->CleanupTemp(existing_task_id);
+                    if (!cleanup_result) {
+                        Logger::Warn() << "Failed to cleanup temp for expired task: upload_id=" << existing_task_id;
+                    }
+                } else {
+                    Logger::Debug() << "Resume upload check successful: upload_id=" << existing_task_id;
+                    InvalidateUploadTaskCache(existing_task_id);
+
+                    auto chunk_result = co_await m_db_client->execSqlCoro(
+                        "SELECT chunk_index FROM upload_task_chunks WHERE task_id = $1 ORDER BY chunk_index",
+                        existing_task_id
                     );
-                } catch (const drogon::orm::DrogonDbException& e) {
-                    Logger::Warn() << "Failed to delete expired upload task: " << e.base().what();
+
+                    InitUploadResponse response;
+                    response.upload_id = existing_task_id;
+                    response.chunk_size = task.getValueOfChunkSize();
+                    response.total_chunks = task.getValueOfTotalChunks();
+                    response.instant_upload = false;
+
+                    response.uploaded_chunks.clear();
+                    for (const auto& chunk_row : chunk_result) {
+                        response.uploaded_chunks.push_back(chunk_row["chunk_index"].as<uint32_t>());
+                    }
+
+                    co_return response;
                 }
-
-                auto cleanup_result = co_await m_storage->CleanupTemp(task_id);
-                if (!cleanup_result) {
-                    Logger::Warn() << "Failed to cleanup temp for expired task: upload_id=" << task_id;
-                }
-            } else {
-                Logger::Debug() << "Resume upload check successful: upload_id=" << task_id;
-                InvalidateUploadTaskCache(task_id);
-
-                auto chunk_result = co_await m_db_client->execSqlCoro(
-                    "SELECT chunk_index FROM upload_task_chunks WHERE task_id = $1 ORDER BY chunk_index",
-                    task_id
-                );
-
-                InitUploadResponse response;
-                response.upload_id = task_id;
-                response.chunk_size = task.getValueOfChunkSize();
-                response.total_chunks = task.getValueOfTotalChunks();
-                response.instant_upload = false;
-
-                response.uploaded_chunks.clear();
-                for (const auto& row : chunk_result) {
-                    response.uploaded_chunks.push_back(row["chunk_index"].as<uint32_t>());
-                }
-
-                co_return response;
             }
         }
 

@@ -365,11 +365,6 @@ namespace disk::services {
             }
         }
 
-        {
-            std::unique_lock lock(m_cache_mutex);
-            m_revocation_cache.Erase(jti);
-        }
-
         const auto key = disk::redis::RedisKeyPrefix::BuildAccessTokenBlacklistKey(jti);
         const auto revoked = co_await m_redis_service->Exists(key);
 
