@@ -485,90 +485,51 @@ namespace disk::folder {
 
         Logger::Debug() << "Starting get breadcrumb: folder_id=" << folder_id << ", user_id=" << user_id;
 
-        /// 1. 特殊情况：根目录
         if (folder_id == 0) {
             BreadcrumbResponse response;
             response.path.push_back(BreadcrumbItem{ .id = 0, .name = "根目录" });
             co_return response;
         }
 
-        /// 2. 查找文件夹并验证归属
-        auto folder_result = co_await FindAndValidateParent(folder_id, user_id);
-        if (!folder_result) {
-            Logger::Warn() << "Folder validation failed: folder_id=" << folder_id;
-            co_return std::unexpected(folder_result.error());
-        }
-
-        /// 3. 沿父链遍历
-        std::vector<BreadcrumbItem> path;
-        std::unordered_set<uint64_t> visited;
-        auto current = *folder_result;
-
-        while (true) {
-            /// 检查深度限制
-            if (path.size() >= 50) {
-                Logger::Error() << "Breadcrumb depth limit exceeded: folder_id=" << folder_id;
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::InternalError, "Folder hierarchy too deep")
-                );
-            }
-
-            /// 检测循环引用
-            if (visited.contains(current.getValueOfId())) {
-                Logger::Error() << "Circular reference detected: folder_id=" << current.getValueOfId();
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::InternalError, "Folder structure anomaly")
-                );
-            }
-            visited.insert(current.getValueOfId());
-
-            /// 添加当前文件夹到路径
-            path.push_back(BreadcrumbItem{ .id = current.getValueOfId(), .name = current.getValueOfName() });
-
-            /// 到达根目录
-            if (current.getValueOfParentId() == 0) {
-                break;
-            }
-
-            /// 获取父文件夹
-            auto parent_result = co_await FindFolderById(current.getValueOfParentId());
-            if (!parent_result) {
-                Logger::Warn() << "Parent chain broken: folder_id=" << current.getValueOfId()
-                         << ", missing_parent_id=" << current.getValueOfParentId();
-                break;
-            }
-            current = *parent_result;
-        }
-
-        /// 4. 添加根目录并反转
-        path.push_back(BreadcrumbItem{ .id = 0, .name = "根目录" });
-        std::ranges::reverse(path);
-
-        /// 5. 构建响应
-        BreadcrumbResponse response;
-        response.path = std::move(path);
-
-        Logger::Debug() << "Breadcrumb retrieved successfully: folder_id=" << folder_id
-                  << ", depth=" << response.path.size();
-
-        co_return response;
-    }
-
-    auto FolderService::FindFolderById(uint64_t folder_id) const
-        -> drogon::Task<std::optional<Folders>> {
-
         try {
-            CoroMapper<Folders> mapper(m_db_client);
-
-            auto folder = co_await mapper.findOne(
-                Criteria(Folders::Cols::_id, CompareOperator::EQ, folder_id)
+            auto result = co_await m_db_client->execSqlCoro(
+                "WITH RECURSIVE ancestors AS ("
+                "  SELECT id, name, parent_id FROM folders WHERE id = $1 AND user_id = $2"
+                "  UNION ALL"
+                "  SELECT f.id, f.name, f.parent_id FROM folders f"
+                "  INNER JOIN ancestors a ON f.id = a.parent_id"
+                ") SELECT id, name FROM ancestors",
+                folder_id,
+                user_id
             );
 
-            co_return folder;
+            if (result.empty()) {
+                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+            }
+
+            std::vector<BreadcrumbItem> path;
+            path.reserve(result.size());
+            for (const auto& row : result) {
+                path.push_back(BreadcrumbItem{
+                    .id = row["id"].as<uint64_t>(),
+                    .name = row["name"].as<std::string>()
+                });
+            }
+
+            path.push_back(BreadcrumbItem{ .id = 0, .name = "根目录" });
+            std::ranges::reverse(path);
+
+            BreadcrumbResponse response;
+            response.path = std::move(path);
+
+            Logger::Debug() << "Breadcrumb retrieved successfully: folder_id=" << folder_id
+                      << ", depth=" << response.path.size();
+
+            co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Debug() << "Folder does not exist: folder_id=" << folder_id;
-            co_return std::nullopt;
+            Logger::Warn() << "Breadcrumb query failed: folder_id=" << folder_id << " - " << e.base().what();
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to retrieve breadcrumb"));
         }
     }
 
