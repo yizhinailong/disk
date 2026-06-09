@@ -1,7 +1,7 @@
 /**
- * @file FileService.hpp
+ * @file UploadService.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief 文件服务
+ * @brief 文件上传服务
  *
  * @copyright Copyright (c) 2026
  *
@@ -34,30 +34,27 @@ namespace disk::storage {
 namespace disk::file {
 
     /**
-     * @brief 文件服务类
+     * @brief 文件上传服务类
      *
-     * 提供文件管理相关的业务逻辑：
+     * 提供文件上传相关的业务逻辑：
      * - 初始化上传（配额检查、秒传检测、断点续传）
      * - 上传分片（分片验证、临时文件写入）
      * - 完成上传（分片组装、去重、文件记录创建）
      * - 取消上传（清理临时文件、删除上传任务）
-     * - 文件列表、详情、下载
-     * - 文件重命名、移动、复制、删除（移入回收站）
-     * - 文件搜索
      */
-    class FileService {
+    class UploadService {
     public:
         /**
          * @brief 构造函数
          * @param db_client 数据库客户端
          * @param storage 文件存储接口
          */
-        explicit FileService(drogon::orm::DbClientPtr db_client, storage::IFileStorage* storage);
-        ~FileService() = default;
-        FileService(const FileService&) = delete;
-        auto operator=(const FileService&) -> FileService& = delete;
-        FileService(FileService&&) = delete;
-        auto operator=(FileService&&) -> FileService& = delete;
+        explicit UploadService(drogon::orm::DbClientPtr db_client, storage::IFileStorage* storage);
+        ~UploadService() = default;
+        UploadService(const UploadService&) = delete;
+        auto operator=(const UploadService&) -> UploadService& = delete;
+        UploadService(UploadService&&) = delete;
+        auto operator=(UploadService&&) -> UploadService& = delete;
 
         /**
          * @brief 初始化上传
@@ -137,155 +134,6 @@ namespace disk::file {
          */
         [[nodiscard]]
         auto CancelUpload(std::string upload_id, uint64_t user_id) -> drogon::Task<Result<void>>;
-
-        /**
-         * @brief 获取文件列表
-         *
-         * 业务规则：
-         * - 验证 parent_id 文件夹存在且属于用户（如果 parent_id != 0）
-         * - 查询 files 和 folders 表，合并结果
-         * - 应用 type 过滤（all/file/folder）
-         * - 应用排序和分页
-         *
-         * @param request 文件列表请求
-         * @param user_id 用户 ID
-         * @return drogon::Task<Result<FileListResponse>> 成功返回文件列表，失败返回错误
-         */
-        [[nodiscard]]
-        auto GetFileList(FileListRequest request, uint64_t user_id)
-            -> drogon::Task<Result<FileListResponse>>;
-
-        /**
-         * @brief 获取文件详情
-         *
-         * @param file_id 文件 ID
-         * @param user_id 用户 ID
-         * @return drogon::Task<Result<FileDetailResponse>> 成功返回文件详情，失败返回错误
-         */
-        [[nodiscard]]
-        auto GetFileDetail(uint64_t file_id, uint64_t user_id)
-            -> drogon::Task<Result<FileDetailResponse>>;
-
-        /**
-         * @brief 获取下载信息（元数据）
-         *
-         * 业务规则：
-         * - 验证文件存在且属于用户
-         * - 关联 file_contents 获取存储信息
-         * - 返回文件元数据（不含物理路径）
-         *
-         * @param file_id 文件 ID
-         * @param user_id 用户 ID
-         * @return drogon::Task<Result<DownloadInfoResponse>> 成功返回下载信息，失败返回错误
-         */
-        [[nodiscard]]
-        auto GetDownloadInfo(uint64_t file_id, uint64_t user_id)
-            -> drogon::Task<Result<DownloadInfoResponse>>;
-
-        /**
-         * @brief 获取下载数据（含物理路径）
-         *
-         * 业务规则：
-         * - 验证文件存在且属于用户
-         * - 关联 file_contents 获取存储路径
-         * - 返回完整下载信息（含 storage_path）
-         *
-         * @param file_id 文件 ID
-         * @param user_id 用户 ID
-         * @return drogon::Task<Result<DownloadInfo>> 成功返回下载数据，失败返回错误
-         */
-        [[nodiscard]]
-        auto GetDownloadData(uint64_t file_id, uint64_t user_id)
-            -> drogon::Task<Result<DownloadInfo>>;
-
-        /**
-         * @brief 重命名文件
-         *
-         * 业务规则：
-         * - 验证文件存在且属于用户
-         * - 检查新文件名是否与同目录下其他文件冲突
-         * - 更新文件名和更新时间
-         *
-         * @param file_id 文件 ID
-         * @param new_name 新文件名
-         * @param user_id 用户 ID
-         * @return drogon::Task<Result<RenameResponse>> 成功返回重命名后的文件信息，失败返回错误
-         */
-        [[nodiscard]]
-        auto Rename(uint64_t file_id, std::string new_name, uint64_t user_id)
-            -> drogon::Task<Result<RenameResponse>>;
-
-        /**
-         * @brief 移动文件到目标文件夹
-         *
-         * 业务规则：
-         * - 验证目标文件夹存在且属于用户
-         * - 验证每个文件存在且属于用户
-         * - 检查目标文件夹是否存在同名文件
-         * - 更新文件的 folder_id
-         *
-         * @param request 移动请求
-         * @param user_id 用户 ID
-         * @return drogon::Task<Result<MoveResponse>> 成功返回移动统计，失败返回错误
-         */
-        [[nodiscard]]
-        auto Move(MoveRequest request, uint64_t user_id) -> drogon::Task<Result<MoveResponse>>;
-
-        /**
-         * @brief 复制文件到目标文件夹
-         *
-         * 业务规则：
-         * - 验证目标文件夹存在且属于用户
-         * - 计算总复制大小，检查存储配额
-         * - 验证每个文件存在且属于用户
-         * - 检查目标文件夹是否存在同名文件
-         * - 创建新文件记录（复用 content_id）
-         * - 增加 file_contents.ref_count（不复制物理文件）
-         * - 更新用户存储使用量
-         *
-         * @param request 复制请求
-         * @param user_id 用户 ID
-         * @return drogon::Task<Result<CopyResponse>> 成功返回复制统计和ID映射，失败返回错误
-         */
-        [[nodiscard]]
-        auto Copy(CopyRequest request, uint64_t user_id) -> drogon::Task<Result<CopyResponse>>;
-
-        /**
-         * @brief 删除文件（移入回收站）
-         *
-         * 业务规则：
-         * - 验证每个文件存在且属于用户
-         * - 创建 trash 记录保存文件元数据
-         * - item_data 包含 content_id 和 mime_type（用于恢复）
-         * - 删除原始 files 记录
-         * - 不更新 storage_used（回收站项目仍计入配额）
-         * - 不减少 file_contents.ref_count（彻底删除时才减少）
-         *
-         * @param request 删除请求
-         * @param user_id 用户 ID
-         * @return drogon::Task<Result<DeleteResponse>> 成功返回删除统计，失败返回错误
-         */
-        [[nodiscard]]
-        auto Delete(DeleteRequest request, uint64_t user_id)
-            -> drogon::Task<Result<DeleteResponse>>;
-
-        /**
-         * @brief 搜索文件和文件夹
-         *
-         * 业务规则：
-         * - 支持文件名模糊搜索（LIKE %keyword%）
-         * - 支持按类型过滤（all/file/folder）
-         * - 支持限定搜索范围（folder_id）
-         * - 返回结果包含路径面包屑信息
-         * - 应用分页
-         *
-         * @param request 搜索请求
-         * @param user_id 用户 ID
-         * @return drogon::Task<Result<SearchResponse>> 成功返回搜索结果，失败返回错误
-         */
-        [[nodiscard]]
-        auto Search(SearchRequest request, uint64_t user_id)
-            -> drogon::Task<Result<SearchResponse>>;
 
     private:
         /**
@@ -417,53 +265,6 @@ namespace disk::file {
             int64_t delta
         ) -> drogon::Task<void>;
 
-        /**
-         * @brief 批量递增 file_contents.ref_count（事务版）
-         *
-         * 在指定连接上执行 CASE WHEN 批量更新。
-         *
-         * @param client 数据库客户端
-         * @param content_ref_increment content_id → 递增量映射
-         * @param existing_content_ids 已验证存在的 content_id 集合
-         * @return drogon::Task<std::unordered_set<uint64_t>> 实际成功递增的 content_id 集合
-         */
-        [[nodiscard]]
-        auto IncrementContentRefCount(
-            const drogon::orm::DbClientPtr& client,
-            const std::unordered_map<uint64_t, uint64_t>& content_ref_increment,
-            const std::unordered_set<uint64_t>& existing_content_ids
-        ) -> drogon::Task<std::unordered_set<uint64_t>>;
-
-        /**
-         * @brief 批量插入复制文件记录并获取新 ID（事务版）
-         *
-         * @param client 数据库客户端
-         * @param user_id 用户 ID
-         * @param target_folder_id 目标文件夹 ID
-         * @param valid_items 待插入的文件列表
-         * @return drogon::Task<std::vector<std::pair<uint64_t, uint64_t>>> (old_id, new_id) 映射
-         */
-        [[nodiscard]]
-        auto InsertCopiedFiles(
-            const drogon::orm::DbClientPtr& client,
-            uint64_t user_id,
-            uint64_t target_folder_id,
-            const std::vector<std::pair<uint64_t, const drogon_model::disk::Files*>>& valid_items
-        ) -> drogon::Task<std::vector<std::pair<uint64_t, uint64_t>>>;
-
-        /**
-         * @brief 批量删除文件记录（事务版）
-         *
-         * @param client 数据库客户端
-         * @param file_ids 待删除的文件 ID 列表
-         * @return drogon::Task<int> 实际删除的行数
-         */
-        [[nodiscard]]
-        auto DeleteFilesByIds(
-            const drogon::orm::DbClientPtr& client,
-            const std::vector<uint64_t>& file_ids
-        ) -> drogon::Task<int>;
-
         [[nodiscard]]
         auto LookupExistingContentMetadata(
             const drogon::orm::DbClientPtr& client,
@@ -496,7 +297,7 @@ namespace disk::file {
 
         drogon::orm::DbClientPtr m_db_client;                                      ///< 数据库客户端
         storage::IFileStorage* m_storage{};                                          ///< 文件存储接口
-        std::shared_ptr<RedisService> m_redis_service{RedisService::GetInstance()};  ///< Redis 服务
+        std::shared_ptr<disk::services::RedisService> m_redis_service{disk::services::RedisService::GetInstance()};  ///< Redis 服务
         std::unordered_map<std::string, UploadTaskCacheEntry> m_upload_task_cache; ///< 上传任务元数据缓存
         std::shared_mutex m_upload_task_cache_mutex;                               ///< 上传任务缓存读写锁
     };

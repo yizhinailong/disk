@@ -10,7 +10,9 @@
 
 #pragma once
 
-#include "services/FileService.hpp"
+#include "services/FileMutationService.hpp"
+#include "services/FileQueryService.hpp"
+#include "services/UploadService.hpp"
 #include "storage/IFileStorage.hpp"
 
 namespace disk::file {
@@ -228,7 +230,9 @@ namespace disk::file {
         auto Search(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
-        std::unique_ptr<FileService> m_file_service{};
+        std::unique_ptr<UploadService> m_upload_service{};
+        std::unique_ptr<FileQueryService> m_query_service{};
+        std::unique_ptr<FileMutationService> m_mutation_service{};
         disk::storage::IFileStorage* m_storage{};
     };
 
