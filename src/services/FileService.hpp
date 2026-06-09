@@ -22,6 +22,7 @@
 #include <trantor/utils/Date.h>
 
 #include "dtos/FileDto.hpp"
+#include "services/RedisService.hpp"
 #include "models/Files.hpp"
 #include "models/UploadTasks.hpp"
 #include "utils/ErrorCode.hpp"
@@ -483,8 +484,19 @@ namespace disk::file {
             const std::string& upload_id
         ) const -> drogon::Task<std::optional<UploadedChunkCoverage>>;
 
+        /**
+         * @brief Invalidate file list cache for specified user and folders
+         *
+         * @param user_id User ID
+         * @param folder_ids Folder IDs whose file list caches should be invalidated
+         * @return drogon::Task<void>
+         */
+        auto InvalidateFileListCache(uint64_t user_id, const std::vector<uint64_t>& folder_ids)
+            -> drogon::Task<void>;
+
         drogon::orm::DbClientPtr m_db_client;                                      ///< 数据库客户端
         storage::IFileStorage* m_storage{};                                          ///< 文件存储接口
+        std::shared_ptr<RedisService> m_redis_service{RedisService::GetInstance()};  ///< Redis 服务
         std::unordered_map<std::string, UploadTaskCacheEntry> m_upload_task_cache; ///< 上传任务元数据缓存
         std::shared_mutex m_upload_task_cache_mutex;                               ///< 上传任务缓存读写锁
     };
