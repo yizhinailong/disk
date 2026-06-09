@@ -97,7 +97,9 @@ set(Services_HEADERS
     services/AdminService.hpp
     services/AuthService.hpp
     services/CleanupService.hpp
-    services/FileService.hpp
+    services/FileMutationService.hpp
+    services/FileQueryService.hpp
+    services/FileServiceUtils.hpp
     services/FolderService.hpp
     services/HealthService.hpp
     services/OperationLogService.hpp
@@ -107,13 +109,16 @@ set(Services_HEADERS
     services/SystemService.hpp
     services/TokenService.hpp
     services/TrashService.hpp
+    services/UploadService.hpp
     services/UserService.hpp
 )
 set(Services_SOURCES
     services/AdminService.cpp
     services/AuthService.cpp
     services/CleanupService.cpp
-    services/FileService.cpp
+    services/FileMutationService.cpp
+    services/FileQueryService.cpp
+    services/FileServiceUtils.cpp
     services/FolderService.cpp
     services/HealthService.cpp
     services/OperationLogService.cpp
@@ -123,6 +128,7 @@ set(Services_SOURCES
     services/SystemService.cpp
     services/TokenService.cpp
     services/TrashService.cpp
+    services/UploadService.cpp
     services/UserService.cpp
 )
 

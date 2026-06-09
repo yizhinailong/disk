@@ -21,7 +21,9 @@
 namespace disk::file {
 
     FileController::FileController()
-        : m_file_service(std::make_unique<FileService>(drogon::app().getDbClient(), storage::StorageMgr::GetStorage())),
+        : m_upload_service(std::make_unique<UploadService>(drogon::app().getDbClient(), storage::StorageMgr::GetStorage())),
+          m_query_service(std::make_unique<FileQueryService>(drogon::app().getDbClient())),
+          m_mutation_service(std::make_unique<FileMutationService>(drogon::app().getDbClient(), storage::StorageMgr::GetStorage())),
           m_storage(storage::StorageMgr::GetStorage()) {
     }
 
@@ -45,7 +47,7 @@ namespace disk::file {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         /// 3. 调用 Service 层初始化上传
-        auto result = co_await m_file_service->InitUpload(*parse_result, user_id);
+        auto result = co_await m_upload_service->InitUpload(*parse_result, user_id);
         if (!result) {
             Logger::Error() << "Initialize upload failed: " << result.error().message
                       << " (user_id=" << user_id << ")";
@@ -133,7 +135,7 @@ namespace disk::file {
 
         /// 4. 调用 Service 层上传分片
         auto result =
-            co_await m_file_service
+            co_await m_upload_service
                 ->UploadChunk(upload_id, chunk_index, chunk_hash, chunk_data, user_id);
         if (!result) {
             Logger::Error() << "Upload chunk failed: " << result.error().message
@@ -165,7 +167,7 @@ namespace disk::file {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         /// 3. 调用 Service 层完成上传
-        auto result = co_await m_file_service->CompleteUpload(parse_result->upload_id, user_id);
+        auto result = co_await m_upload_service->CompleteUpload(parse_result->upload_id, user_id);
         if (!result) {
             Logger::Error() << "Complete upload failed: " << result.error().message
                       << " (user_id=" << user_id << ", upload_id=" << parse_result->upload_id
@@ -196,7 +198,7 @@ namespace disk::file {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         /// 3. 调用 Service 层取消上传
-        auto result = co_await m_file_service->CancelUpload(upload_id, user_id);
+        auto result = co_await m_upload_service->CancelUpload(upload_id, user_id);
         if (!result) {
             Logger::Error() << "Cancel upload failed: " << result.error().message
                       << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";
@@ -230,7 +232,7 @@ namespace disk::file {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         /// 3. 调用 Service 层获取文件列表
-        auto result = co_await m_file_service->GetFileList(*parse_result, user_id);
+        auto result = co_await m_query_service->GetFileList(*parse_result, user_id);
         if (!result) {
             Logger::Error() << "Get file list failed: " << result.error().message
                       << " (user_id=" << user_id << ")";
@@ -262,7 +264,7 @@ namespace disk::file {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         /// 3. 调用 Service 层获取文件详情
-        auto result = co_await m_file_service->GetFileDetail(parse_result->file_id, user_id);
+        auto result = co_await m_query_service->GetFileDetail(parse_result->file_id, user_id);
         if (!result) {
             Logger::Error() << "Get file detail failed: " << result.error().message
                       << " (user_id=" << user_id << ", file_id=" << file_id << ")";
@@ -294,7 +296,7 @@ namespace disk::file {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         /// 3. 调用 Service 层获取下载信息
-        auto result = co_await m_file_service->GetDownloadInfo(parse_result->file_id, user_id);
+        auto result = co_await m_query_service->GetDownloadInfo(parse_result->file_id, user_id);
         if (!result) {
             Logger::Error() << "Get download info failed: " << result.error().message
                       << " (user_id=" << user_id << ", file_id=" << file_id << ")";
@@ -327,7 +329,7 @@ namespace disk::file {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         /// 3. 获取下载文件信息
-        auto info_result = co_await m_file_service->GetDownloadData(parse_result->file_id, user_id);
+        auto info_result = co_await m_query_service->GetDownloadData(parse_result->file_id, user_id);
         if (!info_result) {
             Logger::Error() << "Get download data failed: " << info_result.error().message
                       << " (user_id=" << user_id << ", file_id=" << file_id << ")";
@@ -373,7 +375,7 @@ namespace disk::file {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         /// 3. 调用 Service 层重命名文件
-        auto result = co_await m_file_service->Rename(
+        auto result = co_await m_mutation_service->Rename(
             parse_result->file_id,
             std::move(parse_result->new_name),
             user_id
@@ -411,7 +413,7 @@ namespace disk::file {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         /// 3. 调用 Service 层移动文件
-        auto result = co_await m_file_service->Move(*parse_result, user_id);
+        auto result = co_await m_mutation_service->Move(*parse_result, user_id);
         if (!result) {
             Logger::Error() << "Move file failed: " << result.error().message << " (user_id=" << user_id
                       << ")";
@@ -444,7 +446,7 @@ namespace disk::file {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         /// 3. 调用 Service 层复制文件
-        auto result = co_await m_file_service->Copy(*parse_result, user_id);
+        auto result = co_await m_mutation_service->Copy(*parse_result, user_id);
         if (!result) {
             Logger::Error() << "Copy file failed: " << result.error().message << " (user_id=" << user_id
                       << ")";
@@ -478,7 +480,7 @@ namespace disk::file {
 
         /// 3. 调用 Service 层删除文件（异常边界：防止未捕获异常导致连接中断）
         try {
-            auto result = co_await m_file_service->Delete(*parse_result, user_id);
+            auto result = co_await m_mutation_service->Delete(*parse_result, user_id);
             if (!result) {
                 Logger::Error() << "Delete file failed: " << result.error().message << " (user_id=" << user_id
                           << ")";
@@ -519,7 +521,7 @@ namespace disk::file {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         /// 3. 调用 Service 层搜索文件
-        auto result = co_await m_file_service->Search(*parse_result, user_id);
+        auto result = co_await m_query_service->Search(*parse_result, user_id);
         if (!result) {
             Logger::Error() << "File search failed: " << result.error().message << " (user_id=" << user_id
                       << ")";
