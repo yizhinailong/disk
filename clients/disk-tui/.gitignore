@@ -1,0 +1,10 @@
+# Build artifacts
+bin/
+*.test
+
+# Local config file written by the binary
+config.json
+
+# Editor files
+.vscode/
+.idea/
