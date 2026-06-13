@@ -9,3 +9,5 @@ CMakeUserPresets.json
 output
 .claude/worktrees
 .omc/
+.codegraph
+
