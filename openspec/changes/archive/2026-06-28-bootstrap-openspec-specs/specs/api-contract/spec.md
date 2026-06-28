@@ -1,0 +1,55 @@
+## ADDED Requirements
+
+### Requirement: Uniform JSON API Envelope
+The system SHALL return JSON API responses using a consistent envelope containing `code`, `message`, and `data`, except for successful binary download responses.
+
+#### Scenario: Successful JSON response
+- **WHEN** an API operation completes successfully and returns JSON
+- **THEN** the response SHALL include `code: 0`, `message: "success"`, and a `data` value
+
+#### Scenario: Domain error response
+- **WHEN** an API operation fails with a domain error
+- **THEN** the response SHALL include a stable business error `code`, a human-readable `message`, and `data` set to null or structured error details
+
+### Requirement: Error Code Contract
+The system SHALL expose stable business error codes for common, authentication, file, share, Redis, and administrator error domains.
+
+#### Scenario: Known domain failure
+- **WHEN** a request fails due to a known domain condition
+- **THEN** the system SHALL map the failure to the documented business error code and an appropriate HTTP status code
+
+### Requirement: Pagination Envelope
+The system SHALL return paginated collection results with item data and pagination metadata.
+
+#### Scenario: Paginated list response
+- **WHEN** an API returns a paginated collection
+- **THEN** the response data SHALL include `items` and pagination fields such as page, page size, total count, and total pages
+
+### Requirement: Authentication Header Contract
+The system SHALL use `Authorization: Bearer <access_token>` for authenticated user and administrator APIs and `X-Share-Token` for visitor share APIs.
+
+#### Scenario: Authenticated owner request
+- **WHEN** a client calls a protected owner API
+- **THEN** the client SHALL provide a bearer access token in the `Authorization` header
+
+#### Scenario: Visitor share request
+- **WHEN** a visitor browses or downloads shared content
+- **THEN** the client SHALL provide the share access token in the `X-Share-Token` header
+
+### Requirement: Binary Download Contract
+The system SHALL support successful binary download responses outside the JSON envelope while preserving JSON error responses for download failures.
+
+#### Scenario: Successful binary download
+- **WHEN** a client downloads file content successfully
+- **THEN** the response SHALL return binary content with appropriate download headers rather than the JSON envelope
+
+#### Scenario: Download error
+- **WHEN** a download request fails before streaming content
+- **THEN** the response SHALL use the standard JSON error envelope
+
+### Requirement: Request Trace Propagation
+The system SHALL propagate request trace identifiers to responses when a request trace ID is available.
+
+#### Scenario: Request trace ID exists
+- **WHEN** a request has an associated trace identifier
+- **THEN** the response SHALL include it as `X-Request-Id`

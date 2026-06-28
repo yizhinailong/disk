@@ -1,0 +1,77 @@
+## ADDED Requirements
+
+### Requirement: File And Folder Listing
+The system SHALL list files and folders within a user's directory namespace and distinguish item types in the response.
+
+#### Scenario: Directory listing succeeds
+- **WHEN** an authenticated user lists an accessible directory
+- **THEN** the system SHALL return files and folders for that directory with pagination and type-specific fields
+
+### Requirement: File And Folder Details
+The system SHALL provide metadata details for accessible files and folders.
+
+#### Scenario: Detail requested for accessible item
+- **WHEN** an authenticated user requests details for an accessible item
+- **THEN** the system SHALL return the item's metadata and location information
+
+### Requirement: Folder Creation
+The system SHALL allow users to create folders under valid parent folders while enforcing folder naming rules.
+
+#### Scenario: Folder creation succeeds
+- **WHEN** an authenticated user creates a folder with a valid name under an accessible parent
+- **THEN** the system SHALL create the folder and return its metadata
+
+#### Scenario: Folder name is invalid or conflicts
+- **WHEN** the folder name is invalid or conflicts with an existing folder in the same parent
+- **THEN** the system SHALL reject the creation request
+
+### Requirement: Rename Items
+The system SHALL allow users to rename files or folders while enforcing naming validation and conflict rules.
+
+#### Scenario: Rename succeeds
+- **WHEN** an authenticated user renames an accessible file or folder to a valid non-conflicting name
+- **THEN** the system SHALL update the item name and modification metadata
+
+#### Scenario: Rename target conflicts
+- **WHEN** the requested new name violates naming rules or conflicts with an existing same-type item
+- **THEN** the system SHALL reject the rename request
+
+### Requirement: Move Items
+The system SHALL allow users to move files or folders to an accessible target folder.
+
+#### Scenario: Move succeeds
+- **WHEN** an authenticated user moves accessible items to a valid target folder
+- **THEN** the system SHALL update the items' parent location and return the number of moved items
+
+#### Scenario: Move target is invalid
+- **WHEN** the target folder is missing, inaccessible, or would create an invalid folder relationship
+- **THEN** the system SHALL reject the invalid move
+
+### Requirement: Copy Items
+The system SHALL allow users to copy files or folders while preserving content-sharing and quota semantics.
+
+#### Scenario: Copy succeeds
+- **WHEN** an authenticated user copies accessible items with sufficient quota
+- **THEN** the system SHALL create copied metadata and update content reference counts as needed
+
+#### Scenario: Copy exceeds quota
+- **WHEN** the requested copy would exceed user quota
+- **THEN** the system SHALL reject the copy without partially applying the operation
+
+### Requirement: Search Namespace
+The system SHALL allow users to search files and folders by keyword within their own namespace.
+
+#### Scenario: Search succeeds
+- **WHEN** an authenticated user searches with a valid keyword and optional scope
+- **THEN** the system SHALL return matching accessible files and folders with pagination
+
+### Requirement: Folder Navigation Metadata
+The system SHALL provide folder tree and breadcrumb information for client navigation.
+
+#### Scenario: Folder tree requested
+- **WHEN** an authenticated user requests the folder tree
+- **THEN** the system SHALL return accessible folder hierarchy data
+
+#### Scenario: Breadcrumb requested
+- **WHEN** an authenticated user requests a breadcrumb for an accessible folder
+- **THEN** the system SHALL return the path from root to that folder
