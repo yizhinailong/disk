@@ -189,7 +189,7 @@ describe('useDriveStore', () => {
   })
 
   describe('fetchFolderTree', () => {
-    it('stores folder tree', async () => {
+    it('stores folder tree and toggles tree loading state', async () => {
       vi.mocked(folderApi.getFolderTree).mockResolvedValue({
         id: 0,
         name: 'Root',
@@ -199,6 +199,30 @@ describe('useDriveStore', () => {
       const store = useDriveStore()
       await store.fetchFolderTree()
       expect(store.folderTree).toEqual({ id: 0, name: 'Root', children: [{ id: 1, name: 'Docs', children: [] }] })
+      expect(store.folderTreeLoading).toBe(false)
+    })
+
+    it('refreshes hierarchy view with files, breadcrumb, and folder tree', async () => {
+      vi.mocked(fileApi.listFiles).mockResolvedValue({
+        items: sampleFiles,
+        pagination: { page: 1, page_size: 20, total: 3, total_pages: 1 },
+      })
+      vi.mocked(folderApi.getBreadcrumb).mockResolvedValue({ path: [{ id: 5, name: 'SubFolder' }] })
+      vi.mocked(folderApi.getFolderTree).mockResolvedValue({
+        id: 0,
+        name: 'Root',
+        children: [{ id: 5, name: 'SubFolder', children: [] }],
+      })
+
+      const store = useDriveStore()
+      store.currentFolderId = 5
+      await store.refreshHierarchyView()
+
+      expect(fileApi.listFiles).toHaveBeenCalled()
+      expect(folderApi.getBreadcrumb).toHaveBeenCalledWith(5)
+      expect(folderApi.getFolderTree).toHaveBeenCalled()
+      expect(store.breadcrumbs).toEqual([{ id: 5, name: 'SubFolder' }])
+      expect(store.folderTree?.children[0]?.id).toBe(5)
     })
   })
 

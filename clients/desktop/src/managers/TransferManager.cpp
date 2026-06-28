@@ -188,6 +188,12 @@ namespace disk::desktop::managers {
             share_id
         );
         if (!task_id.isEmpty()) {
+            int row = m_download_model->FindTask(task_id);
+            if (row >= 0) {
+                auto task = *m_download_model->GetTask(row);
+                task.supports_range = true;
+                m_download_model->UpdateTask(task_id, task);
+            }
             PreparePartialFileForRange(task_id);
             SetDownloadState(task_id, DownloadState::Ready);
             StartDownloadTransfer(task_id);
@@ -223,14 +229,7 @@ namespace disk::desktop::managers {
 
         // Per §7.3: resume goes back through FetchingMetadata
         SetDownloadState(task_id, DownloadState::FetchingMetadata);
-        if (task.auth_domain == "owner") {
-            FetchDownloadMetadata(task_id);
-        } else {
-            // Visitor: recalculate offset and go
-            PreparePartialFileForRange(task_id);
-            SetDownloadState(task_id, DownloadState::Ready);
-            StartDownloadTransfer(task_id);
-        }
+        FetchDownloadMetadata(task_id);
     }
 
     void TransferManager::CancelDownload(const QString& task_id) {
@@ -271,13 +270,7 @@ namespace disk::desktop::managers {
         }
 
         SetDownloadState(task_id, DownloadState::FetchingMetadata);
-        if (task.auth_domain == "owner") {
-            FetchDownloadMetadata(task_id);
-        } else {
-            PreparePartialFileForRange(task_id);
-            SetDownloadState(task_id, DownloadState::Ready);
-            StartDownloadTransfer(task_id);
-        }
+        FetchDownloadMetadata(task_id);
     }
 
     void TransferManager::ClearCompletedUploads() {
@@ -1092,6 +1085,13 @@ namespace disk::desktop::managers {
         }
         auto task = *m_download_model->GetTask(row);
 
+        if (task.auth_domain != "owner") {
+            PreparePartialFileForRange(task_id);
+            SetDownloadState(task_id, DownloadState::Ready);
+            StartDownloadTransfer(task_id);
+            return;
+        }
+
         auto headers = PrepareOwnerHeaders();
         auto reply = m_network_client->Get(
             QUrl(QString("/api/file/download/%1/info").arg(task.file_id)),
@@ -1158,21 +1158,8 @@ namespace disk::desktop::managers {
         task.mime_type = data.value("mime_type").toString();
         task.supports_range = data.value("supports_range").toBool(false);
 
-        // §7.3: Check for partial file to determine full vs range
-        QFileInfo partial_info(task.target_path);
-        if (partial_info.exists() && partial_info.size() > 0 &&
-            task.supports_range) {
-            task.transfer_mode = "range";
-            task.range_start = static_cast<quint64>(partial_info.size());
-            task.received_bytes = task.range_start.value_or(0);
-        } else {
-            task.transfer_mode = "full";
-            if (partial_info.exists()) {
-                QFile::remove(task.target_path);
-            }
-        }
-
         m_download_model->UpdateTask(task_id, task);
+        PreparePartialFileForRange(task_id);
         SetDownloadState(task_id, DownloadState::Ready);
         StartDownloadTransfer(task_id);
     }
@@ -1265,8 +1252,10 @@ namespace disk::desktop::managers {
             return;
         }
         auto task = *m_download_model->GetTask(row);
-        task.received_bytes = active.bytes_received_at_start +
-                              static_cast<quint64>(active.file->pos());
+        const quint64 current_file_pos = static_cast<quint64>(active.file->pos());
+        task.received_bytes = task.transfer_mode == "range"
+            ? current_file_pos
+            : active.bytes_received_at_start + current_file_pos;
         m_download_model->UpdateTask(task_id, task);
 
         if (task.file_size > 0) {
@@ -1282,6 +1271,10 @@ namespace disk::desktop::managers {
         }
 
         auto& active = m_active_downloads[task_id];
+        if (active.reply && active.file && active.reply->bytesAvailable() > 0) {
+            HandleDownloadData(task_id);
+        }
+
         auto* reply = active.reply;
         auto* file = active.file;
 
@@ -1335,7 +1328,39 @@ namespace disk::desktop::managers {
         int row = m_download_model->FindTask(task_id);
         if (row >= 0) {
             auto task = *m_download_model->GetTask(row);
-            task.received_bytes = task.file_size;
+            QFileInfo completed_info(task.target_path);
+            const quint64 actual_size = completed_info.exists()
+                ? static_cast<quint64>(completed_info.size())
+                : 0;
+            if (actual_size != task.file_size) {
+                ApiError err;
+                err.code = 0;
+                err.family = "transfer";
+                err.category = "IntegrityError";
+                err.message = "下载文件大小校验失败";
+                err.retryable = false;
+                err.action = "retry";
+                FailDownload(task_id, err);
+                return;
+            }
+
+            if (task.file_hash.has_value() && !task.file_hash->isEmpty()) {
+                const QString actual_hash = ComputeFileMd5(task.target_path);
+                if (actual_hash.isEmpty() ||
+                    actual_hash.compare(*task.file_hash, Qt::CaseInsensitive) != 0) {
+                    ApiError err;
+                    err.code = 0;
+                    err.family = "transfer";
+                    err.category = "IntegrityError";
+                    err.message = "下载文件哈希校验失败";
+                    err.retryable = false;
+                    err.action = "retry";
+                    FailDownload(task_id, err);
+                    return;
+                }
+            }
+
+            task.received_bytes = actual_size;
             m_download_model->UpdateTask(task_id, task);
         }
 
@@ -1446,7 +1471,8 @@ namespace disk::desktop::managers {
         auto task = *m_download_model->GetTask(row);
 
         QFileInfo info(task.target_path);
-        if (info.exists() && info.size() > 0 && task.supports_range) {
+        if (info.exists() && info.size() > 0 &&
+            static_cast<quint64>(info.size()) < task.file_size && task.supports_range) {
             task.transfer_mode = "range";
             task.range_start = static_cast<quint64>(info.size());
             task.received_bytes = task.range_start.value_or(0);

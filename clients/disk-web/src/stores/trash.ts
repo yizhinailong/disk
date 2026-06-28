@@ -10,6 +10,7 @@ import type {
   TrashDeleteAllResponse,
 } from '@/types';
 import { listTrash, restoreTrash, deleteTrash, deleteAllTrash } from '@/api/trash';
+import { useDriveStore } from './drive';
 
 export const useTrashStore = defineStore('trash', () => {
   // ==================== State ====================
@@ -33,7 +34,10 @@ export const useTrashStore = defineStore('trash', () => {
     data: TrashRestoreRequest,
   ): Promise<TrashRestoreResponse> {
     const res = await restoreTrash(data);
-    await fetchTrashItems(pagination.value?.page ?? 1);
+    await Promise.all([
+      fetchTrashItems(pagination.value?.page ?? 1),
+      useDriveStore().refreshHierarchyView(),
+    ]);
     return res;
   }
 
