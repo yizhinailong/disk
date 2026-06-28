@@ -149,7 +149,7 @@ func (c *Client) BrowseShare(ctx context.Context, shareID string, folderID uint6
 	}
 	var out BrowseShareResponse
 	err := c.decodeEnvelope(ctx, http.MethodGet, fmt.Sprintf("/api/share/browse/%s", shareID), requestOpts{
-		query: q, shareAuth: true,
+		query: q, shareAuth: true, noAuth: true,
 	}, &out)
 	return out, err
 }
@@ -159,7 +159,7 @@ func (c *Client) BrowseShare(ctx context.Context, shareID string, folderID uint6
 func (c *Client) DownloadShareFile(ctx context.Context, shareID string, fileID uint64, dst io.Writer) (http.Header, error) {
 	resp, err := c.doRequest(ctx, http.MethodGet,
 		fmt.Sprintf("/api/share/download/%s/%d", shareID, fileID),
-		requestOpts{shareAuth: true})
+		requestOpts{shareAuth: true, noAuth: true})
 	if err != nil {
 		return nil, err
 	}

@@ -370,6 +370,30 @@ func (c *Client) doRaw(ctx context.Context, method, path string, opts requestOpt
 	return c.doRequest(ctx, method, path, opts)
 }
 
+// doRawOwnerRetry issues a raw owner-authenticated request and retries once
+// after refreshing the owner token when the server reports HTTP 401.
+func (c *Client) doRawOwnerRetry(ctx context.Context, method, path string, opts requestOpts) (*http.Response, error) {
+	resp, err := c.doRequest(ctx, method, path, opts)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusUnauthorized || opts.noAuth || opts.shareAuth {
+		return resp, nil
+	}
+
+	_ = drainBody(resp)
+	_ = resp.Body.Close()
+
+	refreshed, refreshErr := c.tryRefresh(ctx)
+	if refreshErr != nil {
+		return nil, refreshErr
+	}
+	if !refreshed {
+		return nil, &APIError{HTTPCode: http.StatusUnauthorized, URL: path}
+	}
+	return c.doRequest(ctx, method, path, opts)
+}
+
 // helpers ------------------------------------------------------------------
 
 // writeJSON marshals v and returns the body + content type.

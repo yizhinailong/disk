@@ -64,7 +64,7 @@ func (c *Client) DownloadInfo(ctx context.Context, fileID uint64) (DownloadInfoR
 // response body into dst. Returns the response headers (Content-Length,
 // Content-Range, Content-Disposition) for caller use.
 func (c *Client) DownloadFile(ctx context.Context, fileID uint64, dst io.Writer) (http.Header, error) {
-	resp, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/api/file/download/%d", fileID), requestOpts{})
+	resp, err := c.doRawOwnerRetry(ctx, http.MethodGet, fmt.Sprintf("/api/file/download/%d", fileID), requestOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (c *Client) DownloadFileRange(ctx context.Context, fileID uint64, start, en
 	} else if start >= 0 {
 		headers["Range"] = fmt.Sprintf("bytes=%d-", start)
 	}
-	resp, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/api/file/download/%d", fileID), requestOpts{headers: headers})
+	resp, err := c.doRawOwnerRetry(ctx, http.MethodGet, fmt.Sprintf("/api/file/download/%d", fileID), requestOpts{headers: headers})
 	if err != nil {
 		return nil, err
 	}

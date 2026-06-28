@@ -151,6 +151,14 @@ export interface DownloadTask {
   status: DownloadTaskStatus;
   /** 下载进度 0-100 */
   progress: number;
+  /** 已接收字节数 */
+  received_bytes: number;
+  /** 服务端报告的总字节数 */
+  total_size: number;
+  /** 是否支持 Range 续传 */
+  supports_range: boolean;
+  /** 运行时已接收分片，用于暂停后继续拼接 */
+  chunks: Uint8Array[];
   /** 错误信息 */
   error?: string;
 }

@@ -151,22 +151,88 @@ function clearTokens(): void {
 
 // ==================== Token 刷新队列 ====================
 
-let isRefreshing = false
-let refreshSubscribers: Array<(token: string) => void> = []
+type RefreshSubscriber = {
+  resolve: (token: string) => void
+  reject: (error: ApiError) => void
+}
 
-function subscribeTokenRefresh(cb: (token: string) => void): void {
-  refreshSubscribers.push(cb)
+let isRefreshing = false
+let refreshSubscribers: RefreshSubscriber[] = []
+
+function subscribeTokenRefresh(resolve: (token: string) => void, reject: (error: ApiError) => void): void {
+  refreshSubscribers.push({ resolve, reject })
 }
 
 function onTokenRefreshed(token: string): void {
-  for (const cb of refreshSubscribers) {
-    cb(token)
-  }
+  const subscribers = refreshSubscribers
   refreshSubscribers = []
+  for (const subscriber of subscribers) {
+    subscriber.resolve(token)
+  }
 }
 
-function onRefreshFailed(): void {
+function onRefreshFailed(error: ApiError): void {
+  const subscribers = refreshSubscribers
   refreshSubscribers = []
+  for (const subscriber of subscribers) {
+    subscriber.reject(error)
+  }
+}
+
+function createAuthExpiredError(): ApiError {
+  return new ApiError(40108, '登录已过期，请重新登录')
+}
+
+function redirectToLogin(): void {
+  if (typeof window === 'undefined') return
+  try {
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login'
+    }
+  } catch {
+    // Ignore navigation failures in tests or constrained runtimes.
+  }
+}
+
+export async function refreshAccessToken(): Promise<string> {
+  if (isRefreshing) {
+    return new Promise((resolve, reject) => {
+      subscribeTokenRefresh(resolve, reject)
+    })
+  }
+
+  isRefreshing = true
+
+  try {
+    const refreshToken = getRefreshToken()
+    if (!refreshToken) {
+      throw new Error('No refresh token')
+    }
+
+    // 直接用 axios 发起刷新，避免走拦截器
+    const { data } = await axios.post<ApiResponse<{ access_token: string; refresh_token: string }>>(
+      '/api/auth/refresh',
+      { refresh_token: refreshToken },
+      { headers: { 'Content-Type': 'application/json' } },
+    )
+
+    if (data.code !== 0 || !data.data) {
+      throw new Error('Refresh failed')
+    }
+
+    const { access_token, refresh_token: new_refresh_token } = data.data
+    setTokens(access_token, new_refresh_token)
+    onTokenRefreshed(access_token)
+    return access_token
+  } catch {
+    const error = createAuthExpiredError()
+    onRefreshFailed(error)
+    clearTokens()
+    redirectToLogin()
+    throw error
+  } finally {
+    isRefreshing = false
+  }
 }
 
 // ==================== 基础 Axios 实例 ====================
@@ -202,52 +268,14 @@ apiClient.interceptors.response.use(
       return rejectApiError(error)
     }
 
-    // 尝试刷新 token
-    if (isRefreshing) {
-      // 排队等待刷新完成
-      return new Promise((resolve) => {
-        subscribeTokenRefresh((token: string) => {
-          originalRequest.headers.Authorization = `Bearer ${token}`
-          originalRequest._retry = true
-          resolve(apiClient(originalRequest))
-        })
-      })
-    }
-
-    isRefreshing = true
     originalRequest._retry = true
 
     try {
-      const refreshToken = getRefreshToken()
-      if (!refreshToken) {
-        throw new Error('No refresh token')
-      }
-
-      // 直接用 axios 发起刷新，避免走拦截器
-      const { data } = await axios.post<ApiResponse<{ access_token: string; refresh_token: string }>>(
-        '/api/auth/refresh',
-        { refresh_token: refreshToken },
-        { headers: { 'Content-Type': 'application/json' } },
-      )
-
-      if (data.code !== 0 || !data.data) {
-        throw new Error('Refresh failed')
-      }
-
-      const { access_token, refresh_token: new_refresh_token } = data.data
-      setTokens(access_token, new_refresh_token)
-
-      onTokenRefreshed(access_token)
-
-      originalRequest.headers.Authorization = `Bearer ${access_token}`
+      const accessToken = await refreshAccessToken()
+      originalRequest.headers.Authorization = `Bearer ${accessToken}`
       return apiClient(originalRequest)
-    } catch {
-      onRefreshFailed()
-      clearTokens()
-      window.location.href = '/login'
-      return Promise.reject(new ApiError(40108, '登录已过期，请重新登录'))
-    } finally {
-      isRefreshing = false
+    } catch (refreshError) {
+      return Promise.reject(refreshError)
     }
   },
 )
