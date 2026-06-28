@@ -1,17 +1,4 @@
-# Client Integration Specification
-
-## Purpose
-
-Defines cross-client expectations for desktop, terminal, web, and other clients consuming the Disk REST API.
-
-## Requirements
-
-### Requirement: REST Client Compatibility
-The system SHALL expose stable REST API behavior that can be consumed by desktop, terminal, web, and other HTTP clients.
-
-#### Scenario: Client calls documented API
-- **WHEN** a supported client calls a documented backend API with valid inputs and authentication
-- **THEN** the backend SHALL respond according to the shared API contract
+## MODIFIED Requirements
 
 ### Requirement: Owner Authentication Domain
 Clients SHALL use bearer access tokens for owner/user operations and SHALL keep owner credentials separate from visitor share tokens.
@@ -35,13 +22,6 @@ Clients SHALL use share tokens for visitor share browse and download flows, and 
 - **WHEN** a client downloads shared file content after public access verification
 - **THEN** the client SHALL send the share token using `X-Share-Token` and handle a successful response as binary content rather than a JSON envelope
 
-### Requirement: Token Refresh Integration
-Clients SHALL recover from access-token expiry by refreshing tokens once and retrying the original owner request when refresh is possible.
-
-#### Scenario: Access token expired
-- **WHEN** a client receives an access-token expiry response and has a valid refresh token
-- **THEN** the client SHALL refresh the token and retry the original request once
-
 ### Requirement: Client Upload Workflow
 Clients SHALL follow the backend upload lifecycle for full-file upload behavior, including backend-compatible chunk upload and completion requests.
 
@@ -52,10 +32,3 @@ Clients SHALL follow the backend upload lifecycle for full-file upload behavior,
 #### Scenario: Web client uploads chunks
 - **WHEN** the Web client uploads a file that requires chunk transfer
 - **THEN** the Web client SHALL send each chunk using the backend upload task identifier, required chunk index, binary chunk payload, and owner bearer authentication expected by the backend
-
-### Requirement: Cross-Client Behavior Consistency
-Client implementations SHALL present backend capabilities without redefining backend business rules independently.
-
-#### Scenario: Backend rejects operation
-- **WHEN** the backend rejects a client operation with a domain error
-- **THEN** the client SHALL surface or adapt that error without assuming a conflicting business outcome

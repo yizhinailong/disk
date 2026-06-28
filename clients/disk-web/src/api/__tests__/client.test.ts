@@ -116,6 +116,22 @@ describe('apiClient interceptors', () => {
     expect(result).toEqual({ id: 1 })
   })
 
+  it('response interceptor preserves Blob responses without envelope parsing', async () => {
+    const mod = await import('../client?cachebust=' + Date.now())
+    const blob = new Blob(['file-content'], { type: 'application/octet-stream' })
+    const response = {
+      data: blob,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: { responseType: 'blob' } as InternalAxiosRequestConfig,
+    }
+
+    const handlers = mod.apiClient.interceptors.response as { handlers: Array<{ fulfilled: (response: AxiosResponse) => Promise<unknown> }> }
+    const result = await handlers.handlers[0].fulfilled(response as AxiosResponse)
+    expect(result).toBe(blob)
+  })
+
   it('response interceptor rejects with ApiError on non-zero code', async () => {
     const mod = await import('../client?cachebust=' + Date.now())
     const response = {
@@ -170,5 +186,40 @@ describe('createShareClient', () => {
       client.defaults.headers['X-Share-Token'] ??
       client.defaults.headers.common?.['X-Share-Token']
     expect(headerValue).toBe('share-token-123')
+  })
+
+  it('preserves Blob responses without envelope parsing', async () => {
+    const mod = await import('../client?cachebust=' + Date.now())
+    const client = mod.createShareClient('share-token-123')
+    const blob = new Blob(['shared-file'], { type: 'application/octet-stream' })
+    const response = {
+      data: blob,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: { responseType: 'blob' } as InternalAxiosRequestConfig,
+    }
+
+    const handlers = client.interceptors.response as { handlers: Array<{ fulfilled: (response: AxiosResponse) => Promise<unknown> }> }
+    const result = await handlers.handlers[0].fulfilled(response as AxiosResponse)
+    expect(result).toBe(blob)
+  })
+
+  it('parses Blob-wrapped JSON errors', async () => {
+    const mod = await import('../client?cachebust=' + Date.now())
+    const client = mod.createShareClient('share-token-123')
+    const errorBlob = new Blob([
+      JSON.stringify({ code: 60004, message: 'Share denied', data: null }),
+    ], { type: 'application/json' })
+    const error = {
+      message: 'Request failed',
+      response: {
+        status: 403,
+        data: errorBlob,
+      },
+    }
+
+    const handlers = client.interceptors.response as { handlers: Array<{ rejected: (error: unknown) => Promise<unknown> }> }
+    await expect(handlers.handlers[0].rejected(error)).rejects.toThrow('分享访问被拒绝')
   })
 })

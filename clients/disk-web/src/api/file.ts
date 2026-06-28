@@ -31,14 +31,13 @@ export function uploadChunk(
   chunkHash: string,
   chunkData: Blob,
 ): Promise<UploadChunkResponse> {
-  const formData = new FormData()
-  formData.append('upload_id', uploadId)
-  formData.append('chunk_index', String(chunkIndex))
-  formData.append('chunk_hash', chunkHash)
-  formData.append('chunk', chunkData)
-
-  return apiClient.post('/file/upload/chunk', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+  return apiClient.post('/file/upload/chunk', chunkData, {
+    params: {
+      upload_id: uploadId,
+      chunk_index: chunkIndex,
+      chunk_hash: chunkHash,
+    },
+    headers: { 'Content-Type': 'application/octet-stream' },
     timeout: 120000,
   }) as Promise<UploadChunkResponse>
 }

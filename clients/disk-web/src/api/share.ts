@@ -18,23 +18,23 @@ import type {
 } from '@/types'
 
 export function createShare(data: CreateShareRequest): Promise<CreateShareResponse> {
-  return publicClient.post('/share', data) as Promise<CreateShareResponse>
+  return apiClient.post('/share', data) as Promise<CreateShareResponse>
 }
 
 export function listShares(params: ShareListQuery): Promise<ShareListResponse> {
-  return publicClient.get('/share', { params }) as Promise<ShareListResponse>
+  return apiClient.get('/share', { params }) as Promise<ShareListResponse>
 }
 
 export function getShareDetail(shareId: string): Promise<ShareDetailResponse> {
-  return publicClient.get(`/share/${encodeURIComponent(shareId)}`) as Promise<ShareDetailResponse>
+  return apiClient.get(`/share/${encodeURIComponent(shareId)}`) as Promise<ShareDetailResponse>
 }
 
 export function updateShare(shareId: string, data: UpdateShareRequest): Promise<UpdateShareResponse> {
-  return publicClient.put(`/share/${encodeURIComponent(shareId)}`, data) as Promise<UpdateShareResponse>
+  return apiClient.put(`/share/${encodeURIComponent(shareId)}`, data) as Promise<UpdateShareResponse>
 }
 
 export function cancelShares(data: CancelShareRequest): Promise<CancelShareResponse> {
-  return publicClient.delete('/share', { data }) as Promise<CancelShareResponse>
+  return apiClient.delete('/share', { data }) as Promise<CancelShareResponse>
 }
 
 export function accessShare(shareId: string, data: AccessShareRequest): Promise<AccessShareResponse> {

@@ -185,6 +185,7 @@ export const useTransferStore = defineStore('transfer', () => {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
       const uploadId = initResp.upload_id;
+      const chunkSize = initResp.chunk_size;
       const totalChunks = initResp.total_chunks;
       const alreadyUploaded = new Set(initResp.uploaded_chunks);
 
@@ -214,8 +215,8 @@ export const useTransferStore = defineStore('transfer', () => {
       for (const chunkIndex of remaining) {
         if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
-        const start = chunkIndex * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, task.file_size);
+        const start = chunkIndex * chunkSize;
+        const end = Math.min(start + chunkSize, task.file_size);
         const blob = task.file.slice(start, end);
         const chunkHash = await computeChunkMD5(blob);
 

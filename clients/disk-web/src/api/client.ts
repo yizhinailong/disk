@@ -47,6 +47,68 @@ function getErrorMessage(code: number, fallback: string): string {
   return ERROR_MESSAGE_MAP[code] ?? fallback
 }
 
+function isBinaryResponse(data: unknown): data is Blob | ArrayBuffer {
+  return data instanceof Blob || data instanceof ArrayBuffer
+}
+
+async function parseBlobApiResponse(blob: Blob): Promise<ApiResponse<unknown> | undefined> {
+  if (!blob.type.includes('application/json')) {
+    return undefined
+  }
+
+  try {
+    return JSON.parse(await blob.text()) as ApiResponse<unknown>
+  } catch {
+    return undefined
+  }
+}
+
+function isApiResponse(value: unknown): value is ApiResponse<unknown> {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const maybe = value as Partial<ApiResponse<unknown>>
+  return typeof maybe.code === 'number' && typeof maybe.message === 'string'
+}
+
+function unwrapApiResponse(responseData: unknown): unknown | Promise<unknown> {
+  if (isBinaryResponse(responseData)) {
+    return responseData
+  }
+
+  const body = responseData as ApiResponse<unknown>
+  if (body.code === 0) {
+    return body.data
+  }
+
+  const message = getErrorMessage(body.code, body.message)
+  return Promise.reject(new ApiError(body.code, message))
+}
+
+async function rejectApiError(error: AxiosError<ApiResponse<unknown> | Blob>): Promise<never> {
+  if (error.response) {
+    let body: ApiResponse<unknown> | undefined
+    if (error.response.data instanceof Blob) {
+      body = await parseBlobApiResponse(error.response.data)
+    } else if (isApiResponse(error.response.data)) {
+      body = error.response.data
+    }
+
+    if (body && body.code !== 0) {
+      const message = getErrorMessage(body.code, body.message)
+      return Promise.reject(new ApiError(body.code, message))
+    }
+  }
+
+  return Promise.reject(
+    new ApiError(
+      error.response?.status ?? -1,
+      error.message ?? '网络请求失败',
+    ),
+  )
+}
+
 // ==================== ApiError ====================
 
 /** 业务错误 */
@@ -131,33 +193,13 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 
 // 响应拦截器：解包 ApiResponse + 401 刷新
 apiClient.interceptors.response.use(
-  (response) => {
-    const body = response.data as ApiResponse<unknown>
-    if (body.code === 0) {
-      return body.data as typeof response.data
-    }
-    // 业务错误
-    const message = getErrorMessage(body.code, body.message)
-    return Promise.reject(new ApiError(body.code, message))
-  },
-  async (error: AxiosError<ApiResponse<unknown>>) => {
+  (response) => unwrapApiResponse(response.data) as typeof response.data,
+  async (error: AxiosError<ApiResponse<unknown> | Blob>) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
 
     // 非 401 或已重试过，直接抛出
     if (error.response?.status !== 401 || originalRequest._retry) {
-      if (error.response) {
-        const body = error.response.data as ApiResponse<unknown> | undefined
-        if (body && body.code !== 0) {
-          const message = getErrorMessage(body.code, body.message)
-          return Promise.reject(new ApiError(body.code, message))
-        }
-      }
-      return Promise.reject(
-        new ApiError(
-          error.response?.status ?? -1,
-          error.message ?? '网络请求失败',
-        ),
-      )
+      return rejectApiError(error)
     }
 
     // 尝试刷新 token
@@ -225,31 +267,10 @@ export function createShareClient(shareToken: string): AxiosInstance {
     },
   })
 
-  // 响应拦截器：解包 ApiResponse（不处理 401 刷新）
+  // 响应拦截器：解包 ApiResponse（不处理 401 刷新），保留 Blob 下载响应
   client.interceptors.response.use(
-    (response) => {
-      const body = response.data as ApiResponse<unknown>
-      if (body.code === 0) {
-        return body.data as typeof response.data
-      }
-      const message = getErrorMessage(body.code, body.message)
-      return Promise.reject(new ApiError(body.code, message))
-    },
-    (error: AxiosError<ApiResponse<unknown>>) => {
-      if (error.response) {
-        const body = error.response.data as ApiResponse<unknown> | undefined
-        if (body && body.code !== 0) {
-          const message = getErrorMessage(body.code, body.message)
-          return Promise.reject(new ApiError(body.code, message))
-        }
-      }
-      return Promise.reject(
-        new ApiError(
-          error.response?.status ?? -1,
-          error.message ?? '网络请求失败',
-        ),
-      )
-    },
+    (response) => unwrapApiResponse(response.data) as typeof response.data,
+    (error: AxiosError<ApiResponse<unknown> | Blob>) => rejectApiError(error),
   )
 
   return client
@@ -261,29 +282,8 @@ export function createShareClient(shareToken: string): AxiosInstance {
 export const publicClient: AxiosInstance = axios.create(baseConfig)
 
 publicClient.interceptors.response.use(
-  (response) => {
-    const body = response.data as ApiResponse<unknown>
-    if (body.code === 0) {
-      return body.data as typeof response.data
-    }
-    const message = getErrorMessage(body.code, body.message)
-    return Promise.reject(new ApiError(body.code, message))
-  },
-  (error: AxiosError<ApiResponse<unknown>>) => {
-    if (error.response) {
-      const body = error.response.data as ApiResponse<unknown> | undefined
-      if (body && body.code !== 0) {
-        const message = getErrorMessage(body.code, body.message)
-        return Promise.reject(new ApiError(body.code, message))
-      }
-    }
-    return Promise.reject(
-      new ApiError(
-        error.response?.status ?? -1,
-        error.message ?? '网络请求失败',
-      ),
-    )
-  },
+  (response) => unwrapApiResponse(response.data) as typeof response.data,
+  (error: AxiosError<ApiResponse<unknown> | Blob>) => rejectApiError(error),
 )
 
 // ==================== Token 工具导出 ====================
