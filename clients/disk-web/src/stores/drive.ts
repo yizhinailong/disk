@@ -18,6 +18,7 @@ export const useDriveStore = defineStore('drive', () => {
   const breadcrumbs = ref<BreadcrumbItem[]>([]);
   const folderTree = ref<FolderTreeNode | null>(null);
   const loading = ref<boolean>(false);
+  const folderTreeLoading = ref<boolean>(false);
   const searchQuery = ref<string>('');
   const searchResults = ref<SearchResultItem[]>([]);
   const sortBy = ref<string>('updated_at');
@@ -74,8 +75,17 @@ export const useDriveStore = defineStore('drive', () => {
   }
 
   async function fetchFolderTree(): Promise<void> {
-    const result = await getFolderTree();
-    folderTree.value = { id: result.id, name: result.name, children: [...result.children] };
+    folderTreeLoading.value = true;
+    try {
+      const result = await getFolderTree();
+      folderTree.value = { id: result.id, name: result.name, children: [...result.children] };
+    } finally {
+      folderTreeLoading.value = false;
+    }
+  }
+
+  async function refreshFolderTree(): Promise<void> {
+    await fetchFolderTree();
   }
 
   async function fetchBreadcrumb(): Promise<void> {
@@ -147,6 +157,14 @@ export const useDriveStore = defineStore('drive', () => {
     await fetchFiles(pagination.value?.page ?? 1);
   }
 
+  async function refreshNavigationMetadata(): Promise<void> {
+    await Promise.all([fetchBreadcrumb(), fetchFolderTree()]);
+  }
+
+  async function refreshHierarchyView(): Promise<void> {
+    await Promise.all([refreshCurrentView(), fetchBreadcrumb(), fetchFolderTree()]);
+  }
+
   return {
     // state
     files,
@@ -154,6 +172,7 @@ export const useDriveStore = defineStore('drive', () => {
     breadcrumbs,
     folderTree,
     loading,
+    folderTreeLoading,
     searchQuery,
     searchResults,
     sortBy,
@@ -170,6 +189,7 @@ export const useDriveStore = defineStore('drive', () => {
     // actions
     fetchFiles,
     fetchFolderTree,
+    refreshFolderTree,
     fetchBreadcrumb,
     navigateToFolder,
     searchFiles,
@@ -181,5 +201,7 @@ export const useDriveStore = defineStore('drive', () => {
     selectAll,
     clearSelection,
     refreshCurrentView,
+    refreshNavigationMetadata,
+    refreshHierarchyView,
   };
 });

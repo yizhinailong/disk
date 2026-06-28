@@ -21,11 +21,19 @@ Clients SHALL use bearer access tokens for owner/user operations and SHALL keep 
 - **THEN** the client SHALL send the owner access token using the bearer authorization header
 
 ### Requirement: Visitor Share Domain
-Clients SHALL use share tokens for visitor share browse and download flows.
+Clients SHALL use share tokens for visitor share browse and download flows, including full and ranged download requests, and SHALL NOT fall back to owner bearer authentication for visitor transfers.
 
 #### Scenario: Visitor browses shared content
 - **WHEN** a client performs a visitor share operation after public access verification
 - **THEN** the client SHALL send the share token using `X-Share-Token`
+
+#### Scenario: Visitor resumes shared download
+- **WHEN** a client resumes a visitor share download using an HTTP byte range request
+- **THEN** the client SHALL send both the `Range` header and the share token using `X-Share-Token`
+
+#### Scenario: Visitor download remains isolated from owner authentication
+- **WHEN** a visitor share download or resume request is made from a client that may also have owner session state
+- **THEN** the client SHALL authenticate the visitor request with the share token and SHALL NOT require or substitute an owner bearer token
 
 ### Requirement: Token Refresh Integration
 Clients SHALL recover from access-token expiry by refreshing tokens once and retrying the original owner request when refresh is possible.

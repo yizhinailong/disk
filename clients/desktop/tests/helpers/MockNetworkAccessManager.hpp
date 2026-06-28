@@ -165,18 +165,28 @@ namespace disk::desktop::testing {
 
             auto url = request.url().toString();
 
-            // Check for registered errors first
+            // Check for registered errors first, preferring the most specific URL substring.
+            QString matched_error_key;
             for (auto it = m_errors.constBegin(); it != m_errors.constEnd(); ++it) {
-                if (url.contains(it.key())) {
-                    return new MockNetworkReply(it.value().error, it.value().error_string, this);
+                if (url.contains(it.key()) && it.key().size() > matched_error_key.size()) {
+                    matched_error_key = it.key();
                 }
             }
+            if (!matched_error_key.isEmpty()) {
+                const auto& error = m_errors.value(matched_error_key);
+                return new MockNetworkReply(error.error, error.error_string, this);
+            }
 
-            // Check for registered responses
+            // Check for registered responses, preferring the most specific URL substring.
+            QString matched_response_key;
             for (auto it = m_responses.constBegin(); it != m_responses.constEnd(); ++it) {
-                if (url.contains(it.key())) {
-                    return new MockNetworkReply(it.value().data, it.value().http_status, this);
+                if (url.contains(it.key()) && it.key().size() > matched_response_key.size()) {
+                    matched_response_key = it.key();
                 }
+            }
+            if (!matched_response_key.isEmpty()) {
+                const auto& response = m_responses.value(matched_response_key);
+                return new MockNetworkReply(response.data, response.http_status, this);
             }
 
             // Default: return empty 404

@@ -17,8 +17,6 @@
           :props="treeProps"
           node-key="id"
           highlight-current
-          lazy
-          :load="loadNode"
           :default-expanded-keys="defaultExpanded"
           :current-node-key="driveStore.currentFolderId"
           :expand-on-click-node="false"
@@ -36,12 +34,12 @@
         </el-tree>
 
         <!-- Empty state -->
-        <div v-if="!loading && treeData.length === 0" class="tree-empty">
+        <div v-if="!driveStore.folderTreeLoading && treeData.length === 0" class="tree-empty">
           <span>暂无文件夹</span>
         </div>
 
         <!-- Loading state -->
-        <div v-if="loading" class="tree-loading">
+        <div v-if="driveStore.folderTreeLoading" class="tree-loading">
           <el-icon class="is-loading"><Loading /></el-icon>
           <span>加载中...</span>
         </div>
@@ -51,11 +49,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import type { ElTree } from 'element-plus'
 import { Folder, ArrowRight, Loading } from '@element-plus/icons-vue'
 import { useDriveStore } from '@/stores/drive'
-import { getFolderTree } from '@/api/folder'
 import type { FolderTreeNode } from '@/types'
 
 const driveStore = useDriveStore()
@@ -63,65 +60,46 @@ const driveStore = useDriveStore()
 // ==================== State ====================
 const treeRef = ref<InstanceType<typeof ElTree> | null>(null)
 const collapsed = ref(false)
-const loading = ref(false)
-const rootChildren = ref<FolderTreeNode[]>([])
 const defaultExpanded = ref<number[]>([])
 
 // ==================== Tree Configuration ====================
 const treeProps = {
   label: 'name',
   children: 'children',
-  isLeaf: (data: FolderTreeNode) => data.children.length === 0,
 }
 
-// Root-level data: we wrap the API response as a single root node "我的文件"
-// The el-tree displays its children at top level
 const treeData = computed<FolderTreeNode[]>(() => {
-  if (!rootChildren.value.length) return []
-  return rootChildren.value
+  const root = driveStore.folderTree
+  if (!root) return []
+  return [...root.children]
 })
 
-// ==================== Lazy Load ====================
-async function loadNode(
-  node: { level: number; data?: FolderTreeNode; isLeaf: boolean },
-  resolve: (data: FolderTreeNode[]) => void,
-) {
-  try {
-    if (node.level === 0) {
-      // Root level: load full tree from API
-      loading.value = true
-      const response = await getFolderTree()
-      rootChildren.value = [...response.children]
+function findAncestorPath(
+  nodes: readonly FolderTreeNode[],
+  targetId: number,
+  path: number[] = [],
+): number[] | null {
+  for (const node of nodes) {
+    const nextPath = [...path, node.id]
+    if (node.id === targetId) return path
 
-      // Auto-expand first level
-      if (response.children.length > 0) {
-        const firstLevelIds = response.children.map((c) => c.id)
-        defaultExpanded.value = firstLevelIds
-      }
-
-      // Store root tree data in drive store for cross-component access
-      if (driveStore.folderTree === null) {
-        // Only set if store hasn't been populated yet
-        // (store actions are TODO, so we don't call fetchFolderTree)
-      }
-
-      resolve(rootChildren.value)
-      return
-    }
-
-    // Non-root node: resolve from pre-loaded children
-    if (node.data && node.data.children.length > 0) {
-      resolve([...node.data.children])
-    } else {
-      // Fetch sub-tree for this node
-      const response = await getFolderTree({ parent_id: node.data?.id, depth: 1 })
-      resolve([...response.children])
-    }
-  } catch {
-    resolve([])
-  } finally {
-    loading.value = false
+    const childPath = findAncestorPath(node.children, targetId, nextPath)
+    if (childPath) return childPath
   }
+  return null
+}
+
+function syncCurrentFolder(folderId: number): void {
+  const expanded = folderId === 0 ? [] : findAncestorPath(treeData.value, folderId) ?? []
+  defaultExpanded.value = expanded
+
+  nextTick(() => {
+    if (folderId === 0) {
+      treeRef.value?.setCurrentKey(null)
+    } else {
+      treeRef.value?.setCurrentKey(folderId)
+    }
+  })
 }
 
 // ==================== Node Click ====================
@@ -133,23 +111,16 @@ function handleNodeClick(data: FolderTreeNode) {
 
 // ==================== Sync Current Folder Highlight ====================
 watch(
-  () => driveStore.currentFolderId,
-  (folderId) => {
-    // Use nextTick to ensure tree is rendered
-    setTimeout(() => {
-      if (folderId === 0) {
-        // Root folder: clear current highlight
-        treeRef.value?.setCurrentKey(null)
-      } else {
-        treeRef.value?.setCurrentKey(folderId)
-      }
-    }, 0)
+  () => [driveStore.currentFolderId, driveStore.folderTree] as const,
+  ([folderId]) => {
+    syncCurrentFolder(folderId)
   },
 )
 
 // ==================== Initialize ====================
 onMounted(async () => {
-  // The tree's lazy load handles initial data fetch automatically
+  await driveStore.fetchFolderTree()
+  syncCurrentFolder(driveStore.currentFolderId)
 })
 </script>
 

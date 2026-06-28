@@ -6,6 +6,7 @@
 #include "network/NetworkClient.hpp"
 #include "network/RequestFactory.hpp"
 
+#include <QTemporaryDir>
 #include <QTemporaryFile>
 
 using namespace disk::desktop;
@@ -386,6 +387,179 @@ private slots:
         auto preserved_visitor_download = mgr.GetDownloadModel()->GetTask(mgr.GetDownloadModel()->FindTask("dl_visitor"));
         QVERIFY(preserved_visitor_download.has_value());
         QCOMPARE(preserved_visitor_download->status, QString("paused"));
+    }
+    void VisitorShareDownloadResumesWithRangeAndShareToken() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString target_path = dir.filePath("shared.bin");
+        QFile partial(target_path);
+        QVERIFY(partial.open(QIODevice::WriteOnly));
+        partial.write("abc");
+        partial.close();
+
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterRawResponse(
+            "api/share/download/share-1/77",
+            QByteArray("def")
+        );
+
+        NetworkClient nc(static_cast<QNetworkAccessManager*>(&mock_network));
+        nc.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory rf;
+        rf.SetVisitorShareToken("share_token");
+        TransferManager mgr(&nc, &rf);
+
+        mgr.StartShareDownload("share-1", 77, target_path, "shared.bin", 6);
+
+        QTRY_VERIFY(mock_network.GetRequestLog().size() >= 1);
+        const auto transfer_request = mock_network.GetRequestLog().at(0);
+        QCOMPARE(transfer_request.rawHeader("X-Share-Token"), QByteArray("share_token"));
+        QCOMPARE(transfer_request.rawHeader("Range"), QByteArray("bytes=3-"));
+
+        QTRY_COMPARE(mgr.GetDownloadModel()->GetTask(0)->status, QString("completed"));
+        QCOMPARE(mgr.GetDownloadModel()->GetTask(0)->transfer_mode, QString("range"));
+        QCOMPARE(mgr.GetDownloadModel()->GetTask(0)->received_bytes, quint64(6));
+    }
+
+    void VisitorShareDownloadRestartsWhenPartialIsTooLarge() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString target_path = dir.filePath("shared.bin");
+        QFile partial(target_path);
+        QVERIFY(partial.open(QIODevice::WriteOnly));
+        partial.write("abcdefg");
+        partial.close();
+
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterRawResponse(
+            "api/share/download/share-2/78",
+            QByteArray("abc")
+        );
+
+        NetworkClient nc(static_cast<QNetworkAccessManager*>(&mock_network));
+        nc.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory rf;
+        rf.SetVisitorShareToken("share_token");
+        TransferManager mgr(&nc, &rf);
+
+        mgr.StartShareDownload("share-2", 78, target_path, "shared.bin", 3);
+
+        QTRY_VERIFY(mock_network.GetRequestLog().size() >= 1);
+        const auto transfer_request = mock_network.GetRequestLog().at(0);
+        QVERIFY(transfer_request.rawHeader("Range").isEmpty());
+
+        QTRY_COMPARE(mgr.GetDownloadModel()->GetTask(0)->status, QString("completed"));
+        QCOMPARE(mgr.GetDownloadModel()->GetTask(0)->transfer_mode, QString("full"));
+        QCOMPARE(QFileInfo(target_path).size(), qint64(3));
+    }
+
+    void DownloadFailsWhenCompletedSizeMismatches() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString target_path = dir.filePath("report.pdf");
+
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file/download/91/info",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data",
+                  QJsonObject{
+                      { "filename", "report.pdf" },
+                      { "file_size", 6.0 },
+                      { "file_hash", "" },
+                      { "mime_type", "application/pdf" },
+                      { "supports_range", false },
+                  } },
+            }
+        );
+        mock_network.RegisterRawResponse("api/file/download/91", QByteArray("abc"));
+
+        NetworkClient nc(static_cast<QNetworkAccessManager*>(&mock_network));
+        nc.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory rf;
+        rf.SetOwnerAccessToken("owner_token");
+        TransferManager mgr(&nc, &rf);
+        QSignalSpy error_spy(&mgr, &TransferManager::taskError);
+
+        mgr.StartDownload(91, target_path);
+
+        QTRY_COMPARE(mgr.GetDownloadModel()->GetTask(0)->status, QString("failed"));
+        QCOMPARE(mgr.GetDownloadModel()->GetTask(0)->error->category, QString("IntegrityError"));
+        QCOMPARE(error_spy.count(), 1);
+    }
+
+    void DownloadFailsWhenCompletedHashMismatches() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString target_path = dir.filePath("report.pdf");
+
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file/download/92/info",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data",
+                  QJsonObject{
+                      { "filename", "report.pdf" },
+                      { "file_size", 3.0 },
+                      { "file_hash", QString("00000000000000000000000000000000") },
+                      { "mime_type", "application/pdf" },
+                      { "supports_range", false },
+                  } },
+            }
+        );
+        mock_network.RegisterRawResponse("api/file/download/92", QByteArray("abc"));
+
+        NetworkClient nc(static_cast<QNetworkAccessManager*>(&mock_network));
+        nc.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory rf;
+        rf.SetOwnerAccessToken("owner_token");
+        TransferManager mgr(&nc, &rf);
+        QSignalSpy error_spy(&mgr, &TransferManager::taskError);
+
+        mgr.StartDownload(92, target_path);
+
+        QTRY_COMPARE(mgr.GetDownloadModel()->GetTask(0)->status, QString("failed"));
+        QCOMPARE(mgr.GetDownloadModel()->GetTask(0)->error->category, QString("IntegrityError"));
+        QCOMPARE(error_spy.count(), 1);
+    }
+
+    void DownloadCompletesWithSizeOnlyWhenHashIsMissing() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString target_path = dir.filePath("report.pdf");
+
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterResponse(
+            "api/file/download/93/info",
+            QJsonObject{
+                { "code", 0 },
+                { "message", "success" },
+                { "data",
+                  QJsonObject{
+                      { "filename", "report.pdf" },
+                      { "file_size", 3.0 },
+                      { "file_hash", "" },
+                      { "mime_type", "application/pdf" },
+                      { "supports_range", false },
+                  } },
+            }
+        );
+        mock_network.RegisterRawResponse("api/file/download/93", QByteArray("abc"));
+
+        NetworkClient nc(static_cast<QNetworkAccessManager*>(&mock_network));
+        nc.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory rf;
+        rf.SetOwnerAccessToken("owner_token");
+        TransferManager mgr(&nc, &rf);
+
+        mgr.StartDownload(93, target_path);
+
+        QTRY_COMPARE(mgr.GetDownloadModel()->GetTask(0)->status, QString("completed"));
+        QCOMPARE(mgr.GetDownloadModel()->GetTask(0)->received_bytes, quint64(3));
     }
 };
 

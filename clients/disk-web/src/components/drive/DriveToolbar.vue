@@ -208,7 +208,6 @@ import {
   copyFiles,
   deleteFiles,
   createFolder,
-  getFolderTree,
 } from '@/api'
 import type {
   FileItem,
@@ -273,7 +272,7 @@ async function confirmNewFolder(): Promise<void> {
     })
     ElMessage.success(`文件夹「${name}」创建成功`)
     showNewFolderDialog.value = false
-    await driveStore.refreshCurrentView()
+    await driveStore.refreshHierarchyView()
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : '创建文件夹失败'
     ElMessage.error(msg)
@@ -322,7 +321,7 @@ async function confirmRename(): Promise<void> {
     await renameFile(item.id, { new_name: newName })
     ElMessage.success('重命名成功')
     showRenameDialog.value = false
-    await driveStore.refreshCurrentView()
+    await driveStore.refreshHierarchyView()
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : '重命名失败'
     ElMessage.error(msg)
@@ -357,9 +356,17 @@ function splitSelectedIds(): {
 
 async function loadFolderTree(): Promise<void> {
   try {
-    const tree = await getFolderTree()
+    await driveStore.fetchFolderTree()
+    if (!driveStore.folderTree) {
+      folderTreeData.value = []
+      return
+    }
     folderTreeData.value = [
-      { id: tree.id, name: tree.name || '根目录', children: [...tree.children] },
+      {
+        id: driveStore.folderTree.id,
+        name: driveStore.folderTree.name || '根目录',
+        children: [...driveStore.folderTree.children],
+      },
     ]
   } catch {
     folderTreeData.value = []
@@ -413,7 +420,7 @@ async function confirmMoveCopy(): Promise<void> {
       ElMessage.success(`已复制 ${result.copied_count} 项`)
     }
     showMoveCopyDialog.value = false
-    await driveStore.refreshCurrentView()
+    await driveStore.refreshHierarchyView()
   } catch (err: unknown) {
     const msg = err instanceof Error
       ? err.message
@@ -460,7 +467,7 @@ async function handleDelete(): Promise<void> {
       folder_ids: folderIds.length > 0 ? folderIds : undefined,
     })
     ElMessage.success(`已删除 ${result.deleted_count} 项`)
-    await driveStore.refreshCurrentView()
+    await driveStore.refreshHierarchyView()
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : '删除失败'
     ElMessage.error(msg)
