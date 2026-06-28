@@ -1,31 +1,4 @@
-# Client Integration Specification
-
-## Purpose
-
-Defines cross-client expectations for desktop, terminal, web, and other clients consuming the Disk REST API.
-
-## Requirements
-
-### Requirement: REST Client Compatibility
-The system SHALL expose stable REST API behavior that can be consumed by desktop, terminal, web, and other HTTP clients.
-
-#### Scenario: Client calls documented API
-- **WHEN** a supported client calls a documented backend API with valid inputs and authentication
-- **THEN** the backend SHALL respond according to the shared API contract
-
-### Requirement: Owner Authentication Domain
-Clients SHALL use bearer access tokens for owner/user operations and SHALL keep owner credentials separate from visitor share tokens.
-
-#### Scenario: Owner operation requested
-- **WHEN** a client performs a user-owned operation such as file, folder, profile, trash, share management, or admin access
-- **THEN** the client SHALL send the owner access token using the bearer authorization header
-
-### Requirement: Visitor Share Domain
-Clients SHALL use share tokens for visitor share browse and download flows.
-
-#### Scenario: Visitor browses shared content
-- **WHEN** a client performs a visitor share operation after public access verification
-- **THEN** the client SHALL send the share token using `X-Share-Token`
+## MODIFIED Requirements
 
 ### Requirement: Token Refresh Integration
 Clients SHALL recover from access-token expiry by refreshing tokens once and retrying the original owner request when refresh is possible, and SHALL settle all callers waiting on a shared refresh attempt whether that refresh succeeds or fails.
@@ -46,19 +19,7 @@ Clients SHALL recover from access-token expiry by refreshing tokens once and ret
 - **WHEN** a queued Web owner request is waiting and the shared refresh attempt fails
 - **THEN** the Web client SHALL reject the queued request with an authentication error, clear invalid local token state, and avoid leaving the request promise pending
 
-### Requirement: Client Upload Workflow
-Clients SHALL follow the backend upload lifecycle for full-file upload behavior.
-
-#### Scenario: Client uploads a file
-- **WHEN** a client uploads a local file
-- **THEN** the client SHALL initialize upload, upload required chunks unless instant upload succeeds, and complete or cancel the upload according to backend responses
-
-### Requirement: Cross-Client Behavior Consistency
-Client implementations SHALL present backend capabilities without redefining backend business rules independently.
-
-#### Scenario: Backend rejects operation
-- **WHEN** the backend rejects a client operation with a domain error
-- **THEN** the client SHALL surface or adapt that error without assuming a conflicting business outcome
+## ADDED Requirements
 
 ### Requirement: Authenticated Client Downloads
 Clients SHALL apply owner access-token refresh and single retry behavior to authenticated owner download requests, including raw/binary download paths that do not use the normal JSON API interceptor.

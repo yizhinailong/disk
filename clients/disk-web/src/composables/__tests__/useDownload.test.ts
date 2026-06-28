@@ -1,30 +1,62 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useDownload, saveBlobAsFile } from '../../composables/useDownload'
 import * as fileApi from '@/api/file'
-import { getAccessToken } from '@/api/client'
+import { getAccessToken, refreshAccessToken } from '@/api/client'
 
 vi.mock('@/api/file')
 vi.mock('@/api/client', () => ({
   getAccessToken: vi.fn(() => 'fake-token'),
+  getRefreshToken: vi.fn(() => 'fake-refresh'),
+  refreshAccessToken: vi.fn(),
   setTokens: vi.fn(),
   clearTokens: vi.fn(),
 }))
 
+function mockDownloadInfo(overrides = {}) {
+  return {
+    file_id: 1,
+    filename: 'doc.txt',
+    file_size: 100,
+    file_hash: 'hash',
+    mime_type: 'text/plain',
+    supports_range: false,
+    ...overrides,
+  }
+}
+
+function mockResponse(options: {
+  status?: number
+  ok?: boolean
+  headers?: HeadersInit
+  blob?: Blob
+  body?: ReadableStream<Uint8Array> | null
+} = {}) {
+  const status = options.status ?? 200
+  return {
+    ok: options.ok ?? (status >= 200 && status < 300),
+    status,
+    headers: new Headers(options.headers),
+    body: options.body ?? null,
+    blob: async () => options.blob ?? new Blob(['content']),
+  } as Response
+}
+
 describe('useDownload', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(getAccessToken).mockReturnValue('fake-token')
+    vi.mocked(refreshAccessToken).mockResolvedValue('new-token')
   })
 
   describe('fetchInfo', () => {
     it('calls getDownloadInfo with file id', async () => {
-      const mockInfo = {
+      const mockInfo = mockDownloadInfo({
         file_id: 42,
         filename: 'test.pdf',
         file_size: 1024,
         file_hash: 'abc123',
         mime_type: 'application/pdf',
-        supports_range: false,
-      }
+      })
       vi.mocked(fileApi.getDownloadInfo).mockResolvedValue(mockInfo)
 
       const { fetchInfo } = useDownload()
@@ -37,25 +69,15 @@ describe('useDownload', () => {
 
   describe('startDownload', () => {
     it('downloads file with correct headers', async () => {
-      const mockInfo = {
-        file_id: 1,
-        filename: 'doc.txt',
-        file_size: 100,
-        file_hash: 'hash',
-        mime_type: 'text/plain',
-        supports_range: false,
-      }
+      const mockInfo = mockDownloadInfo()
       vi.mocked(fileApi.getDownloadInfo).mockResolvedValue(mockInfo)
 
       const mockBlob = new Blob(['content'], { type: 'text/plain' })
       const originalFetch = globalThis.fetch
-      globalThis.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        headers: new Headers({ 'Content-Length': '100' }),
-        body: null,
-        blob: async () => mockBlob,
-      })
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse({
+        headers: { 'Content-Length': '100' },
+        blob: mockBlob,
+      }))
 
       const { startDownload } = useDownload()
       const result = await startDownload(1)
@@ -77,22 +99,10 @@ describe('useDownload', () => {
     })
 
     it('throws on non-ok response', async () => {
-      const mockInfo = {
-        file_id: 1,
-        filename: 'doc.txt',
-        file_size: 100,
-        file_hash: 'hash',
-        mime_type: 'text/plain',
-        supports_range: false,
-      }
-      vi.mocked(fileApi.getDownloadInfo).mockResolvedValue(mockInfo)
+      vi.mocked(fileApi.getDownloadInfo).mockResolvedValue(mockDownloadInfo())
 
       const originalFetch = globalThis.fetch
-      globalThis.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-        headers: new Headers(),
-      })
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse({ status: 500, ok: false }))
 
       const { startDownload } = useDownload()
       await expect(startDownload(1)).rejects.toThrow('下载失败: HTTP 500')
@@ -100,28 +110,61 @@ describe('useDownload', () => {
       globalThis.fetch = originalFetch
     })
 
+    it('refreshes token and retries once on 401 response', async () => {
+      vi.mocked(fileApi.getDownloadInfo).mockResolvedValue(mockDownloadInfo())
+      vi.mocked(refreshAccessToken).mockResolvedValue('refreshed-token')
+
+      const originalFetch = globalThis.fetch
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce(mockResponse({ status: 401, ok: false }))
+        .mockResolvedValueOnce(mockResponse({ headers: { 'Content-Length': '100' }, blob: new Blob(['ok']) }))
+
+      const { startDownload } = useDownload()
+      await startDownload(1)
+
+      expect(refreshAccessToken).toHaveBeenCalledTimes(1)
+      expect(globalThis.fetch).toHaveBeenNthCalledWith(
+        2,
+        '/api/file/download/1',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer refreshed-token' }),
+        }),
+      )
+
+      globalThis.fetch = originalFetch
+    })
+
+    it('propagates refresh failure after 401 response', async () => {
+      vi.mocked(fileApi.getDownloadInfo).mockResolvedValue(mockDownloadInfo())
+      vi.mocked(refreshAccessToken).mockRejectedValue(new Error('refresh failed'))
+
+      const originalFetch = globalThis.fetch
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse({ status: 401, ok: false }))
+
+      const { startDownload } = useDownload()
+      await expect(startDownload(1)).rejects.toThrow('refresh failed')
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+
+      globalThis.fetch = originalFetch
+    })
+
     it('includes Range header for resume when startByte > 0', async () => {
-      const mockInfo = {
-        file_id: 1,
+      const mockInfo = mockDownloadInfo({
         filename: 'big.zip',
         file_size: 10000,
-        file_hash: 'hash',
         mime_type: 'application/zip',
         supports_range: true,
-      }
+      })
       vi.mocked(fileApi.getDownloadInfo).mockResolvedValue(mockInfo)
 
       const mockBlob = new Blob(['partial'])
       const originalFetch = globalThis.fetch
-      globalThis.fetch = vi.fn().mockResolvedValue({
-        ok: false,
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse({
         status: 206,
-        headers: new Headers({
-          'Content-Range': 'bytes 500-9999/10000',
-        }),
-        body: null,
-        blob: async () => mockBlob,
-      })
+        ok: false,
+        headers: { 'Content-Range': 'bytes 500-9999/10000' },
+        blob: mockBlob,
+      }))
 
       const { startDownload } = useDownload()
       await startDownload(1, { startByte: 500 })
@@ -138,26 +181,31 @@ describe('useDownload', () => {
       globalThis.fetch = originalFetch
     })
 
+    it('rejects resumed response when Content-Range does not match requested offset', async () => {
+      vi.mocked(fileApi.getDownloadInfo).mockResolvedValue(mockDownloadInfo({ supports_range: true }))
+
+      const originalFetch = globalThis.fetch
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse({
+        status: 206,
+        ok: false,
+        headers: { 'Content-Range': 'bytes 0-99/100' },
+      }))
+
+      const { startDownload } = useDownload()
+      await expect(startDownload(1, { startByte: 50 })).rejects.toThrow('续传失败: 响应范围不匹配')
+
+      globalThis.fetch = originalFetch
+    })
+
     it('uses fallback filename when info has none', async () => {
-      const mockInfo = {
-        file_id: 1,
-        filename: '',
-        file_size: 100,
-        file_hash: 'hash',
-        mime_type: 'text/plain',
-        supports_range: false,
-      }
-      vi.mocked(fileApi.getDownloadInfo).mockResolvedValue(mockInfo)
+      vi.mocked(fileApi.getDownloadInfo).mockResolvedValue(mockDownloadInfo({ filename: '' }))
 
       const mockBlob = new Blob(['data'])
       const originalFetch = globalThis.fetch
-      globalThis.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        headers: new Headers({ 'Content-Length': '100' }),
-        body: null,
-        blob: async () => mockBlob,
-      })
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse({
+        headers: { 'Content-Length': '100' },
+        blob: mockBlob,
+      }))
 
       const { startDownload } = useDownload()
       const result = await startDownload(1)
@@ -168,25 +216,14 @@ describe('useDownload', () => {
 
     it('sends request without Authorization when no token', async () => {
       vi.mocked(getAccessToken).mockReturnValue(null)
-      const mockInfo = {
-        file_id: 1,
-        filename: 'doc.txt',
-        file_size: 100,
-        file_hash: 'hash',
-        mime_type: 'text/plain',
-        supports_range: false,
-      }
-      vi.mocked(fileApi.getDownloadInfo).mockResolvedValue(mockInfo)
+      vi.mocked(fileApi.getDownloadInfo).mockResolvedValue(mockDownloadInfo())
 
       const mockBlob = new Blob(['content'])
       const originalFetch = globalThis.fetch
-      globalThis.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        headers: new Headers({ 'Content-Length': '100' }),
-        body: null,
-        blob: async () => mockBlob,
-      })
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse({
+        headers: { 'Content-Length': '100' },
+        blob: mockBlob,
+      }))
 
       const { startDownload } = useDownload()
       await startDownload(1)

@@ -112,6 +112,12 @@ function findTaskIn(tasks: UploadTask[], taskId: string): UploadTask | undefined
   return tasks.find((t) => t.id === taskId);
 }
 
+function clearDownloadRuntime(task: DownloadTask): void {
+  task.chunks = [];
+  task.received_bytes = 0;
+  task.progress = 0;
+}
+
 // ==================== Store ====================
 
 export const useTransferStore = defineStore('transfer', () => {
@@ -387,7 +393,7 @@ export const useTransferStore = defineStore('transfer', () => {
 
   function updateDownloadTask(
     taskId: string,
-    patch: Partial<Pick<DownloadTask, 'status' | 'progress' | 'error'>>,
+    patch: Partial<Pick<DownloadTask, 'status' | 'progress' | 'received_bytes' | 'total_size' | 'supports_range' | 'chunks' | 'error'>>,
   ): void {
     const idx = downloads.value.findIndex((t) => t.id === taskId);
     if (idx === -1) return;
@@ -395,32 +401,68 @@ export const useTransferStore = defineStore('transfer', () => {
     downloads.value[idx] = { ...existing, ...patch };
   }
 
-  async function executeDownload(task: DownloadTask): Promise<void> {
+  async function executeDownload(taskId: string): Promise<void> {
+    const task = downloads.value.find((t) => t.id === taskId);
+    if (!task) return;
+
     const controller = getOrCreateController(task.id);
     const signal = controller.signal;
+    const startByte = task.supports_range ? task.received_bytes : 0;
+
+    if (startByte === 0 && task.received_bytes > 0) {
+      clearDownloadRuntime(task);
+    }
 
     try {
-      updateDownloadTask(task.id, { status: 'downloading', progress: 0 });
+      updateDownloadTask(task.id, { status: 'downloading', error: undefined });
 
       const { startDownload } = useDownload();
-      const { blob, filename } = await startDownload(Number(task.file_id), {
+      const { filename } = await startDownload(Number(task.file_id), {
         signal,
-        onProgress: (_loaded, _total, progress) => {
-          updateDownloadTask(task.id, { progress: Math.min(progress, 99) });
+        startByte,
+        onInfo: (info) => {
+          updateDownloadTask(task.id, {
+            total_size: info.file_size,
+            supports_range: info.supports_range,
+          });
+        },
+        onChunk: (chunk) => {
+          const current = downloads.value.find((t) => t.id === task.id);
+          if (!current) return;
+          current.chunks.push(chunk);
+        },
+        onProgress: (loaded, total, progress) => {
+          updateDownloadTask(task.id, {
+            received_bytes: loaded,
+            total_size: total,
+            progress: Math.min(progress, 99),
+          });
         },
       });
 
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
+      const completed = downloads.value.find((t) => t.id === task.id);
+      if (!completed) return;
+      const blob = new Blob(completed.chunks as BlobPart[]);
       saveBlobAsFile(blob, filename);
-      updateDownloadTask(task.id, { status: 'completed', progress: 100 });
+      updateDownloadTask(task.id, {
+        status: 'completed',
+        progress: 100,
+        received_bytes: completed.total_size || completed.received_bytes,
+        chunks: [],
+      });
       abortControllers.delete(task.id);
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return;
       }
       const message = err instanceof Error ? err.message : '下载失败';
-      updateDownloadTask(task.id, { status: 'failed', error: message });
+      const failed = downloads.value.find((t) => t.id === task.id);
+      if (failed) {
+        failed.chunks = [];
+      }
+      updateDownloadTask(task.id, { status: 'failed', error: message, received_bytes: 0, progress: 0 });
       abortControllers.delete(task.id);
     }
   }
@@ -433,23 +475,45 @@ export const useTransferStore = defineStore('transfer', () => {
       file_size: fileSize,
       status: 'pending',
       progress: 0,
+      received_bytes: 0,
+      total_size: fileSize,
+      supports_range: false,
+      chunks: [],
     };
 
     downloads.value.push(task);
-    executeDownload(task);
+    executeDownload(task.id);
   }
 
   function removeDownloadTask(taskId: string): void {
+    abortController(taskId);
+    const task = downloads.value.find((t) => t.id === taskId);
+    if (task) {
+      task.chunks = [];
+    }
     downloads.value = downloads.value.filter((t) => t.id !== taskId);
   }
 
   function cancelDownloadTask(taskId: string): void {
     abortController(taskId);
+    const task = downloads.value.find((t) => t.id === taskId);
+    if (task) {
+      clearDownloadRuntime(task);
+    }
     updateDownloadTask(taskId, { status: 'cancelled', error: '已取消' });
   }
 
   function pauseDownloadTask(taskId: string): void {
+    const task = downloads.value.find((t) => t.id === taskId);
     abortController(taskId);
+    if (!task) return;
+
+    if (!task.supports_range) {
+      clearDownloadRuntime(task);
+      updateDownloadTask(taskId, { status: 'paused', error: '该文件不支持断点续传，继续时将重新下载' });
+      return;
+    }
+
     updateDownloadTask(taskId, { status: 'paused' });
   }
 
@@ -457,15 +521,22 @@ export const useTransferStore = defineStore('transfer', () => {
     const task = downloads.value.find((t) => t.id === taskId);
     if (!task || task.status !== 'paused') return;
 
-    updateDownloadTask(taskId, { status: 'pending', progress: 0 });
+    if (!task.supports_range && task.received_bytes > 0) {
+      clearDownloadRuntime(task);
+    }
+
+    updateDownloadTask(taskId, { status: 'pending', error: undefined });
     getOrCreateController(taskId);
-    executeDownload({ ...task, status: 'pending', progress: 0 });
+    executeDownload(taskId);
   }
 
   function clearCompletedTasks(): void {
     uploads.value = uploads.value.filter(
       (t) => t.status !== 'completed' && t.status !== 'cancelled',
     );
+    downloads.value
+      .filter((t) => t.status === 'completed' || t.status === 'cancelled')
+      .forEach((t) => { t.chunks = []; });
     downloads.value = downloads.value.filter(
       (t) => t.status !== 'completed' && t.status !== 'cancelled',
     );
@@ -478,6 +549,9 @@ export const useTransferStore = defineStore('transfer', () => {
   }
 
   function clearCompletedDownloads(): void {
+    downloads.value
+      .filter((t) => t.status === 'completed' || t.status === 'cancelled' || t.status === 'failed')
+      .forEach((t) => { t.chunks = []; });
     downloads.value = downloads.value.filter(
       (t) => t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'failed',
     );

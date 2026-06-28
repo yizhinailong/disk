@@ -1,6 +1,20 @@
+import axios from 'axios'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios'
+import type { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { ApiError } from '../client'
+
+function createStorage(initial: Record<string, string> = {}) {
+  let store = { ...initial }
+  return {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => { store[key] = value },
+    removeItem: (key: string) => { delete store[key] },
+    clear: () => { store = {} },
+    get length() { return Object.keys(store).length },
+    key: (_index: number) => null,
+    store,
+  }
+}
 
 describe('ApiError', () => {
   it('creates error with code and message', () => {
@@ -27,18 +41,10 @@ describe('ApiError', () => {
 })
 
 describe('token storage helpers', () => {
-  let store: Record<string, string>
+  let storage: ReturnType<typeof createStorage>
 
   beforeEach(() => {
-    store = {}
-    const storage = {
-      getItem: (key: string) => store[key] ?? null,
-      setItem: (key: string, value: string) => { store[key] = value },
-      removeItem: (key: string) => { delete store[key] },
-      clear: () => { store = {} },
-      get length() { return Object.keys(store).length },
-      key: (_index: number) => null,
-    }
+    storage = createStorage()
     vi.stubGlobal('localStorage', storage)
   })
 
@@ -49,12 +55,12 @@ describe('token storage helpers', () => {
   it('setTokens stores access and refresh tokens', async () => {
     const { setTokens } = await importClient()
     setTokens('my-access', 'my-refresh')
-    expect(store['access_token']).toBe('my-access')
-    expect(store['refresh_token']).toBe('my-refresh')
+    expect(storage.store['access_token']).toBe('my-access')
+    expect(storage.store['refresh_token']).toBe('my-refresh')
   })
 
   it('getAccessToken returns stored token', async () => {
-    store['access_token'] = 'stored-at'
+    storage.store['access_token'] = 'stored-at'
     const { getAccessToken } = await importClient()
     expect(getAccessToken()).toBe('stored-at')
   })
@@ -65,32 +71,29 @@ describe('token storage helpers', () => {
   })
 
   it('getRefreshToken returns stored token', async () => {
-    store['refresh_token'] = 'stored-rt'
+    storage.store['refresh_token'] = 'stored-rt'
     const { getRefreshToken } = await importClient()
     expect(getRefreshToken()).toBe('stored-rt')
   })
 
   it('clearTokens removes both tokens', async () => {
-    store['access_token'] = 'at'
-    store['refresh_token'] = 'rt'
+    storage.store['access_token'] = 'at'
+    storage.store['refresh_token'] = 'rt'
     const { clearTokens } = await importClient()
     clearTokens()
-    expect(store['access_token']).toBeUndefined()
-    expect(store['refresh_token']).toBeUndefined()
+    expect(storage.store['access_token']).toBeUndefined()
+    expect(storage.store['refresh_token']).toBeUndefined()
   })
 })
 
 describe('apiClient interceptors', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('request interceptor adds Bearer token when available', async () => {
-    const store: Record<string, string> = { access_token: 'test-token' }
-    vi.stubGlobal('localStorage', {
-      getItem: (key: string) => store[key] ?? null,
-      setItem: (key: string, value: string) => { store[key] = value },
-      removeItem: (key: string) => { delete store[key] },
-      clear: () => Object.keys(store).forEach((k) => delete store[k]),
-      get length() { return Object.keys(store).length },
-      key: () => null,
-    })
+    const storage = createStorage({ access_token: 'test-token' })
+    vi.stubGlobal('localStorage', storage)
 
     const mod = await import('../client?cachebust=' + Date.now())
     const config: Partial<InternalAxiosRequestConfig> = { headers: { Authorization: '' } }
@@ -128,6 +131,43 @@ describe('apiClient interceptors', () => {
 
     const handlers = mod.apiClient.interceptors.response as { handlers: Array<{ fulfilled: (response: AxiosResponse) => Promise<unknown> }> }
     await expect(handlers.handlers[0].fulfilled(response)).rejects.toThrow('用户名或密码错误')
+  })
+
+  it('rejects queued requests when shared token refresh fails', async () => {
+    const storage = createStorage({ access_token: 'expired-at', refresh_token: 'expired-rt' })
+    vi.stubGlobal('localStorage', storage)
+    const mod = await import('../client?cachebust=' + Date.now())
+    const handlers = mod.apiClient.interceptors.response as {
+      handlers: Array<{
+        rejected: (error: AxiosError) => Promise<unknown>
+      }>
+    }
+
+    let rejectRefresh!: (error: Error) => void
+    const refreshPromise = new Promise<never>((_resolve, reject) => {
+      rejectRefresh = reject
+    })
+    vi.spyOn(axios, 'post').mockReturnValueOnce(refreshPromise)
+
+    const first = handlers.handlers[0].rejected({
+      config: { headers: {} },
+      response: { status: 401, data: { code: 40108, message: 'expired', data: null } },
+      message: 'Unauthorized',
+    } as AxiosError)
+    const second = handlers.handlers[0].rejected({
+      config: { headers: {} },
+      response: { status: 401, data: { code: 40108, message: 'expired', data: null } },
+      message: 'Unauthorized',
+    } as AxiosError)
+
+    rejectRefresh(new Error('refresh failed'))
+
+    await expect(first).rejects.toMatchObject({ code: 40108, message: '登录已过期，请重新登录' })
+    await expect(second).rejects.toMatchObject({ code: 40108, message: '登录已过期，请重新登录' })
+    expect(storage.store['access_token']).toBeUndefined()
+    expect(storage.store['refresh_token']).toBeUndefined()
+    expect(axios.post).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
   })
 })
 
