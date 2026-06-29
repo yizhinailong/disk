@@ -403,8 +403,9 @@ export const useTransferStore = defineStore('transfer', () => {
       updateDownloadTask(task.id, { status: 'downloading', progress: 0 });
 
       const { startDownload } = useDownload();
-      const { blob, filename } = await startDownload(Number(task.file_id), {
+      const { blob, filename, savedToDisk } = await startDownload(Number(task.file_id), {
         signal,
+        saveToDisk: true,
         onProgress: (_loaded, _total, progress) => {
           updateDownloadTask(task.id, { progress: Math.min(progress, 99) });
         },
@@ -412,7 +413,10 @@ export const useTransferStore = defineStore('transfer', () => {
 
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
-      saveBlobAsFile(blob, filename);
+      if (!savedToDisk) {
+        if (!blob) throw new Error('下载数据为空');
+        saveBlobAsFile(blob, filename);
+      }
       updateDownloadTask(task.id, { status: 'completed', progress: 100 });
       abortControllers.delete(task.id);
     } catch (err: unknown) {

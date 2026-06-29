@@ -22,6 +22,102 @@
 
 namespace disk::desktop::managers {
 
+    namespace {
+
+        constexpr auto RESUME_STATE_SUFFIX = ".download.json";
+
+        auto make_download_error(
+            const QString& category,
+            const QString& message,
+            bool retryable = true,
+            const QString& action = "retry"
+        ) -> ApiError {
+            ApiError err;
+            err.code = 0;
+            err.family = "file";
+            err.category = category;
+            err.message = message;
+            err.retryable = retryable;
+            err.action = action;
+            return err;
+        }
+
+        auto resume_state_path(const QString& target_path) -> QString {
+            return target_path + RESUME_STATE_SUFFIX;
+        }
+
+        auto build_remote_identity(const DownloadTask& task) -> QString {
+            const QString domain = task.auth_domain.isEmpty() ? QStringLiteral("owner") : task.auth_domain;
+            const QString share = task.share_id.value_or(QString{});
+            const QString hash = task.file_hash.value_or(QString{});
+            return QStringLiteral("%1:%2:%3:%4:%5")
+                .arg(domain, share, QString::number(task.file_id), QString::number(task.file_size), hash);
+        }
+
+        auto load_resume_state(const QString& target_path) -> std::optional<QJsonObject> {
+            QFile file(resume_state_path(target_path));
+
+            if (!file.open(QIODevice::ReadOnly)) {
+                return std::nullopt;
+            }
+
+            QJsonParseError error;
+            const auto doc = QJsonDocument::fromJson(file.readAll(), &error);
+            if (error.error != QJsonParseError::NoError || !doc.isObject()) {
+                return std::nullopt;
+            }
+            return doc.object();
+        }
+
+        void persist_resume_state(const DownloadTask& task) {
+            if (task.target_path.isEmpty()) {
+                return;
+            }
+
+            QFile file(resume_state_path(task.target_path));
+            const QFileInfo info(file);
+            QDir().mkpath(info.absolutePath());
+            if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                return;
+            }
+
+            QJsonObject json = task.ToJson();
+            json["remote_identity"] = task.remote_identity;
+            json["expected_size"] = static_cast<double>(task.expected_size);
+            json["local_partial_size"] = static_cast<double>(task.local_partial_size);
+            if (task.integrity_hash.has_value()) {
+                json["integrity_hash"] = *task.integrity_hash;
+            }
+            file.write(QJsonDocument(json).toJson(QJsonDocument::Compact));
+        }
+
+        void remove_resume_state(const DownloadTask& task) {
+            if (!task.target_path.isEmpty()) {
+                QFile::remove(resume_state_path(task.target_path));
+            }
+        }
+
+        auto persisted_state_matches(
+            const QJsonObject& json,
+            const DownloadTask& task,
+            quint64 local_size
+        ) -> bool {
+            if (json.value("remote_identity").toString() != task.remote_identity) {
+                return false;
+            }
+            if (static_cast<quint64>(json.value("expected_size").toDouble(0)) != task.expected_size) {
+                return false;
+            }
+            if (static_cast<quint64>(json.value("local_partial_size").toDouble(0)) != local_size) {
+                return false;
+            }
+            const QString expected_hash = task.integrity_hash.value_or(QString{});
+            const QString saved_hash = json.value("integrity_hash").toString();
+            return saved_hash == expected_hash;
+        }
+
+    } // namespace
+
     // ── UploadState / DownloadState string helpers ──
 
     auto ToString(UploadState state) -> QString {
@@ -177,7 +273,8 @@ namespace disk::desktop::managers {
         quint64 file_id,
         const QString& target_path,
         const QString& filename,
-        quint64 file_size
+        quint64 file_size,
+        const QString& file_hash
     ) {
         auto task_id = CreateDownloadTask(
             file_id,
@@ -188,9 +285,20 @@ namespace disk::desktop::managers {
             share_id
         );
         if (!task_id.isEmpty()) {
-            PreparePartialFileForRange(task_id);
-            SetDownloadState(task_id, DownloadState::Ready);
-            StartDownloadTransfer(task_id);
+            int row = m_download_model->FindTask(task_id);
+            if (row >= 0) {
+                auto task = *m_download_model->GetTask(row);
+                task.file_hash = file_hash.isEmpty() ? std::nullopt : std::optional<QString>(file_hash);
+                task.integrity_hash = task.file_hash;
+                task.expected_size = task.file_size;
+                task.remote_identity = build_remote_identity(task);
+                task.supports_range = true;
+                m_download_model->UpdateTask(task_id, task);
+            }
+            if (PreparePartialFileForRange(task_id)) {
+                SetDownloadState(task_id, DownloadState::Ready);
+                StartDownloadTransfer(task_id);
+            }
         }
     }
 
@@ -227,9 +335,10 @@ namespace disk::desktop::managers {
             FetchDownloadMetadata(task_id);
         } else {
             // Visitor: recalculate offset and go
-            PreparePartialFileForRange(task_id);
-            SetDownloadState(task_id, DownloadState::Ready);
-            StartDownloadTransfer(task_id);
+            if (PreparePartialFileForRange(task_id)) {
+                SetDownloadState(task_id, DownloadState::Ready);
+                StartDownloadTransfer(task_id);
+            }
         }
     }
 
@@ -246,6 +355,7 @@ namespace disk::desktop::managers {
 
         if (!task.target_path.isEmpty()) {
             QFile::remove(task.target_path);
+            remove_resume_state(task);
         }
 
         SetDownloadState(task_id, DownloadState::Cancelled);
@@ -274,9 +384,10 @@ namespace disk::desktop::managers {
         if (task.auth_domain == "owner") {
             FetchDownloadMetadata(task_id);
         } else {
-            PreparePartialFileForRange(task_id);
-            SetDownloadState(task_id, DownloadState::Ready);
-            StartDownloadTransfer(task_id);
+            if (PreparePartialFileForRange(task_id)) {
+                SetDownloadState(task_id, DownloadState::Ready);
+                StartDownloadTransfer(task_id);
+            }
         }
     }
 
@@ -1157,22 +1268,16 @@ namespace disk::desktop::managers {
         task.file_hash = data.value("file_hash").toString();
         task.mime_type = data.value("mime_type").toString();
         task.supports_range = data.value("supports_range").toBool(false);
-
-        // §7.3: Check for partial file to determine full vs range
-        QFileInfo partial_info(task.target_path);
-        if (partial_info.exists() && partial_info.size() > 0 &&
-            task.supports_range) {
-            task.transfer_mode = "range";
-            task.range_start = static_cast<quint64>(partial_info.size());
-            task.received_bytes = task.range_start.value_or(0);
-        } else {
-            task.transfer_mode = "full";
-            if (partial_info.exists()) {
-                QFile::remove(task.target_path);
-            }
-        }
+        task.expected_size = task.file_size;
+        task.integrity_hash = task.file_hash;
+        task.remote_identity = build_remote_identity(task);
+        task.verification_status = {};
 
         m_download_model->UpdateTask(task_id, task);
+        if (!PreparePartialFileForRange(task_id)) {
+            return;
+        }
+
         SetDownloadState(task_id, DownloadState::Ready);
         StartDownloadTransfer(task_id);
     }
@@ -1227,9 +1332,20 @@ namespace disk::desktop::managers {
 
         auto reply = m_network_client->Get(url, headers);
 
+        const int status_code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (task.transfer_mode == "range" && status_code > 0 && status_code != 206) {
+            reply->deleteLater();
+            file->close();
+            delete file;
+            RestartDownload(task_id, "服务器拒绝断点续传，已重新下载");
+            SetDownloadState(task_id, DownloadState::Ready);
+            StartDownloadTransfer(task_id);
+            return;
+        }
+
         m_active_downloads[task_id].reply = reply;
         m_active_downloads[task_id].file = file;
-        m_active_downloads[task_id].bytes_received_at_start = task.received_bytes;
+        m_active_downloads[task_id].bytes_received_at_start = task.transfer_mode == "range" ? task.received_bytes : 0;
         m_active_downloads[task_id].download_start_time =
             QDateTime::currentSecsSinceEpoch();
 
@@ -1265,8 +1381,9 @@ namespace disk::desktop::managers {
             return;
         }
         auto task = *m_download_model->GetTask(row);
-        task.received_bytes = active.bytes_received_at_start +
-                              static_cast<quint64>(active.file->pos());
+        task.received_bytes += static_cast<quint64>(data.size());
+        task.local_partial_size = task.received_bytes;
+        persist_resume_state(task);
         m_download_model->UpdateTask(task_id, task);
 
         if (task.file_size > 0) {
@@ -1282,6 +1399,10 @@ namespace disk::desktop::managers {
         }
 
         auto& active = m_active_downloads[task_id];
+        if (active.reply && active.file && active.reply->bytesAvailable() > 0) {
+            HandleDownloadData(task_id);
+        }
+
         auto* reply = active.reply;
         auto* file = active.file;
 
@@ -1304,19 +1425,25 @@ namespace disk::desktop::managers {
         // §7.4: Handle 416 Range Not Satisfiable
         int status =
             reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (status == 416) {
-            int row = m_download_model->FindTask(task_id);
-            if (row >= 0) {
-                auto task = *m_download_model->GetTask(row);
-                QFile::remove(task.target_path);
-                task.transfer_mode = "full";
-                task.range_start = std::nullopt;
-                task.received_bytes = 0;
-                m_download_model->UpdateTask(task_id, task);
+        int row = m_download_model->FindTask(task_id);
+        if (row >= 0) {
+            const auto task = *m_download_model->GetTask(row);
+            if (status == 416) {
+                if (task.transfer_mode == "range") {
+                    RestartDownload(task_id, "服务器拒绝断点续传，已重新下载");
+                    SetDownloadState(task_id, DownloadState::Ready);
+                    StartDownloadTransfer(task_id);
+                    return;
+                }
+                FailDownload(task_id, make_download_error("RangeRejected", "服务器拒绝下载范围请求", false, "restart_download"));
+                return;
             }
-            SetDownloadState(task_id, DownloadState::FetchingMetadata);
-            FetchDownloadMetadata(task_id);
-            return;
+            if (task.transfer_mode == "range" && status > 0 && status != 206) {
+                RestartDownload(task_id, "服务器未返回断点续传内容，已重新下载");
+                SetDownloadState(task_id, DownloadState::Ready);
+                StartDownloadTransfer(task_id);
+                return;
+            }
         }
 
         if (reply->error() != QNetworkReply::NoError) {
@@ -1332,11 +1459,8 @@ namespace disk::desktop::managers {
         }
 
         // Download complete
-        int row = m_download_model->FindTask(task_id);
-        if (row >= 0) {
-            auto task = *m_download_model->GetTask(row);
-            task.received_bytes = task.file_size;
-            m_download_model->UpdateTask(task_id, task);
+        if (!VerifyCompletedDownload(task_id)) {
+            return;
         }
 
         SetDownloadState(task_id, DownloadState::Completed);
@@ -1380,6 +1504,28 @@ namespace disk::desktop::managers {
         }
         m_active_downloads.remove(task_id);
         emit taskError(task_id, error.message);
+    }
+
+    void TransferManager::RestartDownload(const QString& task_id, const QString& detail) {
+        int row = m_download_model->FindTask(task_id);
+        if (row < 0) {
+            return;
+        }
+
+        auto task = *m_download_model->GetTask(row);
+        if (!task.target_path.isEmpty()) {
+            QFile::remove(task.target_path);
+            remove_resume_state(task);
+        }
+        task.transfer_mode = "full";
+        task.range_start = std::nullopt;
+        task.range_end = std::nullopt;
+        task.received_bytes = 0;
+        task.local_partial_size = 0;
+        task.status_detail = detail;
+        task.verification_status = {};
+        persist_resume_state(task);
+        m_download_model->UpdateTask(task_id, task);
     }
 
     void TransferManager::RetryOrFailDownload(
@@ -1428,9 +1574,10 @@ namespace disk::desktop::managers {
                 if (task.auth_domain == "owner") {
                     FetchDownloadMetadata(task_id);
                 } else {
-                    PreparePartialFileForRange(task_id);
-                    SetDownloadState(task_id, DownloadState::Ready);
-                    StartDownloadTransfer(task_id);
+                    if (PreparePartialFileForRange(task_id)) {
+                        SetDownloadState(task_id, DownloadState::Ready);
+                        StartDownloadTransfer(task_id);
+                    }
                 }
             });
         } else {
@@ -1438,27 +1585,117 @@ namespace disk::desktop::managers {
         }
     }
 
-    void TransferManager::PreparePartialFileForRange(const QString& task_id) {
+    auto TransferManager::PreparePartialFileForRange(const QString& task_id) -> bool {
         int row = m_download_model->FindTask(task_id);
         if (row < 0) {
-            return;
+            return false;
         }
         auto task = *m_download_model->GetTask(row);
+        if (task.expected_size == 0) {
+            task.expected_size = task.file_size;
+        }
+        if (task.remote_identity.isEmpty()) {
+            task.remote_identity = build_remote_identity(task);
+        }
+        if (!task.integrity_hash.has_value()) {
+            task.integrity_hash = task.file_hash;
+        }
 
         QFileInfo info(task.target_path);
-        if (info.exists() && info.size() > 0 && task.supports_range) {
-            task.transfer_mode = "range";
-            task.range_start = static_cast<quint64>(info.size());
-            task.received_bytes = task.range_start.value_or(0);
-        } else {
+        const bool has_partial = info.exists() && info.size() > 0;
+        if (!has_partial) {
             task.transfer_mode = "full";
-            if (info.exists()) {
-                QFile::remove(task.target_path);
-            }
             task.range_start = std::nullopt;
+            task.range_end = std::nullopt;
             task.received_bytes = 0;
+            task.local_partial_size = 0;
+            task.status_detail = "重新开始下载";
+            persist_resume_state(task);
+            m_download_model->UpdateTask(task_id, task);
+            return true;
         }
+
+        const auto local_size = static_cast<quint64>(info.size());
+        if (task.expected_size > 0 && local_size > task.expected_size) {
+            RestartDownload(task_id, "本地部分文件大于远端文件，已重新下载");
+            return true;
+        }
+
+        const auto saved_state = load_resume_state(task.target_path);
+        const bool can_resume = task.supports_range && saved_state.has_value() &&
+                                local_size < task.expected_size &&
+                                persisted_state_matches(*saved_state, task, local_size);
+        if (can_resume) {
+            task.transfer_mode = "range";
+            task.range_start = local_size;
+            task.range_end = task.expected_size > 0 ? std::optional<quint64>(task.expected_size - 1) : std::nullopt;
+            task.received_bytes = local_size;
+            task.local_partial_size = local_size;
+            task.status_detail = "从上次中断处继续下载";
+            persist_resume_state(task);
+            m_download_model->UpdateTask(task_id, task);
+            return true;
+        }
+
+        if (task.supports_range && !saved_state.has_value()) {
+            RestartDownload(task_id, "缺少可信的断点续传记录，已重新下载");
+            return true;
+        }
+
+        RestartDownload(task_id, task.supports_range ? "断点续传元数据不匹配，已重新下载" : "服务器不支持断点续传，已重新下载");
+        return true;
+    }
+
+    auto TransferManager::VerifyCompletedDownload(const QString& task_id) -> bool {
+        int row = m_download_model->FindTask(task_id);
+        if (row < 0) {
+            return false;
+        }
+
+        auto task = *m_download_model->GetTask(row);
+        const QString previous_detail = task.status_detail;
+        const QFileInfo info(task.target_path);
+        const quint64 actual_size = info.exists() ? static_cast<quint64>(info.size()) : 0;
+        const quint64 expected_size = task.expected_size > 0 ? task.expected_size : task.file_size;
+        if (expected_size > 0 && actual_size != expected_size) {
+            task.received_bytes = actual_size;
+            task.local_partial_size = actual_size;
+            task.verification_status = "failed";
+            task.status_detail = QString("下载校验失败：文件大小不匹配（%1/%2 字节）")
+                                     .arg(actual_size)
+                                     .arg(expected_size);
+            m_download_model->UpdateTask(task_id, task);
+            FailDownload(task_id, make_download_error("VerificationFailed", task.status_detail, true, "restart_download"));
+            return false;
+        }
+
+        if (task.integrity_hash.has_value() && !task.integrity_hash->isEmpty()) {
+            const auto actual_hash = ComputeFileMd5(task.target_path);
+            if (actual_hash.compare(*task.integrity_hash, Qt::CaseInsensitive) != 0) {
+                task.received_bytes = actual_size;
+                task.local_partial_size = actual_size;
+                task.verification_status = "failed";
+                task.status_detail = "下载校验失败：文件哈希不匹配";
+                m_download_model->UpdateTask(task_id, task);
+                FailDownload(task_id, make_download_error("VerificationFailed", task.status_detail, true, "restart_download"));
+                return false;
+            }
+            task.verification_status = "verified_hash";
+            task.status_detail = previous_detail.isEmpty()
+                ? QStringLiteral("下载完成，已通过大小和哈希校验")
+                : QStringLiteral("%1；下载完成，已通过大小和哈希校验").arg(previous_detail);
+        } else {
+            task.verification_status = "verified_size_only";
+            task.status_detail = previous_detail.isEmpty()
+                ? QStringLiteral("下载完成，已通过大小校验；未提供哈希信息")
+                : QStringLiteral("%1；下载完成，已通过大小校验；未提供哈希信息").arg(previous_detail);
+        }
+
+        task.received_bytes = actual_size;
+        task.local_partial_size = actual_size;
         m_download_model->UpdateTask(task_id, task);
+        remove_resume_state(task);
+        return true;
     }
 
     // ── Utility ──

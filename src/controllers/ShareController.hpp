@@ -87,6 +87,12 @@ namespace disk::share {
             "disk::filters::ShareAuthFilter"
         );
         ADD_METHOD_TO(
+            ShareController::DownloadInfo,
+            "/api/share/download/{share_id}/{file_id}/info",
+            drogon::Get,
+            "disk::filters::ShareAuthFilter"
+        );
+        ADD_METHOD_TO(
             ShareController::Download,
             "/api/share/download/{share_id}/{file_id}",
             drogon::Get,
@@ -163,6 +169,10 @@ namespace disk::share {
          */
         [[nodiscard]]
         auto Browse(drogon::HttpRequestPtr request, std::string share_id)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto DownloadInfo(drogon::HttpRequestPtr request, std::string share_id, std::string file_id)
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         /**

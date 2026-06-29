@@ -927,6 +927,7 @@ public:
 
     Q_INVOKABLE void StartUpload(const QString &, quint64) {}
     Q_INVOKABLE void StartDownload(quint64, const QString &, const QString &) {}
+    Q_INVOKABLE void StartShareDownload(const QString &, quint64, const QString &, const QString &, quint64, const QString &) {}
 
 signals:
     void taskError(const QString &task_id, const QString &message);

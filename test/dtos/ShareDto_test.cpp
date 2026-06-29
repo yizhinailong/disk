@@ -139,6 +139,8 @@ TEST(ShareFile, ToJsonCorrectFields) {
     file.name = "document.pdf";
     file.type = "file";
     file.size = 102400;
+    file.file_hash = "abc123";
+    file.supports_range = true;
 
     auto json = file.ToJson();
 
@@ -146,6 +148,8 @@ TEST(ShareFile, ToJsonCorrectFields) {
     EXPECT_EQ(json["name"].asString(), "document.pdf");
     EXPECT_EQ(json["type"].asString(), "file");
     EXPECT_EQ(json["size"].asUInt64(), 102400);
+    EXPECT_EQ(json["file_hash"].asString(), "abc123");
+    EXPECT_TRUE(json["supports_range"].asBool());
 }
 
 TEST(ShareFile, ToJsonFolder) {

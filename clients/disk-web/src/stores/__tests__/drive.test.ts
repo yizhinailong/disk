@@ -73,7 +73,44 @@ describe('useDriveStore', () => {
       expect(store.currentFolderId).toBe(5)
       expect(store.isRoot).toBe(false)
       expect(store.breadcrumbs).toEqual(breadcrumb)
-      expect(fileApi.listFiles).toHaveBeenCalled()
+      expect(fileApi.listFiles).toHaveBeenCalledWith(expect.objectContaining({ parent_id: 5 }))
+    })
+
+    it('keeps list and breadcrumb consistent for tree selection, breadcrumb navigation, and drill-down', async () => {
+      vi.mocked(fileApi.listFiles).mockResolvedValueOnce({
+        items: [{ id: 11, name: 'design.md', type: 'file', size: 10, mime_type: 'text/markdown', created_at: '2024-01-01', updated_at: '2024-01-01' }],
+        pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+      }).mockResolvedValueOnce({
+        items: [{ id: 21, name: 'nested', type: 'folder', item_count: 0, created_at: '2024-01-01', updated_at: '2024-01-02' }],
+        pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+      }).mockResolvedValueOnce({
+        items: [{ id: 31, name: 'leaf.txt', type: 'file', size: 1, mime_type: 'text/plain', created_at: '2024-01-01', updated_at: '2024-01-03' }],
+        pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+      })
+      vi.mocked(folderApi.getBreadcrumb).mockResolvedValueOnce({
+        path: [{ id: 5, name: 'Docs' }],
+      }).mockResolvedValueOnce({
+        path: [{ id: 5, name: 'Docs' }, { id: 9, name: 'Specs' }],
+      }).mockResolvedValueOnce({
+        path: [{ id: 5, name: 'Docs' }, { id: 9, name: 'Specs' }, { id: 21, name: 'Nested' }],
+      })
+
+      const store = useDriveStore()
+
+      await store.navigateToFolder(5)
+      expect(store.currentFolderId).toBe(5)
+      expect(store.files[0]?.name).toBe('design.md')
+      expect(store.breadcrumbs.map((item) => item.id)).toEqual([5])
+
+      await store.navigateToFolder(9)
+      expect(store.currentFolderId).toBe(9)
+      expect(store.files[0]?.id).toBe(21)
+      expect(store.breadcrumbs.map((item) => item.id)).toEqual([5, 9])
+
+      await store.navigateToFolder(21)
+      expect(store.currentFolderId).toBe(21)
+      expect(store.files[0]?.name).toBe('leaf.txt')
+      expect(store.breadcrumbs.map((item) => item.id)).toEqual([5, 9, 21])
     })
   })
 
@@ -199,6 +236,35 @@ describe('useDriveStore', () => {
       const store = useDriveStore()
       await store.fetchFolderTree()
       expect(store.folderTree).toEqual({ id: 0, name: 'Root', children: [{ id: 1, name: 'Docs', children: [] }] })
+    })
+
+    it('keeps folder tree, list, and breadcrumb consistent after hierarchy refresh', async () => {
+      vi.mocked(fileApi.listFiles).mockResolvedValue({
+        items: [{ id: 9, name: 'nested.txt', type: 'file', size: 12, mime_type: 'text/plain', created_at: '2024-01-01', updated_at: '2024-01-01' }],
+        pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+      })
+      vi.mocked(folderApi.getBreadcrumb).mockResolvedValue({
+        path: [{ id: 5, name: 'Docs' }, { id: 9, name: 'Nested' }],
+      })
+      vi.mocked(folderApi.getFolderTree).mockResolvedValue({
+        id: 0,
+        name: 'Root',
+        children: [{ id: 5, name: 'Docs', children: [{ id: 9, name: 'Nested', children: [] }] }],
+      })
+
+      const store = useDriveStore()
+      store.currentFolderId = 9
+      store.selectedIds = new Set([1])
+
+      await store.refreshCurrentView()
+
+      expect(fileApi.listFiles).toHaveBeenCalledWith(expect.objectContaining({ parent_id: 9 }))
+      expect(folderApi.getBreadcrumb).toHaveBeenCalledWith(9)
+      expect(folderApi.getFolderTree).toHaveBeenCalled()
+      expect(store.files).toHaveLength(1)
+      expect(store.selectedIds.size).toBe(0)
+      expect(store.breadcrumbs.map((item) => item.id)).toEqual([5, 9])
+      expect(store.folderTree?.children[0]?.children?.[0]?.id).toBe(9)
     })
   })
 

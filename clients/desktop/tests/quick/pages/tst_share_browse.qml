@@ -38,4 +38,15 @@ TestCase {
         verify(source.indexOf('shareManager.saveShareItems(root.shareId, ids.fileIds, ids.folderIds, "0")') === -1,
                "Does not hard-code root destination")
     }
+
+    function test_share_browse_passes_hash_metadata_to_downloads() {
+        var source = readShareBrowseSource()
+
+        verify(source.indexOf("pendingDownloadFileHash") !== -1,
+               "Keeps available visitor file hash for integrity verification")
+        verify(source.indexOf("model.hash || \"\"") !== -1,
+               "Reads hash metadata from browse model when opening download dialog")
+        verify(source.indexOf("root.pendingDownloadFileHash") !== -1,
+               "Passes hash metadata into StartShareDownload")
+    }
 }

@@ -127,6 +127,10 @@
               详情
             </el-button>
 
+            <el-button text type="primary" size="small" @click="openStorageDialog(row)">
+              空间
+            </el-button>
+
             <el-button text type="danger" size="small" @click="onDelete(row)">
               删除
             </el-button>
@@ -191,6 +195,59 @@
         </el-descriptions>
       </template>
     </el-dialog>
+
+    <!-- 存储空间编辑对话框 -->
+    <el-dialog
+      v-model="storageDialogVisible"
+      title="修改用户空间"
+      width="460px"
+      destroy-on-close
+    >
+      <template v-if="storageTarget">
+        <el-descriptions :column="1" border class="admin-users-page__storage-summary">
+          <el-descriptions-item label="用户">
+            {{ storageTarget.username }}
+          </el-descriptions-item>
+          <el-descriptions-item label="已用空间">
+            <SizeDisplay :bytes="storageTarget.storage_used" />
+          </el-descriptions-item>
+          <el-descriptions-item label="当前配额">
+            <SizeDisplay :bytes="storageTarget.storage_quota" />
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <el-form label-position="top">
+          <el-form-item
+            label="新的可用空间（GB）"
+            :error="storageFormError"
+          >
+            <el-input-number
+              v-model="storageAvailableSpaceG"
+              :min="0"
+              :max="storageMaxAvailableSpaceG"
+              :precision="0"
+              :step="1"
+              controls-position="right"
+              class="admin-users-page__storage-input"
+            />
+            <div class="admin-users-page__storage-help">
+              后端会将配额设置为「已用 + 预留 + 可用空间」。
+            </div>
+          </el-form-item>
+        </el-form>
+      </template>
+      <template #footer>
+        <el-button @click="storageDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="storageSubmitting"
+          :disabled="Boolean(storageFormError)"
+          @click="submitStorageChange"
+        >
+          保存
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -211,6 +268,10 @@ const searchText = ref('');
 const filterStatus = ref<number | undefined>(undefined);
 const filterRole = ref<number | undefined>(undefined);
 const detailVisible = ref(false);
+const storageDialogVisible = ref(false);
+const storageSubmitting = ref(false);
+const storageTarget = ref<AdminUserItem | null>(null);
+const storageAvailableSpaceG = ref(0);
 const currentPage = ref(1);
 const currentPageSize = ref(20);
 
@@ -218,6 +279,22 @@ const pageState = computed<'loading' | 'empty' | 'content'>(() => {
   if (store.loading) return 'loading';
   if (store.users.length === 0) return 'empty';
   return 'content';
+});
+
+const storageMaxAvailableSpaceG = computed(() => Number.MAX_SAFE_INTEGER);
+
+const storageFormError = computed(() => {
+  if (!storageTarget.value) return '';
+  if (!Number.isInteger(storageAvailableSpaceG.value)) {
+    return '可用空间必须是整数 GB';
+  }
+  if (storageAvailableSpaceG.value < 0) {
+    return '可用空间不能小于 0';
+  }
+  if (storageAvailableSpaceG.value > storageMaxAvailableSpaceG.value) {
+    return '可用空间过大';
+  }
+  return '';
 });
 
 function statusLabel(status: number): string {
@@ -301,6 +378,44 @@ async function showDetail(userId: number): Promise<void> {
   }
 }
 
+function bytesToAvailableSpaceG(row: AdminUserItem): number {
+  const reserved = row.storage_reserved ?? 0;
+  const usedAndReserved = row.storage_used + reserved;
+  const availableBytes = Math.max(row.storage_quota - usedAndReserved, 0);
+  return Math.floor(availableBytes / (1024 ** 3));
+}
+
+function openStorageDialog(row: AdminUserItem): void {
+  storageTarget.value = row;
+  storageAvailableSpaceG.value = bytesToAvailableSpaceG(row);
+  storageDialogVisible.value = true;
+}
+
+async function submitStorageChange(): Promise<void> {
+  if (!storageTarget.value || storageFormError.value) return;
+
+  storageSubmitting.value = true;
+  try {
+    const updated = await store.changeUserAvailableSpace(
+      storageTarget.value.id,
+      storageAvailableSpaceG.value,
+    );
+    storageTarget.value = {
+      ...storageTarget.value,
+      storage_quota: updated.storage_quota,
+      storage_used: updated.storage_used,
+      storage_reserved: updated.storage_reserved,
+    };
+    storageDialogVisible.value = false;
+    ElMessage.success(`用户 ${updated.username} 空间已修改`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '修改用户空间失败';
+    ElMessage.error(message);
+  } finally {
+    storageSubmitting.value = false;
+  }
+}
+
 async function onDelete(row: AdminUserItem): Promise<void> {
   try {
     await ElMessageBox.confirm(
@@ -365,5 +480,19 @@ onMounted(() => {
 .admin-users-page__email {
   color: var(--el-text-color-secondary);
   font-size: 13px;
+}
+
+.admin-users-page__storage-summary {
+  margin-bottom: 16px;
+}
+
+.admin-users-page__storage-input {
+  width: 100%;
+}
+
+.admin-users-page__storage-help {
+  margin-top: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 </style>

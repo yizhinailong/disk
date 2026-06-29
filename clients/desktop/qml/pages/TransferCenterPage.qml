@@ -245,6 +245,7 @@ Page {
                                 }
 
                                 text: statusText(model.status) +
+                                    (model.statusDetail ? " — " + model.statusDetail : "") +
                                     (model.error && model.error.message
                                         ? " — " + model.error.message : "")
                                 color: statusColor(model.status)

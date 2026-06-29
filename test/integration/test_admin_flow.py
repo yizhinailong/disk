@@ -670,10 +670,11 @@ def test_admin_get_nonexistent_user():
 def test_admin_change_user_available_space():
     log_info("[Test 16] Admin 修改用户可用空间...")
 
+    admin_headers = get_admin_headers()
     before_resp = fetch(
         f"/api/admin/users/{_test_user_id}",
         method="GET",
-        headers=get_admin_headers(),
+        headers=admin_headers,
     )
     before_code = json_field(before_resp.text, "code")
     if before_resp.status_code != 200 or before_code != "0":
@@ -688,7 +689,7 @@ def test_admin_change_user_available_space():
     resp = fetch(
         f"/api/admin/users/{_test_user_id}/available-space",
         method="PUT",
-        headers={**get_admin_headers(), "Content-Type": "application/json"},
+        headers={**admin_headers, "Content-Type": "application/json"},
         json_body={"available_space_g": available_space_g},
     )
     code = json_field(resp.text, "code")
@@ -700,7 +701,7 @@ def test_admin_change_user_available_space():
     after_resp = fetch(
         f"/api/admin/users/{_test_user_id}",
         method="GET",
-        headers=get_admin_headers(),
+        headers=admin_headers,
     )
     after_code = json_field(after_resp.text, "code")
     new_quota = int(json_field(after_resp.text, "data.user.storage_quota") or "0")
@@ -713,6 +714,34 @@ def test_admin_change_user_available_space():
             f"code={after_code} quota={new_quota}"
         )
         print(after_resp.text)
+        sys.exit(1)
+
+    logs_resp = fetch(
+        "/api/admin/logs?action=admin.user.available_space_change&page_size=5",
+        method="GET",
+        headers=admin_headers,
+    )
+    logs_code = json_field(logs_resp.text, "code")
+    if logs_resp.status_code != 200 or logs_code != "0":
+        log_fail(f"Admin available-space operation log query failed: HTTP {logs_resp.status_code} code={logs_code}")
+        print(logs_resp.text)
+        sys.exit(1)
+
+    recorded_target = json_field(logs_resp.text, "data.items.0.target_id")
+    recorded_action = json_field(logs_resp.text, "data.items.0.action")
+    recorded_details = json_field(logs_resp.text, "data.items.0.details")
+    if (
+        recorded_action == "admin.user.available_space_change"
+        and recorded_target == _test_user_id
+        and "available_space_g" in recorded_details
+    ):
+        log_pass("Admin available-space operation result is visible in admin logs")
+    else:
+        log_fail(
+            "Admin available-space operation log missing expected action/target/details: "
+            f"action={recorded_action}, target={recorded_target}, details={recorded_details}"
+        )
+        print(logs_resp.text)
         sys.exit(1)
 
 

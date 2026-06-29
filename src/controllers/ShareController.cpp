@@ -287,6 +287,55 @@ namespace disk::share {
         co_return Response::Success(result->ToJson());
     }
 
+    auto ShareController::DownloadInfo(
+        drogon::HttpRequestPtr request,
+        std::string share_id,
+        std::string file_id
+    ) -> drogon::Task<drogon::HttpResponsePtr> {
+
+        Logger::Info() << "Received share download info request: " << request->getPeerAddr().toIpPort()
+                 << ", share_id=" << share_id << ", file_id=" << file_id;
+
+        auto parse_result = DownloadShareRequest::FromPath(share_id, file_id);
+        if (!parse_result) {
+            Logger::Warn() << "Share download info request parameter validation failed: "
+                     << parse_result.error().message;
+            co_return Response::Error(parse_result.error());
+        }
+
+        const auto internal_share_id = request->attributes()->get<uint64_t>("share_id");
+        const auto& share_code = request->attributes()->get<std::string>("share_code");
+
+        if (share_id != share_code) {
+            Logger::Warn() << "Share token does not match requested share_id: token_share_code="
+                     << share_code << ", request_share_id=" << share_id;
+            co_return Response::Error(ErrorInfo(
+                ErrorCode::ShareAccessDenied,
+                "Share token does not match requested share"
+            ));
+        }
+
+        auto info_result = co_await m_share_service->GetDownloadInfo(*parse_result, internal_share_id);
+        if (!info_result) {
+            Logger::Error() << "Get share download info failed: " << info_result.error().message
+                      << " (share_id=" << share_id << ", file_id=" << file_id << ")";
+            co_return Response::Error(info_result.error());
+        }
+
+        const auto& info = *info_result;
+        disk::file::DownloadInfoResponse response;
+        response.file_id = info.file_id;
+        response.filename = info.filename;
+        response.file_size = info.file_size;
+        response.file_hash = info.file_hash;
+        response.mime_type = info.mime_type;
+        response.supports_range = info.supports_range;
+
+        Logger::Info() << "Share download info successful: share_id=" << share_id
+                 << ", file_id=" << file_id << ", size=" << info.file_size;
+        co_return Response::Success(response.ToJson());
+    }
+
     auto ShareController::Download(
         drogon::HttpRequestPtr request,
         std::string share_id,
@@ -341,7 +390,7 @@ namespace disk::share {
                 .filename = download_info.filename,
                 .file_size = download_info.file_size,
                 .mime_type = download_info.mime_type,
-                .file_hash = download_info.hash_md5,
+                .file_hash = download_info.file_hash,
                 .range_header = std::string(request->getHeader("Range")),
             },
             m_storage

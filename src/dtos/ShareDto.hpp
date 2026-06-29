@@ -142,6 +142,8 @@ namespace disk::share {
         std::string name;
         std::string type; ///< "file" 或 "folder"
         uint64_t size;
+        std::string file_hash;
+        bool supports_range{ true };
         uint32_t item_count{ 0 };
 
         /// 转换为 JSON
@@ -152,6 +154,10 @@ namespace disk::share {
             SetField(json, "name", name);
             SetField(json, "type", type);
             SetField(json, "size", size);
+            if (type == "file") {
+                SetField(json, "file_hash", file_hash);
+                SetField(json, "supports_range", supports_range);
+            }
             if (type == "folder") {
                 SetField(json, "item_count", item_count);
             }
@@ -935,6 +941,8 @@ namespace disk::share {
         std::string name;
         std::string type; ///< "file" 或 "folder"
         uint64_t size;
+        std::string file_hash;
+        bool supports_range{ true };
         uint32_t item_count{ 0 };
 
         /// 转换为 JSON
@@ -945,6 +953,10 @@ namespace disk::share {
             SetField(json, "name", name);
             SetField(json, "type", type);
             SetField(json, "size", size);
+            if (type == "file") {
+                SetField(json, "file_hash", file_hash);
+                SetField(json, "supports_range", supports_range);
+            }
             if (type == "folder") {
                 SetField(json, "item_count", item_count);
             }
@@ -1157,7 +1169,8 @@ namespace disk::share {
         std::string storage_path;
         uint64_t file_size{ 0 };
         std::string mime_type;
-        std::string hash_md5;
+        std::string file_hash;
+        bool supports_range{ true };
     };
 
     } ///< namespace disk::share

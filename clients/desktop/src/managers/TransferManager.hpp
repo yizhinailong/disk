@@ -139,7 +139,8 @@ namespace disk::desktop::managers {
             quint64 file_id,
             const QString& target_path,
             const QString& filename = {},
-            quint64 file_size = 0
+            quint64 file_size = 0,
+            const QString& file_hash = {}
         );
 
         /**
@@ -248,8 +249,10 @@ namespace disk::desktop::managers {
 
         void SetDownloadState(const QString& task_id, DownloadState state);
         void FailDownload(const QString& task_id, const ApiError& error);
+        void RestartDownload(const QString& task_id, const QString& detail);
         void RetryOrFailDownload(const QString& task_id, const ApiError& error);
-        void PreparePartialFileForRange(const QString& task_id);
+        auto PreparePartialFileForRange(const QString& task_id) -> bool;
+        auto VerifyCompletedDownload(const QString& task_id) -> bool;
 
         // ── Utility ──
 

@@ -6,6 +6,7 @@ import {
   getUserDetail,
   changeUserStatus as apiChangeUserStatus,
   changeUserRole as apiChangeUserRole,
+  changeUserAvailableSpace as apiChangeUserAvailableSpace,
   deleteUser as apiDeleteUser,
   listShares,
   getShareDetail,
@@ -87,6 +88,29 @@ export const useAdminStore = defineStore('admin', () => {
       users.value[idx] = { ...users.value[idx], role };
     }
     ElMessage.success('角色修改成功');
+  }
+
+  async function changeUserAvailableSpace(
+    userId: number,
+    availableSpaceG: number,
+  ): Promise<AdminUserDetailResponse> {
+    const res = await apiChangeUserAvailableSpace(userId, {
+      available_space_g: availableSpaceG,
+    });
+    const updated = res.user;
+    const idx = users.value.findIndex((u) => u.id === userId);
+    if (idx !== -1) {
+      users.value[idx] = {
+        ...users.value[idx],
+        storage_quota: updated.storage_quota,
+        storage_used: updated.storage_used,
+        storage_reserved: updated.storage_reserved,
+      };
+    }
+    if (currentUserDetail.value?.id === userId) {
+      currentUserDetail.value = updated;
+    }
+    return updated;
   }
 
   async function deleteUser(userId: number): Promise<void> {
@@ -213,6 +237,7 @@ export const useAdminStore = defineStore('admin', () => {
     fetchUserDetail,
     changeUserStatus,
     changeUserRole,
+    changeUserAvailableSpace,
     deleteUser,
     fetchShares,
     fetchShareDetail,

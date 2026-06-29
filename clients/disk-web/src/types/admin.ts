@@ -13,6 +13,7 @@ export interface AdminUserItem {
   /** 0=普通用户 1=管理员 */
   readonly role: number;
   readonly storage_used: number;
+  readonly storage_reserved?: number;
   readonly storage_quota: number;
   readonly created_at: string;
   readonly updated_at: string;
@@ -43,6 +44,7 @@ export interface AdminUserDetailResponse {
   readonly status: number;
   readonly role: number;
   readonly storage_used: number;
+  readonly storage_reserved?: number;
   readonly storage_quota: number;
   readonly created_at: string;
   readonly updated_at: string;
@@ -70,6 +72,17 @@ export interface AdminChangeRoleRequest {
 export interface AdminChangeRoleResponse {
   readonly id: number;
   readonly role: number;
+}
+
+/** 修改用户可用空间请求 */
+export interface AdminChangeAvailableSpaceRequest {
+  /** 保留给用户的新可用空间，单位 GB */
+  readonly available_space_g: number;
+}
+
+/** 修改用户可用空间响应 */
+export interface AdminChangeAvailableSpaceResponse {
+  readonly user: AdminUserDetailResponse;
 }
 
 /** 删除用户响应 */

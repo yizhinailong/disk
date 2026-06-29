@@ -70,7 +70,7 @@
           <el-breadcrumb-item
             v-for="crumb in store.breadcrumbs"
             :key="crumb.id"
-            @click="store.navigateToFolder(crumb.id)"
+            @click="goToBreadcrumb(crumb.id)"
           >
             <span class="drive-page__breadcrumb-link">{{ crumb.name }}</span>
           </el-breadcrumb-item>
@@ -167,6 +167,10 @@ function goToRoot(): void {
   router.replace({ path: '/drive' });
 }
 
+function goToBreadcrumb(folderId: number): void {
+  router.push({ path: '/drive', query: folderId === 0 ? {} : { folderId: String(folderId) } });
+}
+
 function onSortChange({ prop, order }: { prop: string; order: string | null }): void {
   if (!prop || !order) {
     store.setSortBy('updated_at');
@@ -248,10 +252,9 @@ async function initFromRoute(): Promise<void> {
 
   const folderIdParam = route.query.folderId;
   const folderId = folderIdParam ? Number(folderIdParam) : 0;
-  if (!Number.isNaN(folderId) && folderId !== store.currentFolderId) {
-    store.currentFolderId = folderId;
+  if (!Number.isNaN(folderId)) {
+    await store.navigateToFolder(folderId);
   }
-  await Promise.all([store.fetchFiles(1), store.fetchBreadcrumb()]);
 }
 
 watch(() => [route.query.folderId, route.query.q], () => {

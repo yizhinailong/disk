@@ -10,6 +10,7 @@
 #include <QAbstractListModel>
 #include <QDateTime>
 #include <QVector>
+#include <optional>
 
 #include "network/ErrorAdapter.hpp"
 
@@ -30,6 +31,12 @@ namespace disk::desktop {
         std::optional<quint64> range_end;
         QString target_path;
         quint64 received_bytes{ 0 };
+        QString remote_identity;
+        quint64 expected_size{ 0 };
+        quint64 local_partial_size{ 0 };
+        std::optional<QString> integrity_hash;
+        QString verification_status;
+        QString status_detail;
         QString status; // queued / downloading / paused / completed / failed / cancelled
         std::optional<ApiError> error;
 
@@ -56,6 +63,12 @@ namespace disk::desktop {
             RangeEndRole,
             TargetPathRole,
             ReceivedBytesRole,
+            RemoteIdentityRole,
+            ExpectedSizeRole,
+            LocalPartialSizeRole,
+            IntegrityHashRole,
+            VerificationStatusRole,
+            StatusDetailRole,
             StatusRole,
             ErrorRole,
         };

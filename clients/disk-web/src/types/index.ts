@@ -132,6 +132,8 @@ export type {
   AdminChangeStatusResponse,
   AdminChangeRoleRequest,
   AdminChangeRoleResponse,
+  AdminChangeAvailableSpaceRequest,
+  AdminChangeAvailableSpaceResponse,
   AdminDeleteUserResponse,
   AdminStorageStatsResponse,
   AdminShareItem,

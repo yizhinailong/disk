@@ -208,7 +208,6 @@ import {
   copyFiles,
   deleteFiles,
   createFolder,
-  getFolderTree,
 } from '@/api'
 import type {
   FileItem,
@@ -357,7 +356,7 @@ function splitSelectedIds(): {
 
 async function loadFolderTree(): Promise<void> {
   try {
-    const tree = await getFolderTree()
+    const tree = driveStore.folderTree ?? await driveStore.fetchFolderTree()
     folderTreeData.value = [
       { id: tree.id, name: tree.name || '根目录', children: [...tree.children] },
     ]

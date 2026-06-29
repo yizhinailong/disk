@@ -36,12 +36,12 @@
         </el-tree>
 
         <!-- Empty state -->
-        <div v-if="!loading && treeData.length === 0" class="tree-empty">
-          <span>暂无文件夹</span>
+        <div v-if="!driveStore.folderTreeLoading && treeData.length === 0" class="tree-empty">
+          <span>{{ driveStore.folderTreeError || '暂无文件夹' }}</span>
         </div>
 
         <!-- Loading state -->
-        <div v-if="loading" class="tree-loading">
+        <div v-if="driveStore.folderTreeLoading" class="tree-loading">
           <el-icon class="is-loading"><Loading /></el-icon>
           <span>加载中...</span>
         </div>
@@ -55,7 +55,6 @@ import { ref, computed, watch, onMounted } from 'vue'
 import type { ElTree } from 'element-plus'
 import { Folder, ArrowRight, Loading } from '@element-plus/icons-vue'
 import { useDriveStore } from '@/stores/drive'
-import { getFolderTree } from '@/api/folder'
 import type { FolderTreeNode } from '@/types'
 
 const driveStore = useDriveStore()
@@ -63,8 +62,6 @@ const driveStore = useDriveStore()
 // ==================== State ====================
 const treeRef = ref<InstanceType<typeof ElTree> | null>(null)
 const collapsed = ref(false)
-const loading = ref(false)
-const rootChildren = ref<FolderTreeNode[]>([])
 const defaultExpanded = ref<number[]>([])
 
 // ==================== Tree Configuration ====================
@@ -74,11 +71,8 @@ const treeProps = {
   isLeaf: (data: FolderTreeNode) => data.children.length === 0,
 }
 
-// Root-level data: we wrap the API response as a single root node "我的文件"
-// The el-tree displays its children at top level
 const treeData = computed<FolderTreeNode[]>(() => {
-  if (!rootChildren.value.length) return []
-  return rootChildren.value
+  return driveStore.folderTree ? [...driveStore.folderTree.children] : []
 })
 
 // ==================== Lazy Load ====================
@@ -88,39 +82,21 @@ async function loadNode(
 ) {
   try {
     if (node.level === 0) {
-      // Root level: load full tree from API
-      loading.value = true
-      const response = await getFolderTree()
-      rootChildren.value = [...response.children]
-
-      // Auto-expand first level
-      if (response.children.length > 0) {
-        const firstLevelIds = response.children.map((c) => c.id)
-        defaultExpanded.value = firstLevelIds
-      }
-
-      // Store root tree data in drive store for cross-component access
-      if (driveStore.folderTree === null) {
-        // Only set if store hasn't been populated yet
-        // (store actions are TODO, so we don't call fetchFolderTree)
-      }
-
-      resolve(rootChildren.value)
+      const tree = driveStore.folderTree ?? await driveStore.fetchFolderTree()
+      defaultExpanded.value = tree.children.map((c) => c.id)
+      resolve([...tree.children])
       return
     }
 
-    // Non-root node: resolve from pre-loaded children
     if (node.data && node.data.children.length > 0) {
       resolve([...node.data.children])
-    } else {
-      // Fetch sub-tree for this node
-      const response = await getFolderTree({ parent_id: node.data?.id, depth: 1 })
-      resolve([...response.children])
+      return
     }
+
+    const tree = await driveStore.fetchFolderTree({ parent_id: node.data?.id, depth: 1 })
+    resolve([...tree.children])
   } catch {
     resolve([])
-  } finally {
-    loading.value = false
   }
 }
 
@@ -147,9 +123,18 @@ watch(
   },
 )
 
+watch(
+  () => driveStore.folderTree,
+  (tree) => {
+    defaultExpanded.value = tree?.children.map((c) => c.id) ?? []
+  },
+)
+
 // ==================== Initialize ====================
 onMounted(async () => {
-  // The tree's lazy load handles initial data fetch automatically
+  if (!driveStore.folderTree) {
+    await driveStore.refreshFolderTree().catch(() => undefined)
+  }
 })
 </script>
 
