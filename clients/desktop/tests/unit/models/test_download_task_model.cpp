@@ -18,7 +18,7 @@ private slots:
     void RoleNamesCount() {
         DownloadTaskModel model;
         auto roles = model.roleNames();
-        QCOMPARE(roles.size(), 16);
+        QCOMPARE(roles.size(), 22);
     }
 
     void AddTaskIncrementsRowCount() {
@@ -49,6 +49,12 @@ private slots:
         task.supports_range = true;
         task.transfer_mode = "full";
         task.received_bytes = 1024;
+        task.remote_identity = "owner::42:2097152:hash";
+        task.expected_size = 2097152;
+        task.local_partial_size = 1024;
+        task.integrity_hash = "hash";
+        task.verification_status = "verified_size_only";
+        task.status_detail = "下载完成，已通过大小校验";
         model.AddTask(task);
 
         auto idx = model.index(0);
@@ -63,6 +69,12 @@ private slots:
         QCOMPARE(model.data(idx, DownloadTaskModel::SupportsRangeRole).toBool(), true);
         QCOMPARE(model.data(idx, DownloadTaskModel::TransferModeRole).toString(), QString("full"));
         QCOMPARE(model.data(idx, DownloadTaskModel::ReceivedBytesRole).toULongLong(), quint64(1024));
+        QCOMPARE(model.data(idx, DownloadTaskModel::RemoteIdentityRole).toString(), QString("owner::42:2097152:hash"));
+        QCOMPARE(model.data(idx, DownloadTaskModel::ExpectedSizeRole).toULongLong(), quint64(2097152));
+        QCOMPARE(model.data(idx, DownloadTaskModel::LocalPartialSizeRole).toULongLong(), quint64(1024));
+        QCOMPARE(model.data(idx, DownloadTaskModel::IntegrityHashRole).toString(), QString("hash"));
+        QCOMPARE(model.data(idx, DownloadTaskModel::VerificationStatusRole).toString(), QString("verified_size_only"));
+        QCOMPARE(model.data(idx, DownloadTaskModel::StatusDetailRole).toString(), QString("下载完成，已通过大小校验"));
     }
 
     void VisitorTaskWithShareId() {
@@ -242,6 +254,12 @@ private slots:
         json["range_end"] = 8192.0;
         json["target_path"] = "/tmp/data.csv";
         json["received_bytes"] = 1024.0;
+        json["remote_identity"] = "owner:sh_test:55:8192:hashabc";
+        json["expected_size"] = 8192.0;
+        json["local_partial_size"] = 1024.0;
+        json["integrity_hash"] = "hashabc";
+        json["verification_status"] = "verified_hash";
+        json["status_detail"] = "从上次中断处继续下载";
         json["status"] = "paused";
 
         auto task = DownloadTask::FromJson(json);
@@ -263,6 +281,13 @@ private slots:
         QCOMPARE(*task.range_end, quint64(8192));
         QCOMPARE(task.target_path, QString("/tmp/data.csv"));
         QCOMPARE(task.received_bytes, quint64(1024));
+        QCOMPARE(task.remote_identity, QString("owner:sh_test:55:8192:hashabc"));
+        QCOMPARE(task.expected_size, quint64(8192));
+        QCOMPARE(task.local_partial_size, quint64(1024));
+        QVERIFY(task.integrity_hash.has_value());
+        QCOMPARE(*task.integrity_hash, QString("hashabc"));
+        QCOMPARE(task.verification_status, QString("verified_hash"));
+        QCOMPARE(task.status_detail, QString("从上次中断处继续下载"));
         QCOMPARE(task.status, QString("paused"));
     }
 
@@ -282,6 +307,12 @@ private slots:
         task.range_end = quint64(65536);
         task.target_path = "/out/file.zip";
         task.received_bytes = 1000;
+        task.remote_identity = "visitor:sh_rt:10:65536:abcdef";
+        task.expected_size = 65536;
+        task.local_partial_size = 1000;
+        task.integrity_hash = "abcdef";
+        task.verification_status = "verified_hash";
+        task.status_detail = "从上次中断处继续下载";
         task.status = "downloading";
 
         auto json = task.ToJson();
@@ -292,6 +323,12 @@ private slots:
         QCOMPARE(json["status"].toString(), QString("downloading"));
         QVERIFY(json.contains("share_id"));
         QVERIFY(json.contains("range_start"));
+        QCOMPARE(json["remote_identity"].toString(), QString("visitor:sh_rt:10:65536:abcdef"));
+        QCOMPARE(json["expected_size"].toDouble(), 65536.0);
+        QCOMPARE(json["local_partial_size"].toDouble(), 1000.0);
+        QCOMPARE(json["integrity_hash"].toString(), QString("abcdef"));
+        QCOMPARE(json["verification_status"].toString(), QString("verified_hash"));
+        QCOMPARE(json["status_detail"].toString(), QString("从上次中断处继续下载"));
     }
 };
 

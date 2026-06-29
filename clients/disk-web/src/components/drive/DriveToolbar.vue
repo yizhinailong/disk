@@ -356,16 +356,12 @@ function splitSelectedIds(): {
 
 async function loadFolderTree(): Promise<void> {
   try {
-    await driveStore.fetchFolderTree()
-    if (!driveStore.folderTree) {
-      folderTreeData.value = []
-      return
-    }
+    const tree = driveStore.folderTree ?? await driveStore.fetchFolderTree()
     folderTreeData.value = [
       {
-        id: driveStore.folderTree.id,
-        name: driveStore.folderTree.name || '根目录',
-        children: [...driveStore.folderTree.children],
+        id: tree.id,
+        name: tree.name || '根目录',
+        children: [...tree.children],
       },
     ]
   } catch {

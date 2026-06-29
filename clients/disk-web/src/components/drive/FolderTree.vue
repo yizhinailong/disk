@@ -17,6 +17,8 @@
           :props="treeProps"
           node-key="id"
           highlight-current
+          lazy
+          :load="loadNode"
           :default-expanded-keys="defaultExpanded"
           :current-node-key="driveStore.currentFolderId"
           :expand-on-click-node="false"
@@ -35,7 +37,7 @@
 
         <!-- Empty state -->
         <div v-if="!driveStore.folderTreeLoading && treeData.length === 0" class="tree-empty">
-          <span>暂无文件夹</span>
+          <span>{{ driveStore.folderTreeError || '暂无文件夹' }}</span>
         </div>
 
         <!-- Loading state -->
@@ -69,9 +71,7 @@ const treeProps = {
 }
 
 const treeData = computed<FolderTreeNode[]>(() => {
-  const root = driveStore.folderTree
-  if (!root) return []
-  return [...root.children]
+  return driveStore.folderTree ? [...driveStore.folderTree.children] : []
 })
 
 function findAncestorPath(
@@ -87,6 +87,31 @@ function findAncestorPath(
     if (childPath) return childPath
   }
   return null
+}
+
+// ==================== Lazy Load ====================
+async function loadNode(
+  node: { level: number; data?: FolderTreeNode; isLeaf: boolean },
+  resolve: (data: FolderTreeNode[]) => void,
+) {
+  try {
+    if (node.level === 0) {
+      const tree = driveStore.folderTree ?? await driveStore.fetchFolderTree()
+      defaultExpanded.value = tree.children.map((c) => c.id)
+      resolve([...tree.children])
+      return
+    }
+
+    if (node.data && node.data.children.length > 0) {
+      resolve([...node.data.children])
+      return
+    }
+
+    const tree = await driveStore.fetchFolderTree({ parent_id: node.data?.id, depth: 1 })
+    resolve([...tree.children])
+  } catch {
+    resolve([])
+  }
 }
 
 function syncCurrentFolder(folderId: number): void {
@@ -117,9 +142,18 @@ watch(
   },
 )
 
+watch(
+  () => driveStore.folderTree,
+  (tree) => {
+    defaultExpanded.value = tree?.children.map((c) => c.id) ?? []
+  },
+)
+
 // ==================== Initialize ====================
 onMounted(async () => {
-  await driveStore.fetchFolderTree()
+  if (!driveStore.folderTree) {
+    await driveStore.refreshFolderTree().catch(() => undefined)
+  }
   syncCurrentFolder(driveStore.currentFolderId)
 })
 </script>

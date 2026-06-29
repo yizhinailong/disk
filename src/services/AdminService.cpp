@@ -291,11 +291,16 @@ namespace disk::services {
     auto AdminService::ChangeUserAvailableSpace(uint64_t target_id,
                                                 uint64_t available_space_g,
                                                 uint64_t operator_id)
-        -> drogon::Task<Result<void>> {
+        -> drogon::Task<Result<admin::UserDetailResponse>> {
 
         Logger::Info() << "Admin change user available space: target_id=" << target_id
                  << " available_space_g=" << available_space_g
                  << " operator_id=" << operator_id;
+
+        if (target_id == operator_id) {
+            Logger::Warn() << "Admin cannot modify self available space: operator_id=" << operator_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::AdminCannotModifySelf));
+        }
 
         try {
             CoroMapper<Users> mapper(m_db_client);
@@ -347,8 +352,23 @@ namespace disk::services {
                 details
             );
 
+            admin::UserDetailResponse response;
+            response.id = user.getValueOfId();
+            response.username = user.getValueOfUsername();
+            response.email = user.getValueOfEmail();
+            response.nickname = user.getNickname() ? *user.getNickname() : "";
+            response.avatar = user.getAvatar() ? *user.getAvatar() : "";
+            response.role = user.getValueOfRole();
+            response.status = user.getValueOfStatus();
+            response.storage_quota = new_storage_quota;
+            response.storage_used = storage_used;
+            response.storage_reserved = storage_reserved;
+            response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
+            response.last_login_at = user.getLastLoginAt()
+                ? user.getValueOfLastLoginAt().toDbStringLocal() : "";
+
             Logger::Info() << "Admin change user available space successful: target_id=" << target_id;
-            co_return {};
+            co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
             const auto error_msg = std::string(e.base().what());

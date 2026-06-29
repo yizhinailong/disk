@@ -1,3 +1,4 @@
+#include <QJsonDocument>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -6,6 +7,9 @@
 #include "network/NetworkClient.hpp"
 #include "network/RequestFactory.hpp"
 
+#include <QCryptographicHash>
+#include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
 
@@ -15,6 +19,29 @@ using namespace disk::desktop::testing;
 
 class TestTransferManager : public QObject {
     Q_OBJECT
+
+private:
+    static auto Md5(const QByteArray& data) -> QString {
+        return QString(QCryptographicHash::hash(data, QCryptographicHash::Md5).toHex());
+    }
+
+    static void WriteResumeState(
+        const QString& target_path,
+        const QString& remote_identity,
+        quint64 expected_size,
+        quint64 local_partial_size,
+        const QString& integrity_hash = {}
+    ) {
+        QFile state_file(target_path + QStringLiteral(".download.json"));
+        QVERIFY(state_file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+
+        QJsonObject json;
+        json["remote_identity"] = remote_identity;
+        json["expected_size"] = static_cast<double>(expected_size);
+        json["local_partial_size"] = static_cast<double>(local_partial_size);
+        json["integrity_hash"] = integrity_hash;
+        state_file.write(QJsonDocument(json).toJson(QJsonDocument::Compact));
+    }
 
 private slots:
 
@@ -388,7 +415,51 @@ private slots:
         QVERIFY(preserved_visitor_download.has_value());
         QCOMPARE(preserved_visitor_download->status, QString("paused"));
     }
-    void VisitorShareDownloadResumesWithRangeAndShareToken() {
+
+    void VisitorShareDownloadResumesWithTrustedPartialState() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString target_path = dir.filePath("shared.bin");
+        QFile partial(target_path);
+        QVERIFY(partial.open(QIODevice::WriteOnly));
+        partial.write("abc");
+        partial.close();
+
+        const QString hash = Md5("abcdef");
+        WriteResumeState(target_path, QStringLiteral("visitor:share-1:77:6:%1").arg(hash), 6, 3, hash);
+
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterRawResponse(
+            "api/share/download/share-1/77",
+            QByteArray("def"),
+            206
+        );
+
+        NetworkClient nc(static_cast<QNetworkAccessManager*>(&mock_network));
+        nc.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory rf;
+        rf.SetVisitorShareToken("share_token");
+        TransferManager mgr(&nc, &rf);
+
+        mgr.StartShareDownload("share-1", 77, target_path, "shared.bin", 6, hash);
+
+        QTRY_VERIFY(mock_network.GetRequestLog().size() >= 1);
+        const auto transfer_request = mock_network.GetRequestLog().at(0);
+        QCOMPARE(transfer_request.rawHeader("X-Share-Token"), QByteArray("share_token"));
+        QCOMPARE(transfer_request.rawHeader("Range"), QByteArray("bytes=3-"));
+
+        QTRY_COMPARE(mgr.GetDownloadModel()->GetTask(0)->status, QString("completed"));
+        const auto task = mgr.GetDownloadModel()->GetTask(0);
+        QVERIFY(task.has_value());
+        QCOMPARE(task->transfer_mode, QString("range"));
+        QCOMPARE(task->received_bytes, quint64(6));
+        QCOMPARE(task->local_partial_size, quint64(6));
+        QCOMPARE(task->verification_status, QString("verified_hash"));
+        QVERIFY(task->status_detail.contains(QStringLiteral("从上次中断处继续下载")));
+        QCOMPARE(QFileInfo(target_path + QStringLiteral(".download.json")).exists(), false);
+    }
+
+    void VisitorShareDownloadRestartsWhenPartialStateIsMissing() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         const QString target_path = dir.filePath("shared.bin");
@@ -399,8 +470,8 @@ private slots:
 
         MockNetworkAccessManager mock_network;
         mock_network.RegisterRawResponse(
-            "api/share/download/share-1/77",
-            QByteArray("def")
+            "api/share/download/share-2/78",
+            QByteArray("abcdef")
         );
 
         NetworkClient nc(static_cast<QNetworkAccessManager*>(&mock_network));
@@ -409,30 +480,66 @@ private slots:
         rf.SetVisitorShareToken("share_token");
         TransferManager mgr(&nc, &rf);
 
-        mgr.StartShareDownload("share-1", 77, target_path, "shared.bin", 6);
+        mgr.StartShareDownload("share-2", 78, target_path, "shared.bin", 6);
 
         QTRY_VERIFY(mock_network.GetRequestLog().size() >= 1);
         const auto transfer_request = mock_network.GetRequestLog().at(0);
-        QCOMPARE(transfer_request.rawHeader("X-Share-Token"), QByteArray("share_token"));
-        QCOMPARE(transfer_request.rawHeader("Range"), QByteArray("bytes=3-"));
+        QVERIFY(transfer_request.rawHeader("Range").isEmpty());
 
         QTRY_COMPARE(mgr.GetDownloadModel()->GetTask(0)->status, QString("completed"));
-        QCOMPARE(mgr.GetDownloadModel()->GetTask(0)->transfer_mode, QString("range"));
-        QCOMPARE(mgr.GetDownloadModel()->GetTask(0)->received_bytes, quint64(6));
+        const auto task = mgr.GetDownloadModel()->GetTask(0);
+        QVERIFY(task.has_value());
+        QCOMPARE(task->transfer_mode, QString("full"));
+        QCOMPARE(QFileInfo(target_path).size(), qint64(6));
+        QVERIFY(task->status_detail.contains(QStringLiteral("缺少可信的断点续传记录")));
+        QCOMPARE(task->verification_status, QString("verified_size_only"));
     }
 
-    void VisitorShareDownloadRestartsWhenPartialIsTooLarge() {
+    void VisitorShareDownloadRestartsWhenRangeIsRejected() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         const QString target_path = dir.filePath("shared.bin");
         QFile partial(target_path);
         QVERIFY(partial.open(QIODevice::WriteOnly));
-        partial.write("abcdefg");
+        partial.write("abc");
         partial.close();
+
+        const QString hash = Md5("abcdef");
+        WriteResumeState(target_path, QStringLiteral("visitor:share-3:79:6:%1").arg(hash), 6, 3, hash);
 
         MockNetworkAccessManager mock_network;
         mock_network.RegisterRawResponse(
-            "api/share/download/share-2/78",
+            "api/share/download/share-3/79",
+            QByteArray("abcdef")
+        );
+
+        NetworkClient nc(static_cast<QNetworkAccessManager*>(&mock_network));
+        nc.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory rf;
+        rf.SetVisitorShareToken("share_token");
+        TransferManager mgr(&nc, &rf);
+
+        mgr.StartShareDownload("share-3", 79, target_path, "shared.bin", 6, hash);
+
+        QTRY_VERIFY(mock_network.GetRequestLog().size() >= 2);
+        QCOMPARE(mock_network.GetRequestLog().at(0).rawHeader("Range"), QByteArray("bytes=3-"));
+        QVERIFY(mock_network.GetRequestLog().at(1).rawHeader("Range").isEmpty());
+
+        QTRY_COMPARE(mgr.GetDownloadModel()->GetTask(0)->status, QString("completed"));
+        const auto task = mgr.GetDownloadModel()->GetTask(0);
+        QVERIFY(task.has_value());
+        QCOMPARE(task->transfer_mode, QString("full"));
+        QVERIFY(task->status_detail.contains(QStringLiteral("服务器拒绝断点续传")));
+    }
+
+    void VisitorShareDownloadFailsOnSizeVerificationMismatch() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString target_path = dir.filePath("shared.bin");
+
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterRawResponse(
+            "api/share/download/share-4/80",
             QByteArray("abc")
         );
 
@@ -441,16 +548,48 @@ private slots:
         RequestFactory rf;
         rf.SetVisitorShareToken("share_token");
         TransferManager mgr(&nc, &rf);
+        QSignalSpy error_spy(&mgr, &TransferManager::taskError);
 
-        mgr.StartShareDownload("share-2", 78, target_path, "shared.bin", 3);
+        mgr.StartShareDownload("share-4", 80, target_path, "shared.bin", 6);
 
-        QTRY_VERIFY(mock_network.GetRequestLog().size() >= 1);
-        const auto transfer_request = mock_network.GetRequestLog().at(0);
-        QVERIFY(transfer_request.rawHeader("Range").isEmpty());
+        QTRY_COMPARE(mgr.GetDownloadModel()->GetTask(0)->status, QString("failed"));
+        const auto task = mgr.GetDownloadModel()->GetTask(0);
+        QVERIFY(task.has_value());
+        QVERIFY(task->error.has_value());
+        QCOMPARE(task->error->category, QString("VerificationFailed"));
+        QCOMPARE(task->verification_status, QString("failed"));
+        QVERIFY(task->status_detail.contains(QStringLiteral("文件大小不匹配")));
+        QCOMPARE(error_spy.count(), 1);
+    }
 
-        QTRY_COMPARE(mgr.GetDownloadModel()->GetTask(0)->status, QString("completed"));
-        QCOMPARE(mgr.GetDownloadModel()->GetTask(0)->transfer_mode, QString("full"));
-        QCOMPARE(QFileInfo(target_path).size(), qint64(3));
+    void VisitorShareDownloadFailsOnHashVerificationMismatch() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString target_path = dir.filePath("shared.bin");
+
+        MockNetworkAccessManager mock_network;
+        mock_network.RegisterRawResponse(
+            "api/share/download/share-5/81",
+            QByteArray("abc")
+        );
+
+        NetworkClient nc(static_cast<QNetworkAccessManager*>(&mock_network));
+        nc.SetBaseUrl("http://127.0.0.1:8080/");
+        RequestFactory rf;
+        rf.SetVisitorShareToken("share_token");
+        TransferManager mgr(&nc, &rf);
+        QSignalSpy error_spy(&mgr, &TransferManager::taskError);
+
+        mgr.StartShareDownload("share-5", 81, target_path, "shared.bin", 3, QStringLiteral("00000000000000000000000000000000"));
+
+        QTRY_COMPARE(mgr.GetDownloadModel()->GetTask(0)->status, QString("failed"));
+        const auto task = mgr.GetDownloadModel()->GetTask(0);
+        QVERIFY(task.has_value());
+        QVERIFY(task->error.has_value());
+        QCOMPARE(task->error->category, QString("VerificationFailed"));
+        QCOMPARE(task->verification_status, QString("failed"));
+        QVERIFY(task->status_detail.contains(QStringLiteral("文件哈希不匹配")));
+        QCOMPARE(error_spy.count(), 1);
     }
 
     void DownloadFailsWhenCompletedSizeMismatches() {
@@ -561,6 +700,7 @@ private slots:
         QTRY_COMPARE(mgr.GetDownloadModel()->GetTask(0)->status, QString("completed"));
         QCOMPARE(mgr.GetDownloadModel()->GetTask(0)->received_bytes, quint64(3));
     }
+
 };
 
 int run_TestTransferManager(int argc, char* argv[]) {

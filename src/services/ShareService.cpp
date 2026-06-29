@@ -740,6 +740,8 @@ namespace disk::share {
                 item.name = file.name;
                 item.type = file.type;
                 item.size = file.size;
+                item.file_hash = file.file_hash;
+                item.supports_range = file.supports_range;
                 item.item_count = file.item_count;
                 response.items.push_back(item);
             }
@@ -763,7 +765,7 @@ namespace disk::share {
             const auto folder_user_id = folder_rows[0]["user_id"].as<uint64_t>();
 
             auto file_rows = co_await m_db_client->execSqlCoro(
-                "SELECT f.id, f.name, f.size, 'file' AS type " "FROM files f WHERE f.folder_id = $1 AND f.user_id = $2 ORDER BY f.name, f.id",
+                "SELECT f.id, f.name, f.size, fc.hash_md5, 'file' AS type " "FROM files f " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE f.folder_id = $1 AND f.user_id = $2 ORDER BY f.name, f.id",
                 folder_id,
                 folder_user_id
             );
@@ -773,6 +775,8 @@ namespace disk::share {
                 item.name = row["name"].as<std::string>();
                 item.type = row["type"].as<std::string>();
                 item.size = row["size"].as<uint64_t>();
+                item.file_hash = row["hash_md5"].isNull() ? "" : row["hash_md5"].as<std::string>();
+                item.supports_range = true;
                 response.items.push_back(item);
             }
 
@@ -903,7 +907,8 @@ namespace disk::share {
             info.file_size = row["file_size"].as<uint64_t>();
             info.mime_type =
                 row["mime_type"].isNull() ? "application/octet-stream" : row["mime_type"].as<std::string>();
-            info.hash_md5 = row["hash_md5"].as<std::string>();
+            info.file_hash = row["hash_md5"].as<std::string>();
+            info.supports_range = true;
 
             co_return info;
         } catch (const DrogonDbException& e) {
@@ -1413,7 +1418,7 @@ namespace disk::share {
 
         try {
             auto file_rows = co_await m_db_client->execSqlCoro(
-                "SELECT sf.id AS share_file_id, f.id, f.name, f.size, 'file' AS type " "FROM share_files sf " "JOIN files f ON sf.item_id = f.id " "WHERE sf.share_id = $1 AND sf.item_type = 'file' " "ORDER BY sf.id",
+                "SELECT sf.id AS share_file_id, f.id, f.name, f.size, fc.hash_md5, 'file' AS type " "FROM share_files sf " "JOIN files f ON sf.item_id = f.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE sf.share_id = $1 AND sf.item_type = 'file' " "ORDER BY sf.id",
                 share_id
             );
 
@@ -1431,6 +1436,8 @@ namespace disk::share {
                 sf_item.name = row["name"].as<std::string>();
                 sf_item.type = row["type"].as<std::string>();
                 sf_item.size = row["size"].as<uint64_t>();
+                sf_item.file_hash = row["hash_md5"].isNull() ? "" : row["hash_md5"].as<std::string>();
+                sf_item.supports_range = true;
                 ordered_items.push_back(
                     OrderedShareFile{ row["share_file_id"].as<uint64_t>(), std::move(sf_item) }
                 );
@@ -1487,7 +1494,7 @@ namespace disk::share {
                 auto placeholders = BatchUtils::BuildInPlaceholders(chunk);
 
                 auto file_rows = co_await m_db_client->execSqlCoro(
-                    "SELECT sf.id AS share_file_id, sf.share_id, f.id, f.name, f.size, 'file' AS " "type " "FROM share_files sf " "JOIN files f ON sf.item_id = f.id " "WHERE sf.share_id IN (" + placeholders + ") AND sf.item_type = 'file' " "ORDER BY sf.id",
+                    "SELECT sf.id AS share_file_id, sf.share_id, f.id, f.name, f.size, fc.hash_md5, 'file' AS " "type " "FROM share_files sf " "JOIN files f ON sf.item_id = f.id " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE sf.share_id IN (" + placeholders + ") AND sf.item_type = 'file' " "ORDER BY sf.id",
                     chunk
                 );
 
@@ -1502,6 +1509,8 @@ namespace disk::share {
                     share_file.name = row["name"].as<std::string>();
                     share_file.type = row["type"].as<std::string>();
                     share_file.size = row["size"].as<uint64_t>();
+                    share_file.file_hash = row["hash_md5"].isNull() ? "" : row["hash_md5"].as<std::string>();
+                    share_file.supports_range = true;
                     auto share_id = row["share_id"].as<uint64_t>();
                     ordered_items_by_share[share_id].push_back(OrderedShareFile{ .share_file_id = row["share_file_id"].as<uint64_t>(), .share_file = std::move(share_file) });
                 }

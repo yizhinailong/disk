@@ -105,7 +105,7 @@ namespace disk::services {
         auto ChangeUserAvailableSpace(uint64_t target_id,
                                       uint64_t available_space_g,
                                       uint64_t operator_id)
-            -> drogon::Task<Result<void>>;
+            -> drogon::Task<Result<admin::UserDetailResponse>>;
 
         /**
          * @brief 软删除用户

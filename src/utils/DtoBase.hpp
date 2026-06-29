@@ -77,11 +77,11 @@ protected:
                 std::string("Missing required parameter: ") + key
             ));
         }
-        if (!json[key].isIntegral()) {
-            Logger::Warn() << "Parameter '" << key << "' type error: expected integer";
+        if (!json[key].isIntegral() || json[key].isInt64() && json[key].asInt64() < 0) {
+            Logger::Warn() << "Parameter '" << key << "' type error: expected unsigned integer";
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
-                std::string("Parameter '") + key + "' type error: expected integer"
+                std::string("Parameter '") + key + "' type error: expected unsigned integer"
             ));
         }
         return json[key].asUInt64();
@@ -151,11 +151,11 @@ protected:
         if (!json.isMember(key)) {
             return std::optional<uint64_t>(std::nullopt);
         }
-        if (!json[key].isIntegral()) {
-            Logger::Warn() << "Parameter '" << key << "' type error: expected integer";
+        if (!json[key].isIntegral() || json[key].isInt64() && json[key].asInt64() < 0) {
+            Logger::Warn() << "Parameter '" << key << "' type error: expected unsigned integer";
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
-                std::string("Parameter '") + key + "' type error: expected integer"
+                std::string("Parameter '") + key + "' type error: expected unsigned integer"
             ));
         }
         return json[key].asUInt64();

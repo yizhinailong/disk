@@ -7,6 +7,8 @@ import type {
   AdminChangeStatusResponse,
   AdminChangeRoleRequest,
   AdminChangeRoleResponse,
+  AdminChangeAvailableSpaceRequest,
+  AdminChangeAvailableSpaceResponse,
   AdminDeleteUserResponse,
   AdminStorageStatsResponse,
   AdminShareListResponse,
@@ -41,6 +43,13 @@ export function changeUserRole(
   data: AdminChangeRoleRequest,
 ): Promise<AdminChangeRoleResponse> {
   return apiClient.put(`/admin/users/${userId}/role`, data) as Promise<AdminChangeRoleResponse>
+}
+
+export function changeUserAvailableSpace(
+  userId: number,
+  data: AdminChangeAvailableSpaceRequest,
+): Promise<AdminChangeAvailableSpaceResponse> {
+  return apiClient.put(`/admin/users/${userId}/available-space`, data) as Promise<AdminChangeAvailableSpaceResponse>
 }
 
 export function deleteUser(userId: number): Promise<AdminDeleteUserResponse> {

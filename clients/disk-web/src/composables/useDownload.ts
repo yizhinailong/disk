@@ -6,9 +6,30 @@ export type DownloadProgressCallback = (loaded: number, total: number, progress:
 export type DownloadChunkCallback = (chunk: Uint8Array) => void
 
 export interface DownloadResult {
-  blob: Blob
+  blob?: Blob
   filename: string
   info: DownloadInfoResponse
+  savedToDisk: boolean
+}
+
+interface FileSystemWritableFileStreamLike {
+  write(chunk: BufferSource | Blob | string): Promise<void>
+  close(): Promise<void>
+  abort?(reason?: unknown): Promise<void>
+}
+
+interface FileSystemFileHandleLike {
+  createWritable(): Promise<FileSystemWritableFileStreamLike>
+}
+
+interface SaveFilePickerWindow extends Window {
+  showSaveFilePicker?: (options?: {
+    suggestedName?: string
+    types?: Array<{
+      description: string
+      accept: Record<string, string[]>
+    }>
+  }) => Promise<FileSystemFileHandleLike>
 }
 
 interface DownloadOptions {
@@ -17,6 +38,7 @@ interface DownloadOptions {
   onChunk?: DownloadChunkCallback
   onInfo?: (info: DownloadInfoResponse) => void
   startByte?: number
+  saveToDisk?: boolean
 }
 
 export function useDownload() {
@@ -28,7 +50,7 @@ export function useDownload() {
     fileId: number,
     options: DownloadOptions = {},
   ): Promise<DownloadResult> {
-    const { signal, onProgress, onChunk, onInfo, startByte = 0 } = options
+    const { signal, onProgress, onChunk, onInfo, startByte = 0, saveToDisk = false } = options
 
     const info = await fetchInfo(fileId)
     onInfo?.(info)
@@ -38,23 +60,18 @@ export function useDownload() {
     const response = await fetchOwnerDownload(fileId, info, rangeStart, signal)
     validateDownloadResponse(response, rangeStart)
 
-    const contentLength = response.headers.get('Content-Length')
-    const contentRange = response.headers.get('Content-Range')
-    let totalSize = info.file_size
+    const totalSize = resolveTotalSize(response, info.file_size, rangeStart)
 
-    // Content-Range format: "bytes START-END/TOTAL"
-    if (contentRange) {
-      const match = contentRange.match(/\/(\d+)/)
-      if (match) {
-        totalSize = Number(match[1])
+    if (saveToDisk) {
+      const saved = await saveResponseToDisk(response, filename, totalSize, rangeStart, onProgress, signal)
+      if (saved) {
+        return { filename, info, savedToDisk: true }
       }
-    } else if (contentLength && rangeStart === 0) {
-      totalSize = Number(contentLength)
     }
 
     const blob = await readBodyWithProgress(response, totalSize, rangeStart, onProgress, onChunk, signal)
 
-    return { blob, filename, info }
+    return { blob, filename, info, savedToDisk: false }
   }
 
   return { startDownload, fetchInfo }
@@ -117,6 +134,77 @@ function validateDownloadResponse(response: Response, startByte: number): void {
   }
 }
 
+function resolveTotalSize(response: Response, fallbackSize: number, rangeStart: number): number {
+  const contentLength = response.headers.get('Content-Length')
+  const contentRange = response.headers.get('Content-Range')
+  let totalSize = fallbackSize
+
+  // Content-Range format: "bytes START-END/TOTAL"
+  if (contentRange) {
+    const match = contentRange.match(/\/(\d+)/)
+    if (match) {
+      totalSize = Number(match[1])
+    }
+  } else if (contentLength && rangeStart === 0) {
+    totalSize = Number(contentLength)
+  }
+
+  return totalSize
+}
+
+async function saveResponseToDisk(
+  response: Response,
+  filename: string,
+  totalSize: number,
+  startByte: number,
+  onProgress?: DownloadProgressCallback,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const picker = (window as SaveFilePickerWindow).showSaveFilePicker
+  const body = response.body
+  if (!picker || !body || startByte > 0) {
+    return false
+  }
+
+  let writable: FileSystemWritableFileStreamLike | null = null
+  const reader = body.getReader()
+  let loaded = startByte
+
+  try {
+    const handle = await picker({
+      suggestedName: filename,
+      types: [{ description: '下载文件', accept: { 'application/octet-stream': ['.*'] } }],
+    })
+    writable = await handle.createWritable()
+
+    while (true) {
+      if (signal?.aborted) {
+        await reader.cancel()
+        throw new DOMException('Aborted', 'AbortError')
+      }
+
+      const { done, value } = await reader.read()
+      if (done) break
+
+      await writable.write(value)
+      loaded += value.length
+      const progress = totalSize > 0 ? Math.round((loaded / totalSize) * 100) : 100
+      onProgress?.(loaded, totalSize, Math.min(progress, 100))
+    }
+
+    await writable.close()
+    return true
+  } catch (err) {
+    await writable?.abort?.(err)
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw err
+    }
+    return false
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 async function readBodyWithProgress(
   response: Response,
   totalSize: number,
@@ -142,7 +230,7 @@ async function readBodyWithProgress(
   try {
     while (true) {
       if (signal?.aborted) {
-        reader.cancel()
+        await reader.cancel()
         throw new DOMException('Aborted', 'AbortError')
       }
 

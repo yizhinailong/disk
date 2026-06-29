@@ -41,6 +41,14 @@ namespace disk::desktop {
 
         task.target_path = json.value("target_path").toString();
         task.received_bytes = static_cast<quint64>(json.value("received_bytes").toDouble(0));
+        task.remote_identity = json.value("remote_identity").toString();
+        task.expected_size = static_cast<quint64>(json.value("expected_size").toDouble(task.file_size));
+        task.local_partial_size = static_cast<quint64>(json.value("local_partial_size").toDouble(0));
+        if (json.contains("integrity_hash")) {
+            task.integrity_hash = json.value("integrity_hash").toString();
+        }
+        task.verification_status = json.value("verification_status").toString();
+        task.status_detail = json.value("status_detail").toString();
         task.status = json.value("status").toString("queued");
 
         return task;
@@ -76,6 +84,14 @@ namespace disk::desktop {
 
         json["target_path"] = target_path;
         json["received_bytes"] = static_cast<double>(received_bytes);
+        json["remote_identity"] = remote_identity;
+        json["expected_size"] = static_cast<double>(expected_size);
+        json["local_partial_size"] = static_cast<double>(local_partial_size);
+        if (integrity_hash.has_value()) {
+            json["integrity_hash"] = *integrity_hash;
+        }
+        json["verification_status"] = verification_status;
+        json["status_detail"] = status_detail;
         json["status"] = status;
 
         return json;
@@ -111,9 +127,15 @@ namespace disk::desktop {
             case TransferModeRole : return task.transfer_mode;
             case RangeStartRole   : return task.range_start.has_value() ? QVariant(*task.range_start) : QVariant();
             case RangeEndRole     : return task.range_end.has_value() ? QVariant(*task.range_end) : QVariant();
-            case TargetPathRole   : return task.target_path;
-            case ReceivedBytesRole: return task.received_bytes;
-            case StatusRole       : return task.status;
+            case TargetPathRole        : return task.target_path;
+            case ReceivedBytesRole     : return task.received_bytes;
+            case RemoteIdentityRole    : return task.remote_identity;
+            case ExpectedSizeRole      : return task.expected_size;
+            case LocalPartialSizeRole  : return task.local_partial_size;
+            case IntegrityHashRole     : return task.integrity_hash.has_value() ? QVariant(*task.integrity_hash) : QVariant();
+            case VerificationStatusRole: return task.verification_status;
+            case StatusDetailRole      : return task.status_detail;
+            case StatusRole            : return task.status;
             case ErrorRole        : {
                 if (!task.error.has_value()) {
                     return QVariant();
@@ -142,9 +164,15 @@ namespace disk::desktop {
             {  TransferModeRole,  "transferMode" },
             {    RangeStartRole,    "rangeStart" },
             {      RangeEndRole,      "rangeEnd" },
-            {    TargetPathRole,    "targetPath" },
-            { ReceivedBytesRole, "receivedBytes" },
-            {        StatusRole,        "status" },
+            {        TargetPathRole,        "targetPath" },
+            {     ReceivedBytesRole,     "receivedBytes" },
+            {    RemoteIdentityRole,    "remoteIdentity" },
+            {      ExpectedSizeRole,      "expectedSize" },
+            {  LocalPartialSizeRole,  "localPartialSize" },
+            {     IntegrityHashRole,     "integrityHash" },
+            { VerificationStatusRole, "verificationStatus" },
+            {       StatusDetailRole,       "statusDetail" },
+            {            StatusRole,            "status" },
             {         ErrorRole,         "error" },
         };
     }

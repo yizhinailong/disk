@@ -108,6 +108,13 @@ TestCase {
         verify(source.indexOf("ResumeDownload") !== -1, "Has resume download button")
     }
 
+    function test_transfer_center_surfaces_download_status_detail() {
+        var source = readTransferCenterSource()
+
+        verify(source.indexOf("model.statusDetail") !== -1,
+               "Download delegate surfaces resumed/restarted/verification status detail")
+    }
+
     function test_transfer_center_empty_state_labels() {
         var source = readTransferCenterSource()
 

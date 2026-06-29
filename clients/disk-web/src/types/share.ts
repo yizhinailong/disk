@@ -68,6 +68,10 @@ export interface ShareFile {
   readonly name: string;
   readonly type: FileItemType;
   readonly size: number;
+  /** 文件时有值，用于下载完整性校验 */
+  readonly file_hash?: string;
+  /** 文件是否支持 HTTP Range 下载 */
+  readonly supports_range?: boolean;
   /** 文件夹时有值 */
   readonly item_count?: number;
 }
@@ -160,6 +164,10 @@ export interface BrowseItem {
   readonly name: string;
   readonly type: FileItemType;
   readonly size: number;
+  /** 文件时有值，用于下载完整性校验 */
+  readonly file_hash?: string;
+  /** 文件是否支持 HTTP Range 下载 */
+  readonly supports_range?: boolean;
   /** 文件夹时有值 */
   readonly item_count?: number;
 }

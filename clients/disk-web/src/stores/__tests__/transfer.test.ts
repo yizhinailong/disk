@@ -23,48 +23,94 @@ describe('useTransferStore downloads', () => {
     vi.stubGlobal('crypto', { randomUUID: () => `task-${++id}` })
   })
 
-  it('tracks received bytes and saves assembled chunks on completion', async () => {
+  it('delegates large downloads to disk streaming and keeps payload bytes out of store state', async () => {
+    const payload = new Uint8Array(10_000_000)
+    const startDownload = vi.fn(async (_fileId, options) => {
+      options.onInfo?.({
+        file_id: 1,
+        filename: 'large.bin',
+        file_size: 10_000_000,
+        file_hash: 'hash',
+        mime_type: 'application/octet-stream',
+        supports_range: true,
+      })
+      options.onProgress?.(5_000_000, 10_000_000, 50)
+      options.onProgress?.(10_000_000, 10_000_000, 100)
+      return {
+        filename: 'large.bin',
+        info: {
+          file_id: 1,
+          filename: 'large.bin',
+          file_size: 10_000_000,
+          file_hash: 'hash',
+          mime_type: 'application/octet-stream',
+          supports_range: true,
+        },
+        savedToDisk: true,
+      }
+    })
+    vi.mocked(useDownload).mockReturnValue({ fetchInfo: vi.fn(), startDownload })
+
+    const store = useTransferStore()
+    store.addDownloadTask(1, 'large.bin', 10_000_000)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const task = store.downloads[0]!
+    expect(startDownload).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ saveToDisk: true, signal: expect.any(AbortSignal) }),
+    )
+    expect(task.status).toBe('completed')
+    expect(task.progress).toBe(100)
+    expect(task.received_bytes).toBe(10_000_000)
+    expect(Object.values(task)).not.toContain(payload)
+    expect(Object.prototype.hasOwnProperty.call(task, 'chunks')).toBe(false)
+    expect(Object.prototype.hasOwnProperty.call(task, 'blob')).toBe(false)
+    expect(saveBlobAsFile).not.toHaveBeenCalled()
+  })
+
+  it('uses the Blob saver only for fallback downloads', async () => {
+    const blob = new Blob(['fallback'])
     vi.mocked(useDownload).mockReturnValue({
       fetchInfo: vi.fn(),
       startDownload: vi.fn(async (_fileId, options) => {
         options.onInfo?.({
           file_id: 1,
-          filename: 'file.txt',
-          file_size: 6,
+          filename: 'fallback.txt',
+          file_size: 8,
           file_hash: 'hash',
           mime_type: 'text/plain',
-          supports_range: true,
+          supports_range: false,
         })
-        options.onChunk?.(new Uint8Array([1, 2, 3]))
-        options.onProgress?.(3, 6, 50)
-        options.onChunk?.(new Uint8Array([4, 5, 6]))
-        options.onProgress?.(6, 6, 100)
+        options.onProgress?.(8, 8, 100)
         return {
-          blob: new Blob([new Uint8Array([1, 2, 3, 4, 5, 6])]),
-          filename: 'file.txt',
+          blob,
+          filename: 'fallback.txt',
           info: {
             file_id: 1,
-            filename: 'file.txt',
-            file_size: 6,
+            filename: 'fallback.txt',
+            file_size: 8,
             file_hash: 'hash',
             mime_type: 'text/plain',
-            supports_range: true,
+            supports_range: false,
           },
+          savedToDisk: false,
         }
       }),
     })
 
     const store = useTransferStore()
-    store.addDownloadTask(1, 'file.txt', 6)
+    store.addDownloadTask(1, 'fallback.txt', 8)
     await Promise.resolve()
     await Promise.resolve()
 
     const task = store.downloads[0]!
     expect(task.status).toBe('completed')
     expect(task.progress).toBe(100)
-    expect(task.received_bytes).toBe(6)
-    expect(task.chunks).toEqual([])
-    expect(saveBlobAsFile).toHaveBeenCalledWith(expect.any(Blob), 'file.txt')
+    expect(task.received_bytes).toBe(8)
+    expect(saveBlobAsFile).toHaveBeenCalledWith(blob, 'fallback.txt')
+    expect(Object.prototype.hasOwnProperty.call(task, 'blob')).toBe(false)
   })
 
   it('preserves partial bytes on pause and resumes from saved offset', async () => {
@@ -80,14 +126,13 @@ describe('useTransferStore downloads', () => {
           mime_type: 'text/plain',
           supports_range: true,
         })
-        options.onChunk?.(new Uint8Array([1, 2, 3, 4]))
         options.onProgress?.(4, 10, 40)
         await firstDownload
         throw new DOMException('Aborted', 'AbortError')
       })
       .mockImplementationOnce(async (_fileId, options) => {
         expect(options.startByte).toBe(4)
-        options.onChunk?.(new Uint8Array([5, 6, 7, 8, 9, 10]))
+        expect(options.saveToDisk).toBe(false)
         options.onProgress?.(10, 10, 100)
         return {
           blob: new Blob([new Uint8Array([5, 6, 7, 8, 9, 10])]),
@@ -100,6 +145,7 @@ describe('useTransferStore downloads', () => {
             mime_type: 'text/plain',
             supports_range: true,
           },
+          savedToDisk: false,
         }
       })
     vi.mocked(useDownload).mockReturnValue({ fetchInfo: vi.fn(), startDownload })
@@ -115,7 +161,6 @@ describe('useTransferStore downloads', () => {
     let task = store.downloads[0]!
     expect(task.status).toBe('paused')
     expect(task.received_bytes).toBe(4)
-    expect(task.chunks).toHaveLength(1)
 
     store.resumeDownloadTask('task-1')
     await Promise.resolve()
@@ -144,7 +189,6 @@ describe('useTransferStore downloads', () => {
           mime_type: 'text/plain',
           supports_range: false,
         })
-        options.onChunk?.(new Uint8Array([1, 2]))
         options.onProgress?.(2, 10, 20)
         await firstDownload
         throw new DOMException('Aborted', 'AbortError')
@@ -162,7 +206,6 @@ describe('useTransferStore downloads', () => {
     const task = store.downloads[0]!
     expect(task.status).toBe('paused')
     expect(task.received_bytes).toBe(0)
-    expect(task.chunks).toEqual([])
     expect(task.error).toContain('不支持断点续传')
   })
 
@@ -185,8 +228,7 @@ describe('useTransferStore downloads', () => {
       received_bytes: 4,
       total_size: 10,
       supports_range: true,
-      chunks: [new Uint8Array([1, 2, 3, 4])],
-    })
+    } as never)
 
     store.resumeDownloadTask('task-1')
     await Promise.resolve()
@@ -196,7 +238,25 @@ describe('useTransferStore downloads', () => {
     expect(task.status).toBe('failed')
     expect(task.received_bytes).toBe(0)
     expect(task.progress).toBe(0)
-    expect(task.chunks).toEqual([])
     expect(task.error).toBe('续传失败: 响应范围不匹配')
+  })
+
+  it('surfaces terminal download failure feedback', async () => {
+    vi.mocked(useDownload).mockReturnValue({
+      fetchInfo: vi.fn(),
+      startDownload: vi.fn(async () => {
+        throw new Error('下载失败: HTTP 416')
+      }),
+    })
+
+    const store = useTransferStore()
+    store.addDownloadTask(1, 'broken.bin', 100)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const task = store.downloads[0]!
+    expect(task.status).toBe('failed')
+    expect(task.error).toBe('下载失败: HTTP 416')
+    expect(saveBlobAsFile).not.toHaveBeenCalled()
   })
 })

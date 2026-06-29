@@ -15,6 +15,7 @@ Page {
     property string pendingDownloadFileId: ""
     property string pendingDownloadFilename: ""
     property double pendingDownloadFileSize: 0
+    property string pendingDownloadFileHash: ""
     property var selectedItemIds: []
     property bool saveInFlight: false
     property string saveErrorMessage: ""
@@ -46,10 +47,11 @@ Page {
         return value === "" ? "download" : value
     }
 
-    function openDownloadDialog(fileId, filename, fileSize) {
+    function openDownloadDialog(fileId, filename, fileSize, fileHash) {
         root.pendingDownloadFileId = String(fileId || "")
         root.pendingDownloadFilename = root.downloadBasename(filename)
         root.pendingDownloadFileSize = Number(fileSize || 0)
+        root.pendingDownloadFileHash = String(fileHash || "")
         root.downloadErrorMessage = ""
         shareDownloadFileDialogLoader.active = true
         shareDownloadFileDialogLoader.item.currentFile = root.pendingDownloadFilename
@@ -76,7 +78,8 @@ Page {
             fileId,
             localPath,
             root.pendingDownloadFilename,
-            root.pendingDownloadFileSize
+            root.pendingDownloadFileSize,
+            root.pendingDownloadFileHash
         )
         if (transferManager.downloadModel.rowCount() === downloadCountBefore) {
             root.downloadErrorMessage = "创建下载任务失败"
@@ -403,7 +406,7 @@ Page {
                             text: "下载"
                             visible: model.kind !== "folder" && root.permission === "download"
                             flat: true
-                            onClicked: root.openDownloadDialog(model.id, model.name, model.size || 0)
+                            onClicked: root.openDownloadDialog(model.id, model.name, model.size || 0, model.hash || "")
                         }
                     }
                 }

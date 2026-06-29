@@ -17,8 +17,9 @@ export const useDriveStore = defineStore('drive', () => {
   const currentFolderId = ref<number>(0);
   const breadcrumbs = ref<BreadcrumbItem[]>([]);
   const folderTree = ref<FolderTreeNode | null>(null);
-  const loading = ref<boolean>(false);
   const folderTreeLoading = ref<boolean>(false);
+  const folderTreeError = ref<string | null>(null);
+  const loading = ref<boolean>(false);
   const searchQuery = ref<string>('');
   const searchResults = ref<SearchResultItem[]>([]);
   const sortBy = ref<string>('updated_at');
@@ -74,14 +75,27 @@ export const useDriveStore = defineStore('drive', () => {
     }
   }
 
-  async function fetchFolderTree(): Promise<void> {
+  async function fetchFolderTree(params?: Parameters<typeof getFolderTree>[0]): Promise<FolderTreeNode> {
     folderTreeLoading.value = true;
+    folderTreeError.value = null;
     try {
-      const result = await getFolderTree();
-      folderTree.value = { id: result.id, name: result.name, children: [...result.children] };
+      const result = await getFolderTree(params);
+      const tree = { id: result.id, name: result.name, children: [...result.children] };
+      if (!params?.parent_id) {
+        folderTree.value = tree;
+      }
+      return tree;
+    } catch (err) {
+      folderTreeError.value = err instanceof Error ? err.message : '加载文件夹树失败';
+      throw err;
     } finally {
       folderTreeLoading.value = false;
     }
+  }
+
+  function invalidateFolderTree(): void {
+    folderTree.value = null;
+    folderTreeError.value = null;
   }
 
   async function refreshFolderTree(): Promise<void> {
@@ -154,7 +168,12 @@ export const useDriveStore = defineStore('drive', () => {
   }
 
   async function refreshCurrentView(): Promise<void> {
-    await fetchFiles(pagination.value?.page ?? 1);
+    invalidateFolderTree();
+    await Promise.all([
+      fetchFiles(pagination.value?.page ?? 1),
+      fetchBreadcrumb(),
+      refreshFolderTree().catch(() => undefined),
+    ]);
   }
 
   async function refreshNavigationMetadata(): Promise<void> {
@@ -171,8 +190,9 @@ export const useDriveStore = defineStore('drive', () => {
     currentFolderId,
     breadcrumbs,
     folderTree,
-    loading,
     folderTreeLoading,
+    folderTreeError,
+    loading,
     searchQuery,
     searchResults,
     sortBy,
@@ -190,6 +210,7 @@ export const useDriveStore = defineStore('drive', () => {
     fetchFiles,
     fetchFolderTree,
     refreshFolderTree,
+    invalidateFolderTree,
     fetchBreadcrumb,
     navigateToFolder,
     searchFiles,

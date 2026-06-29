@@ -113,7 +113,6 @@ function findTaskIn(tasks: UploadTask[], taskId: string): UploadTask | undefined
 }
 
 function clearDownloadRuntime(task: DownloadTask): void {
-  task.chunks = [];
   task.received_bytes = 0;
   task.progress = 0;
 }
@@ -394,7 +393,7 @@ export const useTransferStore = defineStore('transfer', () => {
 
   function updateDownloadTask(
     taskId: string,
-    patch: Partial<Pick<DownloadTask, 'status' | 'progress' | 'received_bytes' | 'total_size' | 'supports_range' | 'chunks' | 'error'>>,
+    patch: Partial<Pick<DownloadTask, 'status' | 'progress' | 'received_bytes' | 'total_size' | 'supports_range' | 'error'>>,
   ): void {
     const idx = downloads.value.findIndex((t) => t.id === taskId);
     if (idx === -1) return;
@@ -418,19 +417,15 @@ export const useTransferStore = defineStore('transfer', () => {
       updateDownloadTask(task.id, { status: 'downloading', error: undefined });
 
       const { startDownload } = useDownload();
-      const { filename } = await startDownload(Number(task.file_id), {
+      const { blob, filename, savedToDisk } = await startDownload(Number(task.file_id), {
         signal,
         startByte,
+        saveToDisk: startByte === 0,
         onInfo: (info) => {
           updateDownloadTask(task.id, {
             total_size: info.file_size,
             supports_range: info.supports_range,
           });
-        },
-        onChunk: (chunk) => {
-          const current = downloads.value.find((t) => t.id === task.id);
-          if (!current) return;
-          current.chunks.push(chunk);
         },
         onProgress: (loaded, total, progress) => {
           updateDownloadTask(task.id, {
@@ -445,13 +440,14 @@ export const useTransferStore = defineStore('transfer', () => {
 
       const completed = downloads.value.find((t) => t.id === task.id);
       if (!completed) return;
-      const blob = new Blob(completed.chunks as BlobPart[]);
-      saveBlobAsFile(blob, filename);
+      if (!savedToDisk) {
+        if (!blob) throw new Error('下载数据为空');
+        saveBlobAsFile(blob, filename);
+      }
       updateDownloadTask(task.id, {
         status: 'completed',
         progress: 100,
         received_bytes: completed.total_size || completed.received_bytes,
-        chunks: [],
       });
       abortControllers.delete(task.id);
     } catch (err: unknown) {
@@ -459,17 +455,13 @@ export const useTransferStore = defineStore('transfer', () => {
         return;
       }
       const message = err instanceof Error ? err.message : '下载失败';
-      const failed = downloads.value.find((t) => t.id === task.id);
-      if (failed) {
-        failed.chunks = [];
-      }
       updateDownloadTask(task.id, { status: 'failed', error: message, received_bytes: 0, progress: 0 });
       abortControllers.delete(task.id);
     }
   }
 
   function addDownloadTask(fileId: number, fileName: string, fileSize: number): void {
-    const task: DownloadTask = {
+    const task = {
       id: crypto.randomUUID(),
       file_id: String(fileId),
       file_name: fileName,
@@ -479,8 +471,7 @@ export const useTransferStore = defineStore('transfer', () => {
       received_bytes: 0,
       total_size: fileSize,
       supports_range: false,
-      chunks: [],
-    };
+    } as DownloadTask;
 
     downloads.value.push(task);
     executeDownload(task.id);
@@ -488,10 +479,6 @@ export const useTransferStore = defineStore('transfer', () => {
 
   function removeDownloadTask(taskId: string): void {
     abortController(taskId);
-    const task = downloads.value.find((t) => t.id === taskId);
-    if (task) {
-      task.chunks = [];
-    }
     downloads.value = downloads.value.filter((t) => t.id !== taskId);
   }
 
@@ -535,9 +522,6 @@ export const useTransferStore = defineStore('transfer', () => {
     uploads.value = uploads.value.filter(
       (t) => t.status !== 'completed' && t.status !== 'cancelled',
     );
-    downloads.value
-      .filter((t) => t.status === 'completed' || t.status === 'cancelled')
-      .forEach((t) => { t.chunks = []; });
     downloads.value = downloads.value.filter(
       (t) => t.status !== 'completed' && t.status !== 'cancelled',
     );
@@ -550,9 +534,6 @@ export const useTransferStore = defineStore('transfer', () => {
   }
 
   function clearCompletedDownloads(): void {
-    downloads.value
-      .filter((t) => t.status === 'completed' || t.status === 'cancelled' || t.status === 'failed')
-      .forEach((t) => { t.chunks = []; });
     downloads.value = downloads.value.filter(
       (t) => t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'failed',
     );

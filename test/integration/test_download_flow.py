@@ -65,6 +65,7 @@ FILE_HASH = ""
 SHARE_ID = ""
 SHARE_TOKEN = ""
 SHARE_FILE_ID = ""
+SHARE_ACCESS_BODY = ""
 
 
 # ─── Phase 2: Upload a test file ───────────────────────────────────────────
@@ -199,7 +200,7 @@ def do_create_share():
 
 
 def do_access_share():
-    global SHARE_TOKEN, SHARE_FILE_ID
+    global SHARE_TOKEN, SHARE_FILE_ID, SHARE_ACCESS_BODY
 
     log_step("Accessing share to get share_token...")
 
@@ -209,6 +210,7 @@ def do_access_share():
         headers={"Content-Type": "application/json"},
         json_body={},
     )
+    SHARE_ACCESS_BODY = resp.text
 
     SHARE_TOKEN = json_field(resp.text, "data.share_token")
     if not SHARE_TOKEN or SHARE_TOKEN == "null":
@@ -224,6 +226,53 @@ def do_access_share():
 
     save_evidence(f"{EVIDENCE_PREFIX}-share-access.json", resp.text)
     log_pass(f"Share access — share_token obtained, file_id={SHARE_FILE_ID}")
+
+
+# ─── Test: Download Metadata ──────────────────────────────────────────────────
+
+
+def test_owner_download_metadata_integrity_fields():
+    log_step(f"Test: GET /api/file/download/{FILE_ID}/info exposes integrity metadata")
+
+    resp = fetch(
+        f"/api/file/download/{FILE_ID}/info",
+        method="GET",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    )
+
+    save_evidence(f"{EVIDENCE_PREFIX}-file-info.json", resp.text)
+
+    ok = True
+    assert_status("file-info", resp.status_code, 200) or (ok := False)
+    assert_json_field("file-info-code", resp.text, "code", "0") or (ok := False)
+    assert_json_field("file-info-id", resp.text, "data.file_id", FILE_ID) or (ok := False)
+    assert_json_field("file-info-size", resp.text, "data.file_size", str(FILE_SIZE)) or (ok := False)
+    assert_json_field("file-info-hash", resp.text, "data.file_hash", FILE_HASH) or (ok := False)
+    assert_json_field("file-info-range", resp.text, "data.supports_range", "true") or (ok := False)
+
+    if ok:
+        log_pass("file-info: owner metadata includes size/hash/range fields")
+
+
+def test_visitor_download_metadata_integrity_fields():
+    log_step("Test: share access metadata exposes visitor size/hash fields")
+
+    ok = True
+    assert_json_field("share-access-file-id", SHARE_ACCESS_BODY, "data.files.0.id", SHARE_FILE_ID) or (ok := False)
+    assert_json_field("share-access-file-size", SHARE_ACCESS_BODY, "data.files.0.size", str(FILE_SIZE)) or (ok := False)
+    share_hash = json_field(SHARE_ACCESS_BODY, "data.files.0.hash")
+    share_file_hash = json_field(SHARE_ACCESS_BODY, "data.files.0.file_hash")
+    if FILE_HASH in (share_hash, share_file_hash):
+        log_pass("share-access-file-hash")
+    else:
+        log_fail(
+            "share-access-file-hash: expected visitor metadata to expose uploaded hash "
+            f"{FILE_HASH}, got hash={share_hash!r}, file_hash={share_file_hash!r}"
+        )
+        ok = False
+
+    if ok:
+        log_pass("share-access: visitor metadata includes size/hash fields")
 
 
 # ─── Test: Personal File Download 200 ──────────────────────────────────────
@@ -381,6 +430,10 @@ def test_share_download_200():
     assert_header_contains("share-200", resp.headers, "Accept-Ranges", "bytes") or (
         ok := False
     )
+    if FILE_HASH:
+        assert_header_contains("share-200", resp.headers, "ETag", FILE_HASH) or (
+            ok := False
+        )
 
     if ok:
         log_pass("share-200: full share download OK")
@@ -419,6 +472,10 @@ def test_share_download_206():
     assert_header_contains("share-206", resp.headers, "Accept-Ranges", "bytes") or (
         ok := False
     )
+    if FILE_HASH:
+        assert_header_contains("share-206", resp.headers, "ETag", FILE_HASH) or (
+            ok := False
+        )
 
     if ok:
         log_pass("share-206: partial share download OK")
@@ -519,6 +576,10 @@ def main():
     print("==========================================")
     print("Running Download Tests")
     print("==========================================\n")
+
+    # Metadata tests
+    test_owner_download_metadata_integrity_fields()
+    test_visitor_download_metadata_integrity_fields()
 
     # Personal file download tests
     test_file_download_200()

@@ -203,8 +203,11 @@ namespace disk::controllers {
             co_return Response::Error(result.error());
         }
 
+        Json::Value data;
+        data["user"] = result->ToJson();
+
         Logger::Info() << "Admin change user available space successful: target_id=" << target_id;
-        co_return Response::Success();
+        co_return Response::Success(data);
     }
 
 
