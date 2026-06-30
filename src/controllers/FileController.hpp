@@ -69,12 +69,14 @@ namespace disk::file {
             "/api/file/download/{file_id}/info",
             drogon::Get,
             "disk::filters::JwtAuthFilter",
+            "disk::filters::DownloadRateLimitFilter"
         );
         ADD_METHOD_TO(
             FileController::Download,
             "/api/file/download/{file_id}",
             drogon::Get,
-            "disk::filters::JwtAuthFilter"
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::DownloadRateLimitFilter"
         );
         ADD_METHOD_TO(
             FileController::Rename,

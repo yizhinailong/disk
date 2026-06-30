@@ -84,7 +84,7 @@ Ignore generated/artifact paths: `build/`, `clients/desktop/build/`, `.sisyphus/
 
 ## UNIQUE STYLES
 
-- Global auth is configured through Drogon `GlobalFilters` in `config.json`, with regex exempt paths for public auth/share/health routes.
+- JWT/admin authentication is declared on protected routes; `config.json` GlobalFilters is reserved for request tracing and public unauthenticated rate limiters.
 - `StorageMgr::SetInstance()` happens once at startup; services retrieve the active `IFileStorage` through the manager.
 - Upload assembly is fail-fast: `AssemblyWorkerPool` rejects when max concurrency or same-`upload_id` single-flight is hit; it does not queue.
 - Python integration tests use PEP 723 headers and `uv run`; helpers can auto-start the backend and write evidence under `.sisyphus/evidence/`.

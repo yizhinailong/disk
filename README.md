@@ -28,7 +28,7 @@
 ### 🔐 认证与安全
 
 - **用户注册 / 登录 / 登出 / 令牌刷新**：支持用户名、邮箱与密码登录流程，登录后签发 Access Token 与 Refresh Token。
-- **JWT Bearer 认证**：通过全局 `JwtAuthFilter` 保护用户、文件、目录、分享管理、回收站、系统信息和日志接口。
+- **JWT Bearer 认证**：通过路由级 `JwtAuthFilter` 保护用户、文件、目录、分享管理、回收站、系统信息和日志接口。
 - **Refresh Token 轮换**：刷新令牌存储在 Redis 中，支持单次使用、过期控制和登出失效。
 - **Argon2id 密码哈希**：使用 libsodium 进行密码哈希与校验，避免明文密码落库。
 - **账户锁定与登录限流**：登录失败计数、短时锁定与 IP 级登录限流，降低暴力破解风险。
@@ -223,7 +223,7 @@ cmake --build --preset windows-debug-clang-cl
 
 ## API 总览
 
-全局认证由 `config.json` 中的 `drogon::plugin::GlobalFilters` 配置。除注册、登录、刷新令牌、健康检查和部分公开分享接口外，其余接口默认需要 `Authorization: Bearer <access_token>`。
+认证由各控制器路由的过滤器声明负责。需要登录的接口在 `ADD_METHOD_TO` 中声明 `JwtAuthFilter`；公开接口（注册、登录、刷新令牌、健康检查和公开分享访问）不声明 JWT 过滤器，但仍可通过公开限流过滤器获得保护。
 
 ### 认证接口
 

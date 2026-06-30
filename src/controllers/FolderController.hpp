@@ -26,24 +26,28 @@ namespace disk::folder {
             "/api/folder/create",
             drogon::Post,
             "disk::filters::JwtAuthFilter",
+            "disk::filters::FolderRateLimitFilter",
         );
         ADD_METHOD_TO(
             FolderController::GetTree,
             "/api/folder/tree",
             drogon::Get,
             "disk::filters::JwtAuthFilter",
+            "disk::filters::FolderRateLimitFilter",
         );
         ADD_METHOD_TO(
             FolderController::GetBreadcrumb,
             "/api/folder/{folder_id}/breadcrumb",
             drogon::Get,
             "disk::filters::JwtAuthFilter",
+            "disk::filters::FolderRateLimitFilter",
         );
         ADD_METHOD_TO(
             FolderController::Rename,
             "/api/folder/{folder_id}/rename",
             drogon::Put,
             "disk::filters::JwtAuthFilter",
+            "disk::filters::FolderRateLimitFilter",
         );
         METHOD_LIST_END
 

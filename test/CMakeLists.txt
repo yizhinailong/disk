@@ -40,6 +40,7 @@ set(TEST_SOURCES
     filters/SharePublicRateLimit_test.cpp
     filters/AdminRateLimit_test.cpp
     filters/FolderRateLimit_test.cpp
+    filters/FilterOwnership_test.cpp
     dtos/AdminDto_test.cpp
     dtos/AuthDto_test.cpp
     dtos/FileDto_test.cpp

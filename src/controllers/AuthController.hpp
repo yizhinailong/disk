@@ -24,7 +24,12 @@ namespace disk::auth {
         ADD_METHOD_TO(AuthController::Register, "/api/auth/register", drogon::Post);
         ADD_METHOD_TO(AuthController::Login, "/api/auth/login", drogon::Post);
         ADD_METHOD_TO(AuthController::RefreshTokens, "/api/auth/refresh", drogon::Post);
-        ADD_METHOD_TO(AuthController::Logout, "/api/auth/logout", drogon::Post);
+        ADD_METHOD_TO(
+            AuthController::Logout,
+            "/api/auth/logout",
+            drogon::Post,
+            "disk::filters::JwtAuthFilter"
+        );
         METHOD_LIST_END
 
         /**

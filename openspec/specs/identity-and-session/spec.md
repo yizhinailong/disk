@@ -36,7 +36,7 @@ The system SHALL authenticate users by username or email plus password and retur
 - **THEN** the system SHALL reject the login with an authentication error
 
 ### Requirement: Access Token Authentication
-The system SHALL protect non-public APIs using JWT bearer access tokens.
+The system SHALL protect non-public APIs using JWT bearer access tokens declared through each protected route's request filter configuration.
 
 #### Scenario: Protected API without token
 - **WHEN** a client calls a protected API without a valid bearer access token
@@ -45,6 +45,10 @@ The system SHALL protect non-public APIs using JWT bearer access tokens.
 #### Scenario: Protected API with valid token
 - **WHEN** a client calls a protected API with a valid access token
 - **THEN** the system SHALL associate the request with the authenticated user
+
+#### Scenario: Protected route filter declaration reviewed
+- **WHEN** a backend route is intended to require an authenticated user
+- **THEN** the route SHALL declare JWT bearer authentication in its route-level filter list
 
 ### Requirement: Refresh Token Lifecycle
 The system SHALL support refresh-token-based access token renewal and SHALL prevent invalid, expired, revoked, or already-used refresh tokens from being accepted.

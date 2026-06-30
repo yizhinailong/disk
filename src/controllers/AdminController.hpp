@@ -44,6 +44,7 @@ namespace disk::controllers {
             drogon::Get,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
         );
         ADD_METHOD_TO(
             AdminController::GetUserDetail,
@@ -51,6 +52,7 @@ namespace disk::controllers {
             drogon::Get,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
         );
         ADD_METHOD_TO(
             AdminController::ChangeUserStatus,
@@ -58,6 +60,7 @@ namespace disk::controllers {
             drogon::Put,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
         );
         ADD_METHOD_TO(
             AdminController::ChangeUserRole,
@@ -65,6 +68,7 @@ namespace disk::controllers {
             drogon::Put,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
         );
         ADD_METHOD_TO(
             AdminController::ChangeUserAvailableSpace,
@@ -72,6 +76,7 @@ namespace disk::controllers {
             drogon::Put,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
         );
         ADD_METHOD_TO(
             AdminController::SoftDeleteUser,
@@ -79,6 +84,7 @@ namespace disk::controllers {
             drogon::Delete,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
         );
         ADD_METHOD_TO(
             AdminController::GetGlobalStorageStats,
@@ -86,6 +92,7 @@ namespace disk::controllers {
             drogon::Get,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
         );
         ADD_METHOD_TO(
             AdminController::ListShares,
@@ -93,6 +100,7 @@ namespace disk::controllers {
             drogon::Get,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
         );
         ADD_METHOD_TO(
             AdminController::GetShareDetail,
@@ -100,6 +108,7 @@ namespace disk::controllers {
             drogon::Get,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
         );
         ADD_METHOD_TO(
             AdminController::ForceCancelShare,
@@ -107,6 +116,7 @@ namespace disk::controllers {
             drogon::Delete,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
         );
         ADD_METHOD_TO(
             AdminController::GetOverviewStats,
@@ -114,6 +124,7 @@ namespace disk::controllers {
             drogon::Get,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
         );
         ADD_METHOD_TO(
             AdminController::GetSystemStatus,
@@ -121,6 +132,7 @@ namespace disk::controllers {
             drogon::Get,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
         );
         ADD_METHOD_TO(
             AdminController::GetAdminLogs,
@@ -128,6 +140,7 @@ namespace disk::controllers {
             drogon::Get,
             "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
         );
         METHOD_LIST_END
 

@@ -32,7 +32,7 @@ namespace disk::share {
      * - GET    /api/share/download/{share_id}/{file_id} - 下载文件（需分享令牌）
      *
      * 认证边界：
-     * - 所有者端点（create/list/detail/update/cancel）：全局 JWT 过滤器
+     * - 所有者端点（create/list/detail/update/cancel）：路由级 JwtAuthFilter
      * - 访问端点（access）：公开，无需认证
      * - 浏览/下载端点（browse/download）：ShareAuthFilter（X-Share-Token）
      */
