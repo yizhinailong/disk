@@ -33,11 +33,15 @@ The system SHALL reserve user storage during upload initialization and SHALL rel
 - **THEN** the system SHALL release the reserved storage
 
 ### Requirement: Instant Upload
-The system SHALL support instant upload when uploaded content already exists and can be referenced safely.
+The system SHALL support instant upload when uploaded content already exists and can be referenced safely, and instant upload SHALL apply logical per-user storage accounting consistently with other user-visible file creation paths.
 
 #### Scenario: Existing content matches upload hash
 - **WHEN** upload initialization finds existing content matching the requested file hash
 - **THEN** the system SHALL create file metadata referencing the existing content without requiring chunk upload
+
+#### Scenario: Instant upload consumes logical quota
+- **WHEN** instant upload creates a new user-visible file reference to existing content
+- **THEN** the system SHALL increase that user's used storage by the logical file size and SHALL enforce quota using logical per-user bytes
 
 ### Requirement: Resumable Chunk Upload
 The system SHALL support chunked and resumable upload using upload task state and uploaded chunk tracking, and clients SHALL send chunk upload requests using the backend-defined upload task identifier, chunk index, chunk payload, and authenticated owner context.
@@ -82,6 +86,25 @@ The system SHALL provide clients with download metadata sufficient to verify exp
 #### Scenario: Visitor download metadata includes integrity fields
 - **WHEN** a visitor requests download information or browse metadata for an accessible shared file using a valid share token
 - **THEN** the system SHALL return expected byte size and available content hash or checksum metadata permitted for visitor download verification
+
+### Requirement: File Download Metadata Updates
+The system SHALL update file-level download metadata for successful content downloads that access a file through private owner APIs or visitor share APIs.
+
+#### Scenario: Private file content download succeeds
+- **WHEN** an authenticated owner successfully downloads file content through the private download endpoint
+- **THEN** the system SHALL increment file-level download count and update the file's last-accessed timestamp
+
+#### Scenario: Private download metadata is requested
+- **WHEN** an authenticated owner requests private download information without downloading content
+- **THEN** the system SHALL NOT count that metadata lookup as a file content download
+
+#### Scenario: Shared file content download succeeds
+- **WHEN** a visitor successfully downloads shared file content using a valid share token
+- **THEN** the system SHALL increment share-level download count and SHALL also update file-level download count and last-accessed timestamp
+
+#### Scenario: Share download metadata is requested
+- **WHEN** a visitor requests shared download information without downloading content
+- **THEN** the system SHALL NOT count that metadata lookup as a file content download or share content download
 
 ### Requirement: Ranged File Download
 The system SHALL support HTTP byte range requests for file downloads, and clients that resume downloads SHALL request byte ranges that match already received content before appending resumed bytes.
@@ -159,7 +182,7 @@ The system SHALL keep download metadata stable enough for clients to decide whet
 - **THEN** the metadata SHALL include stable file identity, expected total size, and available integrity fields needed to detect incompatible partial files
 
 ### Requirement: Upload Lifecycle Boundary
-The backend SHALL expose upload lifecycle behavior through an explicit domain boundary that preserves current upload initialization, chunk acceptance, completion, cancellation, expiry, quota, content, temporary-storage, and response semantics.
+The backend SHALL expose upload lifecycle behavior through an explicit domain boundary that preserves upload initialization, chunk acceptance, completion, cancellation, expiry, quota, content, temporary-storage, and response semantics while applying accepted accounting decisions for logical per-user storage.
 
 #### Scenario: Non-instant upload initialized
 - **WHEN** an authenticated user initializes a valid non-instant upload with sufficient quota
@@ -167,7 +190,7 @@ The backend SHALL expose upload lifecycle behavior through an explicit domain bo
 
 #### Scenario: Instant upload initialized
 - **WHEN** upload initialization finds existing content matching the requested file hash
-- **THEN** the upload lifecycle SHALL create file metadata referencing the existing content, update content reference state safely, and preserve the current accounting behavior for reused physical content
+- **THEN** the upload lifecycle SHALL create file metadata referencing the existing content, update content reference state safely, and increase used storage according to logical per-user accounting semantics
 
 #### Scenario: Upload completion succeeds
 - **WHEN** an upload completes with all chunks present and matching integrity metadata

@@ -1,10 +1,4 @@
-# Request Filter Application Specification
-
-## Purpose
-
-Defines backend request filter ownership, global and route-level filter boundaries, and duplicate filter prevention behavior.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Single Filter Ownership
 The backend SHALL define one ownership path for each request filter so that the same filter is not applied to a request through both global filter configuration and route-level declarations. JWT authentication SHALL be owned by global filter configuration with explicit public exemptions unless a later architecture decision replaces that strategy.
@@ -20,17 +14,6 @@ The backend SHALL define one ownership path for each request filter so that the 
 #### Scenario: JWT ownership reviewed
 - **WHEN** a developer reviews JWT authentication ownership
 - **THEN** protected owner and administrator routes SHALL receive JWT through the global filter path and SHALL NOT also declare route-level JWT for duplicate execution
-
-### Requirement: Global Cross-Cutting Filters
-The backend SHALL reserve global filters for concerns that must apply consistently across all or broad path-scoped request families without relying on individual route declarations.
-
-#### Scenario: Request tracing applies globally
-- **WHEN** any HTTP request is handled
-- **THEN** request tracing SHALL be applied globally and SHALL make a request identifier available for response headers and logs
-
-#### Scenario: Path-scoped global filter outside target path
-- **WHEN** a path-scoped global filter receives a request outside its target route family
-- **THEN** it SHALL no-op without requiring authentication attributes or blocking the request
 
 ### Requirement: Route-Owned Security Filters
 The backend SHALL express endpoint-specific security requirements that are not globally owned, including administrator authorization and share-token authentication, through route-level filter declarations. JWT SHALL remain globally owned with explicit public exemptions under the accepted global-with-exemptions strategy.

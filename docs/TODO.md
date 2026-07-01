@@ -39,22 +39,33 @@ The backend already has the following refactor foundations in place:
 
 ## 0.1 Sync documentation with current implementation
 
-- [ ] Replace stale historical TODO items with this remaining-work roadmap.
-- [ ] Link `docs/backend-discovery.md` as the source of current behavior for filters, upload, content, quota, trash, and downloads.
-- [ ] Move completed historical work to an archive note if long-term traceability is desired.
-- [ ] Ensure open questions distinguish between:
+Decision status: closed by `docs/backend-refactor-decisions.md`, with `docs/backend-discovery.md` retained as the source of confirmed current behavior.
+
+- [x] Replace stale historical TODO items with this remaining-work roadmap.
+- [x] Link `docs/backend-discovery.md` as the source of current behavior for filters, upload, content, quota, trash, and downloads.
+- [x] Move completed historical work to an archive note if long-term traceability is desired; no separate archive note is required for this decision pass.
+- [x] Ensure open questions distinguish between:
   - confirmed current behavior
   - future product decisions
   - implementation risks
 
 ## 0.2 Reconcile open product semantics
 
-- [ ] Decide whether `storage_used` should mean logical per-user bytes or physical unique bytes.
-- [ ] Decide whether instant upload should increase `storage_used` when copy already does.
-- [ ] Decide whether trash items should continue counting against quota until permanent deletion.
-- [ ] Decide whether private downloads should update file-level `download_count` and `last_accessed_at`.
-- [ ] Decide whether share downloads should also update file-level metadata or only share-level metadata.
-- [ ] Record decisions in a design note before behavior-changing implementation.
+Decision status: closed by `docs/backend-refactor-decisions.md`. Behavior-changing implementation remains open where noted below.
+
+- [x] Decide whether `storage_used` should mean logical per-user bytes or physical unique bytes: logical per-user bytes.
+- [x] Decide whether instant upload should increase `storage_used` when copy already does: yes, instant upload should increase logical used storage.
+- [x] Decide whether trash items should continue counting against quota until permanent deletion: yes, trash counts against quota until permanent deletion or expiry cleanup.
+- [x] Decide whether private downloads should update file-level `download_count` and `last_accessed_at`: yes, successful private content downloads should update file metadata.
+- [x] Decide whether share downloads should also update file-level metadata or only share-level metadata: share downloads should update both share-level and file-level metadata.
+- [x] Record decisions in a design note before behavior-changing implementation.
+
+Implementation follow-ups:
+
+- [ ] Update instant upload quota checks and `storage_used` mutation to match logical per-user accounting.
+- [ ] Update successful private content downloads to increment file-level `download_count` and refresh `last_accessed_at`.
+- [ ] Update successful share content downloads to preserve share-level counting and also update file-level metadata.
+- [ ] Add tests that distinguish content downloads from download-info metadata lookups.
 
 ---
 
@@ -101,10 +112,12 @@ The shared rate-limit helper work is already in place. Remaining work is mainly 
 
 ## 2.1 Choose JWT enforcement strategy
 
+Decision status: `global-with-exemptions`, recorded in `docs/backend-refactor-decisions.md`.
+
 Current discovery indicates protected routes may execute both global and route-level JWT filters.
 
-- [ ] Decide whether JWT protection should be global-with-exemptions or route-level-only.
-- [ ] Document the chosen strategy.
+- [x] Decide whether JWT protection should be global-with-exemptions or route-level-only: global-with-exemptions.
+- [x] Document the chosen strategy.
 - [ ] Remove duplicate JWT execution according to the chosen strategy.
 - [ ] Preserve public auth, health, and public share exemptions.
 - [ ] Preserve protected upload, file, folder, share-owner, and admin behavior.
@@ -121,10 +134,12 @@ Current discovery indicates protected routes may execute both global and route-l
 
 ## 2.3 Finalize Redis failure policy
 
+Decision status: fail-open for all current rate-limit families for now, recorded in `docs/backend-refactor-decisions.md`.
+
 Current behavior is fail-open for rate-limit Redis failures.
 
-- [ ] Decide whether all rate limits should remain fail-open.
-- [ ] If any endpoint should fail-closed, document the reason and expected response.
+- [x] Decide whether all rate limits should remain fail-open: yes, all current rate-limit families remain fail-open for now.
+- [x] If any endpoint should fail-closed, document the reason and expected response: none in this decision pass.
 - [ ] Keep failure policy explicit in code and tests.
 - [ ] Ensure headers remain consistent for rate-limit rejection responses.
 
@@ -375,11 +390,18 @@ For each task or PR:
 
 These are product or architecture decisions, not merely implementation tasks.
 
-- [ ] Should `storage_used` represent logical per-user bytes or physical unique bytes?
-- [ ] Should instant upload increase `storage_used` if copy does?
-- [ ] Should trash items count against quota until permanent deletion?
-- [ ] Should JWT be enforced globally with explicit public exemptions or only per route?
-- [ ] Should Redis failures remain fail-open for every rate-limit family?
-- [ ] Should private downloads update `files.download_count` and `files.last_accessed_at`?
-- [ ] Should share downloads update file-level metadata, share-level metadata, or both?
+Resolved by `docs/backend-refactor-decisions.md`:
+
+- [x] Should `storage_used` represent logical per-user bytes or physical unique bytes? Decision: logical per-user bytes.
+- [x] Should instant upload increase `storage_used` if copy does? Decision: yes.
+- [x] Should trash items count against quota until permanent deletion? Decision: yes, until permanent deletion or expiry cleanup.
+- [x] Should JWT be enforced globally with explicit public exemptions or only per route? Decision: global with explicit public exemptions.
+- [x] Should Redis failures remain fail-open for every rate-limit family? Decision: yes for all current rate-limit families, for now.
+- [x] Should private downloads update `files.download_count` and `files.last_accessed_at`? Decision: yes for successful content downloads.
+- [x] Should share downloads update file-level metadata, share-level metadata, or both? Decision: both for successful content downloads.
+
+Still open:
+
 - [ ] Should object storage compatibility be a near-term requirement or only a design constraint?
+- [ ] Should copy accounting use a reservation-style model instead of incrementing `storage_used` before copy work completes?
+- [ ] Should inline expired-task cleanup during upload init release `storage_reserved` through the upload lifecycle/quota boundary?
