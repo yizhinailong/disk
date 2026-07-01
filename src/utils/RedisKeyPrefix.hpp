@@ -152,7 +152,8 @@ namespace disk::redis {
          * @param sort_by Sort field name
          * @param sort_order Sort direction (asc/desc)
          * @param page Page number
-         * @return std::string Redis key format: "file_list:{user_id}:{parent_id}:{type}:{sort_by}:{sort_order}:{page}"
+         * @param page_size Page size
+         * @return std::string Redis key format: "file_list:{user_id}:{parent_id}:{type}:{sort_by}:{sort_order}:{page}:{page_size}"
          */
         [[nodiscard]]
         static auto BuildFileListCacheKey(
@@ -161,7 +162,8 @@ namespace disk::redis {
             const std::string& type,
             const std::string& sort_by,
             const std::string& sort_order,
-            int page
+            int page,
+            int page_size
         ) -> std::string {
             return std::string(FILE_LIST_CACHE_PREFIX) + ":" +
                    std::to_string(user_id) + ":" +
@@ -169,7 +171,8 @@ namespace disk::redis {
                    type + ":" +
                    sort_by + ":" +
                    sort_order + ":" +
-                   std::to_string(page);
+                   std::to_string(page) + ":" +
+                   std::to_string(page_size);
         }
 
         /**

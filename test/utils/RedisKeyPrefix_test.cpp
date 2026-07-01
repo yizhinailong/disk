@@ -75,6 +75,17 @@ TEST(RedisKeyPrefix, BuildLoginRateLimitKeyIPv6WithPort) {
     EXPECT_EQ(result, "rate:login:2001:db8::1");
 }
 
+TEST(RedisKeyPrefix, BuildFileListCacheKeyIncludesPageSize) {
+    auto result = RedisKeyPrefix::BuildFileListCacheKey(42, 7, "all", "name", "asc", 3, 50);
+    EXPECT_EQ(result, "file_list:42:7:all:name:asc:3:50");
+}
+
+TEST(RedisKeyPrefix, BuildFileListCacheKeySeparatesDifferentPageSizes) {
+    auto small_page = RedisKeyPrefix::BuildFileListCacheKey(42, 7, "all", "name", "asc", 1, 20);
+    auto large_page = RedisKeyPrefix::BuildFileListCacheKey(42, 7, "all", "name", "asc", 1, 100);
+    EXPECT_NE(small_page, large_page);
+}
+
 /// ==================== Share Token Redis Key Tests ====================
 
 TEST(RedisKeyPrefix, BuildShareTokenKeyValidShareCodeAndHash) {
