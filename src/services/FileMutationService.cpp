@@ -1416,16 +1416,19 @@ namespace disk::file {
     auto FileMutationService::InvalidateFileListCache(uint64_t user_id, const std::vector<uint64_t>& folder_ids)
         -> drogon::Task<void> {
         std::vector<std::string> keys_to_delete;
+        constexpr int page_sizes_to_invalidate[] = { 20, 50, 100 };
         for (const auto folder_id : folder_ids) {
             for (const auto& type : {"all", "file", "folder"}) {
                 for (const auto& sort : {"name", "size", "created_at", "updated_at"}) {
                     for (const auto& order : {"asc", "desc"}) {
                         for (int page = 1; page <= 3; ++page) {
-                            keys_to_delete.push_back(
-                                disk::redis::RedisKeyPrefix::BuildFileListCacheKey(
-                                    user_id, folder_id, type, sort, order, page
-                                )
-                            );
+                            for (const auto page_size : page_sizes_to_invalidate) {
+                                keys_to_delete.push_back(
+                                    disk::redis::RedisKeyPrefix::BuildFileListCacheKey(
+                                        user_id, folder_id, type, sort, order, page, page_size
+                                    )
+                                );
+                            }
                         }
                     }
                 }

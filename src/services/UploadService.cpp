@@ -24,7 +24,10 @@
 #include <json/reader.h>
 #include <json/writer.h>
 
+#include "ContentRepository.hpp"
 #include "FileServiceUtils.hpp"
+#include "TransactionRunner.hpp"
+#include "UploadTaskRepository.hpp"
 #include "models/FileContents.hpp"
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
@@ -804,60 +807,60 @@ namespace disk::file {
                   << " dedup_hit=" << (existing_content.has_value() ? "true" : "false")
                   << " filename_exists=false";
 
-        std::shared_ptr<drogon::orm::Transaction> transaction;
         Files file;
         bool db_operation_failed = false;
         auto tx_start = std::chrono::steady_clock::now();
-        try {
-            transaction = co_await m_db_client->newTransactionCoro();
+        TransactionRunner transaction_runner(m_db_client);
+        auto tx_result = co_await transaction_runner.Run(
+            [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                ContentRepository content_repository(transaction);
+                UploadTaskRepository upload_task_repository(transaction);
+                CoroMapper<Files> file_mapper(transaction);
 
-            CoroMapper<FileContents> content_mapper(transaction);
-            CoroMapper<Files> file_mapper(transaction);
-
-            uint64_t content_id = 0;
-            if (existing_content.has_value()) {
-                content_id = existing_content.value();
-                auto increment_result = co_await transaction->execSqlCoro(
-                    "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = $1",
-                    content_id
-                );
-                if (increment_result.affectedRows() == 0) {
-                    Logger::Warn() << "File content not found when finalizing upload: content_id="
-                             << content_id;
-                    throw std::runtime_error("Failed to increment file content reference count");
+                uint64_t content_id = 0;
+                if (existing_content.has_value()) {
+                    content_id = existing_content.value();
+                    auto incremented = co_await content_repository.IncrementRefCount(content_id);
+                    if (!incremented) {
+                        Logger::Warn() << "File content not found when finalizing upload: content_id="
+                                 << content_id;
+                        co_return std::unexpected(ErrorInfo(
+                            ErrorCode::InternalError,
+                            "Failed to increment file content reference count"
+                        ));
+                    }
+                } else {
+                    content_id = co_await content_repository.CreateContent(
+                        final_hash,
+                        final_sha256,
+                        task.getValueOfFileSize(),
+                        final_storage_path,
+                        ""
+                    );
+                    Logger::Debug() << "FileContents created successfully: content_id=" << content_id;
                 }
-            } else {
-                FileContents content;
-                content.setHashMd5(final_hash);
-                content.setHashSha256(final_sha256);
-                content.setSize(task.getValueOfFileSize());
-                content.setStoragePath(final_storage_path.string());
-                content.setMimeType("");
-                content.setRefCount(1);
 
-                content = co_await content_mapper.insert(content);
-                content_id = content.getValueOfId();
-                Logger::Debug() << "FileContents created successfully: content_id=" << content_id;
-            }
+                auto parent_location_result =
+                    co_await utils::ResolveFolderLocation(transaction, task.getValueOfFolderId(), user_id);
+                if (!parent_location_result) {
+                    co_return std::unexpected(ErrorInfo(
+                        ErrorCode::FolderNotFound,
+                        "Target upload folder not found"
+                    ));
+                }
 
-            auto parent_location_result =
-                co_await utils::ResolveFolderLocation(transaction, task.getValueOfFolderId(), user_id);
-            if (!parent_location_result) {
-                throw std::runtime_error("Target upload folder not found");
-            }
+                file.setUserId(user_id);
+                file.setContentId(content_id);
+                file.setFolderId(task.getValueOfFolderId());
+                file.setName(task.getValueOfFilename());
+                file.setExtension(ExtractExtension(task.getValueOfFilename()));
+                file.setSize(task.getValueOfFileSize());
+                file.setMimeType("");
+                file.setPath(utils::BuildFilePath(parent_location_result->path, task.getValueOfFilename()));
+                file.setIsFavorite(0);
+                file.setDownloadCount(0);
 
-            file.setUserId(user_id);
-            file.setContentId(content_id);
-            file.setFolderId(task.getValueOfFolderId());
-            file.setName(task.getValueOfFilename());
-            file.setExtension(ExtractExtension(task.getValueOfFilename()));
-            file.setSize(task.getValueOfFileSize());
-            file.setMimeType("");
-            file.setPath(utils::BuildFilePath(parent_location_result->path, task.getValueOfFilename()));
-            file.setIsFavorite(0);
-            file.setDownloadCount(0);
-
-            file = co_await file_mapper.insert(file);
+                file = co_await file_mapper.insert(file);
 
                 auto transfer_result = co_await transaction->execSqlCoro(
                     "UPDATE users SET storage_reserved = GREATEST(storage_reserved - $1, 0), " "storage_used = storage_used + $2 WHERE id = $3",
@@ -866,42 +869,27 @@ namespace disk::file {
                     user_id
                 );
 
-            if (transfer_result.affectedRows() == 0) {
-                throw std::runtime_error("Failed to transfer reserved quota to used");
-            }
-
-            auto finalize_result = co_await transaction->execSqlCoro(
-                "UPDATE upload_tasks SET status = 1, finalized_at = NOW() WHERE id = $1 AND status = 0",
-                upload_id
-            );
-            if (finalize_result.affectedRows() == 0) {
-                throw std::runtime_error("Failed to finalize upload task");
-            }
-
-            co_await transaction->execSqlCoro(
-                "DELETE FROM upload_task_chunks WHERE task_id = $1",
-                upload_id
-            );
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Database operation failed: " << e.base().what();
-            if (transaction) {
-                try {
-                    transaction->rollback();
-                } catch (const std::exception& rollback_e) {
-                    Logger::Error() << "Transaction rollback failed: " << rollback_e.what();
+                if (transfer_result.affectedRows() == 0) {
+                    co_return std::unexpected(ErrorInfo(
+                        ErrorCode::InternalError,
+                        "Failed to transfer reserved quota to used"
+                    ));
                 }
-            }
-            db_operation_failed = true;
-        } catch (const std::exception& e) {
-            Logger::Error() << "Database operation failed: " << e.what();
-            if (transaction) {
-                try {
-                    transaction->rollback();
-                } catch (const std::exception& rollback_e) {
-                    Logger::Error() << "Transaction rollback failed: " << rollback_e.what();
+
+                auto finalized = co_await upload_task_repository.MarkCompleted(upload_id);
+                if (!finalized) {
+                    co_return std::unexpected(ErrorInfo(
+                        ErrorCode::InternalError,
+                        "Failed to finalize upload task"
+                    ));
                 }
+
+                co_await upload_task_repository.DeleteChunks(upload_id);
+                co_return {};
             }
+        );
+        if (!tx_result) {
+            Logger::Error() << "Database operation failed: " << tx_result.error().message;
             db_operation_failed = true;
         }
         Logger::Debug() << "[stage_timer] tx duration_ms="
@@ -1421,16 +1409,19 @@ namespace disk::file {
     auto UploadService::InvalidateFileListCache(uint64_t user_id, const std::vector<uint64_t>& folder_ids)
         -> drogon::Task<void> {
         std::vector<std::string> keys_to_delete;
+        constexpr int page_sizes_to_invalidate[] = { 20, 50, 100 };
         for (const auto folder_id : folder_ids) {
             for (const auto& type : {"all", "file", "folder"}) {
                 for (const auto& sort : {"name", "size", "created_at", "updated_at"}) {
                     for (const auto& order : {"asc", "desc"}) {
                         for (int page = 1; page <= 3; ++page) {
-                            keys_to_delete.push_back(
-                                disk::redis::RedisKeyPrefix::BuildFileListCacheKey(
-                                    user_id, folder_id, type, sort, order, page
-                                )
-                            );
+                            for (const auto page_size : page_sizes_to_invalidate) {
+                                keys_to_delete.push_back(
+                                    disk::redis::RedisKeyPrefix::BuildFileListCacheKey(
+                                        user_id, folder_id, type, sort, order, page, page_size
+                                    )
+                                );
+                            }
                         }
                     }
                 }
