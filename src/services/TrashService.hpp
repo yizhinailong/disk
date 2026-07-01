@@ -25,11 +25,13 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <drogon/orm/DbClient.h>
 
 #include "dtos/TrashDto.hpp"
+#include "services/FileServiceUtils.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::trash {
@@ -68,6 +70,17 @@ namespace disk::trash {
         auto operator=(const TrashService&) -> TrashService& = delete;
         TrashService(TrashService&&) = default;
         auto operator=(TrashService&&) -> TrashService& = default;
+
+        [[nodiscard]]
+        auto CreateTrashRecords(
+            const drogon::orm::DbClientPtr& client,
+            const std::vector<disk::file::utils::TrashInsertItem>& trash_items,
+            uint64_t user_id
+        ) const -> drogon::Task<bool>;
+
+        [[nodiscard]]
+        auto CleanupExpiredTrashItems(int fetch_batch_size, int max_batches_per_run)
+            -> drogon::Task<Result<int>>;
 
         /**
          * @brief 列出回收站项目
@@ -159,6 +172,29 @@ namespace disk::trash {
             std::string item_data;
             std::optional<uint64_t> content_id;
         };
+
+        struct PermanentDeleteResult {
+            int deleted_count{ 0 };
+            uint64_t freed_space{ 0 };
+            std::vector<uint64_t> zero_ref_content_ids;
+        };
+
+        struct BlobCleanupStats {
+            int verified_count{ 0 };
+            int deleted_count{ 0 };
+        };
+
+        [[nodiscard]]
+        auto PermanentlyDeleteTrashItems(
+            const std::vector<PrefetchedTrashItem>& trash_items,
+            bool require_valid_file_content
+        ) -> drogon::Task<PermanentDeleteResult>;
+
+        [[nodiscard]]
+        auto CleanupVerifiedZeroRefBlobs(
+            const std::vector<uint64_t>& content_ids,
+            const std::string& log_context
+        ) -> drogon::Task<BlobCleanupStats>;
 
         /**
          * @brief 生成唯一文件名（用于冲突自动重命名）

@@ -208,10 +208,6 @@ namespace disk::file {
             -> drogon::Task<void>;
 
         [[nodiscard]]
-        auto FindExistingContent(const std::string& file_hash) const
-            -> drogon::Task<std::optional<uint64_t>>;
-
-        [[nodiscard]]
         auto FindExistingTask(uint64_t user_id, const std::string& file_hash) const
             -> drogon::Task<std::optional<drogon_model::disk::UploadTasks>>;
 

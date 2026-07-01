@@ -13,6 +13,8 @@ set(TEST_SOURCES
     services/HashUtil_test.cpp
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp
+    services/ContentService_test.cpp
+    services/QuotaService_test.cpp
     services/FileUploadConsistency_test.cpp
     services/UploadPath_test.cpp
     services/CompleteUploadSingleflight_test.cpp
@@ -52,7 +54,12 @@ set(TEST_SOURCES
     storage/AssemblyPerf_test.cpp
     controllers/DownloadResponder_test.cpp
     ${CMAKE_SOURCE_DIR}/src/controllers/DownloadResponder.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/ContentService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/QuotaService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/TrashService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/UploadLifecycleService.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/ShareAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/RegisterRateLimitFilter.cpp
@@ -63,6 +70,9 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/StorageMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/models/FileContents.cpp
+    ${CMAKE_SOURCE_DIR}/src/models/Files.cpp
+    ${CMAKE_SOURCE_DIR}/src/models/Folders.cpp
+    ${CMAKE_SOURCE_DIR}/src/models/Trash.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TokenService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/RedisService.cpp
 )
@@ -75,7 +85,12 @@ set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/StorageMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/controllers/DownloadResponder.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/UploadLifecycleService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/TrashService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/QuotaService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/ContentService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TokenService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/RedisService.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminAuthFilter.cpp
@@ -94,7 +109,7 @@ set_source_files_properties(
     PROPERTIES COMPILE_FLAGS "-include drogon/HttpAppFramework.h -include utils/LogHelper.hpp"
 )
 
-target_include_directories(disk-test PRIVATE 
+target_include_directories(disk-test PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/test
 )
@@ -199,6 +214,19 @@ set_tests_properties(
     PROPERTIES
     RUN_SERIAL TRUE
     TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME DomainExtractionInvariantsIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_domain_extraction_invariants.py"
+)
+
+set_tests_properties(
+    DomainExtractionInvariantsIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 180
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 

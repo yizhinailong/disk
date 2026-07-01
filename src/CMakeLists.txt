@@ -107,6 +107,7 @@ set(Services_HEADERS
     services/AdminService.hpp
     services/AuthService.hpp
     services/CleanupService.hpp
+    services/ContentService.hpp
     services/ContentRepository.hpp
     services/FileListQuery.hpp
     services/FileMutationService.hpp
@@ -115,6 +116,7 @@ set(Services_HEADERS
     services/FolderService.hpp
     services/HealthService.hpp
     services/OperationLogService.hpp
+    services/QuotaService.hpp
     services/RedisService.hpp
     services/ScheduledTasks.hpp
     services/SearchQuery.hpp
@@ -123,6 +125,7 @@ set(Services_HEADERS
     services/TokenService.hpp
     services/TrashService.hpp
     services/TransactionRunner.hpp
+    services/UploadLifecycleService.hpp
     services/UploadService.hpp
     services/UploadTaskRepository.hpp
     services/UserService.hpp
@@ -131,6 +134,7 @@ set(Services_SOURCES
     services/AdminService.cpp
     services/AuthService.cpp
     services/CleanupService.cpp
+    services/ContentService.cpp
     services/ContentRepository.cpp
     services/FileListQuery.cpp
     services/FileMutationService.cpp
@@ -139,6 +143,7 @@ set(Services_SOURCES
     services/FolderService.cpp
     services/HealthService.cpp
     services/OperationLogService.cpp
+    services/QuotaService.cpp
     services/RedisService.cpp
     services/ScheduledTasks.cpp
     services/SearchQuery.cpp
@@ -146,6 +151,7 @@ set(Services_SOURCES
     services/SystemService.cpp
     services/TokenService.cpp
     services/TrashService.cpp
+    services/UploadLifecycleService.cpp
     services/UploadService.cpp
     services/UploadTaskRepository.cpp
     services/UserService.cpp

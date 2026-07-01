@@ -1,0 +1,281 @@
+/**
+ * @file ContentService.cpp
+ * @author LiuFeng (liufeng.code@outlook.com)
+ * @brief 文件内容领域服务实现
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
+#include "ContentService.hpp"
+
+#include <utility>
+
+#include <drogon/orm/CoroMapper.h>
+#include <drogon/orm/Criteria.h>
+
+#include "models/FileContents.hpp"
+#include "services/FileServiceUtils.hpp"
+#include "utils/BatchUtils.hpp"
+#include "utils/LogHelper.hpp"
+
+namespace disk::content {
+
+    using disk::utils::BatchUtils;
+    using drogon::orm::CompareOperator;
+    using drogon::orm::CoroMapper;
+    using drogon::orm::Criteria;
+    using drogon_model::disk::FileContents;
+
+    namespace {
+
+        auto ToMetadata(const FileContents& content) -> ContentMetadata {
+            return ContentMetadata{ .id = content.getValueOfId(),
+                                    .hash_md5 = content.getValueOfHashMd5(),
+                                    .hash_sha256 = content.getValueOfHashSha256(),
+                                    .size = content.getValueOfSize(),
+                                    .storage_path = content.getValueOfStoragePath(),
+                                    .mime_type = content.getValueOfMimeType(),
+                                    .ref_count = static_cast<int>(content.getValueOfRefCount()) };
+        }
+
+        auto CollectContentIds(const std::unordered_map<uint64_t, uint64_t>& deltas)
+            -> std::vector<uint64_t> {
+            std::vector<uint64_t> content_ids;
+            content_ids.reserve(deltas.size());
+            for (const auto& [content_id, delta] : deltas) {
+                if (delta == 0) {
+                    continue;
+                }
+                content_ids.push_back(content_id);
+            }
+            return content_ids;
+        }
+
+    } ///< namespace
+
+    ContentService::ContentService(drogon::orm::DbClientPtr db_client)
+        : m_db_client(std::move(db_client)) {
+        Logger::Debug() << "ContentService initialization completed";
+    }
+
+    auto ContentService::FindByMd5(const std::string& hash_md5) const
+        -> drogon::Task<std::optional<ContentMetadata>> {
+        co_return co_await FindByMd5(m_db_client, hash_md5);
+    }
+
+    auto ContentService::FindByMd5(
+        const drogon::orm::DbClientPtr& client,
+        const std::string& hash_md5
+    ) const -> drogon::Task<std::optional<ContentMetadata>> {
+        try {
+            CoroMapper<FileContents> mapper(client);
+            auto content = co_await mapper.findOne(
+                Criteria(FileContents::Cols::_hash_md5, CompareOperator::EQ, hash_md5)
+            );
+            co_return ToMetadata(content);
+        } catch (const drogon::orm::UnexpectedRows&) {
+            co_return std::nullopt;
+        } catch (const drogon::orm::DrogonDbException& e) {
+            Logger::Warn() << "Failed to find file content by md5: " << e.base().what();
+            co_return std::nullopt;
+        }
+    }
+
+    auto ContentService::FindExistingIds(
+        const drogon::orm::DbClientPtr& client,
+        const std::vector<uint64_t>& content_ids
+    ) const -> drogon::Task<std::unordered_set<uint64_t>> {
+        std::unordered_set<uint64_t> existing_ids;
+        if (content_ids.empty()) {
+            co_return existing_ids;
+        }
+
+        try {
+            auto rows = co_await client->execSqlCoro(
+                "SELECT id FROM file_contents WHERE id IN (" +
+                    BatchUtils::BuildSafeNumericInClause(content_ids) + ")"
+            );
+            existing_ids.reserve(rows.size());
+            for (const auto& row : rows) {
+                existing_ids.insert(row["id"].as<uint64_t>());
+            }
+        } catch (const drogon::orm::DrogonDbException& e) {
+            Logger::Warn() << "File content batch id lookup failed: " << e.base().what();
+        }
+
+        co_return existing_ids;
+    }
+
+    auto ContentService::Create(
+        const drogon::orm::DbClientPtr& client,
+        const NewContent& content
+    ) const -> drogon::Task<ContentMetadata> {
+        FileContents model;
+        model.setHashMd5(content.hash_md5);
+        model.setHashSha256(content.hash_sha256);
+        model.setSize(content.size);
+        model.setStoragePath(content.storage_path);
+        model.setMimeType(content.mime_type);
+        model.setRefCount(content.ref_count);
+
+        CoroMapper<FileContents> mapper(client);
+        auto inserted = co_await mapper.insert(model);
+        co_return ToMetadata(inserted);
+    }
+
+    auto ContentService::IncrementRefCount(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t content_id,
+        uint64_t increment
+    ) const -> drogon::Task<Result<void>> {
+        if (increment == 0) {
+            co_return {};
+        }
+
+        try {
+            auto result = co_await client->execSqlCoro(
+                "UPDATE file_contents SET ref_count = ref_count + $1 WHERE id = $2",
+                increment,
+                content_id
+            );
+            if (result.affectedRows() == 0) {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::FileNotFound, "File content not found")
+                );
+            }
+            co_return {};
+        } catch (const drogon::orm::DrogonDbException& e) {
+            Logger::Error() << "Failed to increment file content ref_count: content_id="
+                            << content_id << " - " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to update file content reference count")
+            );
+        }
+    }
+
+    auto ContentService::IncrementRefCounts(
+        const drogon::orm::DbClientPtr& client,
+        const std::unordered_map<uint64_t, uint64_t>& increments,
+        const std::unordered_set<uint64_t>& existing_content_ids
+    ) const -> drogon::Task<std::unordered_set<uint64_t>> {
+        std::string update_sql = "UPDATE file_contents SET ref_count = ref_count + CASE id";
+        std::vector<std::pair<uint64_t, uint64_t>> update_cases;
+        update_cases.reserve(increments.size());
+        std::vector<uint64_t> valid_content_ids;
+        valid_content_ids.reserve(increments.size());
+
+        int param_index = 1;
+        for (const auto& [content_id, increment] : increments) {
+            if (increment == 0 || !existing_content_ids.contains(content_id)) {
+                continue;
+            }
+            update_cases.emplace_back(content_id, increment);
+            valid_content_ids.push_back(content_id);
+            auto when_param = std::to_string(param_index++);
+            auto then_param = std::to_string(param_index++);
+            update_sql += " WHEN $" + when_param + " THEN $" + then_param;
+        }
+
+        std::unordered_set<uint64_t> incremented_ids;
+        incremented_ids.reserve(valid_content_ids.size());
+
+        if (valid_content_ids.empty()) {
+            co_return incremented_ids;
+        }
+
+        update_sql += " ELSE 0 END WHERE id IN (" +
+                      BatchUtils::BuildSafeNumericInClause(valid_content_ids) + ")";
+
+        try {
+            co_await disk::file::utils::ExecSqlWithBindings(
+                client,
+                update_sql,
+                [&](auto& binder) {
+                    for (const auto& [content_id, increment] : update_cases) {
+                        binder << content_id << increment;
+                    }
+                }
+            );
+            for (const auto id : valid_content_ids) {
+                incremented_ids.insert(id);
+            }
+        } catch (const drogon::orm::DrogonDbException& e) {
+            Logger::Warn() << "File content batch ref_count increment failed: " << e.base().what();
+        }
+
+        co_return incremented_ids;
+    }
+
+    auto ContentService::DecrementRefCounts(
+        const drogon::orm::DbClientPtr& client,
+        const std::unordered_map<uint64_t, uint64_t>& decrements
+    ) const -> drogon::Task<std::vector<ZeroRefContent>> {
+        auto content_ids = CollectContentIds(decrements);
+        if (content_ids.empty()) {
+            co_return std::vector<ZeroRefContent>{};
+        }
+
+        std::string update_sql =
+            "UPDATE file_contents SET ref_count = GREATEST(ref_count - CASE id";
+        std::vector<std::pair<uint64_t, uint64_t>> update_cases;
+        update_cases.reserve(content_ids.size());
+
+        int param_index = 1;
+        for (const auto& [content_id, decrement] : decrements) {
+            if (decrement == 0) {
+                continue;
+            }
+            update_cases.emplace_back(content_id, decrement);
+            auto when_param = std::to_string(param_index++);
+            auto then_param = std::to_string(param_index++);
+            update_sql += " WHEN $" + when_param + " THEN $" + then_param;
+        }
+        update_sql += " ELSE 0 END, 0) WHERE id IN (" +
+                      BatchUtils::BuildSafeNumericInClause(content_ids) + ")";
+
+        try {
+            co_await disk::file::utils::ExecSqlWithBindings(
+                client,
+                update_sql,
+                [&](auto& binder) {
+                    for (const auto& [content_id, decrement] : update_cases) {
+                        binder << content_id << decrement;
+                    }
+                }
+            );
+        } catch (const drogon::orm::DrogonDbException& e) {
+            Logger::Warn() << "File content batch ref_count decrement failed: " << e.base().what();
+            co_return std::vector<ZeroRefContent>{};
+        }
+
+        co_return co_await VerifyZeroRefContents(client, content_ids);
+    }
+
+    auto ContentService::VerifyZeroRefContents(
+        const drogon::orm::DbClientPtr& client,
+        const std::vector<uint64_t>& content_ids
+    ) const -> drogon::Task<std::vector<ZeroRefContent>> {
+        if (content_ids.empty()) {
+            co_return std::vector<ZeroRefContent>{};
+        }
+
+        std::vector<ZeroRefContent> zero_ref_contents;
+        try {
+            auto rows = co_await client->execSqlCoro(
+                "SELECT id, storage_path FROM file_contents WHERE ref_count = 0 AND id IN (" +
+                    BatchUtils::BuildSafeNumericInClause(content_ids) + ")"
+            );
+            zero_ref_contents.reserve(rows.size());
+            for (const auto& row : rows) {
+                zero_ref_contents.push_back({ .id = row["id"].as<uint64_t>(),
+                                              .storage_path = row["storage_path"].as<std::string>() });
+            }
+        } catch (const drogon::orm::DrogonDbException& e) {
+            Logger::Warn() << "File content zero-ref verification failed: " << e.base().what();
+        }
+
+        co_return zero_ref_contents;
+    }
+
+} ///< namespace disk::content
