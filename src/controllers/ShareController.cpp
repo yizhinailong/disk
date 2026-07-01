@@ -9,25 +9,17 @@
 
 #include "ShareController.hpp"
 
-#include <memory>
-
 #include "DownloadResponder.hpp"
+#include "application/ApplicationContext.hpp"
+#include "controllers/ControllerHelpers.hpp"
 #include "dtos/ShareDto.hpp"
-#include "storage/StorageMgr.hpp"
-#include "utils/ConfigMgr.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::share {
 
     ShareController::ShareController()
-        : m_share_service(
-              std::make_unique<ShareService>(
-                  drogon::app().getDbClient(),
-                  drogon::app().getRedisClient(),
-                  disk::utils::ConfigMgr::GetInstance()->GetJwtSecret()
-              )
-          ),
-          m_storage(storage::StorageMgr::GetStorage()) {
+        : m_share_service(&disk::application::ApplicationContext::GetInstance()->Share()),
+          m_storage(disk::application::ApplicationContext::GetInstance()->Storage()) {
     }
 
     /// ==================== 所有者端点（JWT 保护） ====================
@@ -50,7 +42,7 @@ namespace disk::share {
                   << ", permission=" << SharePermissionToString(parse_result->permission);
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层创建分享
         auto result = co_await m_share_service->Create(*parse_result, user_id);
@@ -82,7 +74,7 @@ namespace disk::share {
                   << ", page=" << parse_result->page << ", page_size=" << parse_result->page_size;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层获取分享列表
         auto result = co_await m_share_service->List(*parse_result, user_id);
@@ -113,7 +105,7 @@ namespace disk::share {
         }
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层获取分享详情
         auto result = co_await m_share_service->Detail(*parse_result, user_id);
@@ -154,7 +146,7 @@ namespace disk::share {
                           "null");
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层更新分享设置
         auto result = co_await m_share_service->Update(*parse_result, user_id);
@@ -186,7 +178,7 @@ namespace disk::share {
                   << parse_result->share_ids.size();
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层批量取消分享
         auto result = co_await m_share_service->Cancel(*parse_result, user_id);
@@ -415,7 +407,7 @@ namespace disk::share {
             co_return Response::Error(parse_result.error());
         }
 
-        const auto target_user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto target_user_id = disk::controllers::GetAuthenticatedUserId(request);
         const auto internal_share_id = request->attributes()->get<uint64_t>("share_id");
         const auto& share_code = request->attributes()->get<std::string>("share_code");
 

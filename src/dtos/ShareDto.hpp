@@ -206,7 +206,7 @@ namespace disk::share {
             if (request.file_ids.empty() && request.folder_ids.empty()) {
                 Logger::Warn() << "Create share request must contain file_ids or folder_ids";
                 return std::unexpected(ErrorInfo(
-                    ErrorCode::InvalidParameter,
+                    ErrorCode::ValidationFailed,
                     "Create share request must contain file_ids or folder_ids"
                 ));
             }

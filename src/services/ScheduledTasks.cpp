@@ -9,6 +9,8 @@
 
 #include "services/ScheduledTasks.hpp"
 
+#include <utility>
+
 namespace disk::services {
 
     /// ==================== 初始化 ====================
@@ -17,6 +19,13 @@ namespace disk::services {
         auto instance = GetInstance();
         if (!instance->m_cleanup_service) {
             instance->m_cleanup_service = std::make_shared<CleanupService>(std::move(db_client));
+        }
+    }
+
+    auto ScheduledTasks::Initialize(std::shared_ptr<CleanupService> cleanup_service) -> void {
+        auto instance = GetInstance();
+        if (!instance->m_cleanup_service) {
+            instance->m_cleanup_service = std::move(cleanup_service);
         }
     }
 

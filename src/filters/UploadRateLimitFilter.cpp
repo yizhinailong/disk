@@ -8,6 +8,7 @@
  */
 
 #include "UploadRateLimitFilter.hpp"
+#include "filters/RateLimitHelper.hpp"
 
 #include <algorithm>
 
@@ -42,14 +43,14 @@ namespace disk::filters {
         }
 
         const auto user_id = attrs->get<uint64_t>("user_id");
-        const auto window = GetCurrentWindow();
+        const auto window = GetFixedWindowStart(WINDOW_SECONDS);
         const auto key = RedisKeyPrefix::BuildUploadRateLimitKey(user_id, window);
         const auto configured_limit =
             disk::utils::ConfigMgr::GetInstance()->GetUploadRateLimitPerMinute();
         const auto limit = configured_limit > 0 ? configured_limit : DEFAULT_LIMIT;
 
         /// 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
-        auto incr_result = co_await m_redis_service->IncrWithExpire(key, WINDOW_SECONDS);
+        auto incr_result = co_await CheckFixedWindowLimit(m_redis_service, key, WINDOW_SECONDS);
         if (!incr_result) {
             Logger::Error() << "Redis IncrWithExpire failed: " << incr_result.error().message;
             /// Redis 失败时不阻止请求
@@ -60,25 +61,12 @@ namespace disk::filters {
 
         /// 检查是否超过限制
         if (current_count > limit) {
-            const auto reset_time = GetResetTime(window);
-            const auto now = std::chrono::system_clock::now();
-            const auto now_seconds = std::chrono::duration_cast<std::chrono::seconds>(
-                                         now.time_since_epoch()
-                                     )
-                                         .count();
-            const auto retry_after = std::max<int64_t>(1, reset_time - now_seconds);
-
+            const auto reset_time = GetFixedWindowReset(window, WINDOW_SECONDS);
             Logger::Warn() << "Upload rate limit: user_id=" << user_id
                      << ", path=" << request->path()
                      << ", count=" << current_count;
 
-            auto response = disk::Response::Error(disk::error::Code::TooManyRequests);
-            response->addHeader("X-RateLimit-Limit", std::to_string(limit));
-            response->addHeader("X-RateLimit-Remaining", "0");
-            response->addHeader("X-RateLimit-Reset", std::to_string(reset_time));
-            response->addHeader("Retry-After", std::to_string(retry_after));
-
-            co_return response;
+            co_return BuildRateLimitExceededResponse(limit, reset_time);
         }
 
         Logger::Debug() << "Upload rate limit check passed: user_id=" << user_id

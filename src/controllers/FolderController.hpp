@@ -82,7 +82,7 @@ namespace disk::folder {
             -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
-        std::unique_ptr<FolderService> m_folder_service{};
+        FolderService* m_folder_service{};
     };
 
 } ///< namespace disk::folder

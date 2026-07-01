@@ -9,13 +9,15 @@
 
 #include "FolderController.hpp"
 
+#include "application/ApplicationContext.hpp"
+#include "controllers/ControllerHelpers.hpp"
 #include "dtos/FolderDto.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::folder {
 
     FolderController::FolderController()
-        : m_folder_service(std::make_unique<FolderService>(drogon::app().getDbClient())) {
+        : m_folder_service(&disk::application::ApplicationContext::GetInstance()->Folder()) {
     }
 
     auto FolderController::CreateFolder(drogon::HttpRequestPtr request)
@@ -34,7 +36,7 @@ namespace disk::folder {
                   << "\", parent_id=" << parse_result->parent_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层创建文件夹
         auto result = co_await m_folder_service->CreateFolder(*parse_result, user_id);
@@ -64,7 +66,7 @@ namespace disk::folder {
         }
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层获取文件夹树
         auto result = co_await m_folder_service
@@ -123,7 +125,7 @@ namespace disk::folder {
         }
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层获取面包屑
         auto result = co_await m_folder_service->GetBreadcrumb(parsed_folder_id, user_id);
@@ -152,7 +154,7 @@ namespace disk::folder {
             co_return Response::Error(parse_result.error());
         }
 
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
         auto result = co_await m_folder_service
                           ->Rename(parse_result->folder_id, parse_result->new_name, user_id);
         if (!result) {

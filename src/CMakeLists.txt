@@ -1,9 +1,18 @@
 add_executable(${PROJECT_NAME} main.cpp)
 
+# Application
+set(Application_HEADERS
+    application/ApplicationContext.hpp
+)
+set(Application_SOURCES
+    application/ApplicationContext.cpp
+)
+
 # Controller
 set(Controllers_HEADERS
     controllers/AdminController.hpp
     controllers/AuthController.hpp
+    controllers/ControllerHelpers.hpp
     controllers/DownloadResponder.hpp
     controllers/FileController.hpp
     controllers/FolderController.hpp
@@ -44,6 +53,7 @@ set(Filters_HEADERS
     filters/AdminRateLimitFilter.hpp
     filters/JwtAuthFilter.hpp
     filters/RateLimitFilter.hpp
+    filters/RateLimitHelper.hpp
     filters/RegisterRateLimitFilter.hpp
     filters/RequestTraceFilter.hpp
     filters/ShareAuthFilter.hpp
@@ -169,6 +179,7 @@ set(Utils_SOURCES
 
 target_sources(${PROJECT_NAME}
     PRIVATE
+    ${Application_SOURCES}
     ${Controllers_SOURCES}
     ${Filters_SOURCES}
     ${Models_SOURCES}
@@ -179,6 +190,7 @@ target_sources(${PROJECT_NAME}
     FILE_SET HEADERS
     TYPE HEADERS
     FILES
+    ${Application_HEADERS}
     ${Controllers_HEADERS}
     ${Dtos_HEADERS}
     ${Filters_HEADERS}
