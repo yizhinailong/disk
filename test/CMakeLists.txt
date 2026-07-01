@@ -395,3 +395,42 @@ set_tests_properties(
     TIMEOUT 300
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+
+add_test(
+    NAME SafetyUploadInvariantsIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_safety_upload_invariants.py"
+)
+
+set_tests_properties(
+    SafetyUploadInvariantsIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 180
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME SafetyContentQuotaIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_safety_content_quota.py"
+)
+
+set_tests_properties(
+    SafetyContentQuotaIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 240
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME SafetyMoveCopyPathIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_safety_move_copy_path.py"
+)
+
+set_tests_properties(
+    SafetyMoveCopyPathIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 180
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)

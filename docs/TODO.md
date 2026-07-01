@@ -85,45 +85,53 @@ Legend:
 
 ### A1. Upload success invariant tests
 
-- [ ] Cover normal upload init → chunk → complete.
-- [ ] Assert `upload_tasks.status` becomes completed.
-- [ ] Assert `users.storage_reserved` decreases after complete.
-- [ ] Assert `users.storage_used` increases according to the current product rule.
-- [ ] Assert `files` row is created.
-- [ ] Assert `file_contents` row is created or reused.
-- [ ] Assert temporary upload files are cleaned after success.
+- [x] Cover normal upload init → chunk → complete.
+- [x] Assert `upload_tasks.status` becomes completed.
+- [x] Assert `users.storage_reserved` decreases after complete.
+- [x] Assert `users.storage_used` increases according to the current product rule.
+- [x] Assert `files` row is created.
+- [x] Assert `file_contents` row is created or reused.
+- [x] Assert temporary upload files are cleaned after success.
 
 ### A2. Upload failure/cancel/expire invariant tests
 
-- [ ] Cover cancel before complete.
-- [ ] Cover expired upload cleanup.
-- [ ] Assert reserved quota is released on cancel/expire.
-- [ ] Assert no `files` row is created on cancel/expire.
-- [ ] Assert temp upload files are cleaned.
+- [x] Cover cancel before complete.
+- [ ] Cover expired upload cleanup. _(Pending: `CleanupExpiredUploadTasks` has no stable public/manual HTTP trigger for integration tests.)_
+- [x] Assert reserved quota is released on cancel/expire. _(Cancel covered; expire pending until a stable trigger exists.)_
+- [x] Assert no `files` row is created on cancel/expire. _(Cancel covered; expire pending until a stable trigger exists.)_
+- [x] Assert temp upload files are cleaned. _(Cancel covered; expire pending until a stable trigger exists.)_
 
 ### A3. Content dedup/ref-count tests
 
-- [ ] Cover instant upload when `file_contents` already exists.
-- [ ] Cover upload completion dedup when content appears before finalize.
-- [ ] Cover copy operation increments or preserves `file_contents.ref_count` according to current behavior.
-- [ ] Cover trash expiration decrements `ref_count`.
-- [ ] Cover `ref_count > 0` does not delete physical blob.
-- [ ] Cover `ref_count == 0` deletes physical blob during cleanup.
+- [x] Cover instant upload when `file_contents` already exists.
+- [ ] Cover upload completion dedup when content appears before finalize. _(Pending: public init resumes same user/hash pending uploads, so this needs a DB fixture or service seam.)_
+- [x] Cover copy operation increments or preserves `file_contents.ref_count` according to current behavior.
+- [ ] Cover trash expiration decrements `ref_count`. _(Permanent trash deletion is covered; scheduled expired-trash cleanup still needs a stable trigger/fixture.)_
+- [x] Cover `ref_count > 0` does not delete physical blob.
+- [x] Cover `ref_count == 0` deletes physical blob during cleanup.
 
 ### A4. Quota/accounting tests
 
-- [ ] Cover concurrent-style reservation behavior using `storage_reserved`.
-- [ ] Assert upload init rejects when `storage_used + storage_reserved + file_size > storage_quota`.
-- [ ] Assert copy checks quota before duplicating logical file records.
-- [ ] Assert trash expiration releases used storage according to the current product rule.
+- [x] Cover concurrent-style reservation behavior using `storage_reserved`.
+- [x] Assert upload init rejects when `storage_used + storage_reserved + file_size > storage_quota`.
+- [x] Assert copy checks quota before duplicating logical file records.
+- [x] Assert trash expiration releases used storage according to the current product rule. _(Permanent trash deletion covered; scheduled expiration pending with A3/A2 cleanup trigger.)_
 
 ### A5. Move/copy/path tests
 
-- [ ] Cover moving file between folders updates path and item counts.
-- [ ] Cover moving folder updates subtree folder paths.
-- [ ] Cover moving folder updates descendant file paths.
-- [ ] Cover moving folder into itself or descendant is rejected.
-- [ ] Cover copying folder preserves tree shape and updates content references.
+- [x] Cover moving file between folders updates path and item counts.
+- [x] Cover moving folder updates subtree folder paths.
+- [x] Cover moving folder updates descendant file paths.
+- [x] Cover moving folder into itself or descendant is rejected.
+- [x] Cover copying folder preserves tree shape and updates content references.
+
+### Safety Net implementation notes
+
+- Added DB/FS invariant safety tests under `test/integration/test_safety_*`.
+- Current instant-upload behavior is characterized as content reuse with `file_contents.ref_count` increment and no upload task.
+- Current copy behavior is characterized as quota-consuming logical duplication with `file_contents.ref_count` increment.
+- Current permanent trash deletion behavior is characterized as releasing `users.storage_used`, decrementing `file_contents.ref_count`, retaining blobs while `ref_count > 0`, and deleting blobs when `ref_count == 0`.
+- Pending deterministic coverage: scheduled expired upload cleanup, scheduled expired-trash cleanup, and upload completion dedup after content appears before finalize. These need either a stable manual cleanup trigger or a DB/service fixture seam.
 
 ## B. Verify filter and rate-limit behavior
 
