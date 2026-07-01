@@ -27,8 +27,7 @@ namespace disk::auth {
         ADD_METHOD_TO(
             AuthController::Logout,
             "/api/auth/logout",
-            drogon::Post,
-            "disk::filters::JwtAuthFilter"
+            drogon::Post
         );
         METHOD_LIST_END
 

@@ -43,14 +43,16 @@ namespace disk::filters {
         }
 
         const auto user_id = attrs->get<uint64_t>("user_id");
-        const auto window = GetFixedWindowStart(WINDOW_SECONDS);
+        const auto config = disk::utils::ConfigMgr::GetInstance();
+        const auto configured_window = config->GetUploadRateLimitWindowSeconds();
+        const auto window_seconds = configured_window > 0 ? configured_window : WINDOW_SECONDS;
+        const auto window = GetFixedWindowStart(window_seconds);
         const auto key = RedisKeyPrefix::BuildUploadRateLimitKey(user_id, window);
-        const auto configured_limit =
-            disk::utils::ConfigMgr::GetInstance()->GetUploadRateLimitPerMinute();
+        const auto configured_limit = config->GetUploadRateLimitPerMinute();
         const auto limit = configured_limit > 0 ? configured_limit : DEFAULT_LIMIT;
 
         /// 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
-        auto incr_result = co_await CheckFixedWindowLimit(m_redis_service, key, WINDOW_SECONDS);
+        auto incr_result = co_await CheckFixedWindowLimit(m_redis_service, key, window_seconds);
         if (!incr_result) {
             Logger::Error() << "Redis IncrWithExpire failed: " << incr_result.error().message;
             /// Redis 失败时不阻止请求
@@ -61,7 +63,7 @@ namespace disk::filters {
 
         /// 检查是否超过限制
         if (current_count > limit) {
-            const auto reset_time = GetFixedWindowReset(window, WINDOW_SECONDS);
+            const auto reset_time = GetFixedWindowReset(window, window_seconds);
             Logger::Warn() << "Upload rate limit: user_id=" << user_id
                      << ", path=" << request->path()
                      << ", count=" << current_count;

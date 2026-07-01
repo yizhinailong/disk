@@ -8,6 +8,9 @@
  */
 #pragma once
 
+#include <cstdint>
+#include <string>
+
 #include "Singleton.hpp"
 
 namespace disk::utils {
@@ -151,6 +154,39 @@ namespace disk::utils {
         [[nodiscard]]
         auto GetUploadRateLimitPerMinute() const noexcept -> int;
 
+        [[nodiscard]]
+        auto GetDownloadRateLimitPerMinute() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetFolderRateLimitPerMinute() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetAdminRateLimitPerMinute() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetSharePublicRateLimitPerMinute() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetRegisterRateLimitPerWindow() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetUploadRateLimitWindowSeconds() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetDownloadRateLimitWindowSeconds() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetFolderRateLimitWindowSeconds() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetAdminRateLimitWindowSeconds() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetSharePublicRateLimitWindowSeconds() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetRegisterRateLimitWindowSeconds() const noexcept -> int;
+
         /// ==================== 数据库配置 ====================
 
         /**
@@ -202,6 +238,17 @@ namespace disk::utils {
         uint32_t m_assembly_max_concurrent{ 4 };
         uint32_t m_assemble_buffer_size_bytes{ 1048576 };
         int m_upload_rate_limit_per_minute{ 60 };
+        int m_download_rate_limit_per_minute{ 60 };
+        int m_folder_rate_limit_per_minute{ 100 };
+        int m_admin_rate_limit_per_minute{ 30 };
+        int m_share_public_rate_limit_per_minute{ 30 };
+        int m_register_rate_limit_per_window{ 5 };
+        int m_upload_rate_limit_window_seconds{ 60 };
+        int m_download_rate_limit_window_seconds{ 60 };
+        int m_folder_rate_limit_window_seconds{ 60 };
+        int m_admin_rate_limit_window_seconds{ 60 };
+        int m_share_public_rate_limit_window_seconds{ 60 };
+        int m_register_rate_limit_window_seconds{ 300 };
         uint32_t m_file_io_threads{ 0 };
 
         int64_t m_db_pool_size{ 0 };

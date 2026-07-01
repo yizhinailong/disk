@@ -82,6 +82,36 @@ namespace disk::utils {
                 Logger::Info() << "Loaded upload_rate_limit_per_minute from config: "
                          << m_upload_rate_limit_per_minute;
             }
+
+            const auto load_int = [&app_config](const char* key, int current_value) -> int {
+                const auto configured_value = app_config.get(key, current_value).asInt();
+                return configured_value > 0 ? configured_value : current_value;
+            };
+
+            m_download_rate_limit_per_minute =
+                load_int("download_rate_limit_per_minute", m_download_rate_limit_per_minute);
+            m_folder_rate_limit_per_minute =
+                load_int("folder_rate_limit_per_minute", m_folder_rate_limit_per_minute);
+            m_admin_rate_limit_per_minute =
+                load_int("admin_rate_limit_per_minute", m_admin_rate_limit_per_minute);
+            m_share_public_rate_limit_per_minute =
+                load_int("share_public_rate_limit_per_minute", m_share_public_rate_limit_per_minute);
+            m_register_rate_limit_per_window =
+                load_int("register_rate_limit_per_window", m_register_rate_limit_per_window);
+            m_upload_rate_limit_window_seconds =
+                load_int("upload_rate_limit_window_seconds", m_upload_rate_limit_window_seconds);
+            m_download_rate_limit_window_seconds =
+                load_int("download_rate_limit_window_seconds", m_download_rate_limit_window_seconds);
+            m_folder_rate_limit_window_seconds =
+                load_int("folder_rate_limit_window_seconds", m_folder_rate_limit_window_seconds);
+            m_admin_rate_limit_window_seconds =
+                load_int("admin_rate_limit_window_seconds", m_admin_rate_limit_window_seconds);
+            m_share_public_rate_limit_window_seconds = load_int(
+                "share_public_rate_limit_window_seconds",
+                m_share_public_rate_limit_window_seconds
+            );
+            m_register_rate_limit_window_seconds =
+                load_int("register_rate_limit_window_seconds", m_register_rate_limit_window_seconds);
         } else {
             Logger::Warn() << "'disk' section not found in custom config, using default values";
         }
@@ -171,6 +201,50 @@ namespace disk::utils {
 
     auto ConfigMgr::GetUploadRateLimitPerMinute() const noexcept -> int {
         return m_upload_rate_limit_per_minute;
+    }
+
+    auto ConfigMgr::GetDownloadRateLimitPerMinute() const noexcept -> int {
+        return m_download_rate_limit_per_minute;
+    }
+
+    auto ConfigMgr::GetFolderRateLimitPerMinute() const noexcept -> int {
+        return m_folder_rate_limit_per_minute;
+    }
+
+    auto ConfigMgr::GetAdminRateLimitPerMinute() const noexcept -> int {
+        return m_admin_rate_limit_per_minute;
+    }
+
+    auto ConfigMgr::GetSharePublicRateLimitPerMinute() const noexcept -> int {
+        return m_share_public_rate_limit_per_minute;
+    }
+
+    auto ConfigMgr::GetRegisterRateLimitPerWindow() const noexcept -> int {
+        return m_register_rate_limit_per_window;
+    }
+
+    auto ConfigMgr::GetUploadRateLimitWindowSeconds() const noexcept -> int {
+        return m_upload_rate_limit_window_seconds;
+    }
+
+    auto ConfigMgr::GetDownloadRateLimitWindowSeconds() const noexcept -> int {
+        return m_download_rate_limit_window_seconds;
+    }
+
+    auto ConfigMgr::GetFolderRateLimitWindowSeconds() const noexcept -> int {
+        return m_folder_rate_limit_window_seconds;
+    }
+
+    auto ConfigMgr::GetAdminRateLimitWindowSeconds() const noexcept -> int {
+        return m_admin_rate_limit_window_seconds;
+    }
+
+    auto ConfigMgr::GetSharePublicRateLimitWindowSeconds() const noexcept -> int {
+        return m_share_public_rate_limit_window_seconds;
+    }
+
+    auto ConfigMgr::GetRegisterRateLimitWindowSeconds() const noexcept -> int {
+        return m_register_rate_limit_window_seconds;
     }
 
     /// ==================== 数据库配置 ====================

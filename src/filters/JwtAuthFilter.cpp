@@ -26,6 +26,15 @@ namespace disk::filters {
 
         auto start = std::chrono::steady_clock::now();
 
+        if (IsPublicPath(request->path())) {
+            auto end = std::chrono::steady_clock::now();
+            auto duration_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            Logger::Info() << "[jwt_auth_filter] duration_us=" << duration_us
+                           << " outcome=exempt path=" << request->path();
+            co_return nullptr;
+        }
+
         const auto& auth_header = request->getHeader("Authorization");
 
         if (auth_header.empty()) {

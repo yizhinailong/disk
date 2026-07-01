@@ -44,38 +44,32 @@ namespace disk::share {
         ADD_METHOD_TO(
             ShareController::Create,
             "/api/share",
-            drogon::Post,
-            "disk::filters::JwtAuthFilter",
+            drogon::Post
         );
         ADD_METHOD_TO(
             ShareController::List,
             "/api/share",
-            drogon::Get,
-            "disk::filters::JwtAuthFilter",
+            drogon::Get
         );
         ADD_METHOD_TO(
             ShareController::Detail,
             "/api/share/{share_id}",
-            drogon::Get,
-            "disk::filters::JwtAuthFilter",
+            drogon::Get
         );
         ADD_METHOD_TO(
             ShareController::Update,
             "/api/share/{share_id}",
-            drogon::Put,
-            "disk::filters::JwtAuthFilter",
+            drogon::Put
         );
         ADD_METHOD_TO(
             ShareController::Cancel,
             "/api/share",
-            drogon::Delete,
-            "disk::filters::JwtAuthFilter",
+            drogon::Delete
         );
         ADD_METHOD_TO(
             ShareController::Cancel,
             "/api/share/cancel",
-            drogon::Post,
-            "disk::filters::JwtAuthFilter",
+            drogon::Post
         );
 
         ADD_METHOD_TO(ShareController::Access, "/api/share/access/{share_id}", drogon::Post);
@@ -102,7 +96,6 @@ namespace disk::share {
             ShareController::Save,
             "/api/share/save/{share_id}",
             drogon::Post,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::ShareAuthFilter"
         );
         METHOD_LIST_END

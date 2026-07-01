@@ -21,8 +21,7 @@ namespace disk::log {
         ADD_METHOD_TO(
             OperationLogController::GetList,
             "/api/logs",
-            drogon::Get,
-            "disk::filters::JwtAuthFilter",
+            drogon::Get
         );
         METHOD_LIST_END
 

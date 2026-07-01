@@ -18,6 +18,17 @@
       "max_file_size": 10737418240,
       "upload_task_expiry_seconds": 86400,
       "upload_rate_limit_per_minute": 240,
+      "upload_rate_limit_window_seconds": 60,
+      "download_rate_limit_per_minute": 60,
+      "download_rate_limit_window_seconds": 60,
+      "folder_rate_limit_per_minute": 100,
+      "folder_rate_limit_window_seconds": 60,
+      "admin_rate_limit_per_minute": 30,
+      "admin_rate_limit_window_seconds": 60,
+      "share_public_rate_limit_per_minute": 30,
+      "share_public_rate_limit_window_seconds": 60,
+      "register_rate_limit_per_window": 5,
+      "register_rate_limit_window_seconds": 300,
       "assembly_max_concurrent": 4,
       "assemble_buffer_size_bytes": 1048576,
       "auth_cpu_pool_metrics_interval_seconds": 60
@@ -51,7 +62,8 @@
       "name": "drogon::plugin::GlobalFilters",
       "config": {
         "filters": [
-          "disk::filters::RequestTraceFilter"
+          "disk::filters::RequestTraceFilter",
+          "disk::filters::JwtAuthFilter"
         ],
         "exempt": []
       }

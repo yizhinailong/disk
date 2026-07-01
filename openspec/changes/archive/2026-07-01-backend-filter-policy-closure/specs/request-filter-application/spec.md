@@ -1,13 +1,7 @@
-# Request Filter Application Specification
-
-## Purpose
-
-Defines backend request filter ownership, global and route-level filter boundaries, and duplicate filter prevention behavior.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Single Filter Ownership
-The backend SHALL define one ownership path for each request filter so that the same filter is not applied to a request through both global filter configuration and route-level declarations. JWT authentication SHALL be owned by global filter configuration with explicit public exemptions unless a later architecture decision replaces that strategy.
+The backend SHALL define one ownership path for each request filter so that the same filter is not applied to a request through both global filter configuration and route-level declarations.
 
 #### Scenario: Filter ownership reviewed
 - **WHEN** a developer reviews global filter configuration and controller route declarations
@@ -19,7 +13,7 @@ The backend SHALL define one ownership path for each request filter so that the 
 
 #### Scenario: Global JWT ownership reviewed
 - **WHEN** a developer reviews protected route declarations after global JWT authentication is enabled
-- **THEN** protected owner and administrator routes SHALL receive JWT through the global filter path and SHALL NOT also declare route-level JWT for duplicate execution
+- **THEN** protected routes SHALL NOT also declare the JWT authentication filter at route level
 
 ### Requirement: Global Cross-Cutting Filters
 The backend SHALL reserve global filters for concerns that must apply consistently across all or broad path-scoped request families without relying on individual route declarations.
@@ -49,14 +43,14 @@ The backend SHALL express endpoint-specific security requirements that are not g
 
 #### Scenario: Admin route declares admin authorization
 - **WHEN** a route requires administrator access
-- **THEN** the route declaration or filter chain SHALL include administrator authorization after JWT authentication has made user role and status attributes available
+- **THEN** the route declaration SHALL include administrator authorization filters in an order that ensures user role and status attributes populated by global JWT authentication are available to the admin filter
 
 #### Scenario: Public route remains public
 - **WHEN** a route is intentionally public, such as registration, login, refresh, health, or share access
 - **THEN** the route declaration and global filter configuration SHALL allow the route to execute without a bearer access token while still applying any route-specific protection such as public rate limiting
 
 ### Requirement: Rate Limit Filter Scope
-The backend SHALL preserve rate-limit behavior while ensuring each rate-limit filter is applied through exactly one scope: path-scoped global configuration or route-level declaration. Rate-limit Redis increment/check failures SHALL remain fail-open unless a later endpoint-specific policy explicitly changes that behavior.
+The backend SHALL preserve rate-limit behavior while ensuring each rate-limit filter is applied through exactly one scope: path-scoped global configuration or route-level declaration.
 
 #### Scenario: Route-scoped rate limiter configured
 - **WHEN** a rate limiter is attached directly to a route
@@ -69,7 +63,3 @@ The backend SHALL preserve rate-limit behavior while ensuring each rate-limit fi
 #### Scenario: Named rate-limit families execute exactly once
 - **WHEN** a request matches upload, private download, folder, admin, public share, or register rate-limit scope
 - **THEN** the matching rate-limit family SHALL execute exactly once for that request and SHALL NOT double-count through overlapping route-level and global filter configuration
-
-#### Scenario: Redis unavailable during rate-limit check
-- **WHEN** a rate-limit filter cannot complete its Redis increment or limit check because Redis is unavailable or returns an error
-- **THEN** the filter SHALL allow the request to continue and SHALL make the fail-open behavior explicit through code structure, tests, or logging

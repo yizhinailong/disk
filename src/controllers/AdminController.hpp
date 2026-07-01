@@ -42,7 +42,6 @@ namespace disk::controllers {
             AdminController::ListUsers,
             "/api/admin/users",
             drogon::Get,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
@@ -50,7 +49,6 @@ namespace disk::controllers {
             AdminController::GetUserDetail,
             "/api/admin/users/{id}",
             drogon::Get,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
@@ -58,7 +56,6 @@ namespace disk::controllers {
             AdminController::ChangeUserStatus,
             "/api/admin/users/{id}/status",
             drogon::Put,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
@@ -66,7 +63,6 @@ namespace disk::controllers {
             AdminController::ChangeUserRole,
             "/api/admin/users/{id}/role",
             drogon::Put,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
@@ -74,7 +70,6 @@ namespace disk::controllers {
             AdminController::ChangeUserAvailableSpace,
             "/api/admin/users/{id}/available-space",
             drogon::Put,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
@@ -82,7 +77,6 @@ namespace disk::controllers {
             AdminController::SoftDeleteUser,
             "/api/admin/users/{id}",
             drogon::Delete,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
@@ -90,7 +84,6 @@ namespace disk::controllers {
             AdminController::GetGlobalStorageStats,
             "/api/admin/storage/stats",
             drogon::Get,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
@@ -98,7 +91,6 @@ namespace disk::controllers {
             AdminController::ListShares,
             "/api/admin/shares",
             drogon::Get,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
@@ -106,7 +98,6 @@ namespace disk::controllers {
             AdminController::GetShareDetail,
             "/api/admin/shares/{id}",
             drogon::Get,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
@@ -114,7 +105,6 @@ namespace disk::controllers {
             AdminController::ForceCancelShare,
             "/api/admin/shares/{id}",
             drogon::Delete,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
@@ -122,7 +112,6 @@ namespace disk::controllers {
             AdminController::GetOverviewStats,
             "/api/admin/stats/overview",
             drogon::Get,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
@@ -130,7 +119,6 @@ namespace disk::controllers {
             AdminController::GetSystemStatus,
             "/api/admin/stats/system",
             drogon::Get,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
@@ -138,7 +126,6 @@ namespace disk::controllers {
             AdminController::GetAdminLogs,
             "/api/admin/logs",
             drogon::Get,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );

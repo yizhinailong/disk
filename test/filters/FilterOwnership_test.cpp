@@ -71,11 +71,12 @@ namespace {
 
 } // namespace
 
-TEST(FilterOwnershipTest, GlobalFiltersOnlyContainGlobalSafeFilters) {
+TEST(FilterOwnershipTest, GlobalFiltersContainGlobalJwtAndPublicRateLimiters) {
     const auto config_text = ReadTextFile(SourceRoot() / "config.json");
 
     const std::unordered_set<std::string_view> global_filters{
         "disk::filters::RequestTraceFilter",
+        "disk::filters::JwtAuthFilter",
         "disk::filters::RegisterRateLimitFilter",
         "disk::filters::SharePublicRateLimitFilter",
     };
@@ -85,7 +86,6 @@ TEST(FilterOwnershipTest, GlobalFiltersOnlyContainGlobalSafeFilters) {
     }
 
     const std::unordered_set<std::string_view> route_owned_filters{
-        "disk::filters::JwtAuthFilter",
         "disk::filters::AdminAuthFilter",
         "disk::filters::DownloadRateLimitFilter",
         "disk::filters::AdminRateLimitFilter",
@@ -100,124 +100,102 @@ TEST(FilterOwnershipTest, GlobalFiltersOnlyContainGlobalSafeFilters) {
     }
 }
 
-TEST(FilterOwnershipTest, PublicRoutesKeepBearerJwtOutOfRouteDeclarations) {
-    const auto auth_controller = ControllerText("AuthController.hpp");
-    EXPECT_TRUE(ContainsAllInOrder(
-        auth_controller,
-        {
-            "AuthController::Register",
-            "\"/api/auth/register\"",
-            "drogon::Post",
-        }
-    ));
-    EXPECT_TRUE(ContainsAllInOrder(
-        auth_controller,
-        {
-            "AuthController::Login",
-            "\"/api/auth/login\"",
-            "drogon::Post",
-        }
-    ));
-    EXPECT_TRUE(ContainsAllInOrder(
-        auth_controller,
-        {
-            "AuthController::RefreshTokens",
-            "\"/api/auth/refresh\"",
-            "drogon::Post",
-        }
-    ));
-    EXPECT_TRUE(ContainsAllInOrder(
-        auth_controller,
-        {
-            "AuthController::RefreshTokens",
-            "ADD_METHOD_TO(\n            AuthController::Logout",
-        }
-    ));
+TEST(FilterOwnershipTest, PublicRoutesAreCentralJwtExemptions) {
+    const auto jwt_filter = ReadTextFile(SourceRoot() / "src" / "filters" / "JwtAuthFilter.hpp");
 
-    const auto health_controller = ControllerText("HealthController.hpp");
-    EXPECT_TRUE(ContainsAllInOrder(
-        health_controller,
-        {
-            "HealthController::Check",
-            "\"/api/health\"",
-            "drogon::Get",
-        }
-    ));
-    EXPECT_EQ(CountOccurrences(health_controller, "JwtAuthFilter"), 0U);
+    EXPECT_NE(jwt_filter.find("path == \"/api/auth/register\""), std::string::npos);
+    EXPECT_NE(jwt_filter.find("path == \"/api/auth/login\""), std::string::npos);
+    EXPECT_NE(jwt_filter.find("path == \"/api/auth/refresh\""), std::string::npos);
+    EXPECT_NE(jwt_filter.find("path == \"/api/health\""), std::string::npos);
+    EXPECT_NE(jwt_filter.find("/api/share/access/"), std::string::npos);
+    EXPECT_NE(jwt_filter.find("/api/share/browse/"), std::string::npos);
+    EXPECT_NE(jwt_filter.find("/api/share/download/"), std::string::npos);
 
-    const auto share_controller = ControllerText("ShareController.hpp");
-    EXPECT_TRUE(ContainsAllInOrder(
-        share_controller,
-        {
-            "ShareController::Access",
-            "\"/api/share/access/{share_id}\"",
-            "drogon::Post",
-        }
-    ));
-    EXPECT_TRUE(ContainsAllInOrder(
-        share_controller,
-        {
-            "ShareController::Access",
-            "ADD_METHOD_TO(\n            ShareController::Browse",
-            "\"disk::filters::ShareAuthFilter\"",
-        }
-    ));
+    EXPECT_EQ(jwt_filter.find("/api/auth/logout"), std::string::npos);
+    EXPECT_EQ(jwt_filter.find("/api/file/list"), std::string::npos);
+    EXPECT_EQ(jwt_filter.find("/api/admin/users"), std::string::npos);
 }
 
-TEST(FilterOwnershipTest, LogoutRouteDeclaresJwtAuthFilter) {
-    const auto auth_controller = ControllerText("AuthController.hpp");
+TEST(FilterOwnershipTest, RouteDeclarationsDoNotDeclareJwtAuthFilter) {
+    const std::vector<std::string_view> controllers{
+        "AdminController.hpp",
+        "AuthController.hpp",
+        "FileController.hpp",
+        "FolderController.hpp",
+        "OperationLogController.hpp",
+        "ShareController.hpp",
+        "SystemController.hpp",
+        "TrashController.hpp",
+        "UserController.hpp",
+    };
 
-    EXPECT_TRUE(ContainsAllInOrder(
-        auth_controller,
-        {
-            "AuthController::Logout",
-            "\"/api/auth/logout\"",
-            "drogon::Post",
-            "\"disk::filters::JwtAuthFilter\"",
-        }
-    ));
+    for (const auto controller : controllers) {
+        EXPECT_EQ(CountOccurrences(ControllerText(controller), "disk::filters::JwtAuthFilter"), 0U)
+            << controller;
+    }
 }
 
-TEST(FilterOwnershipTest, AuthenticatedRateLimitersRunAfterJwtAuthFilter) {
+TEST(FilterOwnershipTest, AuthenticatedRateLimitersRemainRouteOwnedExactlyOnce) {
     const auto file_controller = ControllerText("FileController.hpp");
-    EXPECT_TRUE(ContainsAllInOrder(
-        file_controller,
-        {
-            "FileController::DownloadInfo",
-            "\"disk::filters::JwtAuthFilter\"",
-            "\"disk::filters::DownloadRateLimitFilter\"",
-        }
-    ));
-    EXPECT_TRUE(ContainsAllInOrder(
-        file_controller,
-        {
-            "FileController::Download",
-            "\"disk::filters::JwtAuthFilter\"",
-            "\"disk::filters::DownloadRateLimitFilter\"",
-        }
-    ));
+    EXPECT_EQ(CountOccurrences(file_controller, "\"disk::filters::UploadRateLimitFilter\""), 4U);
+    EXPECT_EQ(CountOccurrences(file_controller, "\"disk::filters::DownloadRateLimitFilter\""), 2U);
 
     const auto folder_controller = ControllerText("FolderController.hpp");
     EXPECT_EQ(CountOccurrences(folder_controller, "\"disk::filters::FolderRateLimitFilter\""), 4U);
-    EXPECT_EQ(CountOccurrences(folder_controller, "\"disk::filters::JwtAuthFilter\","), 4U);
-    EXPECT_TRUE(ContainsAllInOrder(
-        folder_controller,
-        {
-            "FolderController::CreateFolder",
-            "\"disk::filters::JwtAuthFilter\"",
-            "\"disk::filters::FolderRateLimitFilter\"",
-        }
-    ));
 
     const auto admin_controller = ControllerText("AdminController.hpp");
     EXPECT_EQ(CountOccurrences(admin_controller, "\"disk::filters::AdminRateLimitFilter\""), 13U);
+
     EXPECT_TRUE(ContainsAllInOrder(
         admin_controller,
         {
             "AdminController::ListUsers",
-            "\"disk::filters::JwtAuthFilter\"",
             "\"disk::filters::AdminAuthFilter\"",
             "\"disk::filters::AdminRateLimitFilter\"",
         }
     ));
+}
+
+TEST(FilterOwnershipTest, RateLimitFiltersFailOpenOnRedisFailure) {
+    const std::vector<std::string_view> filter_files{
+        "UploadRateLimitFilter.cpp",
+        "DownloadRateLimitFilter.cpp",
+        "FolderRateLimitFilter.cpp",
+        "AdminRateLimitFilter.cpp",
+        "SharePublicRateLimitFilter.cpp",
+        "RegisterRateLimitFilter.cpp",
+    };
+
+    for (const auto filter_file : filter_files) {
+        const auto text = ReadTextFile(SourceRoot() / "src" / "filters" / std::string{filter_file});
+        EXPECT_TRUE(ContainsAllInOrder(
+            text,
+            {
+                "auto incr_result = co_await CheckFixedWindowLimit",
+                "if (!incr_result)",
+                "Logger::Error() << \"Redis IncrWithExpire failed:",
+                "co_return nullptr;",
+            }
+        )) << filter_file;
+    }
+}
+
+TEST(FilterOwnershipTest, RateLimitFiltersUseNormalizedConfiguration) {
+    const std::vector<std::pair<std::string_view, std::vector<std::string_view>>> expected_getters{
+        {"UploadRateLimitFilter.cpp", {"GetUploadRateLimitWindowSeconds", "GetUploadRateLimitPerMinute"}},
+        {"DownloadRateLimitFilter.cpp", {"GetDownloadRateLimitWindowSeconds", "GetDownloadRateLimitPerMinute"}},
+        {"FolderRateLimitFilter.cpp", {"GetFolderRateLimitWindowSeconds", "GetFolderRateLimitPerMinute"}},
+        {"AdminRateLimitFilter.cpp", {"GetAdminRateLimitWindowSeconds", "GetAdminRateLimitPerMinute"}},
+        {"SharePublicRateLimitFilter.cpp", {"GetSharePublicRateLimitWindowSeconds", "GetSharePublicRateLimitPerMinute"}},
+        {"RegisterRateLimitFilter.cpp", {"GetRegisterRateLimitWindowSeconds", "GetRegisterRateLimitPerWindow"}},
+    };
+
+    for (const auto& [filter_file, getters] : expected_getters) {
+        const auto text = ReadTextFile(SourceRoot() / "src" / "filters" / std::string{filter_file});
+        for (const auto getter : getters) {
+            EXPECT_NE(text.find(getter), std::string::npos) << filter_file << ": " << getter;
+        }
+        EXPECT_NE(text.find("window_seconds"), std::string::npos) << filter_file;
+        EXPECT_NE(text.find("const auto limit"), std::string::npos) << filter_file;
+    }
 }

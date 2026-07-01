@@ -28,91 +28,77 @@ namespace disk::file {
             FileController::InitUpload,
             "/api/file/upload/init",
             drogon::Post,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::UploadRateLimitFilter"
         );
         ADD_METHOD_TO(
             FileController::UploadChunk,
             "/api/file/upload/chunk",
             drogon::Post,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::UploadRateLimitFilter"
         );
         ADD_METHOD_TO(
             FileController::CompleteUpload,
             "/api/file/upload/complete",
             drogon::Post,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::UploadRateLimitFilter"
         );
         ADD_METHOD_TO(
             FileController::CancelUpload,
             "/api/file/upload/{upload_id}",
             drogon::Delete,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::UploadRateLimitFilter"
         );
         ADD_METHOD_TO(
             FileController::List,
             "/api/file/list",
-            drogon::Get,
-            "disk::filters::JwtAuthFilter",
+            drogon::Get
         );
         ADD_METHOD_TO(
             FileController::GetDetail,
             "/api/file/{file_id}",
-            drogon::Get,
-            "disk::filters::JwtAuthFilter",
+            drogon::Get
         );
         ADD_METHOD_TO(
             FileController::DownloadInfo,
             "/api/file/download/{file_id}/info",
             drogon::Get,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::DownloadRateLimitFilter"
         );
         ADD_METHOD_TO(
             FileController::Download,
             "/api/file/download/{file_id}",
             drogon::Get,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::DownloadRateLimitFilter"
         );
         ADD_METHOD_TO(
             FileController::Rename,
             "/api/file/{file_id}/rename",
-            drogon::Put,
-            "disk::filters::JwtAuthFilter",
+            drogon::Put
         );
         ADD_METHOD_TO(
             FileController::Move,
             "/api/file/move",
-            drogon::Put,
-            "disk::filters::JwtAuthFilter",
+            drogon::Put
         );
         ADD_METHOD_TO(
             FileController::Copy,
             "/api/file/copy",
-            drogon::Post,
-            "disk::filters::JwtAuthFilter",
+            drogon::Post
         );
         ADD_METHOD_TO(
             FileController::Delete,
             "/api/file",
-            drogon::Delete,
-            "disk::filters::JwtAuthFilter",
+            drogon::Delete
         );
         ADD_METHOD_TO(
             FileController::Delete,
             "/api/file/delete",
-            drogon::Post,
-            "disk::filters::JwtAuthFilter",
+            drogon::Post
         );
         ADD_METHOD_TO(
             FileController::Search,
             "/api/file/search",
-            drogon::Get,
-            "disk::filters::JwtAuthFilter",
+            drogon::Get
         );
         METHOD_LIST_END
 

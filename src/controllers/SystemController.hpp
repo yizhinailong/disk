@@ -21,8 +21,7 @@ namespace disk::system {
         ADD_METHOD_TO(
             SystemController::GetInfo,
             "/api/system/info",
-            drogon::Get,
-            "disk::filters::JwtAuthFilter",
+            drogon::Get
         );
         METHOD_LIST_END
 
