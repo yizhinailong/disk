@@ -307,6 +307,7 @@ Legend:
 - B Filter/rate-limit behavior
 - C Consistency flow mapping
 - Design notes for upload/content/quota/trash rules
+- Discovery note: [Backend Discovery Notes](backend-discovery.md)
 
 ## Track 3 — Low-risk Cleanup
 
