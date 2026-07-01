@@ -1,340 +1,357 @@
 # Backend Refactor TODO
 
-> Goal: Refactor the backend incrementally toward clearer boundaries, stronger consistency, and better testability while preserving current behavior.
+> Goal: Finish the remaining backend refactor work toward explicit lifecycle boundaries,
+> consistent accounting semantics, safer transaction boundaries, and future storage
+> abstraction evolution while preserving current public API behavior unless a task
+> explicitly defines a behavior change.
 >
-> This TODO is organized for parallel development. Tasks with no dependency on each other can be worked on concurrently. Prefer small PRs that keep behavior unchanged unless the task explicitly defines a behavior change.
+> This document tracks remaining work only. Completed historical work has been removed
+> from the active checklist to avoid duplicate implementation.
+
+## Current Baseline
+
+The backend already has the following refactor foundations in place:
+
+- Application-level service composition via `ApplicationContext`.
+- Controller helper for authenticated `user_id` extraction.
+- Shared fixed-window rate-limit helpers.
+- Behavior discovery notes for filters, upload/content/quota/trash/download flows.
+- `ContentService` for file content lookup, creation, ref-count mutation, and zero-ref verification.
+- `QuotaService` for reservation, release, commit, used-storage adjustment, and reconciliation query.
+- `UploadLifecycleService` foundation for upload states, init decisions, chunk validation, cancel, and expiration.
+- `TrashService` foundation for trash list, restore, permanent delete, delete-all, and expired trash cleanup.
+- Initial repository primitives for content and upload tasks.
+- Initial `TransactionRunner`.
 
 ## Guiding Principles
 
 - Preserve existing API behavior unless a task explicitly changes it.
-- Add characterization tests before reshaping critical upload/trash/quota/content flows.
 - Keep refactors incremental and reviewable.
-- Avoid mixing mechanical cleanup with semantic changes in the same PR.
-- Treat file-system changes and database changes as separate failure domains; document compensation behavior.
-
-## Parallel Workstream Map
-
-```text
-Phase 0: Protection & Discovery
-├─ A. Invariant tests and behavior documentation
-├─ B. Filter/rate-limit behavior discovery
-└─ C. Existing consistency flow mapping
-
-Phase 1: Low-risk structure cleanup
-├─ D. ApplicationContext / service composition
-├─ E. Controller helper extraction
-└─ F. Rate-limit/auth cross-cutting cleanup
-
-Phase 2: Domain boundary extraction
-├─ G. ContentService
-├─ H. QuotaService / StorageAccountingService
-├─ I. UploadLifecycleService
-└─ J. TrashService
-
-Phase 3: Data access and transaction boundaries
-├─ K. Repository/query extraction
-└─ L. TransactionRunner / UnitOfWork
-
-Phase 4: Storage abstraction evolution
-└─ M. UploadStagingStorage + BlobStore split
-```
-
-## Dependency Overview
-
-```text
-A ─┬─▶ D ─▶ G ─┬─▶ I ─┬─▶ K ─▶ L ─▶ M
-   │           │      │
-   │           └─▶ H ─┘
-   │
-   └─▶ J ─────────────┘
-
-B ─▶ F
-
-C ─┬─▶ G
-   ├─▶ H
-   ├─▶ I
-   └─▶ J
-
-E can run after A starts, and can proceed independently once response behavior is covered.
-```
-
-Legend:
-
-- `A`: invariant tests
-- `B`: filter discovery
-- `C`: consistency mapping
-- `D`: service composition
-- `E`: controller helpers
-- `F`: cross-cutting filter/rate-limit cleanup
-- `G`: content boundary
-- `H`: quota boundary
-- `I`: upload lifecycle boundary
-- `J`: trash lifecycle boundary
-- `K`: repositories/query objects
-- `L`: transaction runner
-- `M`: storage abstraction split
+- Avoid mixing mechanical cleanup with semantic changes.
+- Treat database changes and filesystem changes as separate failure domains.
+- Keep compensation behavior explicit.
+- Prefer characterization tests before changing upload, trash, quota, content, or filter behavior.
+- Avoid hiding important SQL semantics behind vague repository methods.
 
 ---
 
-# Phase 0 — Protection & Discovery
+# Phase 0 — Plan Sync and Baseline Closure
 
-## A. Add backend invariant tests
+## 0.1 Sync documentation with current implementation
 
-**Can run in parallel with:** B, C
-**Blocks:** most semantic refactors
+- [ ] Replace stale historical TODO items with this remaining-work roadmap.
+- [ ] Link `docs/backend-discovery.md` as the source of current behavior for filters, upload, content, quota, trash, and downloads.
+- [ ] Move completed historical work to an archive note if long-term traceability is desired.
+- [ ] Ensure open questions distinguish between:
+  - confirmed current behavior
+  - future product decisions
+  - implementation risks
 
-### A1. Upload success invariant tests
+## 0.2 Reconcile open product semantics
 
-- [x] Cover normal upload init → chunk → complete.
-- [x] Assert `upload_tasks.status` becomes completed.
-- [x] Assert `users.storage_reserved` decreases after complete.
-- [x] Assert `users.storage_used` increases according to the current product rule.
-- [x] Assert `files` row is created.
-- [x] Assert `file_contents` row is created or reused.
-- [x] Assert temporary upload files are cleaned after success.
-
-### A2. Upload failure/cancel/expire invariant tests
-
-- [x] Cover cancel before complete.
-- [ ] Cover expired upload cleanup. _(Pending: `CleanupExpiredUploadTasks` has no stable public/manual HTTP trigger for integration tests.)_
-- [x] Assert reserved quota is released on cancel/expire. _(Cancel covered; expire pending until a stable trigger exists.)_
-- [x] Assert no `files` row is created on cancel/expire. _(Cancel covered; expire pending until a stable trigger exists.)_
-- [x] Assert temp upload files are cleaned. _(Cancel covered; expire pending until a stable trigger exists.)_
-
-### A3. Content dedup/ref-count tests
-
-- [x] Cover instant upload when `file_contents` already exists.
-- [ ] Cover upload completion dedup when content appears before finalize. _(Pending: public init resumes same user/hash pending uploads, so this needs a DB fixture or service seam.)_
-- [x] Cover copy operation increments or preserves `file_contents.ref_count` according to current behavior.
-- [ ] Cover trash expiration decrements `ref_count`. _(Permanent trash deletion is covered; scheduled expired-trash cleanup still needs a stable trigger/fixture.)_
-- [x] Cover `ref_count > 0` does not delete physical blob.
-- [x] Cover `ref_count == 0` deletes physical blob during cleanup.
-
-### A4. Quota/accounting tests
-
-- [x] Cover concurrent-style reservation behavior using `storage_reserved`.
-- [x] Assert upload init rejects when `storage_used + storage_reserved + file_size > storage_quota`.
-- [x] Assert copy checks quota before duplicating logical file records.
-- [x] Assert trash expiration releases used storage according to the current product rule. _(Permanent trash deletion covered; scheduled expiration pending with A3/A2 cleanup trigger.)_
-
-### A5. Move/copy/path tests
-
-- [x] Cover moving file between folders updates path and item counts.
-- [x] Cover moving folder updates subtree folder paths.
-- [x] Cover moving folder updates descendant file paths.
-- [x] Cover moving folder into itself or descendant is rejected.
-- [x] Cover copying folder preserves tree shape and updates content references.
-
-### Safety Net implementation notes
-
-- Added DB/FS invariant safety tests under `test/integration/test_safety_*`.
-- Current instant-upload behavior is characterized as content reuse with `file_contents.ref_count` increment and no upload task.
-- Current copy behavior is characterized as quota-consuming logical duplication with `file_contents.ref_count` increment.
-- Current permanent trash deletion behavior is characterized as releasing `users.storage_used`, decrementing `file_contents.ref_count`, retaining blobs while `ref_count > 0`, and deleting blobs when `ref_count == 0`.
-- Pending deterministic coverage: scheduled expired upload cleanup, scheduled expired-trash cleanup, and upload completion dedup after content appears before finalize. These need either a stable manual cleanup trigger or a DB/service fixture seam.
-
-## B. Verify filter and rate-limit behavior
-
-**Can run in parallel with:** A, C
-**Blocks:** F
-
-- [ ] Determine whether global filters and route-level filters both execute for protected routes.
-- [ ] Document current execution order for `RequestTraceFilter`, `JwtAuthFilter`, admin filters, and rate-limit filters.
-- [ ] Confirm public endpoints exempted in `config.json` remain reachable without JWT.
-- [ ] Confirm upload endpoints are JWT-protected and upload-rate-limited exactly once.
-- [ ] Confirm download endpoints are JWT-protected and download-rate-limited exactly once.
-- [ ] Capture findings in this TODO or a design note before changing filter declarations.
-
-## C. Map consistency flows
-
-**Can run in parallel with:** A, B
-**Blocks:** G, H, I, J
-
-- [ ] Draw current upload state transitions: init, chunk, complete, cancel, expire.
-- [ ] Draw current content lifecycle: create, reuse, ref-count increment, ref-count decrement, blob delete.
-- [ ] Draw current quota lifecycle: reserve, release, commit, decrease on trash cleanup.
-- [ ] Draw current trash lifecycle: delete to trash, restore if supported, expire, purge.
-- [ ] Identify every code path that modifies `users.storage_used`.
-- [ ] Identify every code path that modifies `users.storage_reserved`.
-- [ ] Identify every code path that modifies `file_contents.ref_count`.
-- [ ] Identify every code path that deletes physical files.
-- [ ] Record the intended business rule: whether trash items continue to count against quota until permanent deletion.
+- [ ] Decide whether `storage_used` should mean logical per-user bytes or physical unique bytes.
+- [ ] Decide whether instant upload should increase `storage_used` when copy already does.
+- [ ] Decide whether trash items should continue counting against quota until permanent deletion.
+- [ ] Decide whether private downloads should update file-level `download_count` and `last_accessed_at`.
+- [ ] Decide whether share downloads should also update file-level metadata or only share-level metadata.
+- [ ] Record decisions in a design note before behavior-changing implementation.
 
 ---
 
-# Phase 1 — Low-risk Structure Cleanup
+# Phase 1 — Safety Net Gaps
 
-## D. Introduce application/service composition boundary
+## 1.1 Add deterministic cleanup test seams
 
-**Depends on:** A started; ideally core tests passing
-**Can run in parallel with:** E, F after B
+Current integration coverage is strong, but scheduled cleanup paths still need stable triggers or fixtures.
 
-- [ ] Introduce an application-level service registry or context for backend services.
-- [ ] Centralize construction of `UploadService`, `FileQueryService`, `FileMutationService`, `FolderService`, `ShareService`, and `CleanupService`.
-- [ ] Keep `StorageMgr` usage behind the composition boundary where practical.
-- [ ] Update controllers to obtain existing service instances instead of directly constructing dependency graphs.
-- [ ] Preserve service lifetimes and startup order.
-- [ ] Verify existing API behavior with tests.
+- [ ] Add a stable manual/test-only seam for expired upload cleanup.
+- [ ] Add a stable manual/test-only seam for expired trash cleanup.
+- [ ] Keep production behavior unchanged unless explicitly documented.
+- [ ] Ensure test seams are not exposed unintentionally in production deployments.
 
-## E. Extract common controller helpers
+## 1.2 Complete expired upload invariant coverage
 
-**Depends on:** A started
-**Can run in parallel with:** D, F
+- [ ] Cover expired upload cleanup end-to-end.
+- [ ] Assert expired upload cleanup releases `users.storage_reserved`.
+- [ ] Assert expired upload cleanup marks upload task as expired.
+- [ ] Assert expired upload cleanup removes temporary upload files.
+- [ ] Assert no `files` row is created for expired uploads.
 
-- [ ] Add a common helper for reading authenticated `user_id` from request attributes.
-- [ ] Add a common mapping from `Result<T>` to `Response::Success` / `Response::Error` where useful.
-- [ ] Add request parsing helpers only if they reduce duplication without hiding validation details.
-- [ ] Avoid changing response envelope shape.
-- [ ] Migrate one controller method first as a pattern.
-- [ ] Migrate remaining repetitive controller methods in small batches.
+## 1.3 Complete expired trash invariant coverage
 
-## F. Unify filter and rate-limit cross-cutting logic
+- [ ] Cover scheduled expired-trash cleanup.
+- [ ] Assert expired trash cleanup decrements `file_contents.ref_count`.
+- [ ] Assert expired trash cleanup releases `users.storage_used` according to the chosen quota rule.
+- [ ] Assert `ref_count > 0` does not delete physical blob.
+- [ ] Assert `ref_count == 0` deletes physical blob after zero-ref verification.
 
-**Depends on:** B
+## 1.4 Cover upload completion dedup race
 
-- [ ] Decide whether JWT protection should be declared globally with exemptions or per-route.
-- [ ] Remove duplicate JWT execution if confirmed.
-- [ ] Extract shared fixed-window Redis rate-limit logic.
-- [ ] Extract shared `X-RateLimit-*` and `Retry-After` response header construction.
-- [ ] Keep Redis-failure policy explicit: fail-open or fail-closed per endpoint type.
-- [ ] Make upload/download/register/share-public limits configurable consistently.
-- [ ] Verify public share and auth endpoints remain correctly exempted/protected.
+- [ ] Add a fixture or service seam for “content appears before finalize”.
+- [ ] Cover upload completion dedup when content is created by another flow before finalization.
+- [ ] Assert temp assembled file is cleaned when existing content is reused.
+- [ ] Assert `file_contents.ref_count` is incremented exactly once.
+- [ ] Assert quota reservation is committed consistently.
 
 ---
 
-# Phase 2 — Domain Boundary Extraction
+# Phase 2 — Auth and Rate-limit Policy Closure
 
-## G. Extract ContentService
+The shared rate-limit helper work is already in place. Remaining work is mainly policy closure and chain cleanup.
 
-**Depends on:** A3, C
+## 2.1 Choose JWT enforcement strategy
 
-- [ ] Create a `ContentService` boundary for `file_contents` operations.
-- [ ] Move content lookup by hash into `ContentService`.
-- [ ] Move content creation/reuse into `ContentService`.
-- [ ] Move `ref_count` increment/decrement operations into `ContentService`.
-- [ ] Move zero-ref content verification into `ContentService`.
-- [ ] Keep physical blob deletion safety checks explicit.
-- [ ] Update upload, copy, and cleanup flows to use the new boundary incrementally.
+Current discovery indicates protected routes may execute both global and route-level JWT filters.
 
-## H. Extract QuotaService / StorageAccountingService
+- [ ] Decide whether JWT protection should be global-with-exemptions or route-level-only.
+- [ ] Document the chosen strategy.
+- [ ] Remove duplicate JWT execution according to the chosen strategy.
+- [ ] Preserve public auth, health, and public share exemptions.
+- [ ] Preserve protected upload, file, folder, share-owner, and admin behavior.
+- [ ] Add or update tests proving JWT executes exactly once for representative protected routes.
 
-**Depends on:** A4, C
+## 2.2 Confirm rate-limit execution count
 
-- [ ] Create a service for storage quota and accounting operations.
-- [ ] Move reservation logic into the service.
-- [ ] Move reservation release logic into the service.
-- [ ] Move reservation commit logic into the service.
-- [ ] Move used-storage increase/decrease logic into the service.
-- [ ] Define a reconciliation query for user storage accounting.
-- [ ] Add a diagnostic/admin-only reconciliation path if desired later.
+- [ ] Verify upload endpoints are upload-rate-limited exactly once.
+- [ ] Verify private download endpoints are download-rate-limited exactly once.
+- [ ] Verify folder endpoints are folder-rate-limited exactly once.
+- [ ] Verify admin endpoints are admin-rate-limited exactly once.
+- [ ] Verify public share endpoints use the intended public-share limit.
+- [ ] Verify register endpoint uses the intended register limit.
 
-## I. Extract UploadLifecycleService
+## 2.3 Finalize Redis failure policy
 
-**Depends on:** A1, A2, G, H, C
+Current behavior is fail-open for rate-limit Redis failures.
 
-- [ ] Define explicit upload states and allowed transitions.
-- [ ] Centralize init/resume/instant-upload decision flow.
-- [ ] Centralize chunk acceptance rules.
-- [ ] Centralize complete/finalize flow.
-- [ ] Centralize cancel flow.
-- [ ] Centralize expire flow or coordinate with cleanup service.
-- [ ] Make compensation behavior explicit for DB failure after blob promotion.
-- [ ] Keep external API responses unchanged during extraction.
+- [ ] Decide whether all rate limits should remain fail-open.
+- [ ] If any endpoint should fail-closed, document the reason and expected response.
+- [ ] Keep failure policy explicit in code and tests.
+- [ ] Ensure headers remain consistent for rate-limit rejection responses.
 
-## J. Extract TrashService
+## 2.4 Normalize limit configuration
 
-**Depends on:** A3, A4, C
-
-- [ ] Centralize move-to-trash behavior.
-- [ ] Centralize permanent delete / expired trash cleanup behavior.
-- [ ] Define whether trash counts against quota until permanent deletion.
-- [ ] Coordinate content ref-count decrement through `ContentService`.
-- [ ] Coordinate storage accounting through `QuotaService`.
-- [ ] Keep blob deletion behind verified zero-ref checks.
-- [ ] Add or preserve batch cleanup limits and logging.
+- [ ] Ensure upload/download/register/share-public/admin/folder limits are configured consistently.
+- [ ] Avoid duplicated constants across individual filters.
+- [ ] Keep endpoint-specific path predicates easy to audit.
 
 ---
 
-# Phase 3 — Data Access and Transaction Boundaries
+# Phase 3 — Lifecycle Boundary Completion
 
-## K. Extract repositories/query objects
+## 3.1 Finish upload lifecycle extraction
 
-**Depends on:** G, H, I, J mostly stable
+`UploadLifecycleService` already owns states, rule helpers, cancel, and expiration. Remaining work is to reduce `UploadService` orchestration responsibility where it still owns too much lifecycle logic.
+
+- [ ] Identify remaining upload lifecycle logic still embedded in `UploadService`.
+- [ ] Move init/resume/instant-upload orchestration behind explicit lifecycle methods where practical.
+- [ ] Move complete/finalize orchestration behind explicit lifecycle methods where practical.
+- [ ] Keep API response construction in controller/service boundary unchanged.
+- [ ] Keep storage promotion and database finalization compensation explicit.
+- [ ] Ensure DB failure after blob promotion still deletes promoted final blob.
+- [ ] Ensure temp cleanup remains idempotent.
+- [ ] Preserve upload task cache behavior or document any intentional change.
+
+## 3.2 Fix or formalize expired-task handling during init
+
+Discovery found that inline expired-task cleanup during upload init may delete expired tasks and temp files without visibly releasing reserved quota.
+
+- [ ] Confirm current behavior with a characterization test or direct fixture.
+- [ ] Decide whether inline expired-task cleanup should release `storage_reserved`.
+- [ ] If yes, route the logic through `UploadLifecycleService` / `QuotaService`.
+- [ ] Ensure expired task deletion, quota release, and temp cleanup cannot drift silently.
+- [ ] Document compensation behavior for partial failure.
+
+## 3.3 Finish trash lifecycle extraction
+
+`TrashService` already owns major trash operations. Remaining work is to ensure move-to-trash and permanent cleanup responsibilities are not split confusingly across services.
+
+- [ ] Identify remaining trash lifecycle logic still embedded in `FileMutationService::Delete`.
+- [ ] Decide whether move-to-trash orchestration should fully live in `TrashService`.
+- [ ] If yes, make `FileMutationService::Delete` delegate trash creation/removal orchestration to `TrashService`.
+- [ ] Keep share cleanup behavior explicit when files/folders move to trash.
+- [ ] Keep `file_contents.ref_count` decrement only on permanent deletion / expiration cleanup.
+- [ ] Keep `users.storage_used` decrease only on permanent deletion / expiration cleanup unless product rules change.
+- [ ] Preserve batch cleanup limits and logging.
+
+## 3.4 Clarify service ownership boundaries
+
+- [ ] Decide whether `ContentRepository` should remain separate from `ContentService` or be absorbed/renamed.
+- [ ] Decide whether `UploadTaskRepository` should remain a low-level primitive or grow into a full repository.
+- [ ] Avoid duplicate paths that mutate the same table with subtly different semantics.
+- [ ] Document the intended layering:
+  - controller
+  - application service
+  - lifecycle/domain service
+  - repository/query object
+  - storage abstraction
+
+---
+
+# Phase 4 — Data Access Boundary Expansion
+
+Initial repository primitives exist, but most query/data-access logic is still embedded in services.
+
+## 4.1 Extract file query objects
 
 - [ ] Extract query object for file list pagination and sorting.
 - [ ] Extract query object for search.
-- [ ] Extract repository methods for upload tasks.
-- [ ] Extract repository methods for files and folders.
-- [ ] Extract repository methods for file contents.
-- [ ] Extract repository methods for trash.
-- [ ] Keep complex SQL visible and named; avoid hiding important query semantics behind vague methods.
-- [ ] Ensure query objects preserve existing indexes and sort determinism.
+- [ ] Preserve existing sort determinism.
+- [ ] Preserve existing index usage.
+- [ ] Ensure cache key behavior includes all relevant query parameters.
+- [ ] Specifically confirm whether file-list cache keys include `page_size`.
 
-## L. Introduce TransactionRunner / UnitOfWork pattern
+## 4.2 Expand upload task repository
 
-**Depends on:** K
+- [ ] Add named repository methods for upload task lookup by id/user.
+- [ ] Add named repository methods for pending/resumable upload lookup.
+- [ ] Add named repository methods for status transitions.
+- [ ] Add named repository methods for chunk coverage.
+- [ ] Keep lifecycle decision-making outside the repository.
 
-- [ ] Add a small transaction helper to standardize begin/commit/rollback behavior.
-- [ ] Avoid large framework-style abstraction; keep Drogon transaction semantics understandable.
-- [ ] Use it first in one high-value flow, such as upload finalization.
-- [ ] Migrate move/copy/delete transactional flows incrementally.
-- [ ] Ensure exception-to-error mapping remains consistent.
-- [ ] Keep filesystem side effects outside DB transactions unless compensation is clearly documented.
+## 4.3 Expand file/folder repositories
+
+- [ ] Add repository methods for common file ownership checks.
+- [ ] Add repository methods for folder ownership checks.
+- [ ] Add repository methods for file/folder move path updates.
+- [ ] Add repository methods for folder subtree queries where useful.
+- [ ] Keep complex recursive SQL visible and named.
+
+## 4.4 Expand content repository or consolidate into ContentService
+
+- [ ] Remove or resolve overlap between `ContentRepository` and `ContentService`.
+- [ ] Ensure all `file_contents.ref_count` mutations go through one consistent path.
+- [ ] Ensure zero-ref verification remains explicit before physical blob deletion.
+- [ ] Preserve current dedup semantics unless product rules change.
+
+## 4.5 Add trash repository/query methods
+
+- [ ] Extract trash list/count query methods.
+- [ ] Extract trash item prefetch methods for restore/delete.
+- [ ] Extract expired trash batch fetch query.
+- [ ] Keep permanent deletion lifecycle decisions in `TrashService`.
 
 ---
 
-# Phase 4 — Storage Abstraction Evolution
+# Phase 5 — Transaction Boundary Expansion
 
-## M. Split staging storage from blob storage
+Initial `TransactionRunner` exists. Remaining work is to apply it consistently to high-risk flows.
 
-**Depends on:** I stable; G stable
+## 5.1 Strengthen upload finalization transaction boundary
 
-- [ ] Define an `UploadStagingStorage` boundary for temp upload sessions.
+- [ ] Confirm upload finalization uses `TransactionRunner` consistently.
+- [ ] Ensure content creation/reuse, file row creation, quota commit, task finalization, and chunk cleanup are transactionally grouped where intended.
+- [ ] Keep filesystem promotion outside the DB transaction unless compensation is explicit.
+- [ ] Test DB failure after blob promotion compensation.
+
+## 5.2 Migrate copy flow transaction boundary
+
+- [ ] Wrap copy quota consumption, file row creation, content ref-count increments, and partial release logic in a clear transaction boundary.
+- [ ] Preserve current copy accounting behavior unless product rules change.
+- [ ] Ensure partial copy failure cannot leave quota/ref-count drift.
+
+## 5.3 Migrate move flow transaction boundary
+
+- [ ] Wrap file/folder move updates and item-count/path updates in a clear transaction boundary.
+- [ ] Preserve subtree path updates.
+- [ ] Preserve rejection of moving folder into itself or descendants.
+- [ ] Preserve cache invalidation behavior.
+
+## 5.4 Migrate delete/trash transaction boundary
+
+- [ ] Wrap move-to-trash record creation, active row removal, share cleanup, and cache invalidation in a clear transaction boundary.
+- [ ] Keep permanent deletion and blob deletion compensation explicit.
+- [ ] Ensure storage accounting and ref-count changes occur only at the intended lifecycle stage.
+
+## 5.5 Review exception-to-error mapping
+
+- [ ] Ensure transaction failures map to existing public error shapes.
+- [ ] Avoid leaking database implementation details.
+- [ ] Preserve current response envelope shape.
+
+---
+
+# Phase 6 — Storage Abstraction Evolution
+
+This phase should wait until upload/content/trash lifecycle boundaries are stable.
+
+## 6.1 Split staging storage from blob storage
+
+- [ ] Define an `UploadStagingStorage` boundary for temporary upload sessions.
 - [ ] Define a `BlobStore` boundary for final content blobs.
-- [ ] Keep local filesystem implementation compatible with current paths.
-- [ ] Update upload assembly to depend on staging storage.
-- [ ] Update content registration/promotion to depend on blob storage.
-- [ ] Update download responder to depend on blob descriptors instead of local filesystem assumptions where practical.
+- [ ] Keep current local filesystem implementation compatible with existing paths.
 - [ ] Preserve current `build/uploaded/{md5_prefix}/{md5}.bin` layout unless intentionally migrated.
-- [ ] Document how an S3/MinIO backend would implement the new interfaces later.
+
+## 6.2 Move upload assembly to staging storage
+
+- [ ] Make chunk writes depend on staging storage.
+- [ ] Make chunk assembly depend on staging storage.
+- [ ] Make temp cleanup depend on staging storage.
+- [ ] Preserve current temp cleanup idempotency.
+
+## 6.3 Move content promotion to blob storage
+
+- [ ] Make final blob promotion depend on `BlobStore`.
+- [ ] Make final blob deletion depend on `BlobStore`.
+- [ ] Keep zero-ref verification before deletion.
+- [ ] Keep DB failure compensation explicit.
+
+## 6.4 Update download path assumptions
+
+- [ ] Update download responder to depend on blob descriptors where practical.
+- [ ] Avoid leaking local filesystem assumptions into controllers.
+- [ ] Preserve range download behavior.
+- [ ] Preserve current private/share download side effects unless product rules change.
+
+## 6.5 Document object storage compatibility
+
+- [ ] Document how S3/MinIO would implement staging storage.
+- [ ] Document how S3/MinIO would implement blob storage.
+- [ ] Document consistency tradeoffs for DB commit vs object-store side effects.
+- [ ] Decide whether object storage compatibility is a near-term requirement or only a design constraint.
 
 ---
 
-# Suggested Parallel Assignments
+# Suggested Dependency Map
 
-## Track 1 — Safety Net
-
-- A1 Upload success tests
-- A2 Upload failure/cancel/expire tests
-- A3 Content ref-count tests
-- A4 Quota tests
-- A5 Move/copy/path tests
-
-## Track 2 — Architecture Discovery
-
-- B Filter/rate-limit behavior
-- C Consistency flow mapping
-- Design notes for upload/content/quota/trash rules
-- Discovery note: [Backend Discovery Notes](backend-discovery.md)
-
-## Track 3 — Low-risk Cleanup
-
-- D Application/service composition
-- E Controller helpers
-- F Rate-limit/auth cleanup after B
-
-## Track 4 — Domain Extraction
-
-- G ContentService
-- H QuotaService
-- I UploadLifecycleService
-- J TrashService
-
-## Track 5 — Infrastructure Evolution
-
-- K Repositories/query objects
-- L TransactionRunner
-- M Storage abstraction split
+```text
+Phase 0: Plan Sync and Semantics
+├─ 0.1 Sync documentation
+└─ 0.2 Reconcile product semantics
+       │
+       ▼
+Phase 1: Safety Net Gaps
+├─ 1.1 Cleanup test seams
+├─ 1.2 Expired upload coverage
+├─ 1.3 Expired trash coverage
+└─ 1.4 Upload dedup race coverage
+       │
+       ├──────────────┐
+       ▼              ▼
+Phase 2: Auth/Filter   Phase 3: Lifecycle Boundary Completion
+├─ JWT strategy        ├─ Upload lifecycle
+├─ Rate-limit count    ├─ Expired init handling
+└─ Redis policy        └─ Trash lifecycle
+                              │
+                              ▼
+Phase 4: Data Access Boundary Expansion
+├─ File query objects
+├─ Upload task repository
+├─ File/folder repositories
+├─ Content repository/service consolidation
+└─ Trash repository/query methods
+                              │
+                              ▼
+Phase 5: Transaction Boundary Expansion
+├─ Upload finalization
+├─ Copy
+├─ Move
+└─ Delete/trash
+                              │
+                              ▼
+Phase 6: Storage Abstraction Evolution
+├─ UploadStagingStorage
+└─ BlobStore
+```
 
 ---
 
@@ -346,17 +363,23 @@ For each task or PR:
 - [ ] New or updated tests cover changed behavior.
 - [ ] Public API response shape is unchanged unless explicitly documented.
 - [ ] Database and filesystem side effects are documented for failure cases.
-- [ ] Logs remain useful for diagnosing upload, cleanup, and quota issues.
+- [ ] Logs remain useful for diagnosing upload, cleanup, quota, and trash issues.
 - [ ] Cache invalidation behavior is considered if file/folder/share data changes.
 - [ ] No unrelated formatting-only churn is mixed with semantic refactors.
+- [ ] Behavior changes are separated from mechanical refactors.
+- [ ] Cleanup and compensation paths are idempotent where practical.
 
 ---
 
-# Open Questions
+# Remaining Open Questions
 
-- [ ] Should trash items count against `storage_used` until permanent deletion? Current cleanup behavior suggests yes.
-- [ ] Should JWT be enforced globally with explicit public exemptions, or only per route?
-- [ ] Should Redis failures remain fail-open for all rate limits, or should some endpoints fail-closed?
-- [ ] Should download count and `last_accessed_at` be updated by private downloads, share downloads, or both?
-- [ ] Should file-list cache keys include `page_size` if they do not already?
+These are product or architecture decisions, not merely implementation tasks.
+
+- [ ] Should `storage_used` represent logical per-user bytes or physical unique bytes?
+- [ ] Should instant upload increase `storage_used` if copy does?
+- [ ] Should trash items count against quota until permanent deletion?
+- [ ] Should JWT be enforced globally with explicit public exemptions or only per route?
+- [ ] Should Redis failures remain fail-open for every rate-limit family?
+- [ ] Should private downloads update `files.download_count` and `files.last_accessed_at`?
+- [ ] Should share downloads update file-level metadata, share-level metadata, or both?
 - [ ] Should object storage compatibility be a near-term requirement or only a design constraint?
