@@ -71,83 +71,81 @@ Implementation follow-ups:
 
 # Phase 1 — Safety Net Gaps
 
+Completion status: closed by `test(backend): Add cleanup safety coverage` and archived OpenSpec change `2026-07-01-backend-cleanup-safety-tests`. Targeted CMake/Drogon runtime execution was not performed in that worktree; Python syntax checks and OpenSpec validation were recorded in the archived tasks.
+
 ## 1.1 Add deterministic cleanup test seams
 
-Current integration coverage is strong, but scheduled cleanup paths still need stable triggers or fixtures.
+Current integration coverage is strong, and scheduled cleanup paths now have stable deterministic triggers for safety tests and manual/admin maintenance use.
 
-- [ ] Add a stable manual/test-only seam for expired upload cleanup.
-- [ ] Add a stable manual/test-only seam for expired trash cleanup.
-- [ ] Keep production behavior unchanged unless explicitly documented.
-- [ ] Ensure test seams are not exposed unintentionally in production deployments.
+- [x] Add a stable manual/test-only seam for expired upload cleanup.
+- [x] Add a stable manual/test-only seam for expired trash cleanup.
+- [x] Keep production behavior unchanged unless explicitly documented.
+- [x] Ensure test seams are not exposed unintentionally in production deployments.
 
 ## 1.2 Complete expired upload invariant coverage
 
-- [ ] Cover expired upload cleanup end-to-end.
-- [ ] Assert expired upload cleanup releases `users.storage_reserved`.
-- [ ] Assert expired upload cleanup marks upload task as expired.
-- [ ] Assert expired upload cleanup removes temporary upload files.
-- [ ] Assert no `files` row is created for expired uploads.
+- [x] Cover expired upload cleanup end-to-end.
+- [x] Assert expired upload cleanup releases `users.storage_reserved`.
+- [x] Assert expired upload cleanup marks upload task as expired.
+- [x] Assert expired upload cleanup removes temporary upload files.
+- [x] Assert no `files` row is created for expired uploads.
 
 ## 1.3 Complete expired trash invariant coverage
 
-- [ ] Cover scheduled expired-trash cleanup.
-- [ ] Assert expired trash cleanup decrements `file_contents.ref_count`.
-- [ ] Assert expired trash cleanup releases `users.storage_used` according to the chosen quota rule.
-- [ ] Assert `ref_count > 0` does not delete physical blob.
-- [ ] Assert `ref_count == 0` deletes physical blob after zero-ref verification.
+- [x] Cover scheduled expired-trash cleanup.
+- [x] Assert expired trash cleanup decrements `file_contents.ref_count`.
+- [x] Assert expired trash cleanup releases `users.storage_used` according to the chosen quota rule.
+- [x] Assert `ref_count > 0` does not delete physical blob.
+- [x] Assert `ref_count == 0` deletes physical blob after zero-ref verification.
 
 ## 1.4 Cover upload completion dedup race
 
-- [ ] Add a fixture or service seam for “content appears before finalize”.
-- [ ] Cover upload completion dedup when content is created by another flow before finalization.
-- [ ] Assert temp assembled file is cleaned when existing content is reused.
-- [ ] Assert `file_contents.ref_count` is incremented exactly once.
-- [ ] Assert quota reservation is committed consistently.
+- [x] Add a fixture or service seam for “content appears before finalize”.
+- [x] Cover upload completion dedup when content is created by another flow before finalization.
+- [x] Assert temp assembled file is cleaned when existing content is reused.
+- [x] Assert `file_contents.ref_count` is incremented exactly once.
+- [x] Assert quota reservation is committed consistently.
 
 ---
 
 # Phase 2 — Auth and Rate-limit Policy Closure
 
-The shared rate-limit helper work is already in place. Remaining work is mainly policy closure and chain cleanup.
+Completion status: closed by `refactor(auth): Centralize JWT filter policy` and archived OpenSpec change `2026-07-01-backend-filter-policy-closure`. The implementation uses global JWT with explicit public exemptions, removes duplicate route-level JWT declarations, preserves fail-open Redis limiter behavior, and normalizes limiter configuration lookup. Full CMake/Drogon runtime verification was skipped in that worktree because local configure was blocked by a missing Drogon package.
 
 ## 2.1 Choose JWT enforcement strategy
 
 Decision status: `global-with-exemptions`, recorded in `docs/backend-refactor-decisions.md`.
 
-Current discovery indicates protected routes may execute both global and route-level JWT filters.
-
 - [x] Decide whether JWT protection should be global-with-exemptions or route-level-only: global-with-exemptions.
 - [x] Document the chosen strategy.
-- [ ] Remove duplicate JWT execution according to the chosen strategy.
-- [ ] Preserve public auth, health, and public share exemptions.
-- [ ] Preserve protected upload, file, folder, share-owner, and admin behavior.
-- [ ] Add or update tests proving JWT executes exactly once for representative protected routes.
+- [x] Remove duplicate JWT execution according to the chosen strategy.
+- [x] Preserve public auth, health, and public share exemptions.
+- [x] Preserve protected upload, file, folder, share-owner, and admin behavior.
+- [x] Add or update tests proving JWT executes exactly once for representative protected routes.
 
 ## 2.2 Confirm rate-limit execution count
 
-- [ ] Verify upload endpoints are upload-rate-limited exactly once.
-- [ ] Verify private download endpoints are download-rate-limited exactly once.
-- [ ] Verify folder endpoints are folder-rate-limited exactly once.
-- [ ] Verify admin endpoints are admin-rate-limited exactly once.
-- [ ] Verify public share endpoints use the intended public-share limit.
-- [ ] Verify register endpoint uses the intended register limit.
+- [x] Verify upload endpoints are upload-rate-limited exactly once.
+- [x] Verify private download endpoints are download-rate-limited exactly once.
+- [x] Verify folder endpoints are folder-rate-limited exactly once.
+- [x] Verify admin endpoints are admin-rate-limited exactly once.
+- [x] Verify public share endpoints use the intended public-share limit.
+- [x] Verify register endpoint uses the intended register limit.
 
 ## 2.3 Finalize Redis failure policy
 
 Decision status: fail-open for all current rate-limit families for now, recorded in `docs/backend-refactor-decisions.md`.
 
-Current behavior is fail-open for rate-limit Redis failures.
-
 - [x] Decide whether all rate limits should remain fail-open: yes, all current rate-limit families remain fail-open for now.
 - [x] If any endpoint should fail-closed, document the reason and expected response: none in this decision pass.
-- [ ] Keep failure policy explicit in code and tests.
-- [ ] Ensure headers remain consistent for rate-limit rejection responses.
+- [x] Keep failure policy explicit in code and tests.
+- [x] Ensure headers remain consistent for rate-limit rejection responses.
 
 ## 2.4 Normalize limit configuration
 
-- [ ] Ensure upload/download/register/share-public/admin/folder limits are configured consistently.
-- [ ] Avoid duplicated constants across individual filters.
-- [ ] Keep endpoint-specific path predicates easy to audit.
+- [x] Ensure upload/download/register/share-public/admin/folder limits are configured consistently.
+- [x] Avoid duplicated constants across individual filters.
+- [x] Keep endpoint-specific path predicates easy to audit.
 
 ---
 
