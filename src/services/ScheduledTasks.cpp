@@ -41,14 +41,9 @@ namespace disk::services {
             drogon::async_func([cleanup_service = instance->m_cleanup_service]() -> drogon::Task<void> {
                 Logger::Info() << "Scheduled cleanup task started";
                 const auto& service = cleanup_service;
-                auto trash_result = co_await service->CleanupExpiredTrash();
-                if (!trash_result) {
-                    Logger::Error() << "Scheduled trash cleanup failed: " << trash_result.error().message;
-                }
-
-                auto upload_result = co_await service->CleanupExpiredUploadTasks();
-                if (!upload_result) {
-                    Logger::Error() << "Scheduled upload task cleanup failed: " << upload_result.error().message;
+                auto cleanup_result = co_await service->RunExpiredCleanupOnce();
+                if (!cleanup_result) {
+                    Logger::Error() << "Scheduled cleanup failed: " << cleanup_result.error().message;
                 }
             })
         );

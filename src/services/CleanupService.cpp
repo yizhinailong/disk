@@ -50,6 +50,23 @@ namespace disk::services {
         Logger::Debug() << "CleanupService initialization completed";
     }
 
+    auto CleanupService::RunExpiredCleanupOnce() -> drogon::Task<Result<CleanupRunResult>> {
+        auto trash_result = co_await CleanupExpiredTrash();
+        auto upload_result = co_await CleanupExpiredUploadTasks();
+
+        if (!trash_result) {
+            co_return std::unexpected(trash_result.error());
+        }
+        if (!upload_result) {
+            co_return std::unexpected(upload_result.error());
+        }
+
+        co_return CleanupRunResult{
+            .expired_trash_deleted = trash_result.value(),
+            .expired_upload_tasks_cleaned = upload_result.value(),
+        };
+    }
+
     auto CleanupService::CleanupExpiredTrash() -> drogon::Task<Result<int>> {
         disk::trash::TrashService trash_service(m_db_client);
         co_return co_await trash_service.CleanupExpiredTrashItems(

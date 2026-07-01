@@ -38,8 +38,11 @@ from lib_py import (  # noqa: E402
     md5_bytes,
     print_summary,
     query_one,
+    save_evidence,
     scalar,
+    sha256_bytes,
     unique_name,
+    upload_temp_dir,
 )
 
 atexit.register(cleanup)
@@ -232,6 +235,33 @@ def permanently_delete_trash(trash_id: int) -> None:
         print_summary()
 
 
+def run_expired_cleanup() -> dict[str, int]:
+    """Run the deterministic admin/manual cleanup seam and return cleanup counts."""
+    resp = fetch(
+        "/api/admin/maintenance/cleanup/expired",
+        method="POST",
+        headers=auth_headers(),
+    )
+    save_evidence(f"{EVIDENCE_PREFIX}-cleanup-expired.json", resp.text)
+    if resp.status_code != 200 or json_field(resp.text, "code") != "0":
+        log_fail("deterministic expired cleanup trigger failed")
+        print(resp.text)
+        print_summary()
+    return {
+        "expired_trash_deleted": int(json_field(resp.text, "data.expired_trash_deleted") or 0),
+        "expired_upload_tasks_cleaned": int(json_field(resp.text, "data.expired_upload_tasks_cleaned") or 0),
+    }
+
+
+def expire_trash_row(trash_id: int) -> None:
+    """Make one trash row eligible for deterministic expired-trash cleanup."""
+    affected = execute(
+        "UPDATE trash SET expires_at = NOW() - INTERVAL '1 second' WHERE id = %s",
+        (trash_id,),
+    )
+    assert_equal(f"trash row {trash_id} marked expired", affected, 1)
+
+
 def test_instant_upload_dedup_ref_count() -> None:
     """Verify instant upload reuses content and increments ref_count."""
     log_section("Instant Upload Dedup Ref-Count")
@@ -254,20 +284,89 @@ def test_instant_upload_dedup_ref_count() -> None:
     assert_equal("instant upload hash matches existing content", file_hash, first_file["name"] and md5_bytes(payload))
 
 
-def document_completion_dedup_public_api_limit() -> None:
-    """Document why completion dedup is not deterministic through public APIs."""
-    log_section("Completion Dedup Public API Limit")
-    note = {
-        "scenario": "content appears after init but before finalize",
-        "status": "documented-pending",
-        "reason": (
-            "The public init endpoint resumes an existing pending upload task for the same user/hash, "
-            "so a second public upload cannot deterministically create matching content before the first task finalizes."
-        ),
-        "recommended_next_step": "Cover this with a DB fixture or service-level seam when such fixture support exists.",
-    }
-    save_evidence(f"{EVIDENCE_PREFIX}-completion-dedup-pending.json", json.dumps(note, indent=2))
-    log_pass("completion dedup public API limitation documented")
+def create_matching_content_fixture(filename: str, payload: bytes) -> tuple[int, int, str]:
+    """Create matching content and a logical file after upload init to simulate finalize-time dedup."""
+    file_hash = md5_bytes(payload)
+    sha256_hash = sha256_bytes(payload)
+    blob_path = final_blob_path(file_hash)
+    blob_path.parent.mkdir(parents=True, exist_ok=True)
+    blob_path.write_bytes(payload)
+
+    content = query_one(
+        """
+        INSERT INTO file_contents (hash_md5, hash_sha256, size, storage_path, mime_type, ref_count)
+        VALUES (%s, %s, %s, %s, %s, 1)
+        RETURNING id
+        """,
+        (file_hash, sha256_hash, len(payload), str(blob_path), ""),
+    )
+    if content is None:
+        log_fail("matching file_contents fixture created")
+        print_summary()
+    content_id = int(content["id"])
+
+    file_row_result = query_one(
+        """
+        INSERT INTO files (user_id, content_id, folder_id, name, extension, size, mime_type, path)
+        VALUES (%s, %s, 0, %s, %s, %s, %s, %s)
+        RETURNING id
+        """,
+        (USER_ID, content_id, filename, "bin", len(payload), "", f"/{filename}"),
+    )
+    if file_row_result is None:
+        log_fail("matching files fixture created")
+        print_summary()
+    execute("UPDATE users SET storage_used = storage_used + %s WHERE id = %s", (len(payload), USER_ID))
+    return int(file_row_result["id"]), content_id, file_hash
+
+
+def test_completion_dedup_race_ref_count_and_accounting_current_rule() -> None:
+    """Verify completion reuses content that appears after init and commits reserved storage to used."""
+    log_section("Completion Dedup Race Ref-Count And Accounting")
+    payload = f"completion-dedup-race-{unique_name()}".encode()
+    upload_filename = f"safety_dedup_race_upload_{unique_name()}.bin"
+    fixture_filename = f"safety_dedup_race_existing_{unique_name()}.bin"
+    quota_before_init = user_quota()
+
+    upload_id, file_hash, instant_file_id = init_upload(upload_filename, payload)
+    assert_equal("dedup race starts as non-instant upload", instant_file_id is None, True)
+    quota_after_init = user_quota()
+    assert_numeric_delta(
+        "dedup race init reserves storage",
+        quota_before_init["storage_reserved"],
+        quota_after_init["storage_reserved"],
+        len(payload),
+    )
+    upload_chunk(upload_id, payload)
+
+    existing_file_id, content_id, fixture_hash = create_matching_content_fixture(fixture_filename, payload)
+    assert_equal("dedup fixture hash matches upload hash", fixture_hash, file_hash)
+    before_complete_ref = int(content_row(content_id)["ref_count"])
+    quota_before_complete = user_quota()
+
+    completed_file_id = complete_upload(upload_id)
+    completed_file = file_row(completed_file_id)
+    existing_file = file_row(existing_file_id)
+    after_complete_ref = int(content_row(content_id)["ref_count"])
+    quota_after_complete = user_quota()
+
+    assert_equal("completion dedup reuses existing content_id", int(completed_file["content_id"]), content_id)
+    assert_equal("dedup fixture file keeps same content_id", int(existing_file["content_id"]), content_id)
+    assert_numeric_delta("completion dedup increments ref_count by current rule", before_complete_ref, after_complete_ref, 1)
+    assert_numeric_delta(
+        "completion dedup releases reserved storage",
+        quota_before_complete["storage_reserved"],
+        quota_after_complete["storage_reserved"],
+        -len(payload),
+    )
+    assert_numeric_delta(
+        "completion dedup commits reserved bytes to used storage by current backend rule",
+        quota_before_complete["storage_used"],
+        quota_after_complete["storage_used"],
+        len(payload),
+    )
+    assert_path_exists("dedup race keeps existing final blob", final_blob_path(file_hash))
+    assert_path_absent("dedup race cleans temp upload directory", upload_temp_dir(upload_id))
 
 
 def test_copy_ref_count_and_quota() -> None:
@@ -383,6 +482,53 @@ def test_permanent_delete_ref_count_and_blob_retention() -> None:
     assert_path_absent("blob deleted when ref_count reaches zero", final_blob_path(file_hash))
 
 
+def test_expired_trash_cleanup_ref_count_quota_and_blob_retention() -> None:
+    """Verify expired-trash cleanup uses permanent-delete semantics and blob safety."""
+    log_section("Expired Trash Cleanup Ref-Count, Quota, And Blob Retention")
+    payload = f"expired-trash-ref-blob-{unique_name()}".encode()
+    first_file_id = upload_file(f"safety_expired_trash_a_{unique_name()}.bin", payload)
+    second_file_id = upload_file(f"safety_expired_trash_b_{unique_name()}.bin", payload)
+    content_id = int(file_row(first_file_id)["content_id"])
+    file_hash = str(content_row(content_id)["hash_md5"])
+    quota_before = user_quota()
+    before_ref = int(content_row(content_id)["ref_count"])
+    assert_path_exists("shared blob exists before expired-trash cleanup", final_blob_path(file_hash))
+
+    trash_first = delete_file_to_trash(first_file_id)
+    expire_trash_row(trash_first)
+    first_counts = run_expired_cleanup()
+    mid_ref = int(content_row(content_id)["ref_count"])
+    quota_after_first = user_quota()
+
+    assert_equal("expired cleanup reports first trash deletion", first_counts["expired_trash_deleted"] >= 1, True)
+    assert_db_row_absent("expired trash row removed after cleanup", "SELECT id FROM trash WHERE id = %s", (trash_first,))
+    assert_numeric_delta("expired cleanup decrements ref_count", before_ref, mid_ref, -1)
+    assert_numeric_delta(
+        "expired cleanup releases used storage by current backend rule",
+        quota_before["storage_used"],
+        quota_after_first["storage_used"],
+        -len(payload),
+    )
+    assert_path_exists("expired cleanup retains shared blob while ref_count remains positive", final_blob_path(file_hash))
+
+    trash_second = delete_file_to_trash(second_file_id)
+    expire_trash_row(trash_second)
+    second_counts = run_expired_cleanup()
+    final_ref = int(content_row(content_id)["ref_count"])
+    quota_after_second = user_quota()
+
+    assert_equal("expired cleanup reports second trash deletion", second_counts["expired_trash_deleted"] >= 1, True)
+    assert_db_row_absent("second expired trash row removed after cleanup", "SELECT id FROM trash WHERE id = %s", (trash_second,))
+    assert_equal("expired cleanup reaches zero ref_count after final reference", final_ref, 0)
+    assert_numeric_delta(
+        "final expired cleanup releases used storage by current backend rule",
+        quota_after_first["storage_used"],
+        quota_after_second["storage_used"],
+        -len(payload),
+    )
+    assert_path_absent("expired cleanup deletes blob only when ref_count reaches zero", final_blob_path(file_hash))
+
+
 def main() -> None:
     """Run content/quota safety-net tests."""
     print("==========================================")
@@ -401,11 +547,12 @@ def main() -> None:
     log_info(f"Using user_id={USER_ID}, base_url={BASE_URL}")
 
     test_instant_upload_dedup_ref_count()
-    document_completion_dedup_public_api_limit()
+    test_completion_dedup_race_ref_count_and_accounting_current_rule()
     test_copy_ref_count_and_quota()
     test_upload_quota_rejection_no_leak()
     test_copy_quota_rejection_no_side_effects()
     test_permanent_delete_ref_count_and_blob_retention()
+    test_expired_trash_cleanup_ref_count_quota_and_blob_retention()
 
     print_summary()
 

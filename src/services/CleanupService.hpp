@@ -32,6 +32,11 @@ namespace disk::services {
      * - 每个项目清理后释放对应存储空间
      * - 更新 file_contents.ref_count
      */
+    struct CleanupRunResult {
+        int expired_trash_deleted{ 0 };
+        int expired_upload_tasks_cleaned{ 0 };
+    };
+
     class CleanupService {
     public:
         explicit CleanupService(drogon::orm::DbClientPtr db_client);
@@ -40,6 +45,16 @@ namespace disk::services {
         auto operator=(const CleanupService&) -> CleanupService& = delete;
         CleanupService(CleanupService&&) = default;
         auto operator=(CleanupService&&) -> CleanupService& = default;
+
+        /**
+         * @brief 确定性运行一次过期数据清理
+         *
+         * 与生产定时任务使用同一清理实现，便于测试和手动维护稳定触发。
+         *
+         * @return drogon::Task<Result<CleanupRunResult>> 成功返回本次清理结果
+         */
+        [[nodiscard]]
+        auto RunExpiredCleanupOnce() -> drogon::Task<Result<CleanupRunResult>>;
 
         /**
          * @brief 清理过期的回收站项目

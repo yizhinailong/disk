@@ -14,7 +14,6 @@ responses. They characterize current backend behavior before refactors.
 from __future__ import annotations
 
 import atexit
-import json
 import os
 import sys
 
@@ -29,6 +28,7 @@ from lib_py import (  # noqa: E402
     cleanup,
     configured_chunk_size,
     do_login,
+    execute,
     fetch,
     final_blob_path,
     json_field,
@@ -145,6 +145,24 @@ def complete_upload(upload_id: str) -> str:
     return file_id
 
 
+def run_expired_cleanup() -> dict[str, int]:
+    """Run the deterministic admin/manual cleanup seam and return cleanup counts."""
+    resp = fetch(
+        "/api/admin/maintenance/cleanup/expired",
+        method="POST",
+        headers=auth_headers(TOKEN),
+    )
+    save_evidence(f"{EVIDENCE_PREFIX}-cleanup-expired.json", resp.text)
+    if resp.status_code != 200 or json_field(resp.text, "code") != "0":
+        log_fail("deterministic expired cleanup trigger failed")
+        print(resp.text)
+        print_summary()
+    return {
+        "expired_trash_deleted": int(json_field(resp.text, "data.expired_trash_deleted") or 0),
+        "expired_upload_tasks_cleaned": int(json_field(resp.text, "data.expired_upload_tasks_cleaned") or 0),
+    }
+
+
 def cancel_upload(upload_id: str) -> None:
     """Cancel an upload task."""
     resp = fetch(
@@ -248,25 +266,50 @@ def test_cancel_upload_invariants() -> None:
     assert_path_absent("final blob absent after cancel", final_blob_path(file_hash))
 
 
-def document_expired_upload_cleanup_trigger() -> None:
-    """Record why the expired-upload scenario is pending in this safety script."""
-    log_section("Expired Upload Cleanup Trigger")
-    note = {
-        "scenario": "expired upload cleanup",
-        "status": "pending",
-        "reason": (
-            "CleanupExpiredUploadTasks is implemented as a scheduled service method, "
-            "but no stable public/manual HTTP trigger is exposed for integration tests."
-        ),
-        "expected_invariants_when_trigger_exists": [
-            "upload_tasks.status becomes 3",
-            "users.storage_reserved decreases by reserved_bytes",
-            "no files row is created",
-            "temporary upload artifacts are removed",
-        ],
-    }
-    save_evidence(f"{EVIDENCE_PREFIX}-expired-upload-pending.json", json.dumps(note, indent=2))
-    log_pass("expired upload cleanup trigger documented as pending")
+def test_expired_upload_cleanup_invariants() -> None:
+    """Verify deterministic expired-upload cleanup releases reservations and temp artifacts."""
+    log_section("Expired Upload Cleanup Invariants")
+    payload = f"safety-expire-{unique_name()}".encode()
+    filename = f"safety_expire_{unique_name()}.bin"
+    quota_before = user_quota()
+
+    upload_id, file_hash = init_upload(filename, payload)
+    quota_after_init = user_quota()
+    upload_single_chunk(upload_id, payload)
+    assert_numeric_delta(
+        "expire fixture reserves storage",
+        quota_before["storage_reserved"],
+        quota_after_init["storage_reserved"],
+        len(payload),
+    )
+
+    affected = execute(
+        "UPDATE upload_tasks SET expires_at = NOW() - INTERVAL '1 second' WHERE id = %s AND status = 0",
+        (upload_id,),
+    )
+    assert_equal("expire fixture marks upload task expired in DB", affected, 1)
+
+    cleanup_counts = run_expired_cleanup()
+    quota_after_cleanup = user_quota()
+
+    assert_equal("cleanup reports at least one expired upload", cleanup_counts["expired_upload_tasks_cleaned"] >= 1, True)
+    task = assert_upload_task(upload_id, 3)
+    assert_equal("expired task fail_reason documents expiry", task["fail_reason"], "任务过期")
+    assert_numeric_delta(
+        "expired upload cleanup releases reserved storage",
+        quota_after_init["storage_reserved"],
+        quota_after_cleanup["storage_reserved"],
+        -len(payload),
+    )
+    assert_equal("expired upload cleanup preserves used storage", quota_after_cleanup["storage_used"], quota_before["storage_used"])
+    assert_db_row_absent(
+        "expired upload cleanup creates no logical file row",
+        "SELECT id FROM files WHERE user_id = %s AND name = %s",
+        (USER_ID, filename),
+    )
+    assert_path_absent("temp upload directory cleaned after expiry", upload_temp_dir(upload_id))
+    assert_path_absent("assembled temp artifact absent after expiry", upload_temp_dir(upload_id).parent / f"{upload_id}.tmp")
+    assert_path_absent("final blob absent after expiry", final_blob_path(file_hash))
 
 
 def main() -> None:
@@ -288,7 +331,7 @@ def main() -> None:
 
     test_successful_chunked_upload_invariants()
     test_cancel_upload_invariants()
-    document_expired_upload_cleanup_trigger()
+    test_expired_upload_cleanup_invariants()
 
     print_summary()
 

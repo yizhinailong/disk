@@ -9,6 +9,7 @@
 
 #include "AdminController.hpp"
 
+#include "application/ApplicationContext.hpp"
 #include "dtos/AdminDto.hpp"
 #include "utils/Response.hpp"
 
@@ -415,6 +416,28 @@ namespace disk::controllers {
 
         Logger::Info() << "Admin list logs successful";
         co_return Response::Success(result->ToJson());
+    }
+
+    auto AdminController::RunExpiredCleanup(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+
+        Logger::Info() << "Admin run expired cleanup request: " << request->getPeerAddr().toIpPort();
+
+        auto& cleanup_service = application::ApplicationContext::GetInstance()->Cleanup();
+        auto result = co_await cleanup_service.RunExpiredCleanupOnce();
+        if (!result) {
+            Logger::Error() << "Failed to run expired cleanup: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        Json::Value data;
+        data["expired_trash_deleted"] = result->expired_trash_deleted;
+        data["expired_upload_tasks_cleaned"] = result->expired_upload_tasks_cleaned;
+
+        Logger::Info() << "Admin run expired cleanup successful: expired_trash_deleted="
+                 << result->expired_trash_deleted
+                 << ", expired_upload_tasks_cleaned=" << result->expired_upload_tasks_cleaned;
+        co_return Response::Success(data);
     }
 
 } ///< namespace disk::controllers

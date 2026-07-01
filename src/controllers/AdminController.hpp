@@ -142,6 +142,14 @@ namespace disk::controllers {
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
+        ADD_METHOD_TO(
+            AdminController::RunExpiredCleanup,
+            "/api/admin/maintenance/cleanup/expired",
+            drogon::Post,
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::AdminAuthFilter",
+            "disk::filters::AdminRateLimitFilter",
+        );
         METHOD_LIST_END
 
         [[nodiscard]]
@@ -194,6 +202,10 @@ namespace disk::controllers {
 
         [[nodiscard]]
         auto GetAdminLogs(drogon::HttpRequestPtr request)
+            -> drogon::Task<drogon::HttpResponsePtr>;
+
+        [[nodiscard]]
+        auto RunExpiredCleanup(drogon::HttpRequestPtr request)
             -> drogon::Task<drogon::HttpResponsePtr>;
     };
 

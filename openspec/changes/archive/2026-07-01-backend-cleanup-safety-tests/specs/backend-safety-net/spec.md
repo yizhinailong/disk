@@ -1,10 +1,4 @@
-# backend-safety-net Specification
-
-## Purpose
-
-Define backend integration safety-net requirements that protect upload lifecycle, content reference counts, quota accounting, trash cleanup, and file/folder namespace behavior during refactors.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Upload lifecycle safety invariants
 The system SHALL provide integration safety tests that verify upload lifecycle operations preserve current database and filesystem invariants, and cleanup-related upload safety scenarios MUST be runnable through a deterministic cleanup trigger that exercises the same implementation as production scheduled cleanup.
@@ -58,25 +52,6 @@ The system SHALL provide integration safety tests that characterize current quot
 #### Scenario: Trash permanent deletion releases used storage according to current rule
 - **WHEN** a file is moved to trash and then permanently deleted or removed by expired-trash cleanup through the deterministic cleanup trigger
 - **THEN** the safety test MUST verify that `users.storage_used` changes according to the current backend rule and that the observed rule is documented by the test name or assertion message
-
-### Requirement: File and folder namespace safety invariants
-The system SHALL provide integration safety tests that characterize current move, copy, and path consistency behavior for files and folders.
-
-#### Scenario: Moving a file updates parent and path
-- **WHEN** a test moves a file from one folder to another through the public API
-- **THEN** the safety test MUST verify that the file row has the new parent folder, the path matches the destination folder path and filename, and item counts follow current behavior
-
-#### Scenario: Moving a folder updates subtree paths
-- **WHEN** a test moves a folder that contains nested folders and files
-- **THEN** the safety test MUST verify that the moved folder path, descendant folder paths, and descendant file paths are updated consistently
-
-#### Scenario: Moving a folder into itself or descendant is rejected
-- **WHEN** a test attempts to move a folder into itself or one of its descendant folders
-- **THEN** the safety test MUST verify that the operation is rejected and the original folder and file paths remain unchanged
-
-#### Scenario: Copying a folder preserves tree shape and content references
-- **WHEN** a test copies a folder containing nested folders and files
-- **THEN** the safety test MUST verify that the copied tree preserves the original shape under the target folder and that copied files reference content according to current backend behavior
 
 ### Requirement: Safety tests integrate with existing test execution
 The system SHALL run backend safety-net tests through the existing integration-test execution contract, and cleanup safety tests MUST invoke cleanup deterministically without relying on production scheduler timing.
