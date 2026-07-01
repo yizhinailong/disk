@@ -152,21 +152,6 @@ namespace disk::file {
         ) -> drogon::Task<void>;
 
         /**
-         * @brief 批量递增 file_contents.ref_count（事务版）
-         *
-         * @param client 数据库客户端
-         * @param content_ref_increment content_id -> 递增量映射
-         * @param existing_content_ids 已验证存在的 content_id 集合
-         * @return drogon::Task<std::unordered_set<uint64_t>> 实际成功递增的 content_id 集合
-         */
-        [[nodiscard]]
-        auto IncrementContentRefCount(
-            const drogon::orm::DbClientPtr& client,
-            const std::unordered_map<uint64_t, uint64_t>& content_ref_increment,
-            const std::unordered_set<uint64_t>& existing_content_ids
-        ) -> drogon::Task<std::unordered_set<uint64_t>>;
-
-        /**
          * @brief 批量插入复制文件记录并获取新 ID（事务版）
          *
          * @param client 数据库客户端

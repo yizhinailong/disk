@@ -25,11 +25,14 @@
 #include <json/writer.h>
 
 #include "FileServiceUtils.hpp"
+#include "services/ContentService.hpp"
+#include "services/QuotaService.hpp"
 #include "models/FileContents.hpp"
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
 #include "models/UploadTaskChunks.hpp"
 #include "storage/IFileStorage.hpp"
+#include "services/UploadLifecycleService.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
 #include "utils/RedisKeyPrefix.hpp"
@@ -83,23 +86,20 @@ namespace disk::file {
             "), filename_exists AS ("
             "  SELECT COUNT(*) AS cnt FROM files"
             "  WHERE user_id = $2 AND folder_id = $1 AND name = $3"
-            "), existing_content AS ("
-            "  SELECT id, mime_type FROM file_contents WHERE hash_md5 = $4 LIMIT 1"
             "), existing_task AS ("
             "  SELECT id FROM upload_tasks"
-            "  WHERE user_id = $2 AND file_hash = $4 AND status = 0 LIMIT 1"
+            "  WHERE user_id = $2 AND file_hash = $4 AND status = $5 LIMIT 1"
             ")"
             " SELECT"
             "   (SELECT path FROM folder_loc) AS folder_path,"
             "   (SELECT depth FROM folder_loc) AS folder_depth,"
             "   (SELECT cnt FROM filename_exists) AS filename_count,"
-            "   (SELECT id FROM existing_content) AS content_id,"
-            "   (SELECT mime_type FROM existing_content) AS content_mime_type,"
             "   (SELECT id FROM existing_task) AS task_id",
             request.parent_id,
             user_id,
             request.filename,
-            request.file_hash
+            request.file_hash,
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
         );
 
         const auto& row = combined[0];
@@ -121,11 +121,15 @@ namespace disk::file {
             co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
         }
 
-        /// Detect instant upload
-        auto content_id = row["content_id"].isNull() ? uint64_t{0} : row["content_id"].as<uint64_t>();
-        auto content_mime_type = row["content_mime_type"].isNull() ? std::string{} : row["content_mime_type"].as<std::string>();
+        /// Detect instant upload / resume / new upload decision
+        disk::content::ContentService content_service(m_db_client);
+        auto existing_content = co_await content_service.FindByMd5(request.file_hash);
+        auto existing_task_id = row["task_id"].isNull() ? std::string{} : row["task_id"].as<std::string>();
+        auto init_decision = disk::upload::DecideInitFlow(existing_content.has_value(), existing_task_id);
 
-        if (content_id != 0) {
+        if (init_decision.type == disk::upload::InitDecisionType::InstantUpload) {
+            auto content_id = existing_content->id;
+            const auto& content_mime_type = existing_content->mime_type;
             Logger::Debug() << "Instant upload check successful: file_hash=" << request.file_hash
                       << ", content_id=" << content_id;
 
@@ -145,11 +149,9 @@ namespace disk::file {
                 }
 
                 /// 事务内递增引用计数
-                auto increment_result = co_await transaction->execSqlCoro(
-                    "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = $1",
-                    content_id
-                );
-                if (increment_result.affectedRows() == 0) {
+                disk::content::ContentService content_service(m_db_client);
+                auto increment_result = co_await content_service.IncrementRefCount(transaction, content_id);
+                if (!increment_result) {
                     Logger::Warn() << "File content not found for instant upload: content_id="
                              << content_id;
                     throw std::runtime_error("Failed to increment file content reference count");
@@ -224,21 +226,21 @@ namespace disk::file {
         }
 
         /// 2. 检测断点续传
-        auto existing_task_id = row["task_id"].isNull() ? std::string{} : row["task_id"].as<std::string>();
-        if (!existing_task_id.empty()) {
+        if (init_decision.type == disk::upload::InitDecisionType::ResumeUpload) {
             auto existing_task = co_await FindExistingTask(user_id, request.file_hash);
             if (existing_task.has_value()) {
                 const auto& task = existing_task.value();
                 const auto& task_id = task.getValueOfId();
 
-                if (task.getValueOfExpiresAt() < trantor::Date::now()) {
+                if (disk::upload::IsExpired(task.getValueOfExpiresAt(), trantor::Date::now())) {
                     Logger::Info() << "Expired upload task found, discarding: upload_id=" << task_id;
                     InvalidateUploadTaskCache(task_id);
 
                     try {
                         co_await m_db_client->execSqlCoro(
-                            "DELETE FROM upload_tasks WHERE id = $1 AND status = 0",
-                            task_id
+                            "DELETE FROM upload_tasks WHERE id = $1 AND status = $2",
+                            task_id,
+                            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
                         );
                     } catch (const drogon::orm::DrogonDbException& e) {
                         Logger::Warn() << "Failed to delete expired upload task: " << e.base().what();
@@ -318,7 +320,7 @@ namespace disk::file {
         task.setTotalChunks(total_chunks);
         task.setReservedBytes(request.file_size);
         task.setTempPath(upload_id);
-        task.setStatus(0); ///< 进行中
+        task.setStatus(disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)); ///< 进行中
         task.setExpiresAt(trantor::Date::now().after(expiry_seconds));
 
         bool create_task_failed = false;
@@ -405,7 +407,7 @@ namespace disk::file {
         const auto& task = cached_task.value();
 
         /// 2. 验证任务未过期
-        if (task.expires_at < trantor::Date::now()) {
+        if (disk::upload::IsExpired(task.expires_at, trantor::Date::now())) {
             Logger::Warn() << "Upload task expired: " << upload_id;
             InvalidateUploadTaskCache(upload_id);
 
@@ -422,10 +424,27 @@ namespace disk::file {
             );
         }
 
-        /// 3. 验证分片索引有效
-        if (chunk_index >= task.total_chunks) {
-            Logger::Warn() << "Chunk index out of range: chunk_index=" << chunk_index
-                     << ", total_chunks=" << task.total_chunks;
+        /// 3. 验证分片索引和大小符合任务几何信息
+        auto chunk_acceptance = disk::upload::ValidateChunkAcceptance(
+            chunk_index,
+            chunk_data.size(),
+            task.file_size,
+            task.chunk_size,
+            task.total_chunks
+        );
+        if (!chunk_acceptance) {
+            const auto& acceptance_error = chunk_acceptance.error();
+            if (acceptance_error.error.message == "Chunk index out of range") {
+                Logger::Warn() << "Chunk index out of range: chunk_index=" << chunk_index
+                         << ", total_chunks=" << task.total_chunks;
+            } else {
+                Logger::Warn() << "Unexpected chunk size: upload_id=" << upload_id
+                         << ", chunk_index=" << chunk_index
+                         << ", expected_size=" << acceptance_error.expected_size
+                         << ", actual_size=" << chunk_data.size()
+                         << ", file_size=" << task.file_size
+                         << ", chunk_size=" << task.chunk_size;
+            }
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
@@ -435,34 +454,7 @@ namespace disk::file {
                      << " chunk_index=" << chunk_index
                      << " data_size=" << chunk_data.size();
 
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::ValidationFailed, "Chunk index out of range")
-            );
-        }
-
-        /// 4. 验证分片大小符合任务几何信息
-        const auto chunk_offset = static_cast<uint64_t>(chunk_index) * task.chunk_size;
-        const auto remaining_bytes = task.file_size - chunk_offset;
-        const auto expected_size = std::min<uint64_t>(task.chunk_size, remaining_bytes);
-        if (chunk_data.size() != expected_size) {
-            Logger::Warn() << "Unexpected chunk size: upload_id=" << upload_id
-                     << ", chunk_index=" << chunk_index
-                     << ", expected_size=" << expected_size
-                     << ", actual_size=" << chunk_data.size()
-                     << ", file_size=" << task.file_size
-                     << ", chunk_size=" << task.chunk_size;
-
-            auto end = std::chrono::steady_clock::now();
-            auto duration_us =
-                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[upload_chunk] duration_us=" << duration_us
-                     << " outcome=failure upload_id=" << upload_id
-                     << " chunk_index=" << chunk_index
-                     << " data_size=" << chunk_data.size();
-
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::ValidationFailed, "Unexpected chunk size")
-            );
+            co_return std::unexpected(acceptance_error.error);
         }
 
         /// 5. 将请求体复制到拥有所有权的缓冲区，只做一次哈希+落盘复用。
@@ -571,7 +563,7 @@ namespace disk::file {
         auto task = task_result.value();
 
         /// 2. Check idempotency: already completed
-        if (task.getValueOfStatus() == 1) {
+        if (task.getValueOfStatus() == disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Completed)) {
             Logger::Debug() << "Upload task already completed: upload_id=" << upload_id;
             InvalidateUploadTaskCache(upload_id);
 
@@ -615,16 +607,11 @@ namespace disk::file {
 
         const auto& coverage = coverage_result.value();
         const auto total_chunks = task.getValueOfTotalChunks();
-
-        bool chunks_valid = false;
-        if (total_chunks == 0) {
-            /// 零分片文件：不期望任何已上传分片
-            chunks_valid = (coverage.uploaded_count == 0);
-        } else {
-            /// 非零分片：数量和最大索引必须匹配
-            chunks_valid = (coverage.uploaded_count == static_cast<uint64_t>(total_chunks)) &&
-                           (coverage.max_chunk_index == static_cast<int64_t>(total_chunks - 1));
-        }
+        const auto chunks_valid = disk::upload::IsCompleteCoverage(
+            total_chunks,
+            disk::upload::ChunkCoverage{ .uploaded_count = coverage.uploaded_count,
+                                         .max_chunk_index = coverage.max_chunk_index }
+        );
 
         LogChunkScanDuration();
 
@@ -707,27 +694,29 @@ namespace disk::file {
                                        &final_hash,
                                        &task,
                                        user_id]() -> drogon::Task<FinalizeLookupResult> {
+            FinalizeLookupResult lookup;
+            disk::content::ContentService content_service(m_db_client);
+            auto existing_content = co_await content_service.FindByMd5(final_hash);
+            if (existing_content.has_value()) {
+                lookup.existing_content_id = existing_content->id;
+            }
+
             try {
                 auto result = co_await m_db_client->execSqlCoro(
-                    "SELECT (SELECT id FROM file_contents WHERE hash_md5 = $1 LIMIT 1) AS content_id, " "EXISTS(SELECT 1 FROM files WHERE user_id = $2 AND folder_id = $3 AND name = $4) AS filename_exists",
-                    final_hash,
+                    "SELECT EXISTS(SELECT 1 FROM files WHERE user_id = $1 AND folder_id = $2 AND name = $3) AS filename_exists",
                     user_id,
                     task.getValueOfFolderId(),
                     task.getValueOfFilename()
                 );
 
-                FinalizeLookupResult lookup;
                 if (!result.empty()) {
-                    if (!result[0]["content_id"].isNull()) {
-                        lookup.existing_content_id = result[0]["content_id"].as<uint64_t>();
-                    }
                     lookup.filename_exists = result[0]["filename_exists"].as<int>() != 0;
                 }
 
                 co_return lookup;
             } catch (const drogon::orm::DrogonDbException& e) {
                 Logger::Error() << "Failed to query finalize upload metadata: " << e.base().what();
-                co_return FinalizeLookupResult{};
+                co_return lookup;
             }
         }();
 
@@ -759,17 +748,19 @@ namespace disk::file {
         }
 
         auto existing_content = lookup_result.existing_content_id;
+        auto finalize_storage_decision = disk::upload::DecideFinalizeStorage(existing_content);
         std::filesystem::path final_storage_path;
         std::string final_sha256;
         bool should_compensate_storage_file = false;
 
-        if (existing_content.has_value()) {
+        if (finalize_storage_decision.type == disk::upload::FinalizeStorageDecisionType::ReuseExistingContent) {
             auto delete_result = co_await m_storage->DeletePath(assemble_path);
             if (!delete_result) {
                 Logger::Warn() << "Failed to cleanup assemble file after dedup: "
                          << static_cast<int>(delete_result.error().code);
             }
-            Logger::Debug() << "File dedup successful: content_id=" << existing_content.value();
+            Logger::Debug() << "File dedup successful: content_id="
+                      << finalize_storage_decision.existing_content_id.value();
         } else {
             auto promote_result = co_await m_storage->PromoteToFinal(assemble_path, final_hash);
             if (!promote_result) {
@@ -811,32 +802,28 @@ namespace disk::file {
         try {
             transaction = co_await m_db_client->newTransactionCoro();
 
-            CoroMapper<FileContents> content_mapper(transaction);
             CoroMapper<Files> file_mapper(transaction);
+            disk::content::ContentService content_service(m_db_client);
 
             uint64_t content_id = 0;
             if (existing_content.has_value()) {
                 content_id = existing_content.value();
-                auto increment_result = co_await transaction->execSqlCoro(
-                    "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = $1",
-                    content_id
-                );
-                if (increment_result.affectedRows() == 0) {
+                auto increment_result = co_await content_service.IncrementRefCount(transaction, content_id);
+                if (!increment_result) {
                     Logger::Warn() << "File content not found when finalizing upload: content_id="
                              << content_id;
                     throw std::runtime_error("Failed to increment file content reference count");
                 }
             } else {
-                FileContents content;
-                content.setHashMd5(final_hash);
-                content.setHashSha256(final_sha256);
-                content.setSize(task.getValueOfFileSize());
-                content.setStoragePath(final_storage_path.string());
-                content.setMimeType("");
-                content.setRefCount(1);
-
-                content = co_await content_mapper.insert(content);
-                content_id = content.getValueOfId();
+                auto content = co_await content_service.Create(
+                    transaction,
+                    disk::content::NewContent{ .hash_md5 = final_hash,
+                                               .hash_sha256 = final_sha256,
+                                               .size = task.getValueOfFileSize(),
+                                               .storage_path = final_storage_path.string(),
+                                               .mime_type = "" }
+                );
+                content_id = content.id;
                 Logger::Debug() << "FileContents created successfully: content_id=" << content_id;
             }
 
@@ -859,20 +846,21 @@ namespace disk::file {
 
             file = co_await file_mapper.insert(file);
 
-                auto transfer_result = co_await transaction->execSqlCoro(
-                    "UPDATE users SET storage_reserved = GREATEST(storage_reserved - $1, 0), " "storage_used = storage_used + $2 WHERE id = $3",
-                    task.getValueOfFileSize(),
-                    task.getValueOfFileSize(),
-                    user_id
-                );
-
-            if (transfer_result.affectedRows() == 0) {
-                throw std::runtime_error("Failed to transfer reserved quota to used");
+            disk::quota::QuotaService quota_service(m_db_client);
+            auto transfer_result = co_await quota_service.CommitReservedToUsed(
+                transaction,
+                user_id,
+                task.getValueOfFileSize()
+            );
+            if (!transfer_result) {
+                throw std::runtime_error(transfer_result.error().message);
             }
 
             auto finalize_result = co_await transaction->execSqlCoro(
-                "UPDATE upload_tasks SET status = 1, finalized_at = NOW() WHERE id = $1 AND status = 0",
-                upload_id
+                "UPDATE upload_tasks SET status = $1, finalized_at = NOW() WHERE id = $2 AND status = $3",
+                disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Completed),
+                upload_id,
+                disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
             );
             if (finalize_result.affectedRows() == 0) {
                 throw std::runtime_error("Failed to finalize upload task");
@@ -994,45 +982,22 @@ namespace disk::file {
         const auto task = task_result.value();
 
         /// 2. Check idempotency: already in terminal state
-        if (task.getValueOfStatus() != 0) {
+        if (!disk::upload::CanCancelOrExpire(task.getValueOfStatus())) {
             Logger::Debug() << "Upload task already in terminal state: upload_id=" << upload_id
                       << ", status=" << task.getValueOfStatus();
             co_return {};
         }
 
-        /// 3. Release reserved quota
-        co_await ReleaseReservedQuota(user_id, task.getValueOfReservedBytes());
-
-        /// 4. Set terminal state (status=2 cancelled)
-        try {
-            co_await m_db_client->execSqlCoro(
-                "UPDATE upload_tasks SET status = 2, finalized_at = NOW(), " "fail_reason = '用户取消' WHERE id = $1 AND status = 0",
-                upload_id
-            );
-            InvalidateUploadTaskCache(upload_id);
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to set cancel terminal state: " << e.base().what();
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to cancel upload task")
-            );
+        disk::upload::UploadLifecycleService lifecycle_service(m_db_client, m_storage);
+        auto cancel_result = co_await lifecycle_service.CancelInProgressUpload(
+            upload_id,
+            user_id,
+            task.getValueOfReservedBytes()
+        );
+        if (!cancel_result) {
+            co_return std::unexpected(cancel_result.error());
         }
-
-        /// 5. Cleanup chunk tracking rows
-        try {
-            co_await m_db_client->execSqlCoro(
-                "DELETE FROM upload_task_chunks WHERE task_id = $1",
-                upload_id
-            );
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "Failed to cleanup upload_task_chunks: " << e.base().what();
-        }
-
-        /// 6. Cleanup temp directory
-        auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
-        if (!cleanup_result) {
-            Logger::Warn() << "Failed to delete temp directory: upload_id=" << upload_id
-                     << ", error=" << static_cast<int>(cleanup_result.error().code);
-        }
+        InvalidateUploadTaskCache(upload_id);
 
         Logger::Debug() << "Upload task cancelled: upload_id=" << upload_id;
         co_return {};
@@ -1042,74 +1007,22 @@ namespace disk::file {
 
     auto UploadService::CheckStorageQuota(uint64_t user_id, uint64_t file_size) const
         -> drogon::Task<Result<void>> {
-        co_return co_await CheckStorageQuota(m_db_client, user_id, file_size);
+        disk::quota::QuotaService quota_service(m_db_client);
+        co_return co_await quota_service.ConsumeUsedStorage(m_db_client, user_id, file_size);
     }
 
     auto UploadService::ReserveStorageQuota(uint64_t user_id, uint64_t file_size) const
         -> drogon::Task<Result<void>> {
 
-        try {
-            auto result = co_await m_db_client->execSqlCoro(
-                "UPDATE users SET storage_reserved = storage_reserved + $1 " "WHERE id = $2 AND storage_used + storage_reserved + $3 <= storage_quota",
-                file_size,
-                user_id,
-                file_size
-            );
-
-            if (result.affectedRows() == 0) {
-                Logger::Warn() << "Insufficient storage quota for reservation: user_id=" << user_id
-                         << ", file_size=" << file_size;
-                co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
-            }
-
-            Logger::Debug() << "Storage quota reserved: user_id=" << user_id
-                      << ", file_size=" << file_size;
-            co_return {};
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to reserve storage quota: " << e.base().what();
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to reserve storage quota")
-            );
-        }
+        disk::quota::QuotaService quota_service(m_db_client);
+        co_return co_await quota_service.ReserveUploadStorage(m_db_client, user_id, file_size);
     }
 
     auto UploadService::ReleaseReservedQuota(uint64_t user_id, uint64_t reserved_bytes)
         -> drogon::Task<void> {
 
-        if (reserved_bytes == 0) {
-            co_return;
-        }
-
-        try {
-            co_await m_db_client->execSqlCoro(
-                "UPDATE users SET storage_reserved = GREATEST(storage_reserved - $1, 0) WHERE id = $2",
-                reserved_bytes,
-                user_id
-            );
-
-            Logger::Debug() << "Reserved quota released: user_id=" << user_id
-                      << ", reserved_bytes=" << reserved_bytes;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to release reserved quota: " << e.base().what();
-        }
-    }
-
-    auto UploadService::FindExistingContent(const std::string& file_hash) const
-        -> drogon::Task<std::optional<uint64_t>> {
-
-        try {
-            CoroMapper<FileContents> mapper(m_db_client);
-            auto content = co_await mapper.findOne(
-                Criteria(FileContents::Cols::_hash_md5, CompareOperator::EQ, file_hash)
-            );
-
-            co_return content.getValueOfId();
-
-        } catch (const drogon::orm::DrogonDbException&) {
-            co_return std::nullopt;
-        }
+        disk::quota::QuotaService quota_service(m_db_client);
+        co_await quota_service.ReleaseReservedStorage(m_db_client, user_id, reserved_bytes);
     }
 
     auto UploadService::FindExistingTask(uint64_t user_id, const std::string& file_hash) const
@@ -1120,7 +1033,7 @@ namespace disk::file {
             auto task = co_await mapper.findOne(
                 Criteria(UploadTasks::Cols::_user_id, CompareOperator::EQ, user_id) &&
                 Criteria(UploadTasks::Cols::_file_hash, CompareOperator::EQ, file_hash) &&
-                Criteria(UploadTasks::Cols::_status, CompareOperator::EQ, 0)
+                Criteria(UploadTasks::Cols::_status, CompareOperator::EQ, disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress))
             );
 
             co_return task;
@@ -1278,31 +1191,8 @@ namespace disk::file {
         uint64_t user_id,
         uint64_t file_size
     ) const -> drogon::Task<Result<void>> {
-
-        try {
-            auto result = co_await client->execSqlCoro(
-                "UPDATE users SET storage_used = storage_used + $1 " "WHERE id = $2 AND storage_used + $3 <= storage_quota",
-                file_size,
-                user_id,
-                file_size
-            );
-
-            if (result.affectedRows() == 0) {
-                Logger::Warn() << "Insufficient storage space: user_id=" << user_id
-                         << ", file_size=" << file_size;
-                co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
-            }
-
-            Logger::Debug() << "Storage quota check passed and reserved: user_id=" << user_id
-                      << ", file_size=" << file_size;
-            co_return {};
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to reserve user storage quota: " << e.base().what();
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to reserve storage quota")
-            );
-        }
+        disk::quota::QuotaService quota_service(m_db_client);
+        co_return co_await quota_service.ConsumeUsedStorage(client, user_id, file_size);
     }
 
     auto UploadService::UpdateStorageUsed(
@@ -1311,33 +1201,8 @@ namespace disk::file {
         int64_t delta
     ) -> drogon::Task<void> {
 
-        try {
-            if (delta >= 0) {
-                auto result = co_await client->execSqlCoro(
-                    "UPDATE users SET storage_used = storage_used + $1 " "WHERE id = $2 AND storage_used + $3 <= storage_quota",
-                    delta,
-                    user_id,
-                    delta
-                );
-
-                if (result.affectedRows() == 0) {
-                    Logger::Warn() << "Skipped storage usage increment due to quota limit: user_id="
-                             << user_id << ", delta=" << delta;
-                    co_return;
-                }
-            } else {
-                co_await client->execSqlCoro(
-                    "UPDATE users SET storage_used = GREATEST(storage_used + $1, 0) WHERE id = $2",
-                    delta,
-                    user_id
-                );
-            }
-
-            Logger::Debug() << "Storage usage updated: user_id=" << user_id << ", delta=" << delta;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to update storage usage: " << e.base().what();
-        }
+        disk::quota::QuotaService quota_service(m_db_client);
+        co_await quota_service.AdjustUsedStorage(client, user_id, delta);
     }
 
     auto UploadService::LookupExistingContentMetadata(

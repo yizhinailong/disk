@@ -84,13 +84,6 @@ namespace disk::services {
          */
         auto UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void>;
 
-        /**
-         * @brief 更新文件内容引用计数
-         *
-         * @param content_id 文件内容 ID
-         * @return drogon::Task<void>
-         */
-        auto DecrementContentRefCount(uint64_t content_id) -> drogon::Task<void>;
     };
 
 } ///< namespace disk::services

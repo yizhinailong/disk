@@ -97,6 +97,8 @@ set(Services_HEADERS
     services/AdminService.hpp
     services/AuthService.hpp
     services/CleanupService.hpp
+    services/ContentService.hpp
+    services/QuotaService.hpp
     services/FileMutationService.hpp
     services/FileQueryService.hpp
     services/FileServiceUtils.hpp
@@ -109,6 +111,7 @@ set(Services_HEADERS
     services/SystemService.hpp
     services/TokenService.hpp
     services/TrashService.hpp
+    services/UploadLifecycleService.hpp
     services/UploadService.hpp
     services/UserService.hpp
 )
@@ -116,6 +119,8 @@ set(Services_SOURCES
     services/AdminService.cpp
     services/AuthService.cpp
     services/CleanupService.cpp
+    services/ContentService.cpp
+    services/QuotaService.cpp
     services/FileMutationService.cpp
     services/FileQueryService.cpp
     services/FileServiceUtils.cpp
@@ -128,6 +133,7 @@ set(Services_SOURCES
     services/SystemService.cpp
     services/TokenService.cpp
     services/TrashService.cpp
+    services/UploadLifecycleService.cpp
     services/UploadService.cpp
     services/UserService.cpp
 )
