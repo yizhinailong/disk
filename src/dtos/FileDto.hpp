@@ -613,6 +613,14 @@ namespace disk::file {
         static auto FromPath(const std::string& file_id_str) -> Result<DownloadInfoRequest> {
             Logger::Debug() << "Start parsing download info request parameters";
 
+            if (!file_id_str.empty() && file_id_str[0] == '-') {
+                Logger::Warn() << "Parameter 'file_id' must be a positive integer: " << file_id_str;
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::InvalidParameter,
+                    "Parameter 'file_id' must be a positive integer"
+                ));
+            }
+
             auto file_id_result = ParsePositiveUInt64(file_id_str, "file_id");
             if (!file_id_result) return std::unexpected(file_id_result.error());
 

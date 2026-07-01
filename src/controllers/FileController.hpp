@@ -230,9 +230,9 @@ namespace disk::file {
         auto Search(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
-        std::unique_ptr<UploadService> m_upload_service{};
-        std::unique_ptr<FileQueryService> m_query_service{};
-        std::unique_ptr<FileMutationService> m_mutation_service{};
+        UploadService* m_upload_service{};
+        FileQueryService* m_query_service{};
+        FileMutationService* m_mutation_service{};
         disk::storage::IFileStorage* m_storage{};
     };
 

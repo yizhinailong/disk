@@ -1,5 +1,9 @@
+#include <memory>
+
 #include <drogon/drogon.h>
 
+#include "application/ApplicationContext.hpp"
+#include "services/CleanupService.hpp"
 #include "services/ScheduledTasks.hpp"
 #include "services/TokenService.hpp"
 #include "storage/LocalFileStorage.hpp"
@@ -63,9 +67,22 @@ auto main() -> int {
     disk::utils::Logger::Info() << "Drogon framework version: " << drogon::getVersion();
     disk::utils::Logger::Info() << "Web server listening on http://127.0.0.1:8080";
 
-    /// 注册启动后定时清理任务
+    /// 注册启动后服务组合与定时清理任务
     drogon::app().registerBeginningAdvice([]() {
-        disk::services::ScheduledTasks::Initialize(drogon::app().getDbClient());
+        disk::application::ApplicationContext::Initialize(
+            drogon::app().getDbClient(),
+            drogon::app().getRedisClient(),
+            disk::storage::StorageMgr::GetStorage(),
+            disk::utils::ConfigMgr::GetInstance()->GetJwtSecret()
+        );
+        disk::utils::Logger::Info() << "Application service context initialized successfully";
+
+        disk::services::ScheduledTasks::Initialize(
+            std::shared_ptr<disk::services::CleanupService>(
+                disk::application::ApplicationContext::GetInstance(),
+                &disk::application::ApplicationContext::GetInstance()->Cleanup()
+            )
+        );
         disk::services::ScheduledTasks::Register();
         disk::services::TokenService::GetInstance()->StartCacheMaintenance();
     });

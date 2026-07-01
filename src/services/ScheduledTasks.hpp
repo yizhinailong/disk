@@ -46,6 +46,8 @@ namespace disk::services {
          */
         static auto Initialize(drogon::orm::DbClientPtr db_client) -> void;
 
+        static auto Initialize(std::shared_ptr<CleanupService> cleanup_service) -> void;
+
         /**
          * @brief 注册所有定时任务
          *

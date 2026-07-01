@@ -8,6 +8,7 @@
  */
 
 #include "RateLimitFilter.hpp"
+#include "filters/RateLimitHelper.hpp"
 
 #include "utils/ErrorCode.hpp"
 #include "utils/RedisKeyPrefix.hpp"
@@ -42,11 +43,11 @@ namespace disk::filters {
         }
 
         const auto user_id = attrs->get<uint64_t>("user_id");
-        const auto window = GetCurrentWindow();
+        const auto window = GetFixedWindowStart(WINDOW_SECONDS);
         const auto key = RedisKeyPrefix::BuildApiRateLimitKey(user_id, window);
 
         /// 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
-        auto incr_result = co_await m_redis_service->IncrWithExpire(key, WINDOW_SECONDS);
+        auto incr_result = co_await CheckFixedWindowLimit(m_redis_service, key, WINDOW_SECONDS);
         if (!incr_result) {
             Logger::Error() << "Redis IncrWithExpire failed: " << incr_result.error().message;
             /// Redis 失败时不阻止请求
@@ -65,12 +66,11 @@ namespace disk::filters {
             Logger::Info() << "[rate_limit_filter] duration_us=" << duration_us
                      << " outcome=failure user_id=" << user_id;
 
-            auto response = disk::Response::Error(disk::error::Code::TooManyRequests);
-            response->addHeader("X-RateLimit-Limit", std::to_string(DEFAULT_LIMIT));
-            response->addHeader("X-RateLimit-Remaining", "0");
-            response->addHeader("X-RateLimit-Reset", std::to_string(GetResetTime(window)));
-
-            co_return response;
+            co_return BuildRateLimitExceededResponse(
+                DEFAULT_LIMIT,
+                GetFixedWindowReset(window, WINDOW_SECONDS),
+                false
+            );
         }
 
         Logger::Debug() << "API rate limit check passed: user_id=" << user_id

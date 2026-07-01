@@ -14,17 +14,18 @@
 #include <memory>
 
 #include "DownloadResponder.hpp"
+#include "application/ApplicationContext.hpp"
+#include "controllers/ControllerHelpers.hpp"
 #include "dtos/FileDto.hpp"
-#include "storage/StorageMgr.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::file {
 
     FileController::FileController()
-        : m_upload_service(std::make_unique<UploadService>(drogon::app().getDbClient(), storage::StorageMgr::GetStorage())),
-          m_query_service(std::make_unique<FileQueryService>(drogon::app().getDbClient())),
-          m_mutation_service(std::make_unique<FileMutationService>(drogon::app().getDbClient(), storage::StorageMgr::GetStorage())),
-          m_storage(storage::StorageMgr::GetStorage()) {
+        : m_upload_service(&disk::application::ApplicationContext::GetInstance()->Upload()),
+          m_query_service(&disk::application::ApplicationContext::GetInstance()->FileQuery()),
+          m_mutation_service(&disk::application::ApplicationContext::GetInstance()->FileMutation()),
+          m_storage(disk::application::ApplicationContext::GetInstance()->Storage()) {
     }
 
     auto FileController::InitUpload(drogon::HttpRequestPtr request)
@@ -44,7 +45,7 @@ namespace disk::file {
                   << ", parent_id=" << parse_result->parent_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层初始化上传
         auto result = co_await m_upload_service->InitUpload(*parse_result, user_id);
@@ -66,7 +67,7 @@ namespace disk::file {
         Logger::Debug() << "Received upload chunk request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 2. 从查询参数提取元数据
         /// 注意：UploadChunk 使用查询参数 (upload_id, chunk_index, chunk_hash) + 原始二进制请求体 (application/octet-stream)
@@ -164,7 +165,7 @@ namespace disk::file {
         Logger::Debug() << "Complete upload parameters validated: upload_id=" << parse_result->upload_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层完成上传
         auto result = co_await m_upload_service->CompleteUpload(parse_result->upload_id, user_id);
@@ -195,7 +196,7 @@ namespace disk::file {
         }
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层取消上传
         auto result = co_await m_upload_service->CancelUpload(upload_id, user_id);
@@ -229,7 +230,7 @@ namespace disk::file {
                   << ", sort_order=" << parse_result->sort_order << ", type=" << parse_result->type;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层获取文件列表
         auto result = co_await m_query_service->GetFileList(*parse_result, user_id);
@@ -261,7 +262,7 @@ namespace disk::file {
         Logger::Debug() << "Get file detail parameters validated: file_id=" << parse_result->file_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层获取文件详情
         auto result = co_await m_query_service->GetFileDetail(parse_result->file_id, user_id);
@@ -293,7 +294,7 @@ namespace disk::file {
         Logger::Debug() << "Get download info parameters validated: file_id=" << parse_result->file_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层获取下载信息
         auto result = co_await m_query_service->GetDownloadInfo(parse_result->file_id, user_id);
@@ -326,7 +327,7 @@ namespace disk::file {
         Logger::Debug() << "Download file parameters validated: file_id=" << parse_result->file_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 获取下载文件信息
         auto info_result = co_await m_query_service->GetDownloadData(parse_result->file_id, user_id);
@@ -372,7 +373,7 @@ namespace disk::file {
                   << ", new_name=\"" << parse_result->new_name << "\"";
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层重命名文件
         auto result = co_await m_mutation_service->Rename(
@@ -410,7 +411,7 @@ namespace disk::file {
                   << ", target_folder_id=" << parse_result->target_folder_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层移动文件
         auto result = co_await m_mutation_service->Move(*parse_result, user_id);
@@ -443,7 +444,7 @@ namespace disk::file {
                   << ", target_folder_id=" << parse_result->target_folder_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层复制文件
         auto result = co_await m_mutation_service->Copy(*parse_result, user_id);
@@ -476,7 +477,7 @@ namespace disk::file {
                   << ", folder_ids.size()=" << parse_result->folder_ids.size();
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层删除文件（异常边界：防止未捕获异常导致连接中断）
         try {
@@ -518,7 +519,7 @@ namespace disk::file {
                   << "\"";
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
+        const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层搜索文件
         auto result = co_await m_query_service->Search(*parse_result, user_id);

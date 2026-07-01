@@ -8,6 +8,7 @@
  */
 
 #include "RegisterRateLimitFilter.hpp"
+#include "filters/RateLimitHelper.hpp"
 
 #include <algorithm>
 
@@ -34,11 +35,11 @@ namespace disk::filters {
 
         /// 从请求获取 IP 地址
         const auto ip = RedisKeyPrefix::ExtractIPOnly(request->peerAddr().toIp());
-        const auto window = GetCurrentWindow();
+        const auto window = GetFixedWindowStart(WINDOW_SECONDS);
         const auto key =
             std::string("rate:register:") + ip + ":" + std::to_string(window);
 
-        auto incr_result = co_await m_redis_service->IncrWithExpire(key, WINDOW_SECONDS);
+        auto incr_result = co_await CheckFixedWindowLimit(m_redis_service, key, WINDOW_SECONDS);
         if (!incr_result) {
             Logger::Error() << "Redis IncrWithExpire failed: " << incr_result.error().message;
             co_return nullptr;
@@ -47,22 +48,11 @@ namespace disk::filters {
         const int64_t current_count = incr_result.value();
 
         if (current_count > DEFAULT_LIMIT) {
-            const auto reset_time = GetResetTime(window);
-            const auto now = std::chrono::system_clock::now();
-            const auto now_seconds =
-                std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
-            const auto retry_after = std::max<int64_t>(1, reset_time - now_seconds);
-
+            const auto reset_time = GetFixedWindowReset(window, WINDOW_SECONDS);
             Logger::Warn() << "Register rate limit: ip=" << ip
                      << ", count=" << current_count;
 
-            auto response = disk::Response::Error(disk::error::Code::TooManyRequests);
-            response->addHeader("X-RateLimit-Limit", std::to_string(DEFAULT_LIMIT));
-            response->addHeader("X-RateLimit-Remaining", "0");
-            response->addHeader("X-RateLimit-Reset", std::to_string(reset_time));
-            response->addHeader("Retry-After", std::to_string(retry_after));
-
-            co_return response;
+            co_return BuildRateLimitExceededResponse(DEFAULT_LIMIT, reset_time);
         }
 
         Logger::Debug() << "Register rate limit check passed: ip=" << ip

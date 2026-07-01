@@ -191,7 +191,7 @@ namespace disk::share {
             -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
-        std::unique_ptr<ShareService> m_share_service{};
+        ShareService* m_share_service{};
         disk::storage::IFileStorage* m_storage{};
     };
 
