@@ -163,26 +163,23 @@ namespace disk::upload {
         uint64_t user_id = 0;
         uint64_t reserved_bytes = 0;
 
+        disk::file::UploadTaskRepository upload_task_repository(m_db_client);
         disk::file::TransactionRunner transaction_runner(m_db_client);
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
-                auto result = co_await transaction->execSqlCoro(
-                    "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = '任务过期' "
-                    "WHERE id = $2 AND status = $3 AND expires_at < NOW() "
-                    "RETURNING user_id, reserved_bytes, temp_path",
-                    ToStorageValue(UploadTaskStatus::Expired),
+                auto expired_record = co_await upload_task_repository.MarkExpiredIfInProgressReturning(
+                    transaction,
                     upload_id,
-                    ToStorageValue(UploadTaskStatus::InProgress)
+                    "任务过期"
                 );
 
-                if (result.empty()) {
+                if (!expired_record.has_value()) {
                     co_return {};
                 }
 
-                const auto& row = result[0];
-                user_id = row["user_id"].as<uint64_t>();
-                reserved_bytes = row["reserved_bytes"].as<uint64_t>();
-                temp_path = row["temp_path"].as<std::string>();
+                user_id = expired_record->user_id;
+                reserved_bytes = expired_record->reserved_bytes;
+                temp_path = expired_record->temp_path;
 
                 disk::quota::QuotaService quota_service(m_db_client);
                 auto release_result = co_await quota_service.ReleaseReservedStorageChecked(

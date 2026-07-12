@@ -81,6 +81,13 @@ namespace disk::file {
         ) const -> drogon::Task<uint64_t>;
 
         [[nodiscard]]
+        auto MarkExpiredIfInProgressReturning(
+            const drogon::orm::DbClientPtr& client,
+            const std::string& upload_id,
+            const std::string& fail_reason
+        ) const -> drogon::Task<std::optional<ExpiredUploadTaskRecord>>;
+
+        [[nodiscard]]
         auto RecordChunkUploadedIfAbsent(const std::string& upload_id, uint32_t chunk_index) const
             -> drogon::Task<bool>;
 
