@@ -18,6 +18,7 @@
 
 #include <drogon/orm/CoroMapper.h>
 #include <drogon/orm/Criteria.h>
+#include <json/writer.h>
 
 #include "models/FileContents.hpp"
 #include "models/Files.hpp"
@@ -206,6 +207,274 @@ namespace disk::trash {
         uint64_t user_id
     ) const -> drogon::Task<bool> {
         co_return co_await disk::file::utils::InsertTrashRecords(client, trash_items, user_id);
+    }
+
+    auto TrashService::MoveToTrash(MoveToTrashRequest request, uint64_t user_id)
+        -> drogon::Task<Result<MoveToTrashResult>> {
+
+        auto normalize_ids = [](std::vector<uint64_t> ids) {
+            std::sort(ids.begin(), ids.end());
+            ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+            return ids;
+        };
+
+        auto requested_file_ids = normalize_ids(std::move(request.file_ids));
+        auto requested_folder_ids = normalize_ids(std::move(request.folder_ids));
+
+        std::unordered_map<uint64_t, disk::file::utils::FolderDeletePlan> folder_plans =
+            co_await disk::file::utils::FetchBatchFolderDeletePlans(m_db_client, requested_folder_ids, user_id);
+
+        auto top_level_folder_ids = disk::file::utils::FilterCoveredFolderIds(requested_folder_ids, folder_plans);
+        auto covered_file_ids = disk::file::utils::CollectCoveredFileIds(top_level_folder_ids, folder_plans);
+
+        std::vector<uint64_t> explicit_file_ids;
+        explicit_file_ids.reserve(requested_file_ids.size());
+        for (const auto file_id : requested_file_ids) {
+            if (covered_file_ids.contains(file_id)) {
+                Logger::Debug() << "Skipping explicit file delete covered by folder delete: file_id=" << file_id;
+                continue;
+            }
+            explicit_file_ids.push_back(file_id);
+        }
+
+        std::unordered_map<uint64_t, Files> file_map;
+        file_map.reserve(explicit_file_ids.size());
+        auto file_chunks = BatchUtils::Chunk(explicit_file_ids, DEFAULT_BATCH_CHUNK_SIZE);
+        for (const auto& chunk : file_chunks) {
+            if (chunk.empty()) {
+                continue;
+            }
+
+            try {
+                auto result = co_await m_db_client->execSqlCoro(
+                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, "
+                    "is_favorite, download_count, last_accessed_at, created_at, updated_at "
+                    "FROM files WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ") AND user_id = $1",
+                    user_id
+                );
+
+                for (const auto& row : result) {
+                    auto file = Files(row, -1);
+                    file_map[file.getValueOfId()] = std::move(file);
+                }
+            } catch (const drogon::orm::DrogonDbException& e) {
+                Logger::Warn() << "File batch fetch failed in move-to-trash, skipping chunk: " << e.base().what();
+            }
+        }
+
+        std::vector<disk::file::utils::TrashInsertItem> trash_items;
+        trash_items.reserve(file_map.size() + top_level_folder_ids.size());
+
+        std::vector<uint64_t> file_ids_to_delete;
+        file_ids_to_delete.reserve(file_map.size() + covered_file_ids.size());
+
+        int deleted_file_count = 0;
+        for (const auto file_id : explicit_file_ids) {
+            auto it = file_map.find(file_id);
+            if (it == file_map.end()) {
+                Logger::Warn() << "File not found or delete failed, skipping: file_id=" << file_id;
+                continue;
+            }
+
+            const auto& file = it->second;
+            Json::Value item_data;
+            if (file.getContentId()) {
+                item_data["content_id"] = static_cast<Json::UInt64>(*file.getContentId());
+            }
+            item_data["mime_type"] = file.getValueOfMimeType();
+            Json::StreamWriterBuilder builder;
+            builder["indentation"] = "";
+
+            trash_items.push_back({
+                .item_type = "file",
+                .item_id = file.getValueOfId(),
+                .item_name = file.getValueOfName(),
+                .item_size = file.getValueOfSize(),
+                .original_folder_id = file.getValueOfFolderId(),
+                .original_path = file.getValueOfPath(),
+                .content_id = file.getContentId() ? std::optional<uint64_t>(*file.getContentId()) : std::nullopt,
+                .item_data = Json::writeString(builder, item_data),
+            });
+            file_ids_to_delete.push_back(file.getValueOfId());
+            ++deleted_file_count;
+        }
+
+        std::vector<uint64_t> folder_ids_to_delete;
+        int deleted_folder_count = 0;
+        for (const auto folder_id : top_level_folder_ids) {
+            auto plan_it = folder_plans.find(folder_id);
+            if (plan_it == folder_plans.end()) {
+                continue;
+            }
+
+            const auto& plan = plan_it->second;
+            trash_items.push_back({
+                .item_type = "folder",
+                .item_id = plan.root.getValueOfId(),
+                .item_name = plan.root.getValueOfName(),
+                .item_size = plan.item_size,
+                .original_folder_id = plan.root.getValueOfParentId(),
+                .original_path = plan.root.getValueOfPath(),
+                .content_id = std::nullopt,
+                .item_data = disk::file::utils::BuildFolderSnapshot(plan),
+            });
+
+            for (const auto& file : plan.files) {
+                file_ids_to_delete.push_back(file.getValueOfId());
+            }
+            for (const auto& folder : plan.folders) {
+                folder_ids_to_delete.push_back(folder.getValueOfId());
+            }
+            ++deleted_folder_count;
+        }
+
+        file_ids_to_delete = normalize_ids(std::move(file_ids_to_delete));
+        folder_ids_to_delete = normalize_ids(std::move(folder_ids_to_delete));
+
+        if (trash_items.empty()) {
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::FileNotFound,
+                "No deletable files or folders found for the given IDs"
+            ));
+        }
+
+        std::vector<uint64_t> affected_folder_ids;
+        for (const auto& trash_item : trash_items) {
+            if (trash_item.original_folder_id != 0) {
+                affected_folder_ids.push_back(trash_item.original_folder_id);
+            }
+        }
+        affected_folder_ids = normalize_ids(std::move(affected_folder_ids));
+
+        std::shared_ptr<drogon::orm::Transaction> txn;
+        try {
+            txn = co_await m_db_client->newTransactionCoro();
+
+            auto insert_ok = co_await CreateTrashRecords(txn, trash_items, user_id);
+            if (!insert_ok) {
+                throw std::runtime_error("Failed to insert trash records");
+            }
+
+            auto share_stats = co_await CleanupShareLinksForMovedItems(
+                txn,
+                file_ids_to_delete,
+                folder_ids_to_delete
+            );
+            Logger::Debug() << "Cleaned share links during delete: file_links="
+                      << share_stats.deleted_file_share_links
+                      << ", folder_links=" << share_stats.deleted_folder_share_links
+                      << ", cancelled_empty_shares=" << share_stats.cancelled_empty_shares;
+
+            auto deleted_file_rows = co_await disk::file::utils::DeleteFilesByIds(txn, file_ids_to_delete);
+            if (deleted_file_rows != static_cast<int>(file_ids_to_delete.size())) {
+                throw std::runtime_error("Failed to delete all file rows");
+            }
+
+            auto deleted_folder_rows = co_await disk::file::utils::DeleteFoldersByIds(txn, folder_ids_to_delete);
+            if (deleted_folder_rows != static_cast<int>(folder_ids_to_delete.size())) {
+                throw std::runtime_error("Failed to delete all folder rows");
+            }
+
+            txn.reset();
+        } catch (const drogon::orm::DrogonDbException& e) {
+            Logger::Error() << "Delete transaction failed (DB): " << e.base().what();
+            if (txn) {
+                try {
+                    txn->rollback();
+                } catch (const std::exception& rb_e) {
+                    Logger::Error() << "Transaction rollback failed: " << rb_e.what();
+                }
+            }
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to delete items"));
+        } catch (const std::exception& e) {
+            Logger::Error() << "Delete transaction failed: " << e.what();
+            if (txn) {
+                try {
+                    txn->rollback();
+                } catch (const std::exception& rb_e) {
+                    Logger::Error() << "Transaction rollback failed: " << rb_e.what();
+                }
+            }
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to delete items"));
+        }
+
+        MoveToTrashResult result;
+        result.deleted_file_count = deleted_file_count;
+        result.deleted_folder_count = deleted_folder_count;
+        result.deleted_count = deleted_file_count + deleted_folder_count;
+        result.removed_file_ids = std::move(file_ids_to_delete);
+        result.removed_folder_ids = std::move(folder_ids_to_delete);
+        result.affected_folder_ids = std::move(affected_folder_ids);
+        co_return result;
+    }
+
+    auto TrashService::CleanupShareLinksForMovedItems(
+        const drogon::orm::DbClientPtr& client,
+        const std::vector<uint64_t>& file_ids,
+        const std::vector<uint64_t>& folder_ids
+    ) const -> drogon::Task<ShareCleanupStats> {
+        auto normalize_ids = [](std::vector<uint64_t> ids) {
+            std::sort(ids.begin(), ids.end());
+            ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+            return ids;
+        };
+
+        ShareCleanupStats stats;
+        std::vector<uint64_t> affected_share_ids;
+
+        auto file_share_chunks = BatchUtils::Chunk(file_ids, DEFAULT_BATCH_CHUNK_SIZE);
+        for (const auto& chunk : file_share_chunks) {
+            if (chunk.empty()) {
+                continue;
+            }
+            auto linked_shares = co_await client->execSqlCoro(
+                "SELECT DISTINCT share_id FROM share_files WHERE item_type = 'file' AND item_id IN (" +
+                    BatchUtils::BuildSafeNumericInClause(chunk) + ")"
+            );
+            for (const auto& row : linked_shares) {
+                affected_share_ids.push_back(row["share_id"].as<uint64_t>());
+            }
+            auto result = co_await client->execSqlCoro(
+                "DELETE FROM share_files WHERE item_type = 'file' AND item_id IN (" +
+                    BatchUtils::BuildSafeNumericInClause(chunk) + ")"
+            );
+            stats.deleted_file_share_links += static_cast<int>(result.affectedRows());
+        }
+
+        auto folder_share_chunks = BatchUtils::Chunk(folder_ids, DEFAULT_BATCH_CHUNK_SIZE);
+        for (const auto& chunk : folder_share_chunks) {
+            if (chunk.empty()) {
+                continue;
+            }
+            auto linked_shares = co_await client->execSqlCoro(
+                "SELECT DISTINCT share_id FROM share_files WHERE item_type = 'folder' AND item_id IN (" +
+                    BatchUtils::BuildSafeNumericInClause(chunk) + ")"
+            );
+            for (const auto& row : linked_shares) {
+                affected_share_ids.push_back(row["share_id"].as<uint64_t>());
+            }
+            auto result = co_await client->execSqlCoro(
+                "DELETE FROM share_files WHERE item_type = 'folder' AND item_id IN (" +
+                    BatchUtils::BuildSafeNumericInClause(chunk) + ")"
+            );
+            stats.deleted_folder_share_links += static_cast<int>(result.affectedRows());
+        }
+
+        affected_share_ids = normalize_ids(std::move(affected_share_ids));
+        auto affected_share_chunks = BatchUtils::Chunk(affected_share_ids, DEFAULT_BATCH_CHUNK_SIZE);
+        for (const auto& chunk : affected_share_chunks) {
+            if (chunk.empty()) {
+                continue;
+            }
+            auto result = co_await client->execSqlCoro(
+                "UPDATE shares s SET status = 0, updated_at = NOW() "
+                "WHERE s.status = 1 AND s.id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ") "
+                "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)"
+            );
+            stats.cancelled_empty_shares += static_cast<int>(result.affectedRows());
+        }
+
+        co_return stats;
     }
 
     auto TrashService::CleanupExpiredTrashItems(

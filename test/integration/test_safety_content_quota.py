@@ -79,7 +79,7 @@ def user_quota() -> dict[str, int]:
     return {key: int(row[key]) for key in ("storage_used", "storage_reserved", "storage_quota")}
 
 
-def init_upload(filename: str, payload: bytes) -> tuple[str, str, str | None]:
+def init_upload(filename: str, payload: bytes, parent_id: int = 0) -> tuple[str, str, str | None]:
     """Initialize upload and return upload_id, file_hash, instant file id if present."""
     file_hash = md5_bytes(payload)
     resp = fetch(
@@ -90,7 +90,7 @@ def init_upload(filename: str, payload: bytes) -> tuple[str, str, str | None]:
             "filename": filename,
             "file_size": len(payload),
             "file_hash": file_hash,
-            "parent_id": 0,
+            "parent_id": parent_id,
         },
     )
     save_evidence(f"{EVIDENCE_PREFIX}-{filename}-init.json", resp.text)
@@ -136,9 +136,9 @@ def complete_upload(upload_id: str) -> int:
     return int(file_id)
 
 
-def upload_file(filename: str, payload: bytes) -> int:
+def upload_file(filename: str, payload: bytes, parent_id: int = 0) -> int:
     """Upload content as a chunked file and return file id."""
-    upload_id, _, instant_file_id = init_upload(filename, payload)
+    upload_id, _, instant_file_id = init_upload(filename, payload, parent_id)
     if instant_file_id:
         return int(instant_file_id)
     upload_chunk(upload_id, payload)
@@ -218,6 +218,85 @@ def delete_file_to_trash(file_id: int) -> int:
         log_fail(f"trash row created for file_id={file_id}")
         print_summary()
     return int(row["id"])
+
+
+def delete_folder_to_trash(folder_id: int) -> int:
+    """Soft delete a folder and return trash id."""
+    resp = fetch(
+        "/api/file",
+        method="DELETE",
+        headers=auth_headers(),
+        json_body={"file_ids": [], "folder_ids": [folder_id]},
+    )
+    save_evidence(f"{EVIDENCE_PREFIX}-delete-folder-{folder_id}.json", resp.text)
+    if resp.status_code != 200 or json_field(resp.text, "code") != "0":
+        log_fail(f"soft delete failed: folder_id={folder_id}")
+        print(resp.text)
+        print_summary()
+    row = query_one(
+        "SELECT id FROM trash WHERE user_id = %s AND item_type = 'folder' AND item_id = %s ORDER BY id DESC LIMIT 1",
+        (USER_ID, folder_id),
+    )
+    if row is None:
+        log_fail(f"trash row created for folder_id={folder_id}")
+        print_summary()
+    return int(row["id"])
+
+
+def empty_trash() -> dict[str, int]:
+    """Empty the current user's trash and return response counters."""
+    resp = fetch(
+        "/api/trash/all",
+        method="DELETE",
+        headers=auth_headers(),
+    )
+    save_evidence(f"{EVIDENCE_PREFIX}-trash-empty.json", resp.text)
+    if resp.status_code != 200 or json_field(resp.text, "code") != "0":
+        log_fail("empty trash failed")
+        print(resp.text)
+        print_summary()
+    return {
+        "deleted_count": int(json_field(resp.text, "data.deleted_count") or 0),
+        "freed_space": int(json_field(resp.text, "data.freed_space") or 0),
+    }
+
+
+def create_share_fixture(file_ids: list[int] | None = None, folder_ids: list[int] | None = None) -> int:
+    """Create an active share and direct share_files links for lifecycle cleanup assertions."""
+    file_ids = file_ids or []
+    folder_ids = folder_ids or []
+    row = query_one(
+        """
+        INSERT INTO shares (share_code, user_id, permission, view_count, download_count, status, created_at, updated_at)
+        VALUES (%s, %s, 'download', 0, 0, 1, NOW(), NOW())
+        RETURNING id
+        """,
+        (f"trash_cleanup_{unique_name()}", USER_ID),
+    )
+    if row is None:
+        log_fail("share fixture created")
+        print_summary()
+    share_id = int(row["id"])
+    for file_id in file_ids:
+        execute(
+            "INSERT INTO share_files (share_id, item_type, item_id, created_at) VALUES (%s, 'file', %s, NOW())",
+            (share_id, file_id),
+        )
+    for folder_id in folder_ids:
+        execute(
+            "INSERT INTO share_files (share_id, item_type, item_id, created_at) VALUES (%s, 'folder', %s, NOW())",
+            (share_id, folder_id),
+        )
+    return share_id
+
+
+def share_status(share_id: int) -> int:
+    """Return share status."""
+    status = scalar("SELECT status FROM shares WHERE id = %s", (share_id,))
+    if status is None:
+        log_fail(f"share exists: id={share_id}")
+        print_summary()
+    return int(status)
 
 
 def permanently_delete_trash(trash_id: int) -> None:
@@ -455,8 +534,134 @@ def test_copy_quota_rejection_no_side_effects() -> None:
     assert_equal("copy quota rejection leaves ref_count unchanged", after_ref, before_ref)
 
 
-def test_permanent_delete_ref_count_and_blob_retention() -> None:
-    """Verify permanent deletion decrements refs and deletes blob only at zero refs."""
+def test_soft_delete_preserves_ref_count_storage_used_and_blob() -> None:
+    """Verify soft delete moves to trash without releasing content refs, quota, or blob."""
+    log_section("Soft Delete Preserves Ref-Count, Quota, And Blob")
+    payload = f"soft-delete-boundary-{unique_name()}".encode()
+    file_id = upload_file(f"safety_soft_delete_{unique_name()}.bin", payload)
+    original_file = file_row(file_id)
+    content_id = int(original_file["content_id"])
+    file_hash = str(content_row(content_id)["hash_md5"])
+    before_ref = int(content_row(content_id)["ref_count"])
+    quota_before = user_quota()
+    assert_path_exists("blob exists before soft delete", final_blob_path(file_hash))
+
+    trash_id = delete_file_to_trash(file_id)
+    trash_row = query_one(
+        "SELECT content_id FROM trash WHERE id = %s AND user_id = %s",
+        (trash_id, USER_ID),
+    )
+    if trash_row is None:
+        log_fail(f"trash row exists after soft delete: id={trash_id}")
+        print_summary()
+    after_ref = int(content_row(content_id)["ref_count"])
+    quota_after = user_quota()
+
+    assert_db_row_absent("active file row removed on soft delete", "SELECT id FROM files WHERE id = %s", (file_id,))
+    assert_equal("trash row keeps content_id", int(trash_row["content_id"]), content_id)
+    assert_equal("soft delete keeps ref_count", after_ref, before_ref)
+    assert_equal("soft delete keeps storage_used", quota_after["storage_used"], quota_before["storage_used"])
+    assert_path_exists("soft delete keeps blob while in trash", final_blob_path(file_hash))
+
+
+def test_share_cleanup_on_soft_delete() -> None:
+    """Verify move-to-trash removes share links and cancels shares only when empty."""
+    log_section("Share Cleanup On Soft Delete")
+    first_file_id = upload_file(f"safety_share_cleanup_a_{unique_name()}.bin", b"share-cleanup-a")
+    second_file_id = upload_file(f"safety_share_cleanup_b_{unique_name()}.bin", b"share-cleanup-b")
+    share_id = create_share_fixture([first_file_id, second_file_id])
+
+    delete_file_to_trash(first_file_id)
+    remaining_links = int(scalar("SELECT COUNT(*) FROM share_files WHERE share_id = %s", (share_id,)) or 0)
+    deleted_link_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM share_files WHERE share_id = %s AND item_type = 'file' AND item_id = %s",
+            (share_id, first_file_id),
+        ) or 0
+    )
+    assert_equal("deleted file share link removed", deleted_link_count, 0)
+    assert_equal("share keeps remaining file link", remaining_links, 1)
+    assert_equal("share remains active while one link remains", share_status(share_id), 1)
+
+    delete_file_to_trash(second_file_id)
+    final_links = int(scalar("SELECT COUNT(*) FROM share_files WHERE share_id = %s", (share_id,)) or 0)
+    assert_equal("last share link removed", final_links, 0)
+    assert_equal("empty share is cancelled", share_status(share_id), 0)
+
+
+def test_folder_soft_delete_snapshot_preserves_ref_count_and_storage() -> None:
+    """Verify folder soft delete writes a folder snapshot and preserves accounting."""
+    log_section("Folder Soft Delete Snapshot Preserves Accounting")
+    root_folder_id = create_folder(f"safety_folder_root_{unique_name()}")
+    child_folder_id = create_folder(f"safety_folder_child_{unique_name()}", root_folder_id)
+    root_payload = f"folder-root-file-{unique_name()}".encode()
+    child_payload = f"folder-child-file-{unique_name()}".encode()
+    root_file_id = upload_file(f"safety_folder_root_file_{unique_name()}.bin", root_payload, root_folder_id)
+    child_file_id = upload_file(f"safety_folder_child_file_{unique_name()}.bin", child_payload, child_folder_id)
+    root_content_id = int(file_row(root_file_id)["content_id"])
+    child_content_id = int(file_row(child_file_id)["content_id"])
+    before_refs = {
+        root_content_id: int(content_row(root_content_id)["ref_count"]),
+        child_content_id: int(content_row(child_content_id)["ref_count"]),
+    }
+    quota_before = user_quota()
+    folder_share_id = create_share_fixture(folder_ids=[root_folder_id])
+
+    trash_id = delete_folder_to_trash(root_folder_id)
+    trash_row = query_one("SELECT item_data FROM trash WHERE id = %s AND user_id = %s", (trash_id, USER_ID))
+    if trash_row is None:
+        log_fail(f"folder trash row exists: id={trash_id}")
+        print_summary()
+    raw_item_data = trash_row["item_data"]
+    item_data = raw_item_data if isinstance(raw_item_data, dict) else json.loads(str(raw_item_data))
+
+    assert_equal("folder snapshot type", item_data.get("type"), "folder_tree")
+    assert_equal("folder snapshot version", int(item_data.get("version")), 1)
+    assert_equal("folder snapshot root id", int(item_data.get("root", {}).get("id")), root_folder_id)
+    assert_equal(
+        "folder snapshot contains child folder",
+        any(int(folder.get("id")) == child_folder_id for folder in item_data.get("folders", [])),
+        True,
+    )
+    snapshot_file_ids = {int(file.get("id")) for file in item_data.get("files", [])}
+    assert_equal("folder snapshot contains root file", root_file_id in snapshot_file_ids, True)
+    assert_equal("folder snapshot contains child file", child_file_id in snapshot_file_ids, True)
+    assert_db_row_absent("root file row removed by folder soft delete", "SELECT id FROM files WHERE id = %s", (root_file_id,))
+    assert_db_row_absent("child file row removed by folder soft delete", "SELECT id FROM files WHERE id = %s", (child_file_id,))
+    assert_db_row_absent("child folder row removed by folder soft delete", "SELECT id FROM folders WHERE id = %s", (child_folder_id,))
+    assert_equal("folder soft delete keeps root file ref_count", int(content_row(root_content_id)["ref_count"]), before_refs[root_content_id])
+    assert_equal("folder soft delete keeps child file ref_count", int(content_row(child_content_id)["ref_count"]), before_refs[child_content_id])
+    assert_equal("folder soft delete keeps storage_used", user_quota()["storage_used"], quota_before["storage_used"])
+    assert_equal("folder share link removed", int(scalar("SELECT COUNT(*) FROM share_files WHERE share_id = %s", (folder_share_id,)) or 0), 0)
+    assert_equal("folder share cancelled", share_status(folder_share_id), 0)
+
+
+def test_delete_all_ref_count_quota_and_blob_cleanup() -> None:
+    """Verify empty-trash uses permanent-delete semantics for refs, quota, and blobs."""
+    log_section("Delete All Ref-Count, Quota, And Blob Cleanup")
+    empty_trash()
+    payload = f"delete-all-boundary-{unique_name()}".encode()
+    first_file_id = upload_file(f"safety_delete_all_a_{unique_name()}.bin", payload)
+    second_file_id = upload_file(f"safety_delete_all_b_{unique_name()}.bin", payload)
+    content_id = int(file_row(first_file_id)["content_id"])
+    file_hash = str(content_row(content_id)["hash_md5"])
+    before_ref = int(content_row(content_id)["ref_count"])
+    quota_before = user_quota()
+
+    first_trash = delete_file_to_trash(first_file_id)
+    second_trash = delete_file_to_trash(second_file_id)
+    result = empty_trash()
+    quota_after = user_quota()
+    final_ref = int(content_row(content_id)["ref_count"])
+
+    assert_equal("delete-all reports at least test rows", result["deleted_count"] >= 2, True)
+    assert_db_row_absent("first delete-all trash row removed", "SELECT id FROM trash WHERE id = %s", (first_trash,))
+    assert_db_row_absent("second delete-all trash row removed", "SELECT id FROM trash WHERE id = %s", (second_trash,))
+    assert_numeric_delta("delete-all decrements ref_count for both files", before_ref, final_ref, -2)
+    assert_numeric_delta("delete-all releases used storage for both files", quota_before["storage_used"], quota_after["storage_used"], -2 * len(payload))
+    assert_path_absent("delete-all deletes blob at zero ref_count", final_blob_path(file_hash))
+
+
     log_section("Permanent Delete Ref-Count And Blob Retention")
     payload = f"trash-ref-blob-{unique_name()}".encode()
     first_file_id = upload_file(f"safety_trash_a_{unique_name()}.bin", payload)
@@ -551,6 +756,10 @@ def main() -> None:
     test_copy_ref_count_and_quota()
     test_upload_quota_rejection_no_leak()
     test_copy_quota_rejection_no_side_effects()
+    test_soft_delete_preserves_ref_count_storage_used_and_blob()
+    test_share_cleanup_on_soft_delete()
+    test_folder_soft_delete_snapshot_preserves_ref_count_and_storage()
+    test_delete_all_ref_count_quota_and_blob_cleanup()
     test_permanent_delete_ref_count_and_blob_retention()
     test_expired_trash_cleanup_ref_count_quota_and_blob_retention()
 

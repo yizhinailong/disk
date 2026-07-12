@@ -134,6 +134,11 @@ namespace disk::file::utils {
         const std::unordered_map<uint64_t, FolderDeletePlan>& plans
     ) -> std::unordered_set<uint64_t>;
 
+    auto DeleteFilesByIds(
+        const drogon::orm::DbClientPtr& client,
+        const std::vector<uint64_t>& file_ids
+    ) -> drogon::Task<int>;
+
     auto DeleteFoldersByIds(
         const drogon::orm::DbClientPtr& client,
         const std::vector<uint64_t>& folder_ids

@@ -442,6 +442,26 @@ namespace disk::file::utils {
         return file_ids;
     }
 
+    auto DeleteFilesByIds(
+        const drogon::orm::DbClientPtr& client,
+        const std::vector<uint64_t>& file_ids
+    ) -> drogon::Task<int> {
+        if (file_ids.empty()) {
+            co_return 0;
+        }
+
+        try {
+            auto result = co_await client->execSqlCoro(
+                "DELETE FROM files WHERE id IN (" +
+                BatchUtils::BuildSafeNumericInClause(file_ids) + ")"
+            );
+            co_return static_cast<int>(result.affectedRows());
+        } catch (const drogon::orm::DrogonDbException& e) {
+            Logger::Warn() << "Batch file delete failed: " << e.base().what();
+            co_return 0;
+        }
+    }
+
     auto DeleteFoldersByIds(
         const drogon::orm::DbClientPtr& client,
         const std::vector<uint64_t>& folder_ids

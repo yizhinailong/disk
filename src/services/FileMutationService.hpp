@@ -168,19 +168,6 @@ namespace disk::file {
             const std::vector<std::pair<uint64_t, const drogon_model::disk::Files*>>& valid_items
         ) -> drogon::Task<std::vector<std::pair<uint64_t, uint64_t>>>;
 
-        /**
-         * @brief 批量删除文件记录（事务版）
-         *
-         * @param client 数据库客户端
-         * @param file_ids 待删除的文件 ID 列表
-         * @return drogon::Task<int> 实际删除的行数
-         */
-        [[nodiscard]]
-        auto DeleteFilesByIds(
-            const drogon::orm::DbClientPtr& client,
-            const std::vector<uint64_t>& file_ids
-        ) -> drogon::Task<int>;
-
         [[nodiscard]]
         static auto ExtractExtension(const std::string& filename) -> std::string;
 
