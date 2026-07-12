@@ -19,7 +19,7 @@ namespace disk::file {
         : m_db_client(std::move(db_client)) {
     }
 
-    auto SearchQuery::Execute(SearchRequest request, uint64_t user_id) -> drogon::Task<SearchResponse> {
+    auto SearchQuery::Execute(SearchQueryParams request, uint64_t user_id) -> drogon::Task<SearchResponse> {
         std::vector<SearchResultItem> items;
         int total = 0;
         int total_pages = 0;
@@ -46,7 +46,7 @@ namespace disk::file {
             request.type == "all",
             "page."
         );
-        auto offset = (request.page - 1) * request.page_size;
+        auto offset = request.Offset();
 
         std::string file_where = use_fulltext ?
                                      "WHERE f.user_id = $1 AND to_tsvector('simple', f.name) @@ to_tsquery('simple', replace($2, ' ', ' | '))" :
@@ -84,7 +84,7 @@ namespace disk::file {
                 "    FROM folders fo " + folder_where + " "
                 "  ) AS combined "
                 "  ORDER BY " + inner_order_by + " "
-                "  LIMIT $3 OFFSET $4"
+                "  LIMIT " + std::to_string(request.page_size) + " OFFSET " + std::to_string(offset) +
                 ") AS page "
                 "LEFT JOIN files f ON page.type = 'file' AND f.id = page.id "
                 "LEFT JOIN folders fo ON page.type = 'folder' AND fo.id = page.id "
@@ -116,12 +116,7 @@ namespace disk::file {
                     data_sql,
                     user_id,
                     search_param,
-                    *request.folder_id,
-                    user_id,
-                    search_param,
-                    *request.folder_id,
-                    request.page_size,
-                    offset
+                    *request.folder_id
                 );
 
                 for (const auto& row : result) {
@@ -154,11 +149,7 @@ namespace disk::file {
                 auto result = co_await m_db_client->execSqlCoro(
                     data_sql,
                     user_id,
-                    search_param,
-                    user_id,
-                    search_param,
-                    request.page_size,
-                    offset
+                    search_param
                 );
 
                 for (const auto& row : result) {
@@ -187,7 +178,7 @@ namespace disk::file {
                 "  SELECT f.id, f.name "
                 "  FROM files f " + file_where + " "
                 "  ORDER BY " + inner_order_by + " "
-                "  LIMIT $3 OFFSET $4"
+                "  LIMIT " + std::to_string(request.page_size) + " OFFSET " + std::to_string(offset) +
                 ") AS page "
                 "JOIN files f ON f.id = page.id "
                 "LEFT JOIN file_contents fc ON f.content_id = fc.id "
@@ -209,9 +200,7 @@ namespace disk::file {
                     data_sql,
                     user_id,
                     search_param,
-                    *request.folder_id,
-                    request.page_size,
-                    offset
+                    *request.folder_id
                 );
 
                 for (const auto& row : result) {
@@ -238,9 +227,7 @@ namespace disk::file {
                 auto result = co_await m_db_client->execSqlCoro(
                     data_sql,
                     user_id,
-                    search_param,
-                    request.page_size,
-                    offset
+                    search_param
                 );
 
                 for (const auto& row : result) {
@@ -267,7 +254,7 @@ namespace disk::file {
                 "  SELECT fo.id, fo.name "
                 "  FROM folders fo " + folder_where + " "
                 "  ORDER BY " + inner_order_by + " "
-                "  LIMIT $3 OFFSET $4"
+                "  LIMIT " + std::to_string(request.page_size) + " OFFSET " + std::to_string(offset) +
                 ") AS page "
                 "JOIN folders fo ON fo.id = page.id "
                 "ORDER BY " + outer_order_by;
@@ -288,9 +275,7 @@ namespace disk::file {
                     data_sql,
                     user_id,
                     search_param,
-                    *request.folder_id,
-                    request.page_size,
-                    offset
+                    *request.folder_id
                 );
 
                 for (const auto& row : result) {
@@ -315,9 +300,7 @@ namespace disk::file {
                 auto result = co_await m_db_client->execSqlCoro(
                     data_sql,
                     user_id,
-                    search_param,
-                    request.page_size,
-                    offset
+                    search_param
                 );
 
                 for (const auto& row : result) {

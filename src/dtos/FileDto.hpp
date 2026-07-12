@@ -389,6 +389,26 @@ namespace disk::file {
     /// ==================== File List ====================
 
     /**
+     * @brief 文件列表查询参数
+     *
+     * @details
+     * 封装文件列表数据访问所需的分页、排序和过滤参数。
+     */
+    struct FileListQueryParams {
+        uint64_t parent_id{ 0 };
+        int page{ 1 };
+        int page_size{ 20 };
+        std::string sort_by{ "name" };
+        std::string sort_order{ "asc" };
+        std::string type{ "all" };
+
+        [[nodiscard]]
+        auto Offset() const -> int64_t {
+            return static_cast<int64_t>(page - 1) * page_size;
+        }
+    };
+
+    /**
      * @brief 获取文件列表请求 DTO
      *
      * @details
@@ -403,12 +423,7 @@ namespace disk::file {
      * 从 URL 查询参数解析。
      */
     struct FileListRequest : DtoBase<FileListRequest> {
-        uint64_t parent_id{ 0 };
-        int page{ 1 };
-        int page_size{ 20 };
-        std::string sort_by{ "name" };
-        std::string sort_order{ "asc" };
-        std::string type{ "all" };
+        FileListQueryParams query;
 
         /// 从 HTTP 请求查询参数解析并验证，返回 Result
         [[nodiscard]]
@@ -433,21 +448,21 @@ namespace disk::file {
             auto parent_id_result = QueryUInt64(req, "parent_id");
             if (!parent_id_result) return std::unexpected(parent_id_result.error());
             if (parent_id_result->has_value()) {
-                request.parent_id = **parent_id_result;
+                request.query.parent_id = **parent_id_result;
             }
 
             /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page", 1);
             if (!page_result) return std::unexpected(page_result.error());
             if (page_result->has_value()) {
-                request.page = **page_result;
+                request.query.page = **page_result;
             }
 
             /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
             if (!page_size_result) return std::unexpected(page_size_result.error());
             if (page_size_result->has_value()) {
-                request.page_size = **page_size_result;
+                request.query.page_size = **page_size_result;
             }
 
             /// 解析可选参数 sort_by
@@ -460,7 +475,7 @@ namespace disk::file {
                         "Parameter 'sort_by' invalid value, must be name/size/created_at/updated_at"
                     ));
                 }
-                request.sort_by = sort_by_str;
+                request.query.sort_by = sort_by_str;
             }
 
             /// 解析可选参数 sort_order
@@ -473,7 +488,7 @@ namespace disk::file {
                         "Parameter 'sort_order' invalid value, must be asc/desc"
                     ));
                 }
-                request.sort_order = sort_order_str;
+                request.query.sort_order = sort_order_str;
             }
 
             /// 解析可选参数 type
@@ -486,13 +501,13 @@ namespace disk::file {
                         "Parameter 'type' invalid value, must be all/file/folder"
                     ));
                 }
-                request.type = type_str;
+                request.query.type = type_str;
             }
 
-            Logger::Debug() << "Parsed file list request: parent_id=" << request.parent_id
-                      << ", page=" << request.page << ", page_size=" << request.page_size
-                      << ", sort_by=" << request.sort_by << ", sort_order=" << request.sort_order
-                      << ", type=" << request.type;
+            Logger::Debug() << "Parsed file list request: parent_id=" << request.query.parent_id
+                      << ", page=" << request.query.page << ", page_size=" << request.query.page_size
+                      << ", sort_by=" << request.query.sort_by << ", sort_order=" << request.query.sort_order
+                      << ", type=" << request.query.type;
 
             return request;
         }
@@ -1249,6 +1264,25 @@ namespace disk::file {
     /// ==================== Search ====================
 
     /**
+     * @brief 文件搜索查询参数
+     *
+     * @details
+     * 封装文件搜索数据访问所需的关键词、过滤范围和分页参数。
+     */
+    struct SearchQueryParams {
+        std::string keyword;
+        std::string type{ "all" };
+        std::optional<uint64_t> folder_id;
+        int page{ 1 };
+        int page_size{ 20 };
+
+        [[nodiscard]]
+        auto Offset() const -> int64_t {
+            return static_cast<int64_t>(page - 1) * page_size;
+        }
+    };
+
+    /**
      * @brief 文件搜索请求 DTO
      *
      * @details
@@ -1262,11 +1296,7 @@ namespace disk::file {
      * 从 URL 查询参数解析。
      */
     struct SearchRequest : DtoBase<SearchRequest> {
-        std::string keyword;
-        std::string type{ "all" };
-        std::optional<uint64_t> folder_id;
-        int page{ 1 };
-        int page_size{ 20 };
+        SearchQueryParams query;
 
         /// 从 HTTP 请求查询参数解析并验证，返回 Result
         [[nodiscard]]
@@ -1307,7 +1337,7 @@ namespace disk::file {
                 }
             }
 
-            request.keyword = keyword_str;
+            request.query.keyword = keyword_str;
 
             /// 解析可选参数 type
             auto type_str = req->getParameter("type");
@@ -1319,33 +1349,33 @@ namespace disk::file {
                         "Parameter 'type' invalid value, must be all/file/folder"
                     ));
                 }
-                request.type = type_str;
+                request.query.type = type_str;
             }
 
             /// 解析可选参数 folder_id
             auto folder_id_result = QueryUInt64(req, "folder_id");
             if (!folder_id_result) return std::unexpected(folder_id_result.error());
-            request.folder_id = *folder_id_result;
+            request.query.folder_id = *folder_id_result;
 
             /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page", 1);
             if (!page_result) return std::unexpected(page_result.error());
             if (page_result->has_value()) {
-                request.page = **page_result;
+                request.query.page = **page_result;
             }
 
             /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
             if (!page_size_result) return std::unexpected(page_size_result.error());
             if (page_size_result->has_value()) {
-                request.page_size = **page_size_result;
+                request.query.page_size = **page_size_result;
             }
 
-            Logger::Debug() << "Parsed file search request: keyword=\"" << request.keyword
-                      << "\", type=" << request.type << ", folder_id="
-                      << (request.folder_id.has_value() ? std::to_string(*request.folder_id) :
-                                                          "null")
-                      << ", page=" << request.page << ", page_size=" << request.page_size;
+            Logger::Debug() << "Parsed file search request: keyword=\"" << request.query.keyword
+                      << "\", type=" << request.query.type << ", folder_id="
+                      << (request.query.folder_id.has_value() ? std::to_string(*request.query.folder_id) :
+                                                                 "null")
+                      << ", page=" << request.query.page << ", page_size=" << request.query.page_size;
 
             return request;
         }

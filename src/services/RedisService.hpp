@@ -154,6 +154,19 @@ namespace disk::services {
         auto MDelete(const std::vector<std::string>& keys) -> drogon::Task<Result<int>>;
 
         /**
+         * @brief 按前缀批量删除键
+         *
+         * 使用 SCAN MATCH 逐批查找并删除，避免使用阻塞性的 KEYS 命令。
+         *
+         * @param prefix Redis 键前缀
+         * @param scan_count 每次 SCAN 的建议数量
+         * @return Result<int> 成功返回删除的键数量，失败返回错误
+         */
+        [[nodiscard]]
+        auto DeleteByPrefix(const std::string& prefix, int scan_count = 100)
+            -> drogon::Task<Result<int>>;
+
+        /**
          * @brief 原子性递增 Redis 键值（递增 1）
          * @param key Redis 键
          * @return Result<std::int64_t> 成功返回递增后的新值，失败返回错误

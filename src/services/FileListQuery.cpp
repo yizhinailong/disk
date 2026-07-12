@@ -19,9 +19,9 @@ namespace disk::file {
         : m_db_client(std::move(db_client)) {
     }
 
-    auto FileListQuery::Execute(FileListRequest request, uint64_t user_id)
+    auto FileListQuery::Execute(FileListQueryParams request, uint64_t user_id)
         -> drogon::Task<FileListResponse> {
-        const auto offset = (request.page - 1) * request.page_size;
+        const auto offset = request.Offset();
 
         std::vector<FileListItem> items;
         int total = 0;
@@ -51,7 +51,7 @@ namespace disk::file {
         co_return response;
     }
 
-    auto FileListQuery::queryAll(FileListRequest const& request, uint64_t user_id, int offset)
+    auto FileListQuery::queryAll(FileListQueryParams const& request, uint64_t user_id, int64_t offset)
         -> drogon::Task<std::pair<std::vector<FileListItem>, int>> {
         int total = 0;
         std::vector<FileListItem> items;
@@ -106,7 +106,7 @@ namespace disk::file {
             "    WHERE fo.parent_id = $3 AND fo.user_id = $4 "
             "  ) AS combined "
             "  ORDER BY " + inner_order_by + " "
-            "  LIMIT $5 OFFSET $6"
+            "  LIMIT " + std::to_string(request.page_size) + " OFFSET " + std::to_string(offset) +
             ") AS page "
             "LEFT JOIN files f ON page.type = 'file' AND page.id = f.id "
             "LEFT JOIN folders fo ON page.type = 'folder' AND page.id = fo.id "
@@ -118,9 +118,7 @@ namespace disk::file {
             request.parent_id,
             user_id,
             request.parent_id,
-            user_id,
-            request.page_size,
-            offset
+            user_id
         );
 
         for (const auto& row : paginated_result) {
@@ -140,7 +138,7 @@ namespace disk::file {
         co_return std::pair<std::vector<FileListItem>, int>{ std::move(items), total };
     }
 
-    auto FileListQuery::queryFiles(FileListRequest const& request, uint64_t user_id, int offset)
+    auto FileListQuery::queryFiles(FileListQueryParams const& request, uint64_t user_id, int64_t offset)
         -> drogon::Task<std::pair<std::vector<FileListItem>, int>> {
         int total = 0;
         std::vector<FileListItem> items;
@@ -174,7 +172,7 @@ namespace disk::file {
             "  FROM files f "
             "  WHERE f.folder_id = $1 AND f.user_id = $2 "
             "  ORDER BY " + inner_order_by + " "
-            "  LIMIT $3 OFFSET $4"
+            "  LIMIT " + std::to_string(request.page_size) + " OFFSET " + std::to_string(offset) +
             ") AS page "
             "JOIN files f ON f.id = page.id "
             "LEFT JOIN file_contents fc ON f.content_id = fc.id "
@@ -183,9 +181,7 @@ namespace disk::file {
         auto paginated_result = co_await m_db_client->execSqlCoro(
             data_sql,
             request.parent_id,
-            user_id,
-            request.page_size,
-            offset
+            user_id
         );
 
         for (const auto& row : paginated_result) {
@@ -205,7 +201,7 @@ namespace disk::file {
         co_return std::pair<std::vector<FileListItem>, int>{ std::move(items), total };
     }
 
-    auto FileListQuery::queryFolders(FileListRequest const& request, uint64_t user_id, int offset)
+    auto FileListQuery::queryFolders(FileListQueryParams const& request, uint64_t user_id, int64_t offset)
         -> drogon::Task<std::pair<std::vector<FileListItem>, int>> {
         int total = 0;
         std::vector<FileListItem> items;
@@ -238,16 +234,14 @@ namespace disk::file {
             "  FROM folders fo "
             "  WHERE fo.parent_id = $1 AND fo.user_id = $2 "
             "  ORDER BY " + inner_order_by + " "
-            "  LIMIT $3 OFFSET $4"
+            "  LIMIT " + std::to_string(request.page_size) + " OFFSET " + std::to_string(offset) +
             ") AS page "
             "ORDER BY " + outer_order_by;
 
         auto paginated_result = co_await m_db_client->execSqlCoro(
             data_sql,
             request.parent_id,
-            user_id,
-            request.page_size,
-            offset
+            user_id
         );
 
         for (const auto& row : paginated_result) {

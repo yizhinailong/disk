@@ -235,10 +235,10 @@ namespace disk::file {
                      << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug() << "File list parameters validated: parent_id=" << parse_result->parent_id
-                  << ", page=" << parse_result->page << ", page_size=" << parse_result->page_size
-                  << ", sort_by=" << parse_result->sort_by
-                  << ", sort_order=" << parse_result->sort_order << ", type=" << parse_result->type;
+        Logger::Debug() << "File list parameters validated: parent_id=" << parse_result->query.parent_id
+                  << ", page=" << parse_result->query.page << ", page_size=" << parse_result->query.page_size
+                  << ", sort_by=" << parse_result->query.sort_by
+                  << ", sort_order=" << parse_result->query.sort_order << ", type=" << parse_result->query.type;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
@@ -533,7 +533,7 @@ namespace disk::file {
                      << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug() << "File search parameters validated: keyword=\"" << parse_result->keyword
+        Logger::Debug() << "File search parameters validated: keyword=\"" << parse_result->query.keyword
                   << "\"";
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）

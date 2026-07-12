@@ -27,7 +27,7 @@ namespace disk::file {
         explicit SearchQuery(drogon::orm::DbClientPtr db_client);
 
         [[nodiscard]]
-        auto Execute(SearchRequest request, uint64_t user_id) -> drogon::Task<SearchResponse>;
+        auto Execute(SearchQueryParams request, uint64_t user_id) -> drogon::Task<SearchResponse>;
 
     private:
         drogon::orm::DbClientPtr m_db_client;

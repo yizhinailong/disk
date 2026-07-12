@@ -26,6 +26,7 @@ using disk::file::DeleteRequest;
 using disk::file::DownloadInfoRequest;
 using disk::file::FileItem;
 using disk::file::FileListItem;
+using disk::file::FileListQueryParams;
 using disk::file::FileListRequest;
 using disk::file::FileListResponse;
 using disk::file::InitUploadRequest;
@@ -33,6 +34,7 @@ using disk::file::InitUploadResponse;
 using disk::file::MoveRequest;
 using disk::file::MoveResponse;
 using disk::file::RenameRequest;
+using disk::file::SearchQueryParams;
 using disk::file::SearchRequest;
 using disk::file::SearchResponse;
 using disk::file::SearchResultItem;
@@ -527,12 +529,12 @@ TEST(FileListRequest, ValidParameters) {
 
     auto result = FileListRequest::FromRequest(req);
     ASSERT_TRUE(result.has_value()) << "Valid parameters should pass";
-    EXPECT_EQ(result->parent_id, 10);
-    EXPECT_EQ(result->page, 2);
-    EXPECT_EQ(result->page_size, 50);
-    EXPECT_EQ(result->sort_by, "size");
-    EXPECT_EQ(result->sort_order, "desc");
-    EXPECT_EQ(result->type, "file");
+    EXPECT_EQ(result->query.parent_id, 10);
+    EXPECT_EQ(result->query.page, 2);
+    EXPECT_EQ(result->query.page_size, 50);
+    EXPECT_EQ(result->query.sort_by, "size");
+    EXPECT_EQ(result->query.sort_order, "desc");
+    EXPECT_EQ(result->query.type, "file");
 }
 
 TEST(FileListRequest, DefaultValues) {
@@ -540,12 +542,12 @@ TEST(FileListRequest, DefaultValues) {
 
     auto result = FileListRequest::FromRequest(req);
     ASSERT_TRUE(result.has_value()) << "Empty request should use defaults";
-    EXPECT_EQ(result->parent_id, 0);
-    EXPECT_EQ(result->page, 1);
-    EXPECT_EQ(result->page_size, 20);
-    EXPECT_EQ(result->sort_by, "name");
-    EXPECT_EQ(result->sort_order, "asc");
-    EXPECT_EQ(result->type, "all");
+    EXPECT_EQ(result->query.parent_id, 0);
+    EXPECT_EQ(result->query.page, 1);
+    EXPECT_EQ(result->query.page_size, 20);
+    EXPECT_EQ(result->query.sort_by, "name");
+    EXPECT_EQ(result->query.sort_order, "asc");
+    EXPECT_EQ(result->query.type, "all");
 }
 
 TEST(FileListRequest, InvalidPage) {
@@ -601,6 +603,16 @@ TEST(FileListRequest, InvalidType) {
     if (!result.has_value()) {
         EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
     }
+}
+
+TEST(FileListQueryParams, Offset) {
+    FileListQueryParams first_page;
+    EXPECT_EQ(first_page.Offset(), 0);
+
+    FileListQueryParams third_page;
+    third_page.page = 3;
+    third_page.page_size = 50;
+    EXPECT_EQ(third_page.Offset(), 100);
 }
 
 /// ==================== DownloadInfoRequest Tests ====================
@@ -1285,12 +1297,12 @@ TEST(SearchRequest, ValidParameters) {
 
     auto result = SearchRequest::FromRequest(req);
     ASSERT_TRUE(result.has_value()) << "Valid parameters should pass";
-    EXPECT_EQ(result->keyword, "document");
-    EXPECT_EQ(result->type, "file");
-    ASSERT_TRUE(result->folder_id.has_value());
-    EXPECT_EQ(*result->folder_id, 10);
-    EXPECT_EQ(result->page, 2);
-    EXPECT_EQ(result->page_size, 50);
+    EXPECT_EQ(result->query.keyword, "document");
+    EXPECT_EQ(result->query.type, "file");
+    ASSERT_TRUE(result->query.folder_id.has_value());
+    EXPECT_EQ(*result->query.folder_id, 10);
+    EXPECT_EQ(result->query.page, 2);
+    EXPECT_EQ(result->query.page_size, 50);
 }
 
 TEST(SearchRequest, DefaultValues) {
@@ -1299,11 +1311,11 @@ TEST(SearchRequest, DefaultValues) {
 
     auto result = SearchRequest::FromRequest(req);
     ASSERT_TRUE(result.has_value()) << "Valid keyword should pass";
-    EXPECT_EQ(result->keyword, "test");
-    EXPECT_EQ(result->type, "all");
-    EXPECT_FALSE(result->folder_id.has_value());
-    EXPECT_EQ(result->page, 1);
-    EXPECT_EQ(result->page_size, 20);
+    EXPECT_EQ(result->query.keyword, "test");
+    EXPECT_EQ(result->query.type, "all");
+    EXPECT_FALSE(result->query.folder_id.has_value());
+    EXPECT_EQ(result->query.page, 1);
+    EXPECT_EQ(result->query.page_size, 20);
 }
 
 TEST(SearchRequest, MissingKeyword) {
@@ -1384,6 +1396,16 @@ TEST(SearchRequest, InvalidPageSizeTooLarge) {
     if (!result.has_value()) {
         EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
     }
+}
+
+TEST(SearchQueryParams, Offset) {
+    SearchQueryParams first_page;
+    EXPECT_EQ(first_page.Offset(), 0);
+
+    SearchQueryParams third_page;
+    third_page.page = 3;
+    third_page.page_size = 50;
+    EXPECT_EQ(third_page.Offset(), 100);
 }
 
 /// ==================== SearchResultItem Tests ====================

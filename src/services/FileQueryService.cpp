@@ -45,16 +45,17 @@ namespace disk::file {
 
     auto FileQueryService::GetFileList(FileListRequest request, uint64_t user_id)
         -> drogon::Task<Result<FileListResponse>> {
+        const auto& query_params = request.query;
 
-        Logger::Debug() << "Starting get file list: parent_id=" << request.parent_id
-                  << ", page=" << request.page << ", page_size=" << request.page_size
-                  << ", sort_by=" << request.sort_by << ", sort_order=" << request.sort_order
-                  << ", type=" << request.type << ", user_id=" << user_id;
+        Logger::Debug() << "Starting get file list: parent_id=" << query_params.parent_id
+                  << ", page=" << query_params.page << ", page_size=" << query_params.page_size
+                  << ", sort_by=" << query_params.sort_by << ", sort_order=" << query_params.sort_order
+                  << ", type=" << query_params.type << ", user_id=" << user_id;
 
         /// 0. Try Redis cache
         auto cache_key = disk::redis::RedisKeyPrefix::BuildFileListCacheKey(
-            user_id, request.parent_id, request.type,
-            request.sort_by, request.sort_order, request.page, request.page_size
+            user_id, query_params.parent_id, query_params.type,
+            query_params.sort_by, query_params.sort_order, query_params.page, query_params.page_size
         );
 
         auto cache_result = co_await m_redis_service->Get(cache_key);
@@ -72,16 +73,16 @@ namespace disk::file {
         Logger::Debug() << "File list cache miss: key=" << cache_key;
 
         /// 1. 验证 parent_id 文件夹存在且属于用户（如果 parent_id != 0）
-        if (request.parent_id != 0) {
+        if (query_params.parent_id != 0) {
             try {
                 CoroMapper<Folders> folder_mapper(m_db_client);
                 auto folder = co_await folder_mapper.findOne(
-                    Criteria(Folders::Cols::_id, CompareOperator::EQ, request.parent_id) &&
+                    Criteria(Folders::Cols::_id, CompareOperator::EQ, query_params.parent_id) &&
                     Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id)
                 );
-                Logger::Debug() << "Folder verification passed: folder_id=" << request.parent_id;
+                Logger::Debug() << "Folder verification passed: folder_id=" << query_params.parent_id;
             } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Warn() << "Folder not found or no permission: folder_id=" << request.parent_id;
+                Logger::Warn() << "Folder not found or no permission: folder_id=" << query_params.parent_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
             }
         }
@@ -90,13 +91,13 @@ namespace disk::file {
         FileListResponse response;
         try {
             FileListQuery query(m_db_client);
-            response = co_await query.Execute(request, user_id);
+            response = co_await query.Execute(query_params, user_id);
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Warn() << "Failed to query file list: " << e.base().what();
         }
 
         Logger::Debug() << "File list retrieved successfully: total=" << response.pagination.total
-                  << ", page=" << request.page;
+                  << ", page=" << query_params.page;
 
         /// Cache the response
         {
@@ -278,22 +279,23 @@ namespace disk::file {
 
     auto FileQueryService::Search(SearchRequest request, uint64_t user_id)
         -> drogon::Task<Result<SearchResponse>> {
+        const auto& query_params = request.query;
 
-        Logger::Debug() << "Starting search file: keyword=\"" << request.keyword
-                  << "\", type=" << request.type << ", folder_id="
-                  << (request.folder_id.has_value() ? std::to_string(*request.folder_id) : "null")
-                  << ", page=" << request.page << ", page_size=" << request.page_size
+        Logger::Debug() << "Starting search file: keyword=\"" << query_params.keyword
+                  << "\", type=" << query_params.type << ", folder_id="
+                  << (query_params.folder_id.has_value() ? std::to_string(*query_params.folder_id) : "null")
+                  << ", page=" << query_params.page << ", page_size=" << query_params.page_size
                   << ", user_id=" << user_id;
 
         SearchResponse response;
         try {
             SearchQuery query(m_db_client);
-            response = co_await query.Execute(request, user_id);
+            response = co_await query.Execute(query_params, user_id);
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Warn() << "Failed to search: " << e.base().what();
         }
 
-        Logger::Debug() << "Search completed: total=" << response.pagination.total << ", page=" << request.page;
+        Logger::Debug() << "Search completed: total=" << response.pagination.total << ", page=" << query_params.page;
         co_return response;
     }
 

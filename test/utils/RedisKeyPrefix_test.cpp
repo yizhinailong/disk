@@ -81,9 +81,15 @@ TEST(RedisKeyPrefix, BuildFileListCacheKeyIncludesPageSize) {
 }
 
 TEST(RedisKeyPrefix, BuildFileListCacheKeySeparatesDifferentPageSizes) {
-    auto small_page = RedisKeyPrefix::BuildFileListCacheKey(42, 7, "all", "name", "asc", 1, 20);
-    auto large_page = RedisKeyPrefix::BuildFileListCacheKey(42, 7, "all", "name", "asc", 1, 100);
-    EXPECT_NE(small_page, large_page);
+    auto default_page = RedisKeyPrefix::BuildFileListCacheKey(42, 7, "all", "name", "asc", 1, 20);
+    auto custom_page = RedisKeyPrefix::BuildFileListCacheKey(42, 7, "all", "name", "asc", 1, 37);
+    EXPECT_NE(default_page, custom_page);
+    EXPECT_EQ(custom_page, "file_list:42:7:all:name:asc:1:37");
+}
+
+TEST(RedisKeyPrefix, BuildFileListCachePrefix) {
+    auto result = RedisKeyPrefix::BuildFileListCachePrefix(42, 7);
+    EXPECT_EQ(result, "file_list:42:7:");
 }
 
 /// ==================== Share Token Redis Key Tests ====================

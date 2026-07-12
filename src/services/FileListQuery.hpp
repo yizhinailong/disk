@@ -29,20 +29,20 @@ namespace disk::file {
         explicit FileListQuery(drogon::orm::DbClientPtr db_client);
 
         [[nodiscard]]
-        auto Execute(FileListRequest request, uint64_t user_id)
+        auto Execute(FileListQueryParams request, uint64_t user_id)
             -> drogon::Task<FileListResponse>;
 
     private:
         [[nodiscard]]
-        auto queryAll(FileListRequest const& request, uint64_t user_id, int offset)
+        auto queryAll(FileListQueryParams const& request, uint64_t user_id, int64_t offset)
             -> drogon::Task<std::pair<std::vector<FileListItem>, int>>;
 
         [[nodiscard]]
-        auto queryFiles(FileListRequest const& request, uint64_t user_id, int offset)
+        auto queryFiles(FileListQueryParams const& request, uint64_t user_id, int64_t offset)
             -> drogon::Task<std::pair<std::vector<FileListItem>, int>>;
 
         [[nodiscard]]
-        auto queryFolders(FileListRequest const& request, uint64_t user_id, int offset)
+        auto queryFolders(FileListQueryParams const& request, uint64_t user_id, int64_t offset)
             -> drogon::Task<std::pair<std::vector<FileListItem>, int>>;
 
         drogon::orm::DbClientPtr m_db_client;
