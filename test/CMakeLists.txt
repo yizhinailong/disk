@@ -19,6 +19,7 @@ set(TEST_SOURCES
     services/UploadPath_test.cpp
     services/CompleteUploadSingleflight_test.cpp
     services/UploadLifecycleService_test.cpp
+    services/UploadTaskRepository_test.cpp
     services/FileServiceAtomicity_test.cpp
     services/FileServiceBatch_test.cpp
     services/FileServiceSearch_test.cpp

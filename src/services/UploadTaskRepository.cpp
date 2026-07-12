@@ -167,6 +167,34 @@ namespace disk::file {
         co_return static_cast<uint64_t>(result.affectedRows());
     }
 
+    auto UploadTaskRepository::MarkExpiredIfInProgressReturning(
+        const drogon::orm::DbClientPtr& client,
+        const std::string& upload_id,
+        const std::string& fail_reason
+    ) const -> drogon::Task<std::optional<ExpiredUploadTaskRecord>> {
+        auto result = co_await client->execSqlCoro(
+            "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2 "
+            "WHERE id = $3 AND status = $4 AND expires_at < NOW() "
+            "RETURNING id, temp_path, user_id, reserved_bytes",
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Expired),
+            fail_reason,
+            upload_id,
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
+        );
+
+        if (result.empty()) {
+            co_return std::nullopt;
+        }
+
+        const auto& row = result[0];
+        co_return ExpiredUploadTaskRecord{
+            .id = row["id"].as<std::string>(),
+            .temp_path = row["temp_path"].as<std::string>(),
+            .user_id = row["user_id"].as<uint64_t>(),
+            .reserved_bytes = row["reserved_bytes"].as<uint64_t>(),
+        };
+    }
+
     auto UploadTaskRepository::RecordChunkUploadedIfAbsent(
         const std::string& upload_id,
         uint32_t chunk_index
