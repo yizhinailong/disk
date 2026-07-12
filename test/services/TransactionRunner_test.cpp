@@ -215,6 +215,26 @@ namespace disk::file {
             EXPECT_EQ(transaction->rollback_count, 1);
         }
 
+        TEST(TransactionRunner, CustomDefaultErrorMapsExceptions) {
+            auto transaction = std::make_shared<FakeTransaction>();
+            auto runner = TransactionRunner(
+                std::make_shared<FakeDbClient>(transaction),
+                ErrorInfo(ErrorCode::InternalError, "Failed to move items")
+            );
+
+            auto result = drogon::sync_wait(runner.Run(
+                [](const drogon::orm::DbClientPtr& /*tx*/) -> drogon::Task<Result<void>> {
+                    co_return co_await DbErrorTask("raw database detail");
+                }
+            ));
+
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::InternalError);
+            EXPECT_EQ(result.error().message, "Failed to move items");
+            EXPECT_EQ(result.error().message.find("raw database detail"), std::string::npos);
+            EXPECT_EQ(transaction->rollback_count, 1);
+        }
+
         TEST(TransactionRunner, RollbackFailureDoesNotReplaceCallbackError) {
             auto transaction = std::make_shared<FakeTransaction>();
             transaction->rollback_should_throw = true;
@@ -234,5 +254,5 @@ namespace disk::file {
             EXPECT_EQ(transaction->rollback_count, 1);
         }
 
-    } ///< namespace
-} ///< namespace disk::file
+    } // namespace
+} // namespace disk::file

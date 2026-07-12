@@ -23,6 +23,7 @@ set(TEST_SOURCES
     services/UploadTaskRepository_test.cpp
     services/FileRepository_test.cpp
     services/FolderRepository_test.cpp
+    services/FileMutationServiceMove_test.cpp
     services/FileServiceAtomicity_test.cpp
     services/FileServiceBatch_test.cpp
     services/FileServiceSearch_test.cpp
