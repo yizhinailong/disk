@@ -256,6 +256,24 @@ namespace disk::file {
         }
     }
 
+    /// ==================== UpdateDownloadMetadata ====================
+
+    auto FileQueryService::UpdateDownloadMetadata(uint64_t file_id, uint64_t user_id)
+        -> drogon::Task<void> {
+        try {
+            co_await m_db_client->execSqlCoro(
+                "UPDATE files "
+                "SET download_count = download_count + 1, last_accessed_at = NOW() "
+                "WHERE id = $1 AND user_id = $2",
+                file_id,
+                user_id
+            );
+        } catch (const drogon::orm::DrogonDbException& e) {
+            Logger::Error() << "Failed to update file download metadata: " << e.base().what()
+                            << " (file_id=" << file_id << ", user_id=" << user_id << ")";
+        }
+    }
+
     /// ==================== Search ====================
 
     auto FileQueryService::Search(SearchRequest request, uint64_t user_id)

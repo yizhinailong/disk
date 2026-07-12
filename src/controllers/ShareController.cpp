@@ -17,6 +17,17 @@
 
 namespace disk::share {
 
+    namespace {
+        auto IsSuccessfulContentDownload(const drogon::HttpResponsePtr& resp) -> bool {
+            if (!resp) {
+                return false;
+            }
+            const auto status = resp->getStatusCode();
+            return status == drogon::HttpStatusCode::k200OK ||
+                   status == drogon::HttpStatusCode::k206PartialContent;
+        }
+    }
+
     ShareController::ShareController()
         : m_share_service(&disk::application::ApplicationContext::GetInstance()->Share()),
           m_storage(disk::application::ApplicationContext::GetInstance()->Storage()) {
@@ -387,6 +398,11 @@ namespace disk::share {
             },
             m_storage
         );
+
+        /// 6. 成功内容下载后更新文件级元数据
+        if (IsSuccessfulContentDownload(resp)) {
+            co_await m_share_service->UpdateFileDownloadMetadata(download_info.file_id);
+        }
 
         /// 7. 增加下载次数
         co_await m_share_service->IncrementDownloadCount(internal_share_id);

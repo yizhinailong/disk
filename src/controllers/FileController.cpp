@@ -21,6 +21,17 @@
 
 namespace disk::file {
 
+    namespace {
+        auto IsSuccessfulContentDownload(const drogon::HttpResponsePtr& resp) -> bool {
+            if (!resp) {
+                return false;
+            }
+            const auto status = resp->getStatusCode();
+            return status == drogon::HttpStatusCode::k200OK ||
+                   status == drogon::HttpStatusCode::k206PartialContent;
+        }
+    }
+
     FileController::FileController()
         : m_upload_service(&disk::application::ApplicationContext::GetInstance()->Upload()),
           m_query_service(&disk::application::ApplicationContext::GetInstance()->FileQuery()),
@@ -343,7 +354,7 @@ namespace disk::file {
                  << ", storage_path=" << download_info.storage_path;
 
         /// 4. 委托下载响应构造
-        co_return co_await BuildDownloadResponse(
+        auto resp = co_await BuildDownloadResponse(
             disk::controllers::DownloadParams{
                 .storage_path = download_info.storage_path,
                 .filename = download_info.filename,
@@ -354,6 +365,13 @@ namespace disk::file {
             },
             m_storage
         );
+
+        /// 5. 成功内容下载后更新文件级元数据
+        if (IsSuccessfulContentDownload(resp)) {
+            co_await m_query_service->UpdateDownloadMetadata(parse_result->file_id, user_id);
+        }
+
+        co_return resp;
     }
 
     auto FileController::Rename(drogon::HttpRequestPtr request, std::string file_id)

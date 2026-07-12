@@ -101,6 +101,15 @@ namespace disk::file {
             -> drogon::Task<Result<DownloadInfo>>;
 
         /**
+         * @brief 更新成功下载后的文件元数据
+         *
+         * @param file_id 文件 ID
+         * @param user_id 用户 ID
+         * @return drogon::Task<void>
+         */
+        auto UpdateDownloadMetadata(uint64_t file_id, uint64_t user_id) -> drogon::Task<void>;
+
+        /**
          * @brief 搜索文件和文件夹
          *
          * 业务规则：

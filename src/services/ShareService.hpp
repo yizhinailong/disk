@@ -261,6 +261,13 @@ namespace disk::share {
          */
         auto IncrementDownloadCount(uint64_t share_id) -> drogon::Task<void>;
 
+        /**
+         * @brief 更新成功分享下载后的文件元数据
+         * @param file_id 文件ID
+         * @return drogon::Task<void>
+         */
+        auto UpdateFileDownloadMetadata(uint64_t file_id) -> drogon::Task<void>;
+
     private:
         /**
          * @brief 生成唯一的分享码

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["httpx"]
+# dependencies = ["httpx", "psycopg[binary]"]
 # ///
 
 """
@@ -47,6 +47,7 @@ from lib_py import (
     assert_status,
     assert_header_contains,
     assert_json_field,
+    query_one,
 )
 
 import atexit
@@ -66,6 +67,92 @@ SHARE_ID = ""
 SHARE_TOKEN = ""
 SHARE_FILE_ID = ""
 SHARE_ACCESS_BODY = ""
+
+
+def file_download_metadata():
+    row = query_one(
+        "SELECT download_count, last_accessed_at FROM files WHERE id = %s",
+        (int(FILE_ID),),
+    )
+    if row is None:
+        log_fail(f"file metadata row missing: file_id={FILE_ID}")
+        return {"download_count": -1, "last_accessed_at": None}
+    return row
+
+
+def share_download_count():
+    count_by_code = query_one(
+        "SELECT download_count FROM shares WHERE share_code = %s",
+        (SHARE_ID,),
+    )
+    if count_by_code is not None:
+        return int(count_by_code["download_count"])
+
+    try:
+        count_by_id = query_one(
+            "SELECT download_count FROM shares WHERE id = %s",
+            (int(SHARE_ID),),
+        )
+    except ValueError:
+        count_by_id = None
+    if count_by_id is None:
+        log_fail(f"share metadata row missing: share_id={SHARE_ID}")
+        return -1
+    return int(count_by_id["download_count"])
+
+
+def assert_file_metadata_unchanged(label, before, after):
+    ok = True
+    if after["download_count"] == before["download_count"]:
+        log_pass(f"{label}: file download_count unchanged")
+    else:
+        log_fail(
+            f"{label}: expected file download_count unchanged at "
+            f"{before['download_count']}, got {after['download_count']}"
+        )
+        ok = False
+
+    if after["last_accessed_at"] == before["last_accessed_at"]:
+        log_pass(f"{label}: file last_accessed_at unchanged")
+    else:
+        log_fail(
+            f"{label}: expected file last_accessed_at unchanged at "
+            f"{before['last_accessed_at']}, got {after['last_accessed_at']}"
+        )
+        ok = False
+    return ok
+
+
+def assert_file_metadata_incremented(label, before, after):
+    ok = True
+    expected_count = int(before["download_count"]) + 1
+    actual_count = int(after["download_count"])
+    if actual_count == expected_count:
+        log_pass(f"{label}: file download_count incremented")
+    else:
+        log_fail(f"{label}: expected file download_count {expected_count}, got {actual_count}")
+        ok = False
+
+    before_accessed = before["last_accessed_at"]
+    after_accessed = after["last_accessed_at"]
+    if after_accessed is not None and after_accessed != before_accessed:
+        log_pass(f"{label}: file last_accessed_at refreshed")
+    else:
+        log_fail(
+            f"{label}: expected file last_accessed_at to refresh, "
+            f"before={before_accessed}, after={after_accessed}"
+        )
+        ok = False
+    return ok
+
+
+def assert_share_download_delta(label, before, after, expected_delta):
+    expected = before + expected_delta
+    if after == expected:
+        log_pass(f"{label}: share download_count delta {expected_delta}")
+        return True
+    log_fail(f"{label}: expected share download_count {expected}, got {after}")
+    return False
 
 
 # ─── Phase 2: Upload a test file ───────────────────────────────────────────
@@ -234,12 +321,15 @@ def do_access_share():
 def test_owner_download_metadata_integrity_fields():
     log_step(f"Test: GET /api/file/download/{FILE_ID}/info exposes integrity metadata")
 
+    metadata_before = file_download_metadata()
+
     resp = fetch(
         f"/api/file/download/{FILE_ID}/info",
         method="GET",
         headers={"Authorization": f"Bearer {TOKEN}"},
     )
 
+    metadata_after = file_download_metadata()
     save_evidence(f"{EVIDENCE_PREFIX}-file-info.json", resp.text)
 
     ok = True
@@ -249,9 +339,10 @@ def test_owner_download_metadata_integrity_fields():
     assert_json_field("file-info-size", resp.text, "data.file_size", str(FILE_SIZE)) or (ok := False)
     assert_json_field("file-info-hash", resp.text, "data.file_hash", FILE_HASH) or (ok := False)
     assert_json_field("file-info-range", resp.text, "data.supports_range", "true") or (ok := False)
+    assert_file_metadata_unchanged("file-info", metadata_before, metadata_after) or (ok := False)
 
     if ok:
-        log_pass("file-info: owner metadata includes size/hash/range fields")
+        log_pass("file-info: owner metadata includes size/hash/range fields without counting download")
 
 
 def test_visitor_download_metadata_integrity_fields():
@@ -275,11 +366,43 @@ def test_visitor_download_metadata_integrity_fields():
         log_pass("share-access: visitor metadata includes size/hash fields")
 
 
+def test_share_download_info_does_not_count():
+    log_step(f"Test: GET /api/share/download/{SHARE_ID}/{SHARE_FILE_ID}/info does not count")
+
+    file_before = file_download_metadata()
+    share_before = share_download_count()
+
+    resp = fetch(
+        f"/api/share/download/{SHARE_ID}/{SHARE_FILE_ID}/info",
+        method="GET",
+        headers={"X-Share-Token": SHARE_TOKEN},
+    )
+
+    file_after = file_download_metadata()
+    share_after = share_download_count()
+    save_evidence(f"{EVIDENCE_PREFIX}-share-info.json", resp.text)
+
+    ok = True
+    assert_status("share-info", resp.status_code, 200) or (ok := False)
+    assert_json_field("share-info-code", resp.text, "code", "0") or (ok := False)
+    assert_json_field("share-info-id", resp.text, "data.file_id", SHARE_FILE_ID) or (ok := False)
+    assert_json_field("share-info-size", resp.text, "data.file_size", str(FILE_SIZE)) or (ok := False)
+    assert_json_field("share-info-hash", resp.text, "data.file_hash", FILE_HASH) or (ok := False)
+    assert_json_field("share-info-range", resp.text, "data.supports_range", "true") or (ok := False)
+    assert_file_metadata_unchanged("share-info", file_before, file_after) or (ok := False)
+    assert_share_download_delta("share-info", share_before, share_after, 0) or (ok := False)
+
+    if ok:
+        log_pass("share-info: metadata lookup did not count as download")
+
+
 # ─── Test: Personal File Download 200 ──────────────────────────────────────
 
 
 def test_file_download_200():
     log_step(f"Test: GET /api/file/download/{FILE_ID} → 200 (full download)")
+
+    metadata_before = file_download_metadata()
 
     resp = fetch(
         f"/api/file/download/{FILE_ID}",
@@ -287,6 +410,7 @@ def test_file_download_200():
         headers={"Authorization": f"Bearer {TOKEN}"},
     )
 
+    metadata_after = file_download_metadata()
     save_evidence(
         f"{EVIDENCE_PREFIX}-file-200.headers.txt",
         json.dumps(dict(resp.headers), indent=2),
@@ -312,9 +436,10 @@ def test_file_download_200():
         assert_header_contains("file-200", resp.headers, "ETag", FILE_HASH) or (
             ok := False
         )
+    assert_file_metadata_incremented("file-200", metadata_before, metadata_after) or (ok := False)
 
     if ok:
-        log_pass("file-200: full download OK")
+        log_pass("file-200: full download OK and file metadata updated")
 
 
 # ─── Test: Personal File Download 206 ──────────────────────────────────────
@@ -322,6 +447,8 @@ def test_file_download_200():
 
 def test_file_download_206():
     log_step(f"Test: GET /api/file/download/{FILE_ID} (Range: bytes=0-9) → 206")
+
+    metadata_before = file_download_metadata()
 
     resp = fetch(
         f"/api/file/download/{FILE_ID}",
@@ -332,6 +459,7 @@ def test_file_download_206():
         },
     )
 
+    metadata_after = file_download_metadata()
     save_evidence(
         f"{EVIDENCE_PREFIX}-file-206.headers.txt",
         json.dumps(dict(resp.headers), indent=2),
@@ -348,9 +476,10 @@ def test_file_download_206():
     assert_header_contains("file-206", resp.headers, "Accept-Ranges", "bytes") or (
         ok := False
     )
+    assert_file_metadata_incremented("file-206", metadata_before, metadata_after) or (ok := False)
 
     if ok:
-        log_pass("file-206: partial content OK")
+        log_pass("file-206: partial content OK and file metadata updated")
 
 
 # ─── Test: Personal File Download 416 ──────────────────────────────────────
@@ -358,6 +487,8 @@ def test_file_download_206():
 
 def test_file_download_416():
     log_step(f"Test: GET /api/file/download/{FILE_ID} (Range: bytes=99999-99999) → 416")
+
+    metadata_before = file_download_metadata()
 
     resp = fetch(
         f"/api/file/download/{FILE_ID}",
@@ -368,6 +499,7 @@ def test_file_download_416():
         },
     )
 
+    metadata_after = file_download_metadata()
     save_evidence(
         f"{EVIDENCE_PREFIX}-file-416.headers.txt",
         json.dumps(dict(resp.headers), indent=2),
@@ -380,6 +512,7 @@ def test_file_download_416():
         "file-416", resp.headers, "Content-Range", f"bytes */{FILE_SIZE}"
     ) or (ok := False)
     assert_json_field("file-416", resp.text, "code", "10002") or (ok := False)
+    assert_file_metadata_unchanged("file-416", metadata_before, metadata_after) or (ok := False)
 
     # Verify .message and .data exist
     try:
@@ -395,7 +528,7 @@ def test_file_download_416():
         ok = False
 
     if ok:
-        log_pass("file-416: unsatisfiable range OK")
+        log_pass("file-416: unsatisfiable range OK without file metadata update")
 
 
 # ─── Test: Share Download 200 ──────────────────────────────────────────────
@@ -404,12 +537,17 @@ def test_file_download_416():
 def test_share_download_200():
     log_step(f"Test: GET /api/share/download/{SHARE_ID}/{SHARE_FILE_ID} → 200")
 
+    file_before = file_download_metadata()
+    share_before = share_download_count()
+
     resp = fetch(
         f"/api/share/download/{SHARE_ID}/{SHARE_FILE_ID}",
         method="GET",
         headers={"X-Share-Token": SHARE_TOKEN},
     )
 
+    file_after = file_download_metadata()
+    share_after = share_download_count()
     save_evidence(
         f"{EVIDENCE_PREFIX}-share-200.headers.txt",
         json.dumps(dict(resp.headers), indent=2),
@@ -434,9 +572,11 @@ def test_share_download_200():
         assert_header_contains("share-200", resp.headers, "ETag", FILE_HASH) or (
             ok := False
         )
+    assert_file_metadata_incremented("share-200", file_before, file_after) or (ok := False)
+    assert_share_download_delta("share-200", share_before, share_after, 1) or (ok := False)
 
     if ok:
-        log_pass("share-200: full share download OK")
+        log_pass("share-200: full share download OK and metadata updated")
 
 
 # ─── Test: Share Download 206 ──────────────────────────────────────────────
@@ -447,6 +587,9 @@ def test_share_download_206():
         f"Test: GET /api/share/download/{SHARE_ID}/{SHARE_FILE_ID} (Range: bytes=0-9) → 206"
     )
 
+    file_before = file_download_metadata()
+    share_before = share_download_count()
+
     resp = fetch(
         f"/api/share/download/{SHARE_ID}/{SHARE_FILE_ID}",
         method="GET",
@@ -456,6 +599,8 @@ def test_share_download_206():
         },
     )
 
+    file_after = file_download_metadata()
+    share_after = share_download_count()
     save_evidence(
         f"{EVIDENCE_PREFIX}-share-206.headers.txt",
         json.dumps(dict(resp.headers), indent=2),
@@ -476,9 +621,11 @@ def test_share_download_206():
         assert_header_contains("share-206", resp.headers, "ETag", FILE_HASH) or (
             ok := False
         )
+    assert_file_metadata_incremented("share-206", file_before, file_after) or (ok := False)
+    assert_share_download_delta("share-206", share_before, share_after, 1) or (ok := False)
 
     if ok:
-        log_pass("share-206: partial share download OK")
+        log_pass("share-206: partial share download OK and metadata updated")
 
 
 # ─── Test: Share Download 416 ──────────────────────────────────────────────
@@ -489,6 +636,9 @@ def test_share_download_416():
         f"Test: GET /api/share/download/{SHARE_ID}/{SHARE_FILE_ID} (Range: bytes=99999-99999) → 416"
     )
 
+    file_before = file_download_metadata()
+    share_before = share_download_count()
+
     resp = fetch(
         f"/api/share/download/{SHARE_ID}/{SHARE_FILE_ID}",
         method="GET",
@@ -498,6 +648,8 @@ def test_share_download_416():
         },
     )
 
+    file_after = file_download_metadata()
+    share_after = share_download_count()
     save_evidence(
         f"{EVIDENCE_PREFIX}-share-416.headers.txt",
         json.dumps(dict(resp.headers), indent=2),
@@ -510,6 +662,8 @@ def test_share_download_416():
         "share-416", resp.headers, "Content-Range", f"bytes */{FILE_SIZE}"
     ) or (ok := False)
     assert_json_field("share-416", resp.text, "code", "10002") or (ok := False)
+    assert_file_metadata_unchanged("share-416", file_before, file_after) or (ok := False)
+    assert_share_download_delta("share-416", share_before, share_after, 1) or (ok := False)
 
     try:
         body = json.loads(resp.text)
@@ -524,7 +678,7 @@ def test_share_download_416():
         ok = False
 
     if ok:
-        log_pass("share-416: unsatisfiable range OK")
+        log_pass("share-416: unsatisfiable range OK, share count preserved, file metadata unchanged")
 
 
 # ─── Evidence Summary ──────────────────────────────────────────────────────
@@ -580,6 +734,7 @@ def main():
     # Metadata tests
     test_owner_download_metadata_integrity_fields()
     test_visitor_download_metadata_integrity_fields()
+    test_share_download_info_does_not_count()
 
     # Personal file download tests
     test_file_download_200()

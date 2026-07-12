@@ -1615,6 +1615,20 @@ namespace disk::share {
         }
     }
 
+    auto ShareService::UpdateFileDownloadMetadata(uint64_t file_id) -> drogon::Task<void> {
+        try {
+            co_await m_db_client->execSqlCoro(
+                "UPDATE files "
+                "SET download_count = download_count + 1, last_accessed_at = NOW() "
+                "WHERE id = $1",
+                file_id
+            );
+        } catch (const DrogonDbException& e) {
+            Logger::Error() << "Failed to update shared file download metadata: " << e.base().what()
+                            << " (file_id=" << file_id << ")";
+        }
+    }
+
     auto ShareService::UpdateTimestamp(uint64_t share_id) -> drogon::Task<void> {
         try {
             co_await m_db_client->execSqlCoro(
