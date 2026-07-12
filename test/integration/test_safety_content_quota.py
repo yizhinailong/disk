@@ -243,6 +243,118 @@ def delete_folder_to_trash(folder_id: int) -> int:
     return int(row["id"])
 
 
+def delete_file_to_trash_response(file_id: int):
+    """Soft delete a file and return the raw HTTP response."""
+    resp = fetch(
+        "/api/file",
+        method="DELETE",
+        headers=auth_headers(),
+        json_body={"file_ids": [file_id], "folder_ids": []},
+    )
+    save_evidence(f"{EVIDENCE_PREFIX}-delete-file-raw-{file_id}.json", resp.text)
+    return resp
+
+
+def delete_folder_to_trash_response(folder_id: int):
+    """Soft delete a folder and return the raw HTTP response."""
+    resp = fetch(
+        "/api/file",
+        method="DELETE",
+        headers=auth_headers(),
+        json_body={"file_ids": [], "folder_ids": [folder_id]},
+    )
+    save_evidence(f"{EVIDENCE_PREFIX}-delete-folder-raw-{folder_id}.json", resp.text)
+    return resp
+
+
+def safe_test_identifier(prefix: str) -> str:
+    """Return a PostgreSQL-safe identifier for temporary failure-injection objects."""
+    return "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in unique_name(prefix))[:60]
+
+
+def drop_failure_trigger(table_name: str, trigger_name: str, function_name: str) -> None:
+    """Drop a temporary failure-injection trigger and function."""
+    execute(f'DROP TRIGGER IF EXISTS "{trigger_name}" ON {table_name}')
+    execute(f'DROP FUNCTION IF EXISTS "{function_name}"()')
+
+
+def install_trash_insert_failure_trigger(item_name: str):
+    """Install a trigger that fails trash insertion for one item name."""
+    function_name = safe_test_identifier("fail_trash_insert_fn")
+    trigger_name = safe_test_identifier("fail_trash_insert_trg")
+    escaped_item_name = item_name.replace("'", "''")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF NEW.item_name = '{escaped_item_name}' THEN
+                RAISE EXCEPTION 'injected trash insert failure for %', NEW.item_name;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE INSERT ON trash '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("trash", trigger_name, function_name)
+
+
+def install_file_delete_failure_trigger(file_id: int):
+    """Install a trigger that fails active file row deletion for one file."""
+    function_name = safe_test_identifier("fail_file_delete_fn")
+    trigger_name = safe_test_identifier("fail_file_delete_trg")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF OLD.id = {int(file_id)} THEN
+                RAISE EXCEPTION 'injected file delete failure for %', OLD.id;
+            END IF;
+            RETURN OLD;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE DELETE ON files '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("files", trigger_name, function_name)
+
+
+def install_folder_delete_failure_trigger(folder_id: int):
+    """Install a trigger that fails active folder row deletion for one folder."""
+    function_name = safe_test_identifier("fail_folder_delete_fn")
+    trigger_name = safe_test_identifier("fail_folder_delete_trg")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF OLD.id = {int(folder_id)} THEN
+                RAISE EXCEPTION 'injected folder delete failure for %', OLD.id;
+            END IF;
+            RETURN OLD;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE DELETE ON folders '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("folders", trigger_name, function_name)
+
+
+def assert_delete_transaction_error(label: str, resp) -> None:
+    """Assert delete transaction failures keep the stable public error contract."""
+    assert_equal(f"{label} returns HTTP 500", resp.status_code, 500)
+    assert_equal(f"{label} returns InternalError code", json_field(resp.text, "code"), "10006")
+    assert_equal(f"{label} returns stable message", json_field(resp.text, "message"), "Failed to delete items")
+
+
 def empty_trash() -> dict[str, int]:
     """Empty the current user's trash and return response counters."""
     resp = fetch(
@@ -671,6 +783,79 @@ def test_soft_delete_preserves_ref_count_storage_used_and_blob() -> None:
     assert_path_exists("soft delete keeps blob while in trash", final_blob_path(file_hash))
 
 
+def test_move_to_trash_trash_insert_failure_preserves_active_state() -> None:
+    """Verify trash insert failure rolls back without removing active rows or shares."""
+    log_section("Move-To-Trash Trash Insert Failure Preserves Active State")
+    payload = f"trash-insert-failure-{unique_name()}".encode()
+    filename = f"safety_trash_insert_failure_{unique_name()}.bin"
+    file_id = upload_file(filename, payload)
+    original_file = file_row(file_id)
+    content_id = int(original_file["content_id"])
+    file_hash = str(content_row(content_id)["hash_md5"])
+    before_ref = int(content_row(content_id)["ref_count"])
+    quota_before = user_quota()
+    share_id = create_share_fixture([file_id])
+    cleanup_trigger = install_trash_insert_failure_trigger(str(original_file["name"]))
+
+    try:
+        resp = delete_file_to_trash_response(file_id)
+    finally:
+        cleanup_trigger()
+
+    assert_delete_transaction_error("trash insert failure", resp)
+    assert_equal("trash insert failure keeps active file", query_one("SELECT id FROM files WHERE id = %s", (file_id,)) is not None, True)
+    assert_db_row_absent(
+        "trash insert failure creates no trash row",
+        "SELECT id FROM trash WHERE user_id = %s AND item_type = 'file' AND item_id = %s",
+        (USER_ID, file_id),
+    )
+    assert_equal(
+        "trash insert failure keeps share link",
+        int(scalar("SELECT COUNT(*) FROM share_files WHERE share_id = %s AND item_type = 'file' AND item_id = %s", (share_id, file_id)) or 0),
+        1,
+    )
+    assert_equal("trash insert failure keeps share active", share_status(share_id), 1)
+    assert_equal("trash insert failure keeps ref_count", int(content_row(content_id)["ref_count"]), before_ref)
+    assert_equal("trash insert failure keeps storage_used", user_quota()["storage_used"], quota_before["storage_used"])
+    assert_path_exists("trash insert failure keeps blob", final_blob_path(file_hash))
+
+
+def test_move_to_trash_active_file_delete_failure_rolls_back_trash_and_share_cleanup() -> None:
+    """Verify active file delete failure rolls back trash insert and share cleanup."""
+    log_section("Move-To-Trash Active File Delete Failure Rolls Back")
+    payload = f"active-file-delete-failure-{unique_name()}".encode()
+    file_id = upload_file(f"safety_file_delete_failure_{unique_name()}.bin", payload)
+    original_file = file_row(file_id)
+    content_id = int(original_file["content_id"])
+    file_hash = str(content_row(content_id)["hash_md5"])
+    before_ref = int(content_row(content_id)["ref_count"])
+    quota_before = user_quota()
+    share_id = create_share_fixture([file_id])
+    cleanup_trigger = install_file_delete_failure_trigger(file_id)
+
+    try:
+        resp = delete_file_to_trash_response(file_id)
+    finally:
+        cleanup_trigger()
+
+    assert_delete_transaction_error("active file delete failure", resp)
+    assert_equal("active file delete failure keeps active file", query_one("SELECT id FROM files WHERE id = %s", (file_id,)) is not None, True)
+    assert_db_row_absent(
+        "active file delete failure rolls back trash row",
+        "SELECT id FROM trash WHERE user_id = %s AND item_type = 'file' AND item_id = %s",
+        (USER_ID, file_id),
+    )
+    assert_equal(
+        "active file delete failure restores share link",
+        int(scalar("SELECT COUNT(*) FROM share_files WHERE share_id = %s AND item_type = 'file' AND item_id = %s", (share_id, file_id)) or 0),
+        1,
+    )
+    assert_equal("active file delete failure keeps share active", share_status(share_id), 1)
+    assert_equal("active file delete failure keeps ref_count", int(content_row(content_id)["ref_count"]), before_ref)
+    assert_equal("active file delete failure keeps storage_used", user_quota()["storage_used"], quota_before["storage_used"])
+    assert_path_exists("active file delete failure keeps blob", final_blob_path(file_hash))
+
+
 def test_restore_preserves_ref_count_storage_used_and_removes_trash() -> None:
     """Verify restore recreates the active file without changing content refs or quota."""
     log_section("Restore Preserves Ref-Count And Quota")
@@ -763,6 +948,55 @@ def test_folder_soft_delete_snapshot_preserves_ref_count_and_storage() -> None:
     assert_equal("folder soft delete keeps storage_used", user_quota()["storage_used"], quota_before["storage_used"])
     assert_equal("folder share link removed", int(scalar("SELECT COUNT(*) FROM share_files WHERE share_id = %s", (folder_share_id,)) or 0), 0)
     assert_equal("folder share cancelled", share_status(folder_share_id), 0)
+
+
+def test_move_to_trash_active_folder_delete_failure_rolls_back_snapshot_and_share_cleanup() -> None:
+    """Verify folder row delete failure rolls back the folder snapshot, subtree delete, and share cleanup."""
+    log_section("Move-To-Trash Active Folder Delete Failure Rolls Back")
+    root_folder_id = create_folder(f"safety_folder_delete_failure_root_{unique_name()}")
+    child_folder_id = create_folder(f"safety_folder_delete_failure_child_{unique_name()}", root_folder_id)
+    root_payload = f"folder-delete-failure-root-{unique_name()}".encode()
+    child_payload = f"folder-delete-failure-child-{unique_name()}".encode()
+    root_file_id = upload_file(f"safety_folder_delete_failure_root_file_{unique_name()}.bin", root_payload, root_folder_id)
+    child_file_id = upload_file(f"safety_folder_delete_failure_child_file_{unique_name()}.bin", child_payload, child_folder_id)
+    root_content_id = int(file_row(root_file_id)["content_id"])
+    child_content_id = int(file_row(child_file_id)["content_id"])
+    root_hash = str(content_row(root_content_id)["hash_md5"])
+    child_hash = str(content_row(child_content_id)["hash_md5"])
+    before_refs = {
+        root_content_id: int(content_row(root_content_id)["ref_count"]),
+        child_content_id: int(content_row(child_content_id)["ref_count"]),
+    }
+    quota_before = user_quota()
+    folder_share_id = create_share_fixture(folder_ids=[root_folder_id])
+    cleanup_trigger = install_folder_delete_failure_trigger(child_folder_id)
+
+    try:
+        resp = delete_folder_to_trash_response(root_folder_id)
+    finally:
+        cleanup_trigger()
+
+    assert_delete_transaction_error("active folder delete failure", resp)
+    assert_db_row_absent(
+        "active folder delete failure rolls back trash snapshot",
+        "SELECT id FROM trash WHERE user_id = %s AND item_type = 'folder' AND item_id = %s",
+        (USER_ID, root_folder_id),
+    )
+    assert_equal("active folder delete failure keeps root folder", query_one("SELECT id FROM folders WHERE id = %s", (root_folder_id,)) is not None, True)
+    assert_equal("active folder delete failure keeps child folder", query_one("SELECT id FROM folders WHERE id = %s", (child_folder_id,)) is not None, True)
+    assert_equal("active folder delete failure keeps root file", query_one("SELECT id FROM files WHERE id = %s", (root_file_id,)) is not None, True)
+    assert_equal("active folder delete failure keeps child file", query_one("SELECT id FROM files WHERE id = %s", (child_file_id,)) is not None, True)
+    assert_equal(
+        "active folder delete failure restores folder share link",
+        int(scalar("SELECT COUNT(*) FROM share_files WHERE share_id = %s AND item_type = 'folder' AND item_id = %s", (folder_share_id, root_folder_id)) or 0),
+        1,
+    )
+    assert_equal("active folder delete failure keeps share active", share_status(folder_share_id), 1)
+    assert_equal("active folder delete failure keeps root ref_count", int(content_row(root_content_id)["ref_count"]), before_refs[root_content_id])
+    assert_equal("active folder delete failure keeps child ref_count", int(content_row(child_content_id)["ref_count"]), before_refs[child_content_id])
+    assert_equal("active folder delete failure keeps storage_used", user_quota()["storage_used"], quota_before["storage_used"])
+    assert_path_exists("active folder delete failure keeps root blob", final_blob_path(root_hash))
+    assert_path_exists("active folder delete failure keeps child blob", final_blob_path(child_hash))
 
 
 def test_delete_all_ref_count_quota_and_blob_cleanup() -> None:
@@ -891,9 +1125,12 @@ def main() -> None:
     test_upload_quota_rejection_no_leak()
     test_copy_quota_rejection_no_side_effects()
     test_soft_delete_preserves_ref_count_storage_used_and_blob()
+    test_move_to_trash_trash_insert_failure_preserves_active_state()
+    test_move_to_trash_active_file_delete_failure_rolls_back_trash_and_share_cleanup()
     test_restore_preserves_ref_count_storage_used_and_removes_trash()
     test_share_cleanup_on_soft_delete()
     test_folder_soft_delete_snapshot_preserves_ref_count_and_storage()
+    test_move_to_trash_active_folder_delete_failure_rolls_back_snapshot_and_share_cleanup()
     test_delete_all_ref_count_quota_and_blob_cleanup()
     test_permanent_delete_ref_count_and_blob_retention()
     test_expired_trash_cleanup_ref_count_quota_and_blob_retention()
