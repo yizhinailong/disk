@@ -17,12 +17,12 @@
 #include <json/writer.h>
 
 #include "FileServiceUtils.hpp"
-#include "services/ContentService.hpp"
-#include "services/QuotaService.hpp"
 #include "TrashService.hpp"
 #include "models/FileContents.hpp"
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
+#include "services/ContentService.hpp"
+#include "services/QuotaService.hpp"
 #include "utils/BatchUtils.hpp"
 #include "utils/RedisKeyPrefix.hpp"
 
@@ -50,8 +50,8 @@ namespace disk::file {
         -> drogon::Task<Result<RenameResponse>> {
 
         Logger::Debug() << "Starting rename file: file_id=" << file_id << ", new_name=\"" << new_name
-                  << "\""
-                  << ", user_id=" << user_id;
+                        << "\""
+                        << ", user_id=" << user_id;
 
         try {
             CoroMapper<Files> mapper(m_db_client);
@@ -74,8 +74,7 @@ namespace disk::file {
             auto updated_at = trantor::Date::now();
             auto new_path = utils::BuildFilePath(folder_location_result->path, new_name);
             auto update_result = co_await m_db_client->execSqlCoro(
-                "UPDATE files SET name = $1, extension = $2, path = $3, updated_at = $4 "
-                "WHERE id = $5 AND user_id = $6",
+                "UPDATE files SET name = $1, extension = $2, path = $3, updated_at = $4 " "WHERE id = $5 AND user_id = $6",
                 new_name,
                 ExtractExtension(new_name),
                 new_path,
@@ -88,14 +87,14 @@ namespace disk::file {
             }
 
             Logger::Info() << "File rename successful: file_id=" << file_id << ", new_name=\"" << new_name
-                     << "\"";
+                           << "\"";
 
             RenameResponse response;
             response.id = file.getValueOfId();
             response.name = new_name;
             response.updated_at = updated_at.toDbStringLocal();
 
-            co_await InvalidateFileListCache(user_id, {folder_id});
+            co_await InvalidateFileListCache(user_id, { folder_id });
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
@@ -110,8 +109,8 @@ namespace disk::file {
         -> drogon::Task<Result<MoveResponse>> {
 
         Logger::Debug() << "Starting move drive items: file_ids.size()=" << request.file_ids.size()
-                  << ", folder_ids.size()=" << request.folder_ids.size()
-                  << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
+                        << ", folder_ids.size()=" << request.folder_ids.size()
+                        << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
         auto target_location_result =
             co_await utils::ResolveFolderLocation(m_db_client, request.target_folder_id, user_id);
@@ -175,7 +174,7 @@ namespace disk::file {
                         auto it = files.find(file_id);
                         if (it == files.end()) {
                             Logger::Warn() << "File not found or no permission, skipping move: file_id="
-                                     << file_id;
+                                           << file_id;
                             continue;
                         }
 
@@ -188,15 +187,14 @@ namespace disk::file {
 
                         if (occupied_names.contains(name)) {
                             Logger::Warn() << "Target folder already has file with same name, skipping: "
-                                     << name;
+                                           << name;
                             continue;
                         }
                         occupied_names.insert(name);
 
                         auto updated_at = trantor::Date::now();
                         auto update_result = co_await txn->execSqlCoro(
-                            "UPDATE files SET folder_id = $1, path = $2, updated_at = $3 "
-                            "WHERE id = $4 AND user_id = $5",
+                            "UPDATE files SET folder_id = $1, path = $2, updated_at = $3 " "WHERE id = $4 AND user_id = $5",
                             request.target_folder_id,
                             utils::BuildFilePath(target_location.path, name),
                             updated_at,
@@ -221,8 +219,7 @@ namespace disk::file {
                             continue;
                         }
                         co_await txn->execSqlCoro(
-                            "UPDATE folders SET item_count = GREATEST(item_count + $1, 0), "
-                            "updated_at = $2 WHERE id = $3 AND user_id = $4",
+                            "UPDATE folders SET item_count = GREATEST(item_count + $1, 0), " "updated_at = $2 WHERE id = $3 AND user_id = $4",
                             delta,
                             trantor::Date::now(),
                             folder_id,
@@ -259,7 +256,7 @@ namespace disk::file {
                 auto plan_it = folder_plans.find(folder_id);
                 if (plan_it == folder_plans.end()) {
                     Logger::Warn() << "Folder not found or no permission, skipping move: folder_id="
-                             << folder_id;
+                                   << folder_id;
                     continue;
                 }
 
@@ -289,7 +286,7 @@ namespace disk::file {
 
                 if (occupied_folder_names.contains(folder_name)) {
                     Logger::Warn() << "Target folder already has folder with same name, skipping: "
-                             << folder_name;
+                                   << folder_name;
                     continue;
                 }
                 occupied_folder_names.insert(folder_name);
@@ -304,8 +301,7 @@ namespace disk::file {
                     auto new_path = new_prefix + old_path.substr(old_prefix.size());
                     if (folder.getValueOfId() == root.getValueOfId()) {
                         co_await txn->execSqlCoro(
-                            "UPDATE folders SET parent_id = $1, path = $2, depth = depth + $3, "
-                            "updated_at = $4 WHERE id = $5 AND user_id = $6",
+                            "UPDATE folders SET parent_id = $1, path = $2, depth = depth + $3, " "updated_at = $4 WHERE id = $5 AND user_id = $6",
                             request.target_folder_id,
                             new_path,
                             depth_delta,
@@ -315,8 +311,7 @@ namespace disk::file {
                         );
                     } else {
                         co_await txn->execSqlCoro(
-                            "UPDATE folders SET path = $1, depth = depth + $2, updated_at = $3 "
-                            "WHERE id = $4 AND user_id = $5",
+                            "UPDATE folders SET path = $1, depth = depth + $2, updated_at = $3 " "WHERE id = $4 AND user_id = $5",
                             new_path,
                             depth_delta,
                             trantor::Date::now(),
@@ -348,8 +343,7 @@ namespace disk::file {
 
                 if (old_parent_id > 0) {
                     co_await txn->execSqlCoro(
-                        "UPDATE folders SET item_count = GREATEST(item_count - 1, 0), "
-                        "updated_at = $1 WHERE id = $2 AND user_id = $3",
+                        "UPDATE folders SET item_count = GREATEST(item_count - 1, 0), " "updated_at = $1 WHERE id = $2 AND user_id = $3",
                         trantor::Date::now(),
                         old_parent_id,
                         user_id
@@ -357,8 +351,7 @@ namespace disk::file {
                 }
                 if (request.target_folder_id > 0) {
                     co_await txn->execSqlCoro(
-                        "UPDATE folders SET item_count = item_count + 1, updated_at = $1 "
-                        "WHERE id = $2 AND user_id = $3",
+                        "UPDATE folders SET item_count = item_count + 1, updated_at = $1 " "WHERE id = $2 AND user_id = $3",
                         trantor::Date::now(),
                         request.target_folder_id,
                         user_id
@@ -399,10 +392,10 @@ namespace disk::file {
         }
 
         Logger::Info() << "Move completed: moved_file_count=" << moved_file_count
-                 << ", moved_folder_count=" << moved_folder_count;
+                       << ", moved_folder_count=" << moved_folder_count;
 
         /// Invalidate file list cache for the target folder
-        co_await InvalidateFileListCache(user_id, {request.target_folder_id});
+        co_await InvalidateFileListCache(user_id, { request.target_folder_id });
 
         MoveResponse response;
         response.moved_file_count = moved_file_count;
@@ -417,8 +410,8 @@ namespace disk::file {
         -> drogon::Task<Result<CopyResponse>> {
 
         Logger::Debug() << "Starting copy items: file_ids.size()=" << request.file_ids.size()
-                  << ", folder_ids.size()=" << request.folder_ids.size()
-                  << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
+                        << ", folder_ids.size()=" << request.folder_ids.size()
+                        << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
         auto normalize_ids = [](std::vector<uint64_t> ids) {
             std::sort(ids.begin(), ids.end());
@@ -436,7 +429,7 @@ namespace disk::file {
         );
         if (!target_location_result) {
             Logger::Warn() << "Target folder not found or no permission: folder_id="
-                     << request.target_folder_id;
+                           << request.target_folder_id;
             co_return std::unexpected(target_location_result.error());
         }
 
@@ -470,9 +463,7 @@ namespace disk::file {
 
             try {
                 auto result = co_await m_db_client->execSqlCoro(
-                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, "
-                    "is_favorite, download_count, last_accessed_at, created_at, updated_at "
-                    "FROM files WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ") AND user_id = $1",
+                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, " "is_favorite, download_count, last_accessed_at, created_at, updated_at " "FROM files WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ") AND user_id = $1",
                     user_id
                 );
 
@@ -513,7 +504,7 @@ namespace disk::file {
             );
             if (!quota_result) {
                 Logger::Warn() << "Storage quota check failed for copy: user_id=" << user_id
-                         << ", total_copy_size=" << total_copy_size;
+                               << ", total_copy_size=" << total_copy_size;
                 co_return std::unexpected(quota_result.error());
             }
         }
@@ -547,7 +538,7 @@ namespace disk::file {
                 );
             } catch (const drogon::orm::DrogonDbException& e) {
                 Logger::Warn() << "Filename conflict query failed in copy, skipping chunk: "
-                         << e.base().what();
+                               << e.base().what();
                 continue;
             }
 
@@ -563,7 +554,7 @@ namespace disk::file {
             for (const auto& [old_id, file] : chunk) {
                 if (occupied_names.contains(file.getValueOfName())) {
                     Logger::Warn() << "Target folder already has file with same name, skipping: "
-                             << file.getValueOfName();
+                                   << file.getValueOfName();
                     continue;
                 }
 
@@ -586,7 +577,7 @@ namespace disk::file {
                     existing_content_ids = co_await content_service.FindExistingIds(m_db_client, content_ids);
                 } catch (const drogon::orm::DrogonDbException& e) {
                     Logger::Warn() << "File content batch query failed in copy, skipping chunk: "
-                             << e.base().what();
+                                   << e.base().what();
                     continue;
                 }
             }
@@ -627,7 +618,7 @@ namespace disk::file {
                     auto cid = file_ptr->getContentId();
                     if (cid && !incremented_ids.contains(*cid)) {
                         Logger::Warn() << "Content ref_count increment skipped in txn, dropping file: content_id="
-                                 << *cid;
+                                       << *cid;
                         continue;
                     }
                     txn_valid_items.emplace_back(old_id, file_ptr);
@@ -695,7 +686,7 @@ namespace disk::file {
             );
             if (target_inside_source) {
                 Logger::Warn() << "Cannot copy folder into itself or descendant, skipping: folder_id="
-                         << folder_id;
+                               << folder_id;
                 continue;
             }
 
@@ -725,7 +716,7 @@ namespace disk::file {
                     existing_content_ids = co_await content_service.FindExistingIds(m_db_client, content_ids);
                 } catch (const drogon::orm::DrogonDbException& e) {
                     Logger::Warn() << "Folder copy content query failed, skipping folder_id=" << folder_id
-                             << ": " << e.base().what();
+                                   << ": " << e.base().what();
                     continue;
                 }
             }
@@ -770,8 +761,7 @@ namespace disk::file {
                 auto inserted_root = co_await folder_mapper.insert(root_folder);
                 folder_id_map[plan.root.getValueOfId()] = inserted_root.getValueOfId();
                 folder_path_map[plan.root.getValueOfId()] = root_path;
-                folder_mappings.push_back({ .old_id = plan.root.getValueOfId(),
-                                            .new_id = inserted_root.getValueOfId() });
+                folder_mappings.push_back({ .old_id = plan.root.getValueOfId(), .new_id = inserted_root.getValueOfId() });
                 ++folder_count;
 
                 for (const auto& folder : plan.folders) {
@@ -786,9 +776,7 @@ namespace disk::file {
                     }
 
                     auto folder_path = utils::BuildFolderPath(parent_path_it->second, folder.getValueOfName());
-                    auto depth_delta = folder.getValueOfDepth() > plan.root.getValueOfDepth()
-                        ? folder.getValueOfDepth() - plan.root.getValueOfDepth()
-                        : 1;
+                    auto depth_delta = folder.getValueOfDepth() > plan.root.getValueOfDepth() ? folder.getValueOfDepth() - plan.root.getValueOfDepth() : 1;
 
                     Folders copied_folder;
                     copied_folder.setUserId(user_id);
@@ -803,8 +791,7 @@ namespace disk::file {
                     auto inserted_folder = co_await folder_mapper.insert(copied_folder);
                     folder_id_map[folder.getValueOfId()] = inserted_folder.getValueOfId();
                     folder_path_map[folder.getValueOfId()] = folder_path;
-                    folder_mappings.push_back({ .old_id = folder.getValueOfId(),
-                                                .new_id = inserted_folder.getValueOfId() });
+                    folder_mappings.push_back({ .old_id = folder.getValueOfId(), .new_id = inserted_folder.getValueOfId() });
                     ++folder_count;
                 }
 
@@ -818,7 +805,7 @@ namespace disk::file {
                     auto content_id_ptr = file.getContentId();
                     if (content_id_ptr && !incremented_ids.contains(*content_id_ptr)) {
                         Logger::Warn() << "Content ref_count increment skipped in folder copy, dropping file: content_id="
-                                 << *content_id_ptr;
+                                       << *content_id_ptr;
                         continue;
                     }
 
@@ -839,16 +826,14 @@ namespace disk::file {
                     copied_file.setUpdatedAt(trantor::Date::now());
 
                     auto inserted_file = co_await file_mapper.insert(copied_file);
-                    file_mappings.push_back({ .old_id = file.getValueOfId(),
-                                              .new_id = inserted_file.getValueOfId() });
+                    file_mappings.push_back({ .old_id = file.getValueOfId(), .new_id = inserted_file.getValueOfId() });
                     ++file_count;
                     copied_size += file.getValueOfSize();
                 }
 
                 if (request.target_folder_id > 0) {
                     co_await txn->execSqlCoro(
-                        "UPDATE folders SET item_count = item_count + 1, updated_at = $1 "
-                        "WHERE id = $2 AND user_id = $3",
+                        "UPDATE folders SET item_count = item_count + 1, updated_at = $1 " "WHERE id = $2 AND user_id = $3",
                         trantor::Date::now(),
                         request.target_folder_id,
                         user_id
@@ -862,7 +847,7 @@ namespace disk::file {
                 new_files.insert(new_files.end(), file_mappings.begin(), file_mappings.end());
             } catch (const std::exception& e) {
                 Logger::Error() << "Folder copy transaction failed: folder_id=" << folder_id
-                          << ", error=" << e.what();
+                                << ", error=" << e.what();
                 if (txn) {
                     try {
                         txn->rollback();
@@ -888,10 +873,10 @@ namespace disk::file {
         response.new_folders = std::move(new_folders);
 
         Logger::Info() << "Copy completed: copied_files=" << response.copied_file_count
-                 << ", copied_folders=" << response.copied_folder_count
-                 << ", total_size=" << actual_copy_size;
+                       << ", copied_folders=" << response.copied_folder_count
+                       << ", total_size=" << actual_copy_size;
 
-        co_await InvalidateFileListCache(user_id, {request.target_folder_id});
+        co_await InvalidateFileListCache(user_id, { request.target_folder_id });
 
         co_return response;
     }
@@ -902,7 +887,7 @@ namespace disk::file {
         -> drogon::Task<Result<DeleteResponse>> {
 
         Logger::Debug() << "Starting delete items: file_ids.size()=" << request.file_ids.size()
-                  << ", folder_ids.size()=" << request.folder_ids.size() << ", user_id=" << user_id;
+                        << ", folder_ids.size()=" << request.folder_ids.size() << ", user_id=" << user_id;
 
         auto delete_start = std::chrono::steady_clock::now();
 
@@ -919,21 +904,17 @@ namespace disk::file {
 
         auto delete_elapsed = std::chrono::steady_clock::now() - delete_start;
         Logger::Info() << "FileMutationService::Delete completed: deleted_count=" << move_result->deleted_count
-                 << ", deleted_file_count=" << move_result->deleted_file_count
-                 << ", deleted_folder_count=" << move_result->deleted_folder_count
-                 << ", removed_file_rows=" << move_result->removed_file_ids.size()
-                 << ", removed_folder_rows=" << move_result->removed_folder_ids.size()
-                 << ", elapsed_ms="
-                 << std::chrono::duration_cast<std::chrono::milliseconds>(delete_elapsed).count();
+                       << ", deleted_file_count=" << move_result->deleted_file_count
+                       << ", deleted_folder_count=" << move_result->deleted_folder_count
+                       << ", removed_file_rows=" << move_result->removed_file_ids.size()
+                       << ", removed_folder_rows=" << move_result->removed_folder_ids.size()
+                       << ", elapsed_ms="
+                       << std::chrono::duration_cast<std::chrono::milliseconds>(delete_elapsed).count();
 
         DeleteResponse response;
         response.deleted_count = move_result->deleted_count;
         response.deleted_file_count = move_result->deleted_file_count;
         response.deleted_folder_count = move_result->deleted_folder_count;
-
-        if (!move_result->affected_folder_ids.empty()) {
-            co_await InvalidateFileListCache(user_id, move_result->affected_folder_ids);
-        }
 
         co_return response;
     }
@@ -1070,4 +1051,4 @@ namespace disk::file {
         }
     }
 
-} ///< namespace disk::file
+} // namespace disk::file
