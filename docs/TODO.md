@@ -268,9 +268,11 @@ Completion status: closed by `fix(upload): guard finalization compensation`.
 
 ## 5.2 Migrate copy flow transaction boundary
 
-- [ ] Wrap copy quota consumption, file row creation, content ref-count increments, and partial release logic in a clear transaction boundary.
-- [ ] Preserve current copy accounting behavior unless product rules change.
-- [ ] Ensure partial copy failure cannot leave quota/ref-count drift.
+Completion status: closed by `fix(copy): migrate transaction boundary`.
+
+- [x] Wrap copy quota consumption, file row creation, content ref-count increments, and partial release logic in a clear transaction boundary.
+- [x] Preserve current copy accounting behavior unless product rules change.
+- [x] Ensure partial copy failure cannot leave quota/ref-count drift.
 
 ## 5.3 Migrate move flow transaction boundary
 
