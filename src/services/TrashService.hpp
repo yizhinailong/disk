@@ -23,6 +23,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -32,6 +33,7 @@
 
 #include "dtos/TrashDto.hpp"
 #include "services/FileServiceUtils.hpp"
+#include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::trash {
@@ -47,7 +49,6 @@ namespace disk::trash {
         int deleted_folder_count{ 0 };
         std::vector<uint64_t> removed_file_ids;
         std::vector<uint64_t> removed_folder_ids;
-        std::vector<uint64_t> affected_folder_ids;
     };
 
     /**
@@ -215,6 +216,9 @@ namespace disk::trash {
             const std::vector<uint64_t>& folder_ids
         ) const -> drogon::Task<ShareCleanupStats>;
 
+        auto InvalidateFileListCache(uint64_t user_id, const std::vector<uint64_t>& folder_ids)
+            -> drogon::Task<void>;
+
         [[nodiscard]]
         auto PermanentlyDeleteTrashItems(
             const std::vector<PrefetchedTrashItem>& trash_items,
@@ -361,7 +365,8 @@ namespace disk::trash {
         [[nodiscard]]
         static auto ExtractBaseName(const std::string& filename) -> std::string;
 
-        drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
+        drogon::orm::DbClientPtr m_db_client;                                                                         ///< 数据库客户端
+        std::shared_ptr<disk::services::RedisService> m_redis_service{ disk::services::RedisService::GetInstance() }; ///< Redis 服务
     };
 
-} ///< namespace disk::trash
+} // namespace disk::trash

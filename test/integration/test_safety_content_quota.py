@@ -314,6 +314,29 @@ def permanently_delete_trash(trash_id: int) -> None:
         print_summary()
 
 
+def restore_trash(trash_id: int) -> int:
+    """Restore one trash item and return the new file id."""
+    resp = fetch(
+        "/api/trash/restore",
+        method="POST",
+        headers=auth_headers(),
+        json_body={"trash_ids": [trash_id]},
+    )
+    save_evidence(f"{EVIDENCE_PREFIX}-trash-restore-{trash_id}.json", resp.text)
+    restored_file_id = json_field(resp.text, "data.results.0.file_id")
+    if (
+        resp.status_code != 200
+        or json_field(resp.text, "code") != "0"
+        or json_field(resp.text, "data.results.0.status") != "success"
+        or not restored_file_id
+        or restored_file_id == "null"
+    ):
+        log_fail(f"trash restore failed: trash_id={trash_id}")
+        print(resp.text)
+        print_summary()
+    return int(restored_file_id)
+
+
 def run_expired_cleanup() -> dict[str, int]:
     """Run the deterministic admin/manual cleanup seam and return cleanup counts."""
     resp = fetch(
@@ -564,6 +587,28 @@ def test_soft_delete_preserves_ref_count_storage_used_and_blob() -> None:
     assert_path_exists("soft delete keeps blob while in trash", final_blob_path(file_hash))
 
 
+def test_restore_preserves_ref_count_storage_used_and_removes_trash() -> None:
+    """Verify restore recreates the active file without changing content refs or quota."""
+    log_section("Restore Preserves Ref-Count And Quota")
+    payload = f"restore-boundary-{unique_name()}".encode()
+    file_id = upload_file(f"safety_restore_{unique_name()}.bin", payload)
+    original_file = file_row(file_id)
+    content_id = int(original_file["content_id"])
+    before_ref = int(content_row(content_id)["ref_count"])
+    quota_before = user_quota()
+
+    trash_id = delete_file_to_trash(file_id)
+    restored_file_id = restore_trash(trash_id)
+    restored_file = file_row(restored_file_id)
+    after_ref = int(content_row(content_id)["ref_count"])
+    quota_after = user_quota()
+
+    assert_equal("restored file reuses content_id", int(restored_file["content_id"]), content_id)
+    assert_db_row_absent("trash row removed after restore", "SELECT id FROM trash WHERE id = %s", (trash_id,))
+    assert_equal("restore keeps ref_count", after_ref, before_ref)
+    assert_equal("restore keeps storage_used", quota_after["storage_used"], quota_before["storage_used"])
+
+
 def test_share_cleanup_on_soft_delete() -> None:
     """Verify move-to-trash removes share links and cancels shares only when empty."""
     log_section("Share Cleanup On Soft Delete")
@@ -662,6 +707,8 @@ def test_delete_all_ref_count_quota_and_blob_cleanup() -> None:
     assert_path_absent("delete-all deletes blob at zero ref_count", final_blob_path(file_hash))
 
 
+def test_permanent_delete_ref_count_and_blob_retention() -> None:
+    """Verify selected permanent delete releases one logical reference at a time."""
     log_section("Permanent Delete Ref-Count And Blob Retention")
     payload = f"trash-ref-blob-{unique_name()}".encode()
     first_file_id = upload_file(f"safety_trash_a_{unique_name()}.bin", payload)
@@ -757,6 +804,7 @@ def main() -> None:
     test_upload_quota_rejection_no_leak()
     test_copy_quota_rejection_no_side_effects()
     test_soft_delete_preserves_ref_count_storage_used_and_blob()
+    test_restore_preserves_ref_count_storage_used_and_removes_trash()
     test_share_cleanup_on_soft_delete()
     test_folder_soft_delete_snapshot_preserves_ref_count_and_storage()
     test_delete_all_ref_count_quota_and_blob_cleanup()
