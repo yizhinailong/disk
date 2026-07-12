@@ -16,7 +16,7 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
+#include <vector>
 
 #include <drogon/orm/DbClient.h>
 #include <trantor/utils/Date.h>
@@ -177,73 +177,8 @@ namespace disk::file {
         auto EvictExpiredUploadTaskCacheEntries() -> void;
 
         [[nodiscard]]
-        auto CheckStorageQuota(uint64_t user_id, uint64_t file_size) const
-            -> drogon::Task<Result<void>>;
-
-        [[nodiscard]]
-        auto ReserveStorageQuota(uint64_t user_id, uint64_t file_size) const
-            -> drogon::Task<Result<void>>;
-
-        auto ReleaseReservedQuota(uint64_t user_id, uint64_t reserved_bytes)
-            -> drogon::Task<void>;
-
-        [[nodiscard]]
         auto FindUploadTask(const std::string& upload_id, uint64_t user_id) const
             -> drogon::Task<Result<drogon_model::disk::UploadTasks>>;
-
-        auto UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void>;
-
-        [[nodiscard]]
-        auto
-        IsFilenameExists(uint64_t folder_id, const std::string& filename, uint64_t user_id) const
-            -> drogon::Task<bool>;
-
-        [[nodiscard]]
-        static auto ExtractExtension(const std::string& filename) -> std::string;
-
-        [[nodiscard]]
-        static auto IsImageMimeType(const std::string& mime_type) -> bool;
-
-        /// ── 事务感知辅助方法（接受 DbClientPtr，可传入事务或普通连接） ──
-
-        /**
-         * @brief 检查并扣除存储配额（事务版）
-         *
-         * 在指定数据库连接（事务或普通连接）上执行配额检查与扣除。
-         * 事务场景下，扣除操作可随事务回滚。
-         *
-         * @param client 数据库客户端（事务或普通连接）
-         * @param user_id 用户 ID
-         * @param file_size 需要的存储空间
-         * @return drogon::Task<Result<void>> 成功或配额不足错误
-         */
-        [[nodiscard]]
-        auto CheckStorageQuota(
-            const drogon::orm::DbClientPtr& client,
-            uint64_t user_id,
-            uint64_t file_size
-        ) const -> drogon::Task<Result<void>>;
-
-        /**
-         * @brief 更新存储使用量（事务版）
-         *
-         * @param client 数据库客户端（事务或普通连接）
-         * @param user_id 用户 ID
-         * @param delta 存储增量（正数为增加，负数为减少）
-         */
-        auto UpdateStorageUsed(
-            const drogon::orm::DbClientPtr& client,
-            uint64_t user_id,
-            int64_t delta
-        ) -> drogon::Task<void>;
-
-        [[nodiscard]]
-        auto IsFilenameExists(
-            const drogon::orm::DbClientPtr& client,
-            uint64_t folder_id,
-            const std::string& filename,
-            uint64_t user_id
-        ) const -> drogon::Task<bool>;
 
         /**
          * @brief Invalidate file list cache for specified user and folders

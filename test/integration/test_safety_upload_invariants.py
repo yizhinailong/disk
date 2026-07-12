@@ -375,6 +375,73 @@ def test_init_upload_expires_existing_task_invariants() -> None:
     assert_path_absent("final blob absent after inline expiry", final_blob_path(file_hash))
 
 
+def test_complete_upload_db_failure_after_promotion_deletes_final_blob() -> None:
+    """Verify promoted blob compensation when DB finalization fails."""
+    log_section("Complete Upload Promotion Compensation Invariants")
+    payload = f"safety-db-failure-{unique_name()}".encode()
+    filename = f"safety_db_failure_{unique_name()}.bin"
+
+    upload_id, file_hash = init_upload(filename, payload)
+    upload_single_chunk(upload_id, payload)
+    assert_chunk_row_count(upload_id, 1)
+
+    execute(
+        """
+        CREATE OR REPLACE FUNCTION fail_safety_upload_file_insert()
+        RETURNS trigger AS $$
+        BEGIN
+            IF NEW.name LIKE 'safety_db_failure_%' THEN
+                RAISE EXCEPTION 'intentional safety upload finalization failure';
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute("DROP TRIGGER IF EXISTS safety_upload_file_insert_fail ON files")
+    execute(
+        """
+        CREATE TRIGGER safety_upload_file_insert_fail
+        BEFORE INSERT ON files
+        FOR EACH ROW EXECUTE FUNCTION fail_safety_upload_file_insert()
+        """
+    )
+
+    try:
+        resp = fetch(
+            "/api/file/upload/complete",
+            method="POST",
+            headers=auth_headers(TOKEN),
+            json_body={"upload_id": upload_id},
+        )
+        save_evidence(f"{EVIDENCE_PREFIX}-{upload_id}-complete-db-failure.json", resp.text)
+        if resp.status_code == 200 and json_field(resp.text, "code") == "0":
+            log_fail("complete upload should fail after trigger rejects files insert")
+            print(resp.text)
+            print_summary()
+
+        log_pass("complete upload failed after files insert trigger")
+    finally:
+        execute("DROP TRIGGER IF EXISTS safety_upload_file_insert_fail ON files")
+        execute("DROP FUNCTION IF EXISTS fail_safety_upload_file_insert()")
+
+    task = assert_upload_task(upload_id, 0)
+    assert_equal("failed finalization keeps reserved_bytes", int(task["reserved_bytes"]), len(payload))
+    assert_chunk_row_count(upload_id, 1)
+    assert_db_row_absent(
+        "failed finalization creates no logical file row",
+        "SELECT id FROM files WHERE user_id = %s AND name = %s",
+        (USER_ID, filename),
+    )
+    assert_db_row_absent(
+        "failed finalization rolls back file content row",
+        "SELECT id FROM file_contents WHERE hash_md5 = %s",
+        (file_hash,),
+    )
+    assert_path_absent("promoted final blob deleted after DB failure", final_blob_path(file_hash))
+    assert_equal("temp upload directory remains for retry", upload_temp_dir(upload_id).exists(), True)
+
+
 def main() -> None:
     """Run upload safety-net tests."""
     print("==========================================")
@@ -396,6 +463,7 @@ def main() -> None:
     test_cancel_upload_invariants()
     test_expired_upload_cleanup_invariants()
     test_init_upload_expires_existing_task_invariants()
+    test_complete_upload_db_failure_after_promotion_deletes_final_blob()
 
     print_summary()
 

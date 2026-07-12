@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <trantor/utils/Date.h>
 #include <drogon/orm/DbClient.h>
@@ -68,6 +69,52 @@ namespace disk::upload {
         std::optional<uint64_t> existing_content_id;
     };
 
+    struct UploadCacheInvalidation {
+        std::vector<std::string> upload_task_ids;
+        std::vector<uint64_t> file_list_folder_ids;
+    };
+
+    struct LifecycleFileItem {
+        uint64_t id{0};
+        std::string name;
+        uint64_t size{0};
+        std::string hash;
+        std::string mime_type;
+        uint64_t parent_id{0};
+        std::string created_at;
+    };
+
+    struct InitUploadCommand {
+        std::string filename;
+        uint64_t file_size{0};
+        std::string file_hash;
+        uint64_t parent_id{0};
+        uint64_t user_id{0};
+        uint64_t max_file_size{0};
+        uint64_t chunk_size{0};
+        int64_t expiry_seconds{0};
+    };
+
+    struct InitUploadOutcome {
+        std::string upload_id;
+        uint32_t chunk_size{0};
+        uint32_t total_chunks{0};
+        std::vector<uint32_t> uploaded_chunks;
+        bool instant_upload{false};
+        std::optional<LifecycleFileItem> file;
+        UploadCacheInvalidation invalidation;
+    };
+
+    struct CompleteUploadCommand {
+        std::string upload_id;
+        uint64_t user_id{0};
+    };
+
+    struct CompleteUploadOutcome {
+        std::optional<LifecycleFileItem> file;
+        UploadCacheInvalidation invalidation;
+    };
+
     [[nodiscard]] auto ToStorageValue(UploadTaskStatus status) -> int16_t;
     [[nodiscard]] auto IsTerminalStatus(int status) -> bool;
     [[nodiscard]] auto CanComplete(int current_status) -> bool;
@@ -101,6 +148,14 @@ namespace disk::upload {
             drogon::orm::DbClientPtr db_client,
             disk::storage::IFileStorage* storage
         );
+
+        [[nodiscard]]
+        auto InitializeUpload(InitUploadCommand command) const
+            -> drogon::Task<Result<InitUploadOutcome>>;
+
+        [[nodiscard]]
+        auto CompleteUpload(CompleteUploadCommand command) const
+            -> drogon::Task<Result<CompleteUploadOutcome>>;
 
         [[nodiscard]]
         auto CancelInProgressUpload(

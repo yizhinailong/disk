@@ -52,6 +52,8 @@ MISSING_FILENAME = f"missing_chunk_test_{os.getpid()}.bin"
 MISMATCH_FILENAME = f"chunk_size_mismatch_test_{os.getpid()}.bin"
 RESUME_FILENAME = f"resume_upload_test_{os.getpid()}.bin"
 DUPLICATE_CHUNK_FILENAME = f"duplicate_chunk_test_{os.getpid()}.bin"
+INSTANT_SOURCE_FILENAME = f"instant_source_test_{os.getpid()}.bin"
+INSTANT_COPY_FILENAME = f"instant_copy_test_{os.getpid()}.bin"
 
 
 def _configured_chunk_size() -> int:
@@ -552,6 +554,87 @@ def test_duplicate_chunk_upload_is_idempotent():
     save_evidence("complete-upload-duplicate-chunk.json", resp.text)
 
 
+def test_instant_upload_reuses_existing_content():
+    log_info("Testing Instant Upload (existing content reuse)...")
+
+    payload = f"instant-upload-payload-{os.getpid()}".encode()
+    file_hash = _md5_bytes(payload)
+    chunk_hash = _md5_bytes(payload)
+
+    resp = fetch(
+        "/api/file/upload/init",
+        method="POST",
+        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
+        json_body={
+            "filename": INSTANT_SOURCE_FILENAME,
+            "file_size": len(payload),
+            "file_hash": file_hash,
+            "parent_id": 0,
+        },
+    )
+    upload_id = json_field(resp.text, "data.upload_id")
+    if not upload_id or upload_id == "null":
+        log_fail("Init Upload (instant source) - failed to get upload_id")
+        print(resp.text)
+        return
+
+    resp = fetch(
+        f"/api/file/upload/chunk?upload_id={upload_id}&chunk_index=0&chunk_hash={chunk_hash}",
+        method="POST",
+        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/octet-stream"},
+        data=payload,
+    )
+    if json_field(resp.text, "data.uploaded") != "true":
+        log_fail("Upload Chunk (instant source)")
+        print(resp.text)
+        return
+
+    resp = fetch(
+        "/api/file/upload/complete",
+        method="POST",
+        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
+        json_body={"upload_id": upload_id},
+    )
+    source_file_id = json_field(resp.text, "data.file.id")
+    if not source_file_id or json_field(resp.text, "data.file.hash") != file_hash:
+        log_fail("Complete Upload (instant source)")
+        print(resp.text)
+        return
+
+    resp = fetch(
+        "/api/file/upload/init",
+        method="POST",
+        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
+        json_body={
+            "filename": INSTANT_COPY_FILENAME,
+            "file_size": len(payload),
+            "file_hash": file_hash,
+            "parent_id": 0,
+        },
+    )
+    instant_upload = json_field(resp.text, "data.instant_upload")
+    instant_upload_id = json_field(resp.text, "data.upload_id")
+    instant_file_id = json_field(resp.text, "data.file.id")
+    instant_file_name = json_field(resp.text, "data.file.name")
+    instant_file_hash = json_field(resp.text, "data.file.hash")
+
+    if instant_upload != "true":
+        log_fail(f"Instant Upload - expected instant_upload=true, got {instant_upload}")
+        print(resp.text)
+        return
+    if instant_upload_id not in ("", "null", None):
+        log_fail(f"Instant Upload - expected empty upload_id, got {instant_upload_id}")
+        print(resp.text)
+        return
+    if not instant_file_id or instant_file_name != INSTANT_COPY_FILENAME or instant_file_hash != file_hash:
+        log_fail("Instant Upload - file payload mismatch")
+        print(resp.text)
+        return
+
+    log_pass("Instant Upload - reused existing content and returned file payload")
+    save_evidence("init-upload-instant.json", resp.text)
+
+
 # ─── Main ───────────────────────────────────────────────────────────────────
 
 
@@ -574,6 +657,7 @@ def main():
     test_chunk_size_mismatch()
     test_resume_upload_returns_uploaded_chunks()
     test_duplicate_chunk_upload_is_idempotent()
+    test_instant_upload_reuses_existing_content()
 
     print_summary()
 

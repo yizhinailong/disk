@@ -712,6 +712,32 @@ namespace disk::file {
             EXPECT_FALSE(std::filesystem::exists(m_temp_base / upload_id));
         }
 
+        TEST_F(UploadPathTest, CleanupTempRemovesUploadDirectoryAndAssembledArtifactIdempotently) {
+            const std::string upload_id = "cleanup-repeat-test";
+
+            ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
+            ASSERT_TRUE(drogon::sync_wait(
+                m_storage->WriteChunk(upload_id, 0, MakePattern(512))
+            ).has_value());
+            {
+                std::ofstream assembled(AssembledPath(upload_id), std::ios::binary);
+                assembled << "assembled-temp";
+            }
+
+            ASSERT_TRUE(std::filesystem::exists(m_temp_base / upload_id));
+            ASSERT_TRUE(std::filesystem::exists(AssembledPath(upload_id)));
+
+            auto first_result = drogon::sync_wait(m_storage->CleanupTemp(upload_id));
+            ASSERT_TRUE(first_result.has_value());
+            EXPECT_FALSE(std::filesystem::exists(m_temp_base / upload_id));
+            EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
+
+            auto second_result = drogon::sync_wait(m_storage->CleanupTemp(upload_id));
+            ASSERT_TRUE(second_result.has_value());
+            EXPECT_FALSE(std::filesystem::exists(m_temp_base / upload_id));
+            EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
+        }
+
         TEST_F(UploadPathTest, CleanupTempIdempotentOnMissingDirectory) {
             const std::string upload_id = "cleanup-nonexistent";
             /// Never created the directory
