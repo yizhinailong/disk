@@ -24,6 +24,8 @@ namespace disk::file {
      * @brief 数据库事务运行器
      *
      * 仅负责数据库事务 begin/rollback 和错误映射；文件系统补偿保持在调用方显式处理。
+     * 映射规则：callback 返回的 ErrorInfo 是公开领域错误，rollback 后原样返回；
+     * DB/普通异常仅记录内部细节，对客户端统一返回默认 InternalError；rollback 失败只记录日志。
      */
     class TransactionRunner {
     public:
@@ -46,17 +48,11 @@ namespace disk::file {
             } catch (const drogon::orm::DrogonDbException& e) {
                 rollbackQuietly(transaction);
                 Logger::Error() << "Database transaction failed: " << e.base().what();
-                co_return std::unexpected(ErrorInfo(
-                    ErrorCode::InternalError,
-                    "Database transaction failed"
-                ));
+                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError));
             } catch (const std::exception& e) {
                 rollbackQuietly(transaction);
                 Logger::Error() << "Database transaction failed: " << e.what();
-                co_return std::unexpected(ErrorInfo(
-                    ErrorCode::InternalError,
-                    "Database transaction failed"
-                ));
+                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError));
             }
         }
 

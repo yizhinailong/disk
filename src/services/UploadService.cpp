@@ -840,10 +840,7 @@ namespace disk::file {
                 auto finalize_success =
                     co_await upload_task_repository.MarkCompletedIfInProgress(transaction, upload_id);
                 if (!finalize_success) {
-                    co_return std::unexpected(ErrorInfo(
-                        ErrorCode::InternalError,
-                        "Failed to finalize upload task"
-                    ));
+                    co_return std::unexpected(ErrorInfo(ErrorCode::InternalError));
                 }
 
                 co_await upload_task_repository.DeleteChunks(transaction, upload_id);
@@ -852,7 +849,7 @@ namespace disk::file {
             }
         );
         if (!tx_result) {
-            Logger::Error() << "Database operation failed: " << tx_result.error().message;
+            Logger::Error() << "Upload finalization transaction failed: " << tx_result.error().message;
             db_operation_failed = true;
         }
         Logger::Debug() << "[stage_timer] tx duration_ms="
@@ -886,9 +883,7 @@ namespace disk::file {
                      << " outcome=failure upload_id=" << upload_id
                      << " total_chunks=" << task.getValueOfTotalChunks();
 
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Database operation failed")
-            );
+            co_return std::unexpected(tx_result.error());
         }
 
         Logger::Debug() << "Files record created successfully: file_id=" << file.getValueOfId();

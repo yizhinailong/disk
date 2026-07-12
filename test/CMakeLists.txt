@@ -15,6 +15,7 @@ set(TEST_SOURCES
     services/LoginRateLimit_test.cpp
     services/ContentService_test.cpp
     services/QuotaService_test.cpp
+    services/TransactionRunner_test.cpp
     services/FileUploadConsistency_test.cpp
     services/UploadPath_test.cpp
     services/CompleteUploadSingleflight_test.cpp
