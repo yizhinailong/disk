@@ -63,9 +63,9 @@ Decision status: closed by `docs/backend-refactor-decisions.md`. Behavior-changi
 Implementation follow-ups:
 
 - [ ] Update instant upload quota checks and `storage_used` mutation to match logical per-user accounting.
-- [ ] Update successful private content downloads to increment file-level `download_count` and refresh `last_accessed_at`.
-- [ ] Update successful share content downloads to preserve share-level counting and also update file-level metadata.
-- [ ] Add tests that distinguish content downloads from download-info metadata lookups.
+- [x] Update successful private content downloads to increment file-level `download_count` and refresh `last_accessed_at`.
+- [x] Update successful share content downloads to preserve share-level counting and also update file-level metadata.
+- [x] Add tests that distinguish content downloads from download-info metadata lookups.
 
 ---
 
@@ -166,32 +166,32 @@ Decision status: fail-open for all current rate-limit families for now, recorded
 
 ## 3.2 Fix or formalize expired-task handling during init
 
-Discovery found that inline expired-task cleanup during upload init may delete expired tasks and temp files without visibly releasing reserved quota.
+Completion status: closed by `fix(backend): release quota for expired upload init cleanup`. Inline expired-task handling during upload init now expires the task through `UploadLifecycleService`, releases `storage_reserved` through `QuotaService`, and keeps temp cleanup idempotent.
 
-- [ ] Confirm current behavior with a characterization test or direct fixture.
-- [ ] Decide whether inline expired-task cleanup should release `storage_reserved`.
-- [ ] If yes, route the logic through `UploadLifecycleService` / `QuotaService`.
-- [ ] Ensure expired task deletion, quota release, and temp cleanup cannot drift silently.
-- [ ] Document compensation behavior for partial failure.
+- [x] Confirm current behavior with a characterization test or direct fixture.
+- [x] Decide whether inline expired-task cleanup should release `storage_reserved`: yes, release reserved quota through the upload lifecycle/quota boundary.
+- [x] If yes, route the logic through `UploadLifecycleService` / `QuotaService`.
+- [x] Ensure expired task deletion, quota release, and temp cleanup cannot drift silently.
+- [x] Document compensation behavior for partial failure.
 
 ## 3.3 Finish trash lifecycle extraction
 
-`TrashService` already owns major trash operations. Remaining work is to ensure move-to-trash and permanent cleanup responsibilities are not split confusingly across services.
+Completion status: closed by `refactor(trash): move soft delete orchestration into TrashService`, `test(trash): cover soft delete lifecycle boundaries`, and `refactor(trash): centralize move-to-trash lifecycle`.
 
-- [ ] Identify remaining trash lifecycle logic still embedded in `FileMutationService::Delete`.
-- [ ] Decide whether move-to-trash orchestration should fully live in `TrashService`.
-- [ ] If yes, make `FileMutationService::Delete` delegate trash creation/removal orchestration to `TrashService`.
-- [ ] Keep share cleanup behavior explicit when files/folders move to trash.
-- [ ] Keep `file_contents.ref_count` decrement only on permanent deletion / expiration cleanup.
-- [ ] Keep `users.storage_used` decrease only on permanent deletion / expiration cleanup unless product rules change.
-- [ ] Preserve batch cleanup limits and logging.
+- [x] Identify remaining trash lifecycle logic still embedded in `FileMutationService::Delete`.
+- [x] Decide whether move-to-trash orchestration should fully live in `TrashService`: yes, `TrashService::MoveToTrash` owns soft-delete lifecycle orchestration.
+- [x] If yes, make `FileMutationService::Delete` delegate trash creation/removal orchestration to `TrashService`.
+- [x] Keep share cleanup behavior explicit when files/folders move to trash.
+- [x] Keep `file_contents.ref_count` decrement only on permanent deletion / expiration cleanup.
+- [x] Keep `users.storage_used` decrease only on permanent deletion / expiration cleanup unless product rules change.
+- [x] Preserve batch cleanup limits and logging.
 
 ## 3.4 Clarify service ownership boundaries
 
 - [x] Treat `ContentService` as the absorbed content persistence boundary; do not revive a separate `ContentRepository`.
-- [ ] Decide whether `UploadTaskRepository` should remain a low-level primitive or grow into a full repository.
-- [ ] Avoid duplicate paths that mutate the same table with subtly different semantics.
-- [ ] Document the intended layering:
+- [x] Treat `UploadTaskRepository` as explicit upload-task persistence primitive / repository boundary while keeping lifecycle decisions in services.
+- [x] Avoid duplicate paths that mutate the same table with subtly different semantics.
+- [x] Document the intended layering:
   - controller
   - application service
   - lifecycle/domain service
@@ -206,20 +206,24 @@ Initial repository primitives exist, but most query/data-access logic is still e
 
 ## 4.1 Extract file query objects
 
-- [ ] Extract query object for file list pagination and sorting.
-- [ ] Extract query object for search.
-- [ ] Preserve existing sort determinism.
-- [ ] Preserve existing index usage.
-- [ ] Ensure cache key behavior includes all relevant query parameters.
-- [ ] Specifically confirm whether file-list cache keys include `page_size`.
+Completion status: closed by `refactor(file): extract query params and fix list cache invalidation`.
+
+- [x] Extract query object for file list pagination and sorting.
+- [x] Extract query object for search.
+- [x] Preserve existing sort determinism.
+- [x] Preserve existing index usage.
+- [x] Ensure cache key behavior includes all relevant query parameters.
+- [x] Specifically confirm whether file-list cache keys include `page_size`: yes, `page_size` is part of the file-list cache key.
 
 ## 4.2 Expand upload task repository
 
-- [ ] Add named repository methods for upload task lookup by id/user.
-- [ ] Add named repository methods for pending/resumable upload lookup.
-- [ ] Add named repository methods for status transitions.
-- [ ] Add named repository methods for chunk coverage.
-- [ ] Keep lifecycle decision-making outside the repository.
+Completion status: closed by `feat(upload): expand upload task repository` and `refactor(upload): move expiration persistence into repository`.
+
+- [x] Add named repository methods for upload task lookup by id/user.
+- [x] Add named repository methods for pending/resumable upload lookup.
+- [x] Add named repository methods for status transitions.
+- [x] Add named repository methods for chunk coverage.
+- [x] Keep lifecycle decision-making outside the repository.
 
 ## 4.3 Expand file/folder repositories
 
@@ -238,10 +242,12 @@ Initial repository primitives exist, but most query/data-access logic is still e
 
 ## 4.5 Add trash repository/query methods
 
-- [ ] Extract trash list/count query methods.
-- [ ] Extract trash item prefetch methods for restore/delete.
-- [ ] Extract expired trash batch fetch query.
-- [ ] Keep permanent deletion lifecycle decisions in `TrashService`.
+Completion status: closed by `refactor(trash): extract trash query methods`.
+
+- [x] Extract trash list/count query methods.
+- [x] Extract trash item prefetch methods for restore/delete.
+- [x] Extract expired trash batch fetch query.
+- [x] Keep permanent deletion lifecycle decisions in `TrashService`.
 
 ---
 
@@ -402,4 +408,4 @@ Still open:
 
 - [ ] Should object storage compatibility be a near-term requirement or only a design constraint?
 - [ ] Should copy accounting use a reservation-style model instead of incrementing `storage_used` before copy work completes?
-- [ ] Should inline expired-task cleanup during upload init release `storage_reserved` through the upload lifecycle/quota boundary?
+- [x] Should inline expired-task cleanup during upload init release `storage_reserved` through the upload lifecycle/quota boundary? Decision: yes; implemented through `UploadLifecycleService` / `QuotaService`.
