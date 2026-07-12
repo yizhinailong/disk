@@ -175,6 +175,30 @@ namespace {
         EXPECT_TRUE(drogon::sync_wait(m_service->Exists(key)));
     }
 
+    TEST_F(RedisServiceRuntimeTest, DeleteByPrefixRemovesOnlyMatchingKeys) {
+        const auto matching_key = TrackKey("file_list:42:7:all:name:asc:1:37");
+        const auto other_folder_key = TrackKey("file_list:42:8:all:name:asc:1:37");
+        const auto nested_matching_key = TrackKey("file_list:42:7:file:size:desc:2:50");
+        const auto prefix = m_key_prefix + ":file_list:42:7:";
+
+        ASSERT_TRUE(drogon::sync_wait(m_service->Set(matching_key, "match-1")).has_value());
+        ASSERT_TRUE(drogon::sync_wait(m_service->Set(other_folder_key, "other")).has_value());
+        ASSERT_TRUE(drogon::sync_wait(m_service->Set(nested_matching_key, "match-2")).has_value());
+
+        auto delete_result = drogon::sync_wait(m_service->DeleteByPrefix(prefix, 10));
+        ASSERT_TRUE(delete_result.has_value());
+        EXPECT_EQ(delete_result.value(), 2);
+        EXPECT_FALSE(drogon::sync_wait(m_service->Exists(matching_key)));
+        EXPECT_FALSE(drogon::sync_wait(m_service->Exists(nested_matching_key)));
+        EXPECT_TRUE(drogon::sync_wait(m_service->Exists(other_folder_key)));
+    }
+
+    TEST_F(RedisServiceRuntimeTest, DeleteByPrefixHandlesEmptyMatch) {
+        auto delete_result = drogon::sync_wait(m_service->DeleteByPrefix(m_key_prefix + ":missing:", 10));
+        ASSERT_TRUE(delete_result.has_value());
+        EXPECT_EQ(delete_result.value(), 0);
+    }
+
     TEST(RedisServiceTest, MethodSignatures) {
         /// 测试用例结构：
         /// 验证所有 RedisService 通用方法的签名

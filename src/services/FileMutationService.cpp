@@ -1313,27 +1313,12 @@ namespace disk::file {
 
     auto FileMutationService::InvalidateFileListCache(uint64_t user_id, const std::vector<uint64_t>& folder_ids)
         -> drogon::Task<void> {
-        std::vector<std::string> keys_to_delete;
-        constexpr int page_sizes_to_invalidate[] = { 20, 50, 100 };
         for (const auto folder_id : folder_ids) {
-            for (const auto& type : {"all", "file", "folder"}) {
-                for (const auto& sort : {"name", "size", "created_at", "updated_at"}) {
-                    for (const auto& order : {"asc", "desc"}) {
-                        for (int page = 1; page <= 3; ++page) {
-                            for (const auto page_size : page_sizes_to_invalidate) {
-                                keys_to_delete.push_back(
-                                    disk::redis::RedisKeyPrefix::BuildFileListCacheKey(
-                                        user_id, folder_id, type, sort, order, page, page_size
-                                    )
-                                );
-                            }
-                        }
-                    }
-                }
+            const auto prefix = disk::redis::RedisKeyPrefix::BuildFileListCachePrefix(user_id, folder_id);
+            auto delete_result = co_await m_redis_service->DeleteByPrefix(prefix);
+            if (!delete_result) {
+                Logger::Warn() << "Failed to invalidate file list cache by prefix: " << prefix;
             }
-        }
-        if (!keys_to_delete.empty()) {
-            co_await m_redis_service->MDelete(keys_to_delete);
         }
     }
 

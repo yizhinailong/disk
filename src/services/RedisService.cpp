@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <string_view>
+#include <vector>
 
 #include "utils/ErrorCode.hpp"
 
@@ -344,6 +345,73 @@ namespace disk::services {
             ));
         } catch (const std::exception& ex) {
             co_return WrapRedisResultParseError("MDELETE", ex);
+        }
+    }
+
+    auto RedisService::DeleteByPrefix(const std::string& prefix, int scan_count)
+        -> drogon::Task<Result<int>> {
+        if (prefix.empty()) {
+            co_return 0;
+        }
+
+        auto cmd_start = std::chrono::steady_clock::now();
+        const auto pattern = prefix + "*";
+        std::string cursor = "0";
+        int total_deleted = 0;
+
+        try {
+            do {
+                auto scan_result = co_await m_redis_client->execCommandCoro(
+                    "SCAN %s MATCH %s COUNT %d",
+                    cursor.c_str(),
+                    pattern.c_str(),
+                    scan_count
+                );
+                const auto scan_reply = scan_result.asArray();
+                if (scan_reply.size() != 2) {
+                    Logger::Error() << "Redis SCAN returned unexpected reply count: actual="
+                              << scan_reply.size();
+                    co_return std::unexpected(ErrorInfo(
+                        ErrorCode::RedisOperationFailed,
+                        "Redis operation failed: unexpected SCAN reply count"
+                    ));
+                }
+
+                cursor = scan_reply[0].asString();
+                std::vector<std::string> keys;
+                const auto key_results = scan_reply[1].asArray();
+                keys.reserve(key_results.size());
+                for (const auto& key_result : key_results) {
+                    keys.push_back(key_result.asString());
+                }
+
+                if (!keys.empty()) {
+                    auto delete_result = co_await MDelete(keys);
+                    if (!delete_result) {
+                        co_return std::unexpected(delete_result.error());
+                    }
+                    total_deleted += *delete_result;
+                }
+            } while (cursor != "0");
+
+            Logger::Debug() << "[redis_timer] DELETE_BY_PREFIX duration_us="
+                      << std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::steady_clock::now() - cmd_start
+                         )
+                             .count()
+                      << " prefix=" << prefix << " deleted=" << total_deleted;
+
+            co_return total_deleted;
+
+        } catch (const drogon::nosql::RedisException& ex) {
+            Logger::Error() << "Redis operation failed: DELETE_BY_PREFIX, prefix=" << prefix
+                      << ", error=" << ex.what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::RedisOperationFailed,
+                "Redis operation failed: " + std::string(ex.what())
+            ));
+        } catch (const std::exception& ex) {
+            co_return WrapRedisResultParseError("DELETE_BY_PREFIX", ex);
         }
     }
 
