@@ -17,6 +17,7 @@
 #include <json/writer.h>
 
 #include "FileServiceUtils.hpp"
+#include "TransactionRunner.hpp"
 #include "TrashService.hpp"
 #include "models/FileContents.hpp"
 #include "models/Files.hpp"
@@ -133,272 +134,251 @@ namespace disk::file {
         int moved_file_count = 0;
         int moved_folder_count = 0;
 
-        std::shared_ptr<drogon::orm::Transaction> txn;
-        try {
-            txn = co_await m_db_client->newTransactionCoro();
-
-            if (!file_ids.empty()) {
-                auto chunks = BatchUtils::Chunk(file_ids, DEFAULT_BATCH_CHUNK_SIZE);
-                for (const auto& chunk : chunks) {
-                    if (chunk.empty()) {
-                        continue;
-                    }
-
-                    auto fetched_files = co_await m_file_repository.FetchOwnedFilesByIds(
-                        txn,
-                        chunk,
-                        user_id
-                    );
-
-                    std::unordered_map<uint64_t, std::pair<uint64_t, std::string>> files;
-                    files.reserve(fetched_files.size());
-                    std::vector<std::string> candidate_names;
-                    candidate_names.reserve(fetched_files.size());
-                    for (const auto& file : fetched_files) {
-                        auto id = file.getValueOfId();
-                        auto folder_id = file.getValueOfFolderId();
-                        auto name = file.getValueOfName();
-                        files[id] = { folder_id, name };
-                        if (folder_id != request.target_folder_id) {
-                            candidate_names.push_back(name);
-                        }
-                    }
-
-                    auto occupied_names = co_await utils::QueryOccupiedNames(
-                        txn,
-                        request.target_folder_id,
-                        user_id,
-                        candidate_names
-                    );
-
-                    std::unordered_map<uint64_t, int> source_deltas;
-                    for (const auto file_id : chunk) {
-                        auto it = files.find(file_id);
-                        if (it == files.end()) {
-                            Logger::Warn() << "File not found or no permission, skipping move: file_id="
-                                           << file_id;
+        TransactionRunner transaction_runner(
+            m_db_client,
+            ErrorInfo(ErrorCode::InternalError, "Failed to move items")
+        );
+        auto transaction_result = co_await transaction_runner.Run(
+            [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                if (!file_ids.empty()) {
+                    auto chunks = BatchUtils::Chunk(file_ids, DEFAULT_BATCH_CHUNK_SIZE);
+                    for (const auto& chunk : chunks) {
+                        if (chunk.empty()) {
                             continue;
                         }
 
-                        auto source_folder_id = it->second.first;
-                        const auto& name = it->second.second;
-                        if (source_folder_id == request.target_folder_id) {
+                        auto fetched_files = co_await m_file_repository.FetchOwnedFilesByIds(
+                            transaction,
+                            chunk,
+                            user_id
+                        );
+
+                        std::unordered_map<uint64_t, std::pair<uint64_t, std::string>> files;
+                        files.reserve(fetched_files.size());
+                        std::vector<std::string> candidate_names;
+                        candidate_names.reserve(fetched_files.size());
+                        for (const auto& file : fetched_files) {
+                            auto id = file.getValueOfId();
+                            auto folder_id = file.getValueOfFolderId();
+                            auto name = file.getValueOfName();
+                            files[id] = { folder_id, name };
+                            if (folder_id != request.target_folder_id) {
+                                candidate_names.push_back(name);
+                            }
+                        }
+
+                        auto occupied_names = co_await utils::QueryOccupiedNames(
+                            transaction,
+                            request.target_folder_id,
+                            user_id,
+                            candidate_names
+                        );
+
+                        std::unordered_map<uint64_t, int> source_deltas;
+                        for (const auto file_id : chunk) {
+                            auto it = files.find(file_id);
+                            if (it == files.end()) {
+                                Logger::Warn() << "File not found or no permission, skipping move: file_id="
+                                               << file_id;
+                                continue;
+                            }
+
+                            auto source_folder_id = it->second.first;
+                            const auto& name = it->second.second;
+                            if (source_folder_id == request.target_folder_id) {
+                                ++moved_file_count;
+                                continue;
+                            }
+
+                            if (occupied_names.contains(name)) {
+                                Logger::Warn() << "Target folder already has file with same name, skipping: "
+                                               << name;
+                                continue;
+                            }
+                            occupied_names.insert(name);
+
+                            auto updated_at = trantor::Date::now();
+                            auto updated = co_await m_file_repository.UpdateFileLocation(
+                                transaction,
+                                file_id,
+                                user_id,
+                                request.target_folder_id,
+                                utils::BuildFilePath(target_location.path, name),
+                                updated_at
+                            );
+                            if (!updated) {
+                                continue;
+                            }
+
+                            if (source_folder_id > 0) {
+                                source_deltas[source_folder_id] -= 1;
+                            }
+                            if (request.target_folder_id > 0) {
+                                source_deltas[request.target_folder_id] += 1;
+                            }
                             ++moved_file_count;
-                            continue;
                         }
 
-                        if (occupied_names.contains(name)) {
-                            Logger::Warn() << "Target folder already has file with same name, skipping: "
-                                           << name;
-                            continue;
+                        for (const auto& [folder_id, delta] : source_deltas) {
+                            if (delta == 0) {
+                                continue;
+                            }
+                            co_await m_folder_repository.ApplyItemCountDelta(
+                                transaction,
+                                folder_id,
+                                user_id,
+                                delta,
+                                trantor::Date::now()
+                            );
                         }
-                        occupied_names.insert(name);
-
-                        auto updated_at = trantor::Date::now();
-                        auto updated = co_await m_file_repository.UpdateFileLocation(
-                            txn,
-                            file_id,
-                            user_id,
-                            request.target_folder_id,
-                            utils::BuildFilePath(target_location.path, name),
-                            updated_at
-                        );
-                        if (!updated) {
-                            continue;
-                        }
-
-                        if (source_folder_id > 0) {
-                            source_deltas[source_folder_id] -= 1;
-                        }
-                        if (request.target_folder_id > 0) {
-                            source_deltas[request.target_folder_id] += 1;
-                        }
-                        ++moved_file_count;
-                    }
-
-                    for (const auto& [folder_id, delta] : source_deltas) {
-                        if (delta == 0) {
-                            continue;
-                        }
-                        co_await m_folder_repository.ApplyItemCountDelta(
-                            txn,
-                            folder_id,
-                            user_id,
-                            delta,
-                            trantor::Date::now()
-                        );
-                    }
-                }
-            }
-
-            std::unordered_map<uint64_t, utils::FolderDeletePlan> folder_plans =
-                co_await m_folder_repository.FetchBatchFolderDeletePlans(txn, folder_ids, user_id);
-
-            auto top_level_folder_ids = utils::FilterCoveredFolderIds(folder_ids, folder_plans);
-            std::vector<std::string> folder_candidate_names;
-            folder_candidate_names.reserve(top_level_folder_ids.size());
-            for (const auto folder_id : top_level_folder_ids) {
-                auto plan_it = folder_plans.find(folder_id);
-                if (plan_it == folder_plans.end()) {
-                    continue;
-                }
-                if (plan_it->second.root.getValueOfParentId() != request.target_folder_id) {
-                    folder_candidate_names.push_back(plan_it->second.root.getValueOfName());
-                }
-            }
-
-            auto occupied_folder_names = co_await utils::QueryOccupiedFolderNames(
-                txn,
-                request.target_folder_id,
-                user_id,
-                folder_candidate_names
-            );
-
-            for (const auto folder_id : top_level_folder_ids) {
-                auto plan_it = folder_plans.find(folder_id);
-                if (plan_it == folder_plans.end()) {
-                    Logger::Warn() << "Folder not found or no permission, skipping move: folder_id="
-                                   << folder_id;
-                    continue;
-                }
-
-                const auto& plan = plan_it->second;
-                const auto& root = plan.root;
-                auto old_parent_id = root.getValueOfParentId();
-                const auto& folder_name = root.getValueOfName();
-
-                auto moving_into_self_or_descendant = std::any_of(
-                    plan.folders.begin(),
-                    plan.folders.end(),
-                    [&](const Folders& folder) {
-                        return folder.getValueOfId() == request.target_folder_id;
-                    }
-                );
-                if (moving_into_self_or_descendant) {
-                    throw utils::ServiceValidationException(ErrorInfo(
-                        ErrorCode::ValidationFailed,
-                        "Cannot move a folder into itself or its descendant"
-                    ));
-                }
-
-                if (old_parent_id == request.target_folder_id) {
-                    ++moved_folder_count;
-                    continue;
-                }
-
-                if (occupied_folder_names.contains(folder_name)) {
-                    Logger::Warn() << "Target folder already has folder with same name, skipping: "
-                                   << folder_name;
-                    continue;
-                }
-                occupied_folder_names.insert(folder_name);
-
-                auto old_prefix = root.getValueOfPath();
-                auto new_prefix = utils::BuildFolderPath(target_location.path, folder_name);
-                auto depth_delta = static_cast<int>(target_location.depth) + 1 -
-                                   static_cast<int>(root.getValueOfDepth());
-
-                for (const auto& folder : plan.folders) {
-                    auto old_path = folder.getValueOfPath();
-                    auto new_path = new_prefix + old_path.substr(old_prefix.size());
-                    if (folder.getValueOfId() == root.getValueOfId()) {
-                        co_await m_folder_repository.UpdateFolderLocationForMove(
-                            txn,
-                            folder.getValueOfId(),
-                            user_id,
-                            request.target_folder_id,
-                            new_path,
-                            depth_delta,
-                            trantor::Date::now()
-                        );
-                    } else {
-                        co_await m_folder_repository.UpdateFolderPathForMove(
-                            txn,
-                            folder.getValueOfId(),
-                            user_id,
-                            new_path,
-                            depth_delta,
-                            trantor::Date::now()
-                        );
                     }
                 }
 
-                std::unordered_map<uint64_t, std::string> folder_paths;
-                folder_paths.reserve(plan.folders.size());
-                for (const auto& folder : plan.folders) {
-                    auto old_path = folder.getValueOfPath();
-                    folder_paths[folder.getValueOfId()] = new_prefix + old_path.substr(old_prefix.size());
-                }
-                for (const auto& file : plan.files) {
-                    auto path_it = folder_paths.find(file.getValueOfFolderId());
-                    if (path_it == folder_paths.end()) {
+                std::unordered_map<uint64_t, utils::FolderDeletePlan> folder_plans =
+                    co_await m_folder_repository.FetchBatchFolderDeletePlans(transaction, folder_ids, user_id);
+
+                auto top_level_folder_ids = utils::FilterCoveredFolderIds(folder_ids, folder_plans);
+                std::vector<std::string> folder_candidate_names;
+                folder_candidate_names.reserve(top_level_folder_ids.size());
+                for (const auto folder_id : top_level_folder_ids) {
+                    auto plan_it = folder_plans.find(folder_id);
+                    if (plan_it == folder_plans.end()) {
                         continue;
                     }
-                    co_await m_file_repository.UpdateFilePath(
-                        txn,
-                        file.getValueOfId(),
-                        user_id,
-                        utils::BuildFilePath(path_it->second, file.getValueOfName()),
-                        trantor::Date::now()
-                    );
+                    if (plan_it->second.root.getValueOfParentId() != request.target_folder_id) {
+                        folder_candidate_names.push_back(plan_it->second.root.getValueOfName());
+                    }
                 }
 
-                if (old_parent_id > 0) {
-                    co_await m_folder_repository.ApplyItemCountDelta(
-                        txn,
-                        old_parent_id,
-                        user_id,
-                        -1,
-                        trantor::Date::now()
+                auto occupied_folder_names = co_await utils::QueryOccupiedFolderNames(
+                    transaction,
+                    request.target_folder_id,
+                    user_id,
+                    folder_candidate_names
+                );
+
+                for (const auto folder_id : top_level_folder_ids) {
+                    auto plan_it = folder_plans.find(folder_id);
+                    if (plan_it == folder_plans.end()) {
+                        Logger::Warn() << "Folder not found or no permission, skipping move: folder_id="
+                                       << folder_id;
+                        continue;
+                    }
+
+                    const auto& plan = plan_it->second;
+                    const auto& root = plan.root;
+                    auto old_parent_id = root.getValueOfParentId();
+                    const auto& folder_name = root.getValueOfName();
+
+                    auto moving_into_self_or_descendant = std::any_of(
+                        plan.folders.begin(),
+                        plan.folders.end(),
+                        [&](const Folders& folder) {
+                            return folder.getValueOfId() == request.target_folder_id;
+                        }
                     );
-                }
-                if (request.target_folder_id > 0) {
-                    co_await m_folder_repository.ApplyItemCountDelta(
-                        txn,
-                        request.target_folder_id,
-                        user_id,
-                        1,
-                        trantor::Date::now()
-                    );
+                    if (moving_into_self_or_descendant) {
+                        co_return std::unexpected(ErrorInfo(
+                            ErrorCode::ValidationFailed,
+                            "Cannot move a folder into itself or its descendant"
+                        ));
+                    }
+
+                    if (old_parent_id == request.target_folder_id) {
+                        ++moved_folder_count;
+                        continue;
+                    }
+
+                    if (occupied_folder_names.contains(folder_name)) {
+                        Logger::Warn() << "Target folder already has folder with same name, skipping: "
+                                       << folder_name;
+                        continue;
+                    }
+                    occupied_folder_names.insert(folder_name);
+
+                    auto old_prefix = root.getValueOfPath();
+                    auto new_prefix = utils::BuildFolderPath(target_location.path, folder_name);
+                    auto depth_delta = static_cast<int>(target_location.depth) + 1 -
+                                       static_cast<int>(root.getValueOfDepth());
+
+                    for (const auto& folder : plan.folders) {
+                        auto old_path = folder.getValueOfPath();
+                        auto new_path = new_prefix + old_path.substr(old_prefix.size());
+                        if (folder.getValueOfId() == root.getValueOfId()) {
+                            co_await m_folder_repository.UpdateFolderLocationForMove(
+                                transaction,
+                                folder.getValueOfId(),
+                                user_id,
+                                request.target_folder_id,
+                                new_path,
+                                depth_delta,
+                                trantor::Date::now()
+                            );
+                        } else {
+                            co_await m_folder_repository.UpdateFolderPathForMove(
+                                transaction,
+                                folder.getValueOfId(),
+                                user_id,
+                                new_path,
+                                depth_delta,
+                                trantor::Date::now()
+                            );
+                        }
+                    }
+
+                    std::unordered_map<uint64_t, std::string> folder_paths;
+                    folder_paths.reserve(plan.folders.size());
+                    for (const auto& folder : plan.folders) {
+                        auto old_path = folder.getValueOfPath();
+                        folder_paths[folder.getValueOfId()] = new_prefix + old_path.substr(old_prefix.size());
+                    }
+                    for (const auto& file : plan.files) {
+                        auto path_it = folder_paths.find(file.getValueOfFolderId());
+                        if (path_it == folder_paths.end()) {
+                            continue;
+                        }
+                        co_await m_file_repository.UpdateFilePath(
+                            transaction,
+                            file.getValueOfId(),
+                            user_id,
+                            utils::BuildFilePath(path_it->second, file.getValueOfName()),
+                            trantor::Date::now()
+                        );
+                    }
+
+                    if (old_parent_id > 0) {
+                        co_await m_folder_repository.ApplyItemCountDelta(
+                            transaction,
+                            old_parent_id,
+                            user_id,
+                            -1,
+                            trantor::Date::now()
+                        );
+                    }
+                    if (request.target_folder_id > 0) {
+                        co_await m_folder_repository.ApplyItemCountDelta(
+                            transaction,
+                            request.target_folder_id,
+                            user_id,
+                            1,
+                            trantor::Date::now()
+                        );
+                    }
+
+                    ++moved_folder_count;
                 }
 
-                ++moved_folder_count;
+                co_return {};
             }
-        } catch (const utils::ServiceValidationException& e) {
-            if (txn) {
-                try {
-                    txn->rollback();
-                } catch (const std::exception& rb_e) {
-                    Logger::Error() << "Transaction rollback failed: " << rb_e.what();
-                }
-            }
-            co_return std::unexpected(e.error);
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Move transaction failed (DB): " << e.base().what();
-            if (txn) {
-                try {
-                    txn->rollback();
-                } catch (const std::exception& rb_e) {
-                    Logger::Error() << "Transaction rollback failed: " << rb_e.what();
-                }
-            }
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to move items"));
-        } catch (const std::exception& e) {
-            Logger::Error() << "Move transaction failed: " << e.what();
-            if (txn) {
-                try {
-                    txn->rollback();
-                } catch (const std::exception& rb_e) {
-                    Logger::Error() << "Transaction rollback failed: " << rb_e.what();
-                }
-            }
-            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to move items"));
+        );
+        if (!transaction_result) {
+            co_return std::unexpected(transaction_result.error());
         }
 
         Logger::Info() << "Move completed: moved_file_count=" << moved_file_count
                        << ", moved_folder_count=" << moved_folder_count;
 
-        /// Invalidate file list cache for the target folder
+        /// Preserve existing target-folder-only file list cache invalidation after successful move.
         co_await InvalidateFileListCache(user_id, { request.target_folder_id });
 
         MoveResponse response;

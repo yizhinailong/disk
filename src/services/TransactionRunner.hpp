@@ -29,8 +29,12 @@ namespace disk::file {
      */
     class TransactionRunner {
     public:
-        explicit TransactionRunner(drogon::orm::DbClientPtr db_client)
-            : m_db_client(std::move(db_client)) {
+        explicit TransactionRunner(
+            drogon::orm::DbClientPtr db_client,
+            ErrorInfo default_error = ErrorInfo(ErrorCode::InternalError)
+        )
+            : m_db_client(std::move(db_client)),
+              m_default_error(std::move(default_error)) {
         }
 
         template <typename Func>
@@ -48,11 +52,11 @@ namespace disk::file {
             } catch (const drogon::orm::DrogonDbException& e) {
                 rollbackQuietly(transaction);
                 Logger::Error() << "Database transaction failed: " << e.base().what();
-                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError));
+                co_return std::unexpected(m_default_error);
             } catch (const std::exception& e) {
                 rollbackQuietly(transaction);
                 Logger::Error() << "Database transaction failed: " << e.what();
-                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError));
+                co_return std::unexpected(m_default_error);
             }
         }
 
@@ -70,6 +74,7 @@ namespace disk::file {
         }
 
         drogon::orm::DbClientPtr m_db_client;
+        ErrorInfo m_default_error;
     };
 
-} ///< namespace disk::file
+} // namespace disk::file
