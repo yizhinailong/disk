@@ -281,9 +281,11 @@ Completion status: closed by `fix(upload): guard finalization compensation`.
 
 ## 5.4 Migrate delete/trash transaction boundary
 
-- [ ] Wrap move-to-trash record creation, active row removal, share cleanup, and cache invalidation in a clear transaction boundary.
-- [ ] Keep permanent deletion and blob deletion compensation explicit.
-- [ ] Ensure storage accounting and ref-count changes occur only at the intended lifecycle stage.
+Completion status: closed by `refactor(trash): migrate delete transaction boundary`.
+
+- [x] Wrap move-to-trash record creation, active row removal, share cleanup, and cache invalidation in a clear transaction boundary.
+- [x] Keep permanent deletion and blob deletion compensation explicit.
+- [x] Ensure storage accounting and ref-count changes occur only at the intended lifecycle stage.
 
 ## 5.5 Review exception-to-error mapping
 
