@@ -36,6 +36,20 @@
 
 namespace disk::trash {
 
+    struct MoveToTrashRequest {
+        std::vector<uint64_t> file_ids;
+        std::vector<uint64_t> folder_ids;
+    };
+
+    struct MoveToTrashResult {
+        int deleted_count{ 0 };
+        int deleted_file_count{ 0 };
+        int deleted_folder_count{ 0 };
+        std::vector<uint64_t> removed_file_ids;
+        std::vector<uint64_t> removed_folder_ids;
+        std::vector<uint64_t> affected_folder_ids;
+    };
+
     /**
      * @brief 回收站服务类
      *
@@ -77,6 +91,10 @@ namespace disk::trash {
             const std::vector<disk::file::utils::TrashInsertItem>& trash_items,
             uint64_t user_id
         ) const -> drogon::Task<bool>;
+
+        [[nodiscard]]
+        auto MoveToTrash(MoveToTrashRequest request, uint64_t user_id)
+            -> drogon::Task<Result<MoveToTrashResult>>;
 
         [[nodiscard]]
         auto CleanupExpiredTrashItems(int fetch_batch_size, int max_batches_per_run)
@@ -183,6 +201,19 @@ namespace disk::trash {
             int verified_count{ 0 };
             int deleted_count{ 0 };
         };
+
+        struct ShareCleanupStats {
+            int deleted_file_share_links{ 0 };
+            int deleted_folder_share_links{ 0 };
+            int cancelled_empty_shares{ 0 };
+        };
+
+        [[nodiscard]]
+        auto CleanupShareLinksForMovedItems(
+            const drogon::orm::DbClientPtr& client,
+            const std::vector<uint64_t>& file_ids,
+            const std::vector<uint64_t>& folder_ids
+        ) const -> drogon::Task<ShareCleanupStats>;
 
         [[nodiscard]]
         auto PermanentlyDeleteTrashItems(
