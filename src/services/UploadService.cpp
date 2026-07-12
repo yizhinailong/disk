@@ -234,22 +234,15 @@ namespace disk::file {
                 const auto& task_id = task.getValueOfId();
 
                 if (disk::upload::IsExpired(task.getValueOfExpiresAt(), trantor::Date::now())) {
-                    Logger::Info() << "Expired upload task found, discarding: upload_id=" << task_id;
+                    Logger::Info() << "Expired upload task found, expiring through lifecycle: upload_id=" << task_id;
                     InvalidateUploadTaskCache(task_id);
 
-                    try {
-                        co_await m_db_client->execSqlCoro(
-                            "DELETE FROM upload_tasks WHERE id = $1 AND status = $2",
-                            task_id,
-                            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
-                        );
-                    } catch (const drogon::orm::DrogonDbException& e) {
-                        Logger::Warn() << "Failed to delete expired upload task: " << e.base().what();
-                    }
-
-                    auto cleanup_result = co_await m_storage->CleanupTemp(task_id);
-                    if (!cleanup_result) {
-                        Logger::Warn() << "Failed to cleanup temp for expired task: upload_id=" << task_id;
+                    disk::upload::UploadLifecycleService lifecycle_service(m_db_client, m_storage);
+                    auto expire_result = co_await lifecycle_service.ExpireInProgressUpload(task_id);
+                    if (!expire_result) {
+                        Logger::Error() << "Failed to expire existing upload task during init: upload_id="
+                                  << task_id << ", error=" << expire_result.error().message;
+                        co_return std::unexpected(expire_result.error());
                     }
                 } else {
                     Logger::Debug() << "Resume upload check successful: upload_id=" << task_id;

@@ -68,21 +68,43 @@ namespace disk::quota {
         uint64_t user_id,
         uint64_t bytes
     ) const -> drogon::Task<void> {
+        auto result = co_await ReleaseReservedStorageChecked(client, user_id, bytes);
+        if (!result) {
+            Logger::Error() << "Failed to release reserved quota: " << result.error().message;
+        }
+    }
+
+    auto QuotaService::ReleaseReservedStorageChecked(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t user_id,
+        uint64_t bytes
+    ) const -> drogon::Task<Result<void>> {
         if (bytes == 0) {
-            co_return;
+            co_return {};
         }
 
         try {
-            co_await client->execSqlCoro(
+            auto result = co_await client->execSqlCoro(
                 "UPDATE users SET storage_reserved = GREATEST(storage_reserved - $1, 0) WHERE id = $2",
                 bytes,
                 user_id
             );
 
+            if (result.affectedRows() == 0) {
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::InternalError,
+                    "Failed to release reserved quota"
+                ));
+            }
+
             Logger::Debug() << "Reserved quota released: user_id=" << user_id
                       << ", bytes=" << bytes;
+            co_return {};
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Error() << "Failed to release reserved quota: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to release reserved quota")
+            );
         }
     }
 

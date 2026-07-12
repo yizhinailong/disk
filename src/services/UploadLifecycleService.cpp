@@ -9,15 +9,13 @@
 
 #include "UploadLifecycleService.hpp"
 
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include "FileServiceUtils.hpp"
+#include "TransactionRunner.hpp"
 #include "services/QuotaService.hpp"
 #include "storage/IFileStorage.hpp"
 #include "storage/StorageMgr.hpp"
-#include "utils/BatchUtils.hpp"
 
 namespace disk::upload {
 
@@ -32,8 +30,8 @@ namespace disk::upload {
         Logger::Debug() << "UploadLifecycleService initialization completed";
     }
 
-    auto ToStorageValue(UploadTaskStatus status) -> int8_t {
-        return static_cast<int8_t>(status);
+    auto ToStorageValue(UploadTaskStatus status) -> int16_t {
+        return static_cast<int16_t>(status);
     }
 
     auto IsTerminalStatus(int status) -> bool {
@@ -164,9 +162,80 @@ namespace disk::upload {
         co_return {};
     }
 
+    auto UploadLifecycleService::ExpireInProgressUpload(const std::string& upload_id) const
+        -> drogon::Task<Result<bool>> {
+        bool expired = false;
+        std::string temp_path;
+        uint64_t user_id = 0;
+        uint64_t reserved_bytes = 0;
+
+        disk::file::TransactionRunner transaction_runner(m_db_client);
+        auto tx_result = co_await transaction_runner.Run(
+            [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                auto result = co_await transaction->execSqlCoro(
+                    "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = '任务过期' "
+                    "WHERE id = $2 AND status = $3 AND expires_at < NOW() "
+                    "RETURNING user_id, reserved_bytes, temp_path",
+                    ToStorageValue(UploadTaskStatus::Expired),
+                    upload_id,
+                    ToStorageValue(UploadTaskStatus::InProgress)
+                );
+
+                if (result.empty()) {
+                    co_return {};
+                }
+
+                const auto& row = result[0];
+                user_id = row["user_id"].as<uint64_t>();
+                reserved_bytes = row["reserved_bytes"].as<uint64_t>();
+                temp_path = row["temp_path"].as<std::string>();
+
+                disk::quota::QuotaService quota_service(m_db_client);
+                auto release_result = co_await quota_service.ReleaseReservedStorageChecked(
+                    transaction,
+                    user_id,
+                    reserved_bytes
+                );
+                if (!release_result) {
+                    co_return std::unexpected(release_result.error());
+                }
+
+                expired = true;
+                co_return {};
+            }
+        );
+
+        if (!tx_result) {
+            co_return std::unexpected(tx_result.error());
+        }
+
+        if (!expired) {
+            co_return false;
+        }
+
+        auto* storage = m_storage != nullptr ? m_storage : disk::storage::StorageMgr::GetStorage();
+        if (storage != nullptr) {
+            auto cleanup_result = co_await storage->CleanupTemp(upload_id);
+            if (!cleanup_result.has_value()) {
+                Logger::Warn() << "Failed to cleanup temp file for expired upload task: task_id="
+                         << upload_id << ", temp_path=" << temp_path
+                         << ", error_code=" << static_cast<uint32_t>(cleanup_result.error().code)
+                         << ", error_message=" << cleanup_result.error().message;
+            } else {
+                Logger::Debug() << "Temp file cleaned for expired upload task: task_id="
+                          << upload_id << ", temp_path=" << temp_path;
+            }
+        }
+
+        Logger::Debug() << "Expired upload task marked as expired: task_id=" << upload_id
+                  << ", user_id=" << user_id << ", reserved_bytes=" << reserved_bytes;
+
+        co_return true;
+    }
+
     auto UploadLifecycleService::ExpireInProgressUploads() const -> drogon::Task<Result<int>> {
         auto result = co_await m_db_client->execSqlCoro(
-            "SELECT id, temp_path, user_id, reserved_bytes FROM upload_tasks "
+            "SELECT id FROM upload_tasks "
             "WHERE status = $1 AND expires_at < NOW() "
             "LIMIT $2",
             ToStorageValue(UploadTaskStatus::InProgress),
@@ -174,67 +243,15 @@ namespace disk::upload {
         );
 
         int cleaned_count = 0;
-        auto* storage = m_storage != nullptr ? m_storage : disk::storage::StorageMgr::GetStorage();
-        std::unordered_map<uint64_t, uint64_t> user_reserved_delta;
-        std::vector<std::string> expired_task_ids;
-        expired_task_ids.reserve(result.size());
-
         for (const auto& row : result) {
             auto task_id = row["id"].as<std::string>();
-            auto temp_path = row["temp_path"].as<std::string>();
-            auto user_id = row["user_id"].as<uint64_t>();
-            auto reserved_bytes = row["reserved_bytes"].as<uint64_t>();
-
-            expired_task_ids.push_back(task_id);
-
-            if (storage != nullptr) {
-                auto delete_result = co_await storage->CleanupTemp(task_id);
-                if (!delete_result.has_value()) {
-                    Logger::Warn() << "Failed to cleanup temp file for expired upload task: task_id="
-                             << task_id << ", temp_path=" << temp_path
-                             << ", error_code=" << static_cast<uint32_t>(delete_result.error().code)
-                             << ", error_message=" << delete_result.error().message;
-                } else {
-                    Logger::Debug() << "Temp file cleaned for expired upload task: task_id="
-                              << task_id << ", temp_path=" << temp_path;
-                }
+            auto expire_result = co_await ExpireInProgressUpload(task_id);
+            if (!expire_result) {
+                co_return std::unexpected(expire_result.error());
             }
-
-            if (reserved_bytes > 0) {
-                user_reserved_delta[user_id] += reserved_bytes;
+            if (expire_result.value()) {
+                cleaned_count++;
             }
-
-            cleaned_count++;
-
-            Logger::Debug() << "Expired upload task marked as expired: task_id=" << task_id
-                      << ", user_id=" << user_id << ", reserved_bytes=" << reserved_bytes;
-        }
-
-        if (!expired_task_ids.empty()) {
-            auto placeholders = disk::utils::BatchUtils::BuildInPlaceholders(expired_task_ids);
-            auto expired_status_param = static_cast<int>(expired_task_ids.size()) + 1;
-            auto in_progress_status_param = static_cast<int>(expired_task_ids.size()) + 2;
-            co_await disk::file::utils::ExecSqlWithBindings(
-                m_db_client,
-                "UPDATE upload_tasks SET status = $" + std::to_string(expired_status_param) +
-                ", finalized_at = NOW(), fail_reason = '任务过期' "
-                "WHERE id IN (" + placeholders + ") AND status = $" +
-                std::to_string(in_progress_status_param),
-                [&](auto& binder) {
-                    for (const auto& task_id : expired_task_ids) {
-                        binder << task_id;
-                    }
-                    binder << ToStorageValue(UploadTaskStatus::Expired)
-                           << ToStorageValue(UploadTaskStatus::InProgress);
-                }
-            );
-        }
-
-        disk::quota::QuotaService quota_service(m_db_client);
-        for (const auto& [user_id, delta] : user_reserved_delta) {
-            co_await quota_service.ReleaseReservedStorage(m_db_client, user_id, delta);
-            Logger::Debug() << "Released reserved storage for expired upload tasks: user_id=" << user_id
-                      << ", released_bytes=" << delta;
         }
 
         co_return cleaned_count;

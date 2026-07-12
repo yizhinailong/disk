@@ -68,7 +68,7 @@ namespace disk::upload {
         std::optional<uint64_t> existing_content_id;
     };
 
-    [[nodiscard]] auto ToStorageValue(UploadTaskStatus status) -> int8_t;
+    [[nodiscard]] auto ToStorageValue(UploadTaskStatus status) -> int16_t;
     [[nodiscard]] auto IsTerminalStatus(int status) -> bool;
     [[nodiscard]] auto CanComplete(int current_status) -> bool;
     [[nodiscard]] auto CanCancelOrExpire(int current_status) -> bool;
@@ -108,6 +108,10 @@ namespace disk::upload {
             uint64_t user_id,
             uint64_t reserved_bytes
         ) const -> drogon::Task<Result<void>>;
+
+        [[nodiscard]]
+        auto ExpireInProgressUpload(const std::string& upload_id) const
+            -> drogon::Task<Result<bool>>;
 
         [[nodiscard]]
         auto ExpireInProgressUploads() const -> drogon::Task<Result<int>>;
