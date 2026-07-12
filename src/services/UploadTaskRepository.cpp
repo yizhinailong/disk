@@ -90,8 +90,26 @@ namespace disk::file {
     }
 
     auto UploadTaskRepository::Create(UploadTasks task) const -> drogon::Task<UploadTasks> {
-        CoroMapper<UploadTasks> mapper(m_db_client);
-        co_return co_await mapper.insert(std::move(task));
+        auto result = co_await m_db_client->execSqlCoro(
+            "INSERT INTO upload_tasks ("
+            "id, user_id, folder_id, filename, file_size, file_hash, chunk_size, total_chunks, "
+            "reserved_bytes, temp_path, status, expires_at"
+            ") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *",
+            task.getValueOfId(),
+            task.getValueOfUserId(),
+            task.getValueOfFolderId(),
+            task.getValueOfFilename(),
+            task.getValueOfFileSize(),
+            task.getValueOfFileHash(),
+            task.getValueOfChunkSize(),
+            task.getValueOfTotalChunks(),
+            task.getValueOfReservedBytes(),
+            task.getValueOfTempPath(),
+            static_cast<int16_t>(task.getValueOfStatus()),
+            task.getValueOfExpiresAt()
+        );
+
+        co_return UploadTasks(result[0], -1);
     }
 
     auto UploadTaskRepository::DeleteInProgressById(const std::string& upload_id) const

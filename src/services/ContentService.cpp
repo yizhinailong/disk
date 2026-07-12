@@ -111,17 +111,18 @@ namespace disk::content {
         const drogon::orm::DbClientPtr& client,
         const NewContent& content
     ) const -> drogon::Task<ContentMetadata> {
-        FileContents model;
-        model.setHashMd5(content.hash_md5);
-        model.setHashSha256(content.hash_sha256);
-        model.setSize(content.size);
-        model.setStoragePath(content.storage_path);
-        model.setMimeType(content.mime_type);
-        model.setRefCount(content.ref_count);
+        auto result = co_await client->execSqlCoro(
+            "INSERT INTO file_contents (hash_md5, hash_sha256, size, storage_path, mime_type, ref_count) "
+            "VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+            content.hash_md5,
+            content.hash_sha256,
+            content.size,
+            content.storage_path,
+            content.mime_type,
+            content.ref_count
+        );
 
-        CoroMapper<FileContents> mapper(client);
-        auto inserted = co_await mapper.insert(model);
-        co_return ToMetadata(inserted);
+        co_return ToMetadata(FileContents(result[0], -1));
     }
 
     auto ContentService::IncrementRefCount(
@@ -136,8 +137,8 @@ namespace disk::content {
         try {
             auto result = co_await client->execSqlCoro(
                 "UPDATE file_contents SET ref_count = ref_count + $1 WHERE id = $2",
-                increment,
-                content_id
+                static_cast<int32_t>(increment),
+                static_cast<int64_t>(content_id)
             );
             if (result.affectedRows() == 0) {
                 co_return std::unexpected(

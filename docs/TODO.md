@@ -153,16 +153,16 @@ Decision status: fail-open for all current rate-limit families for now, recorded
 
 ## 3.1 Finish upload lifecycle extraction
 
-`UploadLifecycleService` already owns states, rule helpers, cancel, and expiration. Remaining work is to reduce `UploadService` orchestration responsibility where it still owns too much lifecycle logic.
+Completion status: closed by `refactor(upload): extract upload lifecycle orchestration`.
 
-- [ ] Identify remaining upload lifecycle logic still embedded in `UploadService`.
-- [ ] Move init/resume/instant-upload orchestration behind explicit lifecycle methods where practical.
-- [ ] Move complete/finalize orchestration behind explicit lifecycle methods where practical.
-- [ ] Keep API response construction in controller/service boundary unchanged.
-- [ ] Keep storage promotion and database finalization compensation explicit.
-- [ ] Ensure DB failure after blob promotion still deletes promoted final blob.
-- [ ] Ensure temp cleanup remains idempotent.
-- [ ] Preserve upload task cache behavior or document any intentional change.
+- [x] Identify remaining upload lifecycle logic still embedded in `UploadService`.
+- [x] Move init/resume/instant-upload orchestration behind explicit lifecycle methods where practical.
+- [x] Move complete/finalize orchestration behind explicit lifecycle methods where practical.
+- [x] Keep API response construction in controller/service boundary unchanged.
+- [x] Keep storage promotion and database finalization compensation explicit.
+- [x] Ensure DB failure after blob promotion still deletes promoted final blob.
+- [x] Ensure temp cleanup remains idempotent.
+- [x] Preserve upload task cache behavior or document any intentional change.
 
 ## 3.2 Fix or formalize expired-task handling during init
 

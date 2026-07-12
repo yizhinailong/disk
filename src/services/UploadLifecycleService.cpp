@@ -79,6 +79,37 @@ namespace disk::upload {
                 co_return false;
             }
         }
+
+        [[nodiscard]] auto InsertFileRecord(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t user_id,
+            uint64_t content_id,
+            uint64_t folder_id,
+            const std::string& filename,
+            const std::string& extension,
+            uint64_t size,
+            const std::string& mime_type,
+            const std::string& path
+        ) -> drogon::Task<drogon_model::disk::Files> {
+            auto result = co_await client->execSqlCoro(
+                "INSERT INTO files ("
+                "user_id, content_id, folder_id, name, extension, size, mime_type, path, "
+                "is_favorite, download_count"
+                ") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *",
+                user_id,
+                content_id,
+                folder_id,
+                filename,
+                extension,
+                size,
+                mime_type,
+                path,
+                static_cast<int16_t>(0),
+                static_cast<uint32_t>(0)
+            );
+
+            co_return drogon_model::disk::Files(result[0], -1);
+        }
     }
 
     UploadLifecycleService::UploadLifecycleService(
@@ -274,19 +305,17 @@ namespace disk::upload {
                 }
 
                 drogon_model::disk::Files file;
-                file.setUserId(command.user_id);
-                file.setContentId(content_id);
-                file.setFolderId(command.parent_id);
-                file.setName(command.filename);
-                file.setExtension(ExtractExtension(command.filename));
-                file.setSize(command.file_size);
-                file.setMimeType(content_mime_type);
-                file.setPath(disk::file::utils::BuildFilePath(parent_location_result->path, command.filename));
-                file.setIsFavorite(0);
-                file.setDownloadCount(0);
-
-                drogon::orm::CoroMapper<drogon_model::disk::Files> file_mapper(transaction);
-                file = co_await file_mapper.insert(file);
+                file = co_await InsertFileRecord(
+                    transaction,
+                    command.user_id,
+                    content_id,
+                    command.parent_id,
+                    command.filename,
+                    ExtractExtension(command.filename),
+                    command.file_size,
+                    content_mime_type,
+                    disk::file::utils::BuildFilePath(parent_location_result->path, command.filename)
+                );
 
                 InitUploadOutcome outcome;
                 outcome.instant_upload = true;
@@ -608,7 +637,7 @@ namespace disk::upload {
                 );
 
                 if (!result.empty()) {
-                    lookup.filename_exists = result[0]["filename_exists"].as<int>() != 0;
+                    lookup.filename_exists = result[0]["filename_exists"].as<bool>();
                 }
 
                 co_return lookup;
@@ -700,7 +729,6 @@ namespace disk::upload {
         disk::file::TransactionRunner transaction_runner(m_db_client);
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
-                drogon::orm::CoroMapper<drogon_model::disk::Files> file_mapper(transaction);
                 disk::content::ContentService content_service(m_db_client);
 
                 uint64_t content_id = 0;
@@ -734,18 +762,17 @@ namespace disk::upload {
                     co_return std::unexpected(parent_location_result.error());
                 }
 
-                file.setUserId(command.user_id);
-                file.setContentId(content_id);
-                file.setFolderId(upload_task.getValueOfFolderId());
-                file.setName(upload_task.getValueOfFilename());
-                file.setExtension(ExtractExtension(upload_task.getValueOfFilename()));
-                file.setSize(upload_task.getValueOfFileSize());
-                file.setMimeType("");
-                file.setPath(disk::file::utils::BuildFilePath(parent_location_result->path, upload_task.getValueOfFilename()));
-                file.setIsFavorite(0);
-                file.setDownloadCount(0);
-
-                file = co_await file_mapper.insert(file);
+                file = co_await InsertFileRecord(
+                    transaction,
+                    command.user_id,
+                    content_id,
+                    upload_task.getValueOfFolderId(),
+                    upload_task.getValueOfFilename(),
+                    ExtractExtension(upload_task.getValueOfFilename()),
+                    upload_task.getValueOfFileSize(),
+                    "",
+                    disk::file::utils::BuildFilePath(parent_location_result->path, upload_task.getValueOfFilename())
+                );
 
                 disk::quota::QuotaService quota_service(m_db_client);
                 auto transfer_result = co_await quota_service.CommitReservedToUsed(
