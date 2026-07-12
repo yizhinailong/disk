@@ -93,8 +93,8 @@ namespace {
         auto PromoteToFinal(
             const std::filesystem::path& /*temp_path*/,
             const std::string& /*hash*/
-        ) -> drogon::Task<Result<std::filesystem::path>> override {
-            co_return m_temp_dir / "final";
+        ) -> drogon::Task<Result<disk::storage::PromoteResult>> override {
+            co_return disk::storage::PromoteResult{ .path = m_temp_dir / "final", .created = true };
         }
 
         auto OpenForRead(const std::filesystem::path& storage_path)

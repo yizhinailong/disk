@@ -24,6 +24,7 @@ from lib_py import (  # noqa: E402
     assert_equal,
     assert_numeric_delta,
     assert_path_absent,
+    assert_path_exists,
     check_server,
     cleanup,
     configured_chunk_size,
@@ -130,6 +131,17 @@ def upload_single_chunk(upload_id: str, payload: bytes) -> None:
 
 def complete_upload(upload_id: str) -> str:
     """Complete an upload and return the created file id."""
+    resp = complete_upload_raw(upload_id)
+    file_id = json_field(resp.text, "data.file.id")
+    if resp.status_code != 200 or json_field(resp.text, "code") != "0" or not file_id:
+        log_fail(f"{upload_id}: complete upload failed")
+        print(resp.text)
+        print_summary()
+    return file_id
+
+
+def complete_upload_raw(upload_id: str):
+    """Call complete upload and return the raw response without asserting success."""
     resp = fetch(
         "/api/file/upload/complete",
         method="POST",
@@ -137,12 +149,7 @@ def complete_upload(upload_id: str) -> str:
         json_body={"upload_id": upload_id},
     )
     save_evidence(f"{EVIDENCE_PREFIX}-{upload_id}-complete.json", resp.text)
-    file_id = json_field(resp.text, "data.file.id")
-    if resp.status_code != 200 or json_field(resp.text, "code") != "0" or not file_id:
-        log_fail(f"{upload_id}: complete upload failed")
-        print(resp.text)
-        print_summary()
-    return file_id
+    return resp
 
 
 def run_expired_cleanup() -> dict[str, int]:
@@ -242,6 +249,89 @@ def test_successful_chunked_upload_invariants() -> None:
     assert_path_absent("temp upload directory cleaned after success", upload_temp_dir(upload_id))
     assert_path_absent("assembled temp artifact cleaned after success", upload_temp_dir(upload_id).parent / f"{upload_id}.tmp")
     assert_equal("final blob path exists after success", final_blob_path(file_hash).exists(), True)
+
+
+def assert_failed_finalize_rolled_back(upload_id: str, filename: str, file_hash: str, quota_before_complete: dict[str, int]) -> None:
+    """Assert failed finalization left the DB-side finalize transaction uncommitted."""
+    assert_db_row_absent(
+        "failed finalize creates no logical file row",
+        "SELECT id FROM files WHERE user_id = %s AND name = %s",
+        (USER_ID, filename),
+    )
+    assert_db_row_absent(
+        "failed finalize creates no content row",
+        "SELECT id FROM file_contents WHERE hash_md5 = %s",
+        (file_hash,),
+    )
+    task = assert_upload_task(upload_id, 0)
+    assert_equal("failed finalize leaves finalized_at unset", task["finalized_at"], None)
+    assert_chunk_row_count(upload_id, 1)
+    quota_after_complete = user_quota()
+    assert_equal(
+        "failed finalize preserves reserved storage",
+        quota_after_complete["storage_reserved"],
+        quota_before_complete["storage_reserved"],
+    )
+    assert_equal(
+        "failed finalize preserves used storage",
+        quota_after_complete["storage_used"],
+        quota_before_complete["storage_used"],
+    )
+
+
+def test_db_failure_after_blob_promotion_compensates_created_blob() -> None:
+    """Verify a transaction failure after promotion deletes only the blob created by this finalize call."""
+    log_section("Finalize DB Failure Compensates Created Blob")
+    payload = f"safety-db-failure-created-{unique_name()}".encode()
+    filename = f"safety_db_failure_created_{unique_name()}.bin"
+
+    upload_id, file_hash = init_upload(filename, payload)
+    upload_single_chunk(upload_id, payload)
+    assert_chunk_row_count(upload_id, 1)
+    quota_before_complete = user_quota()
+    blob_path = final_blob_path(file_hash)
+    assert_path_absent("new-blob failure fixture starts without final blob", blob_path)
+
+    affected = execute(
+        "UPDATE upload_tasks SET folder_id = %s WHERE id = %s AND status = 0",
+        (9_223_372_036_854_000_000, upload_id),
+    )
+    assert_equal("new-blob failure fixture corrupts target folder", affected, 1)
+
+    resp = complete_upload_raw(upload_id)
+    assert_equal("new-blob finalize failure returns non-success code", json_field(resp.text, "code") != "0", True)
+    assert_failed_finalize_rolled_back(upload_id, filename, file_hash, quota_before_complete)
+    assert_path_absent("created final blob deleted after transaction failure", blob_path)
+
+
+def test_db_failure_after_promotion_preserves_preexisting_blob() -> None:
+    """Verify compensation does not delete a final blob that existed before promotion."""
+    log_section("Finalize DB Failure Preserves Preexisting Blob")
+    payload = f"safety-db-failure-reused-{unique_name()}".encode()
+    filename = f"safety_db_failure_reused_{unique_name()}.bin"
+    file_hash = md5_bytes(payload)
+    blob_path = final_blob_path(file_hash)
+
+    upload_id, _ = init_upload(filename, payload)
+    blob_path.parent.mkdir(parents=True, exist_ok=True)
+    blob_path.write_bytes(payload)
+    upload_single_chunk(upload_id, payload)
+    assert_chunk_row_count(upload_id, 1)
+    quota_before_complete = user_quota()
+    assert_path_exists("pre-existing final blob fixture is present", blob_path)
+
+    affected = execute(
+        "UPDATE upload_tasks SET folder_id = %s WHERE id = %s AND status = 0",
+        (9_223_372_036_854_000_001, upload_id),
+    )
+    assert_equal("pre-existing-blob failure fixture corrupts target folder", affected, 1)
+
+    resp = complete_upload_raw(upload_id)
+    assert_equal("pre-existing-blob finalize failure returns non-success code", json_field(resp.text, "code") != "0", True)
+    assert_failed_finalize_rolled_back(upload_id, filename, file_hash, quota_before_complete)
+    assert_path_exists("pre-existing final blob survives transaction failure", blob_path)
+    assert_equal("pre-existing final blob bytes unchanged", blob_path.read_bytes(), payload)
+    blob_path.unlink(missing_ok=True)
 
 
 def test_cancel_upload_invariants() -> None:
@@ -393,6 +483,8 @@ def main() -> None:
     log_info(f"Using user_id={USER_ID}, chunk_size={configured_chunk_size()}, base_url={BASE_URL}")
 
     test_successful_chunked_upload_invariants()
+    test_db_failure_after_blob_promotion_compensates_created_blob()
+    test_db_failure_after_promotion_preserves_preexisting_blob()
     test_cancel_upload_invariants()
     test_expired_upload_cleanup_invariants()
     test_init_upload_expires_existing_task_invariants()

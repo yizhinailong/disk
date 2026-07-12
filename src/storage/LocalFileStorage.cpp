@@ -425,13 +425,13 @@ namespace disk::storage {
     }
 
     auto LocalFileStorage::PromoteToFinal(const std::filesystem::path& temp_path, const std::string& hash)
-        -> drogon::Task<Result<std::filesystem::path>> {
+        -> drogon::Task<Result<PromoteResult>> {
         const auto final_path = GetFinalStoragePath(hash);
         const auto final_dir = final_path.parent_path();
 
         auto result = co_await RunBlockingFilesystemTask(
             m_worker_queue,
-            [temp_path, final_path, final_dir]() -> Result<std::filesystem::path> {
+            [temp_path, final_path, final_dir]() -> Result<PromoteResult> {
                 std::error_code ec;
                 std::filesystem::create_directories(final_dir, ec);
                 if (ec) {
@@ -442,13 +442,13 @@ namespace disk::storage {
 
                 if (std::filesystem::exists(final_path, ec)) {
                     std::filesystem::remove(temp_path, ec);
-                    return final_path;
+                    return PromoteResult{ .path = final_path, .created = false };
                 }
                 ec.clear();
 
                 std::filesystem::rename(temp_path, final_path, ec);
                 if (!ec) {
-                    return final_path;
+                    return PromoteResult{ .path = final_path, .created = true };
                 }
 
                 ec.clear();
@@ -471,7 +471,7 @@ namespace disk::storage {
                     );
                 }
 
-                return final_path;
+                return PromoteResult{ .path = final_path, .created = true };
             }
         );
 

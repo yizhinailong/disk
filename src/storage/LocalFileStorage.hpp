@@ -85,11 +85,11 @@ namespace disk::storage {
          * @brief 将临时文件移动到最终存储位置（哈希分片目录）
          * @param temp_path 临时文件路径
          * @param hash 文件哈希（如 MD5）
-         * @return 成功返回最终存储路径，失败返回错误信息
+         * @return 成功返回最终存储路径与创建状态，失败返回错误信息
          */
         [[nodiscard]]
         auto PromoteToFinal(const std::filesystem::path& temp_path, const std::string& hash)
-            -> drogon::Task<Result<std::filesystem::path>> override;
+            -> drogon::Task<Result<PromoteResult>> override;
 
         /**
          * @brief 打开文件读取句柄用于下载流（支持上层范围定位）

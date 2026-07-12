@@ -295,6 +295,63 @@ namespace disk::file {
             EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
         }
 
+        TEST_F(LocalFileStorageUploadConsistencyTest, PromoteToFinalReportsCreatedForNewBlob) {
+            const std::string upload_id = "promote-created";
+            const std::string content = "promote-created-content";
+            const auto hash = FileHashUtil::HashMd5(content);
+            const auto temp_path = AssembledPath(upload_id);
+
+            std::error_code ec;
+            std::filesystem::create_directories(m_temp_base, ec);
+            ASSERT_FALSE(ec);
+            std::ofstream output(temp_path, std::ios::binary);
+            output.write(content.data(), static_cast<std::streamsize>(content.size()));
+            output.close();
+            ASSERT_TRUE(output);
+
+            auto promote_result = drogon::sync_wait(m_storage->PromoteToFinal(temp_path, hash));
+
+            ASSERT_TRUE(promote_result.has_value());
+            EXPECT_TRUE(promote_result->created);
+            EXPECT_EQ(promote_result->path, m_storage->GetFinalStoragePath(hash));
+            EXPECT_FALSE(std::filesystem::exists(temp_path));
+            ASSERT_TRUE(std::filesystem::exists(promote_result->path));
+            EXPECT_EQ(ReadBinaryFile(promote_result->path), content);
+        }
+
+        TEST_F(LocalFileStorageUploadConsistencyTest, PromoteToFinalReportsReusedForPreexistingBlob) {
+            const std::string upload_id = "promote-reused";
+            const std::string existing_content = "pre-existing-final-blob";
+            const std::string temp_content = "temporary-upload-content";
+            const auto hash = FileHashUtil::HashMd5(temp_content);
+            const auto final_path = m_storage->GetFinalStoragePath(hash);
+            const auto temp_path = AssembledPath(upload_id);
+
+            std::error_code ec;
+            std::filesystem::create_directories(final_path.parent_path(), ec);
+            ASSERT_FALSE(ec);
+            std::ofstream final_output(final_path, std::ios::binary);
+            final_output.write(existing_content.data(), static_cast<std::streamsize>(existing_content.size()));
+            final_output.close();
+            ASSERT_TRUE(final_output);
+
+            std::filesystem::create_directories(m_temp_base, ec);
+            ASSERT_FALSE(ec);
+            std::ofstream temp_output(temp_path, std::ios::binary);
+            temp_output.write(temp_content.data(), static_cast<std::streamsize>(temp_content.size()));
+            temp_output.close();
+            ASSERT_TRUE(temp_output);
+
+            auto promote_result = drogon::sync_wait(m_storage->PromoteToFinal(temp_path, hash));
+
+            ASSERT_TRUE(promote_result.has_value());
+            EXPECT_FALSE(promote_result->created);
+            EXPECT_EQ(promote_result->path, final_path);
+            EXPECT_FALSE(std::filesystem::exists(temp_path));
+            ASSERT_TRUE(std::filesystem::exists(final_path));
+            EXPECT_EQ(ReadBinaryFile(final_path), existing_content);
+        }
+
         /// ==================== Fault Injection Scenario Tests (DB-dependent) ====================
 
         TEST(FileUploadConsistencyFaultInjection, DISABLED_ZoneBQuotaTransferFailureLeavesFreeStorageLeak) {
