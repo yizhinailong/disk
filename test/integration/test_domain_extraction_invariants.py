@@ -341,7 +341,12 @@ def test_instant_upload_ref_count_and_accounting() -> None:
 
     content_after_instant = content_row(content_id)
     assert_equal("instant upload increments ref_count", int(content_after_instant["ref_count"]), 2)
-    assert_equal("instant upload preserves storage_used", quota_after_instant["storage_used"], quota_before_instant["storage_used"])
+    assert_numeric_delta(
+        "instant upload increases used storage by logical file size",
+        quota_before_instant["storage_used"],
+        quota_after_instant["storage_used"],
+        len(payload),
+    )
     assert_equal("instant upload preserves storage_reserved", quota_after_instant["storage_reserved"], quota_before_instant["storage_reserved"])
     assert_path_exists("dedup final blob still exists", final_blob_path(file_hash))
 
