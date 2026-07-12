@@ -276,10 +276,12 @@ Completion status: closed by `fix(copy): migrate transaction boundary`.
 
 ## 5.3 Migrate move flow transaction boundary
 
-- [ ] Wrap file/folder move updates and item-count/path updates in a clear transaction boundary.
-- [ ] Preserve subtree path updates.
-- [ ] Preserve rejection of moving folder into itself or descendants.
-- [ ] Preserve cache invalidation behavior.
+Completion status: closed by `refactor(file): migrate move flow transaction boundary`.
+
+- [x] Wrap file/folder move updates and item-count/path updates in a clear transaction boundary.
+- [x] Preserve subtree path updates.
+- [x] Preserve rejection of moving folder into itself or descendants.
+- [x] Preserve cache invalidation behavior.
 
 ## 5.4 Migrate delete/trash transaction boundary
 
