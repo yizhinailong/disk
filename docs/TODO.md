@@ -227,11 +227,13 @@ Completion status: closed by `feat(upload): expand upload task repository` and `
 
 ## 4.3 Expand file/folder repositories
 
-- [ ] Add repository methods for common file ownership checks.
-- [ ] Add repository methods for folder ownership checks.
-- [ ] Add repository methods for file/folder move path updates.
-- [ ] Add repository methods for folder subtree queries where useful.
-- [ ] Keep complex recursive SQL visible and named.
+Completion status: closed by `refactor(file): extract file folder repository primitives`.
+
+- [x] Add repository methods for common file ownership checks.
+- [x] Add repository methods for folder ownership checks.
+- [x] Add repository methods for file/folder move path updates.
+- [x] Add repository methods for folder subtree queries where useful.
+- [x] Keep complex recursive SQL visible and named.
 
 ## 4.4 Expand content repository or consolidate into ContentService
 
