@@ -283,9 +283,11 @@ Initial `TransactionRunner` exists. Remaining work is to apply it consistently t
 
 ## 5.5 Review exception-to-error mapping
 
-- [ ] Ensure transaction failures map to existing public error shapes.
-- [ ] Avoid leaking database implementation details.
-- [ ] Preserve current response envelope shape.
+Completion status: closed by `fix(transaction): normalize failure error mapping`.
+
+- [x] Ensure transaction failures map to existing public error shapes.
+- [x] Avoid leaking database implementation details.
+- [x] Preserve current response envelope shape.
 
 ---
 
