@@ -184,37 +184,60 @@ namespace disk::quota {
         uint64_t user_id,
         int64_t delta
     ) const -> drogon::Task<void> {
+        auto result = co_await AdjustUsedStorageChecked(client, user_id, delta);
+        if (!result) {
+            Logger::Error() << "Failed to update storage usage: " << result.error().message;
+        }
+    }
+
+    auto QuotaService::AdjustUsedStorageChecked(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t user_id,
+        int64_t delta
+    ) const -> drogon::Task<Result<void>> {
         if (delta == 0) {
-            co_return;
+            co_return {};
         }
 
         try {
             if (delta > 0) {
+                auto bytes = static_cast<uint64_t>(delta);
                 auto result = co_await client->execSqlCoro(
                     "UPDATE users SET storage_used = storage_used + $1 "
                     "WHERE id = $2 AND storage_used + $3 <= storage_quota",
-                    static_cast<uint64_t>(delta),
+                    bytes,
                     user_id,
-                    static_cast<uint64_t>(delta)
+                    bytes
                 );
 
                 if (result.affectedRows() == 0) {
                     Logger::Warn() << "Skipped storage usage increment due to quota limit: user_id="
                              << user_id << ", delta=" << delta;
-                    co_return;
+                    co_return std::unexpected(ErrorInfo(ErrorCode::StorageQuotaExceeded));
                 }
             } else {
-                co_await client->execSqlCoro(
+                auto result = co_await client->execSqlCoro(
                     "UPDATE users SET storage_used = GREATEST(CAST(storage_used AS BIGINT) + $1, 0) "
                     "WHERE id = $2",
                     delta,
                     user_id
                 );
+
+                if (result.affectedRows() == 0) {
+                    co_return std::unexpected(ErrorInfo(
+                        ErrorCode::InternalError,
+                        "Failed to update storage usage"
+                    ));
+                }
             }
 
             Logger::Debug() << "Storage usage updated: user_id=" << user_id << ", delta=" << delta;
+            co_return {};
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Error() << "Failed to update storage usage: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to update storage usage")
+            );
         }
     }
 

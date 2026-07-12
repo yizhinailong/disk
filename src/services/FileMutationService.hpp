@@ -160,7 +160,7 @@ namespace disk::file {
          * @param user_id 用户 ID
          * @param target_folder_id 目标文件夹 ID
          * @param valid_items 待插入的文件列表
-         * @return drogon::Task<std::vector<std::pair<uint64_t, uint64_t>>> (old_id, new_id) 映射
+         * @return 成功返回 (old_id, new_id) 映射；失败返回错误并由调用方回滚事务
          */
         [[nodiscard]]
         auto InsertCopiedFiles(
@@ -168,7 +168,7 @@ namespace disk::file {
             uint64_t user_id,
             uint64_t target_folder_id,
             const std::vector<std::pair<uint64_t, const drogon_model::disk::Files*>>& valid_items
-        ) -> drogon::Task<std::vector<std::pair<uint64_t, uint64_t>>>;
+        ) -> drogon::Task<Result<std::vector<std::pair<uint64_t, uint64_t>>>>;
 
         [[nodiscard]]
         static auto ExtractExtension(const std::string& filename) -> std::string;
