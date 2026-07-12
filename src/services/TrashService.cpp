@@ -165,20 +165,6 @@ namespace disk::trash {
         return content_ids;
     }
 
-    auto DecrementContentRefs(
-        const drogon::orm::DbClientPtr& client,
-        const std::vector<uint64_t>& content_ids
-    ) -> drogon::Task<std::vector<disk::content::ZeroRefContent>> {
-        std::unordered_map<uint64_t, uint64_t> content_id_counts;
-        content_id_counts.reserve(content_ids.size());
-        for (const auto content_id : content_ids) {
-            content_id_counts[content_id] += 1;
-        }
-
-        disk::content::ContentService content_service(client);
-        co_return co_await content_service.DecrementRefCounts(client, content_id_counts);
-    }
-
     [[nodiscard]]
     auto ParallelDeletePaths(
         disk::storage::IFileStorage* storage,

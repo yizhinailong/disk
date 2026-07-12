@@ -154,16 +154,6 @@ namespace disk::file {
             std::chrono::steady_clock::time_point cache_expires_at;
         };
 
-        /**
-         * @brief 已有内容元数据
-         *
-         * 用于秒传/去重场景，缓存已存储文件内容的 ID 和 MIME 类型。
-         */
-        struct ExistingContentMetadata {
-            uint64_t id = 0;
-            std::string mime_type;
-        };
-
         static constexpr auto UPLOAD_TASK_CACHE_TTL = std::chrono::seconds(60);
         static constexpr double UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS = 60.0;
 
@@ -246,12 +236,6 @@ namespace disk::file {
             uint64_t user_id,
             int64_t delta
         ) -> drogon::Task<void>;
-
-        [[nodiscard]]
-        auto LookupExistingContentMetadata(
-            const drogon::orm::DbClientPtr& client,
-            const std::string& file_hash
-        ) const -> drogon::Task<std::optional<ExistingContentMetadata>>;
 
         [[nodiscard]]
         auto IsFilenameExists(

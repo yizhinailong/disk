@@ -155,7 +155,7 @@ namespace disk::file {
         /// Instant-upload path consistency note (optimized):
         ///  - ref_count increment + files insert now wrapped in newTransactionCoro().
         ///  - Transaction-aware IsFilenameExists used for duplicate check within transaction.
-        ///  - Redundant content re-read eliminated; mime_type from LookupExistingContentMetadata.
+        ///  - Redundant content re-read eliminated; mime_type comes from ContentService::FindByMd5.
         ///  - All-or-nothing consistency: rollback on any DB failure within the instant-upload branch.
 
         /// ==================== Upload DTO Contract Tests ====================
