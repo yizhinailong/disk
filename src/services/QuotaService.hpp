@@ -91,6 +91,13 @@ namespace disk::quota {
         ) const -> drogon::Task<void>;
 
         [[nodiscard]]
+        auto AdjustUsedStorageChecked(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t user_id,
+            int64_t delta
+        ) const -> drogon::Task<Result<void>>;
+
+        [[nodiscard]]
         auto GetReconciliation(uint64_t user_id) const
             -> drogon::Task<std::optional<AccountingReconciliation>>;
 

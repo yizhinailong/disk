@@ -160,22 +160,29 @@ namespace disk::content {
         const std::unordered_map<uint64_t, uint64_t>& increments,
         const std::unordered_set<uint64_t>& existing_content_ids
     ) const -> drogon::Task<std::unordered_set<uint64_t>> {
+        auto result = co_await IncrementRefCountsChecked(client, increments, existing_content_ids);
+        if (!result) {
+            Logger::Warn() << "File content batch ref_count increment failed: " << result.error().message;
+            co_return std::unordered_set<uint64_t>{};
+        }
+        co_return result.value();
+    }
+
+    auto ContentService::IncrementRefCountsChecked(
+        const drogon::orm::DbClientPtr& client,
+        const std::unordered_map<uint64_t, uint64_t>& increments,
+        const std::unordered_set<uint64_t>& existing_content_ids
+    ) const -> drogon::Task<Result<std::unordered_set<uint64_t>>> {
         std::string update_sql = "UPDATE file_contents SET ref_count = ref_count + CASE id";
-        std::vector<std::pair<uint64_t, uint64_t>> update_cases;
-        update_cases.reserve(increments.size());
         std::vector<uint64_t> valid_content_ids;
         valid_content_ids.reserve(increments.size());
 
-        int param_index = 1;
         for (const auto& [content_id, increment] : increments) {
             if (increment == 0 || !existing_content_ids.contains(content_id)) {
                 continue;
             }
-            update_cases.emplace_back(content_id, increment);
             valid_content_ids.push_back(content_id);
-            auto when_param = std::to_string(param_index++);
-            auto then_param = std::to_string(param_index++);
-            update_sql += " WHEN $" + when_param + " THEN $" + then_param;
+            update_sql += " WHEN " + std::to_string(content_id) + " THEN " + std::to_string(increment);
         }
 
         std::unordered_set<uint64_t> incremented_ids;
@@ -189,20 +196,22 @@ namespace disk::content {
                       BatchUtils::BuildSafeNumericInClause(valid_content_ids) + ")";
 
         try {
-            co_await disk::file::utils::ExecSqlWithBindings(
-                client,
-                update_sql,
-                [&](auto& binder) {
-                    for (const auto& [content_id, increment] : update_cases) {
-                        binder << content_id << increment;
-                    }
-                }
-            );
+            auto result = co_await client->execSqlCoro(update_sql);
+            if (result.affectedRows() != valid_content_ids.size()) {
+                Logger::Warn() << "File content batch ref_count increment affected unexpected rows: expected="
+                               << valid_content_ids.size() << ", actual=" << result.affectedRows();
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to update file content reference counts")
+                );
+            }
             for (const auto id : valid_content_ids) {
                 incremented_ids.insert(id);
             }
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Warn() << "File content batch ref_count increment failed: " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to update file content reference counts")
+            );
         }
 
         co_return incremented_ids;

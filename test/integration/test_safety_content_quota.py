@@ -182,19 +182,24 @@ def create_folder(name: str, parent_id: int = 0) -> int:
 
 def copy_file(file_id: int, target_folder_id: int = 0) -> list[dict[str, int]]:
     """Copy a file and return new_files mappings."""
+    data = copy_items([file_id], [], target_folder_id)
+    return data.get("new_files", [])
+
+
+def copy_items(file_ids: list[int], folder_ids: list[int], target_folder_id: int = 0) -> dict[str, object]:
+    """Copy files/folders and return response data."""
     resp = fetch(
         "/api/file/copy",
         method="POST",
         headers=auth_headers(),
-        json_body={"file_ids": [file_id], "folder_ids": [], "target_folder_id": target_folder_id},
+        json_body={"file_ids": file_ids, "folder_ids": folder_ids, "target_folder_id": target_folder_id},
     )
-    save_evidence(f"{EVIDENCE_PREFIX}-copy-{file_id}.json", resp.text)
+    save_evidence(f"{EVIDENCE_PREFIX}-copy-{unique_name()}.json", resp.text)
     if resp.status_code != 200 or json_field(resp.text, "code") != "0":
-        log_fail(f"copy file failed: file_id={file_id}")
+        log_fail(f"copy items failed: file_ids={file_ids}, folder_ids={folder_ids}")
         print(resp.text)
         print_summary()
-    data = json.loads(resp.text)
-    return data.get("data", {}).get("new_files", [])
+    return json.loads(resp.text).get("data", {})
 
 
 def delete_file_to_trash(file_id: int) -> int:
@@ -734,6 +739,7 @@ def test_copy_quota_rejection_no_side_effects() -> None:
     before_file_count = int(scalar("SELECT COUNT(*) FROM files WHERE user_id = %s", (USER_ID,)) or 0)
 
     execute("UPDATE users SET storage_used = storage_quota WHERE id = %s", (USER_ID,))
+    saturated = user_quota()
     resp = fetch(
         "/api/file/copy",
         method="POST",
@@ -741,6 +747,7 @@ def test_copy_quota_rejection_no_side_effects() -> None:
         json_body={"file_ids": [source_file_id], "folder_ids": [], "target_folder_id": 0},
     )
     save_evidence(f"{EVIDENCE_PREFIX}-copy-quota-reject.json", resp.text)
+    quota_after_reject = user_quota()
     execute(
         "UPDATE users SET storage_used = %s, storage_reserved = %s, storage_quota = %s WHERE id = %s",
         (original["storage_used"], original["storage_reserved"], original["storage_quota"], USER_ID),
@@ -751,6 +758,70 @@ def test_copy_quota_rejection_no_side_effects() -> None:
     assert_equal("copy quota rejection returns error", json_field(resp.text, "code") != "0", True)
     assert_equal("copy quota rejection creates no files", after_file_count, before_file_count)
     assert_equal("copy quota rejection leaves ref_count unchanged", after_ref, before_ref)
+    assert_equal("copy quota rejection leaves saturated used unchanged", quota_after_reject["storage_used"], saturated["storage_used"])
+
+
+def test_copy_conflict_releases_quota_and_refs_only_successes() -> None:
+    """Verify conflict skips release pre-consumed copy quota and avoid ref-count drift."""
+    log_section("Copy Conflict Releases Quota")
+    conflict_payload = f"copy-conflict-{unique_name()}".encode()
+    copied_payload = f"copy-no-conflict-{unique_name()}".encode()
+    conflict_name = f"safety_copy_conflict_{unique_name()}.bin"
+    copied_name = f"safety_copy_ok_{unique_name()}.bin"
+    conflict_file_id = upload_file(conflict_name, conflict_payload)
+    copied_file_id = upload_file(copied_name, copied_payload)
+    conflict_content_id = int(file_row(conflict_file_id)["content_id"])
+    copied_content_id = int(file_row(copied_file_id)["content_id"])
+
+    target_folder_id = create_folder(f"safety_copy_conflict_target_{unique_name()}")
+    upload_file(conflict_name, f"target-conflict-{unique_name()}".encode(), target_folder_id)
+
+    conflict_ref_before = int(content_row(conflict_content_id)["ref_count"])
+    copied_ref_before = int(content_row(copied_content_id)["ref_count"])
+    quota_before = user_quota()
+
+    data = copy_items([conflict_file_id, copied_file_id], [], target_folder_id)
+    quota_after = user_quota()
+    conflict_ref_after = int(content_row(conflict_content_id)["ref_count"])
+    copied_ref_after = int(content_row(copied_content_id)["ref_count"])
+
+    assert_equal("copy conflict response has one new file", len(data.get("new_files", [])), 1)
+    assert_equal("copy conflict reports one copied file", int(data.get("copied_file_count", 0)), 1)
+    assert_equal("copy conflict leaves conflicting ref_count unchanged", conflict_ref_after, conflict_ref_before)
+    assert_numeric_delta("copy conflict increments successful ref_count", copied_ref_before, copied_ref_after, 1)
+    assert_numeric_delta(
+        "copy conflict releases skipped quota",
+        quota_before["storage_used"],
+        quota_after["storage_used"],
+        len(copied_payload),
+    )
+
+
+def test_copy_folder_skip_releases_quota_and_refs() -> None:
+    """Verify folder skip after quota pre-consumption does not drift quota or refs."""
+    log_section("Copy Folder Skip Releases Quota")
+    parent_folder_id = create_folder(f"safety_folder_skip_parent_{unique_name()}")
+    child_folder_id = create_folder(f"safety_folder_skip_child_{unique_name()}", parent_folder_id)
+    payload = f"folder-skip-{unique_name()}".encode()
+    file_id = upload_file(f"safety_folder_skip_file_{unique_name()}.bin", payload, parent_folder_id)
+    content_id = int(file_row(file_id)["content_id"])
+    before_ref = int(content_row(content_id)["ref_count"])
+    quota_before = user_quota()
+    before_folder_count = int(scalar("SELECT COUNT(*) FROM folders WHERE user_id = %s", (USER_ID,)) or 0)
+    before_file_count = int(scalar("SELECT COUNT(*) FROM files WHERE user_id = %s", (USER_ID,)) or 0)
+
+    data = copy_items([], [parent_folder_id], child_folder_id)
+    quota_after = user_quota()
+    after_ref = int(content_row(content_id)["ref_count"])
+    after_folder_count = int(scalar("SELECT COUNT(*) FROM folders WHERE user_id = %s", (USER_ID,)) or 0)
+    after_file_count = int(scalar("SELECT COUNT(*) FROM files WHERE user_id = %s", (USER_ID,)) or 0)
+
+    assert_equal("folder skip reports zero copied folders", int(data.get("copied_folder_count", 0)), 0)
+    assert_equal("folder skip reports zero copied files", int(data.get("copied_file_count", 0)), 0)
+    assert_equal("folder skip leaves ref_count unchanged", after_ref, before_ref)
+    assert_equal("folder skip leaves storage_used unchanged", quota_after["storage_used"], quota_before["storage_used"])
+    assert_equal("folder skip creates no folders", after_folder_count, before_folder_count)
+    assert_equal("folder skip creates no files", after_file_count, before_file_count)
 
 
 def test_soft_delete_preserves_ref_count_storage_used_and_blob() -> None:
@@ -1124,6 +1195,8 @@ def main() -> None:
     test_copy_ref_count_and_quota()
     test_upload_quota_rejection_no_leak()
     test_copy_quota_rejection_no_side_effects()
+    test_copy_conflict_releases_quota_and_refs_only_successes()
+    test_copy_folder_skip_releases_quota_and_refs()
     test_soft_delete_preserves_ref_count_storage_used_and_blob()
     test_move_to_trash_trash_insert_failure_preserves_active_state()
     test_move_to_trash_active_file_delete_failure_rolls_back_trash_and_share_cleanup()

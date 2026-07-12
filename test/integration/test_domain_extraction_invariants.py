@@ -363,6 +363,10 @@ def test_copy_file_and_folder_ref_counts_and_quota() -> None:
 
     file_target_folder_id = create_folder(f"domain_copy_target_{unique_name()}")
     copy_data = copy_items([source_file_id], [], file_target_folder_id)
+    for key in ("copied_count", "copied_file_count", "copied_folder_count", "new_files", "new_folders"):
+        assert_equal(f"file copy response includes {key}", key in copy_data, True)
+    assert_equal("file copy reports one copied file", int(copy_data["copied_file_count"]), 1)
+    assert_equal("file copy reports zero copied folders", int(copy_data["copied_folder_count"]), 0)
     new_file_id = int(copy_data["new_files"][0]["new_id"])
     copied_file = file_row(new_file_id)
     quota_after_file_copy = user_quota()
@@ -394,6 +398,8 @@ def test_copy_file_and_folder_ref_counts_and_quota() -> None:
     quota_before_folder_copy = user_quota()
     folder_target_id = create_folder(f"domain_folder_copy_target_{unique_name()}")
     folder_copy_data = copy_items([], [parent_folder_id], folder_target_id)
+    for key in ("copied_count", "copied_file_count", "copied_folder_count", "new_files", "new_folders"):
+        assert_equal(f"folder copy response includes {key}", key in folder_copy_data, True)
     quota_after_folder_copy = user_quota()
     child_content_after = content_row(child_content_id)
 

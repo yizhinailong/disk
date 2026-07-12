@@ -64,6 +64,11 @@ namespace disk::content {
                 std::declval<const std::unordered_map<uint64_t, uint64_t>&>(),
                 std::declval<const std::unordered_set<uint64_t>&>()
             ));
+            using CheckedBatchIncrementResult = decltype(std::declval<ContentService&>().IncrementRefCountsChecked(
+                std::declval<const drogon::orm::DbClientPtr&>(),
+                std::declval<const std::unordered_map<uint64_t, uint64_t>&>(),
+                std::declval<const std::unordered_set<uint64_t>&>()
+            ));
             using DecrementResult = decltype(std::declval<ContentService&>().DecrementRefCounts(
                 std::declval<const drogon::orm::DbClientPtr&>(),
                 std::declval<const std::unordered_map<uint64_t, uint64_t>&>()
@@ -79,6 +84,7 @@ namespace disk::content {
             EXPECT_TRUE((std::is_same_v<CreateResult, drogon::Task<ContentMetadata>>));
             EXPECT_TRUE((std::is_same_v<IncrementResult, drogon::Task<Result<void>>>));
             EXPECT_TRUE((std::is_same_v<BatchIncrementResult, drogon::Task<std::unordered_set<uint64_t>>>));
+            EXPECT_TRUE((std::is_same_v<CheckedBatchIncrementResult, drogon::Task<Result<std::unordered_set<uint64_t>>>>));
             EXPECT_TRUE((std::is_same_v<DecrementResult, drogon::Task<std::vector<ZeroRefContent>>>));
             EXPECT_TRUE((std::is_same_v<VerifyResult, drogon::Task<std::vector<ZeroRefContent>>>));
         }

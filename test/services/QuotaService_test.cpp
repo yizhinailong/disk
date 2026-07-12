@@ -2,12 +2,25 @@
 
 #include <gtest/gtest.h>
 
+#include <type_traits>
+#include <utility>
+
 namespace disk::quota {
     namespace {
 
         TEST(QuotaServiceCompileTest, CanConstructWithNullDbClient) {
             QuotaService service(nullptr);
             SUCCEED();
+        }
+
+        TEST(QuotaServiceContractTest, ExposesCheckedUsedStorageAdjustmentForTransactions) {
+            using CheckedAdjustResult = decltype(std::declval<QuotaService&>().AdjustUsedStorageChecked(
+                std::declval<const drogon::orm::DbClientPtr&>(),
+                uint64_t{ 1 },
+                int64_t{ -1 }
+            ));
+
+            EXPECT_TRUE((std::is_same_v<CheckedAdjustResult, drogon::Task<Result<void>>>));
         }
 
         TEST(QuotaServiceContractTest, ReconciliationCarriesPersistedAndObservedAccounting) {
