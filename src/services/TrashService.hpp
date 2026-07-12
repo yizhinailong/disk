@@ -34,6 +34,7 @@
 #include "dtos/TrashDto.hpp"
 #include "services/FileServiceUtils.hpp"
 #include "services/RedisService.hpp"
+#include "services/TrashQuery.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::trash {
@@ -179,19 +180,6 @@ namespace disk::trash {
         auto DeleteAll(uint64_t user_id) -> drogon::Task<Result<DeleteAllResponse>>;
 
     private:
-        struct PrefetchedTrashItem {
-            uint64_t id{ 0 };
-            uint64_t user_id{ 0 };
-            std::string item_type;
-            uint64_t item_id{ 0 };
-            std::string item_name;
-            uint64_t item_size{ 0 };
-            uint64_t original_folder_id{ 0 };
-            std::string original_path;
-            std::string item_data;
-            std::optional<uint64_t> content_id;
-        };
-
         struct PermanentDeleteResult {
             int deleted_count{ 0 };
             uint64_t freed_space{ 0 };
@@ -221,7 +209,7 @@ namespace disk::trash {
 
         [[nodiscard]]
         auto PermanentlyDeleteTrashItems(
-            const std::vector<PrefetchedTrashItem>& trash_items,
+            const std::vector<TrashLifecycleRecord>& trash_items,
             bool require_valid_file_content
         ) -> drogon::Task<PermanentDeleteResult>;
 
@@ -305,7 +293,7 @@ namespace disk::trash {
          * @return drogon::Task<void>
          */
         auto RestoreFile(uint64_t trash_id, uint64_t user_id, BatchResultItem& result) -> drogon::Task<void>;
-        auto RestoreFile(const PrefetchedTrashItem& trash_item, uint64_t user_id, BatchResultItem& result)
+        auto RestoreFile(const TrashLifecycleRecord& trash_item, uint64_t user_id, BatchResultItem& result)
             -> drogon::Task<void>;
 
         /**
@@ -318,7 +306,7 @@ namespace disk::trash {
          */
         auto RestoreFolder(uint64_t trash_id, uint64_t user_id, BatchResultItem& result) -> drogon::Task<void>;
         auto RestoreFolder(
-            const PrefetchedTrashItem& trash_item,
+            const TrashLifecycleRecord& trash_item,
             uint64_t user_id,
             BatchResultItem& result
         ) -> drogon::Task<void>;
@@ -332,7 +320,7 @@ namespace disk::trash {
          * @return drogon::Task<uint64_t> 返回释放的空间大小
          */
         auto DeleteFile(uint64_t trash_id, uint64_t user_id, BatchResultItem& result) -> drogon::Task<uint64_t>;
-        auto DeleteFile(const PrefetchedTrashItem& trash_item, uint64_t user_id, BatchResultItem& result)
+        auto DeleteFile(const TrashLifecycleRecord& trash_item, uint64_t user_id, BatchResultItem& result)
             -> drogon::Task<uint64_t>;
 
         /**
@@ -344,7 +332,7 @@ namespace disk::trash {
          * @return drogon::Task<uint64_t> 返回释放的空间大小
          */
         auto DeleteFolder(uint64_t trash_id, uint64_t user_id, BatchResultItem& result) -> drogon::Task<uint64_t>;
-        auto DeleteFolder(const PrefetchedTrashItem& trash_item, uint64_t user_id, BatchResultItem& result)
+        auto DeleteFolder(const TrashLifecycleRecord& trash_item, uint64_t user_id, BatchResultItem& result)
             -> drogon::Task<uint64_t>;
 
         /**
@@ -366,6 +354,7 @@ namespace disk::trash {
         static auto ExtractBaseName(const std::string& filename) -> std::string;
 
         drogon::orm::DbClientPtr m_db_client;                                                                         ///< 数据库客户端
+        TrashQuery m_trash_query;                                                                                     ///< 回收站查询边界
         std::shared_ptr<disk::services::RedisService> m_redis_service{ disk::services::RedisService::GetInstance() }; ///< Redis 服务
     };
 

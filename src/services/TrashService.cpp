@@ -184,7 +184,7 @@ namespace disk::trash {
     }
 
     TrashService::TrashService(drogon::orm::DbClientPtr db_client)
-        : m_db_client(std::move(db_client)) {
+        : m_db_client(std::move(db_client)), m_trash_query(m_db_client) {
         Logger::Debug() << "TrashService initialization completed";
     }
 
@@ -488,38 +488,20 @@ namespace disk::trash {
 
             while (batch_iteration < max_batches_per_run) {
                 auto batch_start = std::chrono::steady_clock::now();
-                auto result = co_await m_db_client->execSqlCoro(
-                    "SELECT id, user_id, item_type, item_id, item_name, item_size, " "original_folder_id, original_path, item_data, content_id " "FROM trash " "WHERE expires_at < NOW() AND id > $1 " "ORDER BY id ASC " "LIMIT $2",
+                auto trash_items = co_await m_trash_query.FetchExpiredLifecycleBatchAfterId(
                     last_seen_id,
                     fetch_batch_size
                 );
 
-                if (result.empty()) {
+                if (trash_items.empty()) {
                     break;
                 }
 
                 uint64_t batch_max_id = 0;
-                std::vector<PrefetchedTrashItem> trash_items;
-                trash_items.reserve(result.size());
-                for (const auto& row : result) {
-                    PrefetchedTrashItem item;
-                    item.id = row["id"].as<uint64_t>();
-                    item.user_id = row["user_id"].as<uint64_t>();
-                    item.item_type = row["item_type"].as<std::string>();
-                    item.item_id = row["item_id"].as<uint64_t>();
-                    item.item_name = row["item_name"].as<std::string>();
-                    item.item_size = row["item_size"].as<uint64_t>();
-                    item.original_folder_id = row["original_folder_id"].as<uint64_t>();
-                    item.original_path = row["original_path"].as<std::string>();
-                    item.item_data = row["item_data"].as<std::string>();
-                    if (!row["content_id"].isNull()) {
-                        item.content_id = row["content_id"].as<uint64_t>();
-                    }
-
+                for (const auto& item : trash_items) {
                     if (item.id > batch_max_id) {
                         batch_max_id = item.id;
                     }
-                    trash_items.push_back(std::move(item));
                 }
 
                 int chunks_succeeded = 0;
@@ -555,7 +537,7 @@ namespace disk::trash {
 
                 Logger::Info() << "[cleanup_batch] trash batch_iteration="
                                << batch_iteration
-                               << " fetch_size=" << result.size()
+                               << " fetch_size=" << trash_items.size()
                                << " rows_deleted_so_far=" << deleted_count
                                << " chunks_succeeded=" << chunks_succeeded
                                << " chunks_failed=" << chunks_failed
@@ -570,7 +552,7 @@ namespace disk::trash {
                 last_seen_id = batch_max_id;
                 batch_iteration++;
 
-                if (result.size() < static_cast<size_t>(fetch_batch_size)) {
+                if (trash_items.size() < static_cast<size_t>(fetch_batch_size)) {
                     break;
                 }
             }
@@ -606,28 +588,21 @@ namespace disk::trash {
 
         try {
             auto offset = (page - 1) * page_size;
-
-            auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, item_type, item_id, item_name, item_size, " "original_" "folde" "r_" "id," " " "original_path, " "item_data, " "deleted_at, " "expires_at " "FRO" "M " "tra" "sh " "WHERE user_id = $1 " "ORDER BY deleted_at DESC " "LIMIT $2 OFFSET $3",
-                user_id,
-                page_size,
-                offset
-            );
+            auto records = co_await m_trash_query.FetchListPageForUser(user_id, page_size, offset);
 
             std::vector<TrashItemResponse> responses;
-            responses.reserve(result.size());
+            responses.reserve(records.size());
 
-            for (size_t i = 0; i < result.size(); ++i) {
-                const auto& row = result[i];
+            for (const auto& record : records) {
                 TrashItemResponse response;
-                response.id = row["id"].as<uint64_t>();
-                response.type = row["item_type"].as<std::string>();
-                response.original_id = row["item_id"].as<uint64_t>();
-                response.name = row["item_name"].as<std::string>();
-                response.size = row["item_size"].as<uint64_t>();
-                response.original_path = row["original_path"].as<std::string>();
-                response.deleted_at = row["deleted_at"].as<std::string>();
-                response.expires_at = row["expires_at"].as<std::string>();
+                response.id = record.id;
+                response.type = record.item_type;
+                response.original_id = record.item_id;
+                response.name = record.item_name;
+                response.size = record.item_size;
+                response.original_path = record.original_path;
+                response.deleted_at = record.deleted_at;
+                response.expires_at = record.expires_at;
                 responses.push_back(response);
             }
 
@@ -655,11 +630,8 @@ namespace disk::trash {
         Logger::Debug() << "Counting trash items: user_id=" << user_id;
 
         try {
-            CoroMapper<Trash> mapper(m_db_client);
-            auto count = co_await mapper.count(
-                Criteria(Trash::Cols::_user_id, CompareOperator::EQ, user_id)
-            );
-            co_return static_cast<int>(count);
+            auto count = co_await m_trash_query.CountForUser(user_id);
+            co_return count;
 
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Error() << "Failed to count trash items: " << e.base().what();
@@ -679,37 +651,13 @@ namespace disk::trash {
         response.summary.total = static_cast<int>(trash_ids.size());
         response.results.reserve(trash_ids.size());
 
-        std::unordered_map<uint64_t, PrefetchedTrashItem> trash_items_by_id;
+        std::unordered_map<uint64_t, TrashLifecycleRecord> trash_items_by_id;
         trash_items_by_id.reserve(trash_ids.size());
 
         try {
-            auto chunks = BatchUtils::Chunk(trash_ids, DEFAULT_BATCH_CHUNK_SIZE);
-            for (const auto& chunk : chunks) {
-                if (chunk.empty()) {
-                    continue;
-                }
-
-                auto rows = co_await m_db_client->execSqlCoro(
-                    "SELECT id, user_id, item_type, item_id, item_name, item_size, " "original_folder_id, original_path, item_data, content_id " "FROM trash WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ")"
-                );
-
-                for (const auto& row : rows) {
-                    PrefetchedTrashItem item;
-                    item.id = row["id"].as<uint64_t>();
-                    item.user_id = row["user_id"].as<uint64_t>();
-                    item.item_type = row["item_type"].as<std::string>();
-                    item.item_id = row["item_id"].as<uint64_t>();
-                    item.item_name = row["item_name"].as<std::string>();
-                    item.item_size = row["item_size"].as<uint64_t>();
-                    item.original_folder_id = row["original_folder_id"].as<uint64_t>();
-                    item.original_path = row["original_path"].as<std::string>();
-                    item.item_data = row["item_data"].as<std::string>();
-                    if (!row["content_id"].isNull()) {
-                        item.content_id = row["content_id"].as<uint64_t>();
-                    }
-
-                    trash_items_by_id[item.id] = std::move(item);
-                }
+            auto prefetched_items = co_await m_trash_query.PrefetchLifecycleRowsByIds(trash_ids);
+            for (auto& item : prefetched_items) {
+                trash_items_by_id[item.id] = std::move(item);
             }
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Error() << "Failed to batch fetch trash items for restore: user_id=" << user_id
@@ -784,37 +732,13 @@ namespace disk::trash {
 
         uint64_t total_freed_space = 0;
 
-        std::unordered_map<uint64_t, PrefetchedTrashItem> trash_items_by_id;
+        std::unordered_map<uint64_t, TrashLifecycleRecord> trash_items_by_id;
         trash_items_by_id.reserve(trash_ids.size());
 
         try {
-            auto chunks = BatchUtils::Chunk(trash_ids, DEFAULT_BATCH_CHUNK_SIZE);
-            for (const auto& chunk : chunks) {
-                if (chunk.empty()) {
-                    continue;
-                }
-
-                auto rows = co_await m_db_client->execSqlCoro(
-                    "SELECT id, user_id, item_type, item_id, item_name, item_size, " "original_folder_id, original_path, item_data, content_id " "FROM trash WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ")"
-                );
-
-                for (const auto& row : rows) {
-                    PrefetchedTrashItem item;
-                    item.id = row["id"].as<uint64_t>();
-                    item.user_id = row["user_id"].as<uint64_t>();
-                    item.item_type = row["item_type"].as<std::string>();
-                    item.item_id = row["item_id"].as<uint64_t>();
-                    item.item_name = row["item_name"].as<std::string>();
-                    item.item_size = row["item_size"].as<uint64_t>();
-                    item.original_folder_id = row["original_folder_id"].as<uint64_t>();
-                    item.original_path = row["original_path"].as<std::string>();
-                    item.item_data = row["item_data"].as<std::string>();
-                    if (!row["content_id"].isNull()) {
-                        item.content_id = row["content_id"].as<uint64_t>();
-                    }
-
-                    trash_items_by_id[item.id] = std::move(item);
-                }
+            auto prefetched_items = co_await m_trash_query.PrefetchLifecycleRowsByIds(trash_ids);
+            for (auto& item : prefetched_items) {
+                trash_items_by_id[item.id] = std::move(item);
             }
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Error() << "Failed to batch fetch trash items for delete: user_id=" << user_id
@@ -922,29 +846,7 @@ namespace disk::trash {
         response.freed_space = 0;
 
         try {
-            auto trash_rows = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, item_type, item_id, item_name, item_size, " "original_folder_id, original_path, item_data, content_id " "FROM trash WHERE user_id = $1",
-                user_id
-            );
-
-            std::vector<PrefetchedTrashItem> trash_items;
-            trash_items.reserve(trash_rows.size());
-            for (const auto& row : trash_rows) {
-                PrefetchedTrashItem item;
-                item.id = row["id"].as<uint64_t>();
-                item.user_id = row["user_id"].as<uint64_t>();
-                item.item_type = row["item_type"].as<std::string>();
-                item.item_id = row["item_id"].as<uint64_t>();
-                item.item_name = row["item_name"].as<std::string>();
-                item.item_size = row["item_size"].as<uint64_t>();
-                item.original_folder_id = row["original_folder_id"].as<uint64_t>();
-                item.original_path = row["original_path"].as<std::string>();
-                item.item_data = row["item_data"].as<std::string>();
-                if (!row["content_id"].isNull()) {
-                    item.content_id = row["content_id"].as<uint64_t>();
-                }
-                trash_items.push_back(std::move(item));
-            }
+            auto trash_items = co_await m_trash_query.FetchLifecycleRowsForUser(user_id);
 
             auto chunks = BatchUtils::Chunk(trash_items, DEFAULT_BATCH_CHUNK_SIZE);
             for (const auto& chunk : chunks) {
@@ -1000,7 +902,7 @@ namespace disk::trash {
                 Criteria(Trash::Cols::_id, CompareOperator::EQ, trash_id)
             );
 
-            PrefetchedTrashItem trash_item;
+            TrashLifecycleRecord trash_item;
             trash_item.id = trash_model.getValueOfId();
             trash_item.user_id = trash_model.getValueOfUserId();
             trash_item.item_type = trash_model.getValueOfItemType();
@@ -1026,7 +928,7 @@ namespace disk::trash {
     }
 
     auto TrashService::RestoreFile(
-        const PrefetchedTrashItem& trash_item,
+        const TrashLifecycleRecord& trash_item,
         uint64_t user_id,
         BatchResultItem& result
     ) -> drogon::Task<void> {
@@ -1141,7 +1043,7 @@ namespace disk::trash {
                 Criteria(Trash::Cols::_id, CompareOperator::EQ, trash_id)
             );
 
-            PrefetchedTrashItem trash_item;
+            TrashLifecycleRecord trash_item;
             trash_item.id = trash_model.getValueOfId();
             trash_item.user_id = trash_model.getValueOfUserId();
             trash_item.item_type = trash_model.getValueOfItemType();
@@ -1167,7 +1069,7 @@ namespace disk::trash {
     }
 
     auto TrashService::RestoreFolder(
-        const PrefetchedTrashItem& trash_item,
+        const TrashLifecycleRecord& trash_item,
         uint64_t user_id,
         BatchResultItem& result
     ) -> drogon::Task<void> {
@@ -1358,7 +1260,7 @@ namespace disk::trash {
                 Criteria(Trash::Cols::_id, CompareOperator::EQ, trash_id)
             );
 
-            PrefetchedTrashItem trash_item;
+            TrashLifecycleRecord trash_item;
             trash_item.id = trash_model.getValueOfId();
             trash_item.user_id = trash_model.getValueOfUserId();
             trash_item.item_type = trash_model.getValueOfItemType();
@@ -1385,7 +1287,7 @@ namespace disk::trash {
     }
 
     auto TrashService::DeleteFile(
-        const PrefetchedTrashItem& trash_item,
+        const TrashLifecycleRecord& trash_item,
         uint64_t user_id,
         BatchResultItem& result
     ) -> drogon::Task<uint64_t> {
@@ -1444,7 +1346,7 @@ namespace disk::trash {
                 Criteria(Trash::Cols::_id, CompareOperator::EQ, trash_id)
             );
 
-            PrefetchedTrashItem trash_item;
+            TrashLifecycleRecord trash_item;
             trash_item.id = trash_model.getValueOfId();
             trash_item.user_id = trash_model.getValueOfUserId();
             trash_item.item_type = trash_model.getValueOfItemType();
@@ -1471,7 +1373,7 @@ namespace disk::trash {
     }
 
     auto TrashService::DeleteFolder(
-        const PrefetchedTrashItem& trash_item,
+        const TrashLifecycleRecord& trash_item,
         uint64_t user_id,
         BatchResultItem& result
     ) -> drogon::Task<uint64_t> {
@@ -1511,7 +1413,7 @@ namespace disk::trash {
     }
 
     auto TrashService::PermanentlyDeleteTrashItems(
-        const std::vector<PrefetchedTrashItem>& trash_items,
+        const std::vector<TrashLifecycleRecord>& trash_items,
         bool require_valid_file_content
     ) -> drogon::Task<PermanentDeleteResult> {
         PermanentDeleteResult result;
