@@ -28,10 +28,10 @@
 #include "TransactionRunner.hpp"
 #include "services/ContentService.hpp"
 #include "services/QuotaService.hpp"
+#include "services/UploadTaskRepository.hpp"
 #include "models/FileContents.hpp"
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
-#include "models/UploadTaskChunks.hpp"
 #include "storage/IFileStorage.hpp"
 #include "services/UploadLifecycleService.hpp"
 #include "utils/ConfigMgr.hpp"
@@ -49,7 +49,6 @@ namespace disk::file {
     using drogon_model::disk::FileContents;
     using drogon_model::disk::Files;
     using drogon_model::disk::Folders;
-    using drogon_model::disk::UploadTaskChunks;
     using drogon_model::disk::UploadTasks;
 
     /// ==================== 构造函数 ====================
@@ -80,27 +79,23 @@ namespace disk::file {
             );
         }
 
-        /// 1. Compound pre-check: folder location + filename collision + instant upload + resume
+        UploadTaskRepository upload_task_repository(m_db_client);
+
+        /// 1. Compound pre-check: folder location + filename collision
         auto combined = co_await m_db_client->execSqlCoro(
             "WITH folder_loc AS ("
             "  SELECT path, depth FROM folders WHERE id = $1 AND user_id = $2"
             "), filename_exists AS ("
             "  SELECT COUNT(*) AS cnt FROM files"
             "  WHERE user_id = $2 AND folder_id = $1 AND name = $3"
-            "), existing_task AS ("
-            "  SELECT id FROM upload_tasks"
-            "  WHERE user_id = $2 AND file_hash = $4 AND status = $5 LIMIT 1"
             ")"
             " SELECT"
             "   (SELECT path FROM folder_loc) AS folder_path,"
             "   (SELECT depth FROM folder_loc) AS folder_depth,"
-            "   (SELECT cnt FROM filename_exists) AS filename_count,"
-            "   (SELECT id FROM existing_task) AS task_id",
+            "   (SELECT cnt FROM filename_exists) AS filename_count",
             request.parent_id,
             user_id,
-            request.filename,
-            request.file_hash,
-            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
+            request.filename
         );
 
         const auto& row = combined[0];
@@ -125,8 +120,12 @@ namespace disk::file {
         /// Detect instant upload / resume / new upload decision
         disk::content::ContentService content_service(m_db_client);
         auto existing_content = co_await content_service.FindByMd5(request.file_hash);
-        auto existing_task_id = row["task_id"].isNull() ? std::string{} : row["task_id"].as<std::string>();
-        auto init_decision = disk::upload::DecideInitFlow(existing_content.has_value(), existing_task_id);
+        auto existing_task_id =
+            co_await upload_task_repository.FindInProgressIdByUserAndHash(user_id, request.file_hash);
+        auto init_decision = disk::upload::DecideInitFlow(
+            existing_content.has_value(),
+            existing_task_id.value_or(std::string{})
+        );
 
         if (init_decision.type == disk::upload::InitDecisionType::InstantUpload) {
             auto content_id = existing_content->id;
@@ -228,7 +227,8 @@ namespace disk::file {
 
         /// 2. 检测断点续传
         if (init_decision.type == disk::upload::InitDecisionType::ResumeUpload) {
-            auto existing_task = co_await FindExistingTask(user_id, request.file_hash);
+            auto existing_task =
+                co_await upload_task_repository.FindInProgressByUserAndHash(user_id, request.file_hash);
             if (existing_task.has_value()) {
                 const auto& task = existing_task.value();
                 const auto& task_id = task.getValueOfId();
@@ -238,11 +238,7 @@ namespace disk::file {
                     InvalidateUploadTaskCache(task_id);
 
                     try {
-                        co_await m_db_client->execSqlCoro(
-                            "DELETE FROM upload_tasks WHERE id = $1 AND status = $2",
-                            task_id,
-                            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
-                        );
+                        co_await upload_task_repository.DeleteInProgressById(task_id);
                     } catch (const drogon::orm::DrogonDbException& e) {
                         Logger::Warn() << "Failed to delete expired upload task: " << e.base().what();
                     }
@@ -255,21 +251,14 @@ namespace disk::file {
                     Logger::Debug() << "Resume upload check successful: upload_id=" << task_id;
                     InvalidateUploadTaskCache(task_id);
 
-                    auto chunk_result = co_await m_db_client->execSqlCoro(
-                        "SELECT chunk_index FROM upload_task_chunks WHERE task_id = $1 ORDER BY chunk_index",
-                        task_id
-                    );
+                    auto uploaded_chunks = co_await upload_task_repository.ListUploadedChunkIndices(task_id);
 
                     InitUploadResponse response;
                     response.upload_id = task_id;
                     response.chunk_size = task.getValueOfChunkSize();
                     response.total_chunks = task.getValueOfTotalChunks();
                     response.instant_upload = false;
-
-                    response.uploaded_chunks.clear();
-                    for (const auto& chunk_row : chunk_result) {
-                        response.uploaded_chunks.push_back(chunk_row["chunk_index"].as<uint32_t>());
-                    }
+                    response.uploaded_chunks = std::move(uploaded_chunks);
 
                     co_return response;
                 }
@@ -326,8 +315,7 @@ namespace disk::file {
 
         bool create_task_failed = false;
         try {
-            CoroMapper<UploadTasks> mapper(m_db_client);
-            task = co_await mapper.insert(task);
+            task = co_await upload_task_repository.Create(std::move(task));
 
             Logger::Debug() << "Upload task created successfully: upload_id=" << task.getValueOfId()
                       << ", total_chunks=" << total_chunks;
@@ -496,13 +484,10 @@ namespace disk::file {
             co_return std::unexpected(write_result.error());
         }
 
-        /// 7. 记录已上传分片（幂等：INSERT IGNORE 允许重复上传同一分片）
+        /// 7. 记录已上传分片（幂等：ON CONFLICT DO NOTHING 允许重复上传同一分片）
         try {
-            co_await m_db_client->execSqlCoro(
-                "INSERT INTO upload_task_chunks (task_id, chunk_index, uploaded_at) VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING",
-                upload_id,
-                chunk_index
-            );
+            UploadTaskRepository upload_task_repository(m_db_client);
+            co_await upload_task_repository.RecordChunkUploadedIfAbsent(upload_id, chunk_index);
 
             Logger::Debug() << "Chunk upload successful: upload_id=" << upload_id
                       << ", chunk_index=" << chunk_index;
@@ -547,6 +532,8 @@ namespace disk::file {
 
         Logger::Debug() << "Starting complete upload: upload_id=" << upload_id << ", user_id=" << user_id;
 
+        UploadTaskRepository upload_task_repository(m_db_client);
+
         /// 1. 查找并验证上传任务
         auto task_result = co_await FindUploadTask(upload_id, user_id);
         if (!task_result) {
@@ -589,10 +576,13 @@ namespace disk::file {
                       << " upload_id=" << upload_id;
         };
 
-        auto coverage_result = co_await GetUploadedChunkCoverage(m_db_client, upload_id);
-        if (!coverage_result.has_value()) {
+        std::optional<disk::upload::ChunkCoverage> coverage;
+        try {
+            coverage = co_await upload_task_repository.GetChunkCoverage(upload_id);
+        } catch (const drogon::orm::DrogonDbException& e) {
             LogChunkScanDuration();
-            Logger::Error() << "Failed to query chunk coverage: upload_id=" << upload_id;
+            Logger::Error() << "Failed to query chunk coverage: upload_id=" << upload_id
+                      << ", error=" << e.base().what();
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
@@ -605,21 +595,15 @@ namespace disk::file {
                 ErrorInfo(ErrorCode::InternalError, "Failed to query chunk coverage")
             );
         }
-
-        const auto& coverage = coverage_result.value();
         const auto total_chunks = task.getValueOfTotalChunks();
-        const auto chunks_valid = disk::upload::IsCompleteCoverage(
-            total_chunks,
-            disk::upload::ChunkCoverage{ .uploaded_count = coverage.uploaded_count,
-                                         .max_chunk_index = coverage.max_chunk_index }
-        );
+        const auto chunks_valid = disk::upload::IsCompleteCoverage(total_chunks, coverage.value());
 
         LogChunkScanDuration();
 
         if (!chunks_valid) {
-            Logger::Warn() << "Not all chunks uploaded: uploaded=" << coverage.uploaded_count
+            Logger::Warn() << "Not all chunks uploaded: uploaded=" << coverage->uploaded_count
                      << ", total=" << total_chunks
-                     << ", max_index=" << coverage.max_chunk_index;
+                     << ", max_index=" << coverage->max_chunk_index;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
@@ -856,23 +840,16 @@ namespace disk::file {
                     co_return std::unexpected(transfer_result.error());
                 }
 
-                auto finalize_result = co_await transaction->execSqlCoro(
-                    "UPDATE upload_tasks SET status = $1, finalized_at = NOW() WHERE id = $2 AND status = $3",
-                    disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Completed),
-                    upload_id,
-                    disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
-                );
-                if (finalize_result.affectedRows() == 0) {
+                auto finalize_success =
+                    co_await upload_task_repository.MarkCompletedIfInProgress(transaction, upload_id);
+                if (!finalize_success) {
                     co_return std::unexpected(ErrorInfo(
                         ErrorCode::InternalError,
                         "Failed to finalize upload task"
                     ));
                 }
 
-                co_await transaction->execSqlCoro(
-                    "DELETE FROM upload_task_chunks WHERE task_id = $1",
-                    upload_id
-                );
+                co_await upload_task_repository.DeleteChunks(transaction, upload_id);
 
                 co_return {};
             }
@@ -1014,44 +991,17 @@ namespace disk::file {
         co_await quota_service.ReleaseReservedStorage(m_db_client, user_id, reserved_bytes);
     }
 
-    auto UploadService::FindExistingTask(uint64_t user_id, const std::string& file_hash) const
-        -> drogon::Task<std::optional<UploadTasks>> {
-
-        try {
-            CoroMapper<UploadTasks> mapper(m_db_client);
-            auto task = co_await mapper.findOne(
-                Criteria(UploadTasks::Cols::_user_id, CompareOperator::EQ, user_id) &&
-                Criteria(UploadTasks::Cols::_file_hash, CompareOperator::EQ, file_hash) &&
-                Criteria(UploadTasks::Cols::_status, CompareOperator::EQ, disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress))
-            );
-
-            co_return task;
-
-        } catch (const drogon::orm::DrogonDbException&) {
-            co_return std::nullopt;
-        }
-    }
-
     auto UploadService::FindUploadTask(const std::string& upload_id, uint64_t user_id) const
         -> drogon::Task<Result<UploadTasks>> {
-
-        try {
-            CoroMapper<UploadTasks> mapper(m_db_client);
-            auto task = co_await mapper.findByPrimaryKey(upload_id);
-
-            if (task.getValueOfUserId() != user_id) {
-                Logger::Warn() << "Upload task does not belong to current user: upload_id=" << upload_id
-                         << ", task_user_id=" << task.getValueOfUserId()
-                         << ", request_user_id=" << user_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
-            }
-
-            co_return task;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to query upload task: " << e.base().what();
+        UploadTaskRepository upload_task_repository(m_db_client);
+        auto task = co_await upload_task_repository.FindByIdForUser(upload_id, user_id);
+        if (!task.has_value()) {
+            Logger::Warn() << "Upload task not found or not owned by user: upload_id=" << upload_id
+                     << ", request_user_id=" << user_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
         }
+
+        co_return task.value();
     }
 
     auto UploadService::BuildUploadTaskCacheEntry(const UploadTasks& task) -> UploadTaskCacheEntry {
@@ -1243,32 +1193,6 @@ namespace disk::file {
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Error() << "Failed to check filename (transaction): " << e.base().what();
             co_return false;
-        }
-    }
-
-    auto UploadService::GetUploadedChunkCoverage(
-        const drogon::orm::DbClientPtr& client,
-        const std::string& upload_id
-    ) const -> drogon::Task<std::optional<UploadedChunkCoverage>> {
-
-        try {
-            auto result = co_await client->execSqlCoro(
-                "SELECT COUNT(*) AS uploaded_count, " "COALESCE(MAX(chunk_index), -1) AS max_chunk_index " "FROM upload_task_chunks WHERE task_id = $1",
-                upload_id
-            );
-
-            if (result.empty()) {
-                co_return UploadedChunkCoverage{ 0, -1 };
-            }
-
-            UploadedChunkCoverage coverage;
-            coverage.uploaded_count = result[0]["uploaded_count"].as<uint64_t>();
-            coverage.max_chunk_index = result[0]["max_chunk_index"].as<int64_t>();
-            co_return coverage;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to get uploaded chunk coverage: " << e.base().what();
-            co_return std::nullopt;
         }
     }
 

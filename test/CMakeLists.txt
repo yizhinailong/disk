@@ -18,6 +18,7 @@ set(TEST_SOURCES
     services/FileUploadConsistency_test.cpp
     services/UploadPath_test.cpp
     services/CompleteUploadSingleflight_test.cpp
+    services/UploadLifecycleService_test.cpp
     services/FileServiceAtomicity_test.cpp
     services/FileServiceBatch_test.cpp
     services/FileServiceSearch_test.cpp
@@ -60,6 +61,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/services/QuotaService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TrashService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/UploadLifecycleService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/UploadTaskRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/ShareAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/RegisterRateLimitFilter.cpp
@@ -73,6 +75,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/models/Files.cpp
     ${CMAKE_SOURCE_DIR}/src/models/Folders.cpp
     ${CMAKE_SOURCE_DIR}/src/models/Trash.cpp
+    ${CMAKE_SOURCE_DIR}/src/models/UploadTasks.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TokenService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/RedisService.cpp
 )
@@ -88,6 +91,7 @@ set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/UploadLifecycleService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/UploadTaskRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TrashService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/QuotaService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ContentService.cpp

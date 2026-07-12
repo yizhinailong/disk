@@ -164,16 +164,6 @@ namespace disk::file {
             std::string mime_type;
         };
 
-        /**
-         * @brief 已上传分片覆盖信息
-         *
-         * 用于断点续传场景，描述当前上传任务已完成的分片情况。
-         */
-        struct UploadedChunkCoverage {
-            uint64_t uploaded_count = 0;
-            int64_t max_chunk_index = -1;
-        };
-
         static constexpr auto UPLOAD_TASK_CACHE_TTL = std::chrono::seconds(60);
         static constexpr double UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS = 60.0;
 
@@ -206,10 +196,6 @@ namespace disk::file {
 
         auto ReleaseReservedQuota(uint64_t user_id, uint64_t reserved_bytes)
             -> drogon::Task<void>;
-
-        [[nodiscard]]
-        auto FindExistingTask(uint64_t user_id, const std::string& file_hash) const
-            -> drogon::Task<std::optional<drogon_model::disk::UploadTasks>>;
 
         [[nodiscard]]
         auto FindUploadTask(const std::string& upload_id, uint64_t user_id) const
@@ -274,12 +260,6 @@ namespace disk::file {
             const std::string& filename,
             uint64_t user_id
         ) const -> drogon::Task<bool>;
-
-        [[nodiscard]]
-        auto GetUploadedChunkCoverage(
-            const drogon::orm::DbClientPtr& client,
-            const std::string& upload_id
-        ) const -> drogon::Task<std::optional<UploadedChunkCoverage>>;
 
         /**
          * @brief Invalidate file list cache for specified user and folders

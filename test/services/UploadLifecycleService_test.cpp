@@ -1,0 +1,116 @@
+/**
+ * @file UploadLifecycleService_test.cpp
+ * @brief Upload lifecycle pure helper contract tests
+ *
+ * @copyright Copyright (c) 2026
+ */
+
+#include <cstdint>
+#include <optional>
+#include <string>
+
+#include <gtest/gtest.h>
+
+#include "services/UploadLifecycleService.hpp"
+
+namespace disk::upload {
+    namespace {
+
+        TEST(UploadLifecycleStateTransitionTest, StorageValuesMatchSchema) {
+            EXPECT_EQ(ToStorageValue(UploadTaskStatus::InProgress), 0);
+            EXPECT_EQ(ToStorageValue(UploadTaskStatus::Completed), 1);
+            EXPECT_EQ(ToStorageValue(UploadTaskStatus::Cancelled), 2);
+            EXPECT_EQ(ToStorageValue(UploadTaskStatus::Expired), 3);
+        }
+
+        TEST(UploadLifecycleStateTransitionTest, TerminalStatusDetection) {
+            EXPECT_FALSE(IsTerminalStatus(ToStorageValue(UploadTaskStatus::InProgress)));
+            EXPECT_TRUE(IsTerminalStatus(ToStorageValue(UploadTaskStatus::Completed)));
+            EXPECT_TRUE(IsTerminalStatus(ToStorageValue(UploadTaskStatus::Cancelled)));
+            EXPECT_TRUE(IsTerminalStatus(ToStorageValue(UploadTaskStatus::Expired)));
+        }
+
+        TEST(UploadLifecycleStateTransitionTest, TransitionGuardsOnlyAllowInProgress) {
+            EXPECT_TRUE(CanComplete(ToStorageValue(UploadTaskStatus::InProgress)));
+            EXPECT_FALSE(CanComplete(ToStorageValue(UploadTaskStatus::Completed)));
+            EXPECT_FALSE(CanComplete(ToStorageValue(UploadTaskStatus::Cancelled)));
+            EXPECT_FALSE(CanComplete(ToStorageValue(UploadTaskStatus::Expired)));
+
+            EXPECT_TRUE(CanCancelOrExpire(ToStorageValue(UploadTaskStatus::InProgress)));
+            EXPECT_FALSE(CanCancelOrExpire(ToStorageValue(UploadTaskStatus::Completed)));
+            EXPECT_FALSE(CanCancelOrExpire(ToStorageValue(UploadTaskStatus::Cancelled)));
+            EXPECT_FALSE(CanCancelOrExpire(ToStorageValue(UploadTaskStatus::Expired)));
+        }
+
+        TEST(UploadLifecycleInitDecisionTest, ExistingContentWins) {
+            auto decision = DecideInitFlow(true, "upload-id");
+            EXPECT_EQ(decision.type, InitDecisionType::InstantUpload);
+            EXPECT_TRUE(decision.upload_id.empty());
+        }
+
+        TEST(UploadLifecycleInitDecisionTest, ExistingTaskResumesWhenNoContent) {
+            auto decision = DecideInitFlow(false, "upload-id");
+            EXPECT_EQ(decision.type, InitDecisionType::ResumeUpload);
+            EXPECT_EQ(decision.upload_id, "upload-id");
+        }
+
+        TEST(UploadLifecycleInitDecisionTest, MissingContentAndTaskStartsNewUpload) {
+            auto decision = DecideInitFlow(false, "");
+            EXPECT_EQ(decision.type, InitDecisionType::StartNewUpload);
+            EXPECT_TRUE(decision.upload_id.empty());
+        }
+
+        TEST(UploadLifecycleChunkAcceptanceTest, AcceptsFullAndFinalShortChunks) {
+            auto first_chunk = ValidateChunkAcceptance(0, 10, 25, 10, 3);
+            ASSERT_TRUE(first_chunk.has_value());
+            EXPECT_EQ(first_chunk->expected_size, 10);
+
+            auto final_chunk = ValidateChunkAcceptance(2, 5, 25, 10, 3);
+            ASSERT_TRUE(final_chunk.has_value());
+            EXPECT_EQ(final_chunk->expected_size, 5);
+        }
+
+        TEST(UploadLifecycleChunkAcceptanceTest, RejectsOutOfRangeChunkIndex) {
+            auto result = ValidateChunkAcceptance(3, 1, 25, 10, 3);
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().error.code, ErrorCode::ValidationFailed);
+            EXPECT_EQ(result.error().error.message, "Chunk index out of range");
+            EXPECT_EQ(result.error().expected_size, 0);
+        }
+
+        TEST(UploadLifecycleChunkAcceptanceTest, RejectsUnexpectedChunkSize) {
+            auto result = ValidateChunkAcceptance(2, 6, 25, 10, 3);
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().error.code, ErrorCode::ValidationFailed);
+            EXPECT_EQ(result.error().error.message, "Unexpected chunk size");
+            EXPECT_EQ(result.error().expected_size, 5);
+        }
+
+        TEST(UploadLifecycleCoverageTest, CompleteCoverageRequiresCountAndMaxIndex) {
+            EXPECT_TRUE(IsCompleteCoverage(3, ChunkCoverage{ .uploaded_count = 3, .max_chunk_index = 2 }));
+            EXPECT_FALSE(IsCompleteCoverage(3, ChunkCoverage{ .uploaded_count = 2, .max_chunk_index = 2 }));
+            EXPECT_FALSE(IsCompleteCoverage(3, ChunkCoverage{ .uploaded_count = 3, .max_chunk_index = 1 }));
+            EXPECT_FALSE(IsCompleteCoverage(3, ChunkCoverage{ .uploaded_count = 3, .max_chunk_index = 3 }));
+            EXPECT_FALSE(IsCompleteCoverage(3, ChunkCoverage{}));
+        }
+
+        TEST(UploadLifecycleCoverageTest, EmptyTaskCoverageRequiresZeroUploadedCount) {
+            EXPECT_TRUE(IsCompleteCoverage(0, ChunkCoverage{ .uploaded_count = 0, .max_chunk_index = -1 }));
+            EXPECT_FALSE(IsCompleteCoverage(0, ChunkCoverage{ .uploaded_count = 1, .max_chunk_index = 0 }));
+        }
+
+        TEST(UploadLifecycleFinalizeDecisionTest, ReusesExistingContentWhenPresent) {
+            auto decision = DecideFinalizeStorage(42);
+            EXPECT_EQ(decision.type, FinalizeStorageDecisionType::ReuseExistingContent);
+            ASSERT_TRUE(decision.existing_content_id.has_value());
+            EXPECT_EQ(decision.existing_content_id.value(), 42);
+        }
+
+        TEST(UploadLifecycleFinalizeDecisionTest, PromotesWhenContentMissing) {
+            auto decision = DecideFinalizeStorage(std::nullopt);
+            EXPECT_EQ(decision.type, FinalizeStorageDecisionType::PromoteAsNewContent);
+            EXPECT_FALSE(decision.existing_content_id.has_value());
+        }
+
+    } // namespace
+} // namespace disk::upload
