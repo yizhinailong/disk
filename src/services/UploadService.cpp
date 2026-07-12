@@ -134,6 +134,7 @@ namespace disk::file {
                       << ", content_id=" << content_id;
 
             std::shared_ptr<drogon::orm::Transaction> transaction;
+            InitUploadResponse response;
             try {
                 transaction = co_await m_db_client->newTransactionCoro();
 
@@ -148,6 +149,20 @@ namespace disk::file {
                     co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
                 }
 
+                auto parent_location_result =
+                    co_await utils::ResolveFolderLocation(transaction, request.parent_id, user_id);
+                if (!parent_location_result) {
+                    co_return std::unexpected(parent_location_result.error());
+                }
+
+                /// 秒传复用物理内容，但仍按用户逻辑文件大小计入 storage_used。
+                auto quota_result = co_await CheckStorageQuota(transaction, user_id, request.file_size);
+                if (!quota_result) {
+                    Logger::Warn() << "Instant upload storage quota check failed: user_id=" << user_id
+                             << ", file_size=" << request.file_size;
+                    co_return std::unexpected(quota_result.error());
+                }
+
                 /// 事务内递增引用计数
                 disk::content::ContentService content_service(m_db_client);
                 auto increment_result = co_await content_service.IncrementRefCount(transaction, content_id);
@@ -155,12 +170,6 @@ namespace disk::file {
                     Logger::Warn() << "File content not found for instant upload: content_id="
                              << content_id;
                     throw std::runtime_error("Failed to increment file content reference count");
-                }
-
-                auto parent_location_result =
-                    co_await utils::ResolveFolderLocation(transaction, request.parent_id, user_id);
-                if (!parent_location_result) {
-                    co_return std::unexpected(parent_location_result.error());
                 }
 
                 /// 创建文件记录（使用 compound query 提供的 mime_type，无需二次读取）
@@ -179,10 +188,7 @@ namespace disk::file {
                 CoroMapper<Files> file_mapper(transaction);
                 file = co_await file_mapper.insert(file);
 
-                /// 注：秒传时 storage_used 不增加，因为物理文件已存在
-
                 /// 构造响应
-                InitUploadResponse response;
                 response.instant_upload = true;
                 response.file =
                     FileItem{ .id = file.getValueOfId(),
@@ -194,9 +200,6 @@ namespace disk::file {
                               .created_at = file.getValueOfCreatedAt().toDbStringLocal() };
 
                 Logger::Debug() << "Instant upload completed: file_id=" << file.getValueOfId();
-
-                co_await InvalidateFileListCache(user_id, {request.parent_id});
-                co_return response;
 
             } catch (const drogon::orm::DrogonDbException& e) {
                 Logger::Error() << "Instant upload create file record failed: " << e.base().what();
@@ -223,6 +226,10 @@ namespace disk::file {
                     ErrorInfo(ErrorCode::InternalError, "Failed to create file record")
                 );
             }
+
+            transaction.reset();
+            co_await InvalidateFileListCache(user_id, {request.parent_id});
+            co_return response;
         }
 
         /// 2. 检测断点续传

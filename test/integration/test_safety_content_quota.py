@@ -376,7 +376,9 @@ def test_instant_upload_dedup_ref_count() -> None:
     assert_equal("first upload creates content ref_count=1", before_ref, 1)
     assert_equal("first upload stores sha256", content_after_first["hash_sha256"], sha256_bytes(payload))
 
+    quota_before_instant = user_quota()
     upload_id, file_hash, instant_file_id = init_upload(f"safety_instant_dst_{unique_name()}.bin", payload)
+    quota_after_instant = user_quota()
     assert_equal("instant upload returns no upload task", upload_id, "")
     if instant_file_id is None:
         log_fail("instant upload returned no data.file.id")
@@ -386,9 +388,84 @@ def test_instant_upload_dedup_ref_count() -> None:
 
     assert_equal("instant file reuses content_id", int(instant_file["content_id"]), content_id)
     assert_numeric_delta("instant upload increments ref_count", before_ref, after_ref, 1)
+    assert_numeric_delta(
+        "instant upload increases used storage by logical file size",
+        quota_before_instant["storage_used"],
+        quota_after_instant["storage_used"],
+        len(payload),
+    )
+    assert_equal(
+        "instant upload preserves reserved storage",
+        quota_after_instant["storage_reserved"],
+        quota_before_instant["storage_reserved"],
+    )
     assert_equal("instant upload hash matches existing content", file_hash, first_file["name"] and md5_bytes(payload))
     same_hash_rows = int(scalar("SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s", (file_hash,)) or 0)
     assert_equal("instant upload creates no duplicate content row", same_hash_rows, 1)
+
+
+def test_instant_upload_quota_rejection_no_side_effects() -> None:
+    """Verify over-quota instant upload leaves no file, ref-count, or quota drift."""
+    log_section("Instant Upload Quota Rejection")
+    payload = f"instant-quota-reject-{unique_name()}".encode()
+    source_file_id = upload_file(f"safety_instant_quota_src_{unique_name()}.bin", payload)
+    source_file = file_row(source_file_id)
+    content_id = int(source_file["content_id"])
+    before_ref = int(content_row(content_id)["ref_count"])
+    file_hash = md5_bytes(payload)
+    target_name = f"safety_instant_quota_dst_{unique_name()}.bin"
+    original = user_quota()
+    before_same_hash_rows = int(scalar("SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s", (file_hash,)) or 0)
+    before_target_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND folder_id = 0 AND name = %s",
+            (USER_ID, target_name),
+        ) or 0
+    )
+
+    resp = None
+    saturated: dict[str, int] | None = None
+    quota_after_reject: dict[str, int] | None = None
+    try:
+        execute("UPDATE users SET storage_used = storage_quota WHERE id = %s", (USER_ID,))
+        saturated = user_quota()
+        resp = fetch(
+            "/api/file/upload/init",
+            method="POST",
+            headers=auth_headers(),
+            json_body={"filename": target_name, "file_size": len(payload), "file_hash": file_hash, "parent_id": 0},
+        )
+        save_evidence(f"{EVIDENCE_PREFIX}-instant-quota-reject.json", resp.text)
+        quota_after_reject = user_quota()
+    finally:
+        execute(
+            "UPDATE users SET storage_used = %s, storage_reserved = %s, storage_quota = %s WHERE id = %s",
+            (original["storage_used"], original["storage_reserved"], original["storage_quota"], USER_ID),
+        )
+
+    if resp is None or saturated is None or quota_after_reject is None:
+        log_fail("instant upload quota rejection request completed")
+        print_summary()
+
+    after_target_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND folder_id = 0 AND name = %s",
+            (USER_ID, target_name),
+        ) or 0
+    )
+    after_ref = int(content_row(content_id)["ref_count"])
+    restored = user_quota()
+    after_same_hash_rows = int(scalar("SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s", (file_hash,)) or 0)
+
+    assert_equal("instant upload quota rejection returns quota error", json_field(resp.text, "code"), "50004")
+    assert_equal("instant upload quota rejection creates no target file", after_target_count, before_target_count)
+    assert_equal("instant upload quota rejection leaves ref_count unchanged", after_ref, before_ref)
+    assert_equal("instant upload quota rejection leaves used unchanged", quota_after_reject["storage_used"], saturated["storage_used"])
+    assert_equal("instant upload quota rejection leaves reserved unchanged", quota_after_reject["storage_reserved"], saturated["storage_reserved"])
+    assert_equal("instant upload quota rejection restores used", restored["storage_used"], original["storage_used"])
+    assert_equal("instant upload quota rejection restores reserved", restored["storage_reserved"], original["storage_reserved"])
+    assert_equal("instant upload quota rejection creates no duplicate content row", after_same_hash_rows, before_same_hash_rows)
+    assert_path_exists("instant upload quota rejection keeps existing final blob", final_blob_path(file_hash))
 
 
 def create_matching_content_fixture(filename: str, payload: bytes) -> tuple[int, int, str]:
