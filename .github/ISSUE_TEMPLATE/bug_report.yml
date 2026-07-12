@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a problem with Orca
+description: Report a problem with the Disk cloud storage backend
 title: '[Bug]: '
 labels:
   - bug
@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this form for Orca bugs. Include enough detail for someone else to reproduce the issue.
+        Use this form to report bugs in Disk, a high-performance cloud storage backend built with C++23 and Drogon. Include enough detail for maintainers to reproduce and diagnose the issue.
 
   - type: dropdown
     id: os
@@ -22,11 +22,11 @@ body:
       required: true
 
   - type: input
-    id: orca_version
+    id: disk_version
     attributes:
-      label: Orca version
-      description: Include the exact Orca version if you can. You can find it in `Orca > About Orca`.
-      placeholder: v0.14.2
+      label: Disk version / commit
+      description: Include the Disk version, Git commit, or branch name. For local builds, also include the build preset.
+      placeholder: main @ 13fb2b4, linux-debug-clang
     validations:
       required: false
 
@@ -34,18 +34,20 @@ body:
     id: details
     attributes:
       label: Details
-      description: Describe the bug in your own words. Include a short summary, reproduction steps, and anything else that seems relevant.
+      description: Describe the problem, reproduction steps, expected result, actual result, and any relevant logs, API requests, or test output.
       placeholder: |
         Short summary:
-        Orca crashes when ...
+        When calling the ... API, ...
 
-        What happened?
-
-        How can we reproduce it?
+        Steps to reproduce:
         1. ...
         2. ...
         3. ...
 
-        Anything else that might help:
+        Expected result:
+
+        Actual result:
+
+        Relevant logs / requests / responses:
     validations:
       required: true

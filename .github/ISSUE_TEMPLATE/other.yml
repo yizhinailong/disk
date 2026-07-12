@@ -1,11 +1,11 @@
 name: Other
-description: Report another Orca issue type
+description: Report another issue related to the Disk cloud storage backend
 title: '[Other]: '
 body:
   - type: textarea
     id: details
     attributes:
       label: Details
-      description: Share the context, request, or issue. Include a short summary here too.
+      description: Share the context, request, or issue type. For build, configuration, deployment, documentation, or testing topics, include relevant commands, environment details, and output.
     validations:
       required: true
