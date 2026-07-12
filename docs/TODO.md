@@ -259,10 +259,12 @@ Initial `TransactionRunner` exists. Remaining work is to apply it consistently t
 
 ## 5.1 Strengthen upload finalization transaction boundary
 
-- [ ] Confirm upload finalization uses `TransactionRunner` consistently.
-- [ ] Ensure content creation/reuse, file row creation, quota commit, task finalization, and chunk cleanup are transactionally grouped where intended.
-- [ ] Keep filesystem promotion outside the DB transaction unless compensation is explicit.
-- [ ] Test DB failure after blob promotion compensation.
+Completion status: closed by `fix(upload): guard finalization compensation`.
+
+- [x] Confirm upload finalization uses `TransactionRunner` consistently.
+- [x] Ensure content creation/reuse, file row creation, quota commit, task finalization, and chunk cleanup are transactionally grouped where intended.
+- [x] Keep filesystem promotion outside the DB transaction unless compensation is explicit.
+- [x] Test DB failure after blob promotion compensation.
 
 ## 5.2 Migrate copy flow transaction boundary
 
