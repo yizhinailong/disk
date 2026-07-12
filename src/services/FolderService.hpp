@@ -18,6 +18,7 @@
 
 #include "dtos/FolderDto.hpp"
 #include "models/Folders.hpp"
+#include "services/FolderRepository.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::folder {
@@ -156,6 +157,7 @@ namespace disk::folder {
             -> FolderTreeNode;
 
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
+        FolderRepository m_folder_repository; ///< 文件夹持久化原语
     };
 
 } ///< namespace disk::folder

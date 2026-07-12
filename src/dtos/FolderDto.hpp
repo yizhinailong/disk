@@ -181,7 +181,7 @@ namespace disk::folder {
         /// 验证字符集（合法 UTF-8，且不含控制字符）
         [[nodiscard]]
         auto ValidateCharset() const -> bool {
-            return utils::IsValidUtf8WithoutControlChars(name);
+            return ::disk::utils::IsValidUtf8WithoutControlChars(name);
         }
     };
 
@@ -309,7 +309,7 @@ namespace disk::folder {
         }
 
         [[nodiscard]] auto ValidateCharset() const -> bool {
-            return utils::IsValidUtf8WithoutControlChars(new_name);
+            return ::disk::utils::IsValidUtf8WithoutControlChars(new_name);
         }
     };
 

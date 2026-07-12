@@ -20,6 +20,8 @@ set(TEST_SOURCES
     services/CompleteUploadSingleflight_test.cpp
     services/UploadLifecycleService_test.cpp
     services/UploadTaskRepository_test.cpp
+    services/FileRepository_test.cpp
+    services/FolderRepository_test.cpp
     services/FileServiceAtomicity_test.cpp
     services/FileServiceBatch_test.cpp
     services/FileServiceSearch_test.cpp
@@ -57,6 +59,8 @@ set(TEST_SOURCES
     storage/AssemblyPerf_test.cpp
     controllers/DownloadResponder_test.cpp
     ${CMAKE_SOURCE_DIR}/src/controllers/DownloadResponder.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/FileRepository.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/FolderRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ContentService.cpp
@@ -91,6 +95,8 @@ set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/StorageMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/controllers/DownloadResponder.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/FileRepository.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/FolderRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/UploadLifecycleService.cpp

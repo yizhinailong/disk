@@ -18,8 +18,10 @@
 #include <drogon/orm/DbClient.h>
 
 #include "dtos/FileDto.hpp"
-#include "services/RedisService.hpp"
 #include "models/Files.hpp"
+#include "services/FileRepository.hpp"
+#include "services/FolderRepository.hpp"
+#include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::storage {
@@ -189,6 +191,8 @@ namespace disk::file {
             -> drogon::Task<void>;
 
         drogon::orm::DbClientPtr m_db_client;                                      ///< 数据库客户端
+        FileRepository m_file_repository;                                           ///< 文件持久化原语
+        disk::folder::FolderRepository m_folder_repository;                         ///< 文件夹持久化原语
         storage::IFileStorage* m_storage{};                                          ///< 文件存储接口
         std::shared_ptr<disk::services::RedisService> m_redis_service{disk::services::RedisService::GetInstance()};  ///< Redis 服务
     };

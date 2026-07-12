@@ -247,7 +247,7 @@ namespace disk::file {
         /// 验证文件名字符集（合法 UTF-8，且不含控制字符）
         [[nodiscard]]
         auto ValidateFilenameCharset() const -> bool {
-            return utils::IsValidUtf8WithoutControlChars(filename);
+            return ::disk::utils::IsValidUtf8WithoutControlChars(filename);
         }
 
         /// 验证文件大小 (> 0)
@@ -958,7 +958,7 @@ namespace disk::file {
         /// 验证文件名字符集（合法 UTF-8，且不含控制字符）
         [[nodiscard]]
         auto ValidateFilenameCharset() const -> bool {
-            return utils::IsValidUtf8WithoutControlChars(new_name);
+            return ::disk::utils::IsValidUtf8WithoutControlChars(new_name);
         }
     };
 
