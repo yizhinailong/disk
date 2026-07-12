@@ -9,10 +9,13 @@
 
 #include "services/ShareService.hpp"
 
+#include "services/ContentService.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <limits>
 #include <random>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -1050,6 +1053,7 @@ namespace disk::share {
 
             CoroMapper<Files> file_mapper(transaction);
             CoroMapper<Folders> folder_mapper(transaction);
+            disk::content::ContentService content_service(m_db_client);
             SaveShareItemsResponse response;
             uint64_t actual_size = 0;
             int saved_top_level_count = 0;
@@ -1066,10 +1070,13 @@ namespace disk::share {
                 }
 
                 if (source_file.getContentId()) {
-                    co_await transaction->execSqlCoro(
-                        "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = $1",
+                    auto increment_result = co_await content_service.IncrementRefCount(
+                        transaction,
                         *source_file.getContentId()
                     );
+                    if (!increment_result) {
+                        throw std::runtime_error(increment_result.error().message);
+                    }
                 }
 
                 Files copied_file;
@@ -1160,10 +1167,13 @@ namespace disk::share {
                     }
 
                     if (source_file.getContentId()) {
-                        co_await transaction->execSqlCoro(
-                            "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id = $1",
+                        auto increment_result = co_await content_service.IncrementRefCount(
+                            transaction,
                             *source_file.getContentId()
                         );
+                        if (!increment_result) {
+                            throw std::runtime_error(increment_result.error().message);
+                        }
                     }
 
                     Files copied_file;

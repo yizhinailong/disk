@@ -231,10 +231,10 @@ Initial repository primitives exist, but most query/data-access logic is still e
 
 ## 4.4 Expand content repository or consolidate into ContentService
 
-- [ ] Remove or resolve overlap between `ContentRepository` and `ContentService`.
-- [ ] Ensure all `file_contents.ref_count` mutations go through one consistent path.
-- [ ] Ensure zero-ref verification remains explicit before physical blob deletion.
-- [ ] Preserve current dedup semantics unless product rules change.
+- [x] Remove or resolve overlap between `ContentRepository` and `ContentService`.
+- [x] Ensure all `file_contents.ref_count` mutations go through one consistent path.
+- [x] Ensure zero-ref verification remains explicit before physical blob deletion.
+- [x] Preserve current dedup semantics unless product rules change.
 
 ## 4.5 Add trash repository/query methods
 

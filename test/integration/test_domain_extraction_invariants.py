@@ -452,6 +452,36 @@ def test_expired_upload_cleanup_pending_trigger_documented() -> None:
     log_pass("expired upload cleanup trigger gap documented with executable expired-task fixture")
 
 
+def test_ref_count_mutation_boundary_source_invariant() -> None:
+    log_section("Ref Count Mutation Boundary Source Invariant")
+    project_root = Path(__file__).resolve().parents[2]
+    allowed_ref_count_sql = project_root / "src" / "services" / "ContentService.cpp"
+    forbidden_hits: list[str] = []
+
+    for source_path in (project_root / "src").rglob("*.cpp"):
+        text = source_path.read_text(encoding="utf-8")
+        if "UPDATE file_contents SET ref_count" not in text:
+            continue
+        if source_path == allowed_ref_count_sql:
+            continue
+        forbidden_hits.append(str(source_path.relative_to(project_root)))
+
+    if forbidden_hits:
+        log_fail("file_contents.ref_count direct SQL exists outside ContentService: " + ", ".join(forbidden_hits))
+        print_summary()
+
+    removed_repository_files = [
+        project_root / "src" / "services" / "ContentRepository.hpp",
+        project_root / "src" / "services" / "ContentRepository.cpp",
+    ]
+    existing_repository_files = [str(path.relative_to(project_root)) for path in removed_repository_files if path.exists()]
+    if existing_repository_files:
+        log_fail("ContentRepository duplicate primitive still exists: " + ", ".join(existing_repository_files))
+        print_summary()
+
+    log_pass("file_contents.ref_count mutation SQL is centralized in ContentService")
+
+
 def main() -> None:
     print("==========================================")
     print("Backend Domain Extraction Invariant Tests")
@@ -468,6 +498,7 @@ def main() -> None:
     USER_ID = current_user_id()
     log_info(f"Using user_id={USER_ID}, chunk_size={configured_chunk_size()}, base_url={BASE_URL}")
 
+    test_ref_count_mutation_boundary_source_invariant()
     test_successful_upload_invariants()
     test_cancel_upload_invariants()
     test_instant_upload_ref_count_and_accounting()
