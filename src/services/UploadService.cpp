@@ -1141,32 +1141,6 @@ namespace disk::file {
         co_await quota_service.AdjustUsedStorage(client, user_id, delta);
     }
 
-    auto UploadService::LookupExistingContentMetadata(
-        const drogon::orm::DbClientPtr& client,
-        const std::string& file_hash
-    ) const -> drogon::Task<std::optional<ExistingContentMetadata>> {
-
-        try {
-            auto result = co_await client->execSqlCoro(
-                "SELECT id, mime_type FROM file_contents WHERE hash_md5 = $1 LIMIT 1",
-                file_hash
-            );
-
-            if (result.empty()) {
-                co_return std::nullopt;
-            }
-
-            ExistingContentMetadata metadata;
-            metadata.id = result[0]["id"].as<uint64_t>();
-            metadata.mime_type = result[0]["mime_type"].as<std::string>();
-            co_return metadata;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to lookup existing content metadata: " << e.base().what();
-            co_return std::nullopt;
-        }
-    }
-
     auto UploadService::IsFilenameExists(
         const drogon::orm::DbClientPtr& client,
         uint64_t folder_id,

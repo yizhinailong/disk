@@ -188,7 +188,7 @@ Discovery found that inline expired-task cleanup during upload init may delete e
 
 ## 3.4 Clarify service ownership boundaries
 
-- [ ] Decide whether `ContentRepository` should remain separate from `ContentService` or be absorbed/renamed.
+- [x] Treat `ContentService` as the absorbed content persistence boundary; do not revive a separate `ContentRepository`.
 - [ ] Decide whether `UploadTaskRepository` should remain a low-level primitive or grow into a full repository.
 - [ ] Avoid duplicate paths that mutate the same table with subtly different semantics.
 - [ ] Document the intended layering:

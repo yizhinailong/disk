@@ -348,7 +348,10 @@ def test_instant_upload_dedup_ref_count() -> None:
     first_file_id = upload_file(f"safety_instant_src_{unique_name()}.bin", payload)
     first_file = file_row(first_file_id)
     content_id = int(first_file["content_id"])
-    before_ref = int(content_row(content_id)["ref_count"])
+    content_after_first = content_row(content_id)
+    before_ref = int(content_after_first["ref_count"])
+    assert_equal("first upload creates content ref_count=1", before_ref, 1)
+    assert_equal("first upload stores sha256", content_after_first["hash_sha256"], sha256_bytes(payload))
 
     upload_id, file_hash, instant_file_id = init_upload(f"safety_instant_dst_{unique_name()}.bin", payload)
     assert_equal("instant upload returns no upload task", upload_id, "")
@@ -361,6 +364,8 @@ def test_instant_upload_dedup_ref_count() -> None:
     assert_equal("instant file reuses content_id", int(instant_file["content_id"]), content_id)
     assert_numeric_delta("instant upload increments ref_count", before_ref, after_ref, 1)
     assert_equal("instant upload hash matches existing content", file_hash, first_file["name"] and md5_bytes(payload))
+    same_hash_rows = int(scalar("SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s", (file_hash,)) or 0)
+    assert_equal("instant upload creates no duplicate content row", same_hash_rows, 1)
 
 
 def create_matching_content_fixture(filename: str, payload: bytes) -> tuple[int, int, str]:
@@ -444,6 +449,8 @@ def test_completion_dedup_race_ref_count_and_accounting_current_rule() -> None:
         quota_after_complete["storage_used"],
         len(payload),
     )
+    same_hash_rows = int(scalar("SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s", (file_hash,)) or 0)
+    assert_equal("completion dedup creates no duplicate content row", same_hash_rows, 1)
     assert_path_exists("dedup race keeps existing final blob", final_blob_path(file_hash))
     assert_path_absent("dedup race cleans temp upload directory", upload_temp_dir(upload_id))
 
@@ -658,10 +665,13 @@ def test_delete_all_ref_count_quota_and_blob_cleanup() -> None:
     assert_db_row_absent("first delete-all trash row removed", "SELECT id FROM trash WHERE id = %s", (first_trash,))
     assert_db_row_absent("second delete-all trash row removed", "SELECT id FROM trash WHERE id = %s", (second_trash,))
     assert_numeric_delta("delete-all decrements ref_count for both files", before_ref, final_ref, -2)
+    assert_equal("delete-all does not drive ref_count negative", final_ref >= 0, True)
     assert_numeric_delta("delete-all releases used storage for both files", quota_before["storage_used"], quota_after["storage_used"], -2 * len(payload))
     assert_path_absent("delete-all deletes blob at zero ref_count", final_blob_path(file_hash))
 
 
+def test_permanent_delete_ref_count_and_blob_retention() -> None:
+    """Verify selected permanent delete decrements refs and keeps shared blobs until zero refs."""
     log_section("Permanent Delete Ref-Count And Blob Retention")
     payload = f"trash-ref-blob-{unique_name()}".encode()
     first_file_id = upload_file(f"safety_trash_a_{unique_name()}.bin", payload)
@@ -684,6 +694,7 @@ def test_delete_all_ref_count_quota_and_blob_cleanup() -> None:
     permanently_delete_trash(trash_second)
     final_ref = int(content_row(content_id)["ref_count"])
     assert_equal("second permanent delete reaches zero ref_count", final_ref, 0)
+    assert_equal("permanent delete does not drive ref_count negative", final_ref >= 0, True)
     assert_path_absent("blob deleted when ref_count reaches zero", final_blob_path(file_hash))
 
 
@@ -725,6 +736,7 @@ def test_expired_trash_cleanup_ref_count_quota_and_blob_retention() -> None:
     assert_equal("expired cleanup reports second trash deletion", second_counts["expired_trash_deleted"] >= 1, True)
     assert_db_row_absent("second expired trash row removed after cleanup", "SELECT id FROM trash WHERE id = %s", (trash_second,))
     assert_equal("expired cleanup reaches zero ref_count after final reference", final_ref, 0)
+    assert_equal("expired cleanup does not drive ref_count negative", final_ref >= 0, True)
     assert_numeric_delta(
         "final expired cleanup releases used storage by current backend rule",
         quota_after_first["storage_used"],

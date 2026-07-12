@@ -452,22 +452,34 @@ def test_expired_upload_cleanup_pending_trigger_documented() -> None:
     log_pass("expired upload cleanup trigger gap documented with executable expired-task fixture")
 
 
-def test_ref_count_mutation_boundary_source_invariant() -> None:
-    log_section("Ref Count Mutation Boundary Source Invariant")
+def test_content_boundary_source_invariant() -> None:
+    log_section("Content Boundary Source Invariant")
     project_root = Path(__file__).resolve().parents[2]
-    allowed_ref_count_sql = project_root / "src" / "services" / "ContentService.cpp"
-    forbidden_hits: list[str] = []
+    content_service_source = project_root / "src" / "services" / "ContentService.cpp"
+    forbidden_ref_count_hits: list[str] = []
+    forbidden_lifecycle_lookup_hits: list[str] = []
+
+    lifecycle_lookup_markers = [
+        "SELECT id, mime_type " + "FROM file_contents " + "WHERE hash_md5",
+        "FROM file_contents " + "WHERE hash_md5",
+    ]
 
     for source_path in (project_root / "src").rglob("*.cpp"):
         text = source_path.read_text(encoding="utf-8")
-        if "UPDATE file_contents SET ref_count" not in text:
-            continue
-        if source_path == allowed_ref_count_sql:
-            continue
-        forbidden_hits.append(str(source_path.relative_to(project_root)))
+        relative_path = str(source_path.relative_to(project_root))
 
-    if forbidden_hits:
-        log_fail("file_contents.ref_count direct SQL exists outside ContentService: " + ", ".join(forbidden_hits))
+        if "UPDATE file_contents SET ref_count" in text and source_path != content_service_source:
+            forbidden_ref_count_hits.append(relative_path)
+
+        if source_path != content_service_source and any(marker in text for marker in lifecycle_lookup_markers):
+            forbidden_lifecycle_lookup_hits.append(relative_path)
+
+    if forbidden_ref_count_hits:
+        log_fail("file_contents.ref_count direct SQL exists outside ContentService: " + ", ".join(forbidden_ref_count_hits))
+        print_summary()
+
+    if forbidden_lifecycle_lookup_hits:
+        log_fail("file_contents lifecycle md5 lookup SQL exists outside ContentService: " + ", ".join(forbidden_lifecycle_lookup_hits))
         print_summary()
 
     removed_repository_files = [
@@ -479,7 +491,20 @@ def test_ref_count_mutation_boundary_source_invariant() -> None:
         log_fail("ContentRepository duplicate primitive still exists: " + ", ".join(existing_repository_files))
         print_summary()
 
-    log_pass("file_contents.ref_count mutation SQL is centralized in ContentService")
+    trash_source = project_root / "src" / "services" / "TrashService.cpp"
+    trash_text = trash_source.read_text(encoding="utf-8")
+    cleanup_start = trash_text.find("auto TrashService::CleanupVerifiedZeroRefBlobs")
+    verify_index = trash_text.find("VerifyZeroRefContents", cleanup_start)
+    storage_path_index = trash_text.find("content.storage_path", cleanup_start)
+    delete_index = trash_text.find("ParallelDeletePaths", cleanup_start)
+    if cleanup_start == -1 or verify_index == -1 or storage_path_index == -1 or delete_index == -1:
+        log_fail("Trash blob cleanup no longer exposes explicit zero-ref verification and deletion steps")
+        print_summary()
+    if not (cleanup_start < verify_index < storage_path_index < delete_index):
+        log_fail("Trash blob cleanup must verify zero refs before collecting storage paths and deleting blobs")
+        print_summary()
+
+    log_pass("Content lifecycle SQL and zero-ref blob deletion checks remain centralized")
 
 
 def main() -> None:
@@ -498,7 +523,7 @@ def main() -> None:
     USER_ID = current_user_id()
     log_info(f"Using user_id={USER_ID}, chunk_size={configured_chunk_size()}, base_url={BASE_URL}")
 
-    test_ref_count_mutation_boundary_source_invariant()
+    test_content_boundary_source_invariant()
     test_successful_upload_invariants()
     test_cancel_upload_invariants()
     test_instant_upload_ref_count_and_accounting()
