@@ -312,6 +312,57 @@ def test_expired_upload_cleanup_invariants() -> None:
     assert_path_absent("final blob absent after expiry", final_blob_path(file_hash))
 
 
+def test_init_upload_expires_existing_task_invariants() -> None:
+    """Verify upload init cleanup releases expired task quota before reserving replacement."""
+    log_section("Upload Init Inline Expired Cleanup Invariants")
+    payload = f"safety-init-expire-{unique_name()}".encode()
+    filename = f"safety_init_expire_{unique_name()}.bin"
+    quota_before = user_quota()
+
+    old_upload_id, file_hash = init_upload(filename, payload)
+    quota_after_first_init = user_quota()
+    upload_single_chunk(old_upload_id, payload)
+    assert_numeric_delta(
+        "inline expiry fixture reserves storage",
+        quota_before["storage_reserved"],
+        quota_after_first_init["storage_reserved"],
+        len(payload),
+    )
+
+    affected = execute(
+        "UPDATE upload_tasks SET expires_at = NOW() - INTERVAL '1 second' WHERE id = %s AND status = 0",
+        (old_upload_id,),
+    )
+    assert_equal("inline expiry fixture marks upload task expired in DB", affected, 1)
+
+    new_upload_id, _ = init_upload(filename, payload)
+    quota_after_second_init = user_quota()
+
+    assert_equal("inline expiry init creates replacement upload id", new_upload_id != old_upload_id, True)
+    old_task = assert_upload_task(old_upload_id, 3)
+    assert_equal("inline expired task fail_reason documents expiry", old_task["fail_reason"], "任务过期")
+    new_task = assert_upload_task(new_upload_id, 0)
+    assert_equal("replacement task reserved_bytes equals file size", int(new_task["reserved_bytes"]), len(payload))
+    assert_numeric_delta(
+        "inline expired init does not double-reserve storage",
+        quota_before["storage_reserved"],
+        quota_after_second_init["storage_reserved"],
+        len(payload),
+    )
+    assert_equal("inline expired init preserves used storage", quota_after_second_init["storage_used"], quota_before["storage_used"])
+    assert_db_row_absent(
+        "inline expired init creates no logical file row",
+        "SELECT id FROM files WHERE user_id = %s AND name = %s",
+        (USER_ID, filename),
+    )
+    assert_path_absent("old temp upload directory cleaned by inline expiry", upload_temp_dir(old_upload_id))
+    assert_path_absent(
+        "old assembled temp artifact absent after inline expiry",
+        upload_temp_dir(old_upload_id).parent / f"{old_upload_id}.tmp",
+    )
+    assert_path_absent("final blob absent after inline expiry", final_blob_path(file_hash))
+
+
 def main() -> None:
     """Run upload safety-net tests."""
     print("==========================================")
@@ -332,6 +383,7 @@ def main() -> None:
     test_successful_chunked_upload_invariants()
     test_cancel_upload_invariants()
     test_expired_upload_cleanup_invariants()
+    test_init_upload_expires_existing_task_invariants()
 
     print_summary()
 

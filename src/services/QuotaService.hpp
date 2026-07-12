@@ -64,6 +64,13 @@ namespace disk::quota {
         ) const -> drogon::Task<void>;
 
         [[nodiscard]]
+        auto ReleaseReservedStorageChecked(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t user_id,
+            uint64_t bytes
+        ) const -> drogon::Task<Result<void>>;
+
+        [[nodiscard]]
         auto CommitReservedToUsed(
             const drogon::orm::DbClientPtr& client,
             uint64_t user_id,
