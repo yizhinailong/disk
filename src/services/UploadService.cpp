@@ -733,7 +733,7 @@ namespace disk::file {
         auto finalize_storage_decision = disk::upload::DecideFinalizeStorage(existing_content);
         std::filesystem::path final_storage_path;
         std::string final_sha256;
-        bool should_compensate_storage_file = false;
+        bool should_delete_promoted_blob_on_tx_failure = false;
 
         if (finalize_storage_decision.type == disk::upload::FinalizeStorageDecisionType::ReuseExistingContent) {
             auto delete_result = co_await m_storage->DeletePath(assemble_path);
@@ -764,9 +764,12 @@ namespace disk::file {
                 co_return std::unexpected(promote_result.error());
             }
 
-            final_storage_path = promote_result.value();
+            const auto& promoted = promote_result.value();
+            final_storage_path = promoted.path;
             final_sha256 = precomputed_sha256;
-            should_compensate_storage_file = true;
+            /// PromoteToFinal may reuse a pre-existing final blob under DB/storage drift.
+            /// Only delete the final blob on transaction failure if this call created it.
+            should_delete_promoted_blob_on_tx_failure = promoted.created;
         }
         Logger::Debug() << "[stage_timer] dedup_lookup duration_ms="
                   << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -865,7 +868,7 @@ namespace disk::file {
 
         if (db_operation_failed) {
             auto compensation_start = std::chrono::steady_clock::now();
-            if (should_compensate_storage_file) {
+            if (should_delete_promoted_blob_on_tx_failure) {
                 auto cleanup_result = co_await m_storage->DeletePath(final_storage_path);
                 if (!cleanup_result) {
                     Logger::Error() << "Compensation failed, orphan storage file may remain: "
@@ -886,9 +889,7 @@ namespace disk::file {
                      << " outcome=failure upload_id=" << upload_id
                      << " total_chunks=" << task.getValueOfTotalChunks();
 
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Database operation failed")
-            );
+            co_return std::unexpected(tx_result.error());
         }
 
         Logger::Debug() << "Files record created successfully: file_id=" << file.getValueOfId();

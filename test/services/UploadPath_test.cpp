@@ -570,7 +570,9 @@ namespace disk::file {
             );
             ASSERT_TRUE(promote_result.has_value());
 
-            const auto& final_path = promote_result.value();
+            const auto& promoted = promote_result.value();
+            EXPECT_TRUE(promoted.created);
+            const auto& final_path = promoted.path;
             EXPECT_TRUE(std::filesystem::exists(final_path));
             EXPECT_EQ(ReadBinaryFile(final_path), expected_content);
 
