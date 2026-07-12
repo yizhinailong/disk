@@ -111,7 +111,9 @@ set(Services_HEADERS
     services/FileListQuery.hpp
     services/FileMutationService.hpp
     services/FileQueryService.hpp
+    services/FileRepository.hpp
     services/FileServiceUtils.hpp
+    services/FolderRepository.hpp
     services/FolderService.hpp
     services/HealthService.hpp
     services/OperationLogService.hpp
@@ -138,7 +140,9 @@ set(Services_SOURCES
     services/FileListQuery.cpp
     services/FileMutationService.cpp
     services/FileQueryService.cpp
+    services/FileRepository.cpp
     services/FileServiceUtils.cpp
+    services/FolderRepository.cpp
     services/FolderService.cpp
     services/HealthService.cpp
     services/OperationLogService.cpp

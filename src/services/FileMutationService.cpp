@@ -40,7 +40,10 @@ namespace disk::file {
     /// ==================== 构造函数 ====================
 
     FileMutationService::FileMutationService(drogon::orm::DbClientPtr db_client, storage::IFileStorage* storage)
-        : m_db_client(std::move(db_client)), m_storage(storage) {
+        : m_db_client(std::move(db_client)),
+          m_file_repository(m_db_client),
+          m_folder_repository(m_db_client),
+          m_storage(storage) {
         Logger::Debug() << "FileMutationService initialization completed";
     }
 
@@ -54,35 +57,34 @@ namespace disk::file {
                         << ", user_id=" << user_id;
 
         try {
-            CoroMapper<Files> mapper(m_db_client);
-            auto file = co_await mapper.findOne(
-                Criteria(Files::Cols::_id, CompareOperator::EQ, file_id) &&
-                Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id)
-            );
+            auto file = co_await m_file_repository.FindOwnedFile(m_db_client, file_id, user_id);
+            if (!file) {
+                co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
+            }
 
-            auto folder_id = file.getValueOfFolderId();
-            if (file.getValueOfName() != new_name && co_await IsFilenameExists(folder_id, new_name, user_id)) {
+            auto folder_id = file->getValueOfFolderId();
+            if (file->getValueOfName() != new_name && co_await IsFilenameExists(folder_id, new_name, user_id)) {
                 Logger::Warn() << "Target folder already has file with same name: " << new_name;
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
             }
 
-            auto folder_location_result = co_await utils::ResolveFolderLocation(m_db_client, folder_id, user_id);
+            auto folder_location_result = co_await m_folder_repository.ResolveOwnedFolderLocation(m_db_client, folder_id, user_id);
             if (!folder_location_result) {
                 co_return std::unexpected(folder_location_result.error());
             }
 
             auto updated_at = trantor::Date::now();
             auto new_path = utils::BuildFilePath(folder_location_result->path, new_name);
-            auto update_result = co_await m_db_client->execSqlCoro(
-                "UPDATE files SET name = $1, extension = $2, path = $3, updated_at = $4 " "WHERE id = $5 AND user_id = $6",
+            auto updated = co_await m_file_repository.RenameOwnedFile(
+                m_db_client,
+                file_id,
+                user_id,
                 new_name,
                 ExtractExtension(new_name),
                 new_path,
-                updated_at,
-                file_id,
-                user_id
+                updated_at
             );
-            if (update_result.affectedRows() == 0) {
+            if (!updated) {
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
             }
 
@@ -90,7 +92,7 @@ namespace disk::file {
                            << "\"";
 
             RenameResponse response;
-            response.id = file.getValueOfId();
+            response.id = file->getValueOfId();
             response.name = new_name;
             response.updated_at = updated_at.toDbStringLocal();
 
@@ -113,7 +115,7 @@ namespace disk::file {
                         << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
         auto target_location_result =
-            co_await utils::ResolveFolderLocation(m_db_client, request.target_folder_id, user_id);
+            co_await m_folder_repository.ResolveOwnedFolderLocation(m_db_client, request.target_folder_id, user_id);
         if (!target_location_result) {
             co_return std::unexpected(target_location_result.error());
         }
@@ -142,20 +144,20 @@ namespace disk::file {
                         continue;
                     }
 
-                    auto result = co_await txn->execSqlCoro(
-                        "SELECT id, folder_id, name FROM files WHERE id IN (" +
-                            BatchUtils::BuildSafeNumericInClause(chunk) + ") AND user_id = $1",
+                    auto fetched_files = co_await m_file_repository.FetchOwnedFilesByIds(
+                        txn,
+                        chunk,
                         user_id
                     );
 
                     std::unordered_map<uint64_t, std::pair<uint64_t, std::string>> files;
-                    files.reserve(result.size());
+                    files.reserve(fetched_files.size());
                     std::vector<std::string> candidate_names;
-                    candidate_names.reserve(result.size());
-                    for (const auto& row : result) {
-                        auto id = row["id"].as<uint64_t>();
-                        auto folder_id = row["folder_id"].as<uint64_t>();
-                        auto name = row["name"].as<std::string>();
+                    candidate_names.reserve(fetched_files.size());
+                    for (const auto& file : fetched_files) {
+                        auto id = file.getValueOfId();
+                        auto folder_id = file.getValueOfFolderId();
+                        auto name = file.getValueOfName();
                         files[id] = { folder_id, name };
                         if (folder_id != request.target_folder_id) {
                             candidate_names.push_back(name);
@@ -193,15 +195,15 @@ namespace disk::file {
                         occupied_names.insert(name);
 
                         auto updated_at = trantor::Date::now();
-                        auto update_result = co_await txn->execSqlCoro(
-                            "UPDATE files SET folder_id = $1, path = $2, updated_at = $3 " "WHERE id = $4 AND user_id = $5",
+                        auto updated = co_await m_file_repository.UpdateFileLocation(
+                            txn,
+                            file_id,
+                            user_id,
                             request.target_folder_id,
                             utils::BuildFilePath(target_location.path, name),
-                            updated_at,
-                            file_id,
-                            user_id
+                            updated_at
                         );
-                        if (update_result.affectedRows() == 0) {
+                        if (!updated) {
                             continue;
                         }
 
@@ -218,19 +220,19 @@ namespace disk::file {
                         if (delta == 0) {
                             continue;
                         }
-                        co_await txn->execSqlCoro(
-                            "UPDATE folders SET item_count = GREATEST(item_count + $1, 0), " "updated_at = $2 WHERE id = $3 AND user_id = $4",
-                            delta,
-                            trantor::Date::now(),
+                        co_await m_folder_repository.ApplyItemCountDelta(
+                            txn,
                             folder_id,
-                            user_id
+                            user_id,
+                            delta,
+                            trantor::Date::now()
                         );
                     }
                 }
             }
 
             std::unordered_map<uint64_t, utils::FolderDeletePlan> folder_plans =
-                co_await utils::FetchBatchFolderDeletePlans(txn, folder_ids, user_id);
+                co_await m_folder_repository.FetchBatchFolderDeletePlans(txn, folder_ids, user_id);
 
             auto top_level_folder_ids = utils::FilterCoveredFolderIds(folder_ids, folder_plans);
             std::vector<std::string> folder_candidate_names;
@@ -300,23 +302,23 @@ namespace disk::file {
                     auto old_path = folder.getValueOfPath();
                     auto new_path = new_prefix + old_path.substr(old_prefix.size());
                     if (folder.getValueOfId() == root.getValueOfId()) {
-                        co_await txn->execSqlCoro(
-                            "UPDATE folders SET parent_id = $1, path = $2, depth = depth + $3, " "updated_at = $4 WHERE id = $5 AND user_id = $6",
+                        co_await m_folder_repository.UpdateFolderLocationForMove(
+                            txn,
+                            folder.getValueOfId(),
+                            user_id,
                             request.target_folder_id,
                             new_path,
                             depth_delta,
-                            trantor::Date::now(),
-                            folder.getValueOfId(),
-                            user_id
+                            trantor::Date::now()
                         );
                     } else {
-                        co_await txn->execSqlCoro(
-                            "UPDATE folders SET path = $1, depth = depth + $2, updated_at = $3 " "WHERE id = $4 AND user_id = $5",
+                        co_await m_folder_repository.UpdateFolderPathForMove(
+                            txn,
+                            folder.getValueOfId(),
+                            user_id,
                             new_path,
                             depth_delta,
-                            trantor::Date::now(),
-                            folder.getValueOfId(),
-                            user_id
+                            trantor::Date::now()
                         );
                     }
                 }
@@ -332,29 +334,31 @@ namespace disk::file {
                     if (path_it == folder_paths.end()) {
                         continue;
                     }
-                    co_await txn->execSqlCoro(
-                        "UPDATE files SET path = $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
-                        utils::BuildFilePath(path_it->second, file.getValueOfName()),
-                        trantor::Date::now(),
+                    co_await m_file_repository.UpdateFilePath(
+                        txn,
                         file.getValueOfId(),
-                        user_id
+                        user_id,
+                        utils::BuildFilePath(path_it->second, file.getValueOfName()),
+                        trantor::Date::now()
                     );
                 }
 
                 if (old_parent_id > 0) {
-                    co_await txn->execSqlCoro(
-                        "UPDATE folders SET item_count = GREATEST(item_count - 1, 0), " "updated_at = $1 WHERE id = $2 AND user_id = $3",
-                        trantor::Date::now(),
+                    co_await m_folder_repository.ApplyItemCountDelta(
+                        txn,
                         old_parent_id,
-                        user_id
+                        user_id,
+                        -1,
+                        trantor::Date::now()
                     );
                 }
                 if (request.target_folder_id > 0) {
-                    co_await txn->execSqlCoro(
-                        "UPDATE folders SET item_count = item_count + 1, updated_at = $1 " "WHERE id = $2 AND user_id = $3",
-                        trantor::Date::now(),
+                    co_await m_folder_repository.ApplyItemCountDelta(
+                        txn,
                         request.target_folder_id,
-                        user_id
+                        user_id,
+                        1,
+                        trantor::Date::now()
                     );
                 }
 

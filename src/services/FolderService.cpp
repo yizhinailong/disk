@@ -9,6 +9,8 @@
 
 #include "FolderService.hpp"
 
+#include "FileRepository.hpp"
+
 #include <algorithm>
 #include <stdexcept>
 #include <unordered_map>
@@ -24,7 +26,7 @@ namespace disk::folder {
     using drogon_model::disk::Folders;
 
     FolderService::FolderService(drogon::orm::DbClientPtr db_client)
-        : m_db_client(std::move(db_client)) {
+        : m_db_client(std::move(db_client)), m_folder_repository(m_db_client) {
         Logger::Debug() << "FolderService initialization completed";
     }
 
@@ -127,60 +129,29 @@ namespace disk::folder {
                   << new_name << "\", user_id=" << user_id;
 
         try {
-            auto folder_result = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at "
-                "FROM folders WHERE id = $1 AND user_id = $2",
-                folder_id,
-                user_id
-            );
-            if (folder_result.empty()) {
+            auto folder = co_await m_folder_repository.FindOwnedFolder(m_db_client, folder_id, user_id);
+            if (!folder) {
                 co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
             }
 
-            Folders folder(folder_result[0], -1);
-            auto parent_id = folder.getValueOfParentId();
-            if (folder.getValueOfName() != new_name &&
+            auto parent_id = folder->getValueOfParentId();
+            if (folder->getValueOfName() != new_name &&
                 co_await IsFolderNameExists(new_name, parent_id, user_id)) {
                 co_return std::unexpected(ErrorInfo(ErrorCode::FolderAlreadyExists));
             }
 
             std::string parent_path = "/";
             if (parent_id > 0) {
-                auto parent_result = co_await m_db_client->execSqlCoro(
-                    "SELECT path FROM folders WHERE id = $1 AND user_id = $2",
-                    parent_id,
-                    user_id
-                );
-                if (parent_result.empty()) {
+                auto parent = co_await m_folder_repository.FindOwnedFolder(m_db_client, parent_id, user_id);
+                if (!parent) {
                     co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
                 }
-                parent_path = parent_result[0]["path"].as<std::string>();
+                parent_path = parent->getValueOfPath();
             }
 
-            auto old_prefix = folder.getValueOfPath();
+            auto old_prefix = folder->getValueOfPath();
             auto new_prefix = BuildFolderPath(parent_path, new_name);
-
-            auto subtree_result = co_await m_db_client->execSqlCoro(
-                "WITH RECURSIVE folder_tree AS ("
-                "SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at "
-                "FROM folders WHERE id = $1 AND user_id = $2 "
-                "UNION ALL "
-                "SELECT f.id, f.user_id, f.parent_id, f.name, f.path, f.depth, "
-                "f.item_count, f.created_at, f.updated_at "
-                "FROM folders f INNER JOIN folder_tree ft ON f.parent_id = ft.id "
-                "WHERE f.user_id = $3) "
-                "SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at "
-                "FROM folder_tree ORDER BY depth ASC, id ASC",
-                folder_id,
-                user_id,
-                user_id
-            );
-
-            std::vector<Folders> subtree;
-            subtree.reserve(subtree_result.size());
-            for (const auto& row : subtree_result) {
-                subtree.emplace_back(row, -1);
-            }
+            auto subtree = co_await m_folder_repository.FetchFolderSubtree(m_db_client, folder_id, user_id);
 
             std::shared_ptr<drogon::orm::Transaction> txn;
             try {
@@ -190,22 +161,21 @@ namespace disk::folder {
                     auto old_path = item.getValueOfPath();
                     auto new_path = new_prefix + old_path.substr(old_prefix.size());
                     if (item.getValueOfId() == folder_id) {
-                        co_await txn->execSqlCoro(
-                            "UPDATE folders SET name = $1, path = $2, updated_at = $3 "
-                            "WHERE id = $4 AND user_id = $5",
+                        co_await m_folder_repository.RenameFolderPath(
+                            txn,
+                            item.getValueOfId(),
+                            user_id,
                             new_name,
                             new_path,
-                            trantor::Date::now(),
-                            item.getValueOfId(),
-                            user_id
+                            trantor::Date::now()
                         );
                     } else {
-                        co_await txn->execSqlCoro(
-                            "UPDATE folders SET path = $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
-                            new_path,
-                            trantor::Date::now(),
+                        co_await m_folder_repository.UpdateFolderPath(
+                            txn,
                             item.getValueOfId(),
-                            user_id
+                            user_id,
+                            new_path,
+                            trantor::Date::now()
                         );
                     }
                 }
@@ -223,25 +193,19 @@ namespace disk::folder {
                     for (const auto& [id, _] : folder_paths) {
                         folder_ids.push_back(id);
                     }
-                    auto files_result = co_await txn->execSqlCoro(
-                        "SELECT id, folder_id, name FROM files WHERE user_id = $1 AND folder_id IN (" +
-                            disk::utils::BatchUtils::BuildSafeNumericInClause(folder_ids) + ")",
-                        user_id
-                    );
-                    for (const auto& row : files_result) {
-                        auto file_id = row["id"].as<uint64_t>();
-                        auto file_folder_id = row["folder_id"].as<uint64_t>();
-                        auto file_name = row["name"].as<std::string>();
-                        auto path_it = folder_paths.find(file_folder_id);
+                    disk::file::FileRepository file_repository(m_db_client);
+                    auto files = co_await file_repository.FetchFilesInFolders(txn, folder_ids, user_id);
+                    for (const auto& file : files) {
+                        auto path_it = folder_paths.find(file.getValueOfFolderId());
                         if (path_it == folder_paths.end()) {
                             continue;
                         }
-                        co_await txn->execSqlCoro(
-                            "UPDATE files SET path = $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
-                            BuildFilePath(path_it->second, file_name),
-                            trantor::Date::now(),
-                            file_id,
-                            user_id
+                        co_await file_repository.UpdateFilePath(
+                            txn,
+                            file.getValueOfId(),
+                            user_id,
+                            BuildFilePath(path_it->second, file.getValueOfName()),
+                            trantor::Date::now()
                         );
                     }
                 }
@@ -288,22 +252,14 @@ namespace disk::folder {
         -> drogon::Task<Result<Folders>> {
 
         try {
-            CoroMapper<Folders> mapper(m_db_client);
-
-            auto parent = co_await mapper.findOne(
-                Criteria(Folders::Cols::_id, CompareOperator::EQ, parent_id)
-            );
-
-            /// 验证文件夹属于当前用户
-            if (parent.getValueOfUserId() != user_id) {
-                Logger::Warn() << "Parent folder does not belong to current user: parent_id=" << parent_id
-                         << ", owner_id=" << parent.getValueOfUserId() << ", user_id=" << user_id;
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::FolderNotFound, "Parent folder not found")
-                );
+            auto parent = co_await m_folder_repository.FindOwnedFolder(m_db_client, parent_id, user_id);
+            if (!parent) {
+                Logger::Warn() << "Parent folder does not exist or belongs to another user: parent_id="
+                         << parent_id << ", user_id=" << user_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
             }
 
-            co_return parent;
+            co_return *parent;
 
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Warn() << "Parent folder does not exist: parent_id=" << parent_id << " - "
@@ -342,10 +298,7 @@ namespace disk::folder {
 
     auto FolderService::IncrementParentItemCount(uint64_t parent_id) -> drogon::Task<void> {
         try {
-            co_await m_db_client->execSqlCoro(
-                "UPDATE folders SET item_count = item_count + 1 WHERE id = $1",
-                parent_id
-            );
+            co_await m_folder_repository.IncrementItemCount(m_db_client, parent_id);
             Logger::Debug() << "Updated parent folder item_count: parent_id=" << parent_id;
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Warn() << "Failed to update parent folder item_count: parent_id=" << parent_id
@@ -374,28 +327,19 @@ namespace disk::folder {
         std::vector<FolderNodeData> nodes;
 
         try {
-            auto result = co_await m_db_client->execSqlCoro(
-                "WITH RECURSIVE folder_tree AS (" "SELECT id, name, parent_id, path, 0 AS level " "FROM folders " "WHERE user_id = $1 AND parent_id = $2 " "UNION ALL " "SELECT f.id, f.name, f.parent_id, f.path, ft.level + 1 " "FROM folders f " "INNER JOIN folder_tree ft ON f.parent_id = ft.id " "WHERE f.user_id = $3 AND ft.level < $4" ") " "SELECT id, name, parent_id FROM folder_tree ORDER BY path",
+            nodes = co_await m_folder_repository.FetchFolderTreeRows(
+                m_db_client,
                 user_id,
                 parent_id,
-                user_id,
                 max_depth
             );
 
-            if (result.size() == 0) {
+            if (nodes.empty()) {
                 Logger::Debug() << "Folder tree is empty, returning root node";
                 FolderTreeNode root;
                 root.id = parent_id;
                 root.name = (parent_id == 0) ? "根目录" : "";
                 co_return root;
-            }
-
-            for (const auto& row : result) {
-                FolderNodeData node;
-                node.id = row["id"].as<uint64_t>();
-                node.name = row["name"].as<std::string>();
-                node.parent_id = row["parent_id"].as<uint64_t>();
-                nodes.push_back(node);
             }
 
             Logger::Debug() << "Found " << nodes.size() << " folder nodes";
@@ -418,18 +362,11 @@ namespace disk::folder {
         -> drogon::Task<Result<void>> {
 
         try {
-            CoroMapper<Folders> mapper(m_db_client);
-
-            auto parent = co_await mapper.findOne(
-                Criteria(Folders::Cols::_id, CompareOperator::EQ, parent_id)
-            );
-
-            if (parent.getValueOfUserId() != user_id) {
-                Logger::Warn() << "Parent folder does not belong to current user: parent_id=" << parent_id
-                         << ", owner_id=" << parent.getValueOfUserId() << ", user_id=" << user_id;
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::FolderNotFound, "Parent folder not found")
-                );
+            auto parent = co_await m_folder_repository.FindOwnedFolder(m_db_client, parent_id, user_id);
+            if (!parent) {
+                Logger::Warn() << "Parent folder does not exist or belongs to another user: parent_id="
+                         << parent_id << ", user_id=" << user_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
             }
 
             co_return {};
@@ -492,28 +429,10 @@ namespace disk::folder {
         }
 
         try {
-            auto result = co_await m_db_client->execSqlCoro(
-                "WITH RECURSIVE ancestors AS ("
-                "  SELECT id, name, parent_id FROM folders WHERE id = $1 AND user_id = $2"
-                "  UNION ALL"
-                "  SELECT f.id, f.name, f.parent_id FROM folders f"
-                "  INNER JOIN ancestors a ON f.id = a.parent_id"
-                ") SELECT id, name FROM ancestors",
-                folder_id,
-                user_id
-            );
+            auto path = co_await m_folder_repository.FetchBreadcrumbRows(m_db_client, folder_id, user_id);
 
-            if (result.empty()) {
+            if (path.empty()) {
                 co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
-            }
-
-            std::vector<BreadcrumbItem> path;
-            path.reserve(result.size());
-            for (const auto& row : result) {
-                path.push_back(BreadcrumbItem{
-                    .id = row["id"].as<uint64_t>(),
-                    .name = row["name"].as<std::string>()
-                });
             }
 
             path.push_back(BreadcrumbItem{ .id = 0, .name = "根目录" });
