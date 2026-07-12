@@ -9,25 +9,248 @@
 
 #include "UploadTaskRepository.hpp"
 
+#include <utility>
+
+#include <drogon/orm/Mapper.h>
+
+#include "FileServiceUtils.hpp"
+#include "utils/BatchUtils.hpp"
+
 namespace disk::file {
+
+    using drogon::orm::CompareOperator;
+    using drogon::orm::CoroMapper;
+    using drogon::orm::Criteria;
+    using drogon_model::disk::UploadTasks;
 
     UploadTaskRepository::UploadTaskRepository(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
     }
 
+    auto UploadTaskRepository::FindById(const std::string& upload_id) const
+        -> drogon::Task<std::optional<UploadTasks>> {
+        try {
+            CoroMapper<UploadTasks> mapper(m_db_client);
+            co_return co_await mapper.findByPrimaryKey(upload_id);
+        } catch (const drogon::orm::DrogonDbException&) {
+            co_return std::nullopt;
+        }
+    }
+
+    auto UploadTaskRepository::FindByIdForUser(const std::string& upload_id, uint64_t user_id) const
+        -> drogon::Task<std::optional<UploadTasks>> {
+        try {
+            CoroMapper<UploadTasks> mapper(m_db_client);
+            co_return co_await mapper.findOne(
+                Criteria(UploadTasks::Cols::_id, CompareOperator::EQ, upload_id) &&
+                Criteria(UploadTasks::Cols::_user_id, CompareOperator::EQ, user_id)
+            );
+        } catch (const drogon::orm::DrogonDbException&) {
+            co_return std::nullopt;
+        }
+    }
+
+    auto UploadTaskRepository::FindInProgressByUserAndHash(
+        uint64_t user_id,
+        const std::string& file_hash
+    ) const -> drogon::Task<std::optional<UploadTasks>> {
+        try {
+            CoroMapper<UploadTasks> mapper(m_db_client);
+            co_return co_await mapper.findOne(
+                Criteria(UploadTasks::Cols::_user_id, CompareOperator::EQ, user_id) &&
+                Criteria(UploadTasks::Cols::_file_hash, CompareOperator::EQ, file_hash) &&
+                Criteria(
+                    UploadTasks::Cols::_status,
+                    CompareOperator::EQ,
+                    disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
+                )
+            );
+        } catch (const drogon::orm::DrogonDbException&) {
+            co_return std::nullopt;
+        }
+    }
+
+    auto UploadTaskRepository::FindInProgressIdByUserAndHash(
+        uint64_t user_id,
+        const std::string& file_hash
+    ) const -> drogon::Task<std::optional<std::string>> {
+        auto result = co_await m_db_client->execSqlCoro(
+            "SELECT id FROM upload_tasks "
+            "WHERE user_id = $1 AND file_hash = $2 AND status = $3 LIMIT 1",
+            user_id,
+            file_hash,
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
+        );
+
+        if (result.empty()) {
+            co_return std::nullopt;
+        }
+
+        co_return result[0]["id"].as<std::string>();
+    }
+
+    auto UploadTaskRepository::Create(UploadTasks task) const -> drogon::Task<UploadTasks> {
+        CoroMapper<UploadTasks> mapper(m_db_client);
+        co_return co_await mapper.insert(std::move(task));
+    }
+
+    auto UploadTaskRepository::DeleteInProgressById(const std::string& upload_id) const
+        -> drogon::Task<bool> {
+        auto result = co_await m_db_client->execSqlCoro(
+            "DELETE FROM upload_tasks WHERE id = $1 AND status = $2",
+            upload_id,
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
+        );
+        co_return result.affectedRows() > 0;
+    }
+
     auto UploadTaskRepository::MarkCompleted(std::string const& upload_id) const -> drogon::Task<bool> {
-        auto finalize_result = co_await m_db_client->execSqlCoro(
-            "UPDATE upload_tasks SET status = 1, finalized_at = NOW() WHERE id = $1 AND status = 0",
+        co_return co_await MarkCompletedIfInProgress(m_db_client, upload_id);
+    }
+
+    auto UploadTaskRepository::MarkCompletedIfInProgress(
+        const drogon::orm::DbClientPtr& client,
+        const std::string& upload_id
+    ) const -> drogon::Task<bool> {
+        auto result = co_await client->execSqlCoro(
+            "UPDATE upload_tasks SET status = $1, finalized_at = NOW() WHERE id = $2 AND status = $3",
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Completed),
+            upload_id,
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
+        );
+        co_return result.affectedRows() > 0;
+    }
+
+    auto UploadTaskRepository::MarkCancelledIfInProgress(
+        const std::string& upload_id,
+        const std::string& fail_reason
+    ) const -> drogon::Task<bool> {
+        auto result = co_await m_db_client->execSqlCoro(
+            "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2 "
+            "WHERE id = $3 AND status = $4",
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Cancelled),
+            fail_reason,
+            upload_id,
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
+        );
+        co_return result.affectedRows() > 0;
+    }
+
+    auto UploadTaskRepository::MarkExpiredIfInProgressBatch(
+        const std::vector<std::string>& upload_ids,
+        const std::string& fail_reason
+    ) const -> drogon::Task<uint64_t> {
+        if (upload_ids.empty()) {
+            co_return 0;
+        }
+
+        auto placeholders = disk::utils::BatchUtils::BuildInPlaceholders(upload_ids);
+        auto expired_status_param = static_cast<int>(upload_ids.size()) + 1;
+        auto fail_reason_param = static_cast<int>(upload_ids.size()) + 2;
+        auto in_progress_status_param = static_cast<int>(upload_ids.size()) + 3;
+        auto result = co_await disk::file::utils::ExecSqlWithBindings(
+            m_db_client,
+            "UPDATE upload_tasks SET status = $" + std::to_string(expired_status_param) +
+            ", finalized_at = NOW(), fail_reason = $" + std::to_string(fail_reason_param) +
+            " WHERE id IN (" + placeholders + ") AND status = $" +
+            std::to_string(in_progress_status_param),
+            [&](auto& binder) {
+                for (const auto& upload_id : upload_ids) {
+                    binder << upload_id;
+                }
+                binder << disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Expired)
+                       << fail_reason
+                       << disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress);
+            }
+        );
+
+        co_return static_cast<uint64_t>(result.affectedRows());
+    }
+
+    auto UploadTaskRepository::RecordChunkUploadedIfAbsent(
+        const std::string& upload_id,
+        uint32_t chunk_index
+    ) const -> drogon::Task<bool> {
+        auto result = co_await m_db_client->execSqlCoro(
+            "INSERT INTO upload_task_chunks (task_id, chunk_index, uploaded_at) "
+            "VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING",
+            upload_id,
+            chunk_index
+        );
+        co_return result.affectedRows() > 0;
+    }
+
+    auto UploadTaskRepository::ListUploadedChunkIndices(const std::string& upload_id) const
+        -> drogon::Task<std::vector<uint32_t>> {
+        auto result = co_await m_db_client->execSqlCoro(
+            "SELECT chunk_index FROM upload_task_chunks WHERE task_id = $1 ORDER BY chunk_index",
             upload_id
         );
-        co_return finalize_result.affectedRows() > 0;
+
+        std::vector<uint32_t> chunk_indices;
+        chunk_indices.reserve(result.size());
+        for (const auto& row : result) {
+            chunk_indices.push_back(row["chunk_index"].as<uint32_t>());
+        }
+
+        co_return chunk_indices;
+    }
+
+    auto UploadTaskRepository::GetChunkCoverage(const std::string& upload_id) const
+        -> drogon::Task<disk::upload::ChunkCoverage> {
+        auto result = co_await m_db_client->execSqlCoro(
+            "SELECT COUNT(*) AS uploaded_count, "
+            "COALESCE(MAX(chunk_index), -1) AS max_chunk_index "
+            "FROM upload_task_chunks WHERE task_id = $1",
+            upload_id
+        );
+
+        if (result.empty()) {
+            co_return disk::upload::ChunkCoverage{};
+        }
+
+        co_return disk::upload::ChunkCoverage{
+            .uploaded_count = result[0]["uploaded_count"].as<uint64_t>(),
+            .max_chunk_index = result[0]["max_chunk_index"].as<int64_t>(),
+        };
     }
 
     auto UploadTaskRepository::DeleteChunks(std::string const& upload_id) const -> drogon::Task<void> {
-        co_await m_db_client->execSqlCoro(
+        co_await DeleteChunks(m_db_client, upload_id);
+    }
+
+    auto UploadTaskRepository::DeleteChunks(
+        const drogon::orm::DbClientPtr& client,
+        const std::string& upload_id
+    ) const -> drogon::Task<void> {
+        co_await client->execSqlCoro(
             "DELETE FROM upload_task_chunks WHERE task_id = $1",
             upload_id
         );
+    }
+
+    auto UploadTaskRepository::FindExpiredInProgressBatch(size_t limit) const
+        -> drogon::Task<std::vector<ExpiredUploadTaskRecord>> {
+        auto result = co_await m_db_client->execSqlCoro(
+            "SELECT id, temp_path, user_id, reserved_bytes FROM upload_tasks "
+            "WHERE status = $1 AND expires_at < NOW() "
+            "LIMIT $2",
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress),
+            static_cast<int64_t>(limit)
+        );
+
+        std::vector<ExpiredUploadTaskRecord> records;
+        records.reserve(result.size());
+        for (const auto& row : result) {
+            records.push_back(ExpiredUploadTaskRecord{
+                .id = row["id"].as<std::string>(),
+                .temp_path = row["temp_path"].as<std::string>(),
+                .user_id = row["user_id"].as<uint64_t>(),
+                .reserved_bytes = row["reserved_bytes"].as<uint64_t>(),
+            });
+        }
+
+        co_return records;
     }
 
 } ///< namespace disk::file

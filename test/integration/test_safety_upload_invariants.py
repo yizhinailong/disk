@@ -187,6 +187,12 @@ def assert_upload_task(upload_id: str, expected_status: int) -> dict[str, object
     return row
 
 
+def assert_chunk_row_count(upload_id: str, expected_count: int) -> None:
+    """Assert the number of chunk rows tracked for an upload task."""
+    count = int(scalar("SELECT COUNT(*) FROM upload_task_chunks WHERE task_id = %s", (upload_id,)) or 0)
+    assert_equal(f"upload task {upload_id} chunk row count={expected_count}", count, expected_count)
+
+
 def test_successful_chunked_upload_invariants() -> None:
     """Verify successful upload DB and filesystem invariants."""
     log_section("Successful Chunked Upload Invariants")
@@ -199,7 +205,9 @@ def test_successful_chunked_upload_invariants() -> None:
     assert_numeric_delta("upload init reserves storage", quota_before["storage_reserved"], quota_after_init["storage_reserved"], len(payload))
 
     upload_single_chunk(upload_id, payload)
+    assert_chunk_row_count(upload_id, 1)
     file_id = complete_upload(upload_id)
+    assert_chunk_row_count(upload_id, 0)
     quota_after_complete = user_quota()
 
     task = assert_upload_task(upload_id, 1)
@@ -246,7 +254,9 @@ def test_cancel_upload_invariants() -> None:
     upload_id, file_hash = init_upload(filename, payload)
     quota_after_init = user_quota()
     upload_single_chunk(upload_id, payload)
+    assert_chunk_row_count(upload_id, 1)
     cancel_upload(upload_id)
+    assert_chunk_row_count(upload_id, 0)
     quota_after_cancel = user_quota()
 
     assert_upload_task(upload_id, 2)
@@ -276,6 +286,7 @@ def test_expired_upload_cleanup_invariants() -> None:
     upload_id, file_hash = init_upload(filename, payload)
     quota_after_init = user_quota()
     upload_single_chunk(upload_id, payload)
+    assert_chunk_row_count(upload_id, 1)
     assert_numeric_delta(
         "expire fixture reserves storage",
         quota_before["storage_reserved"],
@@ -293,6 +304,7 @@ def test_expired_upload_cleanup_invariants() -> None:
     quota_after_cleanup = user_quota()
 
     assert_equal("cleanup reports at least one expired upload", cleanup_counts["expired_upload_tasks_cleaned"] >= 1, True)
+    assert_chunk_row_count(upload_id, 0)
     task = assert_upload_task(upload_id, 3)
     assert_equal("expired task fail_reason documents expiry", task["fail_reason"], "任务过期")
     assert_numeric_delta(
