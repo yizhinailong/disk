@@ -62,7 +62,7 @@ Decision status: closed by `docs/backend-refactor-decisions.md`. Behavior-changi
 
 Implementation follow-ups:
 
-- [ ] Update instant upload quota checks and `storage_used` mutation to match logical per-user accounting.
+- [x] Update instant upload quota checks and `storage_used` mutation to match logical per-user accounting.
 - [x] Update successful private content downloads to increment file-level `download_count` and refresh `last_accessed_at`.
 - [x] Update successful share content downloads to preserve share-level counting and also update file-level metadata.
 - [x] Add tests that distinguish content downloads from download-info metadata lookups.
