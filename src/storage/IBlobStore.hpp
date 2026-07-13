@@ -9,9 +9,11 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -26,6 +28,58 @@ namespace disk::storage {
     struct BlobPromoteResult {
         std::filesystem::path path;
         bool created{ false };
+    };
+
+    class StorageReadStream {
+    public:
+        virtual ~StorageReadStream() = default;
+
+        [[nodiscard]]
+        virtual auto Read(char* buffer, std::size_t length) -> std::size_t = 0;
+
+        virtual auto Close() -> void = 0;
+    };
+
+    class FileStorageReadStream final : public StorageReadStream {
+    public:
+        FileStorageReadStream(std::shared_ptr<std::ifstream> stream, uint64_t remaining)
+            : m_stream(std::move(stream)), m_remaining(remaining) {}
+
+        [[nodiscard]]
+        auto Read(char* buffer, std::size_t length) -> std::size_t override {
+            if (buffer == nullptr || m_stream == nullptr || !m_stream->is_open() || m_remaining == 0) {
+                return 0;
+            }
+
+            const auto bounded_remaining = static_cast<std::size_t>(std::min<uint64_t>(
+                m_remaining,
+                static_cast<uint64_t>(std::numeric_limits<std::size_t>::max())
+            ));
+            const auto read_size = std::min(length, bounded_remaining);
+            m_stream->read(buffer, static_cast<std::streamsize>(read_size));
+            const auto read_bytes = static_cast<std::size_t>(m_stream->gcount());
+            if (read_bytes == 0) {
+                m_remaining = 0;
+                Close();
+                return 0;
+            }
+
+            m_remaining -= read_bytes;
+            if (m_remaining == 0) {
+                Close();
+            }
+            return read_bytes;
+        }
+
+        auto Close() -> void override {
+            if (m_stream != nullptr && m_stream->is_open()) {
+                m_stream->close();
+            }
+        }
+
+    private:
+        std::shared_ptr<std::ifstream> m_stream;
+        uint64_t m_remaining{ 0 };
     };
 
     /**
@@ -68,6 +122,43 @@ namespace disk::storage {
         virtual auto OpenBlobForRead(const BlobDescriptor& blob)
             -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> {
             co_return co_await OpenForRead(GetFinalStoragePath(blob.hash_md5));
+        }
+
+        /**
+         * @brief 通过最终 Blob 描述符打开限定范围的读取流
+         * @param blob 最终内容 Blob 描述符
+         * @param start 起始字节偏移
+         * @param length 读取字节数
+         * @return 成功返回可读流，失败返回错误信息
+         */
+        [[nodiscard]]
+        virtual auto OpenBlobRangeForRead(
+            const BlobDescriptor& blob,
+            uint64_t start,
+            uint64_t length
+        ) -> drogon::Task<Result<std::shared_ptr<StorageReadStream>>> {
+            auto open_result = co_await OpenBlobForRead(blob);
+            if (!open_result) {
+                co_return std::unexpected(open_result.error());
+            }
+
+            if (start > static_cast<uint64_t>(std::numeric_limits<std::streamoff>::max())) {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid request range")
+                );
+            }
+
+            auto stream = std::move(*open_result);
+            stream->seekg(static_cast<std::streamoff>(start));
+            if (!*stream) {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::FileReadError, "Failed to seek blob for reading")
+                );
+            }
+
+            co_return std::shared_ptr<StorageReadStream>(
+                std::make_shared<FileStorageReadStream>(std::move(stream), length)
+            );
         }
 
         /**

@@ -23,9 +23,6 @@
 #include "../../src/utils/ConfigMgr.hpp"
 #include "../../src/utils/FileHashUtil.hpp"
 
-/// disk-test 未直接链接 LocalFileStorage.cpp，这里按测试翻译单元引入实现，
-/// 以便对真实分片写入与组装路径做特征回归保护。
-#include "../../src/storage/LocalFileStorage.cpp"
 
 namespace disk::file {
     namespace {

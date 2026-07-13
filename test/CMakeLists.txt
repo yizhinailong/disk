@@ -60,10 +60,13 @@ set(TEST_SOURCES
     storage/AssemblyWorkerPool_test.cpp
     storage/AssemblyPerf_test.cpp
     storage/LocalBlobStore_test.cpp
+    storage/S3ObjectStorage_test.cpp
     controllers/DownloadResponder_test.cpp
     ${CMAKE_SOURCE_DIR}/src/controllers/DownloadResponder.cpp
-    ${CMAKE_SOURCE_DIR}/src/storage/LocalBlobStore.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/BlobStoreMgr.cpp
+    ${CMAKE_SOURCE_DIR}/src/storage/LocalBlobStore.cpp
+    ${CMAKE_SOURCE_DIR}/src/storage/LocalFileStorage.cpp
+    ${CMAKE_SOURCE_DIR}/src/storage/S3ObjectStorage.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FolderRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
@@ -131,6 +134,7 @@ set_source_files_properties(
 target_include_directories(disk-test PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/test
+    ${AWSSDK_INCLUDE_DIRS}
 )
 
 target_link_libraries(disk-test
@@ -139,6 +143,7 @@ target_link_libraries(disk-test
     jwt-cpp::jwt-cpp
     unofficial-sodium::sodium
     spdlog::spdlog
+    ${AWSSDK_LIBRARIES}
     GTest::gtest
     GTest::gtest_main
 )
@@ -480,5 +485,18 @@ set_tests_properties(
     PROPERTIES
     RUN_SERIAL TRUE
     TIMEOUT 180
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME S3StorageAdapterIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_s3_storage_adapter.py"
+)
+
+set_tests_properties(
+    S3StorageAdapterIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 300
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )

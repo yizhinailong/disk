@@ -7,8 +7,7 @@
 #include "services/ScheduledTasks.hpp"
 #include "services/TokenService.hpp"
 #include "storage/BlobStoreMgr.hpp"
-#include "storage/LocalBlobStore.hpp"
-#include "storage/LocalFileStorage.hpp"
+#include "storage/StorageFactory.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/LogHelper.hpp"
@@ -61,11 +60,15 @@ auto main() -> int {
     disk::utils::Logger::Info() << "  assemble_buffer_size_bytes: "
                 << disk::utils::ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes();
 
-    /// 初始化文件存储
-    auto storage = std::make_shared<disk::storage::LocalFileStorage>(disk::utils::ConfigMgr::GetInstance());
-    disk::storage::StorageMgr::SetInstance(storage);
-    auto blob_store = std::make_shared<disk::storage::LocalBlobStore>(disk::utils::ConfigMgr::GetInstance());
-    disk::storage::BlobStoreMgr::SetInstance(blob_store);
+    /// 初始化文件存储和最终 Blob 存储
+    try {
+        auto storage_bundle = disk::storage::StorageFactory::Create(disk::utils::ConfigMgr::GetInstance());
+        disk::storage::StorageMgr::SetInstance(std::move(storage_bundle.storage));
+        disk::storage::BlobStoreMgr::SetInstance(std::move(storage_bundle.blob_store));
+    } catch (const std::runtime_error& e) {
+        disk::utils::Logger::Error() << "File storage initialization failed: " << e.what();
+        return 1;
+    }
     disk::utils::Logger::Info() << "File storage initialized successfully";
 
     disk::utils::Logger::Info() << "Drogon framework version: " << drogon::getVersion();

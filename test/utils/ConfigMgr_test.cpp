@@ -398,4 +398,68 @@ namespace {
         RestoreAssemblyDefaults();
     }
 
+    TEST_F(ConfigMgrJwtTest, StorageBackendDefaultsToLocal) {
+        Json::Value cfg;
+        cfg["custom_config"]["disk"]["storage_base_path"] = "test";
+        drogon::app().loadConfigJson(cfg);
+
+        ConfigMgr::GetInstance()->LoadConfig();
+
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetStorageBackend(), disk::utils::StorageBackend::Local);
+        RestoreAssemblyDefaults();
+    }
+
+    TEST_F(ConfigMgrJwtTest, LoadConfigWithExplicitS3Backend) {
+        Json::Value cfg;
+        auto& disk = cfg["custom_config"]["disk"];
+        disk["storage_backend"] = "s3";
+        disk["s3"]["bucket"] = "disk-test";
+        disk["s3"]["region"] = "us-west-2";
+        disk["s3"]["endpoint"] = "http://127.0.0.1:9000";
+        disk["s3"]["use_ssl"] = false;
+        disk["s3"]["force_path_style"] = true;
+        disk["s3"]["verify_ssl"] = false;
+        disk["s3"]["object_prefix"] = "/uploads/objects/";
+        disk["s3"]["connect_timeout_ms"] = 1234;
+        disk["s3"]["request_timeout_ms"] = 5678;
+        drogon::app().loadConfigJson(cfg);
+
+        ConfigMgr::GetInstance()->LoadConfig();
+
+        EXPECT_EQ(ConfigMgr::GetInstance()->GetStorageBackend(), disk::utils::StorageBackend::S3);
+        const auto s3 = ConfigMgr::GetInstance()->GetS3StorageConfig();
+        EXPECT_EQ(s3.bucket, "disk-test");
+        EXPECT_EQ(s3.region, "us-west-2");
+        EXPECT_EQ(s3.endpoint, "http://127.0.0.1:9000");
+        EXPECT_FALSE(s3.use_ssl);
+        EXPECT_TRUE(s3.force_path_style);
+        EXPECT_FALSE(s3.verify_ssl);
+        EXPECT_EQ(s3.object_prefix, "uploads/objects");
+        EXPECT_EQ(s3.connect_timeout_ms, 1234);
+        EXPECT_EQ(s3.request_timeout_ms, 5678);
+
+        RestoreAssemblyDefaults();
+    }
+
+    TEST_F(ConfigMgrJwtTest, LoadConfigRejectsInvalidStorageBackend) {
+        Json::Value cfg;
+        cfg["custom_config"]["disk"]["storage_backend"] = "ftp";
+        drogon::app().loadConfigJson(cfg);
+
+        EXPECT_THROW({ ConfigMgr::GetInstance()->LoadConfig(); }, std::runtime_error);
+        RestoreAssemblyDefaults();
+    }
+
+    TEST_F(ConfigMgrJwtTest, LoadConfigRejectsS3BackendWithoutBucket) {
+        Json::Value cfg;
+        auto& disk = cfg["custom_config"]["disk"];
+        disk["storage_backend"] = "s3";
+        disk["s3"]["bucket"] = "";
+        disk["s3"]["region"] = "us-east-1";
+        drogon::app().loadConfigJson(cfg);
+
+        EXPECT_THROW({ ConfigMgr::GetInstance()->LoadConfig(); }, std::runtime_error);
+        RestoreAssemblyDefaults();
+    }
+
 } ///< namespace

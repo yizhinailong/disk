@@ -12,6 +12,7 @@
   },
   "custom_config": {
     "disk": {
+      "storage_backend": "local",
       "storage_base_path": "build/uploaded",
       "temp_upload_path": "build/temp_uploads",
       "chunk_size": 5242880,
@@ -31,7 +32,18 @@
       "register_rate_limit_window_seconds": 300,
       "assembly_max_concurrent": 4,
       "assemble_buffer_size_bytes": 1048576,
-      "auth_cpu_pool_metrics_interval_seconds": 60
+      "auth_cpu_pool_metrics_interval_seconds": 60,
+      "s3": {
+        "bucket": "disk",
+        "region": "us-east-1",
+        "endpoint": "",
+        "use_ssl": true,
+        "force_path_style": false,
+        "verify_ssl": true,
+        "object_prefix": "objects",
+        "connect_timeout_ms": 3000,
+        "request_timeout_ms": 300000
+      }
     }
   },
   "db_clients": [

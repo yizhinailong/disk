@@ -29,7 +29,7 @@ namespace disk::controllers {
         /// HTTPS 场景下 Drogon 的 newFileResponse 会自动从 sendfile 回退到 read+write
         /// （TLS 连接不支持 sendfile），因此无需显式 isOnSecureConnection() 检测。
         /// 大文件仍走 newFileResponse 路径，享受 Drogon 的内部 TLS 回退机制；
-        /// 小文件走 newStreamResponse 流式路径，减少内存占用。
+        /// 小文件或非本地 Blob 走 newStreamResponse 流式路径，减少内存占用并兼容对象存储。
         constexpr std::size_t SENDFILE_THRESHOLD_BYTES = 256ULL * 1024ULL;
     }
 
@@ -75,12 +75,12 @@ namespace disk::controllers {
         uint64_t content_length = end - start + 1;
 
         /// ================================================================
-        /// Path A: newFileResponse — sendfile 零拷贝路径
+        /// Path A: newFileResponse — 本地 Blob sendfile 零拷贝路径
         /// ================================================================
-        /// 当传输内容 >= sendfile 阈值时，使用 Drogon 内置的 newFileResponse，
-        /// 由 sendfile() 系统调用完成零拷贝传输，避免用户态 read/write 拷贝。
+        /// 当传输内容 >= sendfile 阈值且 BlobStore 暴露本地路径时，使用 Drogon
+        /// 内置的 newFileResponse。S3/MinIO 等对象存储不会暴露本地路径，会落到
+        /// Path B 的 Blob range stream。
         if (content_length >= SENDFILE_THRESHOLD_BYTES) {
-            /// 检查最终 Blob 是否存在
             auto exists_result = co_await blob_store->BlobExists(params.blob);
             if (!exists_result || !*exists_result) {
                 co_return Response::Error(
@@ -129,34 +129,25 @@ namespace disk::controllers {
         }
 
         /// ================================================================
-        /// Path B: newStreamResponse — 流式下载路径（备用）
+        /// Path B: newStreamResponse — Blob range 流式下载路径（对象存储/小文件）
         /// ================================================================
-        /// 适用于小文件或需要显式流控制的场景。保留作为 sendfile 不可用时的回退。
-        auto open_result = co_await blob_store->OpenBlobForRead(params.blob);
+        auto open_result = co_await blob_store->OpenBlobRangeForRead(params.blob, start, content_length);
         if (!open_result) {
-            Logger::Error() << "Cannot open blob for download: content_id=" << params.blob.content_id;
+            Logger::Error() << "Cannot open blob stream for download: content_id=" << params.blob.content_id;
             co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "Cannot open file"));
         }
-        auto file = std::move(*open_result);
-        if (start > static_cast<uint64_t>(std::numeric_limits<std::streamoff>::max())) {
-            Logger::Error() << "Range start exceeds stream offset limit: " << start;
-            co_return Response::Error(
-                ErrorInfo(ErrorCode::ValidationFailed, "Invalid request range")
-            );
-        }
-        file->seekg(static_cast<std::streamoff>(start));
+        auto stream = std::move(*open_result);
 
         auto remaining = std::make_shared<uint64_t>(content_length);
         auto resp = drogon::HttpResponse::newStreamResponse(
-            [file, remaining](char* buffer, std::size_t suggested_length) -> std::size_t {
+            [stream, remaining](char* buffer, std::size_t suggested_length) -> std::size_t {
                 if (!buffer) {
-                    if (file->is_open()) {
-                        file->close();
-                    }
+                    stream->Close();
                     return 0;
                 }
 
-                if (*remaining == 0 || !file->is_open()) {
+                if (*remaining == 0) {
+                    stream->Close();
                     return 0;
                 }
 
@@ -167,19 +158,16 @@ namespace disk::controllers {
                 const auto read_size =
                     std::min({ suggested_length, DOWNLOAD_STREAM_CHUNK_BYTES, bounded_remaining });
 
-                file->read(buffer, static_cast<std::streamsize>(read_size));
-                const auto read_bytes = static_cast<std::size_t>(file->gcount());
+                const auto read_bytes = stream->Read(buffer, read_size);
                 if (read_bytes == 0) {
                     *remaining = 0;
-                    if (file->is_open()) {
-                        file->close();
-                    }
+                    stream->Close();
                     return 0;
                 }
 
                 *remaining -= read_bytes;
-                if (*remaining == 0 && file->is_open()) {
-                    file->close();
+                if (*remaining == 0) {
+                    stream->Close();
                 }
                 return read_bytes;
             }
