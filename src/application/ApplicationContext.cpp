@@ -9,6 +9,7 @@
 
 #include "application/ApplicationContext.hpp"
 
+#include "storage/BlobStoreMgr.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/ConfigMgr.hpp"
 
@@ -20,12 +21,14 @@ namespace disk::application {
         drogon::orm::DbClientPtr db_client,
         drogon::nosql::RedisClientPtr redis_client,
         disk::storage::IFileStorage* storage,
+        disk::storage::IBlobStore* blob_store,
         std::string jwt_secret
     ) -> void {
         GetInstance()->initialize(
             std::move(db_client),
             std::move(redis_client),
             storage,
+            blob_store,
             std::move(jwt_secret)
         );
     }
@@ -34,6 +37,7 @@ namespace disk::application {
         drogon::orm::DbClientPtr db_client,
         drogon::nosql::RedisClientPtr redis_client,
         disk::storage::IFileStorage* storage,
+        disk::storage::IBlobStore* blob_store,
         std::string jwt_secret
     ) -> void {
         if (m_upload_service) {
@@ -43,8 +47,9 @@ namespace disk::application {
         m_db_client = std::move(db_client);
         m_redis_client = std::move(redis_client);
         m_storage = storage;
+        m_blob_store = blob_store;
 
-        m_upload_service = std::make_unique<disk::file::UploadService>(m_db_client, m_storage);
+        m_upload_service = std::make_unique<disk::file::UploadService>(m_db_client, m_storage, m_blob_store);
         m_file_query_service = std::make_unique<disk::file::FileQueryService>(m_db_client);
         m_file_mutation_service = std::make_unique<disk::file::FileMutationService>(m_db_client, m_storage);
         m_folder_service = std::make_unique<disk::folder::FolderService>(m_db_client);
@@ -65,6 +70,7 @@ namespace disk::application {
             drogon::app().getDbClient(),
             drogon::app().getRedisClient(),
             disk::storage::StorageMgr::GetStorage(),
+            disk::storage::BlobStoreMgr::GetBlobStore(),
             disk::utils::ConfigMgr::GetInstance()->GetJwtSecret()
         );
     }
@@ -102,6 +108,11 @@ namespace disk::application {
     auto ApplicationContext::Storage() -> disk::storage::IFileStorage* {
         ensureInitialized();
         return m_storage;
+    }
+
+    auto ApplicationContext::BlobStore() -> disk::storage::IBlobStore* {
+        ensureInitialized();
+        return m_blob_store;
     }
 
 } ///< namespace disk::application

@@ -6,6 +6,8 @@
 #include "services/CleanupService.hpp"
 #include "services/ScheduledTasks.hpp"
 #include "services/TokenService.hpp"
+#include "storage/BlobStoreMgr.hpp"
+#include "storage/LocalBlobStore.hpp"
 #include "storage/LocalFileStorage.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/ConfigMgr.hpp"
@@ -62,6 +64,8 @@ auto main() -> int {
     /// 初始化文件存储
     auto storage = std::make_shared<disk::storage::LocalFileStorage>(disk::utils::ConfigMgr::GetInstance());
     disk::storage::StorageMgr::SetInstance(storage);
+    auto blob_store = std::make_shared<disk::storage::LocalBlobStore>(disk::utils::ConfigMgr::GetInstance());
+    disk::storage::BlobStoreMgr::SetInstance(blob_store);
     disk::utils::Logger::Info() << "File storage initialized successfully";
 
     disk::utils::Logger::Info() << "Drogon framework version: " << drogon::getVersion();
@@ -73,6 +77,7 @@ auto main() -> int {
             drogon::app().getDbClient(),
             drogon::app().getRedisClient(),
             disk::storage::StorageMgr::GetStorage(),
+            disk::storage::BlobStoreMgr::GetBlobStore(),
             disk::utils::ConfigMgr::GetInstance()->GetJwtSecret()
         );
         disk::utils::Logger::Info() << "Application service context initialized successfully";

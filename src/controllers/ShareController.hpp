@@ -11,7 +11,7 @@
 #pragma once
 
 #include "services/ShareService.hpp"
-#include "storage/IFileStorage.hpp"
+#include "storage/IBlobStore.hpp"
 
 namespace disk::share {
 
@@ -185,7 +185,7 @@ namespace disk::share {
 
     private:
         ShareService* m_share_service{};
-        disk::storage::IFileStorage* m_storage{};
+        disk::storage::IBlobStore* m_blob_store{};
     };
 
 } ///< namespace disk::share

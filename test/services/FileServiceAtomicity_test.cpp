@@ -81,6 +81,7 @@
 #include <json/json.h>
 
 #include "../../src/dtos/FileDto.hpp"
+#include "../../src/storage/LocalBlobStore.hpp"
 #include "../../src/storage/LocalFileStorage.hpp"
 #include "../../src/utils/ConfigMgr.hpp"
 #include "../../src/utils/FileHashUtil.hpp"
@@ -88,6 +89,7 @@
 namespace disk::file {
     namespace {
 
+        using disk::storage::LocalBlobStore;
         using disk::storage::LocalFileStorage;
         using disk::utils::ConfigMgr;
         using disk::utils::FileHashUtil;
@@ -154,6 +156,7 @@ namespace disk::file {
 
         auto SimulateCompleteUpload(
             LocalFileStorage& storage,
+            LocalBlobStore& blob_store,
             UploadTaskModel& task,
             const std::vector<uint32_t>& uploaded_chunks,
             bool filename_exists,
@@ -197,7 +200,7 @@ namespace disk::file {
                 return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
             }
 
-            auto promote_result = drogon::sync_wait(storage.PromoteToFinal(assembled.path, assembled.md5_hash));
+            auto promote_result = drogon::sync_wait(blob_store.PromoteToFinal(assembled.path, assembled.md5_hash));
             if (!promote_result) {
                 return std::unexpected(promote_result.error());
             }
@@ -255,9 +258,11 @@ namespace disk::file {
 
                 LoadStorageConfig(m_storage_base, m_temp_base);
                 m_storage = std::make_unique<LocalFileStorage>();
+                m_blob_store = std::make_unique<LocalBlobStore>();
             }
 
             void TearDown() override {
+                m_blob_store.reset();
                 m_storage.reset();
                 RestoreDefaultStorageConfig();
 
@@ -279,7 +284,7 @@ namespace disk::file {
             }
 
             auto FinalStoragePath(const std::string& hash) const -> std::filesystem::path {
-                return m_storage->GetFinalStoragePath(hash);
+                return m_blob_store->GetFinalStoragePath(hash);
             }
 
             auto WriteChunks(
@@ -308,6 +313,7 @@ namespace disk::file {
             std::filesystem::path m_storage_base;
             std::filesystem::path m_temp_base;
             std::unique_ptr<LocalFileStorage> m_storage;
+            std::unique_ptr<LocalBlobStore> m_blob_store;
         };
 
         /// ============================================================================
@@ -499,6 +505,7 @@ namespace disk::file {
 
             auto result = SimulateCompleteUpload(
                 *m_storage,
+                *m_blob_store,
                 task,
                 { 0, 1, 2 },
                 false,
@@ -547,6 +554,7 @@ namespace disk::file {
 
             auto result = SimulateCompleteUpload(
                 *m_storage,
+                *m_blob_store,
                 task,
                 { 0, 1 },
                 false,
@@ -586,6 +594,7 @@ namespace disk::file {
 
             auto result = SimulateCompleteUpload(
                 *m_storage,
+                *m_blob_store,
                 task,
                 { 0, 2 },
                 false,
@@ -618,6 +627,7 @@ namespace disk::file {
 
             auto result = SimulateCompleteUpload(
                 *m_storage,
+                *m_blob_store,
                 task,
                 uploaded_chunks,
                 false,
@@ -658,6 +668,7 @@ namespace disk::file {
 
             auto result = SimulateCompleteUpload(
                 *m_storage,
+                *m_blob_store,
                 task,
                 { 0, 1 },
                 true,
@@ -696,6 +707,7 @@ namespace disk::file {
 
             auto result = SimulateCompleteUpload(
                 *m_storage,
+                *m_blob_store,
                 task,
                 { 0, 1 },
                 false,

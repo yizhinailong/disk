@@ -1,8 +1,7 @@
 /**
  * @file LocalFileStorage.hpp
- * @brief 本地文件存储实现
- * @details 实现 IFileStorage 接口，提供基于本地文件系统的分片上传、文件组装、
- *          临时文件管理和最终存储功能
+ * @brief 本地上传暂存文件存储实现
+ * @details 实现 IFileStorage 接口，提供基于本地文件系统的分片上传、文件组装和临时文件管理
  * @author LiuFeng (liufeng.code@outlook.com)
  *
  * @copyright Copyright (c) 2026
@@ -12,7 +11,6 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -30,19 +28,19 @@ namespace disk::utils {
 namespace disk::storage {
 
     /**
-     * @brief 本地文件存储实现类
+     * @brief 本地上传暂存文件存储实现类
      *
      * 职责边界：
-     * - 实现 IFileStorage 接口的所有文件系统操作
      * - 管理上传会话的临时目录和分片文件
-     * - 实现基于内容哈希的最终存储路径计算
-     * - 使用 Result<T> 作为统一错误契约
+     * - 组装分片并计算内容哈希
+     * - 清理上传暂存文件
+     * - 不处理最终内容 Blob 的提升、读取和删除
      */
     class LocalFileStorage : public IFileStorage {
     public:
         /**
          * @brief 构造本地文件存储实例
-         * @param config_mgr 配置管理器（可选，用于获取存储根目录）
+         * @param config_mgr 配置管理器（可选，用于获取暂存根目录）
          */
         explicit LocalFileStorage(std::shared_ptr<disk::utils::ConfigMgr> config_mgr = nullptr);
         ~LocalFileStorage() override = default;
@@ -82,26 +80,7 @@ namespace disk::storage {
             -> drogon::Task<Result<AssembleResult>> override;
 
         /**
-         * @brief 将临时文件移动到最终存储位置（哈希分片目录）
-         * @param temp_path 临时文件路径
-         * @param hash 文件哈希（如 MD5）
-         * @return 成功返回最终存储路径与创建状态，失败返回错误信息
-         */
-        [[nodiscard]]
-        auto PromoteToFinal(const std::filesystem::path& temp_path, const std::string& hash)
-            -> drogon::Task<Result<PromoteResult>> override;
-
-        /**
-         * @brief 打开文件读取句柄用于下载流（支持上层范围定位）
-         * @param storage_path 存储文件路径
-         * @return 成功返回可读文件流，失败返回错误信息
-         */
-        [[nodiscard]]
-        auto OpenForRead(const std::filesystem::path& storage_path)
-            -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> override;
-
-        /**
-         * @brief 安全删除指定文件或目录
+         * @brief 安全删除上传暂存文件或目录
          * @param target_path 目标路径
          * @return 成功返回空，失败返回错误信息
          */
@@ -115,30 +94,6 @@ namespace disk::storage {
          */
         [[nodiscard]]
         auto CleanupTemp(const std::string& upload_id) -> drogon::Task<Result<void>> override;
-
-        /**
-         * @brief 检查路径是否存在
-         * @param target_path 目标路径
-         * @return 成功返回存在性布尔值，失败返回错误信息
-         */
-        [[nodiscard]]
-        auto Exists(const std::filesystem::path& target_path) -> drogon::Task<Result<bool>> override;
-
-        /**
-         * @brief 根据内容哈希计算最终存储路径
-         * @param hash 文件内容哈希（如 MD5）
-         * @return 最终存储路径
-         */
-        [[nodiscard]]
-        auto GetFinalStoragePath(const std::string& hash) const -> std::filesystem::path override;
-
-        /**
-         * @brief 获取文件大小（字节）
-         * @param target_path 目标路径
-         * @return 成功返回文件大小，失败返回错误信息
-         */
-        [[nodiscard]]
-        auto GetFileSize(const std::filesystem::path& target_path) -> drogon::Task<Result<uint64_t>> override;
 
     private:
         /**

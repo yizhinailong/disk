@@ -27,6 +27,7 @@
 #include "services/ContentService.hpp"
 #include "services/QuotaService.hpp"
 #include "services/UploadTaskRepository.hpp"
+#include "storage/IBlobStore.hpp"
 #include "storage/IFileStorage.hpp"
 #include "storage/StorageMgr.hpp"
 
@@ -114,8 +115,9 @@ namespace disk::upload {
 
     UploadLifecycleService::UploadLifecycleService(
         drogon::orm::DbClientPtr db_client,
-        disk::storage::IFileStorage* storage
-    ) : m_db_client(std::move(db_client)), m_storage(storage) {
+        disk::storage::IFileStorage* storage,
+        disk::storage::IBlobStore* blob_store
+    ) : m_db_client(std::move(db_client)), m_storage(storage), m_blob_store(blob_store) {
         Logger::Debug() << "UploadLifecycleService initialization completed";
     }
 
@@ -688,7 +690,7 @@ namespace disk::upload {
             Logger::Debug() << "File dedup successful: content_id="
                       << finalize_storage_decision.existing_content_id.value();
         } else {
-            auto promote_result = co_await m_storage->PromoteToFinal(assemble_path, final_hash);
+            auto promote_result = co_await m_blob_store->PromoteToFinal(assemble_path, final_hash);
             if (!promote_result) {
                 Logger::Error() << "Failed to move file to final storage: error="
                           << static_cast<int>(promote_result.error().code);
@@ -815,7 +817,7 @@ namespace disk::upload {
         if (db_operation_failed) {
             auto compensation_start = std::chrono::steady_clock::now();
             if (should_delete_promoted_blob_on_tx_failure) {
-                auto cleanup_result = co_await m_storage->DeletePath(final_storage_path);
+                auto cleanup_result = co_await m_blob_store->DeleteBlob(final_storage_path);
                 if (!cleanup_result) {
                     Logger::Error() << "Compensation failed, orphan storage file may remain: "
                               << final_storage_path;

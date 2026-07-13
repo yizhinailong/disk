@@ -5,6 +5,7 @@
 #include <atomic>
 #include <bit>
 #include <chrono>
+#include <fstream>
 #include <functional>
 #include <system_error>
 #include <type_traits>
@@ -424,78 +425,6 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto LocalFileStorage::PromoteToFinal(const std::filesystem::path& temp_path, const std::string& hash)
-        -> drogon::Task<Result<PromoteResult>> {
-        const auto final_path = GetFinalStoragePath(hash);
-        const auto final_dir = final_path.parent_path();
-
-        auto result = co_await RunBlockingFilesystemTask(
-            m_worker_queue,
-            [temp_path, final_path, final_dir]() -> Result<PromoteResult> {
-                std::error_code ec;
-                std::filesystem::create_directories(final_dir, ec);
-                if (ec) {
-                    return std::unexpected(
-                        ErrorInfo(ErrorCode::InternalError, "Failed to create final storage directory")
-                    );
-                }
-
-                if (std::filesystem::exists(final_path, ec)) {
-                    std::filesystem::remove(temp_path, ec);
-                    return PromoteResult{ .path = final_path, .created = false };
-                }
-                ec.clear();
-
-                std::filesystem::rename(temp_path, final_path, ec);
-                if (!ec) {
-                    return PromoteResult{ .path = final_path, .created = true };
-                }
-
-                ec.clear();
-                std::filesystem::copy_file(
-                    temp_path,
-                    final_path,
-                    std::filesystem::copy_options::overwrite_existing,
-                    ec
-                );
-                if (ec) {
-                    return std::unexpected(
-                        ErrorInfo(ErrorCode::InternalError, "Failed to move file to final storage path")
-                    );
-                }
-
-                std::filesystem::remove(temp_path, ec);
-                if (ec) {
-                    return std::unexpected(
-                        ErrorInfo(ErrorCode::InternalError, "Failed to cleanup temp file after copy")
-                    );
-                }
-
-                return PromoteResult{ .path = final_path, .created = true };
-            }
-        );
-
-        co_return result;
-    }
-
-    auto LocalFileStorage::OpenForRead(const std::filesystem::path& storage_path)
-        -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> {
-        auto result = co_await RunBlockingFilesystemTask(
-            m_worker_queue,
-            [storage_path]() -> Result<std::shared_ptr<std::ifstream>> {
-                auto stream = std::make_shared<std::ifstream>(storage_path, std::ios::binary);
-                if (!*stream) {
-                    return std::unexpected(
-                        ErrorInfo(ErrorCode::FileReadError, "Failed to open file for reading")
-                    );
-                }
-
-                return stream;
-            }
-        );
-
-        co_return result;
-    }
 
     auto LocalFileStorage::DeletePath(const std::filesystem::path& target_path)
         -> drogon::Task<Result<void>> {
@@ -562,50 +491,6 @@ namespace disk::storage {
                 }
 
                 return {};
-            }
-        );
-
-        co_return result;
-    }
-
-    auto LocalFileStorage::Exists(const std::filesystem::path& target_path)
-        -> drogon::Task<Result<bool>> {
-        auto result = co_await RunBlockingFilesystemTask(
-            m_worker_queue,
-            [target_path]() -> Result<bool> {
-                std::error_code ec;
-                const bool exists = std::filesystem::exists(target_path, ec);
-                if (ec) {
-                    return std::unexpected(
-                        ErrorInfo(ErrorCode::InternalError, "Failed to check path existence")
-                    );
-                }
-
-                return exists;
-            }
-        );
-
-        co_return result;
-    }
-
-    auto LocalFileStorage::GetFinalStoragePath(const std::string& hash) const -> std::filesystem::path {
-        return std::filesystem::path(m_config_mgr->GetStorageBasePath()) / hash.substr(0, 2) / (hash + ".bin");
-    }
-
-    auto LocalFileStorage::GetFileSize(const std::filesystem::path& target_path)
-        -> drogon::Task<Result<uint64_t>> {
-        auto result = co_await RunBlockingFilesystemTask(
-            m_worker_queue,
-            [target_path]() -> Result<uint64_t> {
-                std::error_code ec;
-                const auto file_size = std::filesystem::file_size(target_path, ec);
-                if (ec) {
-                    return std::unexpected(
-                        ErrorInfo(ErrorCode::FileReadError, "Failed to read file size")
-                    );
-                }
-
-                return file_size;
             }
         );
 

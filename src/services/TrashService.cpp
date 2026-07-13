@@ -29,8 +29,8 @@
 #include "services/QuotaService.hpp"
 #include "services/TransactionRunner.hpp"
 #include "services/TrashContentIdResolver.hpp"
-#include "storage/IFileStorage.hpp"
-#include "storage/StorageMgr.hpp"
+#include "storage/BlobStoreMgr.hpp"
+#include "storage/IBlobStore.hpp"
 #include "utils/BatchUtils.hpp"
 #include "utils/RedisKeyPrefix.hpp"
 
@@ -47,7 +47,6 @@ namespace disk::trash {
     using drogon_model::disk::Trash;
     using drogon_model::disk::Users;
 
-    using disk::storage::IFileStorage;
 
     constexpr size_t MAX_PARALLEL_DELETE_PATHS = 4;
 
@@ -169,7 +168,7 @@ namespace disk::trash {
 
     [[nodiscard]]
     auto ParallelDeletePaths(
-        disk::storage::IFileStorage* storage,
+        disk::storage::IBlobStore* blob_store,
         const std::vector<std::filesystem::path>& paths,
         size_t max_concurrent = MAX_PARALLEL_DELETE_PATHS
     ) -> drogon::Task<std::vector<Result<void>>> {
@@ -178,7 +177,7 @@ namespace disk::trash {
         (void)max_concurrent;
 
         for (const auto& path : paths) {
-            results.push_back(co_await storage->DeletePath(path));
+            results.push_back(co_await blob_store->DeleteBlob(path));
         }
 
         co_return results;
@@ -1528,9 +1527,9 @@ namespace disk::trash {
                            << (unique_content_ids.size() - verified_contents.size());
         }
 
-        auto* storage = disk::storage::StorageMgr::GetStorage();
-        if (storage == nullptr) {
-            Logger::Warn() << "Storage manager is not initialized, skip " << log_context
+        auto* blob_store = disk::storage::BlobStoreMgr::GetBlobStore();
+        if (blob_store == nullptr) {
+            Logger::Warn() << "Blob store manager is not initialized, skip " << log_context
                            << " blob cleanup: blob_count=" << verified_contents.size();
             co_return stats;
         }
@@ -1541,7 +1540,7 @@ namespace disk::trash {
             paths_to_delete.emplace_back(content.storage_path);
         }
 
-        auto delete_results = co_await ParallelDeletePaths(storage, paths_to_delete, MAX_PARALLEL_DELETE_PATHS);
+        auto delete_results = co_await ParallelDeletePaths(blob_store, paths_to_delete, MAX_PARALLEL_DELETE_PATHS);
         for (size_t i = 0; i < delete_results.size(); ++i) {
             if (!delete_results[i].has_value()) {
                 Logger::Warn() << "Failed to cleanup " << log_context << " blob: storage_path="

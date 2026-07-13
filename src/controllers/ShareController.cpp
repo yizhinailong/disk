@@ -30,7 +30,7 @@ namespace disk::share {
 
     ShareController::ShareController()
         : m_share_service(&disk::application::ApplicationContext::GetInstance()->Share()),
-          m_storage(disk::application::ApplicationContext::GetInstance()->Storage()) {
+          m_blob_store(disk::application::ApplicationContext::GetInstance()->BlobStore()) {
     }
 
     /// ==================== 所有者端点（JWT 保护） ====================
@@ -396,7 +396,7 @@ namespace disk::share {
                 .file_hash = download_info.file_hash,
                 .range_header = std::string(request->getHeader("Range")),
             },
-            m_storage
+            m_blob_store
         );
 
         /// 6. 成功内容下载后更新文件级元数据

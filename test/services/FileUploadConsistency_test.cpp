@@ -18,6 +18,7 @@
 #include <json/json.h>
 
 #include "../../src/dtos/FileDto.hpp"
+#include "../../src/storage/LocalBlobStore.hpp"
 #include "../../src/storage/LocalFileStorage.hpp"
 #include "../../src/utils/ConfigMgr.hpp"
 #include "../../src/utils/FileHashUtil.hpp"
@@ -29,6 +30,7 @@
 namespace disk::file {
     namespace {
 
+        using disk::storage::LocalBlobStore;
         using disk::storage::LocalFileStorage;
         using disk::utils::ConfigMgr;
         using disk::utils::FileHashUtil;
@@ -83,9 +85,11 @@ namespace disk::file {
 
                 LoadStorageConfig(m_storage_base, m_temp_base);
                 m_storage = std::make_unique<LocalFileStorage>();
+                m_blob_store = std::make_unique<LocalBlobStore>();
             }
 
             void TearDown() override {
+                m_blob_store.reset();
                 m_storage.reset();
                 RestoreDefaultStorageConfig();
 
@@ -106,6 +110,7 @@ namespace disk::file {
             std::filesystem::path m_storage_base;
             std::filesystem::path m_temp_base;
             std::unique_ptr<LocalFileStorage> m_storage;
+            std::unique_ptr<LocalBlobStore> m_blob_store;
         };
 
         /// ============================================================================
@@ -309,11 +314,11 @@ namespace disk::file {
             output.close();
             ASSERT_TRUE(output);
 
-            auto promote_result = drogon::sync_wait(m_storage->PromoteToFinal(temp_path, hash));
+            auto promote_result = drogon::sync_wait(m_blob_store->PromoteToFinal(temp_path, hash));
 
             ASSERT_TRUE(promote_result.has_value());
             EXPECT_TRUE(promote_result->created);
-            EXPECT_EQ(promote_result->path, m_storage->GetFinalStoragePath(hash));
+            EXPECT_EQ(promote_result->path, m_blob_store->GetFinalStoragePath(hash));
             EXPECT_FALSE(std::filesystem::exists(temp_path));
             ASSERT_TRUE(std::filesystem::exists(promote_result->path));
             EXPECT_EQ(ReadBinaryFile(promote_result->path), content);
@@ -324,7 +329,7 @@ namespace disk::file {
             const std::string existing_content = "pre-existing-final-blob";
             const std::string temp_content = "temporary-upload-content";
             const auto hash = FileHashUtil::HashMd5(temp_content);
-            const auto final_path = m_storage->GetFinalStoragePath(hash);
+            const auto final_path = m_blob_store->GetFinalStoragePath(hash);
             const auto temp_path = AssembledPath(upload_id);
 
             std::error_code ec;
@@ -342,7 +347,7 @@ namespace disk::file {
             temp_output.close();
             ASSERT_TRUE(temp_output);
 
-            auto promote_result = drogon::sync_wait(m_storage->PromoteToFinal(temp_path, hash));
+            auto promote_result = drogon::sync_wait(m_blob_store->PromoteToFinal(temp_path, hash));
 
             ASSERT_TRUE(promote_result.has_value());
             EXPECT_FALSE(promote_result->created);
