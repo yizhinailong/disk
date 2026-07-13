@@ -29,7 +29,7 @@
 #include "services/QuotaService.hpp"
 #include "services/TransactionRunner.hpp"
 #include "services/TrashContentIdResolver.hpp"
-#include "storage/IFileStorage.hpp"
+#include "storage/IBlobStorage.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/BatchUtils.hpp"
 #include "utils/RedisKeyPrefix.hpp"
@@ -47,7 +47,7 @@ namespace disk::trash {
     using drogon_model::disk::Trash;
     using drogon_model::disk::Users;
 
-    using disk::storage::IFileStorage;
+    using disk::storage::IBlobStorage;
 
     constexpr size_t MAX_PARALLEL_DELETE_PATHS = 4;
 
@@ -169,7 +169,7 @@ namespace disk::trash {
 
     [[nodiscard]]
     auto ParallelDeletePaths(
-        disk::storage::IFileStorage* storage,
+        disk::storage::IBlobStorage* storage,
         const std::vector<std::filesystem::path>& paths,
         size_t max_concurrent = MAX_PARALLEL_DELETE_PATHS
     ) -> drogon::Task<std::vector<Result<void>>> {
@@ -178,7 +178,7 @@ namespace disk::trash {
         (void)max_concurrent;
 
         for (const auto& path : paths) {
-            results.push_back(co_await storage->DeletePath(path));
+            results.push_back(co_await storage->DeleteBlob(path));
         }
 
         co_return results;
@@ -1528,7 +1528,7 @@ namespace disk::trash {
                            << (unique_content_ids.size() - verified_contents.size());
         }
 
-        auto* storage = disk::storage::StorageMgr::GetStorage();
+        auto* storage = disk::storage::StorageMgr::GetBlobStorage();
         if (storage == nullptr) {
             Logger::Warn() << "Storage manager is not initialized, skip " << log_context
                            << " blob cleanup: blob_count=" << verified_contents.size();

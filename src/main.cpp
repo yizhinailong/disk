@@ -61,7 +61,7 @@ auto main() -> int {
 
     /// 初始化文件存储
     auto storage = std::make_shared<disk::storage::LocalFileStorage>(disk::utils::ConfigMgr::GetInstance());
-    disk::storage::StorageMgr::SetInstance(storage);
+    disk::storage::StorageMgr::SetInstances(storage, storage);
     disk::utils::Logger::Info() << "File storage initialized successfully";
 
     disk::utils::Logger::Info() << "Drogon framework version: " << drogon::getVersion();
@@ -72,7 +72,8 @@ auto main() -> int {
         disk::application::ApplicationContext::Initialize(
             drogon::app().getDbClient(),
             drogon::app().getRedisClient(),
-            disk::storage::StorageMgr::GetStorage(),
+            disk::storage::StorageMgr::GetStagingStorage(),
+            disk::storage::StorageMgr::GetBlobStorage(),
             disk::utils::ConfigMgr::GetInstance()->GetJwtSecret()
         );
         disk::utils::Logger::Info() << "Application service context initialized successfully";

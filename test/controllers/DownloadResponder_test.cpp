@@ -14,7 +14,7 @@
 
 #include "../../src/controllers/DownloadResponder.hpp"
 #include "../../src/dtos/FileDto.hpp"
-#include "../../src/storage/IFileStorage.hpp"
+#include "../../src/storage/IBlobStorage.hpp"
 #include "../../src/utils/ErrorCode.hpp"
 #include "../../src/utils/Response.hpp"
 
@@ -46,14 +46,14 @@ namespace {
     }
 
     /// ============================================================
-    /// MockFileStorage — 仅实现 OpenForRead，其他返回默认成功值
+    /// MockBlobStorage — 仅实现 OpenForRead，其他返回默认成功值
     /// ============================================================
-    class MockFileStorage final : public disk::storage::IFileStorage {
+    class MockBlobStorage final : public disk::storage::IBlobStorage {
     public:
-        explicit MockFileStorage(std::filesystem::path temp_dir)
+        explicit MockBlobStorage(std::filesystem::path temp_dir)
             : m_temp_dir(std::move(temp_dir)) {}
 
-        ~MockFileStorage() override {
+        ~MockBlobStorage() override {
             std::error_code ec;
             std::filesystem::remove_all(m_temp_dir, ec);
         }
@@ -70,25 +70,7 @@ namespace {
             return path;
         }
 
-        /// ---- IFileStorage 接口 ----
-
-        auto EnsureUploadTempDir(const std::string& /*upload_id*/)
-            -> drogon::Task<Result<void>> override {
-            co_return Result<void>{};
-        }
-
-        auto WriteChunk(
-            const std::string& /*upload_id*/,
-            uint32_t /*chunk_index*/,
-            std::string /*data*/
-        ) -> drogon::Task<Result<void>> override {
-            co_return Result<void>{};
-        }
-
-        auto AssembleChunks(const std::string& /*upload_id*/, uint32_t /*chunk_count*/)
-            -> drogon::Task<Result<disk::storage::AssembleResult>> override {
-            co_return disk::storage::AssembleResult{m_temp_dir / "assembled", "", ""};
-        }
+        /// ---- IBlobStorage 接口 ----
 
         auto PromoteToFinal(
             const std::filesystem::path& /*temp_path*/,
@@ -108,12 +90,7 @@ namespace {
             co_return stream;
         }
 
-        auto DeletePath(const std::filesystem::path& /*target_path*/)
-            -> drogon::Task<Result<void>> override {
-            co_return Result<void>{};
-        }
-
-        auto CleanupTemp(const std::string& /*upload_id*/)
+        auto DeleteBlob(const std::filesystem::path& /*blob_path*/)
             -> drogon::Task<Result<void>> override {
             co_return Result<void>{};
         }
@@ -234,7 +211,7 @@ class DownloadResponderTest : public ::testing::Test {
 protected:
     void SetUp() override {
         m_temp_dir = std::make_unique<TempDirGuard>();
-        m_storage = std::make_unique<MockFileStorage>(m_temp_dir->Path());
+        m_storage = std::make_unique<MockBlobStorage>(m_temp_dir->Path());
     }
 
     void TearDown() override {
@@ -268,7 +245,7 @@ protected:
     }
 
     std::unique_ptr<TempDirGuard> m_temp_dir;
-    std::unique_ptr<MockFileStorage> m_storage;
+    std::unique_ptr<MockBlobStorage> m_storage;
 };
 
 TEST_F(DownloadResponderTest, FullDownloadReturns200) {

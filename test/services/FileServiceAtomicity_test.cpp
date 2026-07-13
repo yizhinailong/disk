@@ -184,7 +184,7 @@ namespace disk::file {
 
             const auto& assembled = assemble_result.value();
             if (assembled.md5_hash != task.file_hash) {
-                auto cleanup_result = drogon::sync_wait(storage.DeletePath(assembled.path));
+                auto cleanup_result = drogon::sync_wait(storage.DeleteStagedFile(assembled.path));
                 (void)cleanup_result;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ChunkVerifyFailed, "File hash verification failed")
@@ -192,7 +192,7 @@ namespace disk::file {
             }
 
             if (filename_exists) {
-                auto cleanup_result = drogon::sync_wait(storage.DeletePath(assembled.path));
+                auto cleanup_result = drogon::sync_wait(storage.DeleteStagedFile(assembled.path));
                 (void)cleanup_result;
                 return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
             }

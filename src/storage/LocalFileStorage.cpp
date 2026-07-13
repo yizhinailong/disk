@@ -497,38 +497,67 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto LocalFileStorage::DeletePath(const std::filesystem::path& target_path)
+    auto LocalFileStorage::DeleteStagedFile(const std::filesystem::path& staged_path)
         -> drogon::Task<Result<void>> {
         auto result = co_await RunBlockingFilesystemTaskWithTimeout(
             m_worker_queue,
-            [target_path]() -> Result<void> {
+            [staged_path]() -> Result<void> {
                 std::error_code ec;
-                const bool exists = std::filesystem::exists(target_path, ec);
+                const bool exists = std::filesystem::exists(staged_path, ec);
                 if (ec) {
                     return std::unexpected(
-                        ErrorInfo(ErrorCode::InternalError, "Failed to check target path")
+                        ErrorInfo(ErrorCode::InternalError, "Failed to check staged file")
                     );
                 }
                 if (!exists) {
                     return {};
                 }
 
-                const bool is_directory = std::filesystem::is_directory(target_path, ec);
+                std::filesystem::remove(staged_path, ec);
                 if (ec) {
                     return std::unexpected(
-                        ErrorInfo(ErrorCode::InternalError, "Failed to inspect target path")
+                        ErrorInfo(ErrorCode::InternalError, "Failed to delete staged file")
                     );
                 }
 
-                if (is_directory) {
-                    std::filesystem::remove_all(target_path, ec);
-                } else {
-                    std::filesystem::remove(target_path, ec);
-                }
+                return {};
+            }
+        );
 
+        co_return result;
+    }
+
+    auto LocalFileStorage::DeleteBlob(const std::filesystem::path& blob_path)
+        -> drogon::Task<Result<void>> {
+        auto result = co_await RunBlockingFilesystemTaskWithTimeout(
+            m_worker_queue,
+            [blob_path]() -> Result<void> {
+                std::error_code ec;
+                const bool exists = std::filesystem::exists(blob_path, ec);
                 if (ec) {
                     return std::unexpected(
-                        ErrorInfo(ErrorCode::InternalError, "Failed to delete target path")
+                        ErrorInfo(ErrorCode::InternalError, "Failed to check blob path")
+                    );
+                }
+                if (!exists) {
+                    return {};
+                }
+
+                if (std::filesystem::is_directory(blob_path, ec)) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Blob path is a directory")
+                    );
+                }
+                if (ec) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Failed to inspect blob path")
+                    );
+                }
+
+                std::filesystem::remove(blob_path, ec);
+                if (ec) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Failed to delete blob")
                     );
                 }
 

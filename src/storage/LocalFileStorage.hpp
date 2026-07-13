@@ -33,7 +33,7 @@ namespace disk::storage {
      * @brief 本地文件存储实现类
      *
      * 职责边界：
-     * - 实现 IFileStorage 接口的所有文件系统操作
+     * - 实现上传暂存与最终 Blob 存储两个本地文件系统边界
      * - 管理上传会话的临时目录和分片文件
      * - 实现基于内容哈希的最终存储路径计算
      * - 使用 Result<T> 作为统一错误契约
@@ -101,12 +101,20 @@ namespace disk::storage {
             -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> override;
 
         /**
-         * @brief 安全删除指定文件或目录
-         * @param target_path 目标路径
+         * @brief 删除暂存区中的单个组装产物
+         * @param staged_path 暂存文件路径
          * @return 成功返回空，失败返回错误信息
          */
         [[nodiscard]]
-        auto DeletePath(const std::filesystem::path& target_path) -> drogon::Task<Result<void>> override;
+        auto DeleteStagedFile(const std::filesystem::path& staged_path) -> drogon::Task<Result<void>> override;
+
+        /**
+         * @brief 删除最终 Blob 文件
+         * @param blob_path Blob 路径
+         * @return 成功返回空，失败返回错误信息
+         */
+        [[nodiscard]]
+        auto DeleteBlob(const std::filesystem::path& blob_path) -> drogon::Task<Result<void>> override;
 
         /**
          * @brief 清理上传会话对应的临时目录及其内容

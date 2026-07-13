@@ -82,7 +82,8 @@ namespace disk::services {
         try {
             disk::upload::UploadLifecycleService lifecycle_service(
                 m_db_client,
-                disk::storage::StorageMgr::GetStorage()
+                disk::storage::StorageMgr::GetStagingStorage(),
+                disk::storage::StorageMgr::GetBlobStorage()
             );
             auto cleanup_result = co_await lifecycle_service.ExpireInProgressUploads();
             if (!cleanup_result) {

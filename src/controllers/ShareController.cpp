@@ -30,7 +30,7 @@ namespace disk::share {
 
     ShareController::ShareController()
         : m_share_service(&disk::application::ApplicationContext::GetInstance()->Share()),
-          m_storage(disk::application::ApplicationContext::GetInstance()->Storage()) {
+          m_storage(disk::application::ApplicationContext::GetInstance()->BlobStorage()) {
     }
 
     /// ==================== 所有者端点（JWT 保护） ====================

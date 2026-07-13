@@ -352,6 +352,81 @@ namespace disk::file {
             EXPECT_EQ(ReadBinaryFile(final_path), existing_content);
         }
 
+        TEST_F(LocalFileStorageUploadConsistencyTest, CleanupTempRemovesChunkDirAndAssembledArtifact) {
+            const std::string upload_id = "cleanup-temp-artifacts";
+            const std::string content = "cleanup-temp-content";
+
+            ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
+            ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, content)).has_value());
+            auto assemble_result = drogon::sync_wait(m_storage->AssembleChunks(upload_id, 1));
+            ASSERT_TRUE(assemble_result.has_value());
+            ASSERT_TRUE(std::filesystem::exists(ChunkPath(upload_id, 0)));
+            ASSERT_TRUE(std::filesystem::exists(assemble_result->path));
+
+            auto cleanup_result = drogon::sync_wait(m_storage->CleanupTemp(upload_id));
+
+            ASSERT_TRUE(cleanup_result.has_value());
+            EXPECT_FALSE(std::filesystem::exists(m_temp_base / upload_id));
+            EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
+
+            auto second_cleanup_result = drogon::sync_wait(m_storage->CleanupTemp(upload_id));
+            EXPECT_TRUE(second_cleanup_result.has_value());
+        }
+
+        TEST_F(LocalFileStorageUploadConsistencyTest, DeleteStagedFileRemovesOnlyAssembledArtifact) {
+            const std::string upload_id = "delete-staged-file";
+            const std::string content = "delete-staged-file-content";
+
+            ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
+            ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, content)).has_value());
+            auto assemble_result = drogon::sync_wait(m_storage->AssembleChunks(upload_id, 1));
+            ASSERT_TRUE(assemble_result.has_value());
+
+            auto delete_result = drogon::sync_wait(m_storage->DeleteStagedFile(assemble_result->path));
+
+            ASSERT_TRUE(delete_result.has_value());
+            EXPECT_FALSE(std::filesystem::exists(assemble_result->path));
+            EXPECT_TRUE(std::filesystem::exists(ChunkPath(upload_id, 0)));
+        }
+
+        TEST_F(LocalFileStorageUploadConsistencyTest, BlobReadSizeExistsAndDeleteUseBlobBoundary) {
+            const std::string upload_id = "blob-boundary-primitives";
+            const std::string content = "blob-boundary-content";
+            const auto hash = FileHashUtil::HashMd5(content);
+            const auto temp_path = AssembledPath(upload_id);
+
+            std::error_code ec;
+            std::filesystem::create_directories(m_temp_base, ec);
+            ASSERT_FALSE(ec);
+            std::ofstream output(temp_path, std::ios::binary);
+            output.write(content.data(), static_cast<std::streamsize>(content.size()));
+            output.close();
+            ASSERT_TRUE(output);
+
+            auto promote_result = drogon::sync_wait(m_storage->PromoteToFinal(temp_path, hash));
+            ASSERT_TRUE(promote_result.has_value());
+
+            auto exists_result = drogon::sync_wait(m_storage->Exists(promote_result->path));
+            ASSERT_TRUE(exists_result.has_value());
+            EXPECT_TRUE(exists_result.value());
+
+            auto size_result = drogon::sync_wait(m_storage->GetFileSize(promote_result->path));
+            ASSERT_TRUE(size_result.has_value());
+            EXPECT_EQ(size_result.value(), content.size());
+
+            auto open_result = drogon::sync_wait(m_storage->OpenForRead(promote_result->path));
+            ASSERT_TRUE(open_result.has_value());
+            std::string read_content{
+                std::istreambuf_iterator<char>(*open_result.value()),
+                std::istreambuf_iterator<char>()
+            };
+            EXPECT_EQ(read_content, content);
+
+            auto delete_result = drogon::sync_wait(m_storage->DeleteBlob(promote_result->path));
+            ASSERT_TRUE(delete_result.has_value());
+            EXPECT_FALSE(std::filesystem::exists(promote_result->path));
+        }
+
         /// ==================== Fault Injection Scenario Tests (DB-dependent) ====================
 
         TEST(FileUploadConsistencyFaultInjection, DISABLED_ZoneBQuotaTransferFailureLeavesFreeStorageLeak) {

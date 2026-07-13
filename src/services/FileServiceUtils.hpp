@@ -25,10 +25,6 @@
 #include "models/Folders.hpp"
 #include "utils/ErrorCode.hpp"
 
-namespace disk::storage {
-    class IFileStorage;
-}
-
 namespace disk::file::utils {
 
     using drogon_model::disk::Files;

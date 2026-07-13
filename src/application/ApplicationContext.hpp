@@ -21,7 +21,8 @@
 #include "services/FolderService.hpp"
 #include "services/ShareService.hpp"
 #include "services/UploadService.hpp"
-#include "storage/IFileStorage.hpp"
+#include "storage/IBlobStorage.hpp"
+#include "storage/IUploadStagingStorage.hpp"
 #include "utils/Singleton.hpp"
 
 namespace disk::application {
@@ -38,7 +39,8 @@ namespace disk::application {
         static auto Initialize(
             drogon::orm::DbClientPtr db_client,
             drogon::nosql::RedisClientPtr redis_client,
-            disk::storage::IFileStorage* storage,
+            disk::storage::IUploadStagingStorage* staging_storage,
+            disk::storage::IBlobStorage* blob_storage,
             std::string jwt_secret
         ) -> void;
 
@@ -61,7 +63,10 @@ namespace disk::application {
         auto Cleanup() -> disk::services::CleanupService&;
 
         [[nodiscard]]
-        auto Storage() -> disk::storage::IFileStorage*;
+        auto StagingStorage() -> disk::storage::IUploadStagingStorage*;
+
+        [[nodiscard]]
+        auto BlobStorage() -> disk::storage::IBlobStorage*;
 
         ~ApplicationContext() = default;
         ApplicationContext(const ApplicationContext&) = delete;
@@ -75,7 +80,8 @@ namespace disk::application {
         auto initialize(
             drogon::orm::DbClientPtr db_client,
             drogon::nosql::RedisClientPtr redis_client,
-            disk::storage::IFileStorage* storage,
+            disk::storage::IUploadStagingStorage* staging_storage,
+            disk::storage::IBlobStorage* blob_storage,
             std::string jwt_secret
         ) -> void;
 
@@ -83,7 +89,8 @@ namespace disk::application {
 
         drogon::orm::DbClientPtr m_db_client{};
         drogon::nosql::RedisClientPtr m_redis_client{};
-        disk::storage::IFileStorage* m_storage{};
+        disk::storage::IUploadStagingStorage* m_staging_storage{};
+        disk::storage::IBlobStorage* m_blob_storage{};
 
         std::unique_ptr<disk::file::UploadService> m_upload_service{};
         std::unique_ptr<disk::file::FileQueryService> m_file_query_service{};

@@ -35,7 +35,7 @@ namespace disk::controllers {
 
     auto BuildDownloadResponse(
         const DownloadParams& params,
-        disk::storage::IFileStorage* storage
+        disk::storage::IBlobStorage* storage
     ) -> drogon::Task<drogon::HttpResponsePtr> {
 
         const auto& file_size = params.file_size;

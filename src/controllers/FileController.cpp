@@ -36,7 +36,7 @@ namespace disk::file {
         : m_upload_service(&disk::application::ApplicationContext::GetInstance()->Upload()),
           m_query_service(&disk::application::ApplicationContext::GetInstance()->FileQuery()),
           m_mutation_service(&disk::application::ApplicationContext::GetInstance()->FileMutation()),
-          m_storage(disk::application::ApplicationContext::GetInstance()->Storage()) {
+          m_storage(disk::application::ApplicationContext::GetInstance()->BlobStorage()) {
     }
 
     auto FileController::InitUpload(drogon::HttpRequestPtr request)

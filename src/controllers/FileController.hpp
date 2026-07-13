@@ -13,7 +13,7 @@
 #include "services/FileMutationService.hpp"
 #include "services/FileQueryService.hpp"
 #include "services/UploadService.hpp"
-#include "storage/IFileStorage.hpp"
+#include "storage/IBlobStorage.hpp"
 
 namespace disk::file {
 
@@ -221,7 +221,7 @@ namespace disk::file {
         UploadService* m_upload_service{};
         FileQueryService* m_query_service{};
         FileMutationService* m_mutation_service{};
-        disk::storage::IFileStorage* m_storage{};
+        disk::storage::IBlobStorage* m_storage{};
     };
 
 } ///< namespace disk::file

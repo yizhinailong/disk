@@ -27,7 +27,8 @@
 #include "services/ContentService.hpp"
 #include "services/QuotaService.hpp"
 #include "services/UploadTaskRepository.hpp"
-#include "storage/IFileStorage.hpp"
+#include "storage/IBlobStorage.hpp"
+#include "storage/IUploadStagingStorage.hpp"
 #include "storage/StorageMgr.hpp"
 
 namespace disk::upload {
@@ -114,8 +115,11 @@ namespace disk::upload {
 
     UploadLifecycleService::UploadLifecycleService(
         drogon::orm::DbClientPtr db_client,
-        disk::storage::IFileStorage* storage
-    ) : m_db_client(std::move(db_client)), m_storage(storage) {
+        disk::storage::IUploadStagingStorage* staging_storage,
+        disk::storage::IBlobStorage* blob_storage
+    ) : m_db_client(std::move(db_client)),
+        m_staging_storage(staging_storage),
+        m_blob_storage(blob_storage) {
         Logger::Debug() << "UploadLifecycleService initialization completed";
     }
 
@@ -442,8 +446,8 @@ namespace disk::upload {
             Logger::Debug() << "Upload task created successfully: upload_id=" << task.getValueOfId()
                       << ", total_chunks=" << total_chunks;
 
-            if (m_storage != nullptr) {
-                auto ensure_result = co_await m_storage->EnsureUploadTempDir(task.getValueOfId());
+            if (m_staging_storage != nullptr) {
+                auto ensure_result = co_await m_staging_storage->EnsureUploadTempDir(task.getValueOfId());
                 if (!ensure_result) {
                     Logger::Warn() << "Failed to ensure upload temp directory: upload_id="
                              << task.getValueOfId();
@@ -565,7 +569,7 @@ namespace disk::upload {
         }
 
         auto assemble_start = std::chrono::steady_clock::now();
-        auto assemble_result = co_await m_storage->AssembleChunks(
+        auto assemble_result = co_await m_staging_storage->AssembleChunks(
             command.upload_id,
             upload_task.getValueOfTotalChunks()
         );
@@ -595,7 +599,7 @@ namespace disk::upload {
         if (final_hash != upload_task.getValueOfFileHash()) {
             Logger::Error() << "File hash mismatch: expected=" << upload_task.getValueOfFileHash()
                       << ", actual=" << final_hash;
-            auto delete_result = co_await m_storage->DeletePath(assemble_path);
+            auto delete_result = co_await m_staging_storage->DeleteStagedFile(assemble_path);
             if (!delete_result) {
                 Logger::Warn() << "Failed to cleanup assemble file after hash mismatch: "
                          << static_cast<int>(delete_result.error().code);
@@ -649,7 +653,7 @@ namespace disk::upload {
 
         if (lookup_result.filename_exists) {
             Logger::Warn() << "File with same name already exists: " << upload_task.getValueOfFilename();
-            auto delete_result = co_await m_storage->DeletePath(assemble_path);
+            auto delete_result = co_await m_staging_storage->DeleteStagedFile(assemble_path);
             if (!delete_result) {
                 Logger::Warn() << "Failed to cleanup assemble file on duplicate name: "
                          << static_cast<int>(delete_result.error().code);
@@ -680,7 +684,7 @@ namespace disk::upload {
         bool should_delete_promoted_blob_on_tx_failure = false;
 
         if (finalize_storage_decision.type == FinalizeStorageDecisionType::ReuseExistingContent) {
-            auto delete_result = co_await m_storage->DeletePath(assemble_path);
+            auto delete_result = co_await m_staging_storage->DeleteStagedFile(assemble_path);
             if (!delete_result) {
                 Logger::Warn() << "Failed to cleanup assemble file after dedup: "
                          << static_cast<int>(delete_result.error().code);
@@ -688,11 +692,11 @@ namespace disk::upload {
             Logger::Debug() << "File dedup successful: content_id="
                       << finalize_storage_decision.existing_content_id.value();
         } else {
-            auto promote_result = co_await m_storage->PromoteToFinal(assemble_path, final_hash);
+            auto promote_result = co_await m_blob_storage->PromoteToFinal(assemble_path, final_hash);
             if (!promote_result) {
                 Logger::Error() << "Failed to move file to final storage: error="
                           << static_cast<int>(promote_result.error().code);
-                auto cleanup_result = co_await m_storage->DeletePath(assemble_path);
+                auto cleanup_result = co_await m_staging_storage->DeleteStagedFile(assemble_path);
                 if (!cleanup_result) {
                     Logger::Warn() << "Failed to cleanup assemble file after promote failure: "
                              << static_cast<int>(cleanup_result.error().code);
@@ -815,7 +819,7 @@ namespace disk::upload {
         if (db_operation_failed) {
             auto compensation_start = std::chrono::steady_clock::now();
             if (should_delete_promoted_blob_on_tx_failure) {
-                auto cleanup_result = co_await m_storage->DeletePath(final_storage_path);
+                auto cleanup_result = co_await m_blob_storage->DeleteBlob(final_storage_path);
                 if (!cleanup_result) {
                     Logger::Error() << "Compensation failed, orphan storage file may remain: "
                               << final_storage_path;
@@ -840,7 +844,7 @@ namespace disk::upload {
         Logger::Debug() << "Files record created successfully: file_id=" << file.getValueOfId();
 
         auto temp_cleanup_start = std::chrono::steady_clock::now();
-        auto cleanup_result = co_await m_storage->CleanupTemp(command.upload_id);
+        auto cleanup_result = co_await m_staging_storage->CleanupTemp(command.upload_id);
         Logger::Debug() << "[stage_timer] temp_cleanup duration_ms="
                   << std::chrono::duration_cast<std::chrono::milliseconds>(
                          std::chrono::steady_clock::now() - temp_cleanup_start
@@ -894,8 +898,8 @@ namespace disk::upload {
             Logger::Warn() << "Failed to cleanup upload_task_chunks: " << e.base().what();
         }
 
-        if (m_storage != nullptr) {
-            auto cleanup_result = co_await m_storage->CleanupTemp(upload_id);
+        if (m_staging_storage != nullptr) {
+            auto cleanup_result = co_await m_staging_storage->CleanupTemp(upload_id);
             if (!cleanup_result) {
                 Logger::Warn() << "Failed to delete temp directory: upload_id=" << upload_id
                          << ", error=" << static_cast<int>(cleanup_result.error().code);
@@ -953,7 +957,7 @@ namespace disk::upload {
             co_return false;
         }
 
-        auto* storage = m_storage != nullptr ? m_storage : disk::storage::StorageMgr::GetStorage();
+        auto* storage = m_staging_storage != nullptr ? m_staging_storage : disk::storage::StorageMgr::GetStagingStorage();
         if (storage != nullptr) {
             auto cleanup_result = co_await storage->CleanupTemp(upload_id);
             if (!cleanup_result.has_value()) {

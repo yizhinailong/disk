@@ -22,7 +22,8 @@
 #include "utils/ErrorCode.hpp"
 
 namespace disk::storage {
-    class IFileStorage;
+    class IBlobStorage;
+    class IUploadStagingStorage;
 }
 
 namespace disk::upload {
@@ -146,7 +147,8 @@ namespace disk::upload {
     public:
         explicit UploadLifecycleService(
             drogon::orm::DbClientPtr db_client,
-            disk::storage::IFileStorage* storage
+            disk::storage::IUploadStagingStorage* staging_storage,
+            disk::storage::IBlobStorage* blob_storage
         );
 
         [[nodiscard]]
@@ -173,7 +175,8 @@ namespace disk::upload {
 
     private:
         drogon::orm::DbClientPtr m_db_client;
-        disk::storage::IFileStorage* m_storage{};
+        disk::storage::IUploadStagingStorage* m_staging_storage{};
+        disk::storage::IBlobStorage* m_blob_storage{};
     };
 
 } // namespace disk::upload

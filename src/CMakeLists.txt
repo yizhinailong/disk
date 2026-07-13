@@ -163,7 +163,9 @@ set(Services_SOURCES
 
 # Storage
 set(Storage_HEADERS
+    storage/IBlobStorage.hpp
     storage/IFileStorage.hpp
+    storage/IUploadStagingStorage.hpp
     storage/LocalFileStorage.hpp
     storage/StorageMgr.hpp
 )
