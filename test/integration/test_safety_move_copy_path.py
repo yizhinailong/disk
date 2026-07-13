@@ -166,6 +166,7 @@ def test_move_file_updates_parent_path_and_counts() -> None:
     file_id = upload_file(file_name, f"move-file-{unique_name()}".encode(), source_folder)
     source_before = int(folder_row(source_folder)["item_count"])
     target_before = int(folder_row(target_folder)["item_count"])
+    assert_equal("upload increments source folder item_count", source_before, 1)
 
     body = move_items([file_id], [], target_folder)
     if json_field(body, "code") != "0":
@@ -211,8 +212,8 @@ def test_move_folder_subtree_paths_and_rejections() -> tuple[int, int, int, int]
     root_name = str(folder_row(root_folder)["name"])
     child_name = str(folder_row(child_folder)["name"])
     assert_equal("moved root parent updated", int(folder_row(root_folder)["parent_id"]), target_folder)
-    assert_equal("moved root path updated", folder_row(root_folder)["path"], f"/{target_name}/{root_name}")
-    assert_equal("moved child path updated", folder_row(child_folder)["path"], f"/{target_name}/{root_name}/{child_name}")
+    assert_equal("moved root path updated", folder_row(root_folder)["path"], f"/{target_name}/{root_name}/")
+    assert_equal("moved child path updated", folder_row(child_folder)["path"], f"/{target_name}/{root_name}/{child_name}/")
     assert_equal("descendant file path updated", file_row(file_id)["path"], f"/{target_name}/{root_name}/{child_name}/{file_name}")
     return target_folder, root_folder, child_folder, file_id
 
@@ -259,11 +260,27 @@ def test_copy_folder_preserves_tree_and_content_refs() -> None:
 
     ref_after = int(query_one("SELECT ref_count FROM file_contents WHERE id = %s", (content_id,))["ref_count"])
     destination_name = str(folder_row(destination)["name"])
-    assert_equal("copied root path preserves shape", copied_root["path"], f"/{destination_name}/{copied_root['name']}")
-    assert_equal("copied child path preserves shape", copied_child["path"], f"/{destination_name}/{copied_root['name']}/{copied_child['name']}")
+    assert_equal("copied root path preserves shape", copied_root["path"], f"/{destination_name}/{copied_root['name']}/")
+    assert_equal("copied child path preserves shape", copied_child["path"], f"/{destination_name}/{copied_root['name']}/{copied_child['name']}/")
     assert_equal("copied file path preserves shape", copied_file["path"], f"/{destination_name}/{copied_root['name']}/{copied_child['name']}/{file_name}")
     assert_equal("copied file reuses content_id", int(copied_file["content_id"]), content_id)
     assert_equal("folder copy increments content ref_count", ref_after, ref_before + 1)
+
+
+def test_instant_upload_updates_parent_count() -> None:
+    """Verify instant upload creates one direct child in the target folder."""
+    log_section("Instant Upload Parent Count")
+    target = create_folder(f"safety_instant_target_{unique_name()}")
+    payload = f"instant-parent-count-{unique_name()}".encode()
+    upload_file(f"safety_instant_source_{unique_name()}.bin", payload)
+
+    target_before = int(folder_row(target)["item_count"])
+    instant_name = f"safety_instant_child_{unique_name()}.bin"
+    instant_file_id = upload_file(instant_name, payload, target)
+
+    assert_equal("instant upload starts with empty target folder", target_before, 0)
+    assert_equal("instant upload increments target folder item_count", int(folder_row(target)["item_count"]), 1)
+    assert_equal("instant upload stores target folder id", int(file_row(instant_file_id)["folder_id"]), target)
 
 
 def main() -> None:
@@ -286,6 +303,7 @@ def main() -> None:
     test_move_file_updates_parent_path_and_counts()
     test_move_folder_subtree_paths_and_rejections()
     test_copy_folder_preserves_tree_and_content_refs()
+    test_instant_upload_updates_parent_count()
 
     print_summary()
 

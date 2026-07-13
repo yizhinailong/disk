@@ -21,6 +21,7 @@
 #include <drogon/utils/Utilities.h>
 
 #include "FileServiceUtils.hpp"
+#include "FolderRepository.hpp"
 #include "TransactionRunner.hpp"
 #include "models/Files.hpp"
 #include "models/UploadTasks.hpp"
@@ -338,6 +339,17 @@ namespace disk::upload {
                         content_mime_type,
                         disk::file::utils::BuildFilePath(parent_location_result->path, command.filename)
                     );
+
+                    if (command.parent_id > 0) {
+                        disk::folder::FolderRepository folder_repository(m_db_client);
+                        co_await folder_repository.ApplyItemCountDelta(
+                            transaction,
+                            command.parent_id,
+                            command.user_id,
+                            1,
+                            trantor::Date::now()
+                        );
+                    }
 
                     co_return {};
                 }
@@ -812,6 +824,17 @@ namespace disk::upload {
                     "",
                     disk::file::utils::BuildFilePath(parent_location_result->path, upload_task.getValueOfFilename())
                 );
+
+                if (upload_task.getValueOfFolderId() > 0) {
+                    disk::folder::FolderRepository folder_repository(m_db_client);
+                    co_await folder_repository.ApplyItemCountDelta(
+                        transaction,
+                        upload_task.getValueOfFolderId(),
+                        command.user_id,
+                        1,
+                        trantor::Date::now()
+                    );
+                }
 
                 disk::quota::QuotaService quota_service(m_db_client);
                 auto transfer_result = co_await quota_service.CommitReservedToUsed(
