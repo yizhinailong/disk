@@ -2181,7 +2181,7 @@ Authorization: Bearer <access_token>
 
 #### 实现说明
 
-回收站彻底删除（DELETE /api/trash）和清空（DELETE /api/trash/all）由 `TrashService::Delete` 和 `TrashService::DeleteAll` 处理。批量删除时逐项串行执行，每项内部先将文件元数据从 trash 表移除，再由 `LocalFileStorage` 线程池并行执行 blob 清理（最大并发 4），最后对 `file_contents.ref_count` 递减。引用计数归零时物理文件由后台线程异步删除，不阻塞响应返回。
+回收站彻底删除（DELETE /api/trash）和清空（DELETE /api/trash/all）由 `TrashService::Delete` 和 `TrashService::DeleteAll` 处理。批量删除时逐项串行执行，每项内部先将文件元数据从 trash 表移除，再通过当前 `BlobStore` 后端并行执行 blob 清理（最大并发 4），最后对 `file_contents.ref_count` 递减。引用计数归零时最终 blob 由存储工作线程删除，不阻塞 Drogon 事件循环；本地和 S3/MinIO 后端保持相同 API 响应结构。
 
 **40106 TokenMissing 响应示例**：
 

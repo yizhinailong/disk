@@ -1,8 +1,8 @@
 # Backend Refactor Decisions
 
-This note records accepted product and policy decisions for the backend refactor roadmap. It is intentionally documentation-only: it does not mean the runtime behavior has already changed.
+This note records accepted product and policy decisions together with their current implementation status for the backend refactor roadmap.
 
-Use `docs/backend-discovery.md` as the source of confirmed current implementation behavior. When this note differs from discovery, discovery describes the current behavior and this note describes the accepted target for a later implementation change.
+Use `docs/backend-discovery.md` as the historical discovery baseline. The status and current-behavior paragraphs in this note are authoritative for decisions implemented after that discovery pass.
 
 ## Decision Summary
 
@@ -75,6 +75,7 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 - For name conflicts, invalid/missing content, copying a folder into itself or a descendant, and other pre-transaction skips, release the reserved bytes for that skipped unit.
 - For content ref-count increment failure, copied row creation failure, item-count update failure, or reserved-to-used commit failure inside a copy transaction, roll back the transaction so ref-counts and copied rows return to their previous state, then release the reservation for that failed unit.
 - For a successful copy unit, commit exactly the copied logical bytes from `storage_reserved` to `storage_used` in the same transaction as ref-count and row creation.
+- Checked reservation release and reserved-to-used commit must require `storage_reserved >= bytes`. Under-reservation is an accounting invariant violation: return an internal error and roll back instead of clamping the counter to zero while increasing `storage_used`.
 - If reservation release fails after a skipped or failed unit, stop rather than silently continuing; log the affected `user_id`, byte count, and reason, and rely on accounting reconciliation to surface orphaned reservations.
 - Reconciliation should flag copy-reservation drift explicitly, because `storage_reserved` currently also represents in-progress upload tasks.
 
@@ -170,11 +171,11 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 
 ## Decision: object storage compatibility is supported as a configurable backend
 
-**Current implementation behavior:** The runtime implementation supports both local filesystem storage and a configurable S3/MinIO-compatible object-storage backend. `UploadStagingStorage` separates temporary upload-session concerns from final blob storage concerns, `BlobStore` separates final content blob promotion, read, existence, size, and deletion semantics, and download responses use descriptor-oriented blob contracts instead of controller-local filesystem assumptions.
+**Current implementation behavior:** The runtime implementation supports both local filesystem storage and a configurable S3/MinIO-compatible final-blob backend. `UploadStagingStorage` separates temporary upload-session concerns from final blob storage concerns, `BlobStore` separates final content blob promotion, read, existence, size, and deletion semantics, and download responses use descriptor-oriented blob contracts instead of controller-local filesystem assumptions. The current S3 backend deliberately keeps upload chunks and assembled staging files on the local `temp_upload_path`; only final content blobs are object-store backed.
 
 **Accepted target behavior:** S3/MinIO compatibility is implemented as a configurable storage backend while preserving the local filesystem backend. Storage boundaries should continue avoiding local-only primitives where an object store cannot provide the same guarantee, and new code should preserve the separation between upload staging, final blob storage, and database lifecycle decisions.
 
-**Expected staging-storage responsibilities for S3/MinIO:** An object-store implementation of `UploadStagingStorage` should store chunks under an upload-session namespace, make repeated chunk writes idempotent for the same upload id and chunk index, assemble chunks into a staging object or multipart upload result, calculate and return MD5/SHA-256 metadata for final validation, discard assembled staging artifacts on validation or DB failure, and clean all per-upload staging keys during cancel/expiry cleanup. It should not create final content blobs, mutate database state, or assume local directory rename semantics.
+**Possible future S3-native staging responsibilities:** If a later product requirement introduces object-store-native upload staging, that work should store chunks under an upload-session namespace, make repeated chunk writes idempotent for the same upload id and chunk index, assemble chunks into a staging object or multipart upload result, calculate and return MD5/SHA-256 metadata for final validation, discard assembled staging artifacts on validation or DB failure, and clean all per-upload staging keys during cancel/expiry cleanup. It must be proposed as a separate issue/change rather than reopening completed Phase 6 work.
 
 **Expected final blob-storage responsibilities for S3/MinIO:** `BlobStore` should own content-addressed final blobs, promotion from a staging descriptor/object into the final hash-derived key, existence checks, metadata such as size/checksum where needed, readable download descriptors instead of local filesystem paths, and idempotent deletion requests. Final keys should remain derived from content hashes to preserve dedup semantics, but callers should not depend on POSIX paths or atomic filesystem rename.
 
@@ -186,9 +187,9 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 - Keep object storage entirely out of the design: rejected because Phase 6 is explicitly extracting storage boundaries, and local-only contracts would make a later S3/MinIO adapter unnecessarily risky.
 - Rely on atomic rename semantics for promotion: rejected because object stores generally expose copy/complete/delete operations rather than POSIX rename.
 
-**Implementation impact:** Phase 6 storage/download boundaries keep DB failure compensation explicit around object-store promotion/deletion, use blob descriptors so controllers do not need local path knowledge, and provide a configurable S3/MinIO-compatible backend with MinIO-oriented development support.
+**Implementation impact:** Phase 6 storage/download boundaries keep DB failure compensation explicit around object-store promotion/deletion, use blob descriptors so controllers do not need local path knowledge, and provide a configurable S3/MinIO-compatible final-blob backend with MinIO-oriented development support. AWS SDK for C++ remains a mandatory build dependency for the single backend binary, including local-only runtime configurations; making it optional would require a separate conditional-build design and is not an active refactor follow-up.
 
-**Follow-up status:** Implemented and closed.
+**Follow-up status:** Implemented and closed. S3-native upload staging is not an active requirement; create a separate issue/OpenSpec change if that requirement appears later.
 
 ## Remaining Unresolved Decisions
 

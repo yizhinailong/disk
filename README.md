@@ -85,8 +85,8 @@
 
 ### 💾 存储与后端能力
 
-- **内容寻址存储**：本地存储按内容哈希组织目录和文件名，方便去重与校验。
-- **存储抽象层**：通过 `IFileStorage` 定义文件保存、读取、合并、清理等操作，当前实现为 `LocalFileStorage`。
+- **内容寻址存储**：最终 blob 按内容哈希组织路径或对象 key，方便去重与校验。
+- **存储抽象层**：`UploadStagingStorage` 管理本地临时分片与组装文件，`BlobStore` 管理最终 blob；运行时可选择本地文件系统或 S3/MinIO 兼容对象存储作为最终 blob 后端。
 - **引用计数**：同一内容可被多个用户文件记录引用，复制和彻底删除会维护 `ref_count`。
 - **PostgreSQL 数据持久化**：用户、文件、内容、上传任务、分享、回收站和操作日志存储在 PostgreSQL。
 - **Redis 缓存与状态管理**：用于刷新令牌、黑名单、登录失败计数、分享访问和限流状态。
@@ -111,6 +111,7 @@
 | ORM | Drogon ORM | - | 由模型配置生成数据库模型 |
 | 认证 | jwt-cpp | ≥ 0.7.1 | JWT HS256 签名与校验 |
 | 密码哈希 | libsodium | ≥ 1.0.21 | Argon2id 密码存储 |
+| 对象存储 | AWS SDK for C++ | vcpkg manifest | S3/MinIO 最终 blob 读写 |
 | 测试 | GoogleTest | ≥ 1.17.0 | 单元测试与服务测试 |
 | 构建 | CMake + vcpkg | CMake 4.0+ | 跨平台依赖和构建管理 |
 
@@ -177,6 +178,7 @@ psql -U postgres -d disk -f sql/init.sql
   "listeners": [{ "address": "127.0.0.1", "port": 8080 }],
   "custom_config": {
     "disk": {
+      "storage_backend": "local",
       "storage_base_path": "build/uploaded",
       "temp_upload_path": "build/temp_uploads",
       "chunk_size": 5242880,
@@ -184,17 +186,31 @@ psql -U postgres -d disk -f sql/init.sql
       "upload_task_expiry_seconds": 86400,
       "upload_rate_limit_per_minute": 240,
       "assembly_max_concurrent": 4,
-      "assemble_buffer_size_bytes": 262144
+      "assemble_buffer_size_bytes": 262144,
+      "s3": {
+        "bucket": "disk",
+        "region": "us-east-1",
+        "endpoint": "http://127.0.0.1:9000",
+        "use_ssl": false,
+        "force_path_style": true,
+        "verify_ssl": false,
+        "object_prefix": "objects"
+      }
     }
   }
 }
 ```
+
+`storage_backend=local` 时最终 blob 写入 `storage_base_path`；设置为 `s3` 时，最终 blob 写入 S3/MinIO，上传分片和组装文件仍使用本机 `temp_upload_path`。S3 凭据通过 `DISK_S3_ACCESS_KEY`、`DISK_S3_SECRET_KEY` 和可选的 `DISK_S3_SESSION_TOKEN` 注入，不写入 `config.json`。
 
 ### 5. 配置环境变量
 
 ```bash
 export JWT_SECRET="your-super-secret-jwt-key-change-in-production"
 export VCPKG_ROOT=/path/to/vcpkg
+# 仅 storage_backend=s3 时需要
+export DISK_S3_ACCESS_KEY="your-access-key"
+export DISK_S3_SECRET_KEY="your-secret-key"
 ```
 
 > `CMakePresets.json` 为开发构建提供了默认 `JWT_SECRET`，生产环境必须改为安全随机密钥。
@@ -329,7 +345,7 @@ disk/
 │   ├── models/         # Drogon ORM 模型
 │   ├── dtos/           # 请求/响应 DTO 与参数校验
 │   ├── filters/        # JWT、分享令牌、限流等过滤器
-│   ├── storage/        # 存储抽象、本地存储与分片合并
+│   ├── storage/        # 分片暂存、BlobStore、本地与 S3 后端
 │   └── utils/          # 配置、错误码、响应、哈希、单例等工具
 ├── test/
 │   ├── services/       # 服务层单元测试
