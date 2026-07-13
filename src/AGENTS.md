@@ -25,7 +25,7 @@ src/
 | Add route | `controllers/*Controller.hpp/.cpp` | Register in `METHOD_LIST_BEGIN`; convert service result only |
 | Add request/response shape | `dtos/*Dto.hpp` | `FromRequest()` validates; `ToJson()` serializes |
 | Add domain logic | `services/*Service.hpp/.cpp` | Return `drogon::Task<Result<T>>`; keep controller thin |
-| Add auth/public access | `filters/`, `controllers/*Controller.hpp`, `config.json` | Protected routes declare auth filters in `ADD_METHOD_TO`; GlobalFilters are for request tracing and public rate limiters |
+| Add auth/public access | `filters/`, `controllers/*Controller.hpp`, `config.json` | Protected routes use the single global `JwtAuthFilter`; public paths are explicit filter exemptions; route filters own domain authorization/rate limits |
 | Add file storage operation | `storage/IFileStorage.hpp`, `LocalFileStorage.*` | Storage layer never owns HTTP, DB, auth decisions |
 | Add shared error | `utils/ErrorCode.hpp` | Keep code ranges: 10xxx common, 40xxx auth, 50xxx file, 60xxx share, 70xxx Redis, 80xxx admin |
 | Add config field | `utils/ConfigMgr.*`, `config.json` | Validate secure/prod behavior |
@@ -61,6 +61,7 @@ src/
 - Do not bypass `StorageMgr` after startup unless explicitly injecting a test/storage seam.
 - Do not queue upload assembly work in `AssemblyWorkerPool`; current design rejects over-capacity or duplicate `upload_id` immediately.
 - Do not introduce public endpoints without documenting their route filter policy and adding tests for public/protected behavior.
+- Do not declare `drogon::plugin::GlobalFilters` more than once in `config.json`; one instance must contain request tracing, global JWT, and public rate limiters.
 
 ## HOTSPOTS
 

@@ -137,7 +137,7 @@ Use `docs/backend-discovery.md` as the historical discovery baseline. The status
 
 ## Decision: JWT enforcement uses global-with-exemptions
 
-**Current implementation behavior:** Protected routes are covered by global `JwtAuthFilter` with explicit public exemptions; duplicate route-level JWT declarations for globally protected routes have been removed.
+**Current implementation behavior:** Protected routes are covered by global `JwtAuthFilter` with explicit public exemptions; duplicate route-level JWT declarations for globally protected routes have been removed. Drogon's plugin registry keys plugins by name, so `config.json` declares exactly one `drogon::plugin::GlobalFilters` instance containing request tracing, JWT, and the self-scoped public rate limiters.
 
 **Accepted target behavior:** JWT authentication is owned by global filter configuration with explicit public exemptions. Public auth, health, and public share routes remain exempt. Protected upload, file, folder, share-owner, auth logout, and admin routes should not also declare route-level JWT when global JWT already covers them.
 
@@ -148,7 +148,7 @@ Use `docs/backend-discovery.md` as the historical discovery baseline. The status
 - Route-level-only JWT: rejected because every protected route must be individually audited and future route additions can drift.
 - Keep both global and route-level JWT: rejected because duplicate execution wastes work and makes filter behavior harder to reason about.
 
-**Implementation impact:** Filter cleanup removed duplicate route-level JWT declarations for globally protected routes, preserves public exemptions, preserves admin/share-specific authorization filters where still needed, and tests representative protected-route behavior.
+**Implementation impact:** Filter cleanup removed duplicate route-level JWT declarations for globally protected routes, preserves public exemptions, preserves admin/share-specific authorization filters where still needed, and tests representative protected-route behavior. Configuration tests also reject duplicate `GlobalFilters` plugin declarations because later duplicate configuration can prevent JWT execution entirely.
 
 **Follow-up status:** Implemented and closed.
 

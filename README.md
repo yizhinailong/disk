@@ -239,7 +239,7 @@ cmake --build --preset windows-debug-clang-cl
 
 ## API 总览
 
-认证由各控制器路由的过滤器声明负责。需要登录的接口在 `ADD_METHOD_TO` 中声明 `JwtAuthFilter`；公开接口（注册、登录、刷新令牌、健康检查和公开分享访问）不声明 JWT 过滤器，但仍可通过公开限流过滤器获得保护。
+认证由唯一的 `drogon::plugin::GlobalFilters` 插件实例统一执行。`JwtAuthFilter` 默认保护所有接口，并在过滤器内部显式豁免注册、登录、刷新令牌、健康检查和公开分享访问；上传、下载、管理员等领域限流或授权过滤器仍由路由声明。`config.json` 不得重复声明同名 `GlobalFilters` 插件，否则后声明配置可能取代前一配置并绕过 JWT。
 
 ### 认证接口
 

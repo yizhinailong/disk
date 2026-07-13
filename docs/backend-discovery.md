@@ -1,6 +1,6 @@
 # Backend Discovery Notes
 
-This note captures the current backend behavior behind the `backend-discovery` OpenSpec change. It is a behavior-preserving discovery artifact: it documents what the code currently does and separates confirmed behavior from future product or refactor decisions.
+This note captures the backend behavior behind the `backend-discovery` OpenSpec change and the decisions subsequently applied to it. Historical risks are retained where useful, while the configuration descriptions below reflect the current target behavior.
 
 ## Scope and Evidence
 
@@ -23,32 +23,13 @@ Primary sources inspected:
 
 ### Global filters
 
-`config.json` registers three `drogon::plugin::GlobalFilters` entries:
+`config.json` registers exactly one `drogon::plugin::GlobalFilters` entry:
 
 ```text
-GlobalFilters #1
+GlobalFilters
   filters:
     - disk::filters::RequestTraceFilter
-  exempt: []
-
-GlobalFilters #2
-  filters:
     - disk::filters::JwtAuthFilter
-    - disk::filters::AdminAuthFilter
-    - disk::filters::DownloadRateLimitFilter
-    - disk::filters::AdminRateLimitFilter
-    - disk::filters::FolderRateLimitFilter
-  exempt:
-    - ^/api/auth/register
-    - ^/api/auth/login
-    - ^/api/auth/refresh
-    - ^/api/health
-    - ^/api/share/access/.*
-    - ^/api/share/browse/.*
-    - ^/api/share/download/.*
-
-GlobalFilters #3
-  filters:
     - disk::filters::RegisterRateLimitFilter
     - disk::filters::SharePublicRateLimitFilter
   exempt: []
@@ -62,32 +43,27 @@ Representative route-level filters:
 
 | Route family | Examples | Route-level filters |
 | --- | --- | --- |
-| Upload | `/api/file/upload/init`, `/api/file/upload/chunk`, `/api/file/upload/complete`, `/api/file/upload/{upload_id}` | `JwtAuthFilter`, `UploadRateLimitFilter` |
-| File query/mutation | `/api/file/list`, `/api/file/{file_id}`, `/api/file/move`, `/api/file/copy`, `/api/file` | `JwtAuthFilter` |
-| Private download | `/api/file/download/{file_id}/info`, `/api/file/download/{file_id}` | `JwtAuthFilter` |
-| Folder | `/api/folder/create`, `/api/folder/tree`, `/api/folder/{folder_id}/breadcrumb`, `/api/folder/{folder_id}/rename` | `JwtAuthFilter`, `FolderRateLimitFilter` |
+| Upload | `/api/file/upload/init`, `/api/file/upload/chunk`, `/api/file/upload/complete`, `/api/file/upload/{upload_id}` | `UploadRateLimitFilter` |
+| File query/mutation | `/api/file/list`, `/api/file/{file_id}`, `/api/file/move`, `/api/file/copy`, `/api/file` | none beyond global JWT |
+| Private download | `/api/file/download/{file_id}/info`, `/api/file/download/{file_id}` | `DownloadRateLimitFilter` |
+| Folder | `/api/folder/create`, `/api/folder/tree`, `/api/folder/{folder_id}/breadcrumb`, `/api/folder/{folder_id}/rename` | `FolderRateLimitFilter` |
 | Auth public | `/api/auth/register`, `/api/auth/login`, `/api/auth/refresh` | none |
-| Auth logout | `/api/auth/logout` | `JwtAuthFilter` |
-| Share owner | `/api/share`, `/api/share/{share_id}`, `/api/share/cancel` | `JwtAuthFilter` |
+| Auth logout | `/api/auth/logout` | none beyond global JWT |
+| Share owner | `/api/share`, `/api/share/{share_id}`, `/api/share/cancel` | none beyond global JWT |
 | Share public access | `/api/share/access/{share_id}` | none |
 | Share browse/download | `/api/share/browse/{share_id}`, `/api/share/download/{share_id}/{file_id}` | `ShareAuthFilter` |
-| Share save | `/api/share/save/{share_id}` | `JwtAuthFilter`, `ShareAuthFilter` |
-| Admin | `/api/admin/...` | `JwtAuthFilter`, `AdminAuthFilter`, `AdminRateLimitFilter` |
+| Share save | `/api/share/save/{share_id}` | `ShareAuthFilter` in addition to global JWT |
+| Admin | `/api/admin/...` | `AdminAuthFilter`, `AdminRateLimitFilter` |
 
 Sources: `src/controllers/FileController.hpp:27`, `src/controllers/FolderController.hpp:23`, `src/controllers/AuthController.hpp:23`, `src/controllers/ShareController.hpp:43`, `src/controllers/AdminController.hpp:40`.
 
 ### JWT execution risk
 
-Static configuration shows that protected non-exempt file/folder/admin/share-owner routes can match both:
+The JWT filter validates the bearer token and inserts `user_id`, `username`, `role`, and `status` into request attributes before route-level filters and controllers execute. Public-path exemptions are centralized in `JwtAuthFilter::IsPublicPath`.
 
-1. Global `JwtAuthFilter` from `config.json:60`.
-2. Route-level `JwtAuthFilter` from controller `ADD_METHOD_TO` declarations.
+Confirmed framework behavior: Drogon `GlobalFilters` registers its configured plugin instance as pre-routing advice and runs its filter list before routing. Drogon then routes the request and runs route-level middlewares/filters before handling. Because plugin instances are addressed by plugin name, duplicate `drogon::plugin::GlobalFilters` entries are unsafe: a later entry can replace the earlier configuration. The configuration therefore uses one entry containing all global filters, and the ownership test asserts that uniqueness.
 
-The JWT filter validates the bearer token and inserts `user_id`, `username`, `role`, and `status` into request attributes at `src/filters/JwtAuthFilter.cpp:74`.
-
-Confirmed framework behavior: Drogon `GlobalFilters` registers each configured plugin instance as pre-routing advice and runs its filter list before routing (`/home/liufeng/.vcpkg/buildtrees/drogon/src/v1.9.11-2720b59428.clean/lib/src/GlobalFilters.cc:68`, `/home/liufeng/.vcpkg/buildtrees/drogon/src/v1.9.11-2720b59428.clean/lib/src/GlobalFilters.cc:88`). Drogon then routes the request and runs route-level middlewares/filters before handling (`/home/liufeng/.vcpkg/buildtrees/drogon/src/v1.9.11-2720b59428.clean/lib/src/HttpServer.cc:431`, `/home/liufeng/.vcpkg/buildtrees/drogon/src/v1.9.11-2720b59428.clean/lib/src/HttpServer.cc:454`, `/home/liufeng/.vcpkg/buildtrees/drogon/src/v1.9.11-2720b59428.clean/lib/src/HttpServer.cc:551`). `ADD_METHOD_TO` string constraints become HTTP middleware names (`build/linux-debug-clang/vcpkg_installed/x64-linux/include/drogon/HttpController.h:33`, `build/linux-debug-clang/vcpkg_installed/x64-linux/include/drogon/utils/HttpConstraint.h:39`, `/home/liufeng/.vcpkg/buildtrees/drogon/src/v1.9.11-2720b59428.clean/lib/src/HttpControllersRouter.cc:197`).
-
-Conclusion: for non-exempt protected routes that also declare route-level `JwtAuthFilter`, JWT executes globally before routing and again as a route-level filter. This includes representative file, upload, folder, share-owner, auth logout, and admin routes. Public routes exempted from the global JWT filter do not receive global JWT, but may still have route-specific filters such as `ShareAuthFilter`.
+Conclusion: protected routes receive JWT exactly once before their route-owned authorization or rate-limit filters. Public routes are skipped by JWT's explicit path predicate and may still be handled by self-scoped public rate-limit or share-token filters.
 
 ### Rate-limit predicates and failure policy
 
@@ -104,7 +80,7 @@ Rate-limit filters are path scoped internally:
 
 Sources: `src/filters/UploadRateLimitFilter.cpp:52`, `src/filters/DownloadRateLimitFilter.cpp:46`, `src/filters/RegisterRateLimitFilter.cpp:41`, `src/filters/SharePublicRateLimitFilter.cpp:39`, `src/filters/AdminRateLimitFilter.cpp:44`, `src/filters/FolderRateLimitFilter.cpp:44`.
 
-Existing tests cover individual path predicates and constants for several filters, including download and admin filters. They do not validate the full Drogon global + route filter chain.
+Tests cover individual path predicates and constants for several filters, including download and admin filters. `FilterOwnership_test.cpp` additionally validates that JWT appears once, route declarations do not duplicate it, and `GlobalFilters` itself is configured exactly once.
 
 ## Upload Lifecycle
 
