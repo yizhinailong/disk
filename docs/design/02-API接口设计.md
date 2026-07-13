@@ -270,7 +270,7 @@ auto GetUser(int id) -> Result<User> {
 
 **POST** `/api/auth/logout`
 
-使当前令牌失效。
+使当前令牌失效。登出成功响应返回前，服务端必须将该 access token 的本地撤销缓存覆盖为已撤销，即使同一 JTI 之前存在“未撤销”否定缓存，后续受保护请求也必须立即返回 `40111` / HTTP 401。
 
 #### 请求头
 
