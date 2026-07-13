@@ -161,10 +161,12 @@ def do_upload_fixture():
 
 
 def test_file_list():
-    log_step("Test: GET /api/file/list?parent_id=0&page_size=100")
+    log_step(
+        "Test: GET /api/file/list?parent_id=0&page_size=100&sort_by=created_at&sort_order=desc&type=file"
+    )
 
     resp = fetch(
-        "/api/file/list?parent_id=0&page_size=100",
+        "/api/file/list?parent_id=0&page_size=100&sort_by=created_at&sort_order=desc&type=file",
         method="GET",
         headers={"Authorization": f"Bearer {TOKEN}"},
     )
