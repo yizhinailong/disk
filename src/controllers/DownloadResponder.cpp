@@ -79,7 +79,7 @@ namespace disk::controllers {
         /// ================================================================
         /// 当传输内容 >= sendfile 阈值时，使用 Drogon 内置的 newFileResponse，
         /// 由 sendfile() 系统调用完成零拷贝传输，避免用户态 read/write 拷贝。
-        if (content_length >= SENDFILE_THRESHOLD_BYTES) {
+        if (storage->SupportsDirectFileResponse() && content_length >= SENDFILE_THRESHOLD_BYTES) {
             /// 检查文件是否存在
             auto exists_result = co_await storage->Exists(params.storage_path);
             if (!exists_result || !*exists_result) {
@@ -130,31 +130,23 @@ namespace disk::controllers {
         /// Path B: newStreamResponse — 流式下载路径（备用）
         /// ================================================================
         /// 适用于小文件或需要显式流控制的场景。保留作为 sendfile 不可用时的回退。
-        auto open_result = co_await storage->OpenForRead(params.storage_path);
+        auto open_result = co_await storage->OpenForReadRange(params.storage_path, start, content_length);
         if (!open_result) {
-            Logger::Error() << "Cannot open file: " << params.storage_path;
+            Logger::Error() << "Cannot open storage stream: " << params.storage_path;
             co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "Cannot open file"));
         }
-        auto file = std::move(*open_result);
-        if (start > static_cast<uint64_t>(std::numeric_limits<std::streamoff>::max())) {
-            Logger::Error() << "Range start exceeds stream offset limit: " << start;
-            co_return Response::Error(
-                ErrorInfo(ErrorCode::ValidationFailed, "Invalid request range")
-            );
-        }
-        file->seekg(static_cast<std::streamoff>(start));
+        auto stream = std::move(*open_result);
 
         auto remaining = std::make_shared<uint64_t>(content_length);
         auto resp = drogon::HttpResponse::newStreamResponse(
-            [file, remaining](char* buffer, std::size_t suggested_length) -> std::size_t {
+            [stream, remaining](char* buffer, std::size_t suggested_length) -> std::size_t {
                 if (!buffer) {
-                    if (file->is_open()) {
-                        file->close();
-                    }
+                    stream->Close();
                     return 0;
                 }
 
-                if (*remaining == 0 || !file->is_open()) {
+                if (*remaining == 0) {
+                    stream->Close();
                     return 0;
                 }
 
@@ -165,19 +157,16 @@ namespace disk::controllers {
                 const auto read_size =
                     std::min({ suggested_length, DOWNLOAD_STREAM_CHUNK_BYTES, bounded_remaining });
 
-                file->read(buffer, static_cast<std::streamsize>(read_size));
-                const auto read_bytes = static_cast<std::size_t>(file->gcount());
+                const auto read_bytes = stream->Read(buffer, read_size);
                 if (read_bytes == 0) {
                     *remaining = 0;
-                    if (file->is_open()) {
-                        file->close();
-                    }
+                    stream->Close();
                     return 0;
                 }
 
                 *remaining -= read_bytes;
-                if (*remaining == 0 && file->is_open()) {
-                    file->close();
+                if (*remaining == 0) {
+                    stream->Close();
                 }
                 return read_bytes;
             }

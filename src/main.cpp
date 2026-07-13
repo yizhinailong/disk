@@ -6,7 +6,7 @@
 #include "services/CleanupService.hpp"
 #include "services/ScheduledTasks.hpp"
 #include "services/TokenService.hpp"
-#include "storage/LocalFileStorage.hpp"
+#include "storage/StorageFactory.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/LogHelper.hpp"
@@ -60,8 +60,13 @@ auto main() -> int {
                 << disk::utils::ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes();
 
     /// 初始化文件存储
-    auto storage = std::make_shared<disk::storage::LocalFileStorage>(disk::utils::ConfigMgr::GetInstance());
-    disk::storage::StorageMgr::SetInstance(storage);
+    try {
+        auto storage = disk::storage::StorageFactory::Create(disk::utils::ConfigMgr::GetInstance());
+        disk::storage::StorageMgr::SetInstance(storage);
+    } catch (const std::runtime_error& e) {
+        disk::utils::Logger::Error() << "File storage initialization failed: " << e.what();
+        return 1;
+    }
     disk::utils::Logger::Info() << "File storage initialized successfully";
 
     disk::utils::Logger::Info() << "Drogon framework version: " << drogon::getVersion();

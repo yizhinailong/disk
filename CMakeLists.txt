@@ -10,6 +10,7 @@ find_package(jwt-cpp CONFIG REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+find_package(AWSSDK CONFIG REQUIRED COMPONENTS s3)
 
 enable_testing()
 

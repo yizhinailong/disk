@@ -165,11 +165,17 @@ set(Services_SOURCES
 set(Storage_HEADERS
     storage/IFileStorage.hpp
     storage/LocalFileStorage.hpp
+    storage/S3Client.hpp
+    storage/S3ObjectStorage.hpp
+    storage/StorageFactory.hpp
     storage/StorageMgr.hpp
     storage/UploadStagingStorage.hpp
 )
 set(Storage_SOURCES
     storage/LocalFileStorage.cpp
+    storage/S3Client.cpp
+    storage/S3ObjectStorage.cpp
+    storage/StorageFactory.cpp
     storage/StorageMgr.cpp
 )
 
@@ -214,6 +220,7 @@ target_sources(${PROJECT_NAME}
 target_include_directories(${PROJECT_NAME}
     PRIVATE
     ${CMAKE_SOURCE_DIR}/src
+    ${AWSSDK_INCLUDE_DIRS}
 )
 
 target_precompile_headers(${PROJECT_NAME}
@@ -235,4 +242,5 @@ target_link_libraries(${PROJECT_NAME}
     jwt-cpp::jwt-cpp
     unofficial-sodium::sodium
     spdlog::spdlog
+    ${AWSSDK_LIBRARIES}
 )

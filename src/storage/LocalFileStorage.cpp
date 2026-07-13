@@ -497,6 +497,10 @@ namespace disk::storage {
         co_return result;
     }
 
+    auto LocalFileStorage::SupportsDirectFileResponse() const noexcept -> bool {
+        return true;
+    }
+
     auto LocalFileStorage::DeletePath(const std::filesystem::path& target_path)
         -> drogon::Task<Result<void>> {
         auto result = co_await RunBlockingFilesystemTaskWithTimeout(

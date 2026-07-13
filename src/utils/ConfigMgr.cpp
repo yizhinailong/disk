@@ -16,10 +16,34 @@
 #include <drogon/utils/Utilities.h>
 
 namespace disk::utils {
+    namespace {
+        auto ParseStorageBackend(std::string value) -> StorageBackend {
+            if (value == "local") {
+                return StorageBackend::Local;
+            }
+            if (value == "s3") {
+                return StorageBackend::S3;
+            }
+            throw std::runtime_error("Invalid storage_backend: " + value);
+        }
+
+        auto NormalizeObjectPrefix(std::string prefix) -> std::string {
+            while (!prefix.empty() && prefix.front() == '/') {
+                prefix.erase(prefix.begin());
+            }
+            while (!prefix.empty() && prefix.back() == '/') {
+                prefix.pop_back();
+            }
+            return prefix.empty() ? "objects" : prefix;
+        }
+    }
+
     ConfigMgr::ConfigMgr() = default;
 
     auto ConfigMgr::LoadConfig() -> void {
         const auto& custom_config = drogon::app().getCustomConfig();
+        m_storage_backend = StorageBackend::Local;
+        m_s3_storage_config = S3StorageConfig{};
 
         if (custom_config.isMember("disk")) {
             const auto& app_config = custom_config["disk"];
@@ -74,6 +98,39 @@ namespace disk::utils {
             m_file_io_threads = static_cast<uint32_t>(app_config.get("file_io_threads", 0).asUInt());
             if (m_file_io_threads > 0) {
                 Logger::Info() << "Loaded file_io_threads from config: " << m_file_io_threads;
+            }
+
+            const auto backend_value = app_config.get("storage_backend", "local").asString();
+            m_storage_backend = ParseStorageBackend(backend_value);
+            Logger::Info() << "Loaded storage_backend from config: " << backend_value;
+
+            if (app_config.isMember("s3")) {
+                const auto& s3_config = app_config["s3"];
+                m_s3_storage_config.bucket = s3_config.get("bucket", m_s3_storage_config.bucket).asString();
+                m_s3_storage_config.region = s3_config.get("region", m_s3_storage_config.region).asString();
+                m_s3_storage_config.endpoint = s3_config.get("endpoint", m_s3_storage_config.endpoint).asString();
+                m_s3_storage_config.use_ssl = s3_config.get("use_ssl", m_s3_storage_config.use_ssl).asBool();
+                m_s3_storage_config.force_path_style =
+                    s3_config.get("force_path_style", m_s3_storage_config.force_path_style).asBool();
+                m_s3_storage_config.verify_ssl = s3_config.get("verify_ssl", m_s3_storage_config.verify_ssl).asBool();
+                m_s3_storage_config.object_prefix = NormalizeObjectPrefix(
+                    s3_config.get("object_prefix", m_s3_storage_config.object_prefix).asString()
+                );
+                m_s3_storage_config.connect_timeout_ms =
+                    s3_config.get("connect_timeout_ms", m_s3_storage_config.connect_timeout_ms).asInt();
+                m_s3_storage_config.request_timeout_ms =
+                    s3_config.get("request_timeout_ms", m_s3_storage_config.request_timeout_ms).asInt();
+            } else {
+                m_s3_storage_config.object_prefix = NormalizeObjectPrefix(m_s3_storage_config.object_prefix);
+            }
+
+            if (m_storage_backend == StorageBackend::S3) {
+                if (m_s3_storage_config.bucket.empty()) {
+                    throw std::runtime_error("S3 storage backend requires non-empty bucket");
+                }
+                if (m_s3_storage_config.region.empty()) {
+                    throw std::runtime_error("S3 storage backend requires non-empty region");
+                }
             }
 
             /// 从配置读取 upload_rate_limit_per_minute
@@ -197,6 +254,14 @@ namespace disk::utils {
 
     auto ConfigMgr::GetFileIoThreads() const noexcept -> uint32_t {
         return m_file_io_threads;
+    }
+
+    auto ConfigMgr::GetStorageBackend() const noexcept -> StorageBackend {
+        return m_storage_backend;
+    }
+
+    auto ConfigMgr::GetS3StorageConfig() const noexcept -> S3StorageConfig {
+        return m_s3_storage_config;
     }
 
     auto ConfigMgr::GetUploadRateLimitPerMinute() const noexcept -> int {

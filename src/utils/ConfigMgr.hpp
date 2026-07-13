@@ -15,6 +15,23 @@
 
 namespace disk::utils {
 
+    enum class StorageBackend {
+        Local,
+        S3,
+    };
+
+    struct S3StorageConfig {
+        std::string bucket{ "disk" };
+        std::string region{ "us-east-1" };
+        std::string endpoint;
+        bool use_ssl{ true };
+        bool force_path_style{ false };
+        bool verify_ssl{ true };
+        std::string object_prefix{ "objects" };
+        int connect_timeout_ms{ 3000 };
+        int request_timeout_ms{ 300000 };
+    };
+
     /**
      * @brief 配置管理类（单例）
      *
@@ -147,6 +164,12 @@ namespace disk::utils {
         [[nodiscard]]
         auto GetFileIoThreads() const noexcept -> uint32_t;
 
+        [[nodiscard]]
+        auto GetStorageBackend() const noexcept -> StorageBackend;
+
+        [[nodiscard]]
+        auto GetS3StorageConfig() const noexcept -> S3StorageConfig;
+
         /**
          * @brief 获取上传接口每分钟限流阈值
          * @return int 每分钟请求数上限（默认 60）
@@ -250,6 +273,8 @@ namespace disk::utils {
         int m_share_public_rate_limit_window_seconds{ 60 };
         int m_register_rate_limit_window_seconds{ 300 };
         uint32_t m_file_io_threads{ 0 };
+        StorageBackend m_storage_backend{ StorageBackend::Local };
+        S3StorageConfig m_s3_storage_config{};
 
         int64_t m_db_pool_size{ 0 };
         int64_t m_redis_pool_size{ 0 };

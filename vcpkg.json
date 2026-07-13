@@ -42,6 +42,13 @@
     {
       "name": "spdlog",
       "version>=": "1.15.1"
+    },
+    {
+      "name": "aws-sdk-cpp",
+      "default-features": false,
+      "features": [
+        "s3"
+      ]
     }
   ]
 }

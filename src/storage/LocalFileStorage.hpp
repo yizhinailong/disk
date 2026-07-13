@@ -111,6 +111,9 @@ namespace disk::storage {
         auto OpenForRead(const std::filesystem::path& storage_path)
             -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> override;
 
+        [[nodiscard]]
+        auto SupportsDirectFileResponse() const noexcept -> bool override;
+
         /**
          * @brief 安全删除指定文件或目录
          * @param target_path 目标路径
