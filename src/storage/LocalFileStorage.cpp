@@ -277,7 +277,7 @@ namespace disk::storage {
     }
 
     auto LocalFileStorage::AssembleChunks(const std::string& upload_id, uint32_t chunk_count)
-        -> drogon::Task<Result<AssembleResult>> {
+        -> drogon::Task<Result<UploadStagingAssembly>> {
         auto start = std::chrono::steady_clock::now();
         auto& pool = AssemblyWorkerPool::GetInstance();
 
@@ -319,7 +319,7 @@ namespace disk::storage {
 
         auto result = co_await RunBlockingFilesystemTask(
             m_assembly_worker_queue,
-            [temp_dir, assembled_path, assembled_parent, chunk_count, buffer_size]() -> Result<AssembleResult> {
+            [temp_dir, assembled_path, assembled_parent, chunk_count, buffer_size]() -> Result<UploadStagingAssembly> {
                 std::error_code ec;
                 std::filesystem::create_directories(assembled_parent, ec);
                 if (ec) {
@@ -392,7 +392,7 @@ namespace disk::storage {
                 std::array<uint8_t, crypto_hash_sha256_BYTES> sha256_digest{};
                 crypto_hash_sha256_final(&sha256_state, sha256_digest.data());
 
-                return AssembleResult{
+                return UploadStagingAssembly{
                     .path = assembled_path,
                     .md5_hash = FileHashUtil::BytesToHex(md5_digest.data(), md5_digest.size()),
                     .sha256_hash =
@@ -529,6 +529,49 @@ namespace disk::storage {
                 if (ec) {
                     return std::unexpected(
                         ErrorInfo(ErrorCode::InternalError, "Failed to delete target path")
+                    );
+                }
+
+                return {};
+            }
+        );
+
+        co_return result;
+    }
+
+    auto LocalFileStorage::DiscardAssembly(
+        const std::string& upload_id,
+        const UploadStagingAssembly& assembly
+    ) -> drogon::Task<Result<void>> {
+        const auto expected_path = GetAssembleFilePath(upload_id);
+        const auto assembly_path = assembly.path;
+
+        auto result = co_await RunBlockingFilesystemTask(
+            m_worker_queue,
+            [expected_path, assembly_path]() -> Result<void> {
+                const auto normalized_expected = expected_path.lexically_normal();
+                const auto normalized_assembly = assembly_path.lexically_normal();
+                if (normalized_assembly != normalized_expected) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Assembled temp file path mismatch")
+                    );
+                }
+
+                std::error_code ec;
+                const bool exists = std::filesystem::exists(expected_path, ec);
+                if (ec) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Failed to check assembled temp file")
+                    );
+                }
+                if (!exists) {
+                    return {};
+                }
+
+                std::filesystem::remove(expected_path, ec);
+                if (ec) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Failed to discard assembled temp file")
                     );
                 }
 

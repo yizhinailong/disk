@@ -307,17 +307,17 @@ This phase should wait until upload/content/trash lifecycle boundaries are stabl
 
 ## 6.1 Split staging storage from blob storage
 
-- [ ] Define an `UploadStagingStorage` boundary for temporary upload sessions.
+- [x] Define an `UploadStagingStorage` boundary for temporary upload sessions.
 - [ ] Define a `BlobStore` boundary for final content blobs.
-- [ ] Keep current local filesystem implementation compatible with existing paths.
-- [ ] Preserve current `build/uploaded/{md5_prefix}/{md5}.bin` layout unless intentionally migrated.
+- [x] Keep current local filesystem implementation compatible with existing paths.
+- [x] Preserve current `build/uploaded/{md5_prefix}/{md5}.bin` layout unless intentionally migrated.
 
 ## 6.2 Move upload assembly to staging storage
 
-- [ ] Make chunk writes depend on staging storage.
-- [ ] Make chunk assembly depend on staging storage.
-- [ ] Make temp cleanup depend on staging storage.
-- [ ] Preserve current temp cleanup idempotency.
+- [x] Make chunk writes depend on staging storage.
+- [x] Make chunk assembly depend on staging storage.
+- [x] Make temp cleanup depend on staging storage.
+- [x] Preserve current temp cleanup idempotency.
 
 ## 6.3 Move content promotion to blob storage
 

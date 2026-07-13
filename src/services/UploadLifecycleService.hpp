@@ -23,6 +23,7 @@
 
 namespace disk::storage {
     class IFileStorage;
+    class UploadStagingStorage;
 }
 
 namespace disk::upload {
@@ -146,7 +147,8 @@ namespace disk::upload {
     public:
         explicit UploadLifecycleService(
             drogon::orm::DbClientPtr db_client,
-            disk::storage::IFileStorage* storage
+            disk::storage::IFileStorage* storage,
+            disk::storage::UploadStagingStorage* upload_staging_storage
         );
 
         [[nodiscard]]
@@ -174,6 +176,7 @@ namespace disk::upload {
     private:
         drogon::orm::DbClientPtr m_db_client;
         disk::storage::IFileStorage* m_storage{};
+        disk::storage::UploadStagingStorage* m_upload_staging_storage{};
     };
 
 } // namespace disk::upload
