@@ -351,12 +351,12 @@ namespace disk::file {
         const auto& download_info = *info_result;
         Logger::Info() << "Get download info successful: file_id=" << file_id
                  << ", filename=" << download_info.filename << ", size=" << download_info.file_size
-                 << ", storage_path=" << download_info.storage_path;
+                 << ", content_id=" << download_info.blob.content_id;
 
         /// 4. 委托下载响应构造
         auto resp = co_await BuildDownloadResponse(
             disk::controllers::DownloadParams{
-                .storage_path = download_info.storage_path,
+                .blob = download_info.blob,
                 .filename = download_info.filename,
                 .file_size = download_info.file_size,
                 .mime_type = download_info.mime_type,

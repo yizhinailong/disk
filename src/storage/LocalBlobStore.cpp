@@ -311,6 +311,14 @@ namespace disk::storage {
         co_return result;
     }
 
+    auto LocalBlobStore::GetLocalBlobPathForDownload(const BlobDescriptor& blob) const
+        -> std::optional<std::filesystem::path> {
+        if (blob.hash_md5.empty()) {
+            return std::nullopt;
+        }
+        return GetFinalStoragePath(blob.hash_md5);
+    }
+
     auto LocalBlobStore::GetFinalStoragePath(const std::string& hash) const -> std::filesystem::path {
         return std::filesystem::path(m_config_mgr->GetStorageBasePath()) / hash.substr(0, 2) / (hash + ".bin");
     }

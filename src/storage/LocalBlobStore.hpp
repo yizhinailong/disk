@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "storage/IBlobStore.hpp"
@@ -60,6 +61,10 @@ namespace disk::storage {
 
         [[nodiscard]]
         auto Exists(const std::filesystem::path& storage_path) -> drogon::Task<Result<bool>> override;
+
+        [[nodiscard]]
+        auto GetLocalBlobPathForDownload(const BlobDescriptor& blob) const
+            -> std::optional<std::filesystem::path> override;
 
         [[nodiscard]]
         auto GetFinalStoragePath(const std::string& hash) const -> std::filesystem::path override;

@@ -872,7 +872,7 @@ namespace disk::share {
         /// 单次 4 表 JOIN 查询：shares + share_files + files + file_contents
         try {
             auto rows = co_await m_db_client->execSqlCoro(
-                "SELECT s.id AS share_id, s.permission, s.status, " "(s.expires_at IS NOT NULL AND s.expires_at <= NOW()) AS is_expired, " "f.id AS file_id, f.name AS file_name, f.size AS file_size, f.content_id, " "fc.storage_path, fc.hash_md5, fc.mime_type " "FROM shares s " "LEFT JOIN files f ON f.id = $1 AND " + BuildSharedFileAccessPredicate("f", 2) + " " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE s.id = $4",
+                "SELECT s.id AS share_id, s.permission, s.status, " "(s.expires_at IS NOT NULL AND s.expires_at <= NOW()) AS is_expired, " "f.id AS file_id, f.name AS file_name, f.size AS file_size, f.content_id, " "fc.id AS content_id, fc.hash_md5, fc.size AS content_size, fc.mime_type " "FROM shares s " "LEFT JOIN files f ON f.id = $1 AND " + BuildSharedFileAccessPredicate("f", 2) + " " "LEFT JOIN file_contents fc ON f.content_id = fc.id " "WHERE s.id = $4",
                 request.file_id,
                 share_id,
                 share_id,
@@ -906,11 +906,15 @@ namespace disk::share {
             DownloadInfo info;
             info.file_id = row["file_id"].as<uint64_t>();
             info.filename = row["file_name"].as<std::string>();
-            info.storage_path = row["storage_path"].as<std::string>();
             info.file_size = row["file_size"].as<uint64_t>();
             info.mime_type =
                 row["mime_type"].isNull() ? "application/octet-stream" : row["mime_type"].as<std::string>();
             info.file_hash = row["hash_md5"].as<std::string>();
+            info.blob = disk::storage::BlobDescriptor{
+                .content_id = row["content_id"].as<uint64_t>(),
+                .hash_md5 = info.file_hash,
+                .size = row["content_size"].as<uint64_t>()
+            };
             info.supports_range = true;
 
             co_return info;

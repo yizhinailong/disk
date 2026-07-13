@@ -85,12 +85,12 @@ namespace disk::file {
             -> drogon::Task<Result<DownloadInfoResponse>>;
 
         /**
-         * @brief 获取下载数据（含物理路径）
+         * @brief 获取下载数据（含最终 Blob 描述符）
          *
          * 业务规则：
          * - 验证文件存在且属于用户
-         * - 关联 file_contents 获取存储路径
-         * - 返回完整下载信息（含 storage_path）
+         * - 关联 file_contents 获取最终 Blob 描述符
+         * - 返回完整下载信息（不含物理路径）
          *
          * @param file_id 文件 ID
          * @param user_id 用户 ID

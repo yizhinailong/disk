@@ -13,10 +13,12 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include <drogon/orm/DbClient.h>
 
+#include "storage/BlobDescriptor.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::storage {
@@ -56,6 +58,39 @@ namespace disk::storage {
         [[nodiscard]]
         virtual auto OpenForRead(const std::filesystem::path& storage_path)
             -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> = 0;
+
+        /**
+         * @brief 通过最终 Blob 描述符打开读取句柄用于下载流
+         * @param blob 最终内容 Blob 描述符
+         * @return 成功返回可读文件流，失败返回错误信息
+         */
+        [[nodiscard]]
+        virtual auto OpenBlobForRead(const BlobDescriptor& blob)
+            -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> {
+            co_return co_await OpenForRead(GetFinalStoragePath(blob.hash_md5));
+        }
+
+        /**
+         * @brief 通过最终 Blob 描述符检查内容是否存在
+         * @param blob 最终内容 Blob 描述符
+         * @return 成功返回存在性布尔值，失败返回错误信息
+         */
+        [[nodiscard]]
+        virtual auto BlobExists(const BlobDescriptor& blob) -> drogon::Task<Result<bool>> {
+            co_return co_await Exists(GetFinalStoragePath(blob.hash_md5));
+        }
+
+        /**
+         * @brief 获取可交给本地文件响应使用的路径（非本地存储可不支持）
+         * @param blob 最终内容 Blob 描述符
+         * @return 本地可发送路径；不支持时返回 std::nullopt
+         */
+        [[nodiscard]]
+        virtual auto GetLocalBlobPathForDownload(const BlobDescriptor& blob) const
+            -> std::optional<std::filesystem::path> {
+            static_cast<void>(blob);
+            return std::nullopt;
+        }
 
         /**
          * @brief 删除最终 Blob；缺失路径视为成功

@@ -49,6 +49,7 @@
 #include <drogon/HttpResponse.h>
 #include <json/json.h>
 
+#include "storage/BlobDescriptor.hpp"
 #include "utils/DtoBase.hpp"
 #include "utils/ErrorCode.hpp"
 #include "utils/NameValidation.hpp"
@@ -1248,16 +1249,16 @@ namespace disk::file {
      * @brief 下载信息结构（内部服务使用）
      *
      * @details
-     * 用于服务层返回下载所需的所有信息，包括文件存储路径。
+     * 用于服务层返回下载所需的所有信息，包括最终内容 Blob 描述符。
      * 控制器使用此结构构造 HTTP 响应。
      */
     struct DownloadInfo {
         uint64_t file_id{ 0 };
         std::string filename;
         uint64_t file_size{ 0 };
-        std::string file_hash;    ///< MD5 哈希
+        std::string file_hash; ///< MD5 哈希
         std::string mime_type;
-        std::string storage_path; ///< 文件物理存储路径
+        disk::storage::BlobDescriptor blob;
         bool supports_range{ true };
     };
 

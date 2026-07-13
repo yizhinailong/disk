@@ -25,6 +25,7 @@ import hashlib
 import json
 import os
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
@@ -42,12 +43,12 @@ from lib_py import (
     json_field,
     fetch,
     header_value,
-    create_temp_file,
     md5_hash,
     assert_status,
     assert_header_contains,
     assert_json_field,
     query_one,
+    final_blob_path,
 )
 
 import atexit
@@ -63,6 +64,8 @@ TOKEN = ""
 FILE_ID = ""
 FILE_SIZE = 0
 FILE_HASH = ""
+FILE_CONTENT = b""
+FILE_NAME = ""
 SHARE_ID = ""
 SHARE_TOKEN = ""
 SHARE_FILE_ID = ""
@@ -155,16 +158,40 @@ def assert_share_download_delta(label, before, after, expected_delta):
     return False
 
 
+def make_ascii_content(size):
+    pattern = f"download-flow-{os.getpid()}-".encode("ascii")
+    repeats = (size // len(pattern)) + 1
+    return (pattern * repeats)[:size]
+
+
+def write_fixture(content, suffix=".bin"):
+    fd, path = tempfile.mkstemp(suffix=suffix, prefix="download_flow_")
+    with os.fdopen(fd, "wb") as f:
+        f.write(content)
+    return path
+
+
+def assert_response_body(label, resp, expected):
+    actual = resp.text.encode("utf-8")
+    if actual == expected:
+        log_pass(f"{label}: response body bytes match fixture")
+        return True
+    log_fail(f"{label}: expected body length {len(expected)}, got {len(actual)}")
+    return False
+
+
 # ─── Phase 2: Upload a test file ───────────────────────────────────────────
 
 
 def do_upload():
-    global FILE_ID, FILE_SIZE, FILE_HASH
+    global FILE_ID, FILE_SIZE, FILE_HASH, FILE_CONTENT, FILE_NAME
 
     log_step("Uploading test fixture file...")
 
-    fixture = create_temp_file(256, suffix=".bin")
-    FILE_SIZE = 256
+    FILE_NAME = f"download_test_{os.getpid()}.bin"
+    FILE_CONTENT = make_ascii_content(256)
+    fixture = write_fixture(FILE_CONTENT, suffix=".bin")
+    FILE_SIZE = len(FILE_CONTENT)
     FILE_HASH = md5_hash(fixture)
 
     with open(fixture, "rb") as f:
@@ -179,7 +206,7 @@ def do_upload():
             "Content-Type": "application/json",
         },
         json_body={
-            "filename": "download_test.bin",
+            "filename": FILE_NAME,
             "file_size": FILE_SIZE,
             "file_hash": FILE_HASH,
             "parent_id": 0,
@@ -423,7 +450,7 @@ def test_file_download_200():
         "file-200", resp.headers, "Content-Disposition", "attachment"
     ) or (ok := False)
     assert_header_contains(
-        "file-200", resp.headers, "Content-Disposition", "download_test.bin"
+        "file-200", resp.headers, "Content-Disposition", FILE_NAME
     ) or (ok := False)
     assert_header_contains(
         "file-200", resp.headers, "Content-Length", str(FILE_SIZE)
@@ -437,6 +464,7 @@ def test_file_download_200():
             ok := False
         )
     assert_file_metadata_incremented("file-200", metadata_before, metadata_after) or (ok := False)
+    assert_response_body("file-200", resp, FILE_CONTENT) or (ok := False)
 
     if ok:
         log_pass("file-200: full download OK and file metadata updated")
@@ -477,6 +505,7 @@ def test_file_download_206():
         ok := False
     )
     assert_file_metadata_incremented("file-206", metadata_before, metadata_after) or (ok := False)
+    assert_response_body("file-206", resp, FILE_CONTENT[:10]) or (ok := False)
 
     if ok:
         log_pass("file-206: partial content OK and file metadata updated")
@@ -531,6 +560,77 @@ def test_file_download_416():
         log_pass("file-416: unsatisfiable range OK without file metadata update")
 
 
+def test_file_download_not_found():
+    missing_id = 999999999
+    log_step(f"Test: GET /api/file/download/{missing_id} → 404")
+
+    resp = fetch(
+        f"/api/file/download/{missing_id}",
+        method="GET",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    )
+    save_evidence(f"{EVIDENCE_PREFIX}-file-404.json", resp.text)
+
+    ok = True
+    assert_status("file-404", resp.status_code, 404) or (ok := False)
+    try:
+        body = json.loads(resp.text)
+        if "code" not in body or "message" not in body:
+            log_fail("file-404: missing error envelope fields")
+            ok = False
+    except Exception:
+        log_fail("file-404: invalid JSON body")
+        ok = False
+
+    if ok:
+        log_pass("file-404: missing private download maps to error envelope")
+
+
+def test_missing_final_blob_error_mapping_and_side_effects():
+    log_step("Test: missing final blob maps to 404 and preserves current side effects")
+
+    blob_path = final_blob_path(FILE_HASH)
+    backup_path = blob_path.with_suffix(blob_path.suffix + ".missing-download-test")
+    if not blob_path.exists():
+        log_fail(f"missing-blob setup: final blob does not exist: {blob_path}")
+        return
+
+    os.replace(blob_path, backup_path)
+    try:
+        file_before = file_download_metadata()
+        private_resp = fetch(
+            f"/api/file/download/{FILE_ID}",
+            method="GET",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+        )
+        file_after = file_download_metadata()
+        save_evidence(f"{EVIDENCE_PREFIX}-file-missing-blob.json", private_resp.text)
+
+        ok = True
+        assert_status("file-missing-blob", private_resp.status_code, 404) or (ok := False)
+        assert_file_metadata_unchanged("file-missing-blob", file_before, file_after) or (ok := False)
+
+        share_file_before = file_download_metadata()
+        share_before = share_download_count()
+        share_resp = fetch(
+            f"/api/share/download/{SHARE_ID}/{SHARE_FILE_ID}",
+            method="GET",
+            headers={"X-Share-Token": SHARE_TOKEN},
+        )
+        share_file_after = file_download_metadata()
+        share_after = share_download_count()
+        save_evidence(f"{EVIDENCE_PREFIX}-share-missing-blob.json", share_resp.text)
+
+        assert_status("share-missing-blob", share_resp.status_code, 404) or (ok := False)
+        assert_file_metadata_unchanged("share-missing-blob", share_file_before, share_file_after) or (ok := False)
+        assert_share_download_delta("share-missing-blob", share_before, share_after, 1) or (ok := False)
+
+        if ok:
+            log_pass("missing-blob: private/share error mapping and side effects preserved")
+    finally:
+        os.replace(backup_path, blob_path)
+
+
 # ─── Test: Share Download 200 ──────────────────────────────────────────────
 
 
@@ -560,7 +660,7 @@ def test_share_download_200():
         "share-200", resp.headers, "Content-Disposition", "attachment"
     ) or (ok := False)
     assert_header_contains(
-        "share-200", resp.headers, "Content-Disposition", "download_test.bin"
+        "share-200", resp.headers, "Content-Disposition", FILE_NAME
     ) or (ok := False)
     assert_header_contains(
         "share-200", resp.headers, "Content-Length", str(FILE_SIZE)
@@ -574,6 +674,7 @@ def test_share_download_200():
         )
     assert_file_metadata_incremented("share-200", file_before, file_after) or (ok := False)
     assert_share_download_delta("share-200", share_before, share_after, 1) or (ok := False)
+    assert_response_body("share-200", resp, FILE_CONTENT) or (ok := False)
 
     if ok:
         log_pass("share-200: full share download OK and metadata updated")
@@ -623,6 +724,7 @@ def test_share_download_206():
         )
     assert_file_metadata_incremented("share-206", file_before, file_after) or (ok := False)
     assert_share_download_delta("share-206", share_before, share_after, 1) or (ok := False)
+    assert_response_body("share-206", resp, FILE_CONTENT[:10]) or (ok := False)
 
     if ok:
         log_pass("share-206: partial share download OK and metadata updated")
@@ -696,6 +798,7 @@ def write_summary_evidence():
         f"FILE_ID: {FILE_ID}\n"
         f"FILE_SIZE: {FILE_SIZE}\n"
         f"FILE_HASH: {FILE_HASH}\n"
+        f"FILE_NAME: {FILE_NAME}\n"
         f"SHARE_ID: {SHARE_ID}\n"
         f"SHARE_FILE_ID: {SHARE_FILE_ID}\n\n"
         f"--- Results ---\n"
@@ -740,6 +843,8 @@ def main():
     test_file_download_200()
     test_file_download_206()
     test_file_download_416()
+    test_file_download_not_found()
+    test_missing_final_blob_error_mapping_and_side_effects()
 
     # Share file download tests
     test_share_download_200()

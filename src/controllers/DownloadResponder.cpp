@@ -80,59 +80,61 @@ namespace disk::controllers {
         /// 当传输内容 >= sendfile 阈值时，使用 Drogon 内置的 newFileResponse，
         /// 由 sendfile() 系统调用完成零拷贝传输，避免用户态 read/write 拷贝。
         if (content_length >= SENDFILE_THRESHOLD_BYTES) {
-            /// 检查文件是否存在
-            auto exists_result = co_await blob_store->Exists(params.storage_path);
+            /// 检查最终 Blob 是否存在
+            auto exists_result = co_await blob_store->BlobExists(params.blob);
             if (!exists_result || !*exists_result) {
                 co_return Response::Error(
                     ErrorInfo(ErrorCode::FileNotFound, "File not found")
                 );
             }
 
-            drogon::HttpResponsePtr resp;
+            if (auto local_path = blob_store->GetLocalBlobPathForDownload(params.blob); local_path.has_value()) {
+                drogon::HttpResponsePtr resp;
 
-            if (range_request.has_range) {
-                /// Range 请求 → Drogon 自动设置 206 + Content-Range
-                resp = drogon::HttpResponse::newFileResponse(
-                    params.storage_path,
-                    static_cast<size_t>(start),
-                    static_cast<size_t>(content_length),
-                    true,  ///< setContentRange
-                    params.filename,
-                    drogon::CT_CUSTOM,
-                    params.mime_type
+                if (range_request.has_range) {
+                    /// Range 请求 → Drogon 自动设置 206 + Content-Range
+                    resp = drogon::HttpResponse::newFileResponse(
+                        local_path->string(),
+                        static_cast<size_t>(start),
+                        static_cast<size_t>(content_length),
+                        true,  ///< setContentRange
+                        params.filename,
+                        drogon::CT_CUSTOM,
+                        params.mime_type
+                    );
+                    Logger::Info() << "Sending partial content via local file response: start=" << start
+                             << ", end=" << end << ", total=" << file_size;
+                } else {
+                    /// 全文件下载 → Drogon 自动设置 200
+                    resp = drogon::HttpResponse::newFileResponse(
+                        local_path->string(),
+                        params.filename,
+                        drogon::CT_CUSTOM,
+                        params.mime_type
+                    );
+                    Logger::Info() << "Sending full file via local file response: size=" << file_size;
+                }
+
+                /// 补充 newFileResponse 未设置的响应头
+                resp->addHeader("Accept-Ranges", "bytes");
+                resp->addHeader(
+                    "Content-Disposition", "attachment; filename=\"" + params.filename + "\""
                 );
-                Logger::Info() << "Sending partial content via sendfile: start=" << start
-                         << ", end=" << end << ", total=" << file_size;
-            } else {
-                /// 全文件下载 → Drogon 自动设置 200
-                resp = drogon::HttpResponse::newFileResponse(
-                    params.storage_path,
-                    params.filename,
-                    drogon::CT_CUSTOM,
-                    params.mime_type
-                );
-                Logger::Info() << "Sending full file via sendfile: size=" << file_size;
-            }
+                if (!params.file_hash.empty()) {
+                    resp->addHeader("ETag", "\"" + params.file_hash + "\"");
+                }
 
-            /// 补充 newFileResponse 未设置的响应头
-            resp->addHeader("Accept-Ranges", "bytes");
-            resp->addHeader(
-                "Content-Disposition", "attachment; filename=\"" + params.filename + "\""
-            );
-            if (!params.file_hash.empty()) {
-                resp->addHeader("ETag", "\"" + params.file_hash + "\"");
+                co_return resp;
             }
-
-            co_return resp;
         }
 
         /// ================================================================
         /// Path B: newStreamResponse — 流式下载路径（备用）
         /// ================================================================
         /// 适用于小文件或需要显式流控制的场景。保留作为 sendfile 不可用时的回退。
-        auto open_result = co_await blob_store->OpenForRead(params.storage_path);
+        auto open_result = co_await blob_store->OpenBlobForRead(params.blob);
         if (!open_result) {
-            Logger::Error() << "Cannot open file: " << params.storage_path;
+            Logger::Error() << "Cannot open blob for download: content_id=" << params.blob.content_id;
             co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "Cannot open file"));
         }
         auto file = std::move(*open_result);

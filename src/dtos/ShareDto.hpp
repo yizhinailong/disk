@@ -43,6 +43,7 @@
 #include <drogon/HttpRequest.h>
 #include <json/json.h>
 
+#include "storage/BlobDescriptor.hpp"
 #include "utils/DtoBase.hpp"
 #include "utils/ErrorCode.hpp"
 
@@ -1166,7 +1167,7 @@ namespace disk::share {
     struct DownloadInfo {
         uint64_t file_id{ 0 };
         std::string filename;
-        std::string storage_path;
+        disk::storage::BlobDescriptor blob;
         uint64_t file_size{ 0 };
         std::string mime_type;
         std::string file_hash;

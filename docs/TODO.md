@@ -334,10 +334,12 @@ Completion status: closed by `feat(storage): move final blobs to BlobStore`.
 
 ## 6.4 Update download path assumptions
 
-- [ ] Update download responder to depend on blob descriptors where practical.
-- [ ] Avoid leaking local filesystem assumptions into controllers.
-- [ ] Preserve range download behavior.
-- [ ] Preserve current private/share download side effects unless product rules change.
+Completion status: closed by `refactor(download): introduce blob download descriptors`.
+
+- [x] Update download responder to depend on blob descriptors where practical.
+- [x] Avoid leaking local filesystem assumptions into controllers.
+- [x] Preserve range download behavior.
+- [x] Preserve current private/share download side effects unless product rules change.
 
 ## 6.5 Document object storage compatibility
 

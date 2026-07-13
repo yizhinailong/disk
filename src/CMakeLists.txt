@@ -163,6 +163,7 @@ set(Services_SOURCES
 
 # Storage
 set(Storage_HEADERS
+    storage/BlobDescriptor.hpp
     storage/BlobStoreMgr.hpp
     storage/IBlobStore.hpp
     storage/IFileStorage.hpp

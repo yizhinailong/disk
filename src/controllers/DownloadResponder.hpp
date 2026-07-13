@@ -24,7 +24,7 @@
 namespace disk::controllers {
 
     struct DownloadParams {
-        std::string storage_path;
+        disk::storage::BlobDescriptor blob;
         std::string filename;
         uint64_t file_size{ 0 };
         std::string mime_type;

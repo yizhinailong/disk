@@ -244,11 +244,15 @@ namespace disk::file {
             info.file_hash = content.getValueOfHashMd5();
             info.mime_type = file.getValueOfMimeType().empty() ? content.getValueOfMimeType() :
                                                                  file.getValueOfMimeType();
-            info.storage_path = content.getValueOfStoragePath();
+            info.blob = disk::storage::BlobDescriptor{
+                .content_id = content.getValueOfId(),
+                .hash_md5 = content.getValueOfHashMd5(),
+                .size = content.getValueOfSize()
+            };
             info.supports_range = true;
 
             Logger::Debug() << "Download data retrieved successfully: filename=" << info.filename
-                      << ", storage_path=" << info.storage_path;
+                      << ", content_id=" << info.blob.content_id;
             co_return info;
 
         } catch (const drogon::orm::DrogonDbException& e) {
