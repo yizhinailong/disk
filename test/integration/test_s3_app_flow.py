@@ -368,7 +368,7 @@ def main() -> int:
                 require(
                     execute(
                         "UPDATE users SET storage_reserved = %s WHERE id = %s AND storage_reserved = %s",
-                        (expected_reserved - 1, user_id, expected_reserved),
+                        (len(fault_payload) - 1, user_id, expected_reserved),
                     )
                     == 1,
                     "fault injection creates an under-reservation after upload staging",
