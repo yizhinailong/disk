@@ -376,32 +376,43 @@ Completion status: closed by `feat(storage): add S3 object storage backend`.
 The backend-refactor feature checklist is complete. This phase tracks remaining
 wrap-up work needed to make that completion easy to verify and maintain.
 
+Completion status: closed on 2026-07-14 after the final documentation, accounting, authentication, storage, integration-test isolation, and S3-compatible application-flow pass.
+
 ## 7.1 Align roadmap and storage documentation
 
-- [ ] Audit storage docs for any remaining stale wording that describes S3/MinIO runtime support as deferred.
-- [ ] Make the current S3 backend scope explicit across docs: final content blobs are object-store backed, while upload staging currently remains compatible with the local temporary upload lifecycle.
-- [ ] If S3-native upload staging is desired later, split it into a separate future issue instead of treating it as unfinished Phase 6 work.
+- [x] Audit storage docs for any remaining stale wording that describes S3/MinIO runtime support as deferred.
+- [x] Make the current S3 backend scope explicit across docs: final content blobs are object-store backed, while upload staging currently remains compatible with the local temporary upload lifecycle.
+- [x] If S3-native upload staging is desired later, split it into a separate future issue instead of treating it as unfinished Phase 6 work.
 
 ## 7.2 Tighten copy-accounting validation notes
 
-- [ ] Update stale comments in `test/services/FileServiceAtomicity_test.cpp` that still describe the old `storage_used += total_copy_size` copy model.
-- [ ] Re-enable, replace, or explicitly retire the remaining disabled copy atomicity fault-injection tests once their coverage is represented by current integration tests.
-- [ ] Add focused DB-behavior coverage for `QuotaService` reserve/commit/release/reconciliation semantics, or document why the integration coverage is the authoritative safety net.
-- [ ] Confirm `QuotaService::CommitReservedToUsed` under-reservation behavior is intentional and covered, or tighten the helper so accounting drift cannot be masked.
+- [x] Update stale comments in `test/services/FileServiceAtomicity_test.cpp` that still describe the old `storage_used += total_copy_size` copy model.
+- [x] Re-enable, replace, or explicitly retire the remaining disabled copy atomicity fault-injection tests once their coverage is represented by current integration tests.
+- [x] Add focused DB-behavior coverage for `QuotaService` reserve/commit/release/reconciliation semantics, or document why the integration coverage is the authoritative safety net.
+- [x] Confirm `QuotaService::CommitReservedToUsed` under-reservation behavior is intentional and covered, or tighten the helper so accounting drift cannot be masked.
 
 ## 7.3 Strengthen S3/MinIO verification
 
-- [ ] Add an app-level MinIO test path with `storage_backend=s3` that exercises upload finalize, full/range download, and permanent deletion cleanup through the Disk server.
-- [ ] Cover S3 promotion compensation when object-store promotion succeeds but DB finalization fails.
-- [ ] Add coverage for `StorageFactory` S3 selection and bucket-validation failure mapping.
-- [ ] Document whether AWS SDK remains a mandatory build dependency or should become optional for local-only builds.
+- [x] Add an app-level MinIO test path with `storage_backend=s3` that exercises upload finalize, full/range download, and permanent deletion cleanup through the Disk server.
+- [x] Cover S3 promotion compensation when object-store promotion succeeds but DB finalization fails.
+- [x] Add coverage for `StorageFactory` S3 selection and bucket-validation failure mapping.
+- [x] Document whether AWS SDK remains a mandatory build dependency or should become optional for local-only builds.
 
 ## 7.4 Final definition-of-done pass
 
-- [ ] Run or record the relevant CMake/Drogon, Python integration, and environment-gated MinIO test commands.
-- [ ] Verify public API response shapes remain unchanged for copy, upload, download, and trash flows.
-- [ ] Verify logs and compensation behavior remain useful for quota reservation release failures, S3 cleanup retry, and blob deletion idempotency.
-- [ ] Close or link any follow-up issues created from this final cleanup phase.
+- [x] Run or record the relevant CMake/Drogon, Python integration, and environment-gated MinIO test commands.
+- [x] Verify public API response shapes remain unchanged for copy, upload, download, and trash flows.
+- [x] Verify logs and compensation behavior remain useful for quota reservation release failures, S3 cleanup retry, and blob deletion idempotency.
+- [x] Close or link any follow-up issues created from this final cleanup phase.
+
+Final validation record (2026-07-14):
+
+- `cmake --build --preset linux-debug-clang` passed (`ninja: no work to do`).
+- `ctest --preset linux-debug-clang --output-on-failure` passed 100% of the 1155 enabled test entries in 96.97 seconds; CTest also reported 20 explicitly disabled entries and one intentional migration-continuity skip.
+- Focused reruns passed for upload invariants (85/85), file metadata queries (15/15), upload flow (16/16), upload rate limiting (4/4), authentication lifecycle (6/6), content/quota safety (176/176), and the other serial integration flows exercised by the full suite.
+- The environment-gated S3 adapter and application tests passed 2/2 against a local Moto S3-compatible endpoint, including upload promotion, full/Range download, permanent deletion, and DB-failure compensation. Native Docker/Podman/MinIO executables were unavailable in this workspace; the documented MinIO command remains the deployment-environment verification path.
+- Runtime evidence confirmed the public `{code,message,data}` envelope, quota release failure diagnostics, zero-reference blob cleanup, and successful promoted-blob compensation. Unit coverage confirmed three-attempt S3 delete retry and missing-object idempotency.
+- No active follow-up issue remains. S3-native upload staging is explicitly outside the completed scope and requires a separate issue only if it becomes a product requirement.
 
 ---
 
@@ -462,15 +473,15 @@ Phase 7: Final Validation and Cleanup
 
 For each task or PR:
 
-- [ ] Existing tests pass.
-- [ ] New or updated tests cover changed behavior.
-- [ ] Public API response shape is unchanged unless explicitly documented.
-- [ ] Database and filesystem side effects are documented for failure cases.
-- [ ] Logs remain useful for diagnosing upload, cleanup, quota, and trash issues.
-- [ ] Cache invalidation behavior is considered if file/folder/share data changes.
-- [ ] No unrelated formatting-only churn is mixed with semantic refactors.
-- [ ] Behavior changes are separated from mechanical refactors.
-- [ ] Cleanup and compensation paths are idempotent where practical.
+- [x] Existing tests pass.
+- [x] New or updated tests cover changed behavior.
+- [x] Public API response shape is unchanged unless explicitly documented.
+- [x] Database and filesystem side effects are documented for failure cases.
+- [x] Logs remain useful for diagnosing upload, cleanup, quota, and trash issues.
+- [x] Cache invalidation behavior is considered if file/folder/share data changes.
+- [x] No unrelated formatting-only churn is mixed with semantic refactors.
+- [x] Behavior changes are separated from mechanical refactors.
+- [x] Cleanup and compensation paths are idempotent where practical.
 
 ---
 
