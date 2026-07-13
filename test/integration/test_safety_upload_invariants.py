@@ -369,6 +369,7 @@ def test_cancel_upload_invariants() -> None:
 def test_expired_upload_cleanup_invariants() -> None:
     """Verify deterministic expired-upload cleanup releases reservations and temp artifacts."""
     log_section("Expired Upload Cleanup Invariants")
+    run_expired_cleanup()
     payload = f"safety-expire-{unique_name()}".encode()
     filename = f"safety_expire_{unique_name()}.bin"
     quota_before = user_quota()
