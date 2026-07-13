@@ -8,8 +8,9 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 
 | Area | Accepted decision | Current implementation status | Follow-up status |
 | --- | --- | --- | --- |
-| `storage_used` meaning | Logical per-user bytes | Logical per-user accounting is implemented for upload, instant upload, copy, trash, and download-side metadata behavior | Copy reservation-style accounting remains a separate open design question tracked by issue #21 |
+| `storage_used` meaning | Logical per-user bytes | Logical per-user accounting is implemented for upload, instant upload, copy, trash, and download-side metadata behavior; copy still uses the current pre-increment accounting model internally | Preserve logical semantics; copy reservation implementation is tracked by issue #25 |
 | Instant upload accounting | Increase `storage_used` like copy | Implemented | Closed |
+| Copy accounting | Reserve candidate logical bytes before copy work, then commit successful bytes to used storage and release skipped/failed bytes | Pre-increments `storage_used` before copy work and compensates skipped/failed bytes with later used-storage decrements | Behavior-changing implementation tracked by issue #25 |
 | Trash quota | Trash counts against quota until permanent delete / expiry cleanup | Implemented and covered by lifecycle cleanup work | Closed |
 | Private download metadata | Successful private content download updates file metadata | Implemented | Closed |
 | Share download metadata | Successful share content download updates share-level and file-level metadata | Implemented | Closed |
@@ -19,7 +20,7 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 
 ## Decision: `storage_used` means logical per-user bytes
 
-**Current implementation behavior:** `docs/backend-discovery.md` records mixed semantics. Upload completion increases `users.storage_used`, copy pre-check/reservation increases `users.storage_used`, but instant upload reusing existing content does not increase `users.storage_used`.
+**Current implementation behavior:** Logical per-user accounting is implemented for the known upload, instant upload, copy, trash, and download-side metadata paths. Copy still uses a pre-increment implementation model internally, but the accepted logical quota semantics remain per-user logical bytes.
 
 **Accepted target behavior:** `users.storage_used` means logical bytes charged to a user-owned namespace, not globally unique physical bytes stored in `file_contents`. Deduplication remains an internal storage optimization and does not reduce the user's logical quota usage.
 
@@ -32,7 +33,7 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 
 **Implementation impact:** Later accounting work should make quota checks and `storage_used` mutations consistently use logical per-user bytes. Reconciliation tooling should compare stored usage against logical active-plus-trash file sizes rather than physical unique content size.
 
-**Follow-up status:** Logical accounting cleanup has been implemented for the accepted current flows. Whether copy should move from its current pre-increment behavior to a reservation-style model remains a separate open design question tracked by issue #21.
+**Follow-up status:** Logical accounting cleanup has been implemented for the accepted current flows. Copy should move from its current pre-increment behavior to a reservation-style model; that behavior-changing implementation is tracked by issue #25.
 
 ## Decision: instant upload increases `storage_used`
 
@@ -50,6 +51,36 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 **Implementation impact:** Upload lifecycle work now checks available logical quota, increments used storage atomically with file row creation and content ref-count increment, and covers the behavior with regression tests.
 
 **Follow-up status:** Implemented and closed.
+
+## Decision: copy accounting uses reservation-style commit/release
+
+**Current implementation behavior:** `FileMutationService::Copy` computes `total_copy_size`, consumes used storage before copy batches run, and then compensates skipped or failed work by decrementing `users.storage_used`. The current transaction boundary groups content ref-count increments, copied row creation, and some partial release logic, but the initial used-storage increment remains a separate pre-copy accounting step.
+
+**Accepted target behavior:** Copy should reserve candidate logical bytes in `users.storage_reserved` before copy work starts, then transfer only successfully copied logical bytes from reserved to used storage in the same database transaction that increments `file_contents.ref_count` and creates the copied `files` / `folders` rows. Bytes for skipped items, rejected folders, missing content, and failed copy units must be released from `storage_reserved`, not subtracted from `storage_used`.
+
+**Compatibility and API impact:** Public API response shape and visible partial-copy behavior stay unchanged. Copy may still return success with fewer copied items when conflicts, invalid IDs, missing content, or per-unit failures are skipped according to the existing endpoint behavior. The intended runtime accounting change is internal: in-flight copy capacity appears as reserved quota instead of already-used quota.
+
+**Rationale:** Reservation-style accounting aligns copy with the upload lifecycle model and keeps `storage_used` as committed logical ownership only. It narrows the drift window: content ref-count increments, copied rows, and used-storage commits succeed or roll back together, while compensation for skipped or failed work is a release of uncommitted reservation. This makes partial failure paths easier to audit than a pre-increment followed by later negative used-storage adjustments.
+
+**Rejected alternatives:**
+
+- Keep current pre-increment of `storage_used`: rejected because a failure between the upfront increment and later compensation can leave used-storage drift unrelated to committed file rows or content ref-counts.
+- Increment `storage_used` only after each successful copy without an upfront reservation: rejected because concurrent writes could consume quota mid-copy and change the current all-candidate quota admission semantics into quota-driven partial success.
+- Reserve only after all conflict/content preflight checks: deferred because it would intentionally change when quota rejection happens relative to existing skip behavior; a later implementation may choose this only if it documents the public behavior change.
+
+**Compensation rules for the implementation follow-up:**
+
+- Target-folder resolution and source discovery happen before reservation; failures there require no quota or ref-count compensation.
+- If the upfront reservation fails, return the existing quota error shape and create no copied rows or ref-count changes.
+- For name conflicts, invalid/missing content, copying a folder into itself or a descendant, and other pre-transaction skips, release the reserved bytes for that skipped unit.
+- For content ref-count increment failure, copied row creation failure, item-count update failure, or reserved-to-used commit failure inside a copy transaction, roll back the transaction so ref-counts and copied rows return to their previous state, then release the reservation for that failed unit.
+- For a successful copy unit, commit exactly the copied logical bytes from `storage_reserved` to `storage_used` in the same transaction as ref-count and row creation.
+- If reservation release fails after a skipped or failed unit, stop rather than silently continuing; log the affected `user_id`, byte count, and reason, and rely on accounting reconciliation to surface orphaned reservations.
+- Reconciliation should flag copy-reservation drift explicitly, because `storage_reserved` currently also represents in-progress upload tasks.
+
+**Implementation impact:** Copy-accounting work should add a copy-specific quota helper or reuse `QuotaService` with checked reservation/commit/release calls; update `test/services/FileServiceAtomicity_test.cpp` and `test/integration/test_safety_content_quota.py` coverage for reservation commit/release, partial failures, retry/idempotency expectations, and `storage_used` / `storage_reserved` reconciliation; and preserve the current `CopyResponse` fields.
+
+**Follow-up status:** Decision recorded; behavior-changing implementation is tracked by issue #25.
 
 ## Decision: trash counts against quota until permanent deletion or expiry cleanup
 
@@ -161,8 +192,6 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 
 ## Remaining Unresolved Decisions
 
-The following roadmap question remains outside this decision set:
-
-- Whether copy accounting should move to a reservation-style model instead of pre-incrementing `storage_used` (tracked by issue #21).
+No backend-refactor roadmap product or architecture decisions are currently open.
 
 A future abuse or security hardening pass may separately revisit whether any specific rate-limit family should become fail-closed, but that is not an open backend-refactor roadmap item.
