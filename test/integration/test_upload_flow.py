@@ -36,6 +36,7 @@ from lib_py import (
     do_login,
     json_field,
     fetch,
+    unique_name,
 )
 
 import atexit
@@ -47,13 +48,14 @@ TEST_USER = os.environ.get("TEST_USER", "admin")
 TEST_PASS = os.environ.get("TEST_PASS", "Admin123")
 
 TOKEN = ""
-HAPPY_FILENAME = f"happy_path_test_{os.getpid()}.bin"
-MISSING_FILENAME = f"missing_chunk_test_{os.getpid()}.bin"
-MISMATCH_FILENAME = f"chunk_size_mismatch_test_{os.getpid()}.bin"
-RESUME_FILENAME = f"resume_upload_test_{os.getpid()}.bin"
-DUPLICATE_CHUNK_FILENAME = f"duplicate_chunk_test_{os.getpid()}.bin"
-INSTANT_SOURCE_FILENAME = f"instant_source_test_{os.getpid()}.bin"
-INSTANT_COPY_FILENAME = f"instant_copy_test_{os.getpid()}.bin"
+RUN_NONCE = unique_name("upload")
+HAPPY_FILENAME = f"happy_path_{RUN_NONCE}.bin"
+MISSING_FILENAME = f"missing_chunk_{RUN_NONCE}.bin"
+MISMATCH_FILENAME = f"chunk_size_mismatch_{RUN_NONCE}.bin"
+RESUME_FILENAME = f"resume_upload_{RUN_NONCE}.bin"
+DUPLICATE_CHUNK_FILENAME = f"duplicate_chunk_{RUN_NONCE}.bin"
+INSTANT_SOURCE_FILENAME = f"instant_source_{RUN_NONCE}.bin"
+INSTANT_COPY_FILENAME = f"instant_copy_{RUN_NONCE}.bin"
 
 
 def _configured_chunk_size() -> int:
@@ -97,13 +99,18 @@ def _md5_bytes(data: bytes) -> str:
     return hashlib.md5(data).hexdigest()
 
 
+def _full_chunk(label: str, fill: bytes) -> bytes:
+    prefix = f"{RUN_NONCE}:{label}:".encode()
+    return prefix + fill * (CHUNK_SIZE - len(prefix))
+
+
 # ─── Test 1: Happy path upload ──────────────────────────────────────────────
 
 
 def test_happy_path_upload():
     log_info("Testing Happy Path Upload Flow...")
 
-    chunk_0_data = b"A" * CHUNK_SIZE
+    chunk_0_data = _full_chunk("happy", b"A")
     chunk_1_data = b"B" * 17
     full_data = chunk_0_data + chunk_1_data
 
@@ -225,7 +232,7 @@ def test_happy_path_upload():
 def test_missing_chunk_upload():
     log_info("Testing Missing Chunk Upload (failure path)...")
 
-    chunk_0_data = b"M" * CHUNK_SIZE
+    chunk_0_data = _full_chunk("missing", b"M")
     chunk_1_data = b"N" * CHUNK_SIZE
     chunk_2_data = b"O" * 17
     full_data = chunk_0_data + chunk_1_data + chunk_2_data
@@ -358,7 +365,7 @@ def test_init_upload_max_file_size():
 def test_chunk_size_mismatch():
     log_info("Testing Upload Chunk (size mismatch)...")
 
-    valid_chunk = b"C" * CHUNK_SIZE
+    valid_chunk = _full_chunk("mismatch", b"C")
     invalid_chunk = valid_chunk[:-1]
     full_data = valid_chunk + b"D"
     file_hash = _md5_bytes(full_data)
@@ -413,9 +420,8 @@ def test_chunk_size_mismatch():
 def test_resume_upload_returns_uploaded_chunks():
     log_info("Testing Resume Upload (uploaded chunks returned)...")
 
-    unique_prefix = f"resume-{os.getpid()}".encode()
-    chunk_0_data = unique_prefix + (b"R" * (CHUNK_SIZE - len(unique_prefix)))
-    chunk_1_data = f"resume-tail-{os.getpid()}".encode()
+    chunk_0_data = _full_chunk("resume", b"R")
+    chunk_1_data = f"{RUN_NONCE}:resume-tail".encode()
     full_data = chunk_0_data + chunk_1_data
     chunk_0_hash = _md5_bytes(chunk_0_data)
     chunk_1_hash = _md5_bytes(chunk_1_data)
@@ -504,7 +510,7 @@ def test_resume_upload_returns_uploaded_chunks():
 def test_duplicate_chunk_upload_is_idempotent():
     log_info("Testing Duplicate Chunk Upload (idempotency)...")
 
-    payload = f"duplicate-chunk-payload-{os.getpid()}".encode()
+    payload = f"{RUN_NONCE}:duplicate-chunk-payload".encode()
     file_hash = _md5_bytes(payload)
     chunk_hash = _md5_bytes(payload)
 
@@ -557,7 +563,7 @@ def test_duplicate_chunk_upload_is_idempotent():
 def test_instant_upload_reuses_existing_content():
     log_info("Testing Instant Upload (existing content reuse)...")
 
-    payload = f"instant-upload-payload-{os.getpid()}".encode()
+    payload = f"{RUN_NONCE}:instant-upload-payload".encode()
     file_hash = _md5_bytes(payload)
     chunk_hash = _md5_bytes(payload)
 
