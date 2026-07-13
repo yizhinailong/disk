@@ -15,6 +15,7 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 | Share download metadata | Successful share content download updates share-level and file-level metadata | Updates share-level count only today | Behavior-changing implementation required |
 | JWT enforcement | Global JWT with explicit public exemptions | Global and route-level JWT can both run | Filter cleanup implementation required |
 | Redis rate-limit failure | Fail-open for now | Already fail-open today | Make explicit in code/tests later |
+| Object storage compatibility | Design constraint for now, not a near-term runtime requirement | Local filesystem storage only | Documented in `docs/object-storage-compatibility.md` |
 
 ## Decision: `storage_used` means logical per-user bytes
 
@@ -136,11 +137,27 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 
 **Follow-up status:** Decision recorded; current behavior already matches the target, but explicit code/test documentation remains open.
 
+## Decision: object storage compatibility is a design constraint for now
+
+**Current implementation behavior:** final content and upload staging are still local filesystem backed. `UploadStagingStorage` is defined for temporary upload sessions, while final promotion, read, delete, and size operations still flow through the existing storage implementation.
+
+**Accepted target behavior:** S3/MinIO compatibility is a current architecture constraint, not a near-term runtime requirement. Future Phase 6 work should avoid introducing new local path assumptions and should evolve toward explicit staging descriptors, blob descriptors, and range-capable download descriptors before enabling an object-store backend.
+
+**Rationale:** The upload/content/trash transaction boundaries are now explicit enough to document object-store side effects, but enabling S3/MinIO safely still requires a `BlobStore` boundary, download responder changes, multipart/copy handling, and reconciliation for non-transactional object-store side effects.
+
+**Rejected alternatives:**
+
+- Implement S3/MinIO immediately: rejected for this phase because it would mix design documentation with backend implementation and download responder changes.
+- Treat object storage as out of scope entirely: rejected because Phase 6 storage abstraction work must not re-couple services to local filesystem path semantics.
+
+**Implementation impact:** Later storage work should follow `docs/object-storage-compatibility.md`: keep public API response shapes and range behavior unchanged, make cleanup/delete idempotent, compensate DB failures after object promotion, add retry/reconciliation for orphaned blobs and stale staging prefixes, and split multipart/copy handling into a dedicated implementation step.
+
+**Follow-up status:** Decision recorded and compatibility design documented; runtime S3/MinIO backend remains future work.
+
 ## Remaining Unresolved Decisions
 
 The following roadmap questions remain outside this decision set:
 
 - Whether copy accounting should move to a reservation-style model instead of pre-incrementing `storage_used`.
 - Whether inline expired upload task cleanup during upload init should release reserved quota through the lifecycle/quota boundary.
-- Whether object storage compatibility is a near-term requirement or only a design constraint.
 - Whether any specific rate-limit family should become fail-closed in a future abuse or security hardening change.
