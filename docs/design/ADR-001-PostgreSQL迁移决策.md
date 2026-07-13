@@ -108,6 +108,19 @@ Drogon 的 ORM 通过 `drogon::orm::DbClient` 抽象数据库访问，PostgreSQL
 - 在正式迁移前，用独立分支完成模型生成和核心服务冒烟测试
 - 维护一份 Drogon ORM PostgreSQL 已知问题清单，随验证进度更新
 
+### 模型生成一致性要求
+
+`src/models/` 必须连接当前 PostgreSQL schema 重新生成，不能只把 `model.json` 的 `rdbms` 从 MySQL 改成 PostgreSQL 而继续保留旧产物。旧模型会携带 MySQL 类型元数据和 `?` 插入占位符；在 PostgreSQL 运行时，`CoroMapper::insert()` 会直接产生语法错误，影响文件夹创建、复制、恢复、分享保存等写路径。
+
+生成与评审时必须同时满足：
+
+- `model.json` 使用开发 PostgreSQL 连接，并与 `config.json` 的开发数据库保持一致；生产凭据仍不得写入仓库。
+- 生成模型的表名和列名使用 PostgreSQL 引号规则，参数使用 `$1`、`$2` 等占位符，插入自增表时使用 `RETURNING *`。
+- PostgreSQL `BIGINT` / `INTEGER` 按生成器映射为有符号 C++ 类型；业务 DTO 和公共服务仍使用无符号 ID/字节数时，在模型边界执行显式、可审计的转换。
+- 运行至少一次后端完整编译和真实 PostgreSQL 写入集成测试，不能只依赖模型文件能够单独编译。
+
+模型方言测试应检查代表性生成产物不再包含 MySQL `bigint unsigned` / `int unsigned` 元数据，并验证 PostgreSQL 插入 SQL 的 `$n` 与 `RETURNING *` 契约。
+
 ---
 
 ## 数据类型迁移策略
