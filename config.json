@@ -75,15 +75,7 @@
       "config": {
         "filters": [
           "disk::filters::RequestTraceFilter",
-          "disk::filters::JwtAuthFilter"
-        ],
-        "exempt": []
-      }
-    },
-    {
-      "name": "drogon::plugin::GlobalFilters",
-      "config": {
-        "filters": [
+          "disk::filters::JwtAuthFilter",
           "disk::filters::RegisterRateLimitFilter",
           "disk::filters::SharePublicRateLimitFilter"
         ],

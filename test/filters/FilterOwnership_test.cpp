@@ -74,6 +74,17 @@ namespace {
 TEST(FilterOwnershipTest, GlobalFiltersContainGlobalJwtAndPublicRateLimiters) {
     const auto config_text = ReadTextFile(SourceRoot() / "config.json");
 
+    EXPECT_EQ(CountOccurrences(config_text, "\"name\": \"drogon::plugin::GlobalFilters\""), 1U);
+    EXPECT_TRUE(ContainsAllInOrder(
+        config_text,
+        {
+            "disk::filters::RequestTraceFilter",
+            "disk::filters::JwtAuthFilter",
+            "disk::filters::RegisterRateLimitFilter",
+            "disk::filters::SharePublicRateLimitFilter",
+        }
+    ));
+
     const std::unordered_set<std::string_view> global_filters{
         "disk::filters::RequestTraceFilter",
         "disk::filters::JwtAuthFilter",
@@ -144,7 +155,7 @@ TEST(FilterOwnershipTest, AuthenticatedRateLimitersRemainRouteOwnedExactlyOnce) 
     EXPECT_EQ(CountOccurrences(folder_controller, "\"disk::filters::FolderRateLimitFilter\""), 4U);
 
     const auto admin_controller = ControllerText("AdminController.hpp");
-    EXPECT_EQ(CountOccurrences(admin_controller, "\"disk::filters::AdminRateLimitFilter\""), 13U);
+    EXPECT_EQ(CountOccurrences(admin_controller, "\"disk::filters::AdminRateLimitFilter\""), 14U);
 
     EXPECT_TRUE(ContainsAllInOrder(
         admin_controller,

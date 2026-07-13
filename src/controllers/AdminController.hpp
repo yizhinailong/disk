@@ -133,7 +133,6 @@ namespace disk::controllers {
             AdminController::RunExpiredCleanup,
             "/api/admin/maintenance/cleanup/expired",
             drogon::Post,
-            "disk::filters::JwtAuthFilter",
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
