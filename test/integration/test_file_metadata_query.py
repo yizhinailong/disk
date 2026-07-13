@@ -63,7 +63,8 @@ TOKEN = ""
 FILE_ID = ""
 FILE_SIZE = 256
 FILE_HASH = ""
-FILE_NAME = f"metadata_test_{unique_name('file')}.bin"
+SEARCH_KEYWORD = unique_name("metadata").replace("_", "")
+FILE_NAME = f"{SEARCH_KEYWORD}.bin"
 
 
 # ─── Upload fixture ────────────────────────────────────────────────────────
@@ -160,10 +161,10 @@ def do_upload_fixture():
 
 
 def test_file_list():
-    log_step("Test: GET /api/file/list?parent_id=0&page_size=200")
+    log_step("Test: GET /api/file/list?parent_id=0&page_size=100")
 
     resp = fetch(
-        "/api/file/list?parent_id=0&page_size=200",
+        "/api/file/list?parent_id=0&page_size=100",
         method="GET",
         headers={"Authorization": f"Bearer {TOKEN}"},
     )
