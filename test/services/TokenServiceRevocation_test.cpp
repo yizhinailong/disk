@@ -143,6 +143,19 @@ namespace {
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
     }
 
+    TEST_F(TokenServiceRevocationTest, RevocationOverwritesNegativeCacheEntry) {
+        const std::string jti = "jti-negative-cache-overwrite";
+
+        m_service->SetRevocationCacheEntryForTest(jti, false, TokenService::GetNegativeCacheTtlSeconds());
+        ASSERT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
+        EXPECT_FALSE(m_service->IsRevocationCacheEntryRevokedForTest(jti));
+
+        m_service->SetRevocationCacheEntryForTest(jti, true, TokenService::GetAccessTokenExpireSeconds());
+
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
+        EXPECT_TRUE(m_service->IsRevocationCacheEntryRevokedForTest(jti));
+    }
+
     TEST_F(TokenServiceRevocationTest, NonRevokedTokenHasShortNegativeCacheTtl) {
         /// 模拟 IsAccessTokenRevoked 查询 Redis 后缓存 revoked=false 的行为：
         /// 否定缓存 TTL = 5s，确保撤销操作能在短时间内生效

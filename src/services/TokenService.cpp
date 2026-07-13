@@ -404,6 +404,13 @@ namespace disk::services {
         return m_revocation_cache.Size();
     }
 
+    auto TokenService::IsRevocationCacheEntryRevokedForTest(const std::string& jti) const -> bool {
+        const auto now = std::chrono::steady_clock::now();
+        std::shared_lock lock(m_cache_mutex);
+        const auto* entry = m_revocation_cache.Find(jti, now);
+        return entry != nullptr && entry->is_revoked;
+    }
+
     auto TokenService::StartCacheMaintenance() -> void {
         drogon::app().getLoop()->runEvery(
             CACHE_MAINTENANCE_INTERVAL_SECONDS,

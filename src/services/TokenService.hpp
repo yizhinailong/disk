@@ -238,6 +238,9 @@ namespace disk::services {
             int ttl_seconds
         ) -> void;
 
+        [[nodiscard]]
+        auto IsRevocationCacheEntryRevokedForTest(const std::string& jti) const -> bool;
+
         /**
          * @brief 测试用：获取本地撤销缓存条目数
          * @return size_t 缓存条目数量
@@ -418,6 +421,7 @@ namespace disk::services {
                 auto old_it = m_by_key.find(key);
                 if (old_it != m_by_key.end()) {
                     m_by_expiry.erase(old_it->second.expiry_it);
+                    m_by_key.erase(old_it);
                 }
                 auto expiry_it = m_by_expiry.emplace(entry.expires_at, key);
                 m_by_key.emplace(key, Value{ std::move(entry), expiry_it });
