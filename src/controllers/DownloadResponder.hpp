@@ -19,7 +19,7 @@
 #include <drogon/HttpResponse.h>
 #include <drogon/utils/coroutine.h>
 
-#include "storage/IFileStorage.hpp"
+#include "storage/IBlobStore.hpp"
 
 namespace disk::controllers {
 
@@ -35,7 +35,7 @@ namespace disk::controllers {
     [[nodiscard]]
     auto BuildDownloadResponse(
         const DownloadParams& params,
-        disk::storage::IFileStorage* storage
+        disk::storage::IBlobStore* blob_store
     ) -> drogon::Task<drogon::HttpResponsePtr>;
 
 } ///< namespace disk::controllers

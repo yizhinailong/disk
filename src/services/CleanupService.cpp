@@ -28,6 +28,7 @@
 #include "services/QuotaService.hpp"
 #include "services/TrashContentIdResolver.hpp"
 #include "TrashService.hpp"
+#include "storage/BlobStoreMgr.hpp"
 #include "storage/StorageMgr.hpp"
 #include "services/UploadLifecycleService.hpp"
 #include "utils/BatchUtils.hpp"
@@ -83,7 +84,8 @@ namespace disk::services {
             disk::upload::UploadLifecycleService lifecycle_service(
                 m_db_client,
                 disk::storage::StorageMgr::GetStorage(),
-                disk::storage::StorageMgr::GetUploadStagingStorage()
+                disk::storage::StorageMgr::GetUploadStagingStorage(),
+                disk::storage::BlobStoreMgr::GetBlobStore()
             );
             auto cleanup_result = co_await lifecycle_service.ExpireInProgressUploads();
             if (!cleanup_result) {

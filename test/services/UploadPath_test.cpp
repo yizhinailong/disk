@@ -103,6 +103,7 @@
 #include <gtest/gtest.h>
 
 #include "../../src/dtos/FileDto.hpp"
+#include "../../src/storage/LocalBlobStore.hpp"
 #include "../../src/storage/LocalFileStorage.hpp"
 #include "../../src/utils/ConfigMgr.hpp"
 #include "../../src/utils/FileHashUtil.hpp"
@@ -113,6 +114,7 @@
 namespace disk::file {
     namespace {
 
+        using disk::storage::LocalBlobStore;
         using disk::storage::LocalFileStorage;
         using disk::utils::ConfigMgr;
         using disk::utils::FileHashUtil;
@@ -176,9 +178,11 @@ namespace disk::file {
 
                 LoadStorageConfig(m_storage_base, m_temp_base);
                 m_storage = std::make_unique<LocalFileStorage>();
+                m_blob_store = std::make_unique<LocalBlobStore>();
             }
 
             void TearDown() override {
+                m_blob_store.reset();
                 m_storage.reset();
                 RestoreDefaultStorageConfig();
 
@@ -199,6 +203,7 @@ namespace disk::file {
             std::filesystem::path m_storage_base;
             std::filesystem::path m_temp_base;
             std::unique_ptr<LocalFileStorage> m_storage;
+            std::unique_ptr<LocalBlobStore> m_blob_store;
         };
 
         /// =====================================================================
@@ -566,7 +571,7 @@ namespace disk::file {
 
             /// Step 4: Promote to final storage
             auto promote_result = drogon::sync_wait(
-                m_storage->PromoteToFinal(assembled.path, assembled.md5_hash)
+                m_blob_store->PromoteToFinal(assembled.path, assembled.md5_hash)
             );
             ASSERT_TRUE(promote_result.has_value());
 
@@ -577,7 +582,7 @@ namespace disk::file {
             EXPECT_EQ(ReadBinaryFile(final_path), expected_content);
 
             /// Verify final storage path matches expected pattern
-            const auto expected_final = m_storage->GetFinalStoragePath(assembled.md5_hash);
+            const auto expected_final = m_blob_store->GetFinalStoragePath(assembled.md5_hash);
             EXPECT_EQ(final_path, expected_final);
 
             /// Step 5: Cleanup temp

@@ -163,12 +163,17 @@ set(Services_SOURCES
 
 # Storage
 set(Storage_HEADERS
+    storage/BlobStoreMgr.hpp
+    storage/IBlobStore.hpp
     storage/IFileStorage.hpp
+    storage/LocalBlobStore.hpp
     storage/LocalFileStorage.hpp
     storage/StorageMgr.hpp
     storage/UploadStagingStorage.hpp
 )
 set(Storage_SOURCES
+    storage/BlobStoreMgr.cpp
+    storage/LocalBlobStore.cpp
     storage/LocalFileStorage.cpp
     storage/StorageMgr.cpp
 )

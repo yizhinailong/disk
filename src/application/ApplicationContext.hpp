@@ -21,6 +21,7 @@
 #include "services/FolderService.hpp"
 #include "services/ShareService.hpp"
 #include "services/UploadService.hpp"
+#include "storage/IBlobStore.hpp"
 #include "storage/IFileStorage.hpp"
 #include "storage/UploadStagingStorage.hpp"
 #include "utils/Singleton.hpp"
@@ -40,6 +41,7 @@ namespace disk::application {
             drogon::orm::DbClientPtr db_client,
             drogon::nosql::RedisClientPtr redis_client,
             disk::storage::IFileStorage* storage,
+            disk::storage::IBlobStore* blob_store,
             std::string jwt_secret
         ) -> void;
 
@@ -64,6 +66,9 @@ namespace disk::application {
         [[nodiscard]]
         auto Storage() -> disk::storage::IFileStorage*;
 
+        [[nodiscard]]
+        auto BlobStore() -> disk::storage::IBlobStore*;
+
         ~ApplicationContext() = default;
         ApplicationContext(const ApplicationContext&) = delete;
         auto operator=(const ApplicationContext&) -> ApplicationContext& = delete;
@@ -77,6 +82,7 @@ namespace disk::application {
             drogon::orm::DbClientPtr db_client,
             drogon::nosql::RedisClientPtr redis_client,
             disk::storage::IFileStorage* storage,
+            disk::storage::IBlobStore* blob_store,
             std::string jwt_secret
         ) -> void;
 
@@ -86,6 +92,7 @@ namespace disk::application {
         drogon::nosql::RedisClientPtr m_redis_client{};
         disk::storage::IFileStorage* m_storage{};
         disk::storage::UploadStagingStorage* m_upload_staging_storage{};
+        disk::storage::IBlobStore* m_blob_store{};
 
         std::unique_ptr<disk::file::UploadService> m_upload_service{};
         std::unique_ptr<disk::file::FileQueryService> m_file_query_service{};

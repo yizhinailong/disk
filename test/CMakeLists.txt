@@ -59,8 +59,11 @@ set(TEST_SOURCES
     dtos/UserDto_test.cpp
     storage/AssemblyWorkerPool_test.cpp
     storage/AssemblyPerf_test.cpp
+    storage/LocalBlobStore_test.cpp
     controllers/DownloadResponder_test.cpp
     ${CMAKE_SOURCE_DIR}/src/controllers/DownloadResponder.cpp
+    ${CMAKE_SOURCE_DIR}/src/storage/LocalBlobStore.cpp
+    ${CMAKE_SOURCE_DIR}/src/storage/BlobStoreMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FolderRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
