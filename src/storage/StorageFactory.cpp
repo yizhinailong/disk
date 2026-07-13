@@ -11,7 +11,10 @@
 
 namespace disk::storage {
 
-    auto StorageFactory::Create(std::shared_ptr<disk::utils::ConfigMgr> config_mgr) -> StorageBundle {
+    auto StorageFactory::Create(
+        std::shared_ptr<disk::utils::ConfigMgr> config_mgr,
+        S3ClientFactory s3_client_factory
+    ) -> StorageBundle {
         if (config_mgr == nullptr) {
             config_mgr = disk::utils::ConfigMgr::GetInstance();
         }
@@ -26,20 +29,31 @@ namespace disk::storage {
 
             case disk::utils::StorageBackend::S3: {
                 Logger::Info() << "Initializing S3 object storage backend";
-                auto client = std::make_shared<AwsS3Client>(config_mgr->GetS3StorageConfig());
-                auto validate_result = client->ValidateBucketAccessible();
-                if (!validate_result) {
-                    throw std::runtime_error(validate_result.error().message);
+                try {
+                    const auto s3_config = config_mgr->GetS3StorageConfig();
+                    auto client = s3_client_factory ? s3_client_factory(s3_config) : std::make_shared<AwsS3Client>(s3_config);
+                    if (client == nullptr) {
+                        throw std::runtime_error("S3 client factory returned null");
+                    }
+
+                    auto validate_result = client->ValidateBucketAccessible();
+                    if (!validate_result) {
+                        throw std::runtime_error(validate_result.error().message);
+                    }
+                    auto s3_storage = std::make_shared<S3ObjectStorage>(std::move(config_mgr), std::move(client));
+                    return StorageBundle{
+                        .storage = s3_storage,
+                        .blob_store = s3_storage,
+                    };
+                } catch (const std::exception& e) {
+                    throw std::runtime_error(
+                        std::string("Failed to initialize S3 storage backend: ") + e.what()
+                    );
                 }
-                auto s3_storage = std::make_shared<S3ObjectStorage>(std::move(config_mgr), std::move(client));
-                return StorageBundle{
-                    .storage = s3_storage,
-                    .blob_store = s3_storage,
-                };
             }
         }
 
         throw std::runtime_error("Unsupported storage backend");
     }
 
-} ///< namespace disk::storage
+} // namespace disk::storage

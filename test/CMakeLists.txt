@@ -62,12 +62,15 @@ set(TEST_SOURCES
     storage/AssemblyPerf_test.cpp
     storage/LocalBlobStore_test.cpp
     storage/S3ObjectStorage_test.cpp
+    storage/StorageFactory_test.cpp
     controllers/DownloadResponder_test.cpp
     ${CMAKE_SOURCE_DIR}/src/controllers/DownloadResponder.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/BlobStoreMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/LocalBlobStore.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/LocalFileStorage.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/S3ObjectStorage.cpp
+    ${CMAKE_SOURCE_DIR}/src/storage/S3Client.cpp
+    ${CMAKE_SOURCE_DIR}/src/storage/StorageFactory.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FolderRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
