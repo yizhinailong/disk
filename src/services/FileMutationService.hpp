@@ -24,10 +24,6 @@
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
 
-namespace disk::storage {
-    class IFileStorage;
-}
-
 namespace disk::file {
 
     /**
@@ -44,9 +40,8 @@ namespace disk::file {
         /**
          * @brief 构造函数
          * @param db_client 数据库客户端
-         * @param storage 文件存储接口
          */
-        explicit FileMutationService(drogon::orm::DbClientPtr db_client, storage::IFileStorage* storage);
+        explicit FileMutationService(drogon::orm::DbClientPtr db_client);
         ~FileMutationService() = default;
         FileMutationService(const FileMutationService&) = delete;
         auto operator=(const FileMutationService&) -> FileMutationService& = delete;
@@ -193,7 +188,6 @@ namespace disk::file {
         drogon::orm::DbClientPtr m_db_client;                                      ///< 数据库客户端
         FileRepository m_file_repository;                                           ///< 文件持久化原语
         disk::folder::FolderRepository m_folder_repository;                         ///< 文件夹持久化原语
-        storage::IFileStorage* m_storage{};                                          ///< 文件存储接口
         std::shared_ptr<disk::services::RedisService> m_redis_service{disk::services::RedisService::GetInstance()};  ///< Redis 服务
     };
 

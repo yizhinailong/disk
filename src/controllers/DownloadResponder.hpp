@@ -35,7 +35,7 @@ namespace disk::controllers {
     [[nodiscard]]
     auto BuildDownloadResponse(
         const DownloadParams& params,
-        disk::storage::IFileStorage* storage
+        disk::storage::BlobStore* blob_store
     ) -> drogon::Task<drogon::HttpResponsePtr>;
 
 } ///< namespace disk::controllers

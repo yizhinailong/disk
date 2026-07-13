@@ -497,6 +497,11 @@ namespace disk::storage {
         co_return result;
     }
 
+    auto LocalFileStorage::DeleteTempPath(const std::filesystem::path& target_path)
+        -> drogon::Task<Result<void>> {
+        co_return co_await DeletePath(target_path);
+    }
+
     auto LocalFileStorage::DeletePath(const std::filesystem::path& target_path)
         -> drogon::Task<Result<void>> {
         auto result = co_await RunBlockingFilesystemTaskWithTimeout(

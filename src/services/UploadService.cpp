@@ -30,8 +30,13 @@ namespace disk::file {
 
     /// ==================== 构造函数 ====================
 
-    UploadService::UploadService(drogon::orm::DbClientPtr db_client, storage::IFileStorage* storage)
-        : m_db_client(std::move(db_client)), m_storage(storage) {
+    UploadService::UploadService(
+        drogon::orm::DbClientPtr db_client,
+        storage::UploadStagingStorage* upload_staging_storage,
+        storage::BlobStore* blob_store
+    ) : m_db_client(std::move(db_client)),
+        m_upload_staging_storage(upload_staging_storage),
+        m_blob_store(blob_store) {
         StartUploadTaskCacheMaintenance();
         Logger::Debug() << "UploadService initialization completed";
     }
@@ -46,7 +51,11 @@ namespace disk::file {
                   << ", parent_id=" << request.parent_id << ", user_id=" << user_id;
 
         auto config = ConfigMgr::GetInstance();
-        disk::upload::UploadLifecycleService lifecycle_service(m_db_client, m_storage);
+        disk::upload::UploadLifecycleService lifecycle_service(
+            m_db_client,
+            m_upload_staging_storage,
+            m_blob_store
+        );
         auto lifecycle_result = co_await lifecycle_service.InitializeUpload(
             disk::upload::InitUploadCommand{ .filename = std::move(request.filename),
                                              .file_size = request.file_size,
@@ -200,7 +209,11 @@ namespace disk::file {
         }
 
         /// 6. 创建临时目录并写入分片
-        auto write_result = co_await m_storage->WriteChunk(upload_id, chunk_index, std::move(chunk_payload));
+        auto write_result = co_await m_upload_staging_storage->WriteChunk(
+            upload_id,
+            chunk_index,
+            std::move(chunk_payload)
+        );
         if (!write_result) {
             Logger::Error() << "Failed to write chunk file: upload_id=" << upload_id
                       << ", chunk_index=" << chunk_index << ", error="
@@ -261,7 +274,11 @@ namespace disk::file {
     auto UploadService::CompleteUpload(std::string upload_id, uint64_t user_id)
         -> drogon::Task<Result<CompleteUploadResponse>> {
 
-        disk::upload::UploadLifecycleService lifecycle_service(m_db_client, m_storage);
+        disk::upload::UploadLifecycleService lifecycle_service(
+            m_db_client,
+            m_upload_staging_storage,
+            m_blob_store
+        );
         auto lifecycle_result = co_await lifecycle_service.CompleteUpload(
             disk::upload::CompleteUploadCommand{ .upload_id = std::move(upload_id),
                                                  .user_id = user_id }
@@ -311,7 +328,11 @@ namespace disk::file {
             co_return {};
         }
 
-        disk::upload::UploadLifecycleService lifecycle_service(m_db_client, m_storage);
+        disk::upload::UploadLifecycleService lifecycle_service(
+            m_db_client,
+            m_upload_staging_storage,
+            m_blob_store
+        );
         auto cancel_result = co_await lifecycle_service.CancelInProgressUpload(
             upload_id,
             user_id,

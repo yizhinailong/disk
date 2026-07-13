@@ -46,14 +46,14 @@ namespace {
     }
 
     /// ============================================================
-    /// MockFileStorage — 仅实现 OpenForRead，其他返回默认成功值
+    /// MockBlobStore — 仅实现下载所需的 BlobStore 读取行为
     /// ============================================================
-    class MockFileStorage final : public disk::storage::IFileStorage {
+    class MockBlobStore final : public disk::storage::BlobStore {
     public:
-        explicit MockFileStorage(std::filesystem::path temp_dir)
+        explicit MockBlobStore(std::filesystem::path temp_dir)
             : m_temp_dir(std::move(temp_dir)) {}
 
-        ~MockFileStorage() override {
+        ~MockBlobStore() override {
             std::error_code ec;
             std::filesystem::remove_all(m_temp_dir, ec);
         }
@@ -70,25 +70,7 @@ namespace {
             return path;
         }
 
-        /// ---- IFileStorage 接口 ----
-
-        auto EnsureUploadTempDir(const std::string& /*upload_id*/)
-            -> drogon::Task<Result<void>> override {
-            co_return Result<void>{};
-        }
-
-        auto WriteChunk(
-            const std::string& /*upload_id*/,
-            uint32_t /*chunk_index*/,
-            std::string /*data*/
-        ) -> drogon::Task<Result<void>> override {
-            co_return Result<void>{};
-        }
-
-        auto AssembleChunks(const std::string& /*upload_id*/, uint32_t /*chunk_count*/)
-            -> drogon::Task<Result<disk::storage::AssembleResult>> override {
-            co_return disk::storage::AssembleResult{m_temp_dir / "assembled", "", ""};
-        }
+        /// ---- BlobStore 接口 ----
 
         auto PromoteToFinal(
             const std::filesystem::path& /*temp_path*/,
@@ -109,11 +91,6 @@ namespace {
         }
 
         auto DeletePath(const std::filesystem::path& /*target_path*/)
-            -> drogon::Task<Result<void>> override {
-            co_return Result<void>{};
-        }
-
-        auto CleanupTemp(const std::string& /*upload_id*/)
             -> drogon::Task<Result<void>> override {
             co_return Result<void>{};
         }
@@ -234,11 +211,11 @@ class DownloadResponderTest : public ::testing::Test {
 protected:
     void SetUp() override {
         m_temp_dir = std::make_unique<TempDirGuard>();
-        m_storage = std::make_unique<MockFileStorage>(m_temp_dir->Path());
+        m_blob_store = std::make_unique<MockBlobStore>(m_temp_dir->Path());
     }
 
     void TearDown() override {
-        m_storage.reset();
+        m_blob_store.reset();
         m_temp_dir.reset();
     }
 
@@ -256,7 +233,7 @@ protected:
         const std::string& content,
         const std::string& range_header = ""
     ) -> disk::controllers::DownloadParams {
-        auto path = m_storage->CreateTempFile("testfile.bin", content);
+        auto path = m_blob_store->CreateTempFile("testfile.bin", content);
         disk::controllers::DownloadParams params;
         params.storage_path = path.string();
         params.filename = "testfile.bin";
@@ -268,7 +245,7 @@ protected:
     }
 
     std::unique_ptr<TempDirGuard> m_temp_dir;
-    std::unique_ptr<MockFileStorage> m_storage;
+    std::unique_ptr<MockBlobStore> m_blob_store;
 };
 
 TEST_F(DownloadResponderTest, FullDownloadReturns200) {
@@ -276,7 +253,7 @@ TEST_F(DownloadResponderTest, FullDownloadReturns200) {
     auto params = MakeDownloadParams(content);
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_blob_store.get())
     );
 
     ASSERT_NE(resp, nullptr);
@@ -296,7 +273,7 @@ TEST_F(DownloadResponderTest, RangeRequestReturns206) {
     auto params = MakeDownloadParams(content, "bytes=0-499");
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_blob_store.get())
     );
 
     ASSERT_NE(resp, nullptr);
@@ -312,7 +289,7 @@ TEST_F(DownloadResponderTest, OpenEndRangeReturns206) {
     auto params = MakeDownloadParams(content, "bytes=500-");
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_blob_store.get())
     );
 
     ASSERT_NE(resp, nullptr);
@@ -327,7 +304,7 @@ TEST_F(DownloadResponderTest, SuffixRangeReturns206) {
     auto params = MakeDownloadParams(content, "bytes=-500");
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_blob_store.get())
     );
 
     ASSERT_NE(resp, nullptr);
@@ -342,7 +319,7 @@ TEST_F(DownloadResponderTest, InvalidRangeReturns416) {
     auto params = MakeDownloadParams(content, "bytes=999999-");
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_blob_store.get())
     );
 
     ASSERT_NE(resp, nullptr);

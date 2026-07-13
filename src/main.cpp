@@ -72,7 +72,8 @@ auto main() -> int {
         disk::application::ApplicationContext::Initialize(
             drogon::app().getDbClient(),
             drogon::app().getRedisClient(),
-            disk::storage::StorageMgr::GetStorage(),
+            disk::storage::StorageMgr::GetUploadStagingStorage(),
+            disk::storage::StorageMgr::GetBlobStore(),
             disk::utils::ConfigMgr::GetInstance()->GetJwtSecret()
         );
         disk::utils::Logger::Info() << "Application service context initialized successfully";

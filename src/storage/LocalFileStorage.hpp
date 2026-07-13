@@ -101,6 +101,14 @@ namespace disk::storage {
             -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> override;
 
         /**
+         * @brief 删除指定暂存文件或目录
+         * @param target_path 暂存文件或目录路径
+         * @return 成功返回空，失败返回错误信息
+         */
+        [[nodiscard]]
+        auto DeleteTempPath(const std::filesystem::path& target_path) -> drogon::Task<Result<void>> override;
+
+        /**
          * @brief 安全删除指定文件或目录
          * @param target_path 目标路径
          * @return 成功返回空，失败返回错误信息

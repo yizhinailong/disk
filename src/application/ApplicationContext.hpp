@@ -38,7 +38,8 @@ namespace disk::application {
         static auto Initialize(
             drogon::orm::DbClientPtr db_client,
             drogon::nosql::RedisClientPtr redis_client,
-            disk::storage::IFileStorage* storage,
+            disk::storage::UploadStagingStorage* upload_staging_storage,
+            disk::storage::BlobStore* blob_store,
             std::string jwt_secret
         ) -> void;
 
@@ -61,7 +62,10 @@ namespace disk::application {
         auto Cleanup() -> disk::services::CleanupService&;
 
         [[nodiscard]]
-        auto Storage() -> disk::storage::IFileStorage*;
+        auto UploadStagingStorage() -> disk::storage::UploadStagingStorage*;
+
+        [[nodiscard]]
+        auto BlobStore() -> disk::storage::BlobStore*;
 
         ~ApplicationContext() = default;
         ApplicationContext(const ApplicationContext&) = delete;
@@ -75,7 +79,8 @@ namespace disk::application {
         auto initialize(
             drogon::orm::DbClientPtr db_client,
             drogon::nosql::RedisClientPtr redis_client,
-            disk::storage::IFileStorage* storage,
+            disk::storage::UploadStagingStorage* upload_staging_storage,
+            disk::storage::BlobStore* blob_store,
             std::string jwt_secret
         ) -> void;
 
@@ -83,7 +88,8 @@ namespace disk::application {
 
         drogon::orm::DbClientPtr m_db_client{};
         drogon::nosql::RedisClientPtr m_redis_client{};
-        disk::storage::IFileStorage* m_storage{};
+        disk::storage::UploadStagingStorage* m_upload_staging_storage{};
+        disk::storage::BlobStore* m_blob_store{};
 
         std::unique_ptr<disk::file::UploadService> m_upload_service{};
         std::unique_ptr<disk::file::FileQueryService> m_file_query_service{};

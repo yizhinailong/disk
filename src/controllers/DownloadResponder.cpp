@@ -35,7 +35,7 @@ namespace disk::controllers {
 
     auto BuildDownloadResponse(
         const DownloadParams& params,
-        disk::storage::IFileStorage* storage
+        disk::storage::BlobStore* blob_store
     ) -> drogon::Task<drogon::HttpResponsePtr> {
 
         const auto& file_size = params.file_size;
@@ -81,7 +81,7 @@ namespace disk::controllers {
         /// 由 sendfile() 系统调用完成零拷贝传输，避免用户态 read/write 拷贝。
         if (content_length >= SENDFILE_THRESHOLD_BYTES) {
             /// 检查文件是否存在
-            auto exists_result = co_await storage->Exists(params.storage_path);
+            auto exists_result = co_await blob_store->Exists(params.storage_path);
             if (!exists_result || !*exists_result) {
                 co_return Response::Error(
                     ErrorInfo(ErrorCode::FileNotFound, "File not found")
@@ -130,7 +130,7 @@ namespace disk::controllers {
         /// Path B: newStreamResponse — 流式下载路径（备用）
         /// ================================================================
         /// 适用于小文件或需要显式流控制的场景。保留作为 sendfile 不可用时的回退。
-        auto open_result = co_await storage->OpenForRead(params.storage_path);
+        auto open_result = co_await blob_store->OpenForRead(params.storage_path);
         if (!open_result) {
             Logger::Error() << "Cannot open file: " << params.storage_path;
             co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "Cannot open file"));

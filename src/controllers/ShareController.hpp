@@ -185,7 +185,7 @@ namespace disk::share {
 
     private:
         ShareService* m_share_service{};
-        disk::storage::IFileStorage* m_storage{};
+        disk::storage::BlobStore* m_blob_store{};
     };
 
 } ///< namespace disk::share

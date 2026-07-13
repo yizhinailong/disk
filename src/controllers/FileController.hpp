@@ -221,7 +221,7 @@ namespace disk::file {
         UploadService* m_upload_service{};
         FileQueryService* m_query_service{};
         FileMutationService* m_mutation_service{};
-        disk::storage::IFileStorage* m_storage{};
+        disk::storage::BlobStore* m_blob_store{};
     };
 
 } ///< namespace disk::file
