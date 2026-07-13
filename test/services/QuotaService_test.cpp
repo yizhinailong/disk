@@ -13,6 +13,16 @@ namespace disk::quota {
             SUCCEED();
         }
 
+        TEST(QuotaServiceContractTest, ExposesGenericReservationForTransactions) {
+            using ReserveResult = decltype(std::declval<QuotaService&>().ReserveStorage(
+                std::declval<const drogon::orm::DbClientPtr&>(),
+                uint64_t{ 1 },
+                uint64_t{ 1 }
+            ));
+
+            EXPECT_TRUE((std::is_same_v<ReserveResult, drogon::Task<Result<void>>>));
+        }
+
         TEST(QuotaServiceContractTest, ExposesCheckedUsedStorageAdjustmentForTransactions) {
             using CheckedAdjustResult = decltype(std::declval<QuotaService&>().AdjustUsedStorageChecked(
                 std::declval<const drogon::orm::DbClientPtr&>(),

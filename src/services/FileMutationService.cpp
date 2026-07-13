@@ -11,7 +11,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <limits>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -488,7 +487,7 @@ namespace disk::file {
         if (total_copy_size > 0) {
             auto quota_result = co_await transaction_runner.Run(
                 [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
-                    co_return co_await quota_service.ConsumeUsedStorage(
+                    co_return co_await quota_service.ReserveStorage(
                         transaction,
                         user_id,
                         total_copy_size
@@ -496,7 +495,7 @@ namespace disk::file {
                 }
             );
             if (!quota_result) {
-                Logger::Warn() << "Storage quota check failed for copy: user_id=" << user_id
+                Logger::Warn() << "Storage quota reservation failed for copy: user_id=" << user_id
                                << ", total_copy_size=" << total_copy_size;
                 co_return std::unexpected(quota_result.error());
             }
@@ -509,34 +508,34 @@ namespace disk::file {
         std::vector<FileIdMapping> new_files;
         std::vector<FileIdMapping> new_folders;
 
-        auto release_copy_quota = [&](uint64_t bytes, std::string reason)
+        auto return_release_error = [&](ErrorInfo error)
+            -> drogon::Task<Result<CopyResponse>> {
+            if (copied_file_count > 0 || copied_folder_count > 0 || !new_files.empty() || !new_folders.empty()) {
+                co_await InvalidateFileListCache(user_id, { request.target_folder_id });
+            }
+            co_return std::unexpected(error);
+        };
+
+        auto release_copy_reservation = [&](uint64_t bytes, std::string reason)
             -> drogon::Task<Result<void>> {
             if (bytes == 0) {
                 co_return {};
             }
-            if (bytes > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
-                Logger::Error() << "Copy quota release overflow: user_id=" << user_id
-                                << ", bytes=" << bytes << ", reason=" << reason;
-                co_return std::unexpected(ErrorInfo(
-                    ErrorCode::InternalError,
-                    "Failed to release copy quota"
-                ));
-            }
 
-            auto release_delta = -static_cast<int64_t>(bytes);
             auto release_result = co_await transaction_runner.Run(
                 [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
-                    co_return co_await quota_service.AdjustUsedStorageChecked(
+                    co_return co_await quota_service.ReleaseReservedStorageChecked(
                         transaction,
                         user_id,
-                        release_delta
+                        bytes
                     );
                 }
             );
             if (!release_result) {
-                Logger::Error() << "Failed to release copy quota: user_id=" << user_id
+                Logger::Error() << "Failed to release copy reservation: user_id=" << user_id
                                 << ", bytes=" << bytes << ", reason=" << reason
-                                << ", error=" << release_result.error().message;
+                                << ", error=" << release_result.error().message
+                                << ", orphaned reservation remains visible via quota reconciliation";
                 co_return std::unexpected(release_result.error());
             }
             co_return {};
@@ -572,12 +571,12 @@ namespace disk::file {
                 file_conflict_query_failed = true;
             }
             if (file_conflict_query_failed) {
-                auto release_result = co_await release_copy_quota(
+                auto release_result = co_await release_copy_reservation(
                     chunk_reserved_size,
                     "file conflict query failed"
                 );
                 if (!release_result) {
-                    co_return std::unexpected(release_result.error());
+                    co_return co_await return_release_error(release_result.error());
                 }
                 released_copy_size += chunk_reserved_size;
                 continue;
@@ -625,12 +624,12 @@ namespace disk::file {
                     content_query_failed = true;
                 }
                 if (content_query_failed) {
-                    auto release_result = co_await release_copy_quota(
+                    auto release_result = co_await release_copy_reservation(
                         chunk_reserved_size,
                         "file content query failed"
                     );
                     if (!release_result) {
-                        co_return std::unexpected(release_result.error());
+                        co_return co_await return_release_error(release_result.error());
                     }
                     released_copy_size += chunk_reserved_size;
                     continue;
@@ -650,20 +649,26 @@ namespace disk::file {
             }
 
             if (valid_items.empty()) {
-                auto release_result = co_await release_copy_quota(
+                auto release_result = co_await release_copy_reservation(
                     chunk_reserved_size,
                     "file batch has no valid items"
                 );
                 if (!release_result) {
-                    co_return std::unexpected(release_result.error());
+                    co_return co_await return_release_error(release_result.error());
                 }
                 released_copy_size += chunk_reserved_size;
                 continue;
             }
 
             std::unordered_map<uint64_t, uint64_t> old_id_to_size;
+            std::unordered_map<uint64_t, uint64_t> valid_content_ref_increment;
+            uint64_t valid_items_size = 0;
             for (const auto& [old_id, file_ptr] : valid_items) {
                 old_id_to_size[old_id] = file_ptr->getValueOfSize();
+                valid_items_size += file_ptr->getValueOfSize();
+                if (auto content_id = file_ptr->getContentId()) {
+                    valid_content_ref_increment[*content_id] += 1;
+                }
             }
 
             std::vector<FileIdMapping> staged_file_mappings;
@@ -673,7 +678,7 @@ namespace disk::file {
                 [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
                     auto increment_result = co_await content_service.IncrementRefCountsChecked(
                         transaction,
-                        content_ref_increment,
+                        valid_content_ref_increment,
                         existing_content_ids
                     );
                     if (!increment_result) {
@@ -704,21 +709,13 @@ namespace disk::file {
                         co_return std::unexpected(id_mappings_result.error());
                     }
 
-                    if (skipped_before_tx_size > 0) {
-                        if (skipped_before_tx_size > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
-                            co_return std::unexpected(ErrorInfo(
-                                ErrorCode::InternalError,
-                                "Failed to release copy quota"
-                            ));
-                        }
-                        auto release_result = co_await quota_service.AdjustUsedStorageChecked(
-                            transaction,
-                            user_id,
-                            -static_cast<int64_t>(skipped_before_tx_size)
-                        );
-                        if (!release_result) {
-                            co_return std::unexpected(release_result.error());
-                        }
+                    auto commit_quota_result = co_await quota_service.CommitReservedToUsed(
+                        transaction,
+                        user_id,
+                        valid_items_size
+                    );
+                    if (!commit_quota_result) {
+                        co_return std::unexpected(commit_quota_result.error());
                     }
 
                     for (const auto& [old_id, new_id] : id_mappings_result.value()) {
@@ -732,12 +729,12 @@ namespace disk::file {
 
             if (!tx_result) {
                 Logger::Error() << "Copy file batch transaction failed: " << tx_result.error().message;
-                auto release_result = co_await release_copy_quota(
+                auto release_result = co_await release_copy_reservation(
                     chunk_reserved_size,
                     "file batch transaction failed"
                 );
                 if (!release_result) {
-                    co_return std::unexpected(release_result.error());
+                    co_return co_await return_release_error(release_result.error());
                 }
                 released_copy_size += chunk_reserved_size;
                 continue;
@@ -745,8 +742,18 @@ namespace disk::file {
 
             copied_file_count += staged_file_count;
             actual_copy_size += staged_actual_size;
-            released_copy_size += skipped_before_tx_size;
             new_files.insert(new_files.end(), staged_file_mappings.begin(), staged_file_mappings.end());
+
+            if (skipped_before_tx_size > 0) {
+                auto release_result = co_await release_copy_reservation(
+                    skipped_before_tx_size,
+                    "file batch skipped items"
+                );
+                if (!release_result) {
+                    co_return co_await return_release_error(release_result.error());
+                }
+                released_copy_size += skipped_before_tx_size;
+            }
         }
 
         std::vector<std::string> root_folder_names;
@@ -778,12 +785,12 @@ namespace disk::file {
                 if (plan_it == folder_plans.end()) {
                     continue;
                 }
-                auto release_result = co_await release_copy_quota(
+                auto release_result = co_await release_copy_reservation(
                     plan_it->second.item_size,
                     "folder conflict query failed"
                 );
                 if (!release_result) {
-                    co_return std::unexpected(release_result.error());
+                    co_return co_await return_release_error(release_result.error());
                 }
                 released_copy_size += plan_it->second.item_size;
             }
@@ -805,12 +812,12 @@ namespace disk::file {
                 if (target_inside_source) {
                     Logger::Warn() << "Cannot copy folder into itself or descendant, skipping: folder_id="
                                    << folder_id;
-                    auto release_result = co_await release_copy_quota(
+                    auto release_result = co_await release_copy_reservation(
                         plan.item_size,
                         "target folder inside source folder"
                     );
                     if (!release_result) {
-                        co_return std::unexpected(release_result.error());
+                        co_return co_await return_release_error(release_result.error());
                     }
                     released_copy_size += plan.item_size;
                     continue;
@@ -819,12 +826,12 @@ namespace disk::file {
                 auto root_name = plan.root.getValueOfName();
                 if (occupied_root_folder_names.contains(root_name)) {
                     Logger::Warn() << "Target folder already has folder with same name, skipping: " << root_name;
-                    auto release_result = co_await release_copy_quota(
+                    auto release_result = co_await release_copy_reservation(
                         plan.item_size,
                         "folder name conflict"
                     );
                     if (!release_result) {
-                        co_return std::unexpected(release_result.error());
+                        co_return co_await return_release_error(release_result.error());
                     }
                     released_copy_size += plan.item_size;
                     continue;
@@ -855,12 +862,12 @@ namespace disk::file {
                         content_query_failed = true;
                     }
                     if (content_query_failed) {
-                        auto release_result = co_await release_copy_quota(
+                        auto release_result = co_await release_copy_reservation(
                             plan.item_size,
                             "folder content query failed"
                         );
                         if (!release_result) {
-                            co_return std::unexpected(release_result.error());
+                            co_return co_await return_release_error(release_result.error());
                         }
                         released_copy_size += plan.item_size;
                         continue;
@@ -878,12 +885,12 @@ namespace disk::file {
                     }
                 }
                 if (missing_content) {
-                    auto release_result = co_await release_copy_quota(
+                    auto release_result = co_await release_copy_reservation(
                         plan.item_size,
                         "folder content missing"
                     );
                     if (!release_result) {
-                        co_return std::unexpected(release_result.error());
+                        co_return co_await return_release_error(release_result.error());
                     }
                     released_copy_size += plan.item_size;
                     continue;
@@ -1016,6 +1023,15 @@ namespace disk::file {
                             );
                         }
 
+                        auto commit_quota_result = co_await quota_service.CommitReservedToUsed(
+                            transaction,
+                            user_id,
+                            plan.item_size
+                        );
+                        if (!commit_quota_result) {
+                            co_return std::unexpected(commit_quota_result.error());
+                        }
+
                         co_return {};
                     }
                 );
@@ -1023,12 +1039,12 @@ namespace disk::file {
                 if (!tx_result) {
                     Logger::Error() << "Folder copy transaction failed: folder_id=" << folder_id
                                     << ", error=" << tx_result.error().message;
-                    auto release_result = co_await release_copy_quota(
+                    auto release_result = co_await release_copy_reservation(
                         plan.item_size,
                         "folder transaction failed"
                     );
                     if (!release_result) {
-                        co_return std::unexpected(release_result.error());
+                        co_return co_await return_release_error(release_result.error());
                     }
                     released_copy_size += plan.item_size;
                     continue;

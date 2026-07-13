@@ -79,6 +79,24 @@ def user_quota() -> dict[str, int]:
     return {key: int(row[key]) for key in ("storage_used", "storage_reserved", "storage_quota")}
 
 
+def unexplained_reserved_bytes() -> int:
+    """Return reserved bytes not explained by in-progress upload tasks."""
+    row = query_one(
+        """
+        SELECT u.storage_reserved - COALESCE(SUM(t.reserved_bytes), 0) AS unexplained_reserved
+        FROM users u
+        LEFT JOIN upload_tasks t ON t.user_id = u.id AND t.status = 0
+        WHERE u.id = %s
+        GROUP BY u.id, u.storage_reserved
+        """,
+        (USER_ID,),
+    )
+    if row is None:
+        log_fail(f"Could not load unexplained reservations for user_id={USER_ID}")
+        print_summary()
+    return int(row["unexplained_reserved"])
+
+
 def init_upload(filename: str, payload: bytes, parent_id: int = 0) -> tuple[str, str, str | None]:
     """Initialize upload and return upload_id, file_hash, instant file id if present."""
     file_hash = md5_bytes(payload)
@@ -188,6 +206,16 @@ def copy_file(file_id: int, target_folder_id: int = 0) -> list[dict[str, int]]:
 
 def copy_items(file_ids: list[int], folder_ids: list[int], target_folder_id: int = 0) -> dict[str, object]:
     """Copy files/folders and return response data."""
+    resp = copy_items_response(file_ids, folder_ids, target_folder_id)
+    if resp.status_code != 200 or json_field(resp.text, "code") != "0":
+        log_fail(f"copy items failed: file_ids={file_ids}, folder_ids={folder_ids}")
+        print(resp.text)
+        print_summary()
+    return json.loads(resp.text).get("data", {})
+
+
+def copy_items_response(file_ids: list[int], folder_ids: list[int], target_folder_id: int = 0):
+    """Copy files/folders and return the raw HTTP response."""
     resp = fetch(
         "/api/file/copy",
         method="POST",
@@ -195,11 +223,7 @@ def copy_items(file_ids: list[int], folder_ids: list[int], target_folder_id: int
         json_body={"file_ids": file_ids, "folder_ids": folder_ids, "target_folder_id": target_folder_id},
     )
     save_evidence(f"{EVIDENCE_PREFIX}-copy-{unique_name()}.json", resp.text)
-    if resp.status_code != 200 or json_field(resp.text, "code") != "0":
-        log_fail(f"copy items failed: file_ids={file_ids}, folder_ids={folder_ids}")
-        print(resp.text)
-        print_summary()
-    return json.loads(resp.text).get("data", {})
+    return resp
 
 
 def delete_file_to_trash(file_id: int) -> int:
@@ -351,6 +375,55 @@ def install_folder_delete_failure_trigger(folder_id: int):
         f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
     )
     return lambda: drop_failure_trigger("folders", trigger_name, function_name)
+
+
+def install_copy_file_insert_failure_trigger(target_folder_id: int, file_name: str):
+    """Install a trigger that fails copied file insertion for one target/name."""
+    function_name = safe_test_identifier("fail_copy_file_insert_fn")
+    trigger_name = safe_test_identifier("fail_copy_file_insert_trg")
+    escaped_file_name = file_name.replace("'", "''")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF NEW.folder_id = {int(target_folder_id)} AND NEW.name = '{escaped_file_name}' THEN
+                RAISE EXCEPTION 'injected copy file insert failure for %', NEW.name;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE INSERT ON files '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("files", trigger_name, function_name)
+
+
+def install_reserved_release_failure_trigger(user_id: int):
+    """Install a trigger that fails reservation releases but not reserve or commit updates."""
+    function_name = safe_test_identifier("fail_reserved_release_fn")
+    trigger_name = safe_test_identifier("fail_reserved_release_trg")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF NEW.id = {int(user_id)}
+               AND NEW.storage_reserved < OLD.storage_reserved
+               AND NEW.storage_used = OLD.storage_used THEN
+                RAISE EXCEPTION 'injected reserved release failure for user %', NEW.id;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE UPDATE ON users '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("users", trigger_name, function_name)
 
 
 def assert_delete_transaction_error(label: str, resp) -> None:
@@ -695,6 +768,7 @@ def test_copy_ref_count_and_quota() -> None:
     assert_equal("copied file reuses source content_id", int(copied_file["content_id"]), content_id)
     assert_numeric_delta("copy increments ref_count", before_ref, after_ref, 1)
     assert_numeric_delta("copy increases used storage by logical file size", quota_before["storage_used"], quota_after["storage_used"], len(payload))
+    assert_equal("copy commits and clears reservation", quota_after["storage_reserved"], quota_before["storage_reserved"])
 
 
 def test_upload_quota_rejection_no_leak() -> None:
@@ -759,10 +833,11 @@ def test_copy_quota_rejection_no_side_effects() -> None:
     assert_equal("copy quota rejection creates no files", after_file_count, before_file_count)
     assert_equal("copy quota rejection leaves ref_count unchanged", after_ref, before_ref)
     assert_equal("copy quota rejection leaves saturated used unchanged", quota_after_reject["storage_used"], saturated["storage_used"])
+    assert_equal("copy quota rejection leaves reserved unchanged", quota_after_reject["storage_reserved"], saturated["storage_reserved"])
 
 
 def test_copy_conflict_releases_quota_and_refs_only_successes() -> None:
-    """Verify conflict skips release pre-consumed copy quota and avoid ref-count drift."""
+    """Verify conflict skips release reserved copy bytes and avoids ref-count drift."""
     log_section("Copy Conflict Releases Quota")
     conflict_payload = f"copy-conflict-{unique_name()}".encode()
     copied_payload = f"copy-no-conflict-{unique_name()}".encode()
@@ -795,10 +870,11 @@ def test_copy_conflict_releases_quota_and_refs_only_successes() -> None:
         quota_after["storage_used"],
         len(copied_payload),
     )
+    assert_equal("copy conflict releases reserved bytes", quota_after["storage_reserved"], quota_before["storage_reserved"])
 
 
 def test_copy_folder_skip_releases_quota_and_refs() -> None:
-    """Verify folder skip after quota pre-consumption does not drift quota or refs."""
+    """Verify folder skip after reservation does not drift quota or refs."""
     log_section("Copy Folder Skip Releases Quota")
     parent_folder_id = create_folder(f"safety_folder_skip_parent_{unique_name()}")
     child_folder_id = create_folder(f"safety_folder_skip_child_{unique_name()}", parent_folder_id)
@@ -820,8 +896,145 @@ def test_copy_folder_skip_releases_quota_and_refs() -> None:
     assert_equal("folder skip reports zero copied files", int(data.get("copied_file_count", 0)), 0)
     assert_equal("folder skip leaves ref_count unchanged", after_ref, before_ref)
     assert_equal("folder skip leaves storage_used unchanged", quota_after["storage_used"], quota_before["storage_used"])
+    assert_equal("folder skip releases reserved bytes", quota_after["storage_reserved"], quota_before["storage_reserved"])
     assert_equal("folder skip creates no folders", after_folder_count, before_folder_count)
     assert_equal("folder skip creates no files", after_file_count, before_file_count)
+
+
+def test_copy_file_insert_failure_rolls_back_reservation_and_retries() -> None:
+    """Verify copied file insert failure rolls back refs/used commit, releases reservation, and can retry."""
+    log_section("Copy File Insert Failure Releases Reservation And Retries")
+    payload = f"copy-insert-failure-{unique_name()}".encode()
+    source_name = f"safety_copy_insert_fail_{unique_name()}.bin"
+    source_file_id = upload_file(source_name, payload)
+    source_content_id = int(file_row(source_file_id)["content_id"])
+    target_folder_id = create_folder(f"safety_copy_insert_fail_target_{unique_name()}")
+
+    before_ref = int(content_row(source_content_id)["ref_count"])
+    quota_before = user_quota()
+    drop_trigger = install_copy_file_insert_failure_trigger(target_folder_id, source_name)
+    try:
+        resp = copy_items_response([source_file_id], [], target_folder_id)
+    finally:
+        drop_trigger()
+
+    quota_after_failure = user_quota()
+    after_failure_ref = int(content_row(source_content_id)["ref_count"])
+    copied_count_after_failure = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND folder_id = %s AND name = %s",
+            (USER_ID, target_folder_id, source_name),
+        ) or 0
+    )
+
+    assert_equal("copy insert failure keeps success response for partial-copy contract", resp.status_code, 200)
+    assert_equal("copy insert failure returns public success envelope", json_field(resp.text, "code"), "0")
+    assert_equal("copy insert failure reports zero copied files", json_field(resp.text, "data.copied_file_count"), "0")
+    assert_equal("copy insert failure creates no copied row", copied_count_after_failure, 0)
+    assert_equal("copy insert failure rolls back ref_count", after_failure_ref, before_ref)
+    assert_equal("copy insert failure leaves used storage unchanged", quota_after_failure["storage_used"], quota_before["storage_used"])
+    assert_equal("copy insert failure releases reserved bytes", quota_after_failure["storage_reserved"], quota_before["storage_reserved"])
+
+    retry_mappings = copy_file(source_file_id, target_folder_id)
+    quota_after_retry = user_quota()
+    after_retry_ref = int(content_row(source_content_id)["ref_count"])
+    copied_count_after_retry = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND folder_id = %s AND name = %s",
+            (USER_ID, target_folder_id, source_name),
+        ) or 0
+    )
+
+    assert_equal("copy retry creates one mapping", len(retry_mappings), 1)
+    assert_equal("copy retry creates exactly one copied row", copied_count_after_retry, 1)
+    assert_numeric_delta("copy retry increments ref_count once", before_ref, after_retry_ref, 1)
+    assert_numeric_delta(
+        "copy retry commits one used-storage delta",
+        quota_before["storage_used"],
+        quota_after_retry["storage_used"],
+        len(payload),
+    )
+    assert_equal("copy retry leaves no lingering reservation", quota_after_retry["storage_reserved"], quota_before["storage_reserved"])
+
+
+def test_copy_reserved_release_failure_stops_and_exposes_orphan() -> None:
+    """Verify reserved-release failure stops later copy work and leaves reconciliation-visible reservation."""
+    log_section("Copy Reserved Release Failure Stops And Exposes Orphan")
+    conflict_payload = f"copy-release-fail-conflict-{unique_name()}".encode()
+    copied_payload = f"copy-release-fail-ok-{unique_name()}".encode()
+    folder_payload = f"copy-release-fail-folder-{unique_name()}".encode()
+    conflict_name = f"safety_copy_release_conflict_{unique_name()}.bin"
+    copied_name = f"safety_copy_release_ok_{unique_name()}.bin"
+    folder_name = f"safety_copy_release_folder_{unique_name()}"
+
+    conflict_file_id = upload_file(conflict_name, conflict_payload)
+    copied_file_id = upload_file(copied_name, copied_payload)
+    conflict_content_id = int(file_row(conflict_file_id)["content_id"])
+    copied_content_id = int(file_row(copied_file_id)["content_id"])
+    source_folder_id = create_folder(folder_name)
+    folder_file_id = upload_file(f"safety_copy_release_folder_file_{unique_name()}.bin", folder_payload, source_folder_id)
+    folder_content_id = int(file_row(folder_file_id)["content_id"])
+
+    target_folder_id = create_folder(f"safety_copy_release_target_{unique_name()}")
+    upload_file(conflict_name, f"target-conflict-{unique_name()}".encode(), target_folder_id)
+
+    conflict_ref_before = int(content_row(conflict_content_id)["ref_count"])
+    copied_ref_before = int(content_row(copied_content_id)["ref_count"])
+    folder_ref_before = int(content_row(folder_content_id)["ref_count"])
+    quota_before = user_quota()
+    unexplained_before = unexplained_reserved_bytes()
+
+    drop_trigger = install_reserved_release_failure_trigger(USER_ID)
+    try:
+        resp = copy_items_response([conflict_file_id, copied_file_id], [source_folder_id], target_folder_id)
+    finally:
+        drop_trigger()
+
+    quota_after = user_quota()
+    unexplained_after = unexplained_reserved_bytes()
+    conflict_ref_after = int(content_row(conflict_content_id)["ref_count"])
+    copied_ref_after = int(content_row(copied_content_id)["ref_count"])
+    folder_ref_after = int(content_row(folder_content_id)["ref_count"])
+    copied_file_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND folder_id = %s AND name = %s",
+            (USER_ID, target_folder_id, copied_name),
+        ) or 0
+    )
+    copied_folder_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM folders WHERE user_id = %s AND parent_id = %s AND name = %s",
+            (USER_ID, target_folder_id, folder_name),
+        ) or 0
+    )
+    expected_orphaned_bytes = len(conflict_payload) + len(folder_payload)
+
+    assert_equal("reserved release failure returns error", json_field(resp.text, "code") != "0", True)
+    assert_equal("reserved release failure keeps prior copied file visible", copied_file_count, 1)
+    assert_equal("reserved release failure stops before folder copy", copied_folder_count, 0)
+    assert_equal("reserved release failure leaves conflicting ref_count unchanged", conflict_ref_after, conflict_ref_before)
+    assert_numeric_delta("reserved release failure commits successful ref_count", copied_ref_before, copied_ref_after, 1)
+    assert_equal("reserved release failure does not copy later folder refs", folder_ref_after, folder_ref_before)
+    assert_numeric_delta(
+        "reserved release failure commits only successful file bytes to used",
+        quota_before["storage_used"],
+        quota_after["storage_used"],
+        len(copied_payload),
+    )
+    assert_numeric_delta(
+        "reserved release failure leaves unprocessed/skipped bytes reserved",
+        quota_before["storage_reserved"],
+        quota_after["storage_reserved"],
+        expected_orphaned_bytes,
+    )
+    assert_numeric_delta(
+        "reserved release failure is visible as unexplained reservation",
+        unexplained_before,
+        unexplained_after,
+        expected_orphaned_bytes,
+    )
+
+    execute("UPDATE users SET storage_reserved = %s WHERE id = %s", (quota_before["storage_reserved"], USER_ID))
 
 
 def test_soft_delete_preserves_ref_count_storage_used_and_blob() -> None:
@@ -1197,6 +1410,8 @@ def main() -> None:
     test_copy_quota_rejection_no_side_effects()
     test_copy_conflict_releases_quota_and_refs_only_successes()
     test_copy_folder_skip_releases_quota_and_refs()
+    test_copy_file_insert_failure_rolls_back_reservation_and_retries()
+    test_copy_reserved_release_failure_stops_and_exposes_orphan()
     test_soft_delete_preserves_ref_count_storage_used_and_blob()
     test_move_to_trash_trash_insert_failure_preserves_active_state()
     test_move_to_trash_active_file_delete_failure_rolls_back_trash_and_share_cleanup()

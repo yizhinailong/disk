@@ -44,6 +44,17 @@ namespace disk::quota {
         auto operator=(QuotaService&&) -> QuotaService& = default;
 
         [[nodiscard]]
+        auto ReserveStorage(uint64_t user_id, uint64_t bytes) const
+            -> drogon::Task<Result<void>>;
+
+        [[nodiscard]]
+        auto ReserveStorage(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t user_id,
+            uint64_t bytes
+        ) const -> drogon::Task<Result<void>>;
+
+        [[nodiscard]]
         auto ReserveUploadStorage(uint64_t user_id, uint64_t bytes) const
             -> drogon::Task<Result<void>>;
 
