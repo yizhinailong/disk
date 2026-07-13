@@ -475,7 +475,7 @@ def create_share_fixture(file_ids: list[int] | None = None, folder_ids: list[int
         VALUES (%s, %s, 'download', 0, 0, 1, NOW(), NOW())
         RETURNING id
         """,
-        (f"trash_cleanup_{unique_name()}", USER_ID),
+        (unique_name("trash"), USER_ID),
     )
     if row is None:
         log_fail("share fixture created")
