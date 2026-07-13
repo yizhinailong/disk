@@ -314,6 +314,8 @@ This phase should wait until upload/content/trash lifecycle boundaries are stabl
 
 ## 6.2 Move upload assembly to staging storage
 
+Completion status: closed by `refactor(upload): move assembly to staging storage`.
+
 - [x] Make chunk writes depend on staging storage.
 - [x] Make chunk assembly depend on staging storage.
 - [x] Make temp cleanup depend on staging storage.
