@@ -353,12 +353,21 @@ Completion status: closed by `refactor(download): introduce blob download descri
 
 ## 6.5 Document object storage compatibility
 
-Completion status: closed by `docs/backend-refactor-decisions.md`. S3/MinIO compatibility is documented as a Phase 6 design constraint for now, not a near-term implementation target; runtime support remains deferred until the remaining storage/download contracts are explicit.
+Completion status: closed by `docs/backend-refactor-decisions.md` and `feat(storage): add S3 object storage backend`. S3/MinIO compatibility was first documented as a Phase 6 design constraint; runtime support now exists as a configurable object-storage backend while local filesystem remains supported.
 
 - [x] Document how S3/MinIO would implement staging storage.
 - [x] Document how S3/MinIO would implement blob storage.
 - [x] Document consistency tradeoffs for DB commit vs object-store side effects.
-- [x] Decide whether object storage compatibility is a near-term requirement or only a design constraint: design constraint for now.
+- [x] Decide whether object storage compatibility is a near-term requirement or only a design constraint: runtime support is now implemented as a configurable S3/MinIO-compatible backend.
+
+## 6.6 Implement S3/MinIO object storage adapter
+
+Completion status: closed by `feat(storage): add S3 object storage backend`.
+
+- [x] Add a configurable S3/MinIO-compatible object storage backend while preserving the local filesystem backend.
+- [x] Implement object-store final blob promotion, existence/size metadata, range-ready download streams, and idempotent delete.
+- [x] Keep upload staging compatible with the existing local temporary upload lifecycle.
+- [x] Add S3 adapter configuration, MinIO compose support, unit tests, and environment-gated integration coverage.
 
 ---
 
@@ -402,7 +411,8 @@ Phase 5: Transaction Boundary Expansion
                               ▼
 Phase 6: Storage Abstraction Evolution
 ├─ UploadStagingStorage
-└─ BlobStore
+├─ BlobStore
+└─ S3/MinIO object storage adapter
 ```
 
 ---

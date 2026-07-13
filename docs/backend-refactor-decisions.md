@@ -16,7 +16,7 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 | Share download metadata | Successful share content download updates share-level and file-level metadata | Implemented | Closed |
 | JWT enforcement | Global JWT with explicit public exemptions | Implemented with public exemptions and route-level duplicate removal | Closed |
 | Redis rate-limit failure | Fail-open for now | Implemented explicitly for current rate-limit families | Closed for current policy; future fail-closed hardening would require a new decision |
-| Object storage compatibility | Design constraint for now, not a near-term implementation target | Local filesystem implementation with explicit staging, blob, and download descriptor boundaries | Runtime S3/MinIO support remains deferred |
+| Object storage compatibility | S3/MinIO-compatible object storage is supported as a configurable runtime backend while local filesystem remains the default/supported backend | Implemented with explicit staging, blob, and download descriptor boundaries | Closed |
 
 ## Decision: `storage_used` means logical per-user bytes
 
@@ -168,11 +168,11 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 
 **Follow-up status:** Implemented and closed for current rate-limit families. Any future fail-closed policy requires a new abuse/security hardening decision.
 
-## Decision: object storage compatibility is a design constraint for now
+## Decision: object storage compatibility is supported as a configurable backend
 
-**Current implementation behavior:** The runtime implementation remains local-filesystem based. `UploadStagingStorage` separates temporary upload-session concerns from final blob storage concerns, `BlobStore` separates final content blob promotion, read, existence, size, and deletion semantics, and download responses use descriptor-oriented blob contracts instead of controller-local filesystem assumptions.
+**Current implementation behavior:** The runtime implementation supports both local filesystem storage and a configurable S3/MinIO-compatible object-storage backend. `UploadStagingStorage` separates temporary upload-session concerns from final blob storage concerns, `BlobStore` separates final content blob promotion, read, existence, size, and deletion semantics, and download responses use descriptor-oriented blob contracts instead of controller-local filesystem assumptions.
 
-**Accepted target behavior:** S3/MinIO compatibility is a Phase 6 design constraint, not a near-term implementation requirement. New storage boundaries should avoid relying on local-only primitives where an object store cannot provide the same guarantee, but this roadmap does not require shipping an S3/MinIO adapter until the remaining download descriptor contracts are explicit.
+**Accepted target behavior:** S3/MinIO compatibility is implemented as a configurable storage backend while preserving the local filesystem backend. Storage boundaries should continue avoiding local-only primitives where an object store cannot provide the same guarantee, and new code should preserve the separation between upload staging, final blob storage, and database lifecycle decisions.
 
 **Expected staging-storage responsibilities for S3/MinIO:** An object-store implementation of `UploadStagingStorage` should store chunks under an upload-session namespace, make repeated chunk writes idempotent for the same upload id and chunk index, assemble chunks into a staging object or multipart upload result, calculate and return MD5/SHA-256 metadata for final validation, discard assembled staging artifacts on validation or DB failure, and clean all per-upload staging keys during cancel/expiry cleanup. It should not create final content blobs, mutate database state, or assume local directory rename semantics.
 
@@ -182,13 +182,13 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 
 **Rejected alternatives:**
 
-- Make S3/MinIO a near-term implementation target now: rejected because download descriptor contracts are still open, so an adapter would either leak local filesystem assumptions or be reworked soon.
+- Make S3/MinIO the only supported backend: rejected because local filesystem storage remains useful for development and simple deployments.
 - Keep object storage entirely out of the design: rejected because Phase 6 is explicitly extracting storage boundaries, and local-only contracts would make a later S3/MinIO adapter unnecessarily risky.
 - Rely on atomic rename semantics for promotion: rejected because object stores generally expose copy/complete/delete operations rather than POSIX rename.
 
-**Implementation impact:** Phase 6 storage/download boundaries keep DB failure compensation explicit around object-store promotion/deletion, move download responses toward blob descriptors so controllers do not need local path knowledge, and leave S3/MinIO adapter implementation deferred. `docs/TODO.md` Phase 6.5 records this documentation task as closed while leaving runtime S3/MinIO support outside the current roadmap.
+**Implementation impact:** Phase 6 storage/download boundaries keep DB failure compensation explicit around object-store promotion/deletion, use blob descriptors so controllers do not need local path knowledge, and provide a configurable S3/MinIO-compatible backend with MinIO-oriented development support.
 
-**Follow-up status:** Decision recorded; runtime S3/MinIO support is deferred and should be tracked as a separate feature if it becomes a near-term target.
+**Follow-up status:** Implemented and closed.
 
 ## Remaining Unresolved Decisions
 
