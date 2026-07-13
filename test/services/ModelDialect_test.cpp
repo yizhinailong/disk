@@ -67,3 +67,10 @@ TEST(ModelDialectTest, GeneratedMetadataDoesNotRetainMySqlUnsignedTypes) {
     EXPECT_EQ(file_source.find("bigint unsigned"), std::string::npos);
     EXPECT_NE(folder_source.find("timestamp without time zone"), std::string::npos);
 }
+
+TEST(ModelDialectTest, ShareQueriesDecodePostgreSqlBooleanExpressionsAsBool) {
+    const auto share_source = ReadTextFile(SourceRoot() / "src" / "services" / "ShareService.cpp");
+
+    EXPECT_NE(share_source.find("[\"is_expired\"].as<bool>()"), std::string::npos);
+    EXPECT_EQ(share_source.find("[\"is_expired\"].as<int>()"), std::string::npos);
+}

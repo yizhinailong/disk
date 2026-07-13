@@ -839,7 +839,7 @@ namespace disk::share {
 
             const auto& row = rows[0];
             auto status = row["status"].as<int>();
-            auto is_expired = row["is_expired"].as<int>() != 0;
+            auto is_expired = row["is_expired"].as<bool>();
             if (status != static_cast<int>(ShareStatus::Active) || is_expired) {
                 co_return std::unexpected(ErrorInfo(ErrorCode::ShareExpired, "Share is not active"));
             }
@@ -885,7 +885,7 @@ namespace disk::share {
 
             const auto& row = rows[0];
             auto status = row["status"].as<int>();
-            auto is_expired = row["is_expired"].as<int>() != 0;
+            auto is_expired = row["is_expired"].as<bool>();
             if (status != static_cast<int>(ShareStatus::Active) || is_expired) {
                 co_return std::unexpected(ErrorInfo(ErrorCode::ShareExpired, "Share is not active"));
             }
@@ -945,7 +945,7 @@ namespace disk::share {
             }
             auto permission = share_rows[0]["permission"].as<std::string>();
             auto status = share_rows[0]["status"].as<int>();
-            auto is_expired = share_rows[0]["is_expired"].as<int>() != 0;
+            auto is_expired = share_rows[0]["is_expired"].as<bool>();
             if (status != static_cast<int>(ShareStatus::Active) || is_expired) {
                 co_return std::unexpected(ErrorInfo(ErrorCode::ShareExpired, "Share is not active"));
             }
