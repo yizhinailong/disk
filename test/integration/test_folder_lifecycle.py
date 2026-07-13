@@ -376,7 +376,7 @@ def test_rename_parent_folder() -> None:
         sys.exit(1)
 
     renamed_path = json_field(body, "data.path")
-    expected_path = f"/{RENAMED_PARENT_FOLDER_NAME}"
+    expected_path = f"/{RENAMED_PARENT_FOLDER_NAME}/"
     if renamed_path != expected_path:
         log_fail(f"Folder rename path mismatch: expected '{expected_path}', got '{renamed_path}'")
         print(body)
