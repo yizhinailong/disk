@@ -13,6 +13,7 @@ set(TEST_SOURCES
     services/HashUtil_test.cpp
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp
+    services/ModelDialect_test.cpp
     services/ContentService_test.cpp
     services/QuotaService_test.cpp
     services/TransactionRunner_test.cpp

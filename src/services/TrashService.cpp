@@ -272,10 +272,10 @@ namespace disk::trash {
 
             trash_items.push_back({
                 .item_type = "file",
-                .item_id = file.getValueOfId(),
+                .item_id = static_cast<uint64_t>(file.getValueOfId()),
                 .item_name = file.getValueOfName(),
-                .item_size = file.getValueOfSize(),
-                .original_folder_id = file.getValueOfFolderId(),
+                .item_size = static_cast<uint64_t>(file.getValueOfSize()),
+                .original_folder_id = static_cast<uint64_t>(file.getValueOfFolderId()),
                 .original_path = file.getValueOfPath(),
                 .content_id = file.getContentId() ? std::optional<uint64_t>(*file.getContentId()) : std::nullopt,
                 .item_data = Json::writeString(builder, item_data),
@@ -295,10 +295,10 @@ namespace disk::trash {
             const auto& plan = plan_it->second;
             trash_items.push_back({
                 .item_type = "folder",
-                .item_id = plan.root.getValueOfId(),
+                .item_id = static_cast<uint64_t>(plan.root.getValueOfId()),
                 .item_name = plan.root.getValueOfName(),
                 .item_size = plan.item_size,
-                .original_folder_id = plan.root.getValueOfParentId(),
+                .original_folder_id = static_cast<uint64_t>(plan.root.getValueOfParentId()),
                 .original_path = plan.root.getValueOfPath(),
                 .content_id = std::nullopt,
                 .item_data = disk::file::utils::BuildFolderSnapshot(plan),

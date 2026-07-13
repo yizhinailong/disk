@@ -98,7 +98,7 @@ namespace disk::file {
             response.name = new_name;
             response.updated_at = updated_at.toDbStringLocal();
 
-            co_await InvalidateFileListCache(user_id, { folder_id });
+            co_await InvalidateFileListCache(user_id, { static_cast<uint64_t>(folder_id) });
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
@@ -950,7 +950,7 @@ namespace disk::file {
                         auto inserted_root = co_await folder_mapper.insert(root_folder);
                         folder_id_map[plan.root.getValueOfId()] = inserted_root.getValueOfId();
                         folder_path_map[plan.root.getValueOfId()] = root_path;
-                        staged_folder_mappings.push_back({ .old_id = plan.root.getValueOfId(), .new_id = inserted_root.getValueOfId() });
+                        staged_folder_mappings.push_back({ .old_id = static_cast<uint64_t>(plan.root.getValueOfId()), .new_id = static_cast<uint64_t>(inserted_root.getValueOfId()) });
                         ++staged_folder_count;
 
                         for (const auto& folder : plan.folders) {
@@ -980,7 +980,7 @@ namespace disk::file {
                             auto inserted_folder = co_await folder_mapper.insert(copied_folder);
                             folder_id_map[folder.getValueOfId()] = inserted_folder.getValueOfId();
                             folder_path_map[folder.getValueOfId()] = folder_path;
-                            staged_folder_mappings.push_back({ .old_id = folder.getValueOfId(), .new_id = inserted_folder.getValueOfId() });
+                            staged_folder_mappings.push_back({ .old_id = static_cast<uint64_t>(folder.getValueOfId()), .new_id = static_cast<uint64_t>(inserted_folder.getValueOfId()) });
                             ++staged_folder_count;
                         }
 
@@ -1009,7 +1009,7 @@ namespace disk::file {
                             copied_file.setUpdatedAt(trantor::Date::now());
 
                             auto inserted_file = co_await file_mapper.insert(copied_file);
-                            staged_file_mappings.push_back({ .old_id = file.getValueOfId(), .new_id = inserted_file.getValueOfId() });
+                            staged_file_mappings.push_back({ .old_id = static_cast<uint64_t>(file.getValueOfId()), .new_id = static_cast<uint64_t>(inserted_file.getValueOfId()) });
                             ++staged_file_count;
                             staged_copied_size += file.getValueOfSize();
                         }

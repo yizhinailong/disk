@@ -13,3148 +13,2504 @@ using namespace drogon;
 using namespace drogon::orm;
 using namespace drogon_model::disk;
 
-const std::string UploadTasks::Cols::_id = "id";
-const std::string UploadTasks::Cols::_user_id = "user_id";
-const std::string UploadTasks::Cols::_folder_id = "folder_id";
-const std::string UploadTasks::Cols::_filename = "filename";
-const std::string UploadTasks::Cols::_file_size = "file_size";
-const std::string UploadTasks::Cols::_file_hash = "file_hash";
-const std::string UploadTasks::Cols::_chunk_size = "chunk_size";
-const std::string UploadTasks::Cols::_total_chunks = "total_chunks";
-const std::string UploadTasks::Cols::_reserved_bytes = "reserved_bytes";
-const std::string UploadTasks::Cols::_temp_path = "temp_path";
-const std::string UploadTasks::Cols::_status = "status";
-const std::string UploadTasks::Cols::_expires_at = "expires_at";
-const std::string UploadTasks::Cols::_finalized_at = "finalized_at";
-const std::string UploadTasks::Cols::_fail_reason = "fail_reason";
-const std::string UploadTasks::Cols::_created_at = "created_at";
-const std::string UploadTasks::Cols::_updated_at = "updated_at";
+const std::string UploadTasks::Cols::_id = "\"id\"";
+const std::string UploadTasks::Cols::_user_id = "\"user_id\"";
+const std::string UploadTasks::Cols::_folder_id = "\"folder_id\"";
+const std::string UploadTasks::Cols::_filename = "\"filename\"";
+const std::string UploadTasks::Cols::_file_size = "\"file_size\"";
+const std::string UploadTasks::Cols::_file_hash = "\"file_hash\"";
+const std::string UploadTasks::Cols::_chunk_size = "\"chunk_size\"";
+const std::string UploadTasks::Cols::_total_chunks = "\"total_chunks\"";
+const std::string UploadTasks::Cols::_reserved_bytes = "\"reserved_bytes\"";
+const std::string UploadTasks::Cols::_temp_path = "\"temp_path\"";
+const std::string UploadTasks::Cols::_status = "\"status\"";
+const std::string UploadTasks::Cols::_expires_at = "\"expires_at\"";
+const std::string UploadTasks::Cols::_finalized_at = "\"finalized_at\"";
+const std::string UploadTasks::Cols::_fail_reason = "\"fail_reason\"";
+const std::string UploadTasks::Cols::_created_at = "\"created_at\"";
+const std::string UploadTasks::Cols::_updated_at = "\"updated_at\"";
 const std::string UploadTasks::primaryKeyName = "id";
 const bool UploadTasks::hasPrimaryKey = true;
-const std::string UploadTasks::tableName = "upload_tasks";
+const std::string UploadTasks::tableName = "\"upload_tasks\"";
 
-const std::vector<typename UploadTasks::MetaData> UploadTasks::metaData_={
-{"id","std::string","varchar(64)",64,0,1,1},
-{"user_id","uint64_t","bigint unsigned",8,0,0,1},
-{"folder_id","uint64_t","bigint unsigned",8,0,0,1},
-{"filename","std::string","varchar(255)",255,0,0,1},
-{"file_size","uint64_t","bigint unsigned",8,0,0,1},
-{"file_hash","std::string","char(32)",0,0,0,1},
-{"chunk_size","uint32_t","int unsigned",4,0,0,1},
-{"total_chunks","uint32_t","int unsigned",4,0,0,1},
-{"reserved_bytes","uint64_t","bigint unsigned",8,0,0,1},
-{"temp_path","std::string","varchar(512)",512,0,0,1},
-{"status","int8_t","tinyint",1,0,0,1},
-{"expires_at","::trantor::Date","datetime",0,0,0,1},
-{"finalized_at","::trantor::Date","datetime",0,0,0,0},
-{"fail_reason","std::string","varchar(512)",512,0,0,0},
-{"created_at","::trantor::Date","datetime",0,0,0,1},
-{"updated_at","::trantor::Date","datetime",0,0,0,1}
-};
-const std::string &UploadTasks::getColumnName(size_t index) noexcept(false)
-{
-    assert(index < metaData_.size());
-    return metaData_[index].colName_;
+const std::vector<typename UploadTasks::MetaData> UploadTasks::metaData_ = {
+    {"id", "std::string", "character varying", 64, 0, 1, 1},
+    {"user_id", "int64_t", "bigint", 8, 0, 0, 1},
+    {"folder_id", "int64_t", "bigint", 8, 0, 0, 1},
+    {"filename", "std::string", "character varying", 255, 0, 0, 1},
+    {"file_size", "int64_t", "bigint", 8, 0, 0, 1},
+    {"file_hash", "std::string", "character", 0, 0, 0, 1},
+    {"chunk_size", "int32_t", "integer", 4, 0, 0, 1},
+    {"total_chunks", "int32_t", "integer", 4, 0, 0, 1},
+    {"reserved_bytes", "int64_t", "bigint", 8, 0, 0, 1},
+    {"temp_path", "std::string", "character varying", 512, 0, 0, 1},
+    {"status", "short", "smallint", 2, 0, 0, 1},
+    {"expires_at", "::trantor::Date", "timestamp without time zone", 0, 0, 0,
+     1},
+    {"finalized_at", "::trantor::Date", "timestamp without time zone", 0, 0, 0,
+     0},
+    {"fail_reason", "std::string", "character varying", 512, 0, 0, 0},
+    {"created_at", "::trantor::Date", "timestamp without time zone", 0, 0, 0,
+     1},
+    {"updated_at", "::trantor::Date", "timestamp without time zone", 0, 0, 0,
+     1}};
+const std::string &UploadTasks::getColumnName(size_t index) noexcept(false) {
+  assert(index < metaData_.size());
+  return metaData_[index].colName_;
 }
-UploadTasks::UploadTasks(const Row &r, const ssize_t indexOffset) noexcept
-{
-    if(indexOffset < 0)
-    {
-        if(!r["id"].isNull())
-        {
-            id_=std::make_shared<std::string>(r["id"].as<std::string>());
-        }
-        if(!r["user_id"].isNull())
-        {
-            userId_=std::make_shared<uint64_t>(r["user_id"].as<uint64_t>());
-        }
-        if(!r["folder_id"].isNull())
-        {
-            folderId_=std::make_shared<uint64_t>(r["folder_id"].as<uint64_t>());
-        }
-        if(!r["filename"].isNull())
-        {
-            filename_=std::make_shared<std::string>(r["filename"].as<std::string>());
-        }
-        if(!r["file_size"].isNull())
-        {
-            fileSize_=std::make_shared<uint64_t>(r["file_size"].as<uint64_t>());
-        }
-        if(!r["file_hash"].isNull())
-        {
-            fileHash_=std::make_shared<std::string>(r["file_hash"].as<std::string>());
-        }
-        if(!r["chunk_size"].isNull())
-        {
-            chunkSize_=std::make_shared<uint32_t>(r["chunk_size"].as<uint32_t>());
-        }
-        if(!r["total_chunks"].isNull())
-        {
-            totalChunks_=std::make_shared<uint32_t>(r["total_chunks"].as<uint32_t>());
-        }
-        if(!r["reserved_bytes"].isNull())
-        {
-            reservedBytes_=std::make_shared<uint64_t>(r["reserved_bytes"].as<uint64_t>());
-        }
-        if(!r["temp_path"].isNull())
-        {
-            tempPath_=std::make_shared<std::string>(r["temp_path"].as<std::string>());
-        }
-        if(!r["status"].isNull())
-        {
-            status_=std::make_shared<int8_t>(r["status"].as<int8_t>());
-        }
-        if(!r["expires_at"].isNull())
-        {
-            auto timeStr = r["expires_at"].as<std::string>();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                expiresAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-        if(!r["finalized_at"].isNull())
-        {
-            auto timeStr = r["finalized_at"].as<std::string>();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                finalizedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-        if(!r["fail_reason"].isNull())
-        {
-            failReason_=std::make_shared<std::string>(r["fail_reason"].as<std::string>());
-        }
-        if(!r["created_at"].isNull())
-        {
-            auto timeStr = r["created_at"].as<std::string>();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-        if(!r["updated_at"].isNull())
-        {
-            auto timeStr = r["updated_at"].as<std::string>();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                updatedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
+UploadTasks::UploadTasks(const Row &r, const ssize_t indexOffset) noexcept {
+  if (indexOffset < 0) {
+    if (!r["id"].isNull()) {
+      id_ = std::make_shared<std::string>(r["id"].as<std::string>());
     }
-    else
-    {
-        size_t offset = (size_t)indexOffset;
-        if(offset + 16 > r.size())
-        {
-            LOG_FATAL << "Invalid SQL result for this model";
-            return;
-        }
-        size_t index;
-        index = offset + 0;
-        if(!r[index].isNull())
-        {
-            id_=std::make_shared<std::string>(r[index].as<std::string>());
-        }
-        index = offset + 1;
-        if(!r[index].isNull())
-        {
-            userId_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
-        }
-        index = offset + 2;
-        if(!r[index].isNull())
-        {
-            folderId_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
-        }
-        index = offset + 3;
-        if(!r[index].isNull())
-        {
-            filename_=std::make_shared<std::string>(r[index].as<std::string>());
-        }
-        index = offset + 4;
-        if(!r[index].isNull())
-        {
-            fileSize_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
-        }
-        index = offset + 5;
-        if(!r[index].isNull())
-        {
-            fileHash_=std::make_shared<std::string>(r[index].as<std::string>());
-        }
-        index = offset + 6;
-        if(!r[index].isNull())
-        {
-            chunkSize_=std::make_shared<uint32_t>(r[index].as<uint32_t>());
-        }
-        index = offset + 7;
-        if(!r[index].isNull())
-        {
-            totalChunks_=std::make_shared<uint32_t>(r[index].as<uint32_t>());
-        }
-        index = offset + 8;
-        if(!r[index].isNull())
-        {
-            reservedBytes_=std::make_shared<uint64_t>(r[index].as<uint64_t>());
-        }
-        index = offset + 9;
-        if(!r[index].isNull())
-        {
-            tempPath_=std::make_shared<std::string>(r[index].as<std::string>());
-        }
-        index = offset + 10;
-        if(!r[index].isNull())
-        {
-            status_=std::make_shared<int8_t>(r[index].as<int8_t>());
-        }
-        index = offset + 11;
-        if(!r[index].isNull())
-        {
-            auto timeStr = r[index].as<std::string>();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                expiresAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-        index = offset + 12;
-        if(!r[index].isNull())
-        {
-            auto timeStr = r[index].as<std::string>();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                finalizedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-        index = offset + 13;
-        if(!r[index].isNull())
-        {
-            failReason_=std::make_shared<std::string>(r[index].as<std::string>());
-        }
-        index = offset + 14;
-        if(!r[index].isNull())
-        {
-            auto timeStr = r[index].as<std::string>();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-        index = offset + 15;
-        if(!r[index].isNull())
-        {
-            auto timeStr = r[index].as<std::string>();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                updatedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
+    if (!r["user_id"].isNull()) {
+      userId_ = std::make_shared<int64_t>(r["user_id"].as<int64_t>());
     }
-
+    if (!r["folder_id"].isNull()) {
+      folderId_ = std::make_shared<int64_t>(r["folder_id"].as<int64_t>());
+    }
+    if (!r["filename"].isNull()) {
+      filename_ =
+          std::make_shared<std::string>(r["filename"].as<std::string>());
+    }
+    if (!r["file_size"].isNull()) {
+      fileSize_ = std::make_shared<int64_t>(r["file_size"].as<int64_t>());
+    }
+    if (!r["file_hash"].isNull()) {
+      fileHash_ =
+          std::make_shared<std::string>(r["file_hash"].as<std::string>());
+    }
+    if (!r["chunk_size"].isNull()) {
+      chunkSize_ = std::make_shared<int32_t>(r["chunk_size"].as<int32_t>());
+    }
+    if (!r["total_chunks"].isNull()) {
+      totalChunks_ = std::make_shared<int32_t>(r["total_chunks"].as<int32_t>());
+    }
+    if (!r["reserved_bytes"].isNull()) {
+      reservedBytes_ =
+          std::make_shared<int64_t>(r["reserved_bytes"].as<int64_t>());
+    }
+    if (!r["temp_path"].isNull()) {
+      tempPath_ =
+          std::make_shared<std::string>(r["temp_path"].as<std::string>());
+    }
+    if (!r["status"].isNull()) {
+      status_ = std::make_shared<short>(r["status"].as<short>());
+    }
+    if (!r["expires_at"].isNull()) {
+      auto timeStr = r["expires_at"].as<std::string>();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        expiresAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+    if (!r["finalized_at"].isNull()) {
+      auto timeStr = r["finalized_at"].as<std::string>();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        finalizedAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+    if (!r["fail_reason"].isNull()) {
+      failReason_ =
+          std::make_shared<std::string>(r["fail_reason"].as<std::string>());
+    }
+    if (!r["created_at"].isNull()) {
+      auto timeStr = r["created_at"].as<std::string>();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        createdAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+    if (!r["updated_at"].isNull()) {
+      auto timeStr = r["updated_at"].as<std::string>();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        updatedAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  } else {
+    size_t offset = (size_t)indexOffset;
+    if (offset + 16 > r.size()) {
+      LOG_FATAL << "Invalid SQL result for this model";
+      return;
+    }
+    size_t index;
+    index = offset + 0;
+    if (!r[index].isNull()) {
+      id_ = std::make_shared<std::string>(r[index].as<std::string>());
+    }
+    index = offset + 1;
+    if (!r[index].isNull()) {
+      userId_ = std::make_shared<int64_t>(r[index].as<int64_t>());
+    }
+    index = offset + 2;
+    if (!r[index].isNull()) {
+      folderId_ = std::make_shared<int64_t>(r[index].as<int64_t>());
+    }
+    index = offset + 3;
+    if (!r[index].isNull()) {
+      filename_ = std::make_shared<std::string>(r[index].as<std::string>());
+    }
+    index = offset + 4;
+    if (!r[index].isNull()) {
+      fileSize_ = std::make_shared<int64_t>(r[index].as<int64_t>());
+    }
+    index = offset + 5;
+    if (!r[index].isNull()) {
+      fileHash_ = std::make_shared<std::string>(r[index].as<std::string>());
+    }
+    index = offset + 6;
+    if (!r[index].isNull()) {
+      chunkSize_ = std::make_shared<int32_t>(r[index].as<int32_t>());
+    }
+    index = offset + 7;
+    if (!r[index].isNull()) {
+      totalChunks_ = std::make_shared<int32_t>(r[index].as<int32_t>());
+    }
+    index = offset + 8;
+    if (!r[index].isNull()) {
+      reservedBytes_ = std::make_shared<int64_t>(r[index].as<int64_t>());
+    }
+    index = offset + 9;
+    if (!r[index].isNull()) {
+      tempPath_ = std::make_shared<std::string>(r[index].as<std::string>());
+    }
+    index = offset + 10;
+    if (!r[index].isNull()) {
+      status_ = std::make_shared<short>(r[index].as<short>());
+    }
+    index = offset + 11;
+    if (!r[index].isNull()) {
+      auto timeStr = r[index].as<std::string>();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        expiresAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+    index = offset + 12;
+    if (!r[index].isNull()) {
+      auto timeStr = r[index].as<std::string>();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        finalizedAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+    index = offset + 13;
+    if (!r[index].isNull()) {
+      failReason_ = std::make_shared<std::string>(r[index].as<std::string>());
+    }
+    index = offset + 14;
+    if (!r[index].isNull()) {
+      auto timeStr = r[index].as<std::string>();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        createdAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+    index = offset + 15;
+    if (!r[index].isNull()) {
+      auto timeStr = r[index].as<std::string>();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        updatedAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  }
 }
 
-UploadTasks::UploadTasks(const Json::Value &pJson, const std::vector<std::string> &pMasqueradingVector) noexcept(false)
-{
-    if(pMasqueradingVector.size() != 16)
-    {
-        LOG_ERROR << "Bad masquerading vector";
-        return;
-    }
-    if(!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0]))
-    {
-        dirtyFlag_[0] = true;
-        if(!pJson[pMasqueradingVector[0]].isNull())
-        {
-            id_=std::make_shared<std::string>(pJson[pMasqueradingVector[0]].asString());
-        }
-    }
-    if(!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1]))
-    {
-        dirtyFlag_[1] = true;
-        if(!pJson[pMasqueradingVector[1]].isNull())
-        {
-            userId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[1]].asUInt64());
-        }
-    }
-    if(!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2]))
-    {
-        dirtyFlag_[2] = true;
-        if(!pJson[pMasqueradingVector[2]].isNull())
-        {
-            folderId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[2]].asUInt64());
-        }
-    }
-    if(!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3]))
-    {
-        dirtyFlag_[3] = true;
-        if(!pJson[pMasqueradingVector[3]].isNull())
-        {
-            filename_=std::make_shared<std::string>(pJson[pMasqueradingVector[3]].asString());
-        }
-    }
-    if(!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4]))
-    {
-        dirtyFlag_[4] = true;
-        if(!pJson[pMasqueradingVector[4]].isNull())
-        {
-            fileSize_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[4]].asUInt64());
-        }
-    }
-    if(!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5]))
-    {
-        dirtyFlag_[5] = true;
-        if(!pJson[pMasqueradingVector[5]].isNull())
-        {
-            fileHash_=std::make_shared<std::string>(pJson[pMasqueradingVector[5]].asString());
-        }
-    }
-    if(!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6]))
-    {
-        dirtyFlag_[6] = true;
-        if(!pJson[pMasqueradingVector[6]].isNull())
-        {
-            chunkSize_=std::make_shared<uint32_t>((uint32_t)pJson[pMasqueradingVector[6]].asUInt64());
-        }
-    }
-    if(!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7]))
-    {
-        dirtyFlag_[7] = true;
-        if(!pJson[pMasqueradingVector[7]].isNull())
-        {
-            totalChunks_=std::make_shared<uint32_t>((uint32_t)pJson[pMasqueradingVector[7]].asUInt64());
-        }
-    }
-    if(!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8]))
-    {
-        dirtyFlag_[8] = true;
-        if(!pJson[pMasqueradingVector[8]].isNull())
-        {
-            reservedBytes_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[8]].asUInt64());
-        }
-    }
-    if(!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9]))
-    {
-        dirtyFlag_[9] = true;
-        if(!pJson[pMasqueradingVector[9]].isNull())
-        {
-            tempPath_=std::make_shared<std::string>(pJson[pMasqueradingVector[9]].asString());
-        }
-    }
-    if(!pMasqueradingVector[10].empty() && pJson.isMember(pMasqueradingVector[10]))
-    {
-        dirtyFlag_[10] = true;
-        if(!pJson[pMasqueradingVector[10]].isNull())
-        {
-            status_=std::make_shared<int8_t>((int8_t)pJson[pMasqueradingVector[10]].asInt64());
-        }
-    }
-    if(!pMasqueradingVector[11].empty() && pJson.isMember(pMasqueradingVector[11]))
-    {
-        dirtyFlag_[11] = true;
-        if(!pJson[pMasqueradingVector[11]].isNull())
-        {
-            auto timeStr = pJson[pMasqueradingVector[11]].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                expiresAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-    if(!pMasqueradingVector[12].empty() && pJson.isMember(pMasqueradingVector[12]))
-    {
-        dirtyFlag_[12] = true;
-        if(!pJson[pMasqueradingVector[12]].isNull())
-        {
-            auto timeStr = pJson[pMasqueradingVector[12]].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                finalizedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-    if(!pMasqueradingVector[13].empty() && pJson.isMember(pMasqueradingVector[13]))
-    {
-        dirtyFlag_[13] = true;
-        if(!pJson[pMasqueradingVector[13]].isNull())
-        {
-            failReason_=std::make_shared<std::string>(pJson[pMasqueradingVector[13]].asString());
-        }
-    }
-    if(!pMasqueradingVector[14].empty() && pJson.isMember(pMasqueradingVector[14]))
-    {
-        dirtyFlag_[14] = true;
-        if(!pJson[pMasqueradingVector[14]].isNull())
-        {
-            auto timeStr = pJson[pMasqueradingVector[14]].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-    if(!pMasqueradingVector[15].empty() && pJson.isMember(pMasqueradingVector[15]))
-    {
-        dirtyFlag_[15] = true;
-        if(!pJson[pMasqueradingVector[15]].isNull())
-        {
-            auto timeStr = pJson[pMasqueradingVector[15]].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                updatedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-}
-
-UploadTasks::UploadTasks(const Json::Value &pJson) noexcept(false)
-{
-    if(pJson.isMember("id"))
-    {
-        dirtyFlag_[0]=true;
-        if(!pJson["id"].isNull())
-        {
-            id_=std::make_shared<std::string>(pJson["id"].asString());
-        }
-    }
-    if(pJson.isMember("user_id"))
-    {
-        dirtyFlag_[1]=true;
-        if(!pJson["user_id"].isNull())
-        {
-            userId_=std::make_shared<uint64_t>((uint64_t)pJson["user_id"].asUInt64());
-        }
-    }
-    if(pJson.isMember("folder_id"))
-    {
-        dirtyFlag_[2]=true;
-        if(!pJson["folder_id"].isNull())
-        {
-            folderId_=std::make_shared<uint64_t>((uint64_t)pJson["folder_id"].asUInt64());
-        }
-    }
-    if(pJson.isMember("filename"))
-    {
-        dirtyFlag_[3]=true;
-        if(!pJson["filename"].isNull())
-        {
-            filename_=std::make_shared<std::string>(pJson["filename"].asString());
-        }
-    }
-    if(pJson.isMember("file_size"))
-    {
-        dirtyFlag_[4]=true;
-        if(!pJson["file_size"].isNull())
-        {
-            fileSize_=std::make_shared<uint64_t>((uint64_t)pJson["file_size"].asUInt64());
-        }
-    }
-    if(pJson.isMember("file_hash"))
-    {
-        dirtyFlag_[5]=true;
-        if(!pJson["file_hash"].isNull())
-        {
-            fileHash_=std::make_shared<std::string>(pJson["file_hash"].asString());
-        }
-    }
-    if(pJson.isMember("chunk_size"))
-    {
-        dirtyFlag_[6]=true;
-        if(!pJson["chunk_size"].isNull())
-        {
-            chunkSize_=std::make_shared<uint32_t>((uint32_t)pJson["chunk_size"].asUInt64());
-        }
-    }
-    if(pJson.isMember("total_chunks"))
-    {
-        dirtyFlag_[7]=true;
-        if(!pJson["total_chunks"].isNull())
-        {
-            totalChunks_=std::make_shared<uint32_t>((uint32_t)pJson["total_chunks"].asUInt64());
-        }
-    }
-    if(pJson.isMember("reserved_bytes"))
-    {
-        dirtyFlag_[8]=true;
-        if(!pJson["reserved_bytes"].isNull())
-        {
-            reservedBytes_=std::make_shared<uint64_t>((uint64_t)pJson["reserved_bytes"].asUInt64());
-        }
-    }
-    if(pJson.isMember("temp_path"))
-    {
-        dirtyFlag_[9]=true;
-        if(!pJson["temp_path"].isNull())
-        {
-            tempPath_=std::make_shared<std::string>(pJson["temp_path"].asString());
-        }
-    }
-    if(pJson.isMember("status"))
-    {
-        dirtyFlag_[10]=true;
-        if(!pJson["status"].isNull())
-        {
-            status_=std::make_shared<int8_t>((int8_t)pJson["status"].asInt64());
-        }
-    }
-    if(pJson.isMember("expires_at"))
-    {
-        dirtyFlag_[11]=true;
-        if(!pJson["expires_at"].isNull())
-        {
-            auto timeStr = pJson["expires_at"].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                expiresAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-    if(pJson.isMember("finalized_at"))
-    {
-        dirtyFlag_[12]=true;
-        if(!pJson["finalized_at"].isNull())
-        {
-            auto timeStr = pJson["finalized_at"].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                finalizedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-    if(pJson.isMember("fail_reason"))
-    {
-        dirtyFlag_[13]=true;
-        if(!pJson["fail_reason"].isNull())
-        {
-            failReason_=std::make_shared<std::string>(pJson["fail_reason"].asString());
-        }
-    }
-    if(pJson.isMember("created_at"))
-    {
-        dirtyFlag_[14]=true;
-        if(!pJson["created_at"].isNull())
-        {
-            auto timeStr = pJson["created_at"].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-    if(pJson.isMember("updated_at"))
-    {
-        dirtyFlag_[15]=true;
-        if(!pJson["updated_at"].isNull())
-        {
-            auto timeStr = pJson["updated_at"].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                updatedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-}
-
-void UploadTasks::updateByMasqueradedJson(const Json::Value &pJson,
-                                            const std::vector<std::string> &pMasqueradingVector) noexcept(false)
-{
-    if(pMasqueradingVector.size() != 16)
-    {
-        LOG_ERROR << "Bad masquerading vector";
-        return;
-    }
-    if(!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0]))
-    {
-        if(!pJson[pMasqueradingVector[0]].isNull())
-        {
-            id_=std::make_shared<std::string>(pJson[pMasqueradingVector[0]].asString());
-        }
-    }
-    if(!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1]))
-    {
-        dirtyFlag_[1] = true;
-        if(!pJson[pMasqueradingVector[1]].isNull())
-        {
-            userId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[1]].asUInt64());
-        }
-    }
-    if(!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2]))
-    {
-        dirtyFlag_[2] = true;
-        if(!pJson[pMasqueradingVector[2]].isNull())
-        {
-            folderId_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[2]].asUInt64());
-        }
-    }
-    if(!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3]))
-    {
-        dirtyFlag_[3] = true;
-        if(!pJson[pMasqueradingVector[3]].isNull())
-        {
-            filename_=std::make_shared<std::string>(pJson[pMasqueradingVector[3]].asString());
-        }
-    }
-    if(!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4]))
-    {
-        dirtyFlag_[4] = true;
-        if(!pJson[pMasqueradingVector[4]].isNull())
-        {
-            fileSize_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[4]].asUInt64());
-        }
-    }
-    if(!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5]))
-    {
-        dirtyFlag_[5] = true;
-        if(!pJson[pMasqueradingVector[5]].isNull())
-        {
-            fileHash_=std::make_shared<std::string>(pJson[pMasqueradingVector[5]].asString());
-        }
-    }
-    if(!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6]))
-    {
-        dirtyFlag_[6] = true;
-        if(!pJson[pMasqueradingVector[6]].isNull())
-        {
-            chunkSize_=std::make_shared<uint32_t>((uint32_t)pJson[pMasqueradingVector[6]].asUInt64());
-        }
-    }
-    if(!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7]))
-    {
-        dirtyFlag_[7] = true;
-        if(!pJson[pMasqueradingVector[7]].isNull())
-        {
-            totalChunks_=std::make_shared<uint32_t>((uint32_t)pJson[pMasqueradingVector[7]].asUInt64());
-        }
-    }
-    if(!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8]))
-    {
-        dirtyFlag_[8] = true;
-        if(!pJson[pMasqueradingVector[8]].isNull())
-        {
-            reservedBytes_=std::make_shared<uint64_t>((uint64_t)pJson[pMasqueradingVector[8]].asUInt64());
-        }
-    }
-    if(!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9]))
-    {
-        dirtyFlag_[9] = true;
-        if(!pJson[pMasqueradingVector[9]].isNull())
-        {
-            tempPath_=std::make_shared<std::string>(pJson[pMasqueradingVector[9]].asString());
-        }
-    }
-    if(!pMasqueradingVector[10].empty() && pJson.isMember(pMasqueradingVector[10]))
-    {
-        dirtyFlag_[10] = true;
-        if(!pJson[pMasqueradingVector[10]].isNull())
-        {
-            status_=std::make_shared<int8_t>((int8_t)pJson[pMasqueradingVector[10]].asInt64());
-        }
-    }
-    if(!pMasqueradingVector[11].empty() && pJson.isMember(pMasqueradingVector[11]))
-    {
-        dirtyFlag_[11] = true;
-        if(!pJson[pMasqueradingVector[11]].isNull())
-        {
-            auto timeStr = pJson[pMasqueradingVector[11]].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                expiresAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-    if(!pMasqueradingVector[12].empty() && pJson.isMember(pMasqueradingVector[12]))
-    {
-        dirtyFlag_[12] = true;
-        if(!pJson[pMasqueradingVector[12]].isNull())
-        {
-            auto timeStr = pJson[pMasqueradingVector[12]].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                finalizedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-    if(!pMasqueradingVector[13].empty() && pJson.isMember(pMasqueradingVector[13]))
-    {
-        dirtyFlag_[13] = true;
-        if(!pJson[pMasqueradingVector[13]].isNull())
-        {
-            failReason_=std::make_shared<std::string>(pJson[pMasqueradingVector[13]].asString());
-        }
-    }
-    if(!pMasqueradingVector[14].empty() && pJson.isMember(pMasqueradingVector[14]))
-    {
-        dirtyFlag_[14] = true;
-        if(!pJson[pMasqueradingVector[14]].isNull())
-        {
-            auto timeStr = pJson[pMasqueradingVector[14]].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-    if(!pMasqueradingVector[15].empty() && pJson.isMember(pMasqueradingVector[15]))
-    {
-        dirtyFlag_[15] = true;
-        if(!pJson[pMasqueradingVector[15]].isNull())
-        {
-            auto timeStr = pJson[pMasqueradingVector[15]].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                updatedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-}
-
-void UploadTasks::updateByJson(const Json::Value &pJson) noexcept(false)
-{
-    if(pJson.isMember("id"))
-    {
-        if(!pJson["id"].isNull())
-        {
-            id_=std::make_shared<std::string>(pJson["id"].asString());
-        }
-    }
-    if(pJson.isMember("user_id"))
-    {
-        dirtyFlag_[1] = true;
-        if(!pJson["user_id"].isNull())
-        {
-            userId_=std::make_shared<uint64_t>((uint64_t)pJson["user_id"].asUInt64());
-        }
-    }
-    if(pJson.isMember("folder_id"))
-    {
-        dirtyFlag_[2] = true;
-        if(!pJson["folder_id"].isNull())
-        {
-            folderId_=std::make_shared<uint64_t>((uint64_t)pJson["folder_id"].asUInt64());
-        }
-    }
-    if(pJson.isMember("filename"))
-    {
-        dirtyFlag_[3] = true;
-        if(!pJson["filename"].isNull())
-        {
-            filename_=std::make_shared<std::string>(pJson["filename"].asString());
-        }
-    }
-    if(pJson.isMember("file_size"))
-    {
-        dirtyFlag_[4] = true;
-        if(!pJson["file_size"].isNull())
-        {
-            fileSize_=std::make_shared<uint64_t>((uint64_t)pJson["file_size"].asUInt64());
-        }
-    }
-    if(pJson.isMember("file_hash"))
-    {
-        dirtyFlag_[5] = true;
-        if(!pJson["file_hash"].isNull())
-        {
-            fileHash_=std::make_shared<std::string>(pJson["file_hash"].asString());
-        }
-    }
-    if(pJson.isMember("chunk_size"))
-    {
-        dirtyFlag_[6] = true;
-        if(!pJson["chunk_size"].isNull())
-        {
-            chunkSize_=std::make_shared<uint32_t>((uint32_t)pJson["chunk_size"].asUInt64());
-        }
-    }
-    if(pJson.isMember("total_chunks"))
-    {
-        dirtyFlag_[7] = true;
-        if(!pJson["total_chunks"].isNull())
-        {
-            totalChunks_=std::make_shared<uint32_t>((uint32_t)pJson["total_chunks"].asUInt64());
-        }
-    }
-    if(pJson.isMember("reserved_bytes"))
-    {
-        dirtyFlag_[8] = true;
-        if(!pJson["reserved_bytes"].isNull())
-        {
-            reservedBytes_=std::make_shared<uint64_t>((uint64_t)pJson["reserved_bytes"].asUInt64());
-        }
-    }
-    if(pJson.isMember("temp_path"))
-    {
-        dirtyFlag_[9] = true;
-        if(!pJson["temp_path"].isNull())
-        {
-            tempPath_=std::make_shared<std::string>(pJson["temp_path"].asString());
-        }
-    }
-    if(pJson.isMember("status"))
-    {
-        dirtyFlag_[10] = true;
-        if(!pJson["status"].isNull())
-        {
-            status_=std::make_shared<int8_t>((int8_t)pJson["status"].asInt64());
-        }
-    }
-    if(pJson.isMember("expires_at"))
-    {
-        dirtyFlag_[11] = true;
-        if(!pJson["expires_at"].isNull())
-        {
-            auto timeStr = pJson["expires_at"].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                expiresAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-    if(pJson.isMember("finalized_at"))
-    {
-        dirtyFlag_[12] = true;
-        if(!pJson["finalized_at"].isNull())
-        {
-            auto timeStr = pJson["finalized_at"].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                finalizedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-    if(pJson.isMember("fail_reason"))
-    {
-        dirtyFlag_[13] = true;
-        if(!pJson["fail_reason"].isNull())
-        {
-            failReason_=std::make_shared<std::string>(pJson["fail_reason"].asString());
-        }
-    }
-    if(pJson.isMember("created_at"))
-    {
-        dirtyFlag_[14] = true;
-        if(!pJson["created_at"].isNull())
-        {
-            auto timeStr = pJson["created_at"].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                createdAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-    if(pJson.isMember("updated_at"))
-    {
-        dirtyFlag_[15] = true;
-        if(!pJson["updated_at"].isNull())
-        {
-            auto timeStr = pJson["updated_at"].asString();
-            struct tm stm;
-            memset(&stm,0,sizeof(stm));
-            auto p = strptime(timeStr.c_str(),"%Y-%m-%d %H:%M:%S",&stm);
-            time_t t = mktime(&stm);
-            size_t decimalNum = 0;
-            if(p)
-            {
-                if(*p=='.')
-                {
-                    std::string decimals(p+1,&timeStr[timeStr.length()]);
-                    while(decimals.length()<6)
-                    {
-                        decimals += "0";
-                    }
-                    decimalNum = (size_t)atol(decimals.c_str());
-                }
-                updatedAt_=std::make_shared<::trantor::Date>(t*1000000+decimalNum);
-            }
-        }
-    }
-}
-
-const std::string &UploadTasks::getValueOfId() const noexcept
-{
-    static const std::string defaultValue = std::string();
-    if(id_)
-        return *id_;
-    return defaultValue;
-}
-const std::shared_ptr<std::string> &UploadTasks::getId() const noexcept
-{
-    return id_;
-}
-void UploadTasks::setId(const std::string &pId) noexcept
-{
-    id_ = std::make_shared<std::string>(pId);
+UploadTasks::UploadTasks(
+    const Json::Value &pJson,
+    const std::vector<std::string> &pMasqueradingVector) noexcept(false) {
+  if (pMasqueradingVector.size() != 16) {
+    LOG_ERROR << "Bad masquerading vector";
+    return;
+  }
+  if (!pMasqueradingVector[0].empty() &&
+      pJson.isMember(pMasqueradingVector[0])) {
     dirtyFlag_[0] = true;
-}
-void UploadTasks::setId(std::string &&pId) noexcept
-{
-    id_ = std::make_shared<std::string>(std::move(pId));
-    dirtyFlag_[0] = true;
-}
-const typename UploadTasks::PrimaryKeyType & UploadTasks::getPrimaryKey() const
-{
-    assert(id_);
-    return *id_;
-}
-
-const uint64_t &UploadTasks::getValueOfUserId() const noexcept
-{
-    static const uint64_t defaultValue = uint64_t();
-    if(userId_)
-        return *userId_;
-    return defaultValue;
-}
-const std::shared_ptr<uint64_t> &UploadTasks::getUserId() const noexcept
-{
-    return userId_;
-}
-void UploadTasks::setUserId(const uint64_t &pUserId) noexcept
-{
-    userId_ = std::make_shared<uint64_t>(pUserId);
+    if (!pJson[pMasqueradingVector[0]].isNull()) {
+      id_ = std::make_shared<std::string>(
+          pJson[pMasqueradingVector[0]].asString());
+    }
+  }
+  if (!pMasqueradingVector[1].empty() &&
+      pJson.isMember(pMasqueradingVector[1])) {
     dirtyFlag_[1] = true;
-}
-
-const uint64_t &UploadTasks::getValueOfFolderId() const noexcept
-{
-    static const uint64_t defaultValue = uint64_t();
-    if(folderId_)
-        return *folderId_;
-    return defaultValue;
-}
-const std::shared_ptr<uint64_t> &UploadTasks::getFolderId() const noexcept
-{
-    return folderId_;
-}
-void UploadTasks::setFolderId(const uint64_t &pFolderId) noexcept
-{
-    folderId_ = std::make_shared<uint64_t>(pFolderId);
+    if (!pJson[pMasqueradingVector[1]].isNull()) {
+      userId_ = std::make_shared<int64_t>(
+          (int64_t)pJson[pMasqueradingVector[1]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[2].empty() &&
+      pJson.isMember(pMasqueradingVector[2])) {
     dirtyFlag_[2] = true;
-}
-
-const std::string &UploadTasks::getValueOfFilename() const noexcept
-{
-    static const std::string defaultValue = std::string();
-    if(filename_)
-        return *filename_;
-    return defaultValue;
-}
-const std::shared_ptr<std::string> &UploadTasks::getFilename() const noexcept
-{
-    return filename_;
-}
-void UploadTasks::setFilename(const std::string &pFilename) noexcept
-{
-    filename_ = std::make_shared<std::string>(pFilename);
+    if (!pJson[pMasqueradingVector[2]].isNull()) {
+      folderId_ = std::make_shared<int64_t>(
+          (int64_t)pJson[pMasqueradingVector[2]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[3].empty() &&
+      pJson.isMember(pMasqueradingVector[3])) {
     dirtyFlag_[3] = true;
-}
-void UploadTasks::setFilename(std::string &&pFilename) noexcept
-{
-    filename_ = std::make_shared<std::string>(std::move(pFilename));
-    dirtyFlag_[3] = true;
-}
-
-const uint64_t &UploadTasks::getValueOfFileSize() const noexcept
-{
-    static const uint64_t defaultValue = uint64_t();
-    if(fileSize_)
-        return *fileSize_;
-    return defaultValue;
-}
-const std::shared_ptr<uint64_t> &UploadTasks::getFileSize() const noexcept
-{
-    return fileSize_;
-}
-void UploadTasks::setFileSize(const uint64_t &pFileSize) noexcept
-{
-    fileSize_ = std::make_shared<uint64_t>(pFileSize);
+    if (!pJson[pMasqueradingVector[3]].isNull()) {
+      filename_ = std::make_shared<std::string>(
+          pJson[pMasqueradingVector[3]].asString());
+    }
+  }
+  if (!pMasqueradingVector[4].empty() &&
+      pJson.isMember(pMasqueradingVector[4])) {
     dirtyFlag_[4] = true;
-}
-
-const std::string &UploadTasks::getValueOfFileHash() const noexcept
-{
-    static const std::string defaultValue = std::string();
-    if(fileHash_)
-        return *fileHash_;
-    return defaultValue;
-}
-const std::shared_ptr<std::string> &UploadTasks::getFileHash() const noexcept
-{
-    return fileHash_;
-}
-void UploadTasks::setFileHash(const std::string &pFileHash) noexcept
-{
-    fileHash_ = std::make_shared<std::string>(pFileHash);
+    if (!pJson[pMasqueradingVector[4]].isNull()) {
+      fileSize_ = std::make_shared<int64_t>(
+          (int64_t)pJson[pMasqueradingVector[4]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[5].empty() &&
+      pJson.isMember(pMasqueradingVector[5])) {
     dirtyFlag_[5] = true;
-}
-void UploadTasks::setFileHash(std::string &&pFileHash) noexcept
-{
-    fileHash_ = std::make_shared<std::string>(std::move(pFileHash));
-    dirtyFlag_[5] = true;
-}
-
-const uint32_t &UploadTasks::getValueOfChunkSize() const noexcept
-{
-    static const uint32_t defaultValue = uint32_t();
-    if(chunkSize_)
-        return *chunkSize_;
-    return defaultValue;
-}
-const std::shared_ptr<uint32_t> &UploadTasks::getChunkSize() const noexcept
-{
-    return chunkSize_;
-}
-void UploadTasks::setChunkSize(const uint32_t &pChunkSize) noexcept
-{
-    chunkSize_ = std::make_shared<uint32_t>(pChunkSize);
+    if (!pJson[pMasqueradingVector[5]].isNull()) {
+      fileHash_ = std::make_shared<std::string>(
+          pJson[pMasqueradingVector[5]].asString());
+    }
+  }
+  if (!pMasqueradingVector[6].empty() &&
+      pJson.isMember(pMasqueradingVector[6])) {
     dirtyFlag_[6] = true;
-}
-
-const uint32_t &UploadTasks::getValueOfTotalChunks() const noexcept
-{
-    static const uint32_t defaultValue = uint32_t();
-    if(totalChunks_)
-        return *totalChunks_;
-    return defaultValue;
-}
-const std::shared_ptr<uint32_t> &UploadTasks::getTotalChunks() const noexcept
-{
-    return totalChunks_;
-}
-void UploadTasks::setTotalChunks(const uint32_t &pTotalChunks) noexcept
-{
-    totalChunks_ = std::make_shared<uint32_t>(pTotalChunks);
+    if (!pJson[pMasqueradingVector[6]].isNull()) {
+      chunkSize_ = std::make_shared<int32_t>(
+          (int32_t)pJson[pMasqueradingVector[6]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[7].empty() &&
+      pJson.isMember(pMasqueradingVector[7])) {
     dirtyFlag_[7] = true;
-}
-
-const uint64_t &UploadTasks::getValueOfReservedBytes() const noexcept
-{
-    static const uint64_t defaultValue = uint64_t();
-    if(reservedBytes_)
-        return *reservedBytes_;
-    return defaultValue;
-}
-const std::shared_ptr<uint64_t> &UploadTasks::getReservedBytes() const noexcept
-{
-    return reservedBytes_;
-}
-void UploadTasks::setReservedBytes(const uint64_t &pReservedBytes) noexcept
-{
-    reservedBytes_ = std::make_shared<uint64_t>(pReservedBytes);
+    if (!pJson[pMasqueradingVector[7]].isNull()) {
+      totalChunks_ = std::make_shared<int32_t>(
+          (int32_t)pJson[pMasqueradingVector[7]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[8].empty() &&
+      pJson.isMember(pMasqueradingVector[8])) {
     dirtyFlag_[8] = true;
-}
-
-const std::string &UploadTasks::getValueOfTempPath() const noexcept
-{
-    static const std::string defaultValue = std::string();
-    if(tempPath_)
-        return *tempPath_;
-    return defaultValue;
-}
-const std::shared_ptr<std::string> &UploadTasks::getTempPath() const noexcept
-{
-    return tempPath_;
-}
-void UploadTasks::setTempPath(const std::string &pTempPath) noexcept
-{
-    tempPath_ = std::make_shared<std::string>(pTempPath);
+    if (!pJson[pMasqueradingVector[8]].isNull()) {
+      reservedBytes_ = std::make_shared<int64_t>(
+          (int64_t)pJson[pMasqueradingVector[8]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[9].empty() &&
+      pJson.isMember(pMasqueradingVector[9])) {
     dirtyFlag_[9] = true;
-}
-void UploadTasks::setTempPath(std::string &&pTempPath) noexcept
-{
-    tempPath_ = std::make_shared<std::string>(std::move(pTempPath));
-    dirtyFlag_[9] = true;
-}
-
-const int8_t &UploadTasks::getValueOfStatus() const noexcept
-{
-    static const int8_t defaultValue = int8_t();
-    if(status_)
-        return *status_;
-    return defaultValue;
-}
-const std::shared_ptr<int8_t> &UploadTasks::getStatus() const noexcept
-{
-    return status_;
-}
-void UploadTasks::setStatus(const int8_t &pStatus) noexcept
-{
-    status_ = std::make_shared<int8_t>(pStatus);
+    if (!pJson[pMasqueradingVector[9]].isNull()) {
+      tempPath_ = std::make_shared<std::string>(
+          pJson[pMasqueradingVector[9]].asString());
+    }
+  }
+  if (!pMasqueradingVector[10].empty() &&
+      pJson.isMember(pMasqueradingVector[10])) {
     dirtyFlag_[10] = true;
-}
-
-const ::trantor::Date &UploadTasks::getValueOfExpiresAt() const noexcept
-{
-    static const ::trantor::Date defaultValue = ::trantor::Date();
-    if(expiresAt_)
-        return *expiresAt_;
-    return defaultValue;
-}
-const std::shared_ptr<::trantor::Date> &UploadTasks::getExpiresAt() const noexcept
-{
-    return expiresAt_;
-}
-void UploadTasks::setExpiresAt(const ::trantor::Date &pExpiresAt) noexcept
-{
-    expiresAt_ = std::make_shared<::trantor::Date>(pExpiresAt);
+    if (!pJson[pMasqueradingVector[10]].isNull()) {
+      status_ = std::make_shared<short>(
+          (short)pJson[pMasqueradingVector[10]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[11].empty() &&
+      pJson.isMember(pMasqueradingVector[11])) {
     dirtyFlag_[11] = true;
-}
-
-const ::trantor::Date &UploadTasks::getValueOfFinalizedAt() const noexcept
-{
-    static const ::trantor::Date defaultValue = ::trantor::Date();
-    if(finalizedAt_)
-        return *finalizedAt_;
-    return defaultValue;
-}
-const std::shared_ptr<::trantor::Date> &UploadTasks::getFinalizedAt() const noexcept
-{
-    return finalizedAt_;
-}
-void UploadTasks::setFinalizedAt(const ::trantor::Date &pFinalizedAt) noexcept
-{
-    finalizedAt_ = std::make_shared<::trantor::Date>(pFinalizedAt);
+    if (!pJson[pMasqueradingVector[11]].isNull()) {
+      auto timeStr = pJson[pMasqueradingVector[11]].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        expiresAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  }
+  if (!pMasqueradingVector[12].empty() &&
+      pJson.isMember(pMasqueradingVector[12])) {
     dirtyFlag_[12] = true;
-}
-void UploadTasks::setFinalizedAtToNull() noexcept
-{
-    finalizedAt_.reset();
-    dirtyFlag_[12] = true;
-}
-
-const std::string &UploadTasks::getValueOfFailReason() const noexcept
-{
-    static const std::string defaultValue = std::string();
-    if(failReason_)
-        return *failReason_;
-    return defaultValue;
-}
-const std::shared_ptr<std::string> &UploadTasks::getFailReason() const noexcept
-{
-    return failReason_;
-}
-void UploadTasks::setFailReason(const std::string &pFailReason) noexcept
-{
-    failReason_ = std::make_shared<std::string>(pFailReason);
+    if (!pJson[pMasqueradingVector[12]].isNull()) {
+      auto timeStr = pJson[pMasqueradingVector[12]].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        finalizedAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  }
+  if (!pMasqueradingVector[13].empty() &&
+      pJson.isMember(pMasqueradingVector[13])) {
     dirtyFlag_[13] = true;
-}
-void UploadTasks::setFailReason(std::string &&pFailReason) noexcept
-{
-    failReason_ = std::make_shared<std::string>(std::move(pFailReason));
-    dirtyFlag_[13] = true;
-}
-void UploadTasks::setFailReasonToNull() noexcept
-{
-    failReason_.reset();
-    dirtyFlag_[13] = true;
-}
-
-const ::trantor::Date &UploadTasks::getValueOfCreatedAt() const noexcept
-{
-    static const ::trantor::Date defaultValue = ::trantor::Date();
-    if(createdAt_)
-        return *createdAt_;
-    return defaultValue;
-}
-const std::shared_ptr<::trantor::Date> &UploadTasks::getCreatedAt() const noexcept
-{
-    return createdAt_;
-}
-void UploadTasks::setCreatedAt(const ::trantor::Date &pCreatedAt) noexcept
-{
-    createdAt_ = std::make_shared<::trantor::Date>(pCreatedAt);
+    if (!pJson[pMasqueradingVector[13]].isNull()) {
+      failReason_ = std::make_shared<std::string>(
+          pJson[pMasqueradingVector[13]].asString());
+    }
+  }
+  if (!pMasqueradingVector[14].empty() &&
+      pJson.isMember(pMasqueradingVector[14])) {
     dirtyFlag_[14] = true;
-}
-
-const ::trantor::Date &UploadTasks::getValueOfUpdatedAt() const noexcept
-{
-    static const ::trantor::Date defaultValue = ::trantor::Date();
-    if(updatedAt_)
-        return *updatedAt_;
-    return defaultValue;
-}
-const std::shared_ptr<::trantor::Date> &UploadTasks::getUpdatedAt() const noexcept
-{
-    return updatedAt_;
-}
-void UploadTasks::setUpdatedAt(const ::trantor::Date &pUpdatedAt) noexcept
-{
-    updatedAt_ = std::make_shared<::trantor::Date>(pUpdatedAt);
+    if (!pJson[pMasqueradingVector[14]].isNull()) {
+      auto timeStr = pJson[pMasqueradingVector[14]].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        createdAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  }
+  if (!pMasqueradingVector[15].empty() &&
+      pJson.isMember(pMasqueradingVector[15])) {
     dirtyFlag_[15] = true;
+    if (!pJson[pMasqueradingVector[15]].isNull()) {
+      auto timeStr = pJson[pMasqueradingVector[15]].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        updatedAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  }
 }
 
-void UploadTasks::updateId(const uint64_t id)
-{
+UploadTasks::UploadTasks(const Json::Value &pJson) noexcept(false) {
+  if (pJson.isMember("id")) {
+    dirtyFlag_[0] = true;
+    if (!pJson["id"].isNull()) {
+      id_ = std::make_shared<std::string>(pJson["id"].asString());
+    }
+  }
+  if (pJson.isMember("user_id")) {
+    dirtyFlag_[1] = true;
+    if (!pJson["user_id"].isNull()) {
+      userId_ = std::make_shared<int64_t>((int64_t)pJson["user_id"].asInt64());
+    }
+  }
+  if (pJson.isMember("folder_id")) {
+    dirtyFlag_[2] = true;
+    if (!pJson["folder_id"].isNull()) {
+      folderId_ =
+          std::make_shared<int64_t>((int64_t)pJson["folder_id"].asInt64());
+    }
+  }
+  if (pJson.isMember("filename")) {
+    dirtyFlag_[3] = true;
+    if (!pJson["filename"].isNull()) {
+      filename_ = std::make_shared<std::string>(pJson["filename"].asString());
+    }
+  }
+  if (pJson.isMember("file_size")) {
+    dirtyFlag_[4] = true;
+    if (!pJson["file_size"].isNull()) {
+      fileSize_ =
+          std::make_shared<int64_t>((int64_t)pJson["file_size"].asInt64());
+    }
+  }
+  if (pJson.isMember("file_hash")) {
+    dirtyFlag_[5] = true;
+    if (!pJson["file_hash"].isNull()) {
+      fileHash_ = std::make_shared<std::string>(pJson["file_hash"].asString());
+    }
+  }
+  if (pJson.isMember("chunk_size")) {
+    dirtyFlag_[6] = true;
+    if (!pJson["chunk_size"].isNull()) {
+      chunkSize_ =
+          std::make_shared<int32_t>((int32_t)pJson["chunk_size"].asInt64());
+    }
+  }
+  if (pJson.isMember("total_chunks")) {
+    dirtyFlag_[7] = true;
+    if (!pJson["total_chunks"].isNull()) {
+      totalChunks_ =
+          std::make_shared<int32_t>((int32_t)pJson["total_chunks"].asInt64());
+    }
+  }
+  if (pJson.isMember("reserved_bytes")) {
+    dirtyFlag_[8] = true;
+    if (!pJson["reserved_bytes"].isNull()) {
+      reservedBytes_ =
+          std::make_shared<int64_t>((int64_t)pJson["reserved_bytes"].asInt64());
+    }
+  }
+  if (pJson.isMember("temp_path")) {
+    dirtyFlag_[9] = true;
+    if (!pJson["temp_path"].isNull()) {
+      tempPath_ = std::make_shared<std::string>(pJson["temp_path"].asString());
+    }
+  }
+  if (pJson.isMember("status")) {
+    dirtyFlag_[10] = true;
+    if (!pJson["status"].isNull()) {
+      status_ = std::make_shared<short>((short)pJson["status"].asInt64());
+    }
+  }
+  if (pJson.isMember("expires_at")) {
+    dirtyFlag_[11] = true;
+    if (!pJson["expires_at"].isNull()) {
+      auto timeStr = pJson["expires_at"].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        expiresAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  }
+  if (pJson.isMember("finalized_at")) {
+    dirtyFlag_[12] = true;
+    if (!pJson["finalized_at"].isNull()) {
+      auto timeStr = pJson["finalized_at"].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        finalizedAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  }
+  if (pJson.isMember("fail_reason")) {
+    dirtyFlag_[13] = true;
+    if (!pJson["fail_reason"].isNull()) {
+      failReason_ =
+          std::make_shared<std::string>(pJson["fail_reason"].asString());
+    }
+  }
+  if (pJson.isMember("created_at")) {
+    dirtyFlag_[14] = true;
+    if (!pJson["created_at"].isNull()) {
+      auto timeStr = pJson["created_at"].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        createdAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  }
+  if (pJson.isMember("updated_at")) {
+    dirtyFlag_[15] = true;
+    if (!pJson["updated_at"].isNull()) {
+      auto timeStr = pJson["updated_at"].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        updatedAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  }
 }
 
-const std::vector<std::string> &UploadTasks::insertColumns() noexcept
-{
-    static const std::vector<std::string> inCols={
-        "id",
-        "user_id",
-        "folder_id",
-        "filename",
-        "file_size",
-        "file_hash",
-        "chunk_size",
-        "total_chunks",
-        "reserved_bytes",
-        "temp_path",
-        "status",
-        "expires_at",
-        "finalized_at",
-        "fail_reason",
-        "created_at",
-        "updated_at"
-    };
-    return inCols;
+void UploadTasks::updateByMasqueradedJson(
+    const Json::Value &pJson,
+    const std::vector<std::string> &pMasqueradingVector) noexcept(false) {
+  if (pMasqueradingVector.size() != 16) {
+    LOG_ERROR << "Bad masquerading vector";
+    return;
+  }
+  if (!pMasqueradingVector[0].empty() &&
+      pJson.isMember(pMasqueradingVector[0])) {
+    if (!pJson[pMasqueradingVector[0]].isNull()) {
+      id_ = std::make_shared<std::string>(
+          pJson[pMasqueradingVector[0]].asString());
+    }
+  }
+  if (!pMasqueradingVector[1].empty() &&
+      pJson.isMember(pMasqueradingVector[1])) {
+    dirtyFlag_[1] = true;
+    if (!pJson[pMasqueradingVector[1]].isNull()) {
+      userId_ = std::make_shared<int64_t>(
+          (int64_t)pJson[pMasqueradingVector[1]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[2].empty() &&
+      pJson.isMember(pMasqueradingVector[2])) {
+    dirtyFlag_[2] = true;
+    if (!pJson[pMasqueradingVector[2]].isNull()) {
+      folderId_ = std::make_shared<int64_t>(
+          (int64_t)pJson[pMasqueradingVector[2]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[3].empty() &&
+      pJson.isMember(pMasqueradingVector[3])) {
+    dirtyFlag_[3] = true;
+    if (!pJson[pMasqueradingVector[3]].isNull()) {
+      filename_ = std::make_shared<std::string>(
+          pJson[pMasqueradingVector[3]].asString());
+    }
+  }
+  if (!pMasqueradingVector[4].empty() &&
+      pJson.isMember(pMasqueradingVector[4])) {
+    dirtyFlag_[4] = true;
+    if (!pJson[pMasqueradingVector[4]].isNull()) {
+      fileSize_ = std::make_shared<int64_t>(
+          (int64_t)pJson[pMasqueradingVector[4]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[5].empty() &&
+      pJson.isMember(pMasqueradingVector[5])) {
+    dirtyFlag_[5] = true;
+    if (!pJson[pMasqueradingVector[5]].isNull()) {
+      fileHash_ = std::make_shared<std::string>(
+          pJson[pMasqueradingVector[5]].asString());
+    }
+  }
+  if (!pMasqueradingVector[6].empty() &&
+      pJson.isMember(pMasqueradingVector[6])) {
+    dirtyFlag_[6] = true;
+    if (!pJson[pMasqueradingVector[6]].isNull()) {
+      chunkSize_ = std::make_shared<int32_t>(
+          (int32_t)pJson[pMasqueradingVector[6]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[7].empty() &&
+      pJson.isMember(pMasqueradingVector[7])) {
+    dirtyFlag_[7] = true;
+    if (!pJson[pMasqueradingVector[7]].isNull()) {
+      totalChunks_ = std::make_shared<int32_t>(
+          (int32_t)pJson[pMasqueradingVector[7]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[8].empty() &&
+      pJson.isMember(pMasqueradingVector[8])) {
+    dirtyFlag_[8] = true;
+    if (!pJson[pMasqueradingVector[8]].isNull()) {
+      reservedBytes_ = std::make_shared<int64_t>(
+          (int64_t)pJson[pMasqueradingVector[8]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[9].empty() &&
+      pJson.isMember(pMasqueradingVector[9])) {
+    dirtyFlag_[9] = true;
+    if (!pJson[pMasqueradingVector[9]].isNull()) {
+      tempPath_ = std::make_shared<std::string>(
+          pJson[pMasqueradingVector[9]].asString());
+    }
+  }
+  if (!pMasqueradingVector[10].empty() &&
+      pJson.isMember(pMasqueradingVector[10])) {
+    dirtyFlag_[10] = true;
+    if (!pJson[pMasqueradingVector[10]].isNull()) {
+      status_ = std::make_shared<short>(
+          (short)pJson[pMasqueradingVector[10]].asInt64());
+    }
+  }
+  if (!pMasqueradingVector[11].empty() &&
+      pJson.isMember(pMasqueradingVector[11])) {
+    dirtyFlag_[11] = true;
+    if (!pJson[pMasqueradingVector[11]].isNull()) {
+      auto timeStr = pJson[pMasqueradingVector[11]].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        expiresAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  }
+  if (!pMasqueradingVector[12].empty() &&
+      pJson.isMember(pMasqueradingVector[12])) {
+    dirtyFlag_[12] = true;
+    if (!pJson[pMasqueradingVector[12]].isNull()) {
+      auto timeStr = pJson[pMasqueradingVector[12]].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        finalizedAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  }
+  if (!pMasqueradingVector[13].empty() &&
+      pJson.isMember(pMasqueradingVector[13])) {
+    dirtyFlag_[13] = true;
+    if (!pJson[pMasqueradingVector[13]].isNull()) {
+      failReason_ = std::make_shared<std::string>(
+          pJson[pMasqueradingVector[13]].asString());
+    }
+  }
+  if (!pMasqueradingVector[14].empty() &&
+      pJson.isMember(pMasqueradingVector[14])) {
+    dirtyFlag_[14] = true;
+    if (!pJson[pMasqueradingVector[14]].isNull()) {
+      auto timeStr = pJson[pMasqueradingVector[14]].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        createdAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  }
+  if (!pMasqueradingVector[15].empty() &&
+      pJson.isMember(pMasqueradingVector[15])) {
+    dirtyFlag_[15] = true;
+    if (!pJson[pMasqueradingVector[15]].isNull()) {
+      auto timeStr = pJson[pMasqueradingVector[15]].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
+        }
+        updatedAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
+    }
+  }
 }
 
-void UploadTasks::outputArgs(drogon::orm::internal::SqlBinder &binder) const
-{
-    if(dirtyFlag_[0])
-    {
-        if(getId())
-        {
-            binder << getValueOfId();
-        }
-        else
-        {
-            binder << nullptr;
-        }
+void UploadTasks::updateByJson(const Json::Value &pJson) noexcept(false) {
+  if (pJson.isMember("id")) {
+    if (!pJson["id"].isNull()) {
+      id_ = std::make_shared<std::string>(pJson["id"].asString());
     }
-    if(dirtyFlag_[1])
-    {
-        if(getUserId())
-        {
-            binder << getValueOfUserId();
-        }
-        else
-        {
-            binder << nullptr;
-        }
+  }
+  if (pJson.isMember("user_id")) {
+    dirtyFlag_[1] = true;
+    if (!pJson["user_id"].isNull()) {
+      userId_ = std::make_shared<int64_t>((int64_t)pJson["user_id"].asInt64());
     }
-    if(dirtyFlag_[2])
-    {
-        if(getFolderId())
-        {
-            binder << getValueOfFolderId();
-        }
-        else
-        {
-            binder << nullptr;
-        }
+  }
+  if (pJson.isMember("folder_id")) {
+    dirtyFlag_[2] = true;
+    if (!pJson["folder_id"].isNull()) {
+      folderId_ =
+          std::make_shared<int64_t>((int64_t)pJson["folder_id"].asInt64());
     }
-    if(dirtyFlag_[3])
-    {
-        if(getFilename())
-        {
-            binder << getValueOfFilename();
-        }
-        else
-        {
-            binder << nullptr;
-        }
+  }
+  if (pJson.isMember("filename")) {
+    dirtyFlag_[3] = true;
+    if (!pJson["filename"].isNull()) {
+      filename_ = std::make_shared<std::string>(pJson["filename"].asString());
     }
-    if(dirtyFlag_[4])
-    {
-        if(getFileSize())
-        {
-            binder << getValueOfFileSize();
-        }
-        else
-        {
-            binder << nullptr;
-        }
+  }
+  if (pJson.isMember("file_size")) {
+    dirtyFlag_[4] = true;
+    if (!pJson["file_size"].isNull()) {
+      fileSize_ =
+          std::make_shared<int64_t>((int64_t)pJson["file_size"].asInt64());
     }
-    if(dirtyFlag_[5])
-    {
-        if(getFileHash())
-        {
-            binder << getValueOfFileHash();
-        }
-        else
-        {
-            binder << nullptr;
-        }
+  }
+  if (pJson.isMember("file_hash")) {
+    dirtyFlag_[5] = true;
+    if (!pJson["file_hash"].isNull()) {
+      fileHash_ = std::make_shared<std::string>(pJson["file_hash"].asString());
     }
-    if(dirtyFlag_[6])
-    {
-        if(getChunkSize())
-        {
-            binder << getValueOfChunkSize();
-        }
-        else
-        {
-            binder << nullptr;
-        }
+  }
+  if (pJson.isMember("chunk_size")) {
+    dirtyFlag_[6] = true;
+    if (!pJson["chunk_size"].isNull()) {
+      chunkSize_ =
+          std::make_shared<int32_t>((int32_t)pJson["chunk_size"].asInt64());
     }
-    if(dirtyFlag_[7])
-    {
-        if(getTotalChunks())
-        {
-            binder << getValueOfTotalChunks();
-        }
-        else
-        {
-            binder << nullptr;
-        }
+  }
+  if (pJson.isMember("total_chunks")) {
+    dirtyFlag_[7] = true;
+    if (!pJson["total_chunks"].isNull()) {
+      totalChunks_ =
+          std::make_shared<int32_t>((int32_t)pJson["total_chunks"].asInt64());
     }
-    if(dirtyFlag_[8])
-    {
-        if(getReservedBytes())
-        {
-            binder << getValueOfReservedBytes();
-        }
-        else
-        {
-            binder << nullptr;
-        }
+  }
+  if (pJson.isMember("reserved_bytes")) {
+    dirtyFlag_[8] = true;
+    if (!pJson["reserved_bytes"].isNull()) {
+      reservedBytes_ =
+          std::make_shared<int64_t>((int64_t)pJson["reserved_bytes"].asInt64());
     }
-    if(dirtyFlag_[9])
-    {
-        if(getTempPath())
-        {
-            binder << getValueOfTempPath();
-        }
-        else
-        {
-            binder << nullptr;
-        }
+  }
+  if (pJson.isMember("temp_path")) {
+    dirtyFlag_[9] = true;
+    if (!pJson["temp_path"].isNull()) {
+      tempPath_ = std::make_shared<std::string>(pJson["temp_path"].asString());
     }
-    if(dirtyFlag_[10])
-    {
-        if(getStatus())
-        {
-            binder << getValueOfStatus();
-        }
-        else
-        {
-            binder << nullptr;
-        }
+  }
+  if (pJson.isMember("status")) {
+    dirtyFlag_[10] = true;
+    if (!pJson["status"].isNull()) {
+      status_ = std::make_shared<short>((short)pJson["status"].asInt64());
     }
-    if(dirtyFlag_[11])
-    {
-        if(getExpiresAt())
-        {
-            binder << getValueOfExpiresAt();
+  }
+  if (pJson.isMember("expires_at")) {
+    dirtyFlag_[11] = true;
+    if (!pJson["expires_at"].isNull()) {
+      auto timeStr = pJson["expires_at"].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
         }
-        else
-        {
-            binder << nullptr;
-        }
+        expiresAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
     }
-    if(dirtyFlag_[12])
-    {
-        if(getFinalizedAt())
-        {
-            binder << getValueOfFinalizedAt();
+  }
+  if (pJson.isMember("finalized_at")) {
+    dirtyFlag_[12] = true;
+    if (!pJson["finalized_at"].isNull()) {
+      auto timeStr = pJson["finalized_at"].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
         }
-        else
-        {
-            binder << nullptr;
-        }
+        finalizedAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
     }
-    if(dirtyFlag_[13])
-    {
-        if(getFailReason())
-        {
-            binder << getValueOfFailReason();
-        }
-        else
-        {
-            binder << nullptr;
-        }
+  }
+  if (pJson.isMember("fail_reason")) {
+    dirtyFlag_[13] = true;
+    if (!pJson["fail_reason"].isNull()) {
+      failReason_ =
+          std::make_shared<std::string>(pJson["fail_reason"].asString());
     }
-    if(dirtyFlag_[14])
-    {
-        if(getCreatedAt())
-        {
-            binder << getValueOfCreatedAt();
+  }
+  if (pJson.isMember("created_at")) {
+    dirtyFlag_[14] = true;
+    if (!pJson["created_at"].isNull()) {
+      auto timeStr = pJson["created_at"].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
         }
-        else
-        {
-            binder << nullptr;
-        }
+        createdAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
     }
-    if(dirtyFlag_[15])
-    {
-        if(getUpdatedAt())
-        {
-            binder << getValueOfUpdatedAt();
+  }
+  if (pJson.isMember("updated_at")) {
+    dirtyFlag_[15] = true;
+    if (!pJson["updated_at"].isNull()) {
+      auto timeStr = pJson["updated_at"].asString();
+      struct tm stm;
+      memset(&stm, 0, sizeof(stm));
+      auto p = strptime(timeStr.c_str(), "%Y-%m-%d %H:%M:%S", &stm);
+      time_t t = mktime(&stm);
+      size_t decimalNum = 0;
+      if (p) {
+        if (*p == '.') {
+          std::string decimals(p + 1, &timeStr[timeStr.length()]);
+          while (decimals.length() < 6) {
+            decimals += "0";
+          }
+          decimalNum = (size_t)atol(decimals.c_str());
         }
-        else
-        {
-            binder << nullptr;
-        }
+        updatedAt_ =
+            std::make_shared<::trantor::Date>(t * 1000000 + decimalNum);
+      }
     }
+  }
 }
 
-const std::vector<std::string> UploadTasks::updateColumns() const
-{
-    std::vector<std::string> ret;
-    if(dirtyFlag_[0])
-    {
-        ret.push_back(getColumnName(0));
-    }
-    if(dirtyFlag_[1])
-    {
-        ret.push_back(getColumnName(1));
-    }
-    if(dirtyFlag_[2])
-    {
-        ret.push_back(getColumnName(2));
-    }
-    if(dirtyFlag_[3])
-    {
-        ret.push_back(getColumnName(3));
-    }
-    if(dirtyFlag_[4])
-    {
-        ret.push_back(getColumnName(4));
-    }
-    if(dirtyFlag_[5])
-    {
-        ret.push_back(getColumnName(5));
-    }
-    if(dirtyFlag_[6])
-    {
-        ret.push_back(getColumnName(6));
-    }
-    if(dirtyFlag_[7])
-    {
-        ret.push_back(getColumnName(7));
-    }
-    if(dirtyFlag_[8])
-    {
-        ret.push_back(getColumnName(8));
-    }
-    if(dirtyFlag_[9])
-    {
-        ret.push_back(getColumnName(9));
-    }
-    if(dirtyFlag_[10])
-    {
-        ret.push_back(getColumnName(10));
-    }
-    if(dirtyFlag_[11])
-    {
-        ret.push_back(getColumnName(11));
-    }
-    if(dirtyFlag_[12])
-    {
-        ret.push_back(getColumnName(12));
-    }
-    if(dirtyFlag_[13])
-    {
-        ret.push_back(getColumnName(13));
-    }
-    if(dirtyFlag_[14])
-    {
-        ret.push_back(getColumnName(14));
-    }
-    if(dirtyFlag_[15])
-    {
-        ret.push_back(getColumnName(15));
-    }
-    return ret;
+const std::string &UploadTasks::getValueOfId() const noexcept {
+  static const std::string defaultValue = std::string();
+  if (id_)
+    return *id_;
+  return defaultValue;
+}
+const std::shared_ptr<std::string> &UploadTasks::getId() const noexcept {
+  return id_;
+}
+void UploadTasks::setId(const std::string &pId) noexcept {
+  id_ = std::make_shared<std::string>(pId);
+  dirtyFlag_[0] = true;
+}
+void UploadTasks::setId(std::string &&pId) noexcept {
+  id_ = std::make_shared<std::string>(std::move(pId));
+  dirtyFlag_[0] = true;
+}
+const typename UploadTasks::PrimaryKeyType &UploadTasks::getPrimaryKey() const {
+  assert(id_);
+  return *id_;
 }
 
-void UploadTasks::updateArgs(drogon::orm::internal::SqlBinder &binder) const
-{
-    if(dirtyFlag_[0])
-    {
-        if(getId())
-        {
-            binder << getValueOfId();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[1])
-    {
-        if(getUserId())
-        {
-            binder << getValueOfUserId();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[2])
-    {
-        if(getFolderId())
-        {
-            binder << getValueOfFolderId();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[3])
-    {
-        if(getFilename())
-        {
-            binder << getValueOfFilename();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[4])
-    {
-        if(getFileSize())
-        {
-            binder << getValueOfFileSize();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[5])
-    {
-        if(getFileHash())
-        {
-            binder << getValueOfFileHash();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[6])
-    {
-        if(getChunkSize())
-        {
-            binder << getValueOfChunkSize();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[7])
-    {
-        if(getTotalChunks())
-        {
-            binder << getValueOfTotalChunks();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[8])
-    {
-        if(getReservedBytes())
-        {
-            binder << getValueOfReservedBytes();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[9])
-    {
-        if(getTempPath())
-        {
-            binder << getValueOfTempPath();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[10])
-    {
-        if(getStatus())
-        {
-            binder << getValueOfStatus();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[11])
-    {
-        if(getExpiresAt())
-        {
-            binder << getValueOfExpiresAt();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[12])
-    {
-        if(getFinalizedAt())
-        {
-            binder << getValueOfFinalizedAt();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[13])
-    {
-        if(getFailReason())
-        {
-            binder << getValueOfFailReason();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[14])
-    {
-        if(getCreatedAt())
-        {
-            binder << getValueOfCreatedAt();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
-    if(dirtyFlag_[15])
-    {
-        if(getUpdatedAt())
-        {
-            binder << getValueOfUpdatedAt();
-        }
-        else
-        {
-            binder << nullptr;
-        }
-    }
+const int64_t &UploadTasks::getValueOfUserId() const noexcept {
+  static const int64_t defaultValue = int64_t();
+  if (userId_)
+    return *userId_;
+  return defaultValue;
 }
-Json::Value UploadTasks::toJson() const
-{
-    Json::Value ret;
-    if(getId())
-    {
-        ret["id"]=getValueOfId();
-    }
-    else
-    {
-        ret["id"]=Json::Value();
-    }
-    if(getUserId())
-    {
-        ret["user_id"]=(Json::UInt64)getValueOfUserId();
-    }
-    else
-    {
-        ret["user_id"]=Json::Value();
-    }
-    if(getFolderId())
-    {
-        ret["folder_id"]=(Json::UInt64)getValueOfFolderId();
-    }
-    else
-    {
-        ret["folder_id"]=Json::Value();
-    }
-    if(getFilename())
-    {
-        ret["filename"]=getValueOfFilename();
-    }
-    else
-    {
-        ret["filename"]=Json::Value();
-    }
-    if(getFileSize())
-    {
-        ret["file_size"]=(Json::UInt64)getValueOfFileSize();
-    }
-    else
-    {
-        ret["file_size"]=Json::Value();
-    }
-    if(getFileHash())
-    {
-        ret["file_hash"]=getValueOfFileHash();
-    }
-    else
-    {
-        ret["file_hash"]=Json::Value();
-    }
-    if(getChunkSize())
-    {
-        ret["chunk_size"]=getValueOfChunkSize();
-    }
-    else
-    {
-        ret["chunk_size"]=Json::Value();
-    }
-    if(getTotalChunks())
-    {
-        ret["total_chunks"]=getValueOfTotalChunks();
-    }
-    else
-    {
-        ret["total_chunks"]=Json::Value();
-    }
-    if(getReservedBytes())
-    {
-        ret["reserved_bytes"]=(Json::UInt64)getValueOfReservedBytes();
-    }
-    else
-    {
-        ret["reserved_bytes"]=Json::Value();
-    }
-    if(getTempPath())
-    {
-        ret["temp_path"]=getValueOfTempPath();
-    }
-    else
-    {
-        ret["temp_path"]=Json::Value();
-    }
-    if(getStatus())
-    {
-        ret["status"]=getValueOfStatus();
-    }
-    else
-    {
-        ret["status"]=Json::Value();
-    }
-    if(getExpiresAt())
-    {
-        ret["expires_at"]=getExpiresAt()->toDbStringLocal();
-    }
-    else
-    {
-        ret["expires_at"]=Json::Value();
-    }
-    if(getFinalizedAt())
-    {
-        ret["finalized_at"]=getFinalizedAt()->toDbStringLocal();
-    }
-    else
-    {
-        ret["finalized_at"]=Json::Value();
-    }
-    if(getFailReason())
-    {
-        ret["fail_reason"]=getValueOfFailReason();
-    }
-    else
-    {
-        ret["fail_reason"]=Json::Value();
-    }
-    if(getCreatedAt())
-    {
-        ret["created_at"]=getCreatedAt()->toDbStringLocal();
-    }
-    else
-    {
-        ret["created_at"]=Json::Value();
-    }
-    if(getUpdatedAt())
-    {
-        ret["updated_at"]=getUpdatedAt()->toDbStringLocal();
-    }
-    else
-    {
-        ret["updated_at"]=Json::Value();
-    }
-    return ret;
+const std::shared_ptr<int64_t> &UploadTasks::getUserId() const noexcept {
+  return userId_;
+}
+void UploadTasks::setUserId(const int64_t &pUserId) noexcept {
+  userId_ = std::make_shared<int64_t>(pUserId);
+  dirtyFlag_[1] = true;
 }
 
-std::string UploadTasks::toString() const
-{
-    return toJson().toStyledString();
+const int64_t &UploadTasks::getValueOfFolderId() const noexcept {
+  static const int64_t defaultValue = int64_t();
+  if (folderId_)
+    return *folderId_;
+  return defaultValue;
+}
+const std::shared_ptr<int64_t> &UploadTasks::getFolderId() const noexcept {
+  return folderId_;
+}
+void UploadTasks::setFolderId(const int64_t &pFolderId) noexcept {
+  folderId_ = std::make_shared<int64_t>(pFolderId);
+  dirtyFlag_[2] = true;
+}
+
+const std::string &UploadTasks::getValueOfFilename() const noexcept {
+  static const std::string defaultValue = std::string();
+  if (filename_)
+    return *filename_;
+  return defaultValue;
+}
+const std::shared_ptr<std::string> &UploadTasks::getFilename() const noexcept {
+  return filename_;
+}
+void UploadTasks::setFilename(const std::string &pFilename) noexcept {
+  filename_ = std::make_shared<std::string>(pFilename);
+  dirtyFlag_[3] = true;
+}
+void UploadTasks::setFilename(std::string &&pFilename) noexcept {
+  filename_ = std::make_shared<std::string>(std::move(pFilename));
+  dirtyFlag_[3] = true;
+}
+
+const int64_t &UploadTasks::getValueOfFileSize() const noexcept {
+  static const int64_t defaultValue = int64_t();
+  if (fileSize_)
+    return *fileSize_;
+  return defaultValue;
+}
+const std::shared_ptr<int64_t> &UploadTasks::getFileSize() const noexcept {
+  return fileSize_;
+}
+void UploadTasks::setFileSize(const int64_t &pFileSize) noexcept {
+  fileSize_ = std::make_shared<int64_t>(pFileSize);
+  dirtyFlag_[4] = true;
+}
+
+const std::string &UploadTasks::getValueOfFileHash() const noexcept {
+  static const std::string defaultValue = std::string();
+  if (fileHash_)
+    return *fileHash_;
+  return defaultValue;
+}
+const std::shared_ptr<std::string> &UploadTasks::getFileHash() const noexcept {
+  return fileHash_;
+}
+void UploadTasks::setFileHash(const std::string &pFileHash) noexcept {
+  fileHash_ = std::make_shared<std::string>(pFileHash);
+  dirtyFlag_[5] = true;
+}
+void UploadTasks::setFileHash(std::string &&pFileHash) noexcept {
+  fileHash_ = std::make_shared<std::string>(std::move(pFileHash));
+  dirtyFlag_[5] = true;
+}
+
+const int32_t &UploadTasks::getValueOfChunkSize() const noexcept {
+  static const int32_t defaultValue = int32_t();
+  if (chunkSize_)
+    return *chunkSize_;
+  return defaultValue;
+}
+const std::shared_ptr<int32_t> &UploadTasks::getChunkSize() const noexcept {
+  return chunkSize_;
+}
+void UploadTasks::setChunkSize(const int32_t &pChunkSize) noexcept {
+  chunkSize_ = std::make_shared<int32_t>(pChunkSize);
+  dirtyFlag_[6] = true;
+}
+
+const int32_t &UploadTasks::getValueOfTotalChunks() const noexcept {
+  static const int32_t defaultValue = int32_t();
+  if (totalChunks_)
+    return *totalChunks_;
+  return defaultValue;
+}
+const std::shared_ptr<int32_t> &UploadTasks::getTotalChunks() const noexcept {
+  return totalChunks_;
+}
+void UploadTasks::setTotalChunks(const int32_t &pTotalChunks) noexcept {
+  totalChunks_ = std::make_shared<int32_t>(pTotalChunks);
+  dirtyFlag_[7] = true;
+}
+
+const int64_t &UploadTasks::getValueOfReservedBytes() const noexcept {
+  static const int64_t defaultValue = int64_t();
+  if (reservedBytes_)
+    return *reservedBytes_;
+  return defaultValue;
+}
+const std::shared_ptr<int64_t> &UploadTasks::getReservedBytes() const noexcept {
+  return reservedBytes_;
+}
+void UploadTasks::setReservedBytes(const int64_t &pReservedBytes) noexcept {
+  reservedBytes_ = std::make_shared<int64_t>(pReservedBytes);
+  dirtyFlag_[8] = true;
+}
+
+const std::string &UploadTasks::getValueOfTempPath() const noexcept {
+  static const std::string defaultValue = std::string();
+  if (tempPath_)
+    return *tempPath_;
+  return defaultValue;
+}
+const std::shared_ptr<std::string> &UploadTasks::getTempPath() const noexcept {
+  return tempPath_;
+}
+void UploadTasks::setTempPath(const std::string &pTempPath) noexcept {
+  tempPath_ = std::make_shared<std::string>(pTempPath);
+  dirtyFlag_[9] = true;
+}
+void UploadTasks::setTempPath(std::string &&pTempPath) noexcept {
+  tempPath_ = std::make_shared<std::string>(std::move(pTempPath));
+  dirtyFlag_[9] = true;
+}
+
+const short &UploadTasks::getValueOfStatus() const noexcept {
+  static const short defaultValue = short();
+  if (status_)
+    return *status_;
+  return defaultValue;
+}
+const std::shared_ptr<short> &UploadTasks::getStatus() const noexcept {
+  return status_;
+}
+void UploadTasks::setStatus(const short &pStatus) noexcept {
+  status_ = std::make_shared<short>(pStatus);
+  dirtyFlag_[10] = true;
+}
+
+const ::trantor::Date &UploadTasks::getValueOfExpiresAt() const noexcept {
+  static const ::trantor::Date defaultValue = ::trantor::Date();
+  if (expiresAt_)
+    return *expiresAt_;
+  return defaultValue;
+}
+const std::shared_ptr<::trantor::Date> &
+UploadTasks::getExpiresAt() const noexcept {
+  return expiresAt_;
+}
+void UploadTasks::setExpiresAt(const ::trantor::Date &pExpiresAt) noexcept {
+  expiresAt_ = std::make_shared<::trantor::Date>(pExpiresAt);
+  dirtyFlag_[11] = true;
+}
+
+const ::trantor::Date &UploadTasks::getValueOfFinalizedAt() const noexcept {
+  static const ::trantor::Date defaultValue = ::trantor::Date();
+  if (finalizedAt_)
+    return *finalizedAt_;
+  return defaultValue;
+}
+const std::shared_ptr<::trantor::Date> &
+UploadTasks::getFinalizedAt() const noexcept {
+  return finalizedAt_;
+}
+void UploadTasks::setFinalizedAt(const ::trantor::Date &pFinalizedAt) noexcept {
+  finalizedAt_ = std::make_shared<::trantor::Date>(pFinalizedAt);
+  dirtyFlag_[12] = true;
+}
+void UploadTasks::setFinalizedAtToNull() noexcept {
+  finalizedAt_.reset();
+  dirtyFlag_[12] = true;
+}
+
+const std::string &UploadTasks::getValueOfFailReason() const noexcept {
+  static const std::string defaultValue = std::string();
+  if (failReason_)
+    return *failReason_;
+  return defaultValue;
+}
+const std::shared_ptr<std::string> &
+UploadTasks::getFailReason() const noexcept {
+  return failReason_;
+}
+void UploadTasks::setFailReason(const std::string &pFailReason) noexcept {
+  failReason_ = std::make_shared<std::string>(pFailReason);
+  dirtyFlag_[13] = true;
+}
+void UploadTasks::setFailReason(std::string &&pFailReason) noexcept {
+  failReason_ = std::make_shared<std::string>(std::move(pFailReason));
+  dirtyFlag_[13] = true;
+}
+void UploadTasks::setFailReasonToNull() noexcept {
+  failReason_.reset();
+  dirtyFlag_[13] = true;
+}
+
+const ::trantor::Date &UploadTasks::getValueOfCreatedAt() const noexcept {
+  static const ::trantor::Date defaultValue = ::trantor::Date();
+  if (createdAt_)
+    return *createdAt_;
+  return defaultValue;
+}
+const std::shared_ptr<::trantor::Date> &
+UploadTasks::getCreatedAt() const noexcept {
+  return createdAt_;
+}
+void UploadTasks::setCreatedAt(const ::trantor::Date &pCreatedAt) noexcept {
+  createdAt_ = std::make_shared<::trantor::Date>(pCreatedAt);
+  dirtyFlag_[14] = true;
+}
+
+const ::trantor::Date &UploadTasks::getValueOfUpdatedAt() const noexcept {
+  static const ::trantor::Date defaultValue = ::trantor::Date();
+  if (updatedAt_)
+    return *updatedAt_;
+  return defaultValue;
+}
+const std::shared_ptr<::trantor::Date> &
+UploadTasks::getUpdatedAt() const noexcept {
+  return updatedAt_;
+}
+void UploadTasks::setUpdatedAt(const ::trantor::Date &pUpdatedAt) noexcept {
+  updatedAt_ = std::make_shared<::trantor::Date>(pUpdatedAt);
+  dirtyFlag_[15] = true;
+}
+
+void UploadTasks::updateId(const uint64_t id) {}
+
+const std::vector<std::string> &UploadTasks::insertColumns() noexcept {
+  static const std::vector<std::string> inCols = {
+      "id",        "user_id",    "folder_id",    "filename",       "file_size",
+      "file_hash", "chunk_size", "total_chunks", "reserved_bytes", "temp_path",
+      "status",    "expires_at", "finalized_at", "fail_reason",    "created_at",
+      "updated_at"};
+  return inCols;
+}
+
+void UploadTasks::outputArgs(drogon::orm::internal::SqlBinder &binder) const {
+  if (dirtyFlag_[0]) {
+    if (getId()) {
+      binder << getValueOfId();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[1]) {
+    if (getUserId()) {
+      binder << getValueOfUserId();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[2]) {
+    if (getFolderId()) {
+      binder << getValueOfFolderId();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[3]) {
+    if (getFilename()) {
+      binder << getValueOfFilename();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[4]) {
+    if (getFileSize()) {
+      binder << getValueOfFileSize();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[5]) {
+    if (getFileHash()) {
+      binder << getValueOfFileHash();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[6]) {
+    if (getChunkSize()) {
+      binder << getValueOfChunkSize();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[7]) {
+    if (getTotalChunks()) {
+      binder << getValueOfTotalChunks();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[8]) {
+    if (getReservedBytes()) {
+      binder << getValueOfReservedBytes();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[9]) {
+    if (getTempPath()) {
+      binder << getValueOfTempPath();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[10]) {
+    if (getStatus()) {
+      binder << getValueOfStatus();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[11]) {
+    if (getExpiresAt()) {
+      binder << getValueOfExpiresAt();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[12]) {
+    if (getFinalizedAt()) {
+      binder << getValueOfFinalizedAt();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[13]) {
+    if (getFailReason()) {
+      binder << getValueOfFailReason();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[14]) {
+    if (getCreatedAt()) {
+      binder << getValueOfCreatedAt();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[15]) {
+    if (getUpdatedAt()) {
+      binder << getValueOfUpdatedAt();
+    } else {
+      binder << nullptr;
+    }
+  }
+}
+
+const std::vector<std::string> UploadTasks::updateColumns() const {
+  std::vector<std::string> ret;
+  if (dirtyFlag_[0]) {
+    ret.push_back(getColumnName(0));
+  }
+  if (dirtyFlag_[1]) {
+    ret.push_back(getColumnName(1));
+  }
+  if (dirtyFlag_[2]) {
+    ret.push_back(getColumnName(2));
+  }
+  if (dirtyFlag_[3]) {
+    ret.push_back(getColumnName(3));
+  }
+  if (dirtyFlag_[4]) {
+    ret.push_back(getColumnName(4));
+  }
+  if (dirtyFlag_[5]) {
+    ret.push_back(getColumnName(5));
+  }
+  if (dirtyFlag_[6]) {
+    ret.push_back(getColumnName(6));
+  }
+  if (dirtyFlag_[7]) {
+    ret.push_back(getColumnName(7));
+  }
+  if (dirtyFlag_[8]) {
+    ret.push_back(getColumnName(8));
+  }
+  if (dirtyFlag_[9]) {
+    ret.push_back(getColumnName(9));
+  }
+  if (dirtyFlag_[10]) {
+    ret.push_back(getColumnName(10));
+  }
+  if (dirtyFlag_[11]) {
+    ret.push_back(getColumnName(11));
+  }
+  if (dirtyFlag_[12]) {
+    ret.push_back(getColumnName(12));
+  }
+  if (dirtyFlag_[13]) {
+    ret.push_back(getColumnName(13));
+  }
+  if (dirtyFlag_[14]) {
+    ret.push_back(getColumnName(14));
+  }
+  if (dirtyFlag_[15]) {
+    ret.push_back(getColumnName(15));
+  }
+  return ret;
+}
+
+void UploadTasks::updateArgs(drogon::orm::internal::SqlBinder &binder) const {
+  if (dirtyFlag_[0]) {
+    if (getId()) {
+      binder << getValueOfId();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[1]) {
+    if (getUserId()) {
+      binder << getValueOfUserId();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[2]) {
+    if (getFolderId()) {
+      binder << getValueOfFolderId();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[3]) {
+    if (getFilename()) {
+      binder << getValueOfFilename();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[4]) {
+    if (getFileSize()) {
+      binder << getValueOfFileSize();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[5]) {
+    if (getFileHash()) {
+      binder << getValueOfFileHash();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[6]) {
+    if (getChunkSize()) {
+      binder << getValueOfChunkSize();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[7]) {
+    if (getTotalChunks()) {
+      binder << getValueOfTotalChunks();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[8]) {
+    if (getReservedBytes()) {
+      binder << getValueOfReservedBytes();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[9]) {
+    if (getTempPath()) {
+      binder << getValueOfTempPath();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[10]) {
+    if (getStatus()) {
+      binder << getValueOfStatus();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[11]) {
+    if (getExpiresAt()) {
+      binder << getValueOfExpiresAt();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[12]) {
+    if (getFinalizedAt()) {
+      binder << getValueOfFinalizedAt();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[13]) {
+    if (getFailReason()) {
+      binder << getValueOfFailReason();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[14]) {
+    if (getCreatedAt()) {
+      binder << getValueOfCreatedAt();
+    } else {
+      binder << nullptr;
+    }
+  }
+  if (dirtyFlag_[15]) {
+    if (getUpdatedAt()) {
+      binder << getValueOfUpdatedAt();
+    } else {
+      binder << nullptr;
+    }
+  }
+}
+Json::Value UploadTasks::toJson() const {
+  Json::Value ret;
+  if (getId()) {
+    ret["id"] = getValueOfId();
+  } else {
+    ret["id"] = Json::Value();
+  }
+  if (getUserId()) {
+    ret["user_id"] = (Json::Int64)getValueOfUserId();
+  } else {
+    ret["user_id"] = Json::Value();
+  }
+  if (getFolderId()) {
+    ret["folder_id"] = (Json::Int64)getValueOfFolderId();
+  } else {
+    ret["folder_id"] = Json::Value();
+  }
+  if (getFilename()) {
+    ret["filename"] = getValueOfFilename();
+  } else {
+    ret["filename"] = Json::Value();
+  }
+  if (getFileSize()) {
+    ret["file_size"] = (Json::Int64)getValueOfFileSize();
+  } else {
+    ret["file_size"] = Json::Value();
+  }
+  if (getFileHash()) {
+    ret["file_hash"] = getValueOfFileHash();
+  } else {
+    ret["file_hash"] = Json::Value();
+  }
+  if (getChunkSize()) {
+    ret["chunk_size"] = getValueOfChunkSize();
+  } else {
+    ret["chunk_size"] = Json::Value();
+  }
+  if (getTotalChunks()) {
+    ret["total_chunks"] = getValueOfTotalChunks();
+  } else {
+    ret["total_chunks"] = Json::Value();
+  }
+  if (getReservedBytes()) {
+    ret["reserved_bytes"] = (Json::Int64)getValueOfReservedBytes();
+  } else {
+    ret["reserved_bytes"] = Json::Value();
+  }
+  if (getTempPath()) {
+    ret["temp_path"] = getValueOfTempPath();
+  } else {
+    ret["temp_path"] = Json::Value();
+  }
+  if (getStatus()) {
+    ret["status"] = getValueOfStatus();
+  } else {
+    ret["status"] = Json::Value();
+  }
+  if (getExpiresAt()) {
+    ret["expires_at"] = getExpiresAt()->toDbStringLocal();
+  } else {
+    ret["expires_at"] = Json::Value();
+  }
+  if (getFinalizedAt()) {
+    ret["finalized_at"] = getFinalizedAt()->toDbStringLocal();
+  } else {
+    ret["finalized_at"] = Json::Value();
+  }
+  if (getFailReason()) {
+    ret["fail_reason"] = getValueOfFailReason();
+  } else {
+    ret["fail_reason"] = Json::Value();
+  }
+  if (getCreatedAt()) {
+    ret["created_at"] = getCreatedAt()->toDbStringLocal();
+  } else {
+    ret["created_at"] = Json::Value();
+  }
+  if (getUpdatedAt()) {
+    ret["updated_at"] = getUpdatedAt()->toDbStringLocal();
+  } else {
+    ret["updated_at"] = Json::Value();
+  }
+  return ret;
 }
 
 Json::Value UploadTasks::toMasqueradedJson(
-    const std::vector<std::string> &pMasqueradingVector) const
-{
-    Json::Value ret;
-    if(pMasqueradingVector.size() == 16)
-    {
-        if(!pMasqueradingVector[0].empty())
-        {
-            if(getId())
-            {
-                ret[pMasqueradingVector[0]]=getValueOfId();
-            }
-            else
-            {
-                ret[pMasqueradingVector[0]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[1].empty())
-        {
-            if(getUserId())
-            {
-                ret[pMasqueradingVector[1]]=(Json::UInt64)getValueOfUserId();
-            }
-            else
-            {
-                ret[pMasqueradingVector[1]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[2].empty())
-        {
-            if(getFolderId())
-            {
-                ret[pMasqueradingVector[2]]=(Json::UInt64)getValueOfFolderId();
-            }
-            else
-            {
-                ret[pMasqueradingVector[2]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[3].empty())
-        {
-            if(getFilename())
-            {
-                ret[pMasqueradingVector[3]]=getValueOfFilename();
-            }
-            else
-            {
-                ret[pMasqueradingVector[3]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[4].empty())
-        {
-            if(getFileSize())
-            {
-                ret[pMasqueradingVector[4]]=(Json::UInt64)getValueOfFileSize();
-            }
-            else
-            {
-                ret[pMasqueradingVector[4]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[5].empty())
-        {
-            if(getFileHash())
-            {
-                ret[pMasqueradingVector[5]]=getValueOfFileHash();
-            }
-            else
-            {
-                ret[pMasqueradingVector[5]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[6].empty())
-        {
-            if(getChunkSize())
-            {
-                ret[pMasqueradingVector[6]]=getValueOfChunkSize();
-            }
-            else
-            {
-                ret[pMasqueradingVector[6]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[7].empty())
-        {
-            if(getTotalChunks())
-            {
-                ret[pMasqueradingVector[7]]=getValueOfTotalChunks();
-            }
-            else
-            {
-                ret[pMasqueradingVector[7]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[8].empty())
-        {
-            if(getReservedBytes())
-            {
-                ret[pMasqueradingVector[8]]=(Json::UInt64)getValueOfReservedBytes();
-            }
-            else
-            {
-                ret[pMasqueradingVector[8]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[9].empty())
-        {
-            if(getTempPath())
-            {
-                ret[pMasqueradingVector[9]]=getValueOfTempPath();
-            }
-            else
-            {
-                ret[pMasqueradingVector[9]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[10].empty())
-        {
-            if(getStatus())
-            {
-                ret[pMasqueradingVector[10]]=getValueOfStatus();
-            }
-            else
-            {
-                ret[pMasqueradingVector[10]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[11].empty())
-        {
-            if(getExpiresAt())
-            {
-                ret[pMasqueradingVector[11]]=getExpiresAt()->toDbStringLocal();
-            }
-            else
-            {
-                ret[pMasqueradingVector[11]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[12].empty())
-        {
-            if(getFinalizedAt())
-            {
-                ret[pMasqueradingVector[12]]=getFinalizedAt()->toDbStringLocal();
-            }
-            else
-            {
-                ret[pMasqueradingVector[12]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[13].empty())
-        {
-            if(getFailReason())
-            {
-                ret[pMasqueradingVector[13]]=getValueOfFailReason();
-            }
-            else
-            {
-                ret[pMasqueradingVector[13]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[14].empty())
-        {
-            if(getCreatedAt())
-            {
-                ret[pMasqueradingVector[14]]=getCreatedAt()->toDbStringLocal();
-            }
-            else
-            {
-                ret[pMasqueradingVector[14]]=Json::Value();
-            }
-        }
-        if(!pMasqueradingVector[15].empty())
-        {
-            if(getUpdatedAt())
-            {
-                ret[pMasqueradingVector[15]]=getUpdatedAt()->toDbStringLocal();
-            }
-            else
-            {
-                ret[pMasqueradingVector[15]]=Json::Value();
-            }
-        }
-        return ret;
+    const std::vector<std::string> &pMasqueradingVector) const {
+  Json::Value ret;
+  if (pMasqueradingVector.size() == 16) {
+    if (!pMasqueradingVector[0].empty()) {
+      if (getId()) {
+        ret[pMasqueradingVector[0]] = getValueOfId();
+      } else {
+        ret[pMasqueradingVector[0]] = Json::Value();
+      }
     }
-    LOG_ERROR << "Masquerade failed";
-    if(getId())
-    {
-        ret["id"]=getValueOfId();
+    if (!pMasqueradingVector[1].empty()) {
+      if (getUserId()) {
+        ret[pMasqueradingVector[1]] = (Json::Int64)getValueOfUserId();
+      } else {
+        ret[pMasqueradingVector[1]] = Json::Value();
+      }
     }
-    else
-    {
-        ret["id"]=Json::Value();
+    if (!pMasqueradingVector[2].empty()) {
+      if (getFolderId()) {
+        ret[pMasqueradingVector[2]] = (Json::Int64)getValueOfFolderId();
+      } else {
+        ret[pMasqueradingVector[2]] = Json::Value();
+      }
     }
-    if(getUserId())
-    {
-        ret["user_id"]=(Json::UInt64)getValueOfUserId();
+    if (!pMasqueradingVector[3].empty()) {
+      if (getFilename()) {
+        ret[pMasqueradingVector[3]] = getValueOfFilename();
+      } else {
+        ret[pMasqueradingVector[3]] = Json::Value();
+      }
     }
-    else
-    {
-        ret["user_id"]=Json::Value();
+    if (!pMasqueradingVector[4].empty()) {
+      if (getFileSize()) {
+        ret[pMasqueradingVector[4]] = (Json::Int64)getValueOfFileSize();
+      } else {
+        ret[pMasqueradingVector[4]] = Json::Value();
+      }
     }
-    if(getFolderId())
-    {
-        ret["folder_id"]=(Json::UInt64)getValueOfFolderId();
+    if (!pMasqueradingVector[5].empty()) {
+      if (getFileHash()) {
+        ret[pMasqueradingVector[5]] = getValueOfFileHash();
+      } else {
+        ret[pMasqueradingVector[5]] = Json::Value();
+      }
     }
-    else
-    {
-        ret["folder_id"]=Json::Value();
+    if (!pMasqueradingVector[6].empty()) {
+      if (getChunkSize()) {
+        ret[pMasqueradingVector[6]] = getValueOfChunkSize();
+      } else {
+        ret[pMasqueradingVector[6]] = Json::Value();
+      }
     }
-    if(getFilename())
-    {
-        ret["filename"]=getValueOfFilename();
+    if (!pMasqueradingVector[7].empty()) {
+      if (getTotalChunks()) {
+        ret[pMasqueradingVector[7]] = getValueOfTotalChunks();
+      } else {
+        ret[pMasqueradingVector[7]] = Json::Value();
+      }
     }
-    else
-    {
-        ret["filename"]=Json::Value();
+    if (!pMasqueradingVector[8].empty()) {
+      if (getReservedBytes()) {
+        ret[pMasqueradingVector[8]] = (Json::Int64)getValueOfReservedBytes();
+      } else {
+        ret[pMasqueradingVector[8]] = Json::Value();
+      }
     }
-    if(getFileSize())
-    {
-        ret["file_size"]=(Json::UInt64)getValueOfFileSize();
+    if (!pMasqueradingVector[9].empty()) {
+      if (getTempPath()) {
+        ret[pMasqueradingVector[9]] = getValueOfTempPath();
+      } else {
+        ret[pMasqueradingVector[9]] = Json::Value();
+      }
     }
-    else
-    {
-        ret["file_size"]=Json::Value();
+    if (!pMasqueradingVector[10].empty()) {
+      if (getStatus()) {
+        ret[pMasqueradingVector[10]] = getValueOfStatus();
+      } else {
+        ret[pMasqueradingVector[10]] = Json::Value();
+      }
     }
-    if(getFileHash())
-    {
-        ret["file_hash"]=getValueOfFileHash();
+    if (!pMasqueradingVector[11].empty()) {
+      if (getExpiresAt()) {
+        ret[pMasqueradingVector[11]] = getExpiresAt()->toDbStringLocal();
+      } else {
+        ret[pMasqueradingVector[11]] = Json::Value();
+      }
     }
-    else
-    {
-        ret["file_hash"]=Json::Value();
+    if (!pMasqueradingVector[12].empty()) {
+      if (getFinalizedAt()) {
+        ret[pMasqueradingVector[12]] = getFinalizedAt()->toDbStringLocal();
+      } else {
+        ret[pMasqueradingVector[12]] = Json::Value();
+      }
     }
-    if(getChunkSize())
-    {
-        ret["chunk_size"]=getValueOfChunkSize();
+    if (!pMasqueradingVector[13].empty()) {
+      if (getFailReason()) {
+        ret[pMasqueradingVector[13]] = getValueOfFailReason();
+      } else {
+        ret[pMasqueradingVector[13]] = Json::Value();
+      }
     }
-    else
-    {
-        ret["chunk_size"]=Json::Value();
+    if (!pMasqueradingVector[14].empty()) {
+      if (getCreatedAt()) {
+        ret[pMasqueradingVector[14]] = getCreatedAt()->toDbStringLocal();
+      } else {
+        ret[pMasqueradingVector[14]] = Json::Value();
+      }
     }
-    if(getTotalChunks())
-    {
-        ret["total_chunks"]=getValueOfTotalChunks();
-    }
-    else
-    {
-        ret["total_chunks"]=Json::Value();
-    }
-    if(getReservedBytes())
-    {
-        ret["reserved_bytes"]=(Json::UInt64)getValueOfReservedBytes();
-    }
-    else
-    {
-        ret["reserved_bytes"]=Json::Value();
-    }
-    if(getTempPath())
-    {
-        ret["temp_path"]=getValueOfTempPath();
-    }
-    else
-    {
-        ret["temp_path"]=Json::Value();
-    }
-    if(getStatus())
-    {
-        ret["status"]=getValueOfStatus();
-    }
-    else
-    {
-        ret["status"]=Json::Value();
-    }
-    if(getExpiresAt())
-    {
-        ret["expires_at"]=getExpiresAt()->toDbStringLocal();
-    }
-    else
-    {
-        ret["expires_at"]=Json::Value();
-    }
-    if(getFinalizedAt())
-    {
-        ret["finalized_at"]=getFinalizedAt()->toDbStringLocal();
-    }
-    else
-    {
-        ret["finalized_at"]=Json::Value();
-    }
-    if(getFailReason())
-    {
-        ret["fail_reason"]=getValueOfFailReason();
-    }
-    else
-    {
-        ret["fail_reason"]=Json::Value();
-    }
-    if(getCreatedAt())
-    {
-        ret["created_at"]=getCreatedAt()->toDbStringLocal();
-    }
-    else
-    {
-        ret["created_at"]=Json::Value();
-    }
-    if(getUpdatedAt())
-    {
-        ret["updated_at"]=getUpdatedAt()->toDbStringLocal();
-    }
-    else
-    {
-        ret["updated_at"]=Json::Value();
+    if (!pMasqueradingVector[15].empty()) {
+      if (getUpdatedAt()) {
+        ret[pMasqueradingVector[15]] = getUpdatedAt()->toDbStringLocal();
+      } else {
+        ret[pMasqueradingVector[15]] = Json::Value();
+      }
     }
     return ret;
+  }
+  LOG_ERROR << "Masquerade failed";
+  if (getId()) {
+    ret["id"] = getValueOfId();
+  } else {
+    ret["id"] = Json::Value();
+  }
+  if (getUserId()) {
+    ret["user_id"] = (Json::Int64)getValueOfUserId();
+  } else {
+    ret["user_id"] = Json::Value();
+  }
+  if (getFolderId()) {
+    ret["folder_id"] = (Json::Int64)getValueOfFolderId();
+  } else {
+    ret["folder_id"] = Json::Value();
+  }
+  if (getFilename()) {
+    ret["filename"] = getValueOfFilename();
+  } else {
+    ret["filename"] = Json::Value();
+  }
+  if (getFileSize()) {
+    ret["file_size"] = (Json::Int64)getValueOfFileSize();
+  } else {
+    ret["file_size"] = Json::Value();
+  }
+  if (getFileHash()) {
+    ret["file_hash"] = getValueOfFileHash();
+  } else {
+    ret["file_hash"] = Json::Value();
+  }
+  if (getChunkSize()) {
+    ret["chunk_size"] = getValueOfChunkSize();
+  } else {
+    ret["chunk_size"] = Json::Value();
+  }
+  if (getTotalChunks()) {
+    ret["total_chunks"] = getValueOfTotalChunks();
+  } else {
+    ret["total_chunks"] = Json::Value();
+  }
+  if (getReservedBytes()) {
+    ret["reserved_bytes"] = (Json::Int64)getValueOfReservedBytes();
+  } else {
+    ret["reserved_bytes"] = Json::Value();
+  }
+  if (getTempPath()) {
+    ret["temp_path"] = getValueOfTempPath();
+  } else {
+    ret["temp_path"] = Json::Value();
+  }
+  if (getStatus()) {
+    ret["status"] = getValueOfStatus();
+  } else {
+    ret["status"] = Json::Value();
+  }
+  if (getExpiresAt()) {
+    ret["expires_at"] = getExpiresAt()->toDbStringLocal();
+  } else {
+    ret["expires_at"] = Json::Value();
+  }
+  if (getFinalizedAt()) {
+    ret["finalized_at"] = getFinalizedAt()->toDbStringLocal();
+  } else {
+    ret["finalized_at"] = Json::Value();
+  }
+  if (getFailReason()) {
+    ret["fail_reason"] = getValueOfFailReason();
+  } else {
+    ret["fail_reason"] = Json::Value();
+  }
+  if (getCreatedAt()) {
+    ret["created_at"] = getCreatedAt()->toDbStringLocal();
+  } else {
+    ret["created_at"] = Json::Value();
+  }
+  if (getUpdatedAt()) {
+    ret["updated_at"] = getUpdatedAt()->toDbStringLocal();
+  } else {
+    ret["updated_at"] = Json::Value();
+  }
+  return ret;
 }
 
-bool UploadTasks::validateJsonForCreation(const Json::Value &pJson, std::string &err)
-{
-    if(pJson.isMember("id"))
-    {
-        if(!validJsonOfField(0, "id", pJson["id"], err, true))
-            return false;
-    }
-    else
-    {
-        err="The id column cannot be null";
-        return false;
-    }
-    if(pJson.isMember("user_id"))
-    {
-        if(!validJsonOfField(1, "user_id", pJson["user_id"], err, true))
-            return false;
-    }
-    else
-    {
-        err="The user_id column cannot be null";
-        return false;
-    }
-    if(pJson.isMember("folder_id"))
-    {
-        if(!validJsonOfField(2, "folder_id", pJson["folder_id"], err, true))
-            return false;
-    }
-    if(pJson.isMember("filename"))
-    {
-        if(!validJsonOfField(3, "filename", pJson["filename"], err, true))
-            return false;
-    }
-    else
-    {
-        err="The filename column cannot be null";
-        return false;
-    }
-    if(pJson.isMember("file_size"))
-    {
-        if(!validJsonOfField(4, "file_size", pJson["file_size"], err, true))
-            return false;
-    }
-    else
-    {
-        err="The file_size column cannot be null";
-        return false;
-    }
-    if(pJson.isMember("file_hash"))
-    {
-        if(!validJsonOfField(5, "file_hash", pJson["file_hash"], err, true))
-            return false;
-    }
-    else
-    {
-        err="The file_hash column cannot be null";
-        return false;
-    }
-    if(pJson.isMember("chunk_size"))
-    {
-        if(!validJsonOfField(6, "chunk_size", pJson["chunk_size"], err, true))
-            return false;
-    }
-    else
-    {
-        err="The chunk_size column cannot be null";
-        return false;
-    }
-    if(pJson.isMember("total_chunks"))
-    {
-        if(!validJsonOfField(7, "total_chunks", pJson["total_chunks"], err, true))
-            return false;
-    }
-    else
-    {
-        err="The total_chunks column cannot be null";
-        return false;
-    }
-    if(pJson.isMember("reserved_bytes"))
-    {
-        if(!validJsonOfField(8, "reserved_bytes", pJson["reserved_bytes"], err, true))
-            return false;
-    }
-    if(pJson.isMember("temp_path"))
-    {
-        if(!validJsonOfField(9, "temp_path", pJson["temp_path"], err, true))
-            return false;
-    }
-    else
-    {
-        err="The temp_path column cannot be null";
-        return false;
-    }
-    if(pJson.isMember("status"))
-    {
-        if(!validJsonOfField(10, "status", pJson["status"], err, true))
-            return false;
-    }
-    if(pJson.isMember("expires_at"))
-    {
-        if(!validJsonOfField(11, "expires_at", pJson["expires_at"], err, true))
-            return false;
-    }
-    else
-    {
-        err="The expires_at column cannot be null";
-        return false;
-    }
-    if(pJson.isMember("finalized_at"))
-    {
-        if(!validJsonOfField(12, "finalized_at", pJson["finalized_at"], err, true))
-            return false;
-    }
-    if(pJson.isMember("fail_reason"))
-    {
-        if(!validJsonOfField(13, "fail_reason", pJson["fail_reason"], err, true))
-            return false;
-    }
-    if(pJson.isMember("created_at"))
-    {
-        if(!validJsonOfField(14, "created_at", pJson["created_at"], err, true))
-            return false;
-    }
-    if(pJson.isMember("updated_at"))
-    {
-        if(!validJsonOfField(15, "updated_at", pJson["updated_at"], err, true))
-            return false;
-    }
-    return true;
+bool UploadTasks::validateJsonForCreation(const Json::Value &pJson,
+                                          std::string &err) {
+  if (pJson.isMember("id")) {
+    if (!validJsonOfField(0, "id", pJson["id"], err, true))
+      return false;
+  } else {
+    err = "The id column cannot be null";
+    return false;
+  }
+  if (pJson.isMember("user_id")) {
+    if (!validJsonOfField(1, "user_id", pJson["user_id"], err, true))
+      return false;
+  } else {
+    err = "The user_id column cannot be null";
+    return false;
+  }
+  if (pJson.isMember("folder_id")) {
+    if (!validJsonOfField(2, "folder_id", pJson["folder_id"], err, true))
+      return false;
+  }
+  if (pJson.isMember("filename")) {
+    if (!validJsonOfField(3, "filename", pJson["filename"], err, true))
+      return false;
+  } else {
+    err = "The filename column cannot be null";
+    return false;
+  }
+  if (pJson.isMember("file_size")) {
+    if (!validJsonOfField(4, "file_size", pJson["file_size"], err, true))
+      return false;
+  } else {
+    err = "The file_size column cannot be null";
+    return false;
+  }
+  if (pJson.isMember("file_hash")) {
+    if (!validJsonOfField(5, "file_hash", pJson["file_hash"], err, true))
+      return false;
+  } else {
+    err = "The file_hash column cannot be null";
+    return false;
+  }
+  if (pJson.isMember("chunk_size")) {
+    if (!validJsonOfField(6, "chunk_size", pJson["chunk_size"], err, true))
+      return false;
+  } else {
+    err = "The chunk_size column cannot be null";
+    return false;
+  }
+  if (pJson.isMember("total_chunks")) {
+    if (!validJsonOfField(7, "total_chunks", pJson["total_chunks"], err, true))
+      return false;
+  } else {
+    err = "The total_chunks column cannot be null";
+    return false;
+  }
+  if (pJson.isMember("reserved_bytes")) {
+    if (!validJsonOfField(8, "reserved_bytes", pJson["reserved_bytes"], err,
+                          true))
+      return false;
+  }
+  if (pJson.isMember("temp_path")) {
+    if (!validJsonOfField(9, "temp_path", pJson["temp_path"], err, true))
+      return false;
+  } else {
+    err = "The temp_path column cannot be null";
+    return false;
+  }
+  if (pJson.isMember("status")) {
+    if (!validJsonOfField(10, "status", pJson["status"], err, true))
+      return false;
+  }
+  if (pJson.isMember("expires_at")) {
+    if (!validJsonOfField(11, "expires_at", pJson["expires_at"], err, true))
+      return false;
+  } else {
+    err = "The expires_at column cannot be null";
+    return false;
+  }
+  if (pJson.isMember("finalized_at")) {
+    if (!validJsonOfField(12, "finalized_at", pJson["finalized_at"], err, true))
+      return false;
+  }
+  if (pJson.isMember("fail_reason")) {
+    if (!validJsonOfField(13, "fail_reason", pJson["fail_reason"], err, true))
+      return false;
+  }
+  if (pJson.isMember("created_at")) {
+    if (!validJsonOfField(14, "created_at", pJson["created_at"], err, true))
+      return false;
+  }
+  if (pJson.isMember("updated_at")) {
+    if (!validJsonOfField(15, "updated_at", pJson["updated_at"], err, true))
+      return false;
+  }
+  return true;
 }
-bool UploadTasks::validateMasqueradedJsonForCreation(const Json::Value &pJson,
-                                                     const std::vector<std::string> &pMasqueradingVector,
-                                                     std::string &err)
-{
-    if(pMasqueradingVector.size() != 16)
-    {
-        err = "Bad masquerading vector";
+bool UploadTasks::validateMasqueradedJsonForCreation(
+    const Json::Value &pJson,
+    const std::vector<std::string> &pMasqueradingVector, std::string &err) {
+  if (pMasqueradingVector.size() != 16) {
+    err = "Bad masquerading vector";
+    return false;
+  }
+  try {
+    if (!pMasqueradingVector[0].empty()) {
+      if (pJson.isMember(pMasqueradingVector[0])) {
+        if (!validJsonOfField(0, pMasqueradingVector[0],
+                              pJson[pMasqueradingVector[0]], err, true))
+          return false;
+      } else {
+        err = "The " + pMasqueradingVector[0] + " column cannot be null";
         return false;
-    }
-    try {
-      if(!pMasqueradingVector[0].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[0]))
-          {
-              if(!validJsonOfField(0, pMasqueradingVector[0], pJson[pMasqueradingVector[0]], err, true))
-                  return false;
-          }
-        else
-        {
-            err="The " + pMasqueradingVector[0] + " column cannot be null";
-            return false;
-        }
-      }
-      if(!pMasqueradingVector[1].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[1]))
-          {
-              if(!validJsonOfField(1, pMasqueradingVector[1], pJson[pMasqueradingVector[1]], err, true))
-                  return false;
-          }
-        else
-        {
-            err="The " + pMasqueradingVector[1] + " column cannot be null";
-            return false;
-        }
-      }
-      if(!pMasqueradingVector[2].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[2]))
-          {
-              if(!validJsonOfField(2, pMasqueradingVector[2], pJson[pMasqueradingVector[2]], err, true))
-                  return false;
-          }
-      }
-      if(!pMasqueradingVector[3].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[3]))
-          {
-              if(!validJsonOfField(3, pMasqueradingVector[3], pJson[pMasqueradingVector[3]], err, true))
-                  return false;
-          }
-        else
-        {
-            err="The " + pMasqueradingVector[3] + " column cannot be null";
-            return false;
-        }
-      }
-      if(!pMasqueradingVector[4].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[4]))
-          {
-              if(!validJsonOfField(4, pMasqueradingVector[4], pJson[pMasqueradingVector[4]], err, true))
-                  return false;
-          }
-        else
-        {
-            err="The " + pMasqueradingVector[4] + " column cannot be null";
-            return false;
-        }
-      }
-      if(!pMasqueradingVector[5].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[5]))
-          {
-              if(!validJsonOfField(5, pMasqueradingVector[5], pJson[pMasqueradingVector[5]], err, true))
-                  return false;
-          }
-        else
-        {
-            err="The " + pMasqueradingVector[5] + " column cannot be null";
-            return false;
-        }
-      }
-      if(!pMasqueradingVector[6].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[6]))
-          {
-              if(!validJsonOfField(6, pMasqueradingVector[6], pJson[pMasqueradingVector[6]], err, true))
-                  return false;
-          }
-        else
-        {
-            err="The " + pMasqueradingVector[6] + " column cannot be null";
-            return false;
-        }
-      }
-      if(!pMasqueradingVector[7].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[7]))
-          {
-              if(!validJsonOfField(7, pMasqueradingVector[7], pJson[pMasqueradingVector[7]], err, true))
-                  return false;
-          }
-        else
-        {
-            err="The " + pMasqueradingVector[7] + " column cannot be null";
-            return false;
-        }
-      }
-      if(!pMasqueradingVector[8].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[8]))
-          {
-              if(!validJsonOfField(8, pMasqueradingVector[8], pJson[pMasqueradingVector[8]], err, true))
-                  return false;
-          }
-      }
-      if(!pMasqueradingVector[9].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[9]))
-          {
-              if(!validJsonOfField(9, pMasqueradingVector[9], pJson[pMasqueradingVector[9]], err, true))
-                  return false;
-          }
-        else
-        {
-            err="The " + pMasqueradingVector[9] + " column cannot be null";
-            return false;
-        }
-      }
-      if(!pMasqueradingVector[10].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[10]))
-          {
-              if(!validJsonOfField(10, pMasqueradingVector[10], pJson[pMasqueradingVector[10]], err, true))
-                  return false;
-          }
-      }
-      if(!pMasqueradingVector[11].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[11]))
-          {
-              if(!validJsonOfField(11, pMasqueradingVector[11], pJson[pMasqueradingVector[11]], err, true))
-                  return false;
-          }
-        else
-        {
-            err="The " + pMasqueradingVector[11] + " column cannot be null";
-            return false;
-        }
-      }
-      if(!pMasqueradingVector[12].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[12]))
-          {
-              if(!validJsonOfField(12, pMasqueradingVector[12], pJson[pMasqueradingVector[12]], err, true))
-                  return false;
-          }
-      }
-      if(!pMasqueradingVector[13].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[13]))
-          {
-              if(!validJsonOfField(13, pMasqueradingVector[13], pJson[pMasqueradingVector[13]], err, true))
-                  return false;
-          }
-      }
-      if(!pMasqueradingVector[14].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[14]))
-          {
-              if(!validJsonOfField(14, pMasqueradingVector[14], pJson[pMasqueradingVector[14]], err, true))
-                  return false;
-          }
-      }
-      if(!pMasqueradingVector[15].empty())
-      {
-          if(pJson.isMember(pMasqueradingVector[15]))
-          {
-              if(!validJsonOfField(15, pMasqueradingVector[15], pJson[pMasqueradingVector[15]], err, true))
-                  return false;
-          }
       }
     }
-    catch(const Json::LogicError &e)
-    {
-      err = e.what();
+    if (!pMasqueradingVector[1].empty()) {
+      if (pJson.isMember(pMasqueradingVector[1])) {
+        if (!validJsonOfField(1, pMasqueradingVector[1],
+                              pJson[pMasqueradingVector[1]], err, true))
+          return false;
+      } else {
+        err = "The " + pMasqueradingVector[1] + " column cannot be null";
+        return false;
+      }
+    }
+    if (!pMasqueradingVector[2].empty()) {
+      if (pJson.isMember(pMasqueradingVector[2])) {
+        if (!validJsonOfField(2, pMasqueradingVector[2],
+                              pJson[pMasqueradingVector[2]], err, true))
+          return false;
+      }
+    }
+    if (!pMasqueradingVector[3].empty()) {
+      if (pJson.isMember(pMasqueradingVector[3])) {
+        if (!validJsonOfField(3, pMasqueradingVector[3],
+                              pJson[pMasqueradingVector[3]], err, true))
+          return false;
+      } else {
+        err = "The " + pMasqueradingVector[3] + " column cannot be null";
+        return false;
+      }
+    }
+    if (!pMasqueradingVector[4].empty()) {
+      if (pJson.isMember(pMasqueradingVector[4])) {
+        if (!validJsonOfField(4, pMasqueradingVector[4],
+                              pJson[pMasqueradingVector[4]], err, true))
+          return false;
+      } else {
+        err = "The " + pMasqueradingVector[4] + " column cannot be null";
+        return false;
+      }
+    }
+    if (!pMasqueradingVector[5].empty()) {
+      if (pJson.isMember(pMasqueradingVector[5])) {
+        if (!validJsonOfField(5, pMasqueradingVector[5],
+                              pJson[pMasqueradingVector[5]], err, true))
+          return false;
+      } else {
+        err = "The " + pMasqueradingVector[5] + " column cannot be null";
+        return false;
+      }
+    }
+    if (!pMasqueradingVector[6].empty()) {
+      if (pJson.isMember(pMasqueradingVector[6])) {
+        if (!validJsonOfField(6, pMasqueradingVector[6],
+                              pJson[pMasqueradingVector[6]], err, true))
+          return false;
+      } else {
+        err = "The " + pMasqueradingVector[6] + " column cannot be null";
+        return false;
+      }
+    }
+    if (!pMasqueradingVector[7].empty()) {
+      if (pJson.isMember(pMasqueradingVector[7])) {
+        if (!validJsonOfField(7, pMasqueradingVector[7],
+                              pJson[pMasqueradingVector[7]], err, true))
+          return false;
+      } else {
+        err = "The " + pMasqueradingVector[7] + " column cannot be null";
+        return false;
+      }
+    }
+    if (!pMasqueradingVector[8].empty()) {
+      if (pJson.isMember(pMasqueradingVector[8])) {
+        if (!validJsonOfField(8, pMasqueradingVector[8],
+                              pJson[pMasqueradingVector[8]], err, true))
+          return false;
+      }
+    }
+    if (!pMasqueradingVector[9].empty()) {
+      if (pJson.isMember(pMasqueradingVector[9])) {
+        if (!validJsonOfField(9, pMasqueradingVector[9],
+                              pJson[pMasqueradingVector[9]], err, true))
+          return false;
+      } else {
+        err = "The " + pMasqueradingVector[9] + " column cannot be null";
+        return false;
+      }
+    }
+    if (!pMasqueradingVector[10].empty()) {
+      if (pJson.isMember(pMasqueradingVector[10])) {
+        if (!validJsonOfField(10, pMasqueradingVector[10],
+                              pJson[pMasqueradingVector[10]], err, true))
+          return false;
+      }
+    }
+    if (!pMasqueradingVector[11].empty()) {
+      if (pJson.isMember(pMasqueradingVector[11])) {
+        if (!validJsonOfField(11, pMasqueradingVector[11],
+                              pJson[pMasqueradingVector[11]], err, true))
+          return false;
+      } else {
+        err = "The " + pMasqueradingVector[11] + " column cannot be null";
+        return false;
+      }
+    }
+    if (!pMasqueradingVector[12].empty()) {
+      if (pJson.isMember(pMasqueradingVector[12])) {
+        if (!validJsonOfField(12, pMasqueradingVector[12],
+                              pJson[pMasqueradingVector[12]], err, true))
+          return false;
+      }
+    }
+    if (!pMasqueradingVector[13].empty()) {
+      if (pJson.isMember(pMasqueradingVector[13])) {
+        if (!validJsonOfField(13, pMasqueradingVector[13],
+                              pJson[pMasqueradingVector[13]], err, true))
+          return false;
+      }
+    }
+    if (!pMasqueradingVector[14].empty()) {
+      if (pJson.isMember(pMasqueradingVector[14])) {
+        if (!validJsonOfField(14, pMasqueradingVector[14],
+                              pJson[pMasqueradingVector[14]], err, true))
+          return false;
+      }
+    }
+    if (!pMasqueradingVector[15].empty()) {
+      if (pJson.isMember(pMasqueradingVector[15])) {
+        if (!validJsonOfField(15, pMasqueradingVector[15],
+                              pJson[pMasqueradingVector[15]], err, true))
+          return false;
+      }
+    }
+  } catch (const Json::LogicError &e) {
+    err = e.what();
+    return false;
+  }
+  return true;
+}
+bool UploadTasks::validateJsonForUpdate(const Json::Value &pJson,
+                                        std::string &err) {
+  if (pJson.isMember("id")) {
+    if (!validJsonOfField(0, "id", pJson["id"], err, false))
+      return false;
+  } else {
+    err = "The value of primary key must be set in the json object for update";
+    return false;
+  }
+  if (pJson.isMember("user_id")) {
+    if (!validJsonOfField(1, "user_id", pJson["user_id"], err, false))
+      return false;
+  }
+  if (pJson.isMember("folder_id")) {
+    if (!validJsonOfField(2, "folder_id", pJson["folder_id"], err, false))
+      return false;
+  }
+  if (pJson.isMember("filename")) {
+    if (!validJsonOfField(3, "filename", pJson["filename"], err, false))
+      return false;
+  }
+  if (pJson.isMember("file_size")) {
+    if (!validJsonOfField(4, "file_size", pJson["file_size"], err, false))
+      return false;
+  }
+  if (pJson.isMember("file_hash")) {
+    if (!validJsonOfField(5, "file_hash", pJson["file_hash"], err, false))
+      return false;
+  }
+  if (pJson.isMember("chunk_size")) {
+    if (!validJsonOfField(6, "chunk_size", pJson["chunk_size"], err, false))
+      return false;
+  }
+  if (pJson.isMember("total_chunks")) {
+    if (!validJsonOfField(7, "total_chunks", pJson["total_chunks"], err, false))
+      return false;
+  }
+  if (pJson.isMember("reserved_bytes")) {
+    if (!validJsonOfField(8, "reserved_bytes", pJson["reserved_bytes"], err,
+                          false))
+      return false;
+  }
+  if (pJson.isMember("temp_path")) {
+    if (!validJsonOfField(9, "temp_path", pJson["temp_path"], err, false))
+      return false;
+  }
+  if (pJson.isMember("status")) {
+    if (!validJsonOfField(10, "status", pJson["status"], err, false))
+      return false;
+  }
+  if (pJson.isMember("expires_at")) {
+    if (!validJsonOfField(11, "expires_at", pJson["expires_at"], err, false))
+      return false;
+  }
+  if (pJson.isMember("finalized_at")) {
+    if (!validJsonOfField(12, "finalized_at", pJson["finalized_at"], err,
+                          false))
+      return false;
+  }
+  if (pJson.isMember("fail_reason")) {
+    if (!validJsonOfField(13, "fail_reason", pJson["fail_reason"], err, false))
+      return false;
+  }
+  if (pJson.isMember("created_at")) {
+    if (!validJsonOfField(14, "created_at", pJson["created_at"], err, false))
+      return false;
+  }
+  if (pJson.isMember("updated_at")) {
+    if (!validJsonOfField(15, "updated_at", pJson["updated_at"], err, false))
+      return false;
+  }
+  return true;
+}
+bool UploadTasks::validateMasqueradedJsonForUpdate(
+    const Json::Value &pJson,
+    const std::vector<std::string> &pMasqueradingVector, std::string &err) {
+  if (pMasqueradingVector.size() != 16) {
+    err = "Bad masquerading vector";
+    return false;
+  }
+  try {
+    if (!pMasqueradingVector[0].empty() &&
+        pJson.isMember(pMasqueradingVector[0])) {
+      if (!validJsonOfField(0, pMasqueradingVector[0],
+                            pJson[pMasqueradingVector[0]], err, false))
+        return false;
+    } else {
+      err =
+          "The value of primary key must be set in the json object for update";
       return false;
     }
-    return true;
+    if (!pMasqueradingVector[1].empty() &&
+        pJson.isMember(pMasqueradingVector[1])) {
+      if (!validJsonOfField(1, pMasqueradingVector[1],
+                            pJson[pMasqueradingVector[1]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[2].empty() &&
+        pJson.isMember(pMasqueradingVector[2])) {
+      if (!validJsonOfField(2, pMasqueradingVector[2],
+                            pJson[pMasqueradingVector[2]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[3].empty() &&
+        pJson.isMember(pMasqueradingVector[3])) {
+      if (!validJsonOfField(3, pMasqueradingVector[3],
+                            pJson[pMasqueradingVector[3]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[4].empty() &&
+        pJson.isMember(pMasqueradingVector[4])) {
+      if (!validJsonOfField(4, pMasqueradingVector[4],
+                            pJson[pMasqueradingVector[4]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[5].empty() &&
+        pJson.isMember(pMasqueradingVector[5])) {
+      if (!validJsonOfField(5, pMasqueradingVector[5],
+                            pJson[pMasqueradingVector[5]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[6].empty() &&
+        pJson.isMember(pMasqueradingVector[6])) {
+      if (!validJsonOfField(6, pMasqueradingVector[6],
+                            pJson[pMasqueradingVector[6]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[7].empty() &&
+        pJson.isMember(pMasqueradingVector[7])) {
+      if (!validJsonOfField(7, pMasqueradingVector[7],
+                            pJson[pMasqueradingVector[7]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[8].empty() &&
+        pJson.isMember(pMasqueradingVector[8])) {
+      if (!validJsonOfField(8, pMasqueradingVector[8],
+                            pJson[pMasqueradingVector[8]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[9].empty() &&
+        pJson.isMember(pMasqueradingVector[9])) {
+      if (!validJsonOfField(9, pMasqueradingVector[9],
+                            pJson[pMasqueradingVector[9]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[10].empty() &&
+        pJson.isMember(pMasqueradingVector[10])) {
+      if (!validJsonOfField(10, pMasqueradingVector[10],
+                            pJson[pMasqueradingVector[10]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[11].empty() &&
+        pJson.isMember(pMasqueradingVector[11])) {
+      if (!validJsonOfField(11, pMasqueradingVector[11],
+                            pJson[pMasqueradingVector[11]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[12].empty() &&
+        pJson.isMember(pMasqueradingVector[12])) {
+      if (!validJsonOfField(12, pMasqueradingVector[12],
+                            pJson[pMasqueradingVector[12]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[13].empty() &&
+        pJson.isMember(pMasqueradingVector[13])) {
+      if (!validJsonOfField(13, pMasqueradingVector[13],
+                            pJson[pMasqueradingVector[13]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[14].empty() &&
+        pJson.isMember(pMasqueradingVector[14])) {
+      if (!validJsonOfField(14, pMasqueradingVector[14],
+                            pJson[pMasqueradingVector[14]], err, false))
+        return false;
+    }
+    if (!pMasqueradingVector[15].empty() &&
+        pJson.isMember(pMasqueradingVector[15])) {
+      if (!validJsonOfField(15, pMasqueradingVector[15],
+                            pJson[pMasqueradingVector[15]], err, false))
+        return false;
+    }
+  } catch (const Json::LogicError &e) {
+    err = e.what();
+    return false;
+  }
+  return true;
 }
-bool UploadTasks::validateJsonForUpdate(const Json::Value &pJson, std::string &err)
-{
-    if(pJson.isMember("id"))
-    {
-        if(!validJsonOfField(0, "id", pJson["id"], err, false))
-            return false;
-    }
-    else
-    {
-        err = "The value of primary key must be set in the json object for update";
-        return false;
-    }
-    if(pJson.isMember("user_id"))
-    {
-        if(!validJsonOfField(1, "user_id", pJson["user_id"], err, false))
-            return false;
-    }
-    if(pJson.isMember("folder_id"))
-    {
-        if(!validJsonOfField(2, "folder_id", pJson["folder_id"], err, false))
-            return false;
-    }
-    if(pJson.isMember("filename"))
-    {
-        if(!validJsonOfField(3, "filename", pJson["filename"], err, false))
-            return false;
-    }
-    if(pJson.isMember("file_size"))
-    {
-        if(!validJsonOfField(4, "file_size", pJson["file_size"], err, false))
-            return false;
-    }
-    if(pJson.isMember("file_hash"))
-    {
-        if(!validJsonOfField(5, "file_hash", pJson["file_hash"], err, false))
-            return false;
-    }
-    if(pJson.isMember("chunk_size"))
-    {
-        if(!validJsonOfField(6, "chunk_size", pJson["chunk_size"], err, false))
-            return false;
-    }
-    if(pJson.isMember("total_chunks"))
-    {
-        if(!validJsonOfField(7, "total_chunks", pJson["total_chunks"], err, false))
-            return false;
-    }
-    if(pJson.isMember("reserved_bytes"))
-    {
-        if(!validJsonOfField(8, "reserved_bytes", pJson["reserved_bytes"], err, false))
-            return false;
-    }
-    if(pJson.isMember("temp_path"))
-    {
-        if(!validJsonOfField(9, "temp_path", pJson["temp_path"], err, false))
-            return false;
-    }
-    if(pJson.isMember("status"))
-    {
-        if(!validJsonOfField(10, "status", pJson["status"], err, false))
-            return false;
-    }
-    if(pJson.isMember("expires_at"))
-    {
-        if(!validJsonOfField(11, "expires_at", pJson["expires_at"], err, false))
-            return false;
-    }
-    if(pJson.isMember("finalized_at"))
-    {
-        if(!validJsonOfField(12, "finalized_at", pJson["finalized_at"], err, false))
-            return false;
-    }
-    if(pJson.isMember("fail_reason"))
-    {
-        if(!validJsonOfField(13, "fail_reason", pJson["fail_reason"], err, false))
-            return false;
-    }
-    if(pJson.isMember("created_at"))
-    {
-        if(!validJsonOfField(14, "created_at", pJson["created_at"], err, false))
-            return false;
-    }
-    if(pJson.isMember("updated_at"))
-    {
-        if(!validJsonOfField(15, "updated_at", pJson["updated_at"], err, false))
-            return false;
-    }
-    return true;
-}
-bool UploadTasks::validateMasqueradedJsonForUpdate(const Json::Value &pJson,
-                                                   const std::vector<std::string> &pMasqueradingVector,
-                                                   std::string &err)
-{
-    if(pMasqueradingVector.size() != 16)
-    {
-        err = "Bad masquerading vector";
-        return false;
-    }
-    try {
-      if(!pMasqueradingVector[0].empty() && pJson.isMember(pMasqueradingVector[0]))
-      {
-          if(!validJsonOfField(0, pMasqueradingVector[0], pJson[pMasqueradingVector[0]], err, false))
-              return false;
-      }
-    else
-    {
-        err = "The value of primary key must be set in the json object for update";
-        return false;
-    }
-      if(!pMasqueradingVector[1].empty() && pJson.isMember(pMasqueradingVector[1]))
-      {
-          if(!validJsonOfField(1, pMasqueradingVector[1], pJson[pMasqueradingVector[1]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[2].empty() && pJson.isMember(pMasqueradingVector[2]))
-      {
-          if(!validJsonOfField(2, pMasqueradingVector[2], pJson[pMasqueradingVector[2]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[3].empty() && pJson.isMember(pMasqueradingVector[3]))
-      {
-          if(!validJsonOfField(3, pMasqueradingVector[3], pJson[pMasqueradingVector[3]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[4].empty() && pJson.isMember(pMasqueradingVector[4]))
-      {
-          if(!validJsonOfField(4, pMasqueradingVector[4], pJson[pMasqueradingVector[4]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[5].empty() && pJson.isMember(pMasqueradingVector[5]))
-      {
-          if(!validJsonOfField(5, pMasqueradingVector[5], pJson[pMasqueradingVector[5]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[6].empty() && pJson.isMember(pMasqueradingVector[6]))
-      {
-          if(!validJsonOfField(6, pMasqueradingVector[6], pJson[pMasqueradingVector[6]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[7].empty() && pJson.isMember(pMasqueradingVector[7]))
-      {
-          if(!validJsonOfField(7, pMasqueradingVector[7], pJson[pMasqueradingVector[7]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[8].empty() && pJson.isMember(pMasqueradingVector[8]))
-      {
-          if(!validJsonOfField(8, pMasqueradingVector[8], pJson[pMasqueradingVector[8]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[9].empty() && pJson.isMember(pMasqueradingVector[9]))
-      {
-          if(!validJsonOfField(9, pMasqueradingVector[9], pJson[pMasqueradingVector[9]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[10].empty() && pJson.isMember(pMasqueradingVector[10]))
-      {
-          if(!validJsonOfField(10, pMasqueradingVector[10], pJson[pMasqueradingVector[10]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[11].empty() && pJson.isMember(pMasqueradingVector[11]))
-      {
-          if(!validJsonOfField(11, pMasqueradingVector[11], pJson[pMasqueradingVector[11]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[12].empty() && pJson.isMember(pMasqueradingVector[12]))
-      {
-          if(!validJsonOfField(12, pMasqueradingVector[12], pJson[pMasqueradingVector[12]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[13].empty() && pJson.isMember(pMasqueradingVector[13]))
-      {
-          if(!validJsonOfField(13, pMasqueradingVector[13], pJson[pMasqueradingVector[13]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[14].empty() && pJson.isMember(pMasqueradingVector[14]))
-      {
-          if(!validJsonOfField(14, pMasqueradingVector[14], pJson[pMasqueradingVector[14]], err, false))
-              return false;
-      }
-      if(!pMasqueradingVector[15].empty() && pJson.isMember(pMasqueradingVector[15]))
-      {
-          if(!validJsonOfField(15, pMasqueradingVector[15], pJson[pMasqueradingVector[15]], err, false))
-              return false;
-      }
-    }
-    catch(const Json::LogicError &e)
-    {
-      err = e.what();
+bool UploadTasks::validJsonOfField(size_t index, const std::string &fieldName,
+                                   const Json::Value &pJson, std::string &err,
+                                   bool isForCreation) {
+  switch (index) {
+  case 0:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
       return false;
     }
-    return true;
-}
-bool UploadTasks::validJsonOfField(size_t index,
-                                   const std::string &fieldName,
-                                   const Json::Value &pJson,
-                                   std::string &err,
-                                   bool isForCreation)
-{
-    switch(index)
-    {
-        case 0:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isString())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                .from_bytes(pJson.asCString()).size() > 64)
-            {
-                err="String length exceeds limit for the " +
-                    fieldName +
-                    " field (the maximum value is 64)";
-                return false;
-            }
-            break;
-        case 1:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isUInt64())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            break;
-        case 2:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isUInt64())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            break;
-        case 3:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isString())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                .from_bytes(pJson.asCString()).size() > 255)
-            {
-                err="String length exceeds limit for the " +
-                    fieldName +
-                    " field (the maximum value is 255)";
-                return false;
-            }
-            break;
-        case 4:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isUInt64())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            break;
-        case 5:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isString())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            break;
-        case 6:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isUInt())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            break;
-        case 7:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isUInt())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            break;
-        case 8:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isUInt64())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            break;
-        case 9:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isString())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                .from_bytes(pJson.asCString()).size() > 512)
-            {
-                err="String length exceeds limit for the " +
-                    fieldName +
-                    " field (the maximum value is 512)";
-                return false;
-            }
-            break;
-        case 10:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isInt())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            break;
-        case 11:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isString())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            break;
-        case 12:
-            if(pJson.isNull())
-            {
-                return true;
-            }
-            if(!pJson.isString())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            break;
-        case 13:
-            if(pJson.isNull())
-            {
-                return true;
-            }
-            if(!pJson.isString())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            if(pJson.isString() && std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}
-                .from_bytes(pJson.asCString()).size() > 512)
-            {
-                err="String length exceeds limit for the " +
-                    fieldName +
-                    " field (the maximum value is 512)";
-                return false;
-            }
-            break;
-        case 14:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isString())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            break;
-        case 15:
-            if(pJson.isNull())
-            {
-                err="The " + fieldName + " column cannot be null";
-                return false;
-            }
-            if(!pJson.isString())
-            {
-                err="Type error in the "+fieldName+" field";
-                return false;
-            }
-            break;
-        default:
-            err="Internal error in the server";
-            return false;
+    if (!pJson.isString()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
     }
-    return true;
+    if (pJson.isString() && std::strlen(pJson.asCString()) > 64) {
+      err = "String length exceeds limit for the " + fieldName +
+            " field (the maximum value is 64)";
+      return false;
+    }
+
+    break;
+  case 1:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
+      return false;
+    }
+    if (!pJson.isInt64()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    break;
+  case 2:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
+      return false;
+    }
+    if (!pJson.isInt64()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    break;
+  case 3:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
+      return false;
+    }
+    if (!pJson.isString()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    if (pJson.isString() && std::strlen(pJson.asCString()) > 255) {
+      err = "String length exceeds limit for the " + fieldName +
+            " field (the maximum value is 255)";
+      return false;
+    }
+
+    break;
+  case 4:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
+      return false;
+    }
+    if (!pJson.isInt64()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    break;
+  case 5:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
+      return false;
+    }
+    if (!pJson.isString()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    break;
+  case 6:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
+      return false;
+    }
+    if (!pJson.isInt()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    break;
+  case 7:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
+      return false;
+    }
+    if (!pJson.isInt()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    break;
+  case 8:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
+      return false;
+    }
+    if (!pJson.isInt64()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    break;
+  case 9:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
+      return false;
+    }
+    if (!pJson.isString()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    if (pJson.isString() && std::strlen(pJson.asCString()) > 512) {
+      err = "String length exceeds limit for the " + fieldName +
+            " field (the maximum value is 512)";
+      return false;
+    }
+
+    break;
+  case 10:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
+      return false;
+    }
+    if (!pJson.isInt()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    break;
+  case 11:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
+      return false;
+    }
+    if (!pJson.isString()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    break;
+  case 12:
+    if (pJson.isNull()) {
+      return true;
+    }
+    if (!pJson.isString()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    break;
+  case 13:
+    if (pJson.isNull()) {
+      return true;
+    }
+    if (!pJson.isString()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    if (pJson.isString() && std::strlen(pJson.asCString()) > 512) {
+      err = "String length exceeds limit for the " + fieldName +
+            " field (the maximum value is 512)";
+      return false;
+    }
+
+    break;
+  case 14:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
+      return false;
+    }
+    if (!pJson.isString()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    break;
+  case 15:
+    if (pJson.isNull()) {
+      err = "The " + fieldName + " column cannot be null";
+      return false;
+    }
+    if (!pJson.isString()) {
+      err = "Type error in the " + fieldName + " field";
+      return false;
+    }
+    break;
+  default:
+    err = "Internal error in the server";
+    return false;
+  }
+  return true;
 }

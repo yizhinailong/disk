@@ -377,15 +377,15 @@ namespace disk::file {
     }
 
     auto UploadService::BuildUploadTaskCacheEntry(const UploadTasks& task) -> UploadTaskCacheEntry {
-        return UploadTaskCacheEntry{ .user_id = task.getValueOfUserId(),
-                                     .file_size = task.getValueOfFileSize(),
-                                     .chunk_size = task.getValueOfChunkSize(),
-                                     .total_chunks = task.getValueOfTotalChunks(),
+        return UploadTaskCacheEntry{ .user_id = static_cast<uint64_t>(task.getValueOfUserId()),
+                                     .file_size = static_cast<uint64_t>(task.getValueOfFileSize()),
+                                     .chunk_size = static_cast<uint32_t>(task.getValueOfChunkSize()),
+                                     .total_chunks = static_cast<uint32_t>(task.getValueOfTotalChunks()),
                                      .expires_at = task.getValueOfExpiresAt(),
                                      .status = task.getValueOfStatus(),
                                      .file_hash = task.getValueOfFileHash(),
                                      .filename = task.getValueOfFilename(),
-                                     .parent_id = task.getValueOfFolderId(),
+                                     .parent_id = static_cast<uint64_t>(task.getValueOfFolderId()),
                                      .cache_expires_at = std::chrono::steady_clock::now() + UPLOAD_TASK_CACHE_TTL };
     }
 

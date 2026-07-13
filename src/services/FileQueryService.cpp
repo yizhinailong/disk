@@ -245,9 +245,9 @@ namespace disk::file {
             info.mime_type = file.getValueOfMimeType().empty() ? content.getValueOfMimeType() :
                                                                  file.getValueOfMimeType();
             info.blob = disk::storage::BlobDescriptor{
-                .content_id = content.getValueOfId(),
+                .content_id = static_cast<uint64_t>(content.getValueOfId()),
                 .hash_md5 = content.getValueOfHashMd5(),
-                .size = content.getValueOfSize()
+                .size = static_cast<uint64_t>(content.getValueOfSize())
             };
             info.supports_range = true;
 

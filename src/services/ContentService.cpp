@@ -30,10 +30,10 @@ namespace disk::content {
     namespace {
 
         auto ToMetadata(const FileContents& content) -> ContentMetadata {
-            return ContentMetadata{ .id = content.getValueOfId(),
+            return ContentMetadata{ .id = static_cast<uint64_t>(content.getValueOfId()),
                                     .hash_md5 = content.getValueOfHashMd5(),
                                     .hash_sha256 = content.getValueOfHashSha256(),
-                                    .size = content.getValueOfSize(),
+                                    .size = static_cast<uint64_t>(content.getValueOfSize()),
                                     .storage_path = content.getValueOfStoragePath(),
                                     .mime_type = content.getValueOfMimeType(),
                                     .ref_count = static_cast<int>(content.getValueOfRefCount()) };
@@ -52,7 +52,7 @@ namespace disk::content {
             return content_ids;
         }
 
-    } ///< namespace
+    } // namespace
 
     ContentService::ContentService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
@@ -94,7 +94,7 @@ namespace disk::content {
         try {
             auto rows = co_await client->execSqlCoro(
                 "SELECT id FROM file_contents WHERE id IN (" +
-                    BatchUtils::BuildSafeNumericInClause(content_ids) + ")"
+                BatchUtils::BuildSafeNumericInClause(content_ids) + ")"
             );
             existing_ids.reserve(rows.size());
             for (const auto& row : rows) {
@@ -112,8 +112,7 @@ namespace disk::content {
         const NewContent& content
     ) const -> drogon::Task<ContentMetadata> {
         auto result = co_await client->execSqlCoro(
-            "INSERT INTO file_contents (hash_md5, hash_sha256, size, storage_path, mime_type, ref_count) "
-            "VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+            "INSERT INTO file_contents (hash_md5, hash_sha256, size, storage_path, mime_type, ref_count) " "VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
             content.hash_md5,
             content.hash_sha256,
             content.size,
@@ -250,7 +249,8 @@ namespace disk::content {
                 update_sql,
                 [&](auto& binder) {
                     for (const auto& [content_id, decrement] : update_cases) {
-                        binder << content_id << decrement;
+                        binder << static_cast<int64_t>(content_id)
+                               << static_cast<int32_t>(decrement);
                     }
                 }
             );
@@ -274,12 +274,11 @@ namespace disk::content {
         try {
             auto rows = co_await client->execSqlCoro(
                 "SELECT id, storage_path FROM file_contents WHERE ref_count = 0 AND id IN (" +
-                    BatchUtils::BuildSafeNumericInClause(content_ids) + ")"
+                BatchUtils::BuildSafeNumericInClause(content_ids) + ")"
             );
             zero_ref_contents.reserve(rows.size());
             for (const auto& row : rows) {
-                zero_ref_contents.push_back({ .id = row["id"].as<uint64_t>(),
-                                              .storage_path = row["storage_path"].as<std::string>() });
+                zero_ref_contents.push_back({ .id = row["id"].as<uint64_t>(), .storage_path = row["storage_path"].as<std::string>() });
             }
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Warn() << "File content zero-ref verification failed: " << e.base().what();
@@ -288,4 +287,4 @@ namespace disk::content {
         co_return zero_ref_contents;
     }
 
-} ///< namespace disk::content
+} // namespace disk::content

@@ -6,418 +6,423 @@
  */
 
 #pragma once
+#include <drogon/orm/BaseBuilder.h>
+#include <drogon/orm/Field.h>
+#include <drogon/orm/Mapper.h>
 #include <drogon/orm/Result.h>
 #include <drogon/orm/Row.h>
-#include <drogon/orm/Field.h>
 #include <drogon/orm/SqlBinder.h>
-#include <drogon/orm/Mapper.h>
-#include <drogon/orm/BaseBuilder.h>
 #ifdef __cpp_impl_coroutine
 #include <drogon/orm/CoroMapper.h>
 #endif
-#include <trantor/utils/Date.h>
-#include <trantor/utils/Logger.h>
+#include <iostream>
 #include <json/json.h>
+#include <memory>
+#include <stdint.h>
 #include <string>
 #include <string_view>
-#include <memory>
-#include <vector>
+#include <trantor/utils/Date.h>
+#include <trantor/utils/Logger.h>
 #include <tuple>
-#include <stdint.h>
-#include <iostream>
+#include <vector>
 
-namespace drogon
-{
-namespace orm
-{
+namespace drogon {
+namespace orm {
 class DbClient;
 using DbClientPtr = std::shared_ptr<DbClient>;
-}
-}
-namespace drogon_model
-{
-namespace disk
-{
+} // namespace orm
+} // namespace drogon
+namespace drogon_model {
+namespace disk {
 
-class Trash
-{
-  public:
-    struct Cols
-    {
-        static const std::string _id;
-        static const std::string _user_id;
-        static const std::string _item_type;
-        static const std::string _item_id;
-        static const std::string _item_name;
-        static const std::string _item_size;
-        static const std::string _content_id;
-        static const std::string _original_folder_id;
-        static const std::string _original_path;
-        static const std::string _item_data;
-        static const std::string _deleted_at;
-        static const std::string _expires_at;
-    };
+class Trash {
+public:
+  struct Cols {
+    static const std::string _id;
+    static const std::string _user_id;
+    static const std::string _item_type;
+    static const std::string _item_id;
+    static const std::string _item_name;
+    static const std::string _item_size;
+    static const std::string _content_id;
+    static const std::string _original_folder_id;
+    static const std::string _original_path;
+    static const std::string _item_data;
+    static const std::string _deleted_at;
+    static const std::string _expires_at;
+  };
 
-    static const int primaryKeyNumber;
-    static const std::string tableName;
-    static const bool hasPrimaryKey;
-    static const std::string primaryKeyName;
-    using PrimaryKeyType = uint64_t;
-    const PrimaryKeyType &getPrimaryKey() const;
+  static const int primaryKeyNumber;
+  static const std::string tableName;
+  static const bool hasPrimaryKey;
+  static const std::string primaryKeyName;
+  using PrimaryKeyType = int64_t;
+  const PrimaryKeyType &getPrimaryKey() const;
 
-    /**
-     * @brief constructor
-     * @param r One row of records in the SQL query result.
-     * @param indexOffset Set the offset to -1 to access all columns by column names,
-     * otherwise access all columns by offsets.
-     * @note If the SQL is not a style of 'select * from table_name ...' (select all
-     * columns by an asterisk), please set the offset to -1.
-     */
-    explicit Trash(const drogon::orm::Row &r, const ssize_t indexOffset = 0) noexcept;
+  /**
+   * @brief constructor
+   * @param r One row of records in the SQL query result.
+   * @param indexOffset Set the offset to -1 to access all columns by column
+   * names, otherwise access all columns by offsets.
+   * @note If the SQL is not a style of 'select * from table_name ...' (select
+   * all columns by an asterisk), please set the offset to -1.
+   */
+  explicit Trash(const drogon::orm::Row &r,
+                 const ssize_t indexOffset = 0) noexcept;
 
-    /**
-     * @brief constructor
-     * @param pJson The json object to construct a new instance.
-     */
-    explicit Trash(const Json::Value &pJson) noexcept(false);
+  /**
+   * @brief constructor
+   * @param pJson The json object to construct a new instance.
+   */
+  explicit Trash(const Json::Value &pJson) noexcept(false);
 
-    /**
-     * @brief constructor
-     * @param pJson The json object to construct a new instance.
-     * @param pMasqueradingVector The aliases of table columns.
-     */
-    Trash(const Json::Value &pJson, const std::vector<std::string> &pMasqueradingVector) noexcept(false);
+  /**
+   * @brief constructor
+   * @param pJson The json object to construct a new instance.
+   * @param pMasqueradingVector The aliases of table columns.
+   */
+  Trash(const Json::Value &pJson,
+        const std::vector<std::string> &pMasqueradingVector) noexcept(false);
 
-    Trash() = default;
+  Trash() = default;
 
-    void updateByJson(const Json::Value &pJson) noexcept(false);
-    void updateByMasqueradedJson(const Json::Value &pJson,
-                                 const std::vector<std::string> &pMasqueradingVector) noexcept(false);
-    static bool validateJsonForCreation(const Json::Value &pJson, std::string &err);
-    static bool validateMasqueradedJsonForCreation(const Json::Value &,
-                                                const std::vector<std::string> &pMasqueradingVector,
-                                                    std::string &err);
-    static bool validateJsonForUpdate(const Json::Value &pJson, std::string &err);
-    static bool validateMasqueradedJsonForUpdate(const Json::Value &,
-                                          const std::vector<std::string> &pMasqueradingVector,
-                                          std::string &err);
-    static bool validJsonOfField(size_t index,
-                          const std::string &fieldName,
-                          const Json::Value &pJson,
-                          std::string &err,
-                          bool isForCreation);
+  void updateByJson(const Json::Value &pJson) noexcept(false);
+  void updateByMasqueradedJson(
+      const Json::Value &pJson,
+      const std::vector<std::string> &pMasqueradingVector) noexcept(false);
+  static bool validateJsonForCreation(const Json::Value &pJson,
+                                      std::string &err);
+  static bool validateMasqueradedJsonForCreation(
+      const Json::Value &, const std::vector<std::string> &pMasqueradingVector,
+      std::string &err);
+  static bool validateJsonForUpdate(const Json::Value &pJson, std::string &err);
+  static bool validateMasqueradedJsonForUpdate(
+      const Json::Value &, const std::vector<std::string> &pMasqueradingVector,
+      std::string &err);
+  static bool validJsonOfField(size_t index, const std::string &fieldName,
+                               const Json::Value &pJson, std::string &err,
+                               bool isForCreation);
 
-    /**  For column id  */
-    ///Get the value of the column id, returns the default value if the column is null
-    const uint64_t &getValueOfId() const noexcept;
-    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-    const std::shared_ptr<uint64_t> &getId() const noexcept;
-    ///Set the value of the column id
-    void setId(const uint64_t &pId) noexcept;
+  /**  For column id  */
+  /// Get the value of the column id, returns the default value if the column is
+  /// null
+  const int64_t &getValueOfId() const noexcept;
+  /// Return a shared_ptr object pointing to the column const value, or an empty
+  /// shared_ptr object if the column is null
+  const std::shared_ptr<int64_t> &getId() const noexcept;
+  /// Set the value of the column id
+  void setId(const int64_t &pId) noexcept;
 
-    /**  For column user_id  */
-    ///Get the value of the column user_id, returns the default value if the column is null
-    const uint64_t &getValueOfUserId() const noexcept;
-    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-    const std::shared_ptr<uint64_t> &getUserId() const noexcept;
-    ///Set the value of the column user_id
-    void setUserId(const uint64_t &pUserId) noexcept;
+  /**  For column user_id  */
+  /// Get the value of the column user_id, returns the default value if the
+  /// column is null
+  const int64_t &getValueOfUserId() const noexcept;
+  /// Return a shared_ptr object pointing to the column const value, or an empty
+  /// shared_ptr object if the column is null
+  const std::shared_ptr<int64_t> &getUserId() const noexcept;
+  /// Set the value of the column user_id
+  void setUserId(const int64_t &pUserId) noexcept;
 
-    /**  For column item_type  */
-    ///Get the value of the column item_type, returns the default value if the column is null
-    const std::string &getValueOfItemType() const noexcept;
-    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-    const std::shared_ptr<std::string> &getItemType() const noexcept;
-    ///Set the value of the column item_type
-    void setItemType(const std::string &pItemType) noexcept;
-    void setItemType(std::string &&pItemType) noexcept;
+  /**  For column item_type  */
+  /// Get the value of the column item_type, returns the default value if the
+  /// column is null
+  const std::string &getValueOfItemType() const noexcept;
+  /// Return a shared_ptr object pointing to the column const value, or an empty
+  /// shared_ptr object if the column is null
+  const std::shared_ptr<std::string> &getItemType() const noexcept;
+  /// Set the value of the column item_type
+  void setItemType(const std::string &pItemType) noexcept;
+  void setItemType(std::string &&pItemType) noexcept;
 
-    /**  For column item_id  */
-    ///Get the value of the column item_id, returns the default value if the column is null
-    const uint64_t &getValueOfItemId() const noexcept;
-    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-    const std::shared_ptr<uint64_t> &getItemId() const noexcept;
-    ///Set the value of the column item_id
-    void setItemId(const uint64_t &pItemId) noexcept;
+  /**  For column item_id  */
+  /// Get the value of the column item_id, returns the default value if the
+  /// column is null
+  const int64_t &getValueOfItemId() const noexcept;
+  /// Return a shared_ptr object pointing to the column const value, or an empty
+  /// shared_ptr object if the column is null
+  const std::shared_ptr<int64_t> &getItemId() const noexcept;
+  /// Set the value of the column item_id
+  void setItemId(const int64_t &pItemId) noexcept;
 
-    /**  For column item_name  */
-    ///Get the value of the column item_name, returns the default value if the column is null
-    const std::string &getValueOfItemName() const noexcept;
-    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-    const std::shared_ptr<std::string> &getItemName() const noexcept;
-    ///Set the value of the column item_name
-    void setItemName(const std::string &pItemName) noexcept;
-    void setItemName(std::string &&pItemName) noexcept;
+  /**  For column item_name  */
+  /// Get the value of the column item_name, returns the default value if the
+  /// column is null
+  const std::string &getValueOfItemName() const noexcept;
+  /// Return a shared_ptr object pointing to the column const value, or an empty
+  /// shared_ptr object if the column is null
+  const std::shared_ptr<std::string> &getItemName() const noexcept;
+  /// Set the value of the column item_name
+  void setItemName(const std::string &pItemName) noexcept;
+  void setItemName(std::string &&pItemName) noexcept;
 
-    /**  For column item_size  */
-    ///Get the value of the column item_size, returns the default value if the column is null
-    const uint64_t &getValueOfItemSize() const noexcept;
-    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-    const std::shared_ptr<uint64_t> &getItemSize() const noexcept;
-    ///Set the value of the column item_size
-    void setItemSize(const uint64_t &pItemSize) noexcept;
+  /**  For column item_size  */
+  /// Get the value of the column item_size, returns the default value if the
+  /// column is null
+  const int64_t &getValueOfItemSize() const noexcept;
+  /// Return a shared_ptr object pointing to the column const value, or an empty
+  /// shared_ptr object if the column is null
+  const std::shared_ptr<int64_t> &getItemSize() const noexcept;
+  /// Set the value of the column item_size
+  void setItemSize(const int64_t &pItemSize) noexcept;
 
-    /**  For column content_id  */
-    ///Get the value of the column content_id, returns the default value if the column is null
-    const uint64_t &getValueOfContentId() const noexcept;
-    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-    const std::shared_ptr<uint64_t> &getContentId() const noexcept;
-    ///Set the value of the column content_id
-    void setContentId(const uint64_t &pContentId) noexcept;
-    void setContentIdToNull() noexcept;
+  /**  For column content_id  */
+  /// Get the value of the column content_id, returns the default value if the
+  /// column is null
+  const int64_t &getValueOfContentId() const noexcept;
+  /// Return a shared_ptr object pointing to the column const value, or an empty
+  /// shared_ptr object if the column is null
+  const std::shared_ptr<int64_t> &getContentId() const noexcept;
+  /// Set the value of the column content_id
+  void setContentId(const int64_t &pContentId) noexcept;
+  void setContentIdToNull() noexcept;
 
-    /**  For column original_folder_id  */
-    ///Get the value of the column original_folder_id, returns the default value if the column is null
-    const uint64_t &getValueOfOriginalFolderId() const noexcept;
-    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-    const std::shared_ptr<uint64_t> &getOriginalFolderId() const noexcept;
-    ///Set the value of the column original_folder_id
-    void setOriginalFolderId(const uint64_t &pOriginalFolderId) noexcept;
+  /**  For column original_folder_id  */
+  /// Get the value of the column original_folder_id, returns the default value
+  /// if the column is null
+  const int64_t &getValueOfOriginalFolderId() const noexcept;
+  /// Return a shared_ptr object pointing to the column const value, or an empty
+  /// shared_ptr object if the column is null
+  const std::shared_ptr<int64_t> &getOriginalFolderId() const noexcept;
+  /// Set the value of the column original_folder_id
+  void setOriginalFolderId(const int64_t &pOriginalFolderId) noexcept;
 
-    /**  For column original_path  */
-    ///Get the value of the column original_path, returns the default value if the column is null
-    const std::string &getValueOfOriginalPath() const noexcept;
-    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-    const std::shared_ptr<std::string> &getOriginalPath() const noexcept;
-    ///Set the value of the column original_path
-    void setOriginalPath(const std::string &pOriginalPath) noexcept;
-    void setOriginalPath(std::string &&pOriginalPath) noexcept;
+  /**  For column original_path  */
+  /// Get the value of the column original_path, returns the default value if
+  /// the column is null
+  const std::string &getValueOfOriginalPath() const noexcept;
+  /// Return a shared_ptr object pointing to the column const value, or an empty
+  /// shared_ptr object if the column is null
+  const std::shared_ptr<std::string> &getOriginalPath() const noexcept;
+  /// Set the value of the column original_path
+  void setOriginalPath(const std::string &pOriginalPath) noexcept;
+  void setOriginalPath(std::string &&pOriginalPath) noexcept;
 
-    /**  For column item_data  */
-    ///Get the value of the column item_data, returns the default value if the column is null
-    const std::string &getValueOfItemData() const noexcept;
-    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-    const std::shared_ptr<std::string> &getItemData() const noexcept;
-    ///Set the value of the column item_data
-    void setItemData(const std::string &pItemData) noexcept;
-    void setItemData(std::string &&pItemData) noexcept;
-    void setItemDataToNull() noexcept;
+  /**  For column item_data  */
+  /// Get the value of the column item_data, returns the default value if the
+  /// column is null
+  const std::string &getValueOfItemData() const noexcept;
+  /// Return a shared_ptr object pointing to the column const value, or an empty
+  /// shared_ptr object if the column is null
+  const std::shared_ptr<std::string> &getItemData() const noexcept;
+  /// Set the value of the column item_data
+  void setItemData(const std::string &pItemData) noexcept;
+  void setItemData(std::string &&pItemData) noexcept;
+  void setItemDataToNull() noexcept;
 
-    /**  For column deleted_at  */
-    ///Get the value of the column deleted_at, returns the default value if the column is null
-    const ::trantor::Date &getValueOfDeletedAt() const noexcept;
-    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-    const std::shared_ptr<::trantor::Date> &getDeletedAt() const noexcept;
-    ///Set the value of the column deleted_at
-    void setDeletedAt(const ::trantor::Date &pDeletedAt) noexcept;
+  /**  For column deleted_at  */
+  /// Get the value of the column deleted_at, returns the default value if the
+  /// column is null
+  const ::trantor::Date &getValueOfDeletedAt() const noexcept;
+  /// Return a shared_ptr object pointing to the column const value, or an empty
+  /// shared_ptr object if the column is null
+  const std::shared_ptr<::trantor::Date> &getDeletedAt() const noexcept;
+  /// Set the value of the column deleted_at
+  void setDeletedAt(const ::trantor::Date &pDeletedAt) noexcept;
 
-    /**  For column expires_at  */
-    ///Get the value of the column expires_at, returns the default value if the column is null
-    const ::trantor::Date &getValueOfExpiresAt() const noexcept;
-    ///Return a shared_ptr object pointing to the column const value, or an empty shared_ptr object if the column is null
-    const std::shared_ptr<::trantor::Date> &getExpiresAt() const noexcept;
-    ///Set the value of the column expires_at
-    void setExpiresAt(const ::trantor::Date &pExpiresAt) noexcept;
+  /**  For column expires_at  */
+  /// Get the value of the column expires_at, returns the default value if the
+  /// column is null
+  const ::trantor::Date &getValueOfExpiresAt() const noexcept;
+  /// Return a shared_ptr object pointing to the column const value, or an empty
+  /// shared_ptr object if the column is null
+  const std::shared_ptr<::trantor::Date> &getExpiresAt() const noexcept;
+  /// Set the value of the column expires_at
+  void setExpiresAt(const ::trantor::Date &pExpiresAt) noexcept;
 
+  static size_t getColumnNumber() noexcept { return 12; }
+  static const std::string &getColumnName(size_t index) noexcept(false);
 
-    static size_t getColumnNumber() noexcept {  return 12;  }
-    static const std::string &getColumnName(size_t index) noexcept(false);
-
-    Json::Value toJson() const;
-    std::string toString() const;
-    Json::Value toMasqueradedJson(const std::vector<std::string> &pMasqueradingVector) const;
-    /// Relationship interfaces
-  private:
-    friend drogon::orm::Mapper<Trash>;
-    friend drogon::orm::BaseBuilder<Trash, true, true>;
-    friend drogon::orm::BaseBuilder<Trash, true, false>;
-    friend drogon::orm::BaseBuilder<Trash, false, true>;
-    friend drogon::orm::BaseBuilder<Trash, false, false>;
+  Json::Value toJson() const;
+  Json::Value
+  toMasqueradedJson(const std::vector<std::string> &pMasqueradingVector) const;
+  /// Relationship interfaces
+private:
+  friend drogon::orm::Mapper<Trash>;
+  friend drogon::orm::BaseBuilder<Trash, true, true>;
+  friend drogon::orm::BaseBuilder<Trash, true, false>;
+  friend drogon::orm::BaseBuilder<Trash, false, true>;
+  friend drogon::orm::BaseBuilder<Trash, false, false>;
 #ifdef __cpp_impl_coroutine
-    friend drogon::orm::CoroMapper<Trash>;
+  friend drogon::orm::CoroMapper<Trash>;
 #endif
-    static const std::vector<std::string> &insertColumns() noexcept;
-    void outputArgs(drogon::orm::internal::SqlBinder &binder) const;
-    const std::vector<std::string> updateColumns() const;
-    void updateArgs(drogon::orm::internal::SqlBinder &binder) const;
-    ///For mysql or sqlite3
-    void updateId(const uint64_t id);
-    std::shared_ptr<uint64_t> id_;
-    std::shared_ptr<uint64_t> userId_;
-    std::shared_ptr<std::string> itemType_;
-    std::shared_ptr<uint64_t> itemId_;
-    std::shared_ptr<std::string> itemName_;
-    std::shared_ptr<uint64_t> itemSize_;
-    std::shared_ptr<uint64_t> contentId_;
-    std::shared_ptr<uint64_t> originalFolderId_;
-    std::shared_ptr<std::string> originalPath_;
-    std::shared_ptr<std::string> itemData_;
-    std::shared_ptr<::trantor::Date> deletedAt_;
-    std::shared_ptr<::trantor::Date> expiresAt_;
-    struct MetaData
-    {
-        const std::string colName_;
-        const std::string colType_;
-        const std::string colDatabaseType_;
-        const ssize_t colLength_;
-        const bool isAutoVal_;
-        const bool isPrimaryKey_;
-        const bool notNull_;
-    };
-    static const std::vector<MetaData> metaData_;
-    bool dirtyFlag_[12]={ false };
-  public:
-    static const std::string &sqlForFindingByPrimaryKey()
-    {
-        static const std::string sql="select * from " + tableName + " where id = ?";
-        return sql;
+  static const std::vector<std::string> &insertColumns() noexcept;
+  void outputArgs(drogon::orm::internal::SqlBinder &binder) const;
+  const std::vector<std::string> updateColumns() const;
+  void updateArgs(drogon::orm::internal::SqlBinder &binder) const;
+  /// For mysql or sqlite3
+  void updateId(const uint64_t id);
+  std::shared_ptr<int64_t> id_;
+  std::shared_ptr<int64_t> userId_;
+  std::shared_ptr<std::string> itemType_;
+  std::shared_ptr<int64_t> itemId_;
+  std::shared_ptr<std::string> itemName_;
+  std::shared_ptr<int64_t> itemSize_;
+  std::shared_ptr<int64_t> contentId_;
+  std::shared_ptr<int64_t> originalFolderId_;
+  std::shared_ptr<std::string> originalPath_;
+  std::shared_ptr<std::string> itemData_;
+  std::shared_ptr<::trantor::Date> deletedAt_;
+  std::shared_ptr<::trantor::Date> expiresAt_;
+  struct MetaData {
+    const std::string colName_;
+    const std::string colType_;
+    const std::string colDatabaseType_;
+    const ssize_t colLength_;
+    const bool isAutoVal_;
+    const bool isPrimaryKey_;
+    const bool notNull_;
+  };
+  static const std::vector<MetaData> metaData_;
+  bool dirtyFlag_[12] = {false};
+
+public:
+  static const std::string &sqlForFindingByPrimaryKey() {
+    static const std::string sql =
+        "select * from " + tableName + " where id = $1";
+    return sql;
+  }
+
+  static const std::string &sqlForDeletingByPrimaryKey() {
+    static const std::string sql =
+        "delete from " + tableName + " where id = $1";
+    return sql;
+  }
+  std::string sqlForInserting(bool &needSelection) const {
+    std::string sql = "insert into " + tableName + " (";
+    size_t parametersCount = 0;
+    needSelection = false;
+    sql += "id,";
+    ++parametersCount;
+    if (dirtyFlag_[1]) {
+      sql += "user_id,";
+      ++parametersCount;
     }
-
-    static const std::string &sqlForDeletingByPrimaryKey()
-    {
-        static const std::string sql="delete from " + tableName + " where id = ?";
-        return sql;
+    if (dirtyFlag_[2]) {
+      sql += "item_type,";
+      ++parametersCount;
     }
-    std::string sqlForInserting(bool &needSelection) const
-    {
-        std::string sql="insert into " + tableName + " (";
-        size_t parametersCount = 0;
-        needSelection = false;
-            sql += "id,";
-            ++parametersCount;
-        if(dirtyFlag_[1])
-        {
-            sql += "user_id,";
-            ++parametersCount;
-        }
-        if(dirtyFlag_[2])
-        {
-            sql += "item_type,";
-            ++parametersCount;
-        }
-        if(dirtyFlag_[3])
-        {
-            sql += "item_id,";
-            ++parametersCount;
-        }
-        if(dirtyFlag_[4])
-        {
-            sql += "item_name,";
-            ++parametersCount;
-        }
-        sql += "item_size,";
-        ++parametersCount;
-        if(!dirtyFlag_[5])
-        {
-            needSelection=true;
-        }
-        if(dirtyFlag_[6])
-        {
-            sql += "content_id,";
-            ++parametersCount;
-        }
-        sql += "original_folder_id,";
-        ++parametersCount;
-        if(!dirtyFlag_[7])
-        {
-            needSelection=true;
-        }
-        if(dirtyFlag_[8])
-        {
-            sql += "original_path,";
-            ++parametersCount;
-        }
-        if(dirtyFlag_[9])
-        {
-            sql += "item_data,";
-            ++parametersCount;
-        }
-        sql += "deleted_at,";
-        ++parametersCount;
-        if(!dirtyFlag_[10])
-        {
-            needSelection=true;
-        }
-        if(dirtyFlag_[11])
-        {
-            sql += "expires_at,";
-            ++parametersCount;
-        }
-        needSelection=true;
-        if(parametersCount > 0)
-        {
-            sql[sql.length()-1]=')';
-            sql += " values (";
-        }
-        else
-            sql += ") values (";
-
-        sql +="default,";
-        if(dirtyFlag_[1])
-        {
-            sql.append("?,");
-
-        }
-        if(dirtyFlag_[2])
-        {
-            sql.append("?,");
-
-        }
-        if(dirtyFlag_[3])
-        {
-            sql.append("?,");
-
-        }
-        if(dirtyFlag_[4])
-        {
-            sql.append("?,");
-
-        }
-        if(dirtyFlag_[5])
-        {
-            sql.append("?,");
-
-        }
-        else
-        {
-            sql +="default,";
-        }
-        if(dirtyFlag_[6])
-        {
-            sql.append("?,");
-
-        }
-        if(dirtyFlag_[7])
-        {
-            sql.append("?,");
-
-        }
-        else
-        {
-            sql +="default,";
-        }
-        if(dirtyFlag_[8])
-        {
-            sql.append("?,");
-
-        }
-        if(dirtyFlag_[9])
-        {
-            sql.append("?,");
-
-        }
-        if(dirtyFlag_[10])
-        {
-            sql.append("?,");
-
-        }
-        else
-        {
-            sql +="default,";
-        }
-        if(dirtyFlag_[11])
-        {
-            sql.append("?,");
-
-        }
-        if(parametersCount > 0)
-        {
-            sql.resize(sql.length() - 1);
-        }
-        sql.append(1, ')');
-        LOG_TRACE << sql;
-        return sql;
+    if (dirtyFlag_[3]) {
+      sql += "item_id,";
+      ++parametersCount;
     }
+    if (dirtyFlag_[4]) {
+      sql += "item_name,";
+      ++parametersCount;
+    }
+    sql += "item_size,";
+    ++parametersCount;
+    if (!dirtyFlag_[5]) {
+      needSelection = true;
+    }
+    if (dirtyFlag_[6]) {
+      sql += "content_id,";
+      ++parametersCount;
+    }
+    sql += "original_folder_id,";
+    ++parametersCount;
+    if (!dirtyFlag_[7]) {
+      needSelection = true;
+    }
+    if (dirtyFlag_[8]) {
+      sql += "original_path,";
+      ++parametersCount;
+    }
+    if (dirtyFlag_[9]) {
+      sql += "item_data,";
+      ++parametersCount;
+    }
+    sql += "deleted_at,";
+    ++parametersCount;
+    if (!dirtyFlag_[10]) {
+      needSelection = true;
+    }
+    if (dirtyFlag_[11]) {
+      sql += "expires_at,";
+      ++parametersCount;
+    }
+    needSelection = true;
+    if (parametersCount > 0) {
+      sql[sql.length() - 1] = ')';
+      sql += " values (";
+    } else
+      sql += ") values (";
+
+    int placeholder = 1;
+    char placeholderStr[64];
+    size_t n = 0;
+    sql += "default,";
+    if (dirtyFlag_[1]) {
+      n = snprintf(placeholderStr, sizeof(placeholderStr), "$%d,",
+                   placeholder++);
+      sql.append(placeholderStr, n);
+    }
+    if (dirtyFlag_[2]) {
+      n = snprintf(placeholderStr, sizeof(placeholderStr), "$%d,",
+                   placeholder++);
+      sql.append(placeholderStr, n);
+    }
+    if (dirtyFlag_[3]) {
+      n = snprintf(placeholderStr, sizeof(placeholderStr), "$%d,",
+                   placeholder++);
+      sql.append(placeholderStr, n);
+    }
+    if (dirtyFlag_[4]) {
+      n = snprintf(placeholderStr, sizeof(placeholderStr), "$%d,",
+                   placeholder++);
+      sql.append(placeholderStr, n);
+    }
+    if (dirtyFlag_[5]) {
+      n = snprintf(placeholderStr, sizeof(placeholderStr), "$%d,",
+                   placeholder++);
+      sql.append(placeholderStr, n);
+    } else {
+      sql += "default,";
+    }
+    if (dirtyFlag_[6]) {
+      n = snprintf(placeholderStr, sizeof(placeholderStr), "$%d,",
+                   placeholder++);
+      sql.append(placeholderStr, n);
+    }
+    if (dirtyFlag_[7]) {
+      n = snprintf(placeholderStr, sizeof(placeholderStr), "$%d,",
+                   placeholder++);
+      sql.append(placeholderStr, n);
+    } else {
+      sql += "default,";
+    }
+    if (dirtyFlag_[8]) {
+      n = snprintf(placeholderStr, sizeof(placeholderStr), "$%d,",
+                   placeholder++);
+      sql.append(placeholderStr, n);
+    }
+    if (dirtyFlag_[9]) {
+      n = snprintf(placeholderStr, sizeof(placeholderStr), "$%d,",
+                   placeholder++);
+      sql.append(placeholderStr, n);
+    }
+    if (dirtyFlag_[10]) {
+      n = snprintf(placeholderStr, sizeof(placeholderStr), "$%d,",
+                   placeholder++);
+      sql.append(placeholderStr, n);
+    } else {
+      sql += "default,";
+    }
+    if (dirtyFlag_[11]) {
+      n = snprintf(placeholderStr, sizeof(placeholderStr), "$%d,",
+                   placeholder++);
+      sql.append(placeholderStr, n);
+    }
+    if (parametersCount > 0) {
+      sql.resize(sql.length() - 1);
+    }
+    if (needSelection) {
+      sql.append(") returning *");
+    } else {
+      sql.append(1, ')');
+    }
+    LOG_TRACE << sql;
+    return sql;
+  }
 };
-} ///< namespace disk
-} ///< namespace drogon_model
+} // namespace disk
+} // namespace drogon_model
