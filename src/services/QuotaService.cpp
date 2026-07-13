@@ -98,12 +98,17 @@ namespace disk::quota {
 
         try {
             auto result = co_await client->execSqlCoro(
-                "UPDATE users SET storage_reserved = GREATEST(storage_reserved - $1, 0) WHERE id = $2",
+                "UPDATE users SET storage_reserved = storage_reserved - $1 "
+                "WHERE id = $2 AND storage_reserved >= $3",
                 bytes,
-                user_id
+                user_id,
+                bytes
             );
 
             if (result.affectedRows() == 0) {
+                Logger::Error() << "Reserved quota release invariant failed: user_id=" << user_id
+                                << ", bytes=" << bytes
+                                << ", reason=user missing or storage_reserved is smaller than release";
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::InternalError,
                     "Failed to release reserved quota"
@@ -132,14 +137,19 @@ namespace disk::quota {
 
         try {
             auto result = co_await client->execSqlCoro(
-                "UPDATE users SET storage_reserved = GREATEST(storage_reserved - $1, 0), "
-                "storage_used = storage_used + $2 WHERE id = $3",
+                "UPDATE users SET storage_reserved = storage_reserved - $1, "
+                "storage_used = storage_used + $2 "
+                "WHERE id = $3 AND storage_reserved >= $4",
                 bytes,
                 bytes,
-                user_id
+                user_id,
+                bytes
             );
 
             if (result.affectedRows() == 0) {
+                Logger::Error() << "Reserved-to-used quota invariant failed: user_id=" << user_id
+                                << ", bytes=" << bytes
+                                << ", reason=user missing or storage_reserved is smaller than commit";
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::InternalError,
                     "Failed to transfer reserved quota to used"

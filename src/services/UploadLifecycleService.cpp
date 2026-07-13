@@ -49,12 +49,12 @@ namespace disk::upload {
             const drogon_model::disk::Files& file,
             const std::string& hash
         ) -> LifecycleFileItem {
-            return LifecycleFileItem{ .id = file.getValueOfId(),
+            return LifecycleFileItem{ .id = static_cast<uint64_t>(file.getValueOfId()),
                                       .name = file.getValueOfName(),
-                                      .size = file.getValueOfSize(),
+                                      .size = static_cast<uint64_t>(file.getValueOfSize()),
                                       .hash = hash,
                                       .mime_type = file.getValueOfMimeType(),
-                                      .parent_id = file.getValueOfFolderId(),
+                                      .parent_id = static_cast<uint64_t>(file.getValueOfFolderId()),
                                       .created_at = file.getValueOfCreatedAt().toDbStringLocal() };
         }
 
@@ -279,84 +279,82 @@ namespace disk::upload {
             auto content_id = existing_content->id;
             const auto& content_mime_type = existing_content->mime_type;
             Logger::Debug() << "Instant upload check successful: file_hash=" << command.file_hash
-                      << ", content_id=" << content_id;
+                            << ", content_id=" << content_id;
 
-            std::shared_ptr<drogon::orm::Transaction> transaction;
-            try {
-                transaction = co_await m_db_client->newTransactionCoro();
+            drogon_model::disk::Files file;
+            disk::file::TransactionRunner transaction_runner(
+                m_db_client,
+                ErrorInfo(ErrorCode::InternalError, "Failed to create file record")
+            );
+            auto tx_result = co_await transaction_runner.Run(
+                [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                    if (co_await IsFilenameExists(
+                            transaction,
+                            command.parent_id,
+                            command.filename,
+                            command.user_id
+                        )) {
+                        Logger::Warn() << "File with same name already exists: " << command.filename;
+                        co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
+                    }
 
-                if (co_await IsFilenameExists(
+                    disk::quota::QuotaService quota_service(m_db_client);
+                    auto quota_result = co_await quota_service.ConsumeUsedStorage(
+                        transaction,
+                        command.user_id,
+                        command.file_size
+                    );
+                    if (!quota_result) {
+                        co_return std::unexpected(quota_result.error());
+                    }
+
+                    auto increment_result = co_await content_service.IncrementRefCount(
+                        transaction,
+                        content_id
+                    );
+                    if (!increment_result) {
+                        Logger::Warn() << "File content not found for instant upload: content_id="
+                                       << content_id;
+                        co_return std::unexpected(increment_result.error());
+                    }
+
+                    auto parent_location_result = co_await disk::file::utils::ResolveFolderLocation(
                         transaction,
                         command.parent_id,
-                        command.filename,
                         command.user_id
-                    )) {
-                    Logger::Warn() << "File with same name already exists: " << command.filename;
-                    co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
-                }
-
-                auto increment_result = co_await content_service.IncrementRefCount(transaction, content_id);
-                if (!increment_result) {
-                    Logger::Warn() << "File content not found for instant upload: content_id="
-                             << content_id;
-                    throw std::runtime_error("Failed to increment file content reference count");
-                }
-
-                auto parent_location_result = co_await disk::file::utils::ResolveFolderLocation(
-                    transaction,
-                    command.parent_id,
-                    command.user_id
-                );
-                if (!parent_location_result) {
-                    co_return std::unexpected(parent_location_result.error());
-                }
-
-                drogon_model::disk::Files file;
-                file = co_await InsertFileRecord(
-                    transaction,
-                    command.user_id,
-                    content_id,
-                    command.parent_id,
-                    command.filename,
-                    ExtractExtension(command.filename),
-                    command.file_size,
-                    content_mime_type,
-                    disk::file::utils::BuildFilePath(parent_location_result->path, command.filename)
-                );
-
-                InitUploadOutcome outcome;
-                outcome.instant_upload = true;
-                outcome.file = ToLifecycleFileItem(file, command.file_hash);
-                outcome.invalidation.file_list_folder_ids.push_back(command.parent_id);
-
-                Logger::Debug() << "Instant upload completed: file_id=" << file.getValueOfId();
-                co_return outcome;
-
-            } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Error() << "Instant upload create file record failed: " << e.base().what();
-                if (transaction) {
-                    try {
-                        transaction->rollback();
-                    } catch (const std::exception& rollback_e) {
-                        Logger::Error() << "Transaction rollback failed: " << rollback_e.what();
+                    );
+                    if (!parent_location_result) {
+                        co_return std::unexpected(parent_location_result.error());
                     }
+
+                    file = co_await InsertFileRecord(
+                        transaction,
+                        command.user_id,
+                        content_id,
+                        command.parent_id,
+                        command.filename,
+                        ExtractExtension(command.filename),
+                        command.file_size,
+                        content_mime_type,
+                        disk::file::utils::BuildFilePath(parent_location_result->path, command.filename)
+                    );
+
+                    co_return {};
                 }
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::InternalError, "Failed to create file record")
-                );
-            } catch (const std::exception& e) {
-                Logger::Error() << "Instant upload create file record failed: " << e.what();
-                if (transaction) {
-                    try {
-                        transaction->rollback();
-                    } catch (const std::exception& rollback_e) {
-                        Logger::Error() << "Transaction rollback failed: " << rollback_e.what();
-                    }
-                }
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::InternalError, "Failed to create file record")
-                );
+            );
+            if (!tx_result) {
+                Logger::Error() << "Instant upload create file record failed: "
+                                << tx_result.error().message;
+                co_return std::unexpected(tx_result.error());
             }
+
+            InitUploadOutcome outcome;
+            outcome.instant_upload = true;
+            outcome.file = ToLifecycleFileItem(file, command.file_hash);
+            outcome.invalidation.file_list_folder_ids.push_back(command.parent_id);
+
+            Logger::Debug() << "Instant upload completed: file_id=" << file.getValueOfId();
+            co_return outcome;
         }
 
         if (init_decision.type == InitDecisionType::ResumeUpload) {
@@ -786,7 +784,7 @@ namespace disk::upload {
                         transaction,
                         disk::content::NewContent{ .hash_md5 = final_hash,
                                                    .hash_sha256 = final_sha256,
-                                                   .size = upload_task.getValueOfFileSize(),
+                                                   .size = static_cast<uint64_t>(upload_task.getValueOfFileSize()),
                                                    .storage_path = final_storage_path.string(),
                                                    .mime_type = "" }
                     );

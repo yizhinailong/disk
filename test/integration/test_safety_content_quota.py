@@ -154,6 +154,20 @@ def complete_upload(upload_id: str) -> int:
     return int(file_id)
 
 
+def cancel_upload(upload_id: str) -> None:
+    """Cancel one in-progress upload task."""
+    resp = fetch(
+        f"/api/file/upload/{upload_id}",
+        method="DELETE",
+        headers=auth_headers(),
+    )
+    save_evidence(f"{EVIDENCE_PREFIX}-{upload_id}-cancel.json", resp.text)
+    if resp.status_code != 200 or json_field(resp.text, "code") != "0":
+        log_fail(f"{upload_id}: cancel upload failed")
+        print(resp.text)
+        print_summary()
+
+
 def upload_file(filename: str, payload: bytes, parent_id: int = 0) -> int:
     """Upload content as a chunked file and return file id."""
     upload_id, _, instant_file_id = init_upload(filename, payload, parent_id)
@@ -769,6 +783,74 @@ def test_copy_ref_count_and_quota() -> None:
     assert_numeric_delta("copy increments ref_count", before_ref, after_ref, 1)
     assert_numeric_delta("copy increases used storage by logical file size", quota_before["storage_used"], quota_after["storage_used"], len(payload))
     assert_equal("copy commits and clears reservation", quota_after["storage_reserved"], quota_before["storage_reserved"])
+
+
+def test_commit_under_reservation_rolls_back_and_compensates() -> None:
+    """Verify a reserved-to-used underflow fails instead of masking accounting drift."""
+    log_section("Reserved-To-Used Under-Reservation Rolls Back")
+    payload = f"quota-under-reservation-{unique_name()}".encode()
+    filename = f"safety_quota_under_reserved_{unique_name()}.bin"
+    quota_before = user_quota()
+    upload_id, file_hash, instant_file_id = init_upload(filename, payload)
+    assert_equal("under-reservation fixture is not instant upload", instant_file_id is None, True)
+    upload_chunk(upload_id, payload)
+
+    quota_after_init = user_quota()
+    expected_under_reserved = quota_after_init["storage_reserved"] - len(payload)
+    assert_equal(
+        "upload init reserves fixture bytes",
+        quota_after_init["storage_reserved"],
+        quota_before["storage_reserved"] + len(payload),
+    )
+    affected = execute(
+        "UPDATE users SET storage_reserved = %s WHERE id = %s",
+        (expected_under_reserved, USER_ID),
+    )
+    assert_equal("under-reservation fixture corrupts one quota row", affected, 1)
+
+    resp = fetch(
+        "/api/file/upload/complete",
+        method="POST",
+        headers=auth_headers(),
+        json_body={"upload_id": upload_id},
+    )
+    save_evidence(f"{EVIDENCE_PREFIX}-{upload_id}-under-reserved-complete.json", resp.text)
+
+    quota_after_failure = user_quota()
+    task_after_failure = query_one(
+        "SELECT status, reserved_bytes FROM upload_tasks WHERE id = %s AND user_id = %s",
+        (upload_id, USER_ID),
+    )
+    assert_equal("under-reservation completion returns HTTP 500", resp.status_code, 500)
+    assert_equal("under-reservation completion preserves error envelope", json_field(resp.text, "code"), "10006")
+    assert_equal("under-reservation failure does not increase used", quota_after_failure["storage_used"], quota_before["storage_used"])
+    assert_equal(
+        "under-reservation failure does not clamp reserved",
+        quota_after_failure["storage_reserved"],
+        expected_under_reserved,
+    )
+    assert_db_row_absent(
+        "under-reservation failure creates no file row",
+        "SELECT id FROM files WHERE user_id = %s AND name = %s",
+        (USER_ID, filename),
+    )
+    assert_db_row_absent(
+        "under-reservation failure rolls back content row",
+        "SELECT id FROM file_contents WHERE hash_md5 = %s",
+        (file_hash,),
+    )
+    assert_path_absent("under-reservation compensation removes promoted blob", final_blob_path(file_hash))
+    assert_equal("under-reservation leaves upload task retryable", task_after_failure is not None, True)
+    if task_after_failure is not None:
+        assert_equal("under-reservation leaves task in progress", int(task_after_failure["status"]), 0)
+        assert_equal("under-reservation preserves task reservation", int(task_after_failure["reserved_bytes"]), len(payload))
+
+    execute(
+        "UPDATE users SET storage_reserved = %s WHERE id = %s",
+        (quota_after_init["storage_reserved"], USER_ID),
+    )
+    cancel_upload(upload_id)
+    assert_equal("under-reservation cleanup restores reserved quota", user_quota()["storage_reserved"], quota_before["storage_reserved"])
 
 
 def test_upload_quota_rejection_no_leak() -> None:
@@ -1405,6 +1487,7 @@ def main() -> None:
 
     test_instant_upload_dedup_ref_count()
     test_completion_dedup_race_ref_count_and_accounting_current_rule()
+    test_commit_under_reservation_rolls_back_and_compensates()
     test_copy_ref_count_and_quota()
     test_upload_quota_rejection_no_leak()
     test_copy_quota_rejection_no_side_effects()
