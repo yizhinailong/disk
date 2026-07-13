@@ -98,6 +98,7 @@ Drogon 的 ORM 通过 `drogon::orm::DbClient` 抽象数据库访问，PostgreSQL
 - **模型生成**：`drogon_ctl create model` 支持 PostgreSQL 数据源，生成的模型类接口与 MySQL 版本相同
 - **事务**：`DbClient` 提供 `newTransaction()`，PostgreSQL 后端完整支持
 - **参数绑定**：PostgreSQL 的 `$1, $2` 占位符由 ORM 处理，但业务边界必须以与数据库推断类型宽度一致的有符号整数绑定；`BIGINT` 主键、`LIMIT` 和 `OFFSET` 使用 `int64_t`，避免 PostgreSQL 二进制参数长度不匹配
+- **布尔结果**：`IS NULL`、比较表达式和其他 PostgreSQL 布尔列以 `bool` 读取，不得沿用 MySQL 风格的 `as<int>() != 0`，避免对 `t/f` 文本执行整数解析
 - **协程集成**：`co_await` 异步查询在 PostgreSQL 后端同样可用
 
 **风险点**：
