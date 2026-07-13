@@ -15,6 +15,7 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 | Share download metadata | Successful share content download updates share-level and file-level metadata | Updates share-level count only today | Behavior-changing implementation required |
 | JWT enforcement | Global JWT with explicit public exemptions | Global and route-level JWT can both run | Filter cleanup implementation required |
 | Redis rate-limit failure | Fail-open for now | Already fail-open today | Make explicit in code/tests later |
+| Object storage compatibility | Design constraint for now, not a near-term implementation target | Local filesystem implementation with explicit staging and `BlobStore` boundaries | Keep Phase 6 storage interfaces object-store-safe before implementing S3/MinIO |
 
 ## Decision: `storage_used` means logical per-user bytes
 
@@ -136,11 +137,32 @@ Use `docs/backend-discovery.md` as the source of confirmed current implementatio
 
 **Follow-up status:** Decision recorded; current behavior already matches the target, but explicit code/test documentation remains open.
 
+## Decision: object storage compatibility is a design constraint for now
+
+**Current implementation behavior:** The runtime implementation remains local-filesystem based. `UploadStagingStorage` separates temporary upload-session concerns from final blob storage concerns, and `BlobStore` separates final content blob promotion, read, existence, size, and deletion semantics. Download responses still need further descriptor-oriented cleanup in `docs/TODO.md` Phase 6.4.
+
+**Accepted target behavior:** S3/MinIO compatibility is a Phase 6 design constraint, not a near-term implementation requirement. New storage boundaries should avoid relying on local-only primitives where an object store cannot provide the same guarantee, but this roadmap does not require shipping an S3/MinIO adapter until the remaining download descriptor contracts are explicit.
+
+**Expected staging-storage responsibilities for S3/MinIO:** An object-store implementation of `UploadStagingStorage` should store chunks under an upload-session namespace, make repeated chunk writes idempotent for the same upload id and chunk index, assemble chunks into a staging object or multipart upload result, calculate and return MD5/SHA-256 metadata for final validation, discard assembled staging artifacts on validation or DB failure, and clean all per-upload staging keys during cancel/expiry cleanup. It should not create final content blobs, mutate database state, or assume local directory rename semantics.
+
+**Expected final blob-storage responsibilities for S3/MinIO:** `BlobStore` should own content-addressed final blobs, promotion from a staging descriptor/object into the final hash-derived key, existence checks, metadata such as size/checksum where needed, readable download descriptors instead of local filesystem paths, and idempotent deletion requests. Final keys should remain derived from content hashes to preserve dedup semantics, but callers should not depend on POSIX paths or atomic filesystem rename.
+
+**Consistency and compensation model:** Database transactions and object-store side effects remain separate failure domains. Blob promotion should occur outside the DB transaction unless a later design introduces an explicit outbox/saga worker. If object-store promotion succeeds and the DB transaction fails, the caller must issue best-effort compensation to delete the promoted final blob. If DB commit succeeds but cleanup of staging artifacts fails, the committed file remains valid and cleanup must be retried asynchronously or by scheduled maintenance. Delete paths must keep zero-ref verification in the DB before object-store deletion, and object-store delete operations should be idempotent because retries may observe already-deleted keys.
+
+**Rejected alternatives:**
+
+- Make S3/MinIO a near-term implementation target now: rejected because download descriptor contracts are still open, so an adapter would either leak local filesystem assumptions or be reworked soon.
+- Keep object storage entirely out of the design: rejected because Phase 6 is explicitly extracting storage boundaries, and local-only contracts would make a later S3/MinIO adapter unnecessarily risky.
+- Rely on atomic rename semantics for promotion: rejected because object stores generally expose copy/complete/delete operations rather than POSIX rename.
+
+**Implementation impact:** Phase 6.3 keeps DB failure compensation explicit around object-store promotion/deletion. Phase 6.4 should move download responses toward blob descriptors or streams so controllers do not need local path knowledge. `docs/TODO.md` Phase 6.5 records this documentation task as closed while leaving runtime S3/MinIO support deferred.
+
+**Follow-up status:** Decision recorded; runtime S3/MinIO support is deferred until the remaining Phase 6 storage boundaries are implemented.
+
 ## Remaining Unresolved Decisions
 
 The following roadmap questions remain outside this decision set:
 
 - Whether copy accounting should move to a reservation-style model instead of pre-incrementing `storage_used`.
 - Whether inline expired upload task cleanup during upload init should release reserved quota through the lifecycle/quota boundary.
-- Whether object storage compatibility is a near-term requirement or only a design constraint.
 - Whether any specific rate-limit family should become fail-closed in a future abuse or security hardening change.

@@ -339,10 +339,12 @@ Completion status: closed by `feat(storage): move final blobs to BlobStore`.
 
 ## 6.5 Document object storage compatibility
 
-- [ ] Document how S3/MinIO would implement staging storage.
-- [ ] Document how S3/MinIO would implement blob storage.
-- [ ] Document consistency tradeoffs for DB commit vs object-store side effects.
-- [ ] Decide whether object storage compatibility is a near-term requirement or only a design constraint.
+Completion status: closed by `docs/backend-refactor-decisions.md`. S3/MinIO compatibility is documented as a Phase 6 design constraint for now, not a near-term implementation target; runtime support remains deferred until the remaining storage/download contracts are explicit.
+
+- [x] Document how S3/MinIO would implement staging storage.
+- [x] Document how S3/MinIO would implement blob storage.
+- [x] Document consistency tradeoffs for DB commit vs object-store side effects.
+- [x] Decide whether object storage compatibility is a near-term requirement or only a design constraint: design constraint for now.
 
 ---
 
@@ -419,9 +421,9 @@ Resolved by `docs/backend-refactor-decisions.md`:
 - [x] Should Redis failures remain fail-open for every rate-limit family? Decision: yes for all current rate-limit families, for now.
 - [x] Should private downloads update `files.download_count` and `files.last_accessed_at`? Decision: yes for successful content downloads.
 - [x] Should share downloads update file-level metadata, share-level metadata, or both? Decision: both for successful content downloads.
+- [x] Should object storage compatibility be a near-term requirement or only a design constraint? Decision: design constraint for now; S3/MinIO implementation is deferred until Phase 6 storage/download contracts are explicit.
 
 Still open:
 
-- [ ] Should object storage compatibility be a near-term requirement or only a design constraint?
 - [ ] Should copy accounting use a reservation-style model instead of incrementing `storage_used` before copy work completes?
 - [x] Should inline expired-task cleanup during upload init release `storage_reserved` through the upload lifecycle/quota boundary? Decision: yes; implemented through `UploadLifecycleService` / `QuotaService`.
