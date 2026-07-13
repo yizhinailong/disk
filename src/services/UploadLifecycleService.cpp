@@ -856,8 +856,14 @@ namespace disk::upload {
             if (should_delete_promoted_blob_on_tx_failure) {
                 auto cleanup_result = co_await m_blob_store->DeleteBlob(final_storage_path);
                 if (!cleanup_result) {
-                    Logger::Error() << "Compensation failed, orphan storage file may remain: "
-                              << final_storage_path;
+                    Logger::Error() << "Promoted blob compensation failed: upload_id="
+                                    << command.upload_id << ", storage_path=" << final_storage_path
+                                    << ", error_code=" << cleanup_result.error().CodeInt()
+                                    << ", error=" << cleanup_result.error().message
+                                    << ", orphaned blob may remain";
+                } else {
+                    Logger::Info() << "Promoted blob compensation completed: upload_id="
+                                   << command.upload_id << ", storage_path=" << final_storage_path;
                 }
             }
             Logger::Info() << "[stage_timer] compensation_cleanup duration_ms="
