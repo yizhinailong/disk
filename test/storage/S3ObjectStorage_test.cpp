@@ -77,6 +77,10 @@ namespace {
         auto DeleteObject(const std::string& key) -> Result<void> override {
             ++delete_calls;
             deleted_keys.push_back(key);
+            if (delete_failures_remaining > 0) {
+                --delete_failures_remaining;
+                return std::unexpected(delete_error);
+            }
             objects.erase(key);
             return {};
         }
@@ -110,6 +114,8 @@ namespace {
         int put_calls{ 0 };
         int delete_calls{ 0 };
         int get_calls{ 0 };
+        int delete_failures_remaining{ 0 };
+        ErrorInfo delete_error{ ErrorCode::InternalError, "fake delete failure" };
     };
 
     auto LoadS3StorageConfig(const std::filesystem::path& temp_upload_path) -> void {
@@ -167,7 +173,7 @@ namespace {
         std::unique_ptr<disk::storage::S3ObjectStorage> storage;
     };
 
-} ///< namespace
+} // namespace
 
 TEST_F(S3ObjectStorageTest, GetFinalStoragePathUsesHashShardedObjectKey) {
     EXPECT_EQ(
@@ -251,4 +257,42 @@ TEST_F(S3ObjectStorageTest, ExistsSizeRangeAndDeleteUseObjectKey) {
     ASSERT_TRUE(delete_result.has_value()) << delete_result.error().message;
     EXPECT_EQ(client->delete_calls, 1);
     EXPECT_FALSE(client->objects.contains(key.generic_string()));
+}
+
+TEST_F(S3ObjectStorageTest, DeleteBlobRetriesTransientFailures) {
+    const auto key = std::filesystem::path("objects/ab/abcdef0123456789abcdef0123456789.bin");
+    client->objects[key.generic_string()] = "payload";
+    client->delete_failures_remaining = 2;
+
+    auto result = drogon::sync_wait(storage->DeleteBlob(key));
+
+    ASSERT_TRUE(result.has_value()) << result.error().message;
+    EXPECT_EQ(client->delete_calls, 3);
+    EXPECT_FALSE(client->objects.contains(key.generic_string()));
+}
+
+TEST_F(S3ObjectStorageTest, DeleteBlobStopsAfterThreeFailuresAndReturnsLastError) {
+    const auto key = std::filesystem::path("objects/ab/abcdef0123456789abcdef0123456789.bin");
+    client->objects[key.generic_string()] = "payload";
+    client->delete_failures_remaining = 10;
+    client->delete_error = ErrorInfo(ErrorCode::InternalError, "persistent fake delete failure");
+
+    auto result = drogon::sync_wait(storage->DeleteBlob(key));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::InternalError);
+    EXPECT_EQ(result.error().message, "persistent fake delete failure");
+    EXPECT_EQ(client->delete_calls, 3);
+    EXPECT_TRUE(client->objects.contains(key.generic_string()));
+}
+
+TEST_F(S3ObjectStorageTest, DeleteBlobIsIdempotentForMissingObject) {
+    const auto key = std::filesystem::path("objects/ab/abcdef0123456789abcdef0123456789.bin");
+
+    auto first_result = drogon::sync_wait(storage->DeleteBlob(key));
+    auto second_result = drogon::sync_wait(storage->DeleteBlob(key));
+
+    ASSERT_TRUE(first_result.has_value()) << first_result.error().message;
+    ASSERT_TRUE(second_result.has_value()) << second_result.error().message;
+    EXPECT_EQ(client->delete_calls, 2);
 }

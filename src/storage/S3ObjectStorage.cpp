@@ -20,6 +20,7 @@ namespace disk::storage {
 
     namespace {
         constexpr size_t DEFAULT_S3_STORAGE_THREADS = 4;
+        constexpr int S3_DELETE_MAX_ATTEMPTS = 3;
         constexpr std::string_view S3_STORAGE_QUEUE_NAME = "s3-object-storage";
 
         template <typename T>
@@ -70,7 +71,7 @@ namespace disk::storage {
                 trantor::EventLoop::getEventLoopOfCurrentThread()
             );
         }
-    } ///< namespace
+    } // namespace
 
     S3ObjectStorage::S3ObjectStorage(
         std::shared_ptr<disk::utils::ConfigMgr> config_mgr,
@@ -79,10 +80,7 @@ namespace disk::storage {
         m_s3_config(m_config_mgr->GetS3StorageConfig()),
         m_s3_client(std::move(s3_client)),
         m_local_staging(m_config_mgr),
-        m_worker_queue(std::make_shared<trantor::ConcurrentTaskQueue>(
-            DEFAULT_S3_STORAGE_THREADS,
-            std::string(S3_STORAGE_QUEUE_NAME)
-        )) {
+        m_worker_queue(std::make_shared<trantor::ConcurrentTaskQueue>(DEFAULT_S3_STORAGE_THREADS, std::string(S3_STORAGE_QUEUE_NAME))) {
         if (m_s3_client == nullptr) {
             throw std::runtime_error("S3ObjectStorage requires an S3 client");
         }
@@ -188,10 +186,34 @@ namespace disk::storage {
         -> drogon::Task<Result<void>> {
         const auto key = ToObjectKey(storage_path);
         auto client = m_s3_client;
+        const auto bucket = m_s3_config.bucket;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, key]() -> Result<void> {
-                return client->DeleteObject(key);
+            [client, key, bucket]() -> Result<void> {
+                for (int attempt = 1; attempt <= S3_DELETE_MAX_ATTEMPTS; ++attempt) {
+                    auto delete_result = client->DeleteObject(key);
+                    if (delete_result) {
+                        if (attempt > 1) {
+                            Logger::Info() << "S3 blob delete succeeded after retry: bucket="
+                                           << bucket << ", key=" << key << ", attempt=" << attempt
+                                           << "/" << S3_DELETE_MAX_ATTEMPTS;
+                        }
+                        return {};
+                    }
+
+                    Logger::Warn() << "S3 blob delete attempt failed: bucket=" << bucket
+                                   << ", key=" << key << ", attempt=" << attempt << "/"
+                                   << S3_DELETE_MAX_ATTEMPTS
+                                   << ", error_code=" << delete_result.error().CodeInt()
+                                   << ", error=" << delete_result.error().message;
+                    if (attempt == S3_DELETE_MAX_ATTEMPTS) {
+                        return std::unexpected(delete_result.error());
+                    }
+                }
+
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "S3 delete retry loop exhausted")
+                );
             }
         );
         co_return result;
@@ -242,4 +264,4 @@ namespace disk::storage {
         return path.generic_string();
     }
 
-} ///< namespace disk::storage
+} // namespace disk::storage
