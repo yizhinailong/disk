@@ -429,5 +429,5 @@ Resolved by `docs/backend-refactor-decisions.md`:
 
 Still open:
 
-- [ ] Should copy accounting use a reservation-style model instead of incrementing `storage_used` before copy work completes?
+- [ ] Should copy accounting use a reservation-style model instead of incrementing `storage_used` before copy work completes? Tracked by GitHub issue #21.
 - [x] Should inline expired-task cleanup during upload init release `storage_reserved` through the upload lifecycle/quota boundary? Decision: yes; implemented through `UploadLifecycleService` / `QuotaService`.
