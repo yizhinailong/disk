@@ -307,6 +307,8 @@ This phase should wait until upload/content/trash lifecycle boundaries are stabl
 
 ## 6.1 Split staging storage from blob storage
 
+Completion status: closed by `refactor(storage): split upload staging from blob store`, `refactor(upload): move assembly to staging storage`, and `feat(storage): move final blobs to BlobStore`.
+
 - [x] Define an `UploadStagingStorage` boundary for temporary upload sessions.
 - [x] Define a `BlobStore` boundary for final content blobs.
 - [x] Keep current local filesystem implementation compatible with existing paths.
