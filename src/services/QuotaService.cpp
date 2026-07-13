@@ -18,12 +18,12 @@ namespace disk::quota {
         Logger::Debug() << "QuotaService initialization completed";
     }
 
-    auto QuotaService::ReserveUploadStorage(uint64_t user_id, uint64_t bytes) const
+    auto QuotaService::ReserveStorage(uint64_t user_id, uint64_t bytes) const
         -> drogon::Task<Result<void>> {
-        co_return co_await ReserveUploadStorage(m_db_client, user_id, bytes);
+        co_return co_await ReserveStorage(m_db_client, user_id, bytes);
     }
 
-    auto QuotaService::ReserveUploadStorage(
+    auto QuotaService::ReserveStorage(
         const drogon::orm::DbClientPtr& client,
         uint64_t user_id,
         uint64_t bytes
@@ -56,6 +56,19 @@ namespace disk::quota {
                 ErrorInfo(ErrorCode::InternalError, "Failed to reserve storage quota")
             );
         }
+    }
+
+    auto QuotaService::ReserveUploadStorage(uint64_t user_id, uint64_t bytes) const
+        -> drogon::Task<Result<void>> {
+        co_return co_await ReserveStorage(m_db_client, user_id, bytes);
+    }
+
+    auto QuotaService::ReserveUploadStorage(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t user_id,
+        uint64_t bytes
+    ) const -> drogon::Task<Result<void>> {
+        co_return co_await ReserveStorage(client, user_id, bytes);
     }
 
     auto QuotaService::ReleaseReservedStorage(uint64_t user_id, uint64_t bytes) const
