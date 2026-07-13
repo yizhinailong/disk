@@ -63,17 +63,19 @@ namespace disk::log {
 
             auto count_result = co_await m_db_client->execSqlCoro(
                 "SELECT COUNT(*) as count FROM operation_logs WHERE user_id = $1",
-                user_id
+                static_cast<int64_t>(user_id)
             );
             if (!count_result.empty()) {
                 response.total = count_result[0]["count"].as<int>();
             }
 
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, action, target_type, target_id, " "target_name, " "       " "d" "e" "t" "a" "i" "l" "s" "," " " "ip_" "address, " "created_" "at " "FROM" " ope" "rati" "on_" "logs" " " "WHERE user_id = $1 " "ORDER BY created_at DESC " "LIMIT $2 OFFSET $3",
-                user_id,
-                page_size,
-                offset
+                "SELECT id, user_id, action, target_type, target_id, target_name, details, "
+                "ip_address, created_at FROM operation_logs "
+                "WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+                static_cast<int64_t>(user_id),
+                static_cast<int64_t>(page_size),
+                static_cast<int64_t>(offset)
             );
 
             for (const auto& row : result) {

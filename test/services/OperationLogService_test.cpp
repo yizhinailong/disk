@@ -14,12 +14,26 @@
 
 #include "services/OperationLogService.hpp"
 
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 
 #include <gtest/gtest.h>
 
 namespace disk::log {
     namespace {
+
+        auto RepositoryRoot() -> std::filesystem::path {
+            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        }
+
+        auto ReadSourceFile(const std::filesystem::path& relative_path) -> std::string {
+            std::ifstream input(RepositoryRoot() / relative_path);
+            std::ostringstream buffer;
+            buffer << input.rdbuf();
+            return buffer.str();
+        }
 
         /// ==================== NormalizeIpAddress 测试 ====================
 
@@ -83,6 +97,14 @@ namespace disk::log {
             entry.ip_address = "172.16.0.1";
             auto normalized = OperationLogService::NormalizeIpAddress(entry.ip_address);
             EXPECT_EQ(normalized, "172.16.0.1");
+        }
+
+        TEST(OperationLogQueryContractTest, PaginationUsesPostgresqlInt64Bindings) {
+            const auto source = ReadSourceFile("src/services/OperationLogService.cpp");
+
+            EXPECT_NE(source.find("static_cast<int64_t>(user_id)"), std::string::npos);
+            EXPECT_NE(source.find("static_cast<int64_t>(page_size)"), std::string::npos);
+            EXPECT_NE(source.find("static_cast<int64_t>(offset)"), std::string::npos);
         }
 
     } ///< namespace
