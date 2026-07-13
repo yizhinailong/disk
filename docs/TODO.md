@@ -371,6 +371,40 @@ Completion status: closed by `feat(storage): add S3 object storage backend`.
 
 ---
 
+# Phase 7 — Final Validation and Cleanup
+
+The backend-refactor feature checklist is complete. This phase tracks remaining
+wrap-up work needed to make that completion easy to verify and maintain.
+
+## 7.1 Align roadmap and storage documentation
+
+- [ ] Audit storage docs for any remaining stale wording that describes S3/MinIO runtime support as deferred.
+- [ ] Make the current S3 backend scope explicit across docs: final content blobs are object-store backed, while upload staging currently remains compatible with the local temporary upload lifecycle.
+- [ ] If S3-native upload staging is desired later, split it into a separate future issue instead of treating it as unfinished Phase 6 work.
+
+## 7.2 Tighten copy-accounting validation notes
+
+- [ ] Update stale comments in `test/services/FileServiceAtomicity_test.cpp` that still describe the old `storage_used += total_copy_size` copy model.
+- [ ] Re-enable, replace, or explicitly retire the remaining disabled copy atomicity fault-injection tests once their coverage is represented by current integration tests.
+- [ ] Add focused DB-behavior coverage for `QuotaService` reserve/commit/release/reconciliation semantics, or document why the integration coverage is the authoritative safety net.
+- [ ] Confirm `QuotaService::CommitReservedToUsed` under-reservation behavior is intentional and covered, or tighten the helper so accounting drift cannot be masked.
+
+## 7.3 Strengthen S3/MinIO verification
+
+- [ ] Add an app-level MinIO test path with `storage_backend=s3` that exercises upload finalize, full/range download, and permanent deletion cleanup through the Disk server.
+- [ ] Cover S3 promotion compensation when object-store promotion succeeds but DB finalization fails.
+- [ ] Add coverage for `StorageFactory` S3 selection and bucket-validation failure mapping.
+- [ ] Document whether AWS SDK remains a mandatory build dependency or should become optional for local-only builds.
+
+## 7.4 Final definition-of-done pass
+
+- [ ] Run or record the relevant CMake/Drogon, Python integration, and environment-gated MinIO test commands.
+- [ ] Verify public API response shapes remain unchanged for copy, upload, download, and trash flows.
+- [ ] Verify logs and compensation behavior remain useful for quota reservation release failures, S3 cleanup retry, and blob deletion idempotency.
+- [ ] Close or link any follow-up issues created from this final cleanup phase.
+
+---
+
 # Suggested Dependency Map
 
 ```text
@@ -413,6 +447,13 @@ Phase 6: Storage Abstraction Evolution
 ├─ UploadStagingStorage
 ├─ BlobStore
 └─ S3/MinIO object storage adapter
+                              │
+                              ▼
+Phase 7: Final Validation and Cleanup
+├─ Documentation alignment
+├─ Copy-accounting validation notes
+├─ S3/MinIO app-level verification
+└─ Final definition-of-done pass
 ```
 
 ---
@@ -446,7 +487,7 @@ Resolved by `docs/backend-refactor-decisions.md`:
 - [x] Should Redis failures remain fail-open for every rate-limit family? Decision: yes for all current rate-limit families, for now.
 - [x] Should private downloads update `files.download_count` and `files.last_accessed_at`? Decision: yes for successful content downloads.
 - [x] Should share downloads update file-level metadata, share-level metadata, or both? Decision: both for successful content downloads.
-- [x] Should object storage compatibility be a near-term requirement or only a design constraint? Decision: design constraint for now; S3/MinIO implementation is deferred until Phase 6 storage/download contracts are explicit.
+- [x] Should object storage compatibility be a near-term requirement or only a design constraint? Decision: S3/MinIO-compatible runtime support is now implemented as a configurable backend; S3-native upload staging remains outside the completed Phase 6 scope unless a future issue explicitly takes it on.
 - [x] Should copy accounting use a reservation-style model instead of incrementing `storage_used` before copy work completes? Decision: yes, reserve candidate logical bytes first, commit successes to used storage transactionally, and release skipped/failed reservations.
 - [x] Should inline expired-task cleanup during upload init release `storage_reserved` through the upload lifecycle/quota boundary? Decision: yes; implemented through `UploadLifecycleService` / `QuotaService`.
 
