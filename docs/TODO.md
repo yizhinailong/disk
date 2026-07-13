@@ -301,13 +301,13 @@ Completion status: closed by `fix(transaction): normalize failure error mapping`
 
 ## 5.6 Migrate copy accounting to reservation-style commit/release
 
-Decision status: accepted in `docs/backend-refactor-decisions.md`; implementation remains open and is tracked by GitHub issue #25.
+Completion status: closed by `feat(copy): reserve quota before committing copies`.
 
-- [ ] Reserve candidate logical copy bytes in `users.storage_reserved` before copy work starts.
-- [ ] Commit successful copy bytes from reserved to used storage in the same transaction as content ref-count increments and copied row creation.
-- [ ] Release reserved bytes for skipped items, rejected folders, missing content, and failed copy units.
-- [ ] Preserve existing `CopyResponse` shape and visible partial-copy behavior unless a later implementation explicitly documents a behavior change.
-- [ ] Add or update `test/services/FileServiceAtomicity_test.cpp` and `test/integration/test_safety_content_quota.py` coverage for reservation commit/release, partial copy failure, repeated retry expectations, and `storage_used` / `storage_reserved` reconciliation.
+- [x] Reserve candidate logical copy bytes in `users.storage_reserved` before copy work starts.
+- [x] Commit successful copy bytes from reserved to used storage in the same transaction as content ref-count increments and copied row creation.
+- [x] Release reserved bytes for skipped items, rejected folders, missing content, and failed copy units.
+- [x] Preserve existing `CopyResponse` shape and visible partial-copy behavior unless a later implementation explicitly documents a behavior change.
+- [x] Add or update `test/services/FileServiceAtomicity_test.cpp` and `test/integration/test_safety_content_quota.py` coverage for reservation commit/release, partial copy failure, repeated retry expectations, and `storage_used` / `storage_reserved` reconciliation.
 
 ---
 
