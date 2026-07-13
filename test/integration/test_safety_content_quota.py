@@ -796,7 +796,7 @@ def test_commit_under_reservation_rolls_back_and_compensates() -> None:
     upload_chunk(upload_id, payload)
 
     quota_after_init = user_quota()
-    expected_under_reserved = quota_after_init["storage_reserved"] - len(payload)
+    forced_under_reserved = len(payload) - 1
     assert_equal(
         "upload init reserves fixture bytes",
         quota_after_init["storage_reserved"],
@@ -804,7 +804,7 @@ def test_commit_under_reservation_rolls_back_and_compensates() -> None:
     )
     affected = execute(
         "UPDATE users SET storage_reserved = %s WHERE id = %s",
-        (expected_under_reserved, USER_ID),
+        (forced_under_reserved, USER_ID),
     )
     assert_equal("under-reservation fixture corrupts one quota row", affected, 1)
 
@@ -827,7 +827,7 @@ def test_commit_under_reservation_rolls_back_and_compensates() -> None:
     assert_equal(
         "under-reservation failure does not clamp reserved",
         quota_after_failure["storage_reserved"],
-        expected_under_reserved,
+        forced_under_reserved,
     )
     assert_db_row_absent(
         "under-reservation failure creates no file row",
