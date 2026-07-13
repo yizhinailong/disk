@@ -985,6 +985,8 @@ namespace disk::upload {
                     co_return std::unexpected(release_result.error());
                 }
 
+                co_await upload_task_repository.DeleteChunks(transaction, upload_id);
+
                 expired = true;
                 co_return {};
             }

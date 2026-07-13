@@ -98,6 +98,7 @@ namespace disk::file {
             EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.MarkExpiredIfInProgressReturning("));
             EXPECT_FALSE(Contains(lifecycle_source, "UPDATE upload_tasks SET status"));
             EXPECT_TRUE(Contains(lifecycle_source, "quota_service.ReleaseReservedStorageChecked("));
+            EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.DeleteChunks(transaction, upload_id)"));
             EXPECT_TRUE(Contains(lifecycle_source, "CleanupTemp(upload_id)"));
         }
 
