@@ -504,3 +504,16 @@ set_tests_properties(
     TIMEOUT 300
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+
+add_test(
+    NAME S3AppFlowIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_s3_app_flow.py"
+)
+
+set_tests_properties(
+    S3AppFlowIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 300
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
