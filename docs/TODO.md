@@ -299,6 +299,16 @@ Completion status: closed by `fix(transaction): normalize failure error mapping`
 - [x] Avoid leaking database implementation details.
 - [x] Preserve current response envelope shape.
 
+## 5.6 Migrate copy accounting to reservation-style commit/release
+
+Decision status: accepted in `docs/backend-refactor-decisions.md`; implementation remains open.
+
+- [ ] Reserve candidate logical copy bytes in `users.storage_reserved` before copy work starts.
+- [ ] Commit successful copy bytes from reserved to used storage in the same transaction as content ref-count increments and copied row creation.
+- [ ] Release reserved bytes for skipped items, rejected folders, missing content, and failed copy units.
+- [ ] Preserve existing `CopyResponse` shape and visible partial-copy behavior unless a later implementation explicitly documents a behavior change.
+- [ ] Add or update `test/services/FileServiceAtomicity_test.cpp` and `test/integration/test_safety_content_quota.py` coverage for reservation commit/release, partial copy failure, repeated retry expectations, and `storage_used` / `storage_reserved` reconciliation.
+
 ---
 
 # Phase 6 — Storage Abstraction Evolution
@@ -376,7 +386,8 @@ Phase 4: Data Access Boundary Expansion
                               ▼
 Phase 5: Transaction Boundary Expansion
 ├─ Upload finalization
-├─ Copy
+├─ Copy transaction boundary
+├─ Copy accounting reservation
 ├─ Move
 └─ Delete/trash
                               │
@@ -417,9 +428,9 @@ Resolved by `docs/backend-refactor-decisions.md`:
 - [x] Should Redis failures remain fail-open for every rate-limit family? Decision: yes for all current rate-limit families, for now.
 - [x] Should private downloads update `files.download_count` and `files.last_accessed_at`? Decision: yes for successful content downloads.
 - [x] Should share downloads update file-level metadata, share-level metadata, or both? Decision: both for successful content downloads.
+- [x] Should copy accounting use a reservation-style model instead of incrementing `storage_used` before copy work completes? Decision: yes, reserve candidate logical bytes first, commit successes to used storage transactionally, and release skipped/failed reservations.
+- [x] Should inline expired-task cleanup during upload init release `storage_reserved` through the upload lifecycle/quota boundary? Decision: yes; implemented through `UploadLifecycleService` / `QuotaService`.
 
 Still open:
 
 - [ ] Should object storage compatibility be a near-term requirement or only a design constraint?
-- [ ] Should copy accounting use a reservation-style model instead of incrementing `storage_used` before copy work completes?
-- [x] Should inline expired-task cleanup during upload init release `storage_reserved` through the upload lifecycle/quota boundary? Decision: yes; implemented through `UploadLifecycleService` / `QuotaService`.
