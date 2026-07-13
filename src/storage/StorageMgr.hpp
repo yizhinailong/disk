@@ -12,6 +12,7 @@
 #include <memory>
 
 #include "storage/IFileStorage.hpp"
+#include "storage/UploadStagingStorage.hpp"
 
 namespace disk::storage {
 
@@ -45,6 +46,13 @@ namespace disk::storage {
          */
         [[nodiscard]]
         static auto GetStorage() -> IFileStorage*;
+
+        /**
+         * @brief 获取上传暂存存储实例
+         * @return UploadStagingStorage* 上传暂存存储实例指针
+         */
+        [[nodiscard]]
+        static auto GetUploadStagingStorage() -> UploadStagingStorage*;
 
         /**
          * @brief 检查存储实例是否已初始化

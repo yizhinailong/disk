@@ -18,6 +18,7 @@
 #include <string_view>
 
 #include "storage/IFileStorage.hpp"
+#include "storage/UploadStagingStorage.hpp"
 
 namespace trantor {
     class ConcurrentTaskQueue;
@@ -38,7 +39,7 @@ namespace disk::storage {
      * - 实现基于内容哈希的最终存储路径计算
      * - 使用 Result<T> 作为统一错误契约
      */
-    class LocalFileStorage : public IFileStorage {
+    class LocalFileStorage : public IFileStorage, public UploadStagingStorage {
     public:
         /**
          * @brief 构造本地文件存储实例
@@ -79,7 +80,17 @@ namespace disk::storage {
          */
         [[nodiscard]]
         auto AssembleChunks(const std::string& upload_id, uint32_t chunk_count)
-            -> drogon::Task<Result<AssembleResult>> override;
+            -> drogon::Task<Result<UploadStagingAssembly>> override;
+
+        /**
+         * @brief 丢弃上传会话对应的组装暂存工件
+         * @param upload_id 上传会话 ID
+         * @param assembly 组装暂存工件描述
+         * @return 成功返回空，失败返回错误信息
+         */
+        [[nodiscard]]
+        auto DiscardAssembly(const std::string& upload_id, const UploadStagingAssembly& assembly)
+            -> drogon::Task<Result<void>> override;
 
         /**
          * @brief 将临时文件移动到最终存储位置（哈希分片目录）

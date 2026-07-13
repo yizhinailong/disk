@@ -166,6 +166,7 @@ set(Storage_HEADERS
     storage/IFileStorage.hpp
     storage/LocalFileStorage.hpp
     storage/StorageMgr.hpp
+    storage/UploadStagingStorage.hpp
 )
 set(Storage_SOURCES
     storage/LocalFileStorage.cpp

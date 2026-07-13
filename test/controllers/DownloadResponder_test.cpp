@@ -72,24 +72,6 @@ namespace {
 
         /// ---- IFileStorage 接口 ----
 
-        auto EnsureUploadTempDir(const std::string& /*upload_id*/)
-            -> drogon::Task<Result<void>> override {
-            co_return Result<void>{};
-        }
-
-        auto WriteChunk(
-            const std::string& /*upload_id*/,
-            uint32_t /*chunk_index*/,
-            std::string /*data*/
-        ) -> drogon::Task<Result<void>> override {
-            co_return Result<void>{};
-        }
-
-        auto AssembleChunks(const std::string& /*upload_id*/, uint32_t /*chunk_count*/)
-            -> drogon::Task<Result<disk::storage::AssembleResult>> override {
-            co_return disk::storage::AssembleResult{m_temp_dir / "assembled", "", ""};
-        }
-
         auto PromoteToFinal(
             const std::filesystem::path& /*temp_path*/,
             const std::string& /*hash*/
@@ -109,11 +91,6 @@ namespace {
         }
 
         auto DeletePath(const std::filesystem::path& /*target_path*/)
-            -> drogon::Task<Result<void>> override {
-            co_return Result<void>{};
-        }
-
-        auto CleanupTemp(const std::string& /*upload_id*/)
             -> drogon::Task<Result<void>> override {
             co_return Result<void>{};
         }

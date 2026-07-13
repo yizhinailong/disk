@@ -695,6 +695,55 @@ namespace disk::file {
             EXPECT_EQ(ReadBinaryFile(ChunkPath(upload_id, 0)), original_data);
         }
 
+        TEST_F(UploadPathTest, DiscardAssemblyRemovesOnlyAssembledArtifact) {
+            const std::string upload_id = "discard-assembly-test";
+            const std::string content = MakePattern(512, 0x34);
+
+            ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
+            ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, content)).has_value());
+
+            auto assemble_result = drogon::sync_wait(m_storage->AssembleChunks(upload_id, 1));
+            ASSERT_TRUE(assemble_result.has_value());
+            ASSERT_TRUE(std::filesystem::exists(assemble_result->path));
+            ASSERT_TRUE(std::filesystem::exists(ChunkPath(upload_id, 0)));
+
+            auto discard_result = drogon::sync_wait(
+                m_storage->DiscardAssembly(upload_id, assemble_result.value())
+            );
+            ASSERT_TRUE(discard_result.has_value());
+            EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
+            EXPECT_TRUE(std::filesystem::exists(ChunkPath(upload_id, 0)));
+            EXPECT_EQ(ReadBinaryFile(ChunkPath(upload_id, 0)), content);
+        }
+
+        TEST_F(UploadPathTest, DiscardAssemblyIsIdempotentOnMissingArtifact) {
+            const std::string upload_id = "discard-idempotent-test";
+            const disk::storage::UploadStagingAssembly assembly{
+                .path = AssembledPath(upload_id),
+                .md5_hash = "",
+                .sha256_hash = ""
+            };
+
+            auto first_result = drogon::sync_wait(m_storage->DiscardAssembly(upload_id, assembly));
+            ASSERT_TRUE(first_result.has_value());
+
+            auto second_result = drogon::sync_wait(m_storage->DiscardAssembly(upload_id, assembly));
+            ASSERT_TRUE(second_result.has_value());
+        }
+
+        TEST_F(UploadPathTest, DiscardAssemblyRejectsMismatchedArtifactPath) {
+            const std::string upload_id = "discard-mismatch-test";
+            const disk::storage::UploadStagingAssembly assembly{
+                .path = m_temp_base / "other-upload.tmp",
+                .md5_hash = "",
+                .sha256_hash = ""
+            };
+
+            auto result = drogon::sync_wait(m_storage->DiscardAssembly(upload_id, assembly));
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::InternalError);
+        }
+
         /// =====================================================================
         /// 9. Cleanup verification
         /// =====================================================================

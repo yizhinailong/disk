@@ -43,8 +43,16 @@ namespace disk::application {
         m_db_client = std::move(db_client);
         m_redis_client = std::move(redis_client);
         m_storage = storage;
+        m_upload_staging_storage = disk::storage::StorageMgr::GetUploadStagingStorage();
+        if (m_upload_staging_storage == nullptr) {
+            m_upload_staging_storage = dynamic_cast<disk::storage::UploadStagingStorage*>(m_storage);
+        }
 
-        m_upload_service = std::make_unique<disk::file::UploadService>(m_db_client, m_storage);
+        m_upload_service = std::make_unique<disk::file::UploadService>(
+            m_db_client,
+            m_storage,
+            m_upload_staging_storage
+        );
         m_file_query_service = std::make_unique<disk::file::FileQueryService>(m_db_client);
         m_file_mutation_service = std::make_unique<disk::file::FileMutationService>(m_db_client, m_storage);
         m_folder_service = std::make_unique<disk::folder::FolderService>(m_db_client);

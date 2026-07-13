@@ -29,6 +29,7 @@
 
 namespace disk::storage {
     class IFileStorage;
+    class UploadStagingStorage;
 }
 
 namespace disk::file {
@@ -49,7 +50,11 @@ namespace disk::file {
          * @param db_client 数据库客户端
          * @param storage 文件存储接口
          */
-        explicit UploadService(drogon::orm::DbClientPtr db_client, storage::IFileStorage* storage);
+        explicit UploadService(
+            drogon::orm::DbClientPtr db_client,
+            storage::IFileStorage* storage,
+            storage::UploadStagingStorage* upload_staging_storage
+        );
         ~UploadService() = default;
         UploadService(const UploadService&) = delete;
         auto operator=(const UploadService&) -> UploadService& = delete;
@@ -192,6 +197,7 @@ namespace disk::file {
 
         drogon::orm::DbClientPtr m_db_client;                                      ///< 数据库客户端
         storage::IFileStorage* m_storage{};                                          ///< 文件存储接口
+        storage::UploadStagingStorage* m_upload_staging_storage{};                   ///< 上传暂存存储接口
         std::shared_ptr<disk::services::RedisService> m_redis_service{disk::services::RedisService::GetInstance()};  ///< Redis 服务
         std::unordered_map<std::string, UploadTaskCacheEntry> m_upload_task_cache; ///< 上传任务元数据缓存
         std::shared_mutex m_upload_task_cache_mutex;                               ///< 上传任务缓存读写锁

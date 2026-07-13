@@ -21,6 +21,10 @@ namespace disk::storage {
         return s_storage.get();
     }
 
+    auto StorageMgr::GetUploadStagingStorage() -> UploadStagingStorage* {
+        return dynamic_cast<UploadStagingStorage*>(s_storage.get());
+    }
+
     auto StorageMgr::IsInitialized() -> bool {
         return s_storage != nullptr;
     }

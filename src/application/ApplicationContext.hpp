@@ -22,6 +22,7 @@
 #include "services/ShareService.hpp"
 #include "services/UploadService.hpp"
 #include "storage/IFileStorage.hpp"
+#include "storage/UploadStagingStorage.hpp"
 #include "utils/Singleton.hpp"
 
 namespace disk::application {
@@ -84,6 +85,7 @@ namespace disk::application {
         drogon::orm::DbClientPtr m_db_client{};
         drogon::nosql::RedisClientPtr m_redis_client{};
         disk::storage::IFileStorage* m_storage{};
+        disk::storage::UploadStagingStorage* m_upload_staging_storage{};
 
         std::unique_ptr<disk::file::UploadService> m_upload_service{};
         std::unique_ptr<disk::file::FileQueryService> m_file_query_service{};
