@@ -211,6 +211,46 @@ def _redis_command(parts: list[str], host: str, port: int) -> str:
     return reply
 
 
+def redis_get_value(
+    key: str,
+    host: str = "127.0.0.1",
+    port: int = 6379,
+) -> str | None:
+    """Return a Redis string value, or None when the key does not exist."""
+    host = os.environ.get("REDIS_HOST", host)
+    port = int(os.environ.get("REDIS_PORT", str(port)))
+
+    reply = _redis_command(["GET", key], host, port)
+    if reply.startswith("$-1\r\n"):
+        return None
+    if not reply.startswith("$"):
+        raise RuntimeError(f"Unexpected Redis reply: {reply.strip()}")
+
+    length_line, separator, remainder = reply.partition("\r\n")
+    if not separator:
+        raise RuntimeError(f"Incomplete Redis reply: {reply.strip()}")
+    length = int(length_line[1:])
+    value = remainder[:length]
+    if len(value.encode()) != length:
+        raise RuntimeError(f"Incomplete Redis bulk reply: {reply.strip()}")
+    return value
+
+
+def redis_ttl(
+    key: str,
+    host: str = "127.0.0.1",
+    port: int = 6379,
+) -> int:
+    """Return the Redis TTL result in seconds (-1 or -2 retain Redis semantics)."""
+    host = os.environ.get("REDIS_HOST", host)
+    port = int(os.environ.get("REDIS_PORT", str(port)))
+
+    reply = _redis_command(["TTL", key], host, port)
+    if not reply.startswith(":"):
+        raise RuntimeError(f"Unexpected Redis reply: {reply.strip()}")
+    return int(reply[1:].split("\r\n", 1)[0])
+
+
 def redis_delete_pattern(
     pattern: str,
     host: str = "127.0.0.1",

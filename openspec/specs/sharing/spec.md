@@ -40,15 +40,38 @@ The system SHALL allow share owners to list, inspect, update, and cancel their o
 - **THEN** the system SHALL mark those shares unavailable for future access
 
 ### Requirement: Public Share Access
-The system SHALL allow public visitors to access a share only after successful share validation and password verification when required.
+The system SHALL allow public visitors to access an active share only after successful share validation and password verification when required, and SHALL rate-limit countable validation failures without revealing whether the share code or password was invalid.
 
 #### Scenario: Share access succeeds
-- **WHEN** a visitor provides valid access information for an active share
+- **WHEN** a visitor provides the correct password for an active password-protected share, or accesses an active share that has no password
 - **THEN** the system SHALL issue a short-lived share access token scoped to that share
+- **AND** the system SHALL neither increment nor clear the failed-validation counter
 
-#### Scenario: Share access fails
-- **WHEN** a share is missing, expired, cancelled, or password verification fails
-- **THEN** the system SHALL reject public access
+#### Scenario: First five countable validation failures
+- **WHEN** a visitor omits the password or provides an empty or wrong password for a password-protected share, or provides a nonexistent share code
+- **AND** fewer than five countable failures have already occurred for the supplied share code and normalized client IP during the current window
+- **THEN** the system SHALL count the failure using `rate:share_password:{share_code}:{normalized_ip}`
+- **AND** the system SHALL return HTTP 400 with code `60003`, message `Share access validation failed`, and `data` set to `null`
+
+#### Scenario: Sixth and later countable validation failures
+- **WHEN** five countable failures have already occurred for the supplied share code and normalized client IP during the current window
+- **AND** another countable validation failure occurs
+- **THEN** the system SHALL return the existing Too Many Requests response with HTTP 429, code `10005`, message `Too many password verification attempts, please try again later`, and `data` set to `null`
+
+#### Scenario: Failed-validation window lifetime
+- **WHEN** the first countable validation failure creates its Redis counter
+- **THEN** the system SHALL start a fixed 900-second window
+- **AND** later failures SHALL increment the counter without refreshing its expiry
+
+#### Scenario: Redis failure during failed-validation accounting
+- **WHEN** Redis is unavailable or failed-validation accounting otherwise fails
+- **THEN** the system SHALL fail open for rate-limit accounting and continue evaluating the access request
+- **AND** a countable validation failure SHALL still receive the unified HTTP 400 response
+
+#### Scenario: Share is expired or cancelled
+- **WHEN** a visitor attempts to access an expired or cancelled share
+- **THEN** the system SHALL reject public access using the existing expired or cancelled share semantics
+- **AND** the response SHALL remain outside the unified failed-validation contract
 
 ### Requirement: Share Token Scope
 The system SHALL limit share tokens to the associated share and permission.

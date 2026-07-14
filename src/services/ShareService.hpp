@@ -175,8 +175,8 @@ namespace disk::share {
          * 业务规则：
          * - 验证分享存在且状态为有效
          * - 验证是否过期
-         * - 如果设置了密码，验证密码正确性
-         * - 密码验证失败记录尝试次数
+         * - 不存在的分享与密码验证失败使用统一公开错误
+         * - 失败验证按 IP/分享固定窗口计数
          * - 验证成功生成分享令牌
          * - 增加访问次数
          *
@@ -380,14 +380,14 @@ namespace disk::share {
         static auto BuildShareLink(const std::string& share_code) -> std::string;
 
         /**
-         * @brief 检查密码尝试次数限制
+         * @brief 记录失败的公开分享访问并构建统一错误
          * @param share_code 分享码
          * @param ip_address IP地址
-         * @return drogon::Task<Result<void>> 成功表示未超限
+         * @return drogon::Task<ErrorInfo> 统一验证错误或超限错误
          */
         [[nodiscard]]
-        auto CheckPasswordRateLimit(const std::string& share_code, const std::string& ip_address) const
-            -> drogon::Task<Result<void>>;
+        auto HandleFailedShareAccess(const std::string& share_code, const std::string& ip_address) const
+            -> drogon::Task<ErrorInfo>;
 
     private:
         drogon::orm::DbClientPtr m_db_client;                          ///< 数据库客户端

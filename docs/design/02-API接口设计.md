@@ -3059,25 +3059,53 @@ Authorization: Bearer <access_token>
 |------|------|------|------|
 | password | string | 否 | 访问密码（如果分享设置了密码） |
 
+#### 公开访问失败统一契约
+
+仅以下场景属于**可计数验证失败**：受密码保护的分享缺失密码、密码为空、密码错误，以及 `share_id` 对应的分享不存在。服务端按“提供的分享标识 + 规范化客户端 IP”计数，前 5 次必须返回完全相同的响应，不得通过状态码、业务码、消息或 `data` 泄露分享是否存在：
+
+```json
+{
+  "code": 60003,
+  "message": "Share access validation failed",
+  "data": null
+}
+```
+
+第 6 次及后续可计数验证失败返回现有的限流响应：HTTP 429、业务码 `10005 TooManyRequests`、消息 `Too many password verification attempts, please try again later`、`data: null`。已过期或已取消的分享继续使用现有语义，不纳入上述统一失败契约，也不计入该失败计数器。
+
+#### 失败计数与窗口语义
+
+- Redis 键固定为 `rate:share_password:{share_code}:{normalized_ip}`；`share_code` 使用请求提供的分享标识，客户端 IP 去除端口后再参与键构造。
+- 计数器仅记录可计数验证失败。正确密码访问和无密码分享访问均不增加计数，也不清除已有计数。
+- 第一次失败创建固定 900 秒窗口；后续失败只原子递增，不刷新过期时间，不使用独立锁定键或滑动窗口。
+- Redis 不可用或计数操作失败时限流逻辑失败开放（fail open），继续执行公开访问验证；若验证仍失败，返回上述统一 HTTP 400 响应。
+
 #### 错误响应矩阵
 
 | HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
 |------------|--------|----------|----------|----------|
 | 400 | 10001 | `InvalidParameter` | 请求参数错误 | share_id 格式错误 |
-| 404 | 60001 | `ShareNotFound` | 分享不存在 | share_id 不存在 |
-| 400 | 60002 | `ShareExpired` | 分享已过期 | 分享已超过有效期 |
-| 400 | 60003 | `SharePasswordError` | 分享密码错误 | 密码验证失败 |
+| 400 | 60003 | `SharePasswordError` | `Share access validation failed` | 前 5 次缺失/空/错误密码，或分享不存在 |
+| 429 | 10005 | `TooManyRequests` | `Too many password verification attempts, please try again later` | 第 6 次及后续可计数验证失败 |
+| 400 | 60002 | `ShareExpired` | 分享已过期 | 分享已过期；不属于统一失败契约 |
 
-**60001 ShareNotFound 响应示例**：
+**60003 SharePasswordError 统一响应示例**：
 
 ```json
 {
-  "code": 60001,
-  "message": "分享不存在",
-  "data": {
-    "share_id": "sh_invalid",
-    "reason": "分享不存在或已被取消"
-  }
+  "code": 60003,
+  "message": "Share access validation failed",
+  "data": null
+}
+```
+
+**10005 TooManyRequests 响应示例**：
+
+```json
+{
+  "code": 10005,
+  "message": "Too many password verification attempts, please try again later",
+  "data": null
 }
 ```
 
@@ -3091,19 +3119,6 @@ Authorization: Bearer <access_token>
     "share_id": "sh_abc123",
     "expired_at": "2026-01-10T10:00:00Z",
     "reason": "分享已超过有效期"
-  }
-}
-```
-
-**60003 SharePasswordError 响应示例**：
-
-```json
-{
-  "code": 60003,
-  "message": "分享密码错误",
-  "data": {
-    "share_id": "sh_abc123",
-    "reason": "访问密码验证失败"
   }
 }
 ```
@@ -3804,34 +3819,44 @@ X-Signature: HMAC-SHA256(timestamp + nonce + body, secret)
 
 #### 9.4.1 密码暴力破解防护
 
-对于设置了密码的分享，服务端必须实施以下防护措施：
+对于公开分享访问验证，服务端必须实施以下防护措施：
 
 | 防护措施 | 实现要求 | 触发条件 |
 |---------|---------|---------|
-| **尝试计数** | Redis 计数器 `share:pwd:{share_id}:{ip}` | 每次密码验证失败 |
-| **尝试限制** | 最多 5 次失败 | 单个 IP + 单个分享 |
-| **临时锁定** | 15 分钟冷却期 | 达到失败上限后 |
-| **计数器过期** | 15 分钟 TTL | 最后一次尝试后 |
+| **失败计数** | Redis 计数器 `rate:share_password:{share_code}:{normalized_ip}` | 缺失/空/错误密码，或分享不存在 |
+| **失败限制** | 前 5 次返回统一验证失败；第 6 次及后续返回 HTTP 429 / `10005` / `Too many password verification attempts, please try again later` / `data: null` | 同一规范化 IP + 同一请求分享标识 |
+| **固定窗口** | 首次失败设置 900 秒 TTL，后续失败不得刷新 | 首次可计数验证失败 |
+| **成功语义** | 正确密码及无密码访问不增加、不清除计数 | 公开访问验证成功 |
+| **Redis 故障** | 限流计数失败开放，继续访问验证 | Redis 不可用或计数操作失败 |
 
 **Redis 键设计**：
 ```
-share:pwd:{share_id}:{client_ip}  -> 失败次数 (int, TTL=15min)
-share:pwd:lock:{share_id}:{client_ip}  -> 锁定标记 (exists, TTL=15min)
+rate:share_password:{share_code}:{normalized_ip}  -> 可计数验证失败次数 (int, TTL=900s)
 ```
 
-**错误响应（锁定状态）**：
+不使用其他键前缀、独立锁定键或“最后一次尝试后重新计时”的滑动窗口。`share_code` 为请求提供的分享标识，即使分享不存在也使用该值计数；`normalized_ip` 为去除端口后的客户端 IP。
+
+**前 5 次失败响应**：
 
 ```json
 {
   "code": 60003,
-  "message": "分享密码错误",
-  "data": {
-    "share_id": "sh_abc123",
-    "reason": "密码错误次数过多，请 15 分钟后重试",
-    "retry_after": 900
-  }
+  "message": "Share access validation failed",
+  "data": null
 }
 ```
+
+**第 6 次及后续失败响应**：
+
+```json
+{
+  "code": 10005,
+  "message": "Too many password verification attempts, please try again later",
+  "data": null
+}
+```
+
+已过期和已取消的分享继续使用现有错误语义，位于统一失败契约和该失败计数器之外。
 
 #### 9.4.2 Share Token 防护
 
@@ -3889,22 +3914,21 @@ Share Token（通过 `/api/share/access` 获取）需要以下安全措施：
 | 操作类型 | 限制规则 | 说明 |
 |---------|---------|------|
 | **分享访问验证** | 30 次/分钟/IP | `/api/share/access` 接口 |
-| **密码尝试** | 5 次/15分钟/IP/分享 | 同一分享的密码验证 |
+| **公开访问验证失败** | 5 次/固定 900 秒/IP/分享标识 | 缺失/空/错误密码及不存在分享；第 6 次起返回 429 |
 | **文件下载** | 10 次/分钟/share_token | 限制下载频率 |
 | **浏览目录** | 60 次/分钟/share_token | 限制目录遍历 |
 
-**429 Too Many Requests 响应**：
+**公开访问验证失败限流的 429 Too Many Requests 响应**：
 
 ```json
 {
   "code": 10005,
-  "message": "请求过于频繁",
-  "data": {
-    "retry_after": 60,
-    "limit": "30 次/分钟"
-  }
+  "message": "Too many password verification attempts, please try again later",
+  "data": null
 }
 ```
+
+该响应仅用于同一 `rate:share_password:{share_code}:{normalized_ip}` 固定窗口内第 6 次及后续可计数验证失败；前 5 次统一返回 HTTP 400 / `60003` / `Share access validation failed` / `data: null`；第 6 次及后续返回 HTTP 429 / `10005` / `Too many password verification attempts, please try again later` / `data: null`。
 
 #### 9.4.4 审计日志
 
@@ -3939,14 +3963,14 @@ created_at  TIMESTAMPTZ      -- 操作时间
 
 实现分享功能时，必须确保以下检查项全部通过：
 
-- [ ] 密码验证失败计数器使用 Redis 原子操作（INCR + EXPIRE）
+- [x] 密码验证失败计数器使用 Redis 原子操作（INCR + EXPIRE）
 - [ ] Share Token 有效期不超过 1 小时
 - [ ] Share Token 包含 `type: "share"` 和 `scope` claim
 - [ ] 验证 Share Token 时检查分享状态和有效期
 - [ ] 分享取消时清理或使失效相关 Share Token
 - [ ] 敏感操作有独立的速率限制
 - [ ] 关键事件写入审计日志
-- [ ] 密码错误响应不泄露分享是否存在的信息（统一返回 60003）
+- [x] 密码错误响应不泄露分享是否存在的信息（统一返回 60003）
 
 ---
 

@@ -32,13 +32,6 @@ The canonical checklist in `docs/design/02-API接口设计.md` section 9.4.5 is 
 - [ ] Confirm every visitor browse, download, metadata, and save-to-drive path revalidates share status and expiry after token verification; add missing coverage before checking the item off.
 - [ ] Document cancellation semantics: current tokens may become unusable through share-status validation even when their individual hashes are not added to the Redis blacklist.
 
-### P0.2 Correct password protection semantics
-
-- [ ] Decide whether the Redis counter represents all password attempts or failed attempts; align the API wording and `ShareService::CheckPasswordRateLimit` call placement with that decision.
-- [ ] Preserve atomic counter/expiry behavior and add a concurrency test for the selected policy.
-- [ ] Reconcile the conflicting public error contract for nonexistent shares versus password failures (`60001` versus the section 9.4.5 requirement to return `60003` without revealing existence).
-- [ ] Add integration coverage for missing password, wrong password, nonexistent share, rate-limit rejection, and successful access after prior failures.
-
 ### P0.3 Add share-domain audit events
 
 - [ ] Define one share audit boundary for `share_create`, `share_access`, `share_pwd_fail`, `share_download`, and `share_cancel`; do not duplicate SQL across controllers.

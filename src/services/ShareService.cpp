@@ -16,6 +16,7 @@
 #include <limits>
 #include <random>
 #include <stdexcept>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -42,6 +43,13 @@ namespace disk::share {
     using drogon_model::disk::Shares;
 
     namespace {
+        constexpr int SHARE_ACCESS_FAILURE_LIMIT = 5;
+        constexpr int SHARE_ACCESS_FAILURE_WINDOW_SECONDS = 900;
+        constexpr std::string_view SHARE_ACCESS_VALIDATION_ERROR_MESSAGE =
+            "Share access validation failed";
+        constexpr std::string_view SHARE_ACCESS_RATE_LIMIT_ERROR_MESSAGE =
+            "Too many password verification attempts, please try again later";
+
         [[nodiscard]] auto BuildSharedFolderAccessPredicate(const std::string& folder_alias, size_t start_index = 1)
             -> std::string {
             return "EXISTS (" "SELECT 1 FROM share_files sff " "JOIN folders shared_root ON sff.item_id = shared_root.id " "WHERE sff.share_id = $" + std::to_string(start_index) + " AND sff.item_type = 'folder' " "AND " + folder_alias + ".user_id = shared_root.user_id " "AND (" + folder_alias + ".id = shared_root.id OR " + folder_alias + ".path LIKE CONCAT(shared_root.path, '%'))" ")";
@@ -654,9 +662,14 @@ namespace disk::share {
         -> drogon::Task<Result<AccessShareResponse>> {
         Logger::Info() << "Verifying share access: share_id=" << request.share_id;
 
-        /// 查找分享
+        /// 查找分享。公开访问不区分不存在的分享和密码验证失败。
         auto share_result = co_await FindShareByCode(request.share_id);
         if (!share_result) {
+            if (share_result.error().code == ErrorCode::ShareNotFound) {
+                co_return std::unexpected(
+                    co_await HandleFailedShareAccess(request.share_id, ip_address)
+                );
+            }
             co_return std::unexpected(share_result.error());
         }
         const auto& share = *share_result;
@@ -673,23 +686,12 @@ namespace disk::share {
             co_return std::unexpected(ErrorInfo(ErrorCode::ShareExpired, "Share has expired"));
         }
 
-        /// 验证密码
+        /// 仅记录失败的密码验证；正确密码不占用失败额度。
         if (share.getPasswordHash() != nullptr) {
-            /// 检查密码尝试限制 (原子递增)
-            auto limit_result = co_await CheckPasswordRateLimit(request.share_id, ip_address);
-            if (!limit_result) {
-                co_return std::unexpected(limit_result.error());
-            }
-
-            if (!request.password.has_value() || request.password->empty()) {
+            if (!request.password.has_value() || request.password->empty() ||
+                !VerifyPassword(share, *request.password)) {
                 co_return std::unexpected(
-                    ErrorInfo(ErrorCode::SharePasswordError, "Access password required")
-                );
-            }
-
-            if (!VerifyPassword(share, *request.password)) {
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::SharePasswordError, "Incorrect access password")
+                    co_await HandleFailedShareAccess(request.share_id, ip_address)
                 );
             }
         }
@@ -1258,13 +1260,9 @@ namespace disk::share {
         try {
             auto share = co_await mapper.findOne(Criteria(Shares::Cols::_share_code, share_code));
             co_return share;
+        } catch (const UnexpectedRows&) {
+            co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "Share not found"));
         } catch (const DrogonDbException& e) {
-            const auto error_msg = std::string(e.base().what());
-            /// findOne() 抛出异常时，可能是"未找到"或真正的 DB 错误
-            if (error_msg.find("empty") != std::string::npos ||
-                error_msg.find("condition") != std::string::npos) {
-                co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "Share not found"));
-            }
             Logger::Error() << "Failed to find share: " << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to find share"));
         }
@@ -1685,35 +1683,40 @@ namespace disk::share {
         return "/s/" + share_code;
     }
 
-    auto ShareService::CheckPasswordRateLimit(
+    auto ShareService::HandleFailedShareAccess(
         const std::string& share_code,
         const std::string& ip_address
-    ) const -> drogon::Task<Result<void>> {
+    ) const -> drogon::Task<ErrorInfo> {
+        const auto validation_error = [] {
+            return ErrorInfo(
+                ErrorCode::SharePasswordError,
+                std::string(SHARE_ACCESS_VALIDATION_ERROR_MESSAGE)
+            );
+        };
+
         if (!m_redis_service) {
-            co_return {};
+            co_return validation_error();
         }
 
         auto key = redis::RedisKeyPrefix::BuildSharePasswordRateLimitKey(share_code, ip_address);
 
-        /// 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
-        auto incr_result = co_await m_redis_service->IncrWithExpire(key, 900);
-
+        /// 单个 Lua 操作原子递增，并仅在首次失败时设置固定窗口。
+        auto incr_result = co_await m_redis_service->IncrWithExpire(
+            key,
+            SHARE_ACCESS_FAILURE_WINDOW_SECONDS
+        );
         if (!incr_result) {
             Logger::Error() << "Redis IncrWithExpire failed: " << incr_result.error().message;
-            co_return {};
+            co_return validation_error();
         }
 
-        constexpr int MAX_ATTEMPTS = 5;
-        const int64_t count = incr_result.value();
-
-        /// 检查是否超过限制
-        if (count > MAX_ATTEMPTS) {
-            co_return std::unexpected(ErrorInfo(
+        if (incr_result.value() > SHARE_ACCESS_FAILURE_LIMIT) {
+            co_return ErrorInfo(
                 ErrorCode::TooManyRequests,
-                "Too many password verification attempts, please try again later"
-            ));
+                std::string(SHARE_ACCESS_RATE_LIMIT_ERROR_MESSAGE)
+            );
         }
 
-        co_return {};
+        co_return validation_error();
     }
 } ///< namespace disk::share

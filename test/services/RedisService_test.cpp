@@ -9,7 +9,10 @@
 
 #include "services/RedisService.hpp"
 
+#include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <future>
 #include <string>
 #include <thread>
 #include <vector>
@@ -30,6 +33,19 @@ namespace {
     auto PingRedis(const drogon::nosql::RedisClientPtr& redis_client) -> drogon::Task<std::string> {
         auto result = co_await redis_client->execCommandCoro("PING");
         co_return result.asString();
+    }
+
+    auto GetRedisInteger(
+        const drogon::nosql::RedisClientPtr& redis_client,
+        const std::string& command,
+        const std::string& key
+    ) -> drogon::Task<std::int64_t> {
+        auto result = co_await redis_client->execCommandCoro(
+            "%s %s",
+            command.c_str(),
+            key.c_str()
+        );
+        co_return result.asInteger();
     }
 
     auto WaitForRedisReady(const drogon::nosql::RedisClientPtr& redis_client) -> bool {
@@ -175,6 +191,70 @@ namespace {
         EXPECT_TRUE(drogon::sync_wait(m_service->Exists(key)));
     }
 
+    TEST_F(RedisServiceRuntimeTest, IncrWithExpireSetsTtlOnlyOnFirstIncrement) {
+        const auto key = TrackKey("fixed_ttl");
+        constexpr int WINDOW_SECONDS = 10;
+
+        auto first_result = drogon::sync_wait(m_service->IncrWithExpire(key, WINDOW_SECONDS));
+        ASSERT_TRUE(first_result.has_value());
+        EXPECT_EQ(first_result.value(), 1);
+
+        const auto first_ttl = drogon::sync_wait(GetRedisInteger(s_redis_client, "TTL", key));
+        EXPECT_GT(first_ttl, 0);
+        EXPECT_LE(first_ttl, WINDOW_SECONDS);
+
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+
+        auto second_result = drogon::sync_wait(m_service->IncrWithExpire(key, WINDOW_SECONDS));
+        ASSERT_TRUE(second_result.has_value());
+        EXPECT_EQ(second_result.value(), 2);
+
+        const auto second_ttl = drogon::sync_wait(GetRedisInteger(s_redis_client, "TTL", key));
+        EXPECT_GT(second_ttl, 0);
+        EXPECT_LE(second_ttl, first_ttl - 1);
+    }
+
+    TEST_F(RedisServiceRuntimeTest, IncrWithExpireIsAtomicUnderConcurrency) {
+        const auto key = TrackKey("concurrent_rate_limit");
+        constexpr int WINDOW_SECONDS = 60;
+        constexpr int WORKER_COUNT = 24;
+        std::atomic<bool> start{ false };
+        std::vector<std::future<Result<std::int64_t>>> futures;
+        futures.reserve(WORKER_COUNT);
+
+        for (int worker = 0; worker < WORKER_COUNT; ++worker) {
+            futures.push_back(std::async(std::launch::async, [&, key]() {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                return drogon::sync_wait(m_service->IncrWithExpire(key, WINDOW_SECONDS));
+            }));
+        }
+
+        start.store(true, std::memory_order_release);
+
+        std::vector<std::int64_t> counts;
+        counts.reserve(WORKER_COUNT);
+        for (auto& future : futures) {
+            auto result = future.get();
+            ASSERT_TRUE(result.has_value());
+            counts.push_back(result.value());
+        }
+
+        std::ranges::sort(counts);
+        for (int index = 0; index < WORKER_COUNT; ++index) {
+            EXPECT_EQ(counts[static_cast<std::size_t>(index)], index + 1);
+        }
+
+        auto stored_count = drogon::sync_wait(m_service->Get(key));
+        ASSERT_TRUE(stored_count.has_value());
+        EXPECT_EQ(stored_count.value(), std::to_string(WORKER_COUNT));
+
+        const auto ttl = drogon::sync_wait(GetRedisInteger(s_redis_client, "TTL", key));
+        EXPECT_GT(ttl, 0);
+        EXPECT_LE(ttl, WINDOW_SECONDS);
+    }
+
     TEST_F(RedisServiceRuntimeTest, DeleteByPrefixRemovesOnlyMatchingKeys) {
         const auto matching_key = TrackKey("file_list:42:7:all:name:asc:1:37");
         const auto other_folder_key = TrackKey("file_list:42:8:all:name:asc:1:37");
@@ -235,7 +315,7 @@ namespace {
         SUCCEED() << "逻辑验证：MDelete 支持单键操作";
     }
 
-} ///< namespace
+} // namespace
 
 /// 保持 TokenService 专用测试
 TEST(RedisService, StoreRefreshTokenSuccess) {
