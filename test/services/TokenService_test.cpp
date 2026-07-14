@@ -1,22 +1,20 @@
 /**
  * @file TokenService_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief 统一 TokenService 的分享令牌契约测试 (RED 阶段)
+ * @brief 统一 TokenService 的分享令牌契约测试
  *
  * @copyright Copyright (c) 2026
  *
- * 本测试文件是 TDD RED 阶段的一部分。
- * 这些测试定义了统一 TokenService（disk::services 命名空间）
- * 应具备的分享令牌能力契约。
- *
- * 当前状态：测试应失败，因为统一 TokenService 尚未实现分享令牌能力。
- * 完成任务 2 后，这些测试应转为绿色。
+ * 这些测试定义并验证统一 TokenService（disk::services 命名空间）
+ * 的分享令牌能力契约。
  */
 
 #include "services/TokenService.hpp"
 
 #include <chrono>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 #include <jwt-cpp/jwt.h>
@@ -31,6 +29,35 @@ namespace {
 
     constexpr const char* TEST_JWT_SECRET = "test_secret_key_for_share_token_32b";
 
+    auto MakeShareScope(const std::string& share_id, const std::string& permission) -> Json::Value {
+        Json::Value scope(Json::objectValue);
+        scope["share_id"] = share_id;
+        scope["permission"] = permission;
+        return scope;
+    }
+
+    auto BuildSignedShareToken(
+        const std::optional<Json::Value>& scope,
+        const std::string& share_code = "AbCd12"
+    ) -> std::string {
+        using traits = jwt::traits::open_source_parsers_jsoncpp;
+
+        const auto now = std::chrono::system_clock::now();
+        jwt::builder<jwt::default_clock, traits> builder{ jwt::default_clock{} };
+        builder.set_issuer("disk_share")
+            .set_type("JWT")
+            .set_subject("12345")
+            .set_payload_claim("share_code", share_code)
+            .set_payload_claim("type", "share")
+            .set_payload_claim("jti", "test-jti-scope")
+            .set_issued_at(now)
+            .set_expires_at(now + std::chrono::hours(1));
+        if (scope.has_value()) {
+            builder.set_payload_claim("scope", *scope);
+        }
+        return builder.sign(jwt::algorithm::hs256{ TEST_JWT_SECRET });
+    }
+
     /// ================================================================================
     /// 统一 TokenService 分享令牌静态 API 测试
     /// ================================================================================
@@ -39,7 +66,7 @@ namespace {
      * @brief 测试统一 TokenService 是否提供 GenerateShareToken 静态方法
      *
      * 契约要求：
-     * - 静态方法，接受 jwt_secret, share_code, share_id
+     * - 静态方法，接受 jwt_secret, share_code, share_id, permission
      * - 返回 Result<std::string>
      */
     TEST(TokenServiceShareTest, GenerateShareTokenValidInputReturnsToken) {
@@ -47,7 +74,8 @@ namespace {
         std::string share_code = "AbCd12";
         uint64_t share_id = 12345;
 
-        auto token_result = TokenService::GenerateShareToken(jwt_secret, share_code, share_id);
+        auto token_result =
+            TokenService::GenerateShareToken(jwt_secret, share_code, share_id, "download");
 
         EXPECT_TRUE(token_result.has_value()) << "Should generate share token successfully";
         EXPECT_FALSE(token_result.value().empty()) << "Token should not be empty";
@@ -59,7 +87,7 @@ namespace {
      * 契约要求：
      * - issuer = "disk_share"
      * - type = "share"
-     * - claims: share_code, share_id (subject), jti
+     * - claims: share_code, share_id (subject), jti, scope
      * - TTL = 3600 秒
      */
     TEST(TokenServiceShareTest, GenerateShareTokenValidInputCorrectClaims) {
@@ -69,7 +97,8 @@ namespace {
         std::string share_code = "AbCd12";
         uint64_t share_id = 12345;
 
-        auto token_result = TokenService::GenerateShareToken(jwt_secret, share_code, share_id);
+        auto token_result =
+            TokenService::GenerateShareToken(jwt_secret, share_code, share_id, "download");
         ASSERT_TRUE(token_result.has_value()) << "Token generation should succeed";
 
         /// 解码并验证 claims
@@ -80,6 +109,11 @@ namespace {
         EXPECT_EQ(decoded.get_payload_claim("share_code").as_string(), share_code) << "share_code claim mismatch";
         EXPECT_EQ(decoded.get_subject(), std::to_string(share_id)) << "share_id (subject) mismatch";
         EXPECT_FALSE(decoded.get_payload_claim("jti").as_string().empty()) << "jti should be present";
+
+        const auto scope = decoded.get_payload_claim("scope").to_json();
+        ASSERT_TRUE(scope.isObject());
+        EXPECT_EQ(scope["share_id"].asString(), share_code);
+        EXPECT_EQ(scope["permission"].asString(), "download");
     }
 
     /**
@@ -94,7 +128,8 @@ namespace {
         std::string share_code = "AbCd12";
         uint64_t share_id = 12345;
 
-        auto token_result = TokenService::GenerateShareToken(jwt_secret, share_code, share_id);
+        auto token_result =
+            TokenService::GenerateShareToken(jwt_secret, share_code, share_id, "view");
         ASSERT_TRUE(token_result.has_value()) << "Token generation should succeed";
 
         auto verify_result = TokenService::VerifyShareToken(jwt_secret, token_result.value());
@@ -103,6 +138,85 @@ namespace {
         EXPECT_EQ(verify_result.value().share_code, share_code);
         EXPECT_EQ(verify_result.value().share_id, share_id);
         EXPECT_FALSE(verify_result.value().jti.empty()) << "JTI should be present";
+        EXPECT_EQ(verify_result.value().scope.share_id, share_code);
+        EXPECT_EQ(verify_result.value().scope.permission, "view");
+    }
+
+    TEST(TokenServiceShareTest, GenerateShareTokenInvalidPermissionReturnsInvalidParameter) {
+        auto token_result = TokenService::GenerateShareToken(
+            TEST_JWT_SECRET,
+            "AbCd12",
+            12345,
+            "admin"
+        );
+
+        ASSERT_FALSE(token_result.has_value());
+        EXPECT_EQ(token_result.error().code, Code::InvalidParameter);
+    }
+
+    TEST(TokenServiceShareTest, VerifyShareTokenMissingScopeReturnsMalformedError) {
+        const auto token = BuildSignedShareToken(std::nullopt);
+
+        auto verify_result = TokenService::VerifyShareToken(TEST_JWT_SECRET, token);
+
+        ASSERT_FALSE(verify_result.has_value());
+        EXPECT_EQ(verify_result.error().code, Code::TokenMalformed);
+    }
+
+    TEST(TokenServiceShareTest, VerifyShareTokenNonObjectScopeReturnsMalformedError) {
+        const auto token = BuildSignedShareToken(Json::Value("download"));
+
+        auto verify_result = TokenService::VerifyShareToken(TEST_JWT_SECRET, token);
+
+        ASSERT_FALSE(verify_result.has_value());
+        EXPECT_EQ(verify_result.error().code, Code::TokenMalformed);
+    }
+
+    TEST(TokenServiceShareTest, VerifyShareTokenMissingOrMistypedScopeFieldsReturnMalformedError) {
+        Json::Value missing_share_id(Json::objectValue);
+        missing_share_id["permission"] = "download";
+
+        Json::Value missing_permission(Json::objectValue);
+        missing_permission["share_id"] = "AbCd12";
+
+        Json::Value numeric_share_id = MakeShareScope("AbCd12", "download");
+        numeric_share_id["share_id"] = 12345;
+
+        Json::Value numeric_permission = MakeShareScope("AbCd12", "download");
+        numeric_permission["permission"] = 1;
+
+        const std::vector<Json::Value> invalid_scopes{
+            missing_share_id,
+            missing_permission,
+            numeric_share_id,
+            numeric_permission,
+        };
+        for (const auto& scope : invalid_scopes) {
+            auto verify_result = TokenService::VerifyShareToken(
+                TEST_JWT_SECRET,
+                BuildSignedShareToken(scope)
+            );
+            ASSERT_FALSE(verify_result.has_value());
+            EXPECT_EQ(verify_result.error().code, Code::TokenMalformed);
+        }
+    }
+
+    TEST(TokenServiceShareTest, VerifyShareTokenUnsupportedScopePermissionReturnsMalformedError) {
+        const auto token = BuildSignedShareToken(MakeShareScope("AbCd12", "admin"));
+
+        auto verify_result = TokenService::VerifyShareToken(TEST_JWT_SECRET, token);
+
+        ASSERT_FALSE(verify_result.has_value());
+        EXPECT_EQ(verify_result.error().code, Code::TokenMalformed);
+    }
+
+    TEST(TokenServiceShareTest, VerifyShareTokenMismatchedScopeShareIdReturnsMalformedError) {
+        const auto token = BuildSignedShareToken(MakeShareScope("OtherShare", "download"));
+
+        auto verify_result = TokenService::VerifyShareToken(TEST_JWT_SECRET, token);
+
+        ASSERT_FALSE(verify_result.has_value());
+        EXPECT_EQ(verify_result.error().code, Code::TokenMalformed);
     }
 
     /**
@@ -140,7 +254,8 @@ namespace {
         std::string share_code = "AbCd12";
         uint64_t share_id = 12345;
 
-        auto token_result = TokenService::GenerateShareToken(jwt_secret, share_code, share_id);
+        auto token_result =
+            TokenService::GenerateShareToken(jwt_secret, share_code, share_id, "download");
         ASSERT_TRUE(token_result.has_value());
 
         auto verify_result = TokenService::VerifyShareToken(wrong_secret, token_result.value());
@@ -236,7 +351,8 @@ namespace {
         std::string share_code = "AbCd12";
         uint64_t share_id = 12345;
 
-        auto token_result = TokenService::GenerateShareToken(jwt_secret, share_code, share_id);
+        auto token_result =
+            TokenService::GenerateShareToken(jwt_secret, share_code, share_id, "download");
         ASSERT_TRUE(token_result.has_value());
 
         auto hash_result = TokenService::ExtractShareTokenHash(token_result.value());
@@ -276,8 +392,8 @@ namespace {
         std::string share_code = "AbCd12";
         uint64_t share_id = 12345;
 
-        auto token1 = TokenService::GenerateShareToken(jwt_secret, share_code, share_id);
-        auto token2 = TokenService::GenerateShareToken(jwt_secret, share_code, share_id);
+        auto token1 = TokenService::GenerateShareToken(jwt_secret, share_code, share_id, "download");
+        auto token2 = TokenService::GenerateShareToken(jwt_secret, share_code, share_id, "download");
 
         ASSERT_TRUE(token1.has_value());
         ASSERT_TRUE(token2.has_value());
@@ -298,8 +414,8 @@ namespace {
         std::string jwt_secret = TEST_JWT_SECRET;
         uint64_t share_id = 12345;
 
-        auto token1 = TokenService::GenerateShareToken(jwt_secret, "code1", share_id);
-        auto token2 = TokenService::GenerateShareToken(jwt_secret, "code2", share_id);
+        auto token1 = TokenService::GenerateShareToken(jwt_secret, "code1", share_id, "download");
+        auto token2 = TokenService::GenerateShareToken(jwt_secret, "code2", share_id, "download");
 
         ASSERT_TRUE(token1.has_value());
         ASSERT_TRUE(token2.has_value());
@@ -325,7 +441,8 @@ namespace {
         std::string share_code = "Revoke1";
         uint64_t share_id = 99999;
 
-        auto token_result = TokenService::GenerateShareToken(jwt_secret, share_code, share_id);
+        auto token_result =
+            TokenService::GenerateShareToken(jwt_secret, share_code, share_id, "download");
         ASSERT_TRUE(token_result.has_value()) << "Token generation should succeed";
 
         /// 静态验证不应返回 TokenRevoked（即使令牌可能已被撤销）
@@ -374,7 +491,7 @@ namespace {
      * 统一后的 TokenService 保持完全兼容的分享令牌语义：
      * - issuer = "disk_share"
      * - type = "share"
-     * - claims: share_code, share_id (subject), jti
+     * - claims: share_code, share_id (subject), jti, scope
      * - TTL = 3600 秒
      */
     TEST(TokenServiceShareTest, MigrationContinuityLegacyTokenVerifiableByUnified) {

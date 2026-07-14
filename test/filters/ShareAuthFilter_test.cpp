@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <drogon/nosql/RedisClient.h>
@@ -91,10 +92,14 @@ namespace {
             m_token_service->ClearShareRevocationCache();
         }
 
-        auto BuildShareRequestWithToken(const std::string& token) const -> drogon::HttpRequestPtr {
+        auto BuildShareRequestWithToken(
+            const std::string& token,
+            const std::string& path = "/api/share/browse/runtime-share",
+            drogon::HttpMethod method = drogon::Get
+        ) const -> drogon::HttpRequestPtr {
             auto request = drogon::HttpRequest::newHttpRequest();
-            request->setMethod(drogon::Get);
-            request->setPath("/api/share/browse/runtime-share");
+            request->setMethod(method);
+            request->setPath(path);
             request->addHeader("X-Share-Token", token);
             return request;
         }
@@ -202,7 +207,8 @@ namespace {
         auto token_result = TokenService::GenerateShareToken(
             TEST_JWT_SECRET,
             "runtime-share-revoked",
-            9001
+            9001,
+            "download"
         );
         ASSERT_TRUE(token_result.has_value());
 
@@ -225,7 +231,8 @@ namespace {
         auto token_result = TokenService::GenerateShareToken(
             TEST_JWT_SECRET,
             "runtime-share-valid",
-            42
+            42,
+            "view"
         );
         ASSERT_TRUE(token_result.has_value());
 
@@ -239,6 +246,57 @@ namespace {
         EXPECT_EQ(request->attributes()->get<uint64_t>("share_id"), 42u);
     }
 
+    TEST_F(ShareAuthFilterRuntimeTest, ViewScopeRejectsDownloadMetadataContentAndSave) {
+        auto token_result = TokenService::GenerateShareToken(
+            TEST_JWT_SECRET,
+            "runtime-share-view",
+            43,
+            "view"
+        );
+        ASSERT_TRUE(token_result.has_value());
+
+        const std::vector<std::pair<std::string, drogon::HttpMethod>> denied_requests{
+            { "/api/share/download/runtime-share-view/7/info",  drogon::Get },
+            {      "/api/share/download/runtime-share-view/7",  drogon::Get },
+            {            "/api/share/save/runtime-share-view", drogon::Post },
+        };
+        for (const auto& [path, method] : denied_requests) {
+            auto request = BuildShareRequestWithToken(token_result.value(), path, method);
+            auto response = drogon::sync_wait(m_filter->doFilter(request));
+            ASSERT_NE(response, nullptr) << path;
+            EXPECT_EQ(response->getStatusCode(), drogon::k403Forbidden) << path;
+
+            auto json = response->getJsonObject();
+            ASSERT_NE(json, nullptr) << path;
+            EXPECT_EQ(
+                (*json)["code"].asUInt(),
+                static_cast<Json::UInt>(Code::ShareAccessDenied)
+            ) << path;
+        }
+    }
+
+    TEST_F(ShareAuthFilterRuntimeTest, DownloadScopeAllowsBrowseMetadataContentAndSave) {
+        auto token_result = TokenService::GenerateShareToken(
+            TEST_JWT_SECRET,
+            "runtime-share-download",
+            44,
+            "download"
+        );
+        ASSERT_TRUE(token_result.has_value());
+
+        const std::vector<std::pair<std::string, drogon::HttpMethod>> allowed_requests{
+            {          "/api/share/browse/runtime-share-download",  drogon::Get },
+            { "/api/share/download/runtime-share-download/7/info",  drogon::Get },
+            {      "/api/share/download/runtime-share-download/7",  drogon::Get },
+            {            "/api/share/save/runtime-share-download", drogon::Post },
+        };
+        for (const auto& [path, method] : allowed_requests) {
+            auto request = BuildShareRequestWithToken(token_result.value(), path, method);
+            auto response = drogon::sync_wait(m_filter->doFilter(request));
+            EXPECT_EQ(response, nullptr) << path;
+        }
+    }
+
     TEST_F(ShareAuthFilterRuntimeTest, ValidTokenPopulatesShareRevocationCache) {
         m_token_service->ClearShareRevocationCache();
         EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 0u);
@@ -246,7 +304,8 @@ namespace {
         auto token_result = TokenService::GenerateShareToken(
             TEST_JWT_SECRET,
             "cache-populate-test",
-            55
+            55,
+            "view"
         );
         ASSERT_TRUE(token_result.has_value());
 
@@ -263,7 +322,8 @@ namespace {
         auto token_result = TokenService::GenerateShareToken(
             TEST_JWT_SECRET,
             "cache-hit-test",
-            77
+            77,
+            "view"
         );
         ASSERT_TRUE(token_result.has_value());
 

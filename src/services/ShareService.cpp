@@ -698,7 +698,8 @@ namespace disk::share {
         auto token_result = services::TokenService::GenerateShareToken(
             m_jwt_secret,
             share.getValueOfShareCode(),
-            share.getValueOfId()
+            share.getValueOfId(),
+            share.getValueOfPermission()
         );
         if (!token_result) {
             co_return std::unexpected(token_result.error());
@@ -830,7 +831,7 @@ namespace disk::share {
         /// 单次 JOIN 查询：验证分享状态、文件属于分享内容并获取元数据
         try {
             auto rows = co_await m_db_client->execSqlCoro(
-                "SELECT s.status, " "(s.expires_at IS NOT NULL AND s.expires_at <= NOW()) AS is_expired, " "sf.id AS share_file_id, f.id, f.name, f.size, 'file' AS type " "FROM shares s " "LEFT JOIN share_files sf ON sf.share_id = s.id " "AND sf.item_type = 'file' AND sf.item_id = $1 " "LEFT JOIN files f ON sf.item_id = f.id " "WHERE s.id = $2",
+                "SELECT s.permission, s.status, " "(s.expires_at IS NOT NULL AND s.expires_at <= NOW()) AS is_expired, " "sf.id AS share_file_id, f.id, f.name, f.size, 'file' AS type " "FROM shares s " "LEFT JOIN share_files sf ON sf.share_id = s.id " "AND sf.item_type = 'file' AND sf.item_id = $1 " "LEFT JOIN files f ON sf.item_id = f.id " "WHERE s.id = $2",
                 request.file_id,
                 share_id
             );
@@ -844,6 +845,11 @@ namespace disk::share {
             auto is_expired = row["is_expired"].as<bool>();
             if (status != static_cast<int>(ShareStatus::Active) || is_expired) {
                 co_return std::unexpected(ErrorInfo(ErrorCode::ShareExpired, "Share is not active"));
+            }
+            if (row["permission"].as<std::string>() != "download") {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ShareAccessDenied, "Share is view-only, download not allowed")
+                );
             }
             if (row["id"].isNull()) {
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "File not in share"));

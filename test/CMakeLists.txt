@@ -376,6 +376,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME ShareTokenSecurityIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_share_token_security.py"
+)
+
+set_tests_properties(
+    ShareTokenSecurityIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME SystemInfoIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_system_info.py"
 )
