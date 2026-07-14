@@ -17,6 +17,15 @@ namespace disk::filters {
 
     using disk::services::TokenService;
 
+    namespace {
+
+        [[nodiscard]] auto RequiresDownloadScope(const std::string& path) -> bool {
+            return path.rfind("/api/share/download/", 0) == 0 ||
+                   path.rfind("/api/share/save/", 0) == 0;
+        }
+
+    } ///< namespace
+
     auto ShareAuthFilter::doFilter(const drogon::HttpRequestPtr& request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
@@ -54,6 +63,13 @@ namespace disk::filters {
         }
 
         const auto& claims = verify_result.value();
+        if (RequiresDownloadScope(request->path()) && claims.scope.permission != "download") {
+            Logger::Warn() << "Share token scope does not permit operation: share_code="
+                           << claims.share_code << ", permission=" << claims.scope.permission
+                           << ", path=" << request->path();
+            co_return disk::Response::Error(disk::error::Code::ShareAccessDenied);
+        }
+
         request->attributes()->insert("share_code", claims.share_code);
         request->attributes()->insert("share_id", claims.share_id);
 

@@ -51,11 +51,27 @@ The system SHALL allow public visitors to access a share only after successful s
 - **THEN** the system SHALL reject public access
 
 ### Requirement: Share Token Scope
-The system SHALL limit share tokens to the associated share and permission.
+The system SHALL encode a JSON-object `scope` claim in every share token. The scope SHALL contain the external share identifier as string `share_id` and the issued permission as string `permission`; allowed permission values are exactly `view` and `download`. The scoped `share_id` SHALL match the token's top-level `share_code` claim.
 
 #### Scenario: Share token used for matching share
 - **WHEN** a visitor uses a valid share token for its associated share
 - **THEN** the system SHALL allow only operations permitted by that token scope
+
+#### Scenario: Share token scope is malformed
+- **WHEN** a share token has no scope, a non-object scope, missing or mistyped scope fields, an unsupported permission, or a scoped share identifier different from its top-level share identifier
+- **THEN** the system SHALL reject the token as malformed
+
+#### Scenario: View scope operations
+- **WHEN** a visitor uses a `view` scoped token
+- **THEN** the system SHALL allow share browsing and SHALL reject download metadata, content download, and save-to-drive operations
+
+#### Scenario: Download scope operations
+- **WHEN** a visitor uses a `download` scoped token
+- **THEN** the system SHALL allow browsing, download metadata, content download, and save-to-drive subject to the current live share record and any owner authentication required by save-to-drive
+
+#### Scenario: Share permission changes after token issue
+- **WHEN** a share permission changes after a token was issued
+- **THEN** the token scope SHALL remain an immutable capability ceiling while the current database permission SHALL be enforced as a live capability floor
 
 #### Scenario: Share token used outside scope
 - **WHEN** a visitor uses a share token for another share or disallowed operation
@@ -77,7 +93,11 @@ The system SHALL allow visitors with valid share tokens and download permission 
 
 #### Scenario: Share is cancelled after token issue
 - **WHEN** a share is cancelled or expires after a token was issued
-- **THEN** the system SHALL reject browse and download requests for that share
+- **THEN** the system SHALL reject browse, download metadata, content download, and save-to-drive requests for that share by rechecking live share status and expiry on each operation
+
+#### Scenario: Cancellation invalidates all existing tokens
+- **WHEN** an owner cancels a share without enumerating or blacklisting each issued token
+- **THEN** every existing token SHALL become unusable through the live share-status check
 
 #### Scenario: Visitor download uses owner token instead of share token
 - **WHEN** a visitor shared-file download request provides an owner bearer token but no valid share token

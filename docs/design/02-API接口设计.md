@@ -3034,7 +3034,7 @@ Authorization: Bearer <access_token>
 
 **POST** `/api/share/access/{share_id}`
 
-验证分享并获取访问令牌（供访客使用，无需登录）。
+验证分享并获取访问令牌（供访客使用，无需登录）。签发的 Share Token 将当前分享的外部 `share_id` 和 `permission` 固化在 `scope` claim 中；完整结构和操作映射见 9.4.2。
 
 #### 实现状态
 **已实现**
@@ -3136,7 +3136,7 @@ Authorization: Bearer <access_token>
 
 **GET** `/api/share/browse/{share_id}`
 
-浏览分享的文件夹内容（使用分享令牌）。服务端会在每次浏览时复查 `shares.status` 和 `expires_at`，因此分享被取消或过期后，已签发但尚未过期的 `X-Share-Token` 也不能继续浏览。
+浏览分享的文件夹内容（使用分享令牌）。`scope.permission` 为 `view` 或 `download` 的令牌均可浏览。服务端会在每次浏览时复查 `shares.status` 和 `expires_at`，因此分享被取消或过期后，已签发但尚未过期的 `X-Share-Token` 也不能继续浏览。
 
 #### 实现状态
 **已实现**
@@ -3273,7 +3273,7 @@ X-Share-Token: <share_token>
 
 **GET** `/api/share/download/{share_id}/{file_id}`
 
-下载分享的文件。服务端会在每次下载时复查 `shares.status` 和 `expires_at`，因此分享被取消或过期后，已签发但尚未过期的 `X-Share-Token` 也不能继续下载。
+下载分享的文件。下载元数据接口 `GET /api/share/download/{share_id}/{file_id}/info` 和实际内容下载均要求 `scope.permission = "download"`，并在每次请求中复查数据库当前 `permission`、`shares.status` 和 `expires_at`。因此仅查看令牌不能下载；分享权限降级、取消或过期后，已签发但尚未过期的 `X-Share-Token` 也不能继续获取下载元数据或内容。
 
 #### 实现状态
 **已实现**
@@ -3843,13 +3843,31 @@ Share Token（通过 `/api/share/access` 获取）需要以下安全措施：
 | **单次使用/绑定** | 建议绑定 Client IP 或 User-Agent | 可选增强措施 |
 | **撤销机制** | 分享取消时立即使所有 token 失效 | 通过 Redis 黑名单或 DB 状态检查 |
 | **类型标识** | JWT `type` claim = `share` | 区分于 access_token/refresh_token |
-| **作用域限定** | JWT `scope` claim 包含 `share_id` 和 `permission` | 限定 token 仅能访问指定分享 |
+| **作用域限定** | JWT `scope` claim 包含外部 `share_id` 和签发时的 `permission` | 限定 token 只能访问指定分享且不能在签发后扩权 |
+
+**Scope JSON 合同**：
+
+- `scope` 必须是 JSON object，且必须包含字符串字段 `share_id` 和 `permission`。
+- `scope.share_id` 是 API 使用的外部分享标识（即 `shares.share_code`），必须与顶层 `share_code` claim 完全一致。
+- `scope.permission` 只允许 `view` 或 `download`，取签发时数据库中的分享权限。
+- 缺失 `scope`、类型错误、字段缺失/类型错误、非法权限值或 `scope.share_id` 与顶层 `share_code` 不一致时，令牌验证返回 HTTP 401 / `40107 TokenMalformed`。
+- Scope 是令牌能力上限，数据库当前分享记录是实时授权下限：操作必须同时满足 token scope 和当前 `shares.permission`。把分享从 `download` 改为 `view` 会立即禁止旧下载令牌；把分享从 `view` 改为 `download` 不会让旧查看令牌获得下载或保存能力，访客必须重新访问分享以取得新令牌。
+
+**权限到访客操作映射**：
+
+| 访客操作 | HTTP/服务路径 | 允许的 `scope.permission` | 每次操作的数据库复查 |
+|---------|---------------|---------------------------|------------------------|
+| 浏览分享 | `GET /api/share/browse/{share_id}` / `Browse` | `view`, `download` | `status`、`expires_at` |
+| 获取下载元数据 | `GET /api/share/download/{share_id}/{file_id}/info` / `DownloadMeta`, `GetDownloadInfo` | `download` | `permission`、`status`、`expires_at` |
+| 下载文件内容 | `GET /api/share/download/{share_id}/{file_id}` / `GetDownloadInfo` 后构造响应 | `download` | `permission`、`status`、`expires_at` |
+| 保存到网盘 | `POST /api/share/save/{share_id}` / `SaveToDrive` | `download`，并同时要求有效 owner Access Token | `permission`、`status`、`expires_at` |
 
 **Share Token Payload 示例**：
 
 ```json
 {
-  "sub": "sh_abc123",
+  "sub": "12345",
+  "share_code": "sh_abc123",
   "type": "share",
   "scope": {
     "share_id": "sh_abc123",
@@ -3861,26 +3879,28 @@ Share Token（通过 `/api/share/access` 获取）需要以下安全措施：
 }
 ```
 
+`sub` 是服务端用于查询的内部 `shares.id` 十进制字符串；外部授权绑定以 `share_code` 和 `scope.share_id` 为准，二者必须一致。
+
 **Token 撤销检查**：
 
-服务端在验证 Share Token 时，必须检查：
-1. JWT 签名和过期时间
-2. 分享状态（`shares.status`）：`status = 0` (cancelled) 时拒绝
-3. 分享有效期（`shares.expires_at`）：已过期时拒绝
-4. （可选）Redis 黑名单 `share:revoked:{jti}`
+服务端分两层检查 Share Token：
 
-**已撤销 Token 响应**：
+1. `ShareAuthFilter` 验证 JWT 签名、issuer、`type`、过期时间、JTI、scope 结构/绑定以及可选的单 token Redis 黑名单。
+2. 通过 JWT 验证后，每个访客业务路径仍重新读取分享记录并检查 `shares.status`、`shares.expires_at`；下载元数据、内容下载和保存到网盘还必须检查数据库当前 `permission = 'download'`。
+
+取消分享采用分享记录状态撤销语义：取消操作把 `shares.status` 更新为 cancelled 后，所有已签发 token 在下一次访客操作的数据库状态检查中立即失效，不要求枚举 token，也不要求把每个 token hash 写入 Redis。Redis `share_token_blacklist:{token_hash}` 仅用于撤销某一个具体 token，不能替代业务路径的实时分享状态检查。
+
+**撤销响应语义**：
 
 ```json
 {
-  "code": 40104,
-  "message": "令牌无效或已过期",
-  "data": {
-    "reason": "分享已被取消",
-    "share_id": "sh_abc123"
-  }
+  "code": 60002,
+  "message": "Share expired",
+  "data": null
 }
 ```
+
+分享被取消或 `expires_at` 到期时返回 HTTP 400 / `60002 ShareExpired`；只有具体 token hash 命中 Redis 黑名单时返回 HTTP 401 / `40111 TokenRevoked`。
 
 #### 9.4.3 速率限制强化
 
@@ -3939,14 +3959,14 @@ created_at  TIMESTAMPTZ      -- 操作时间
 
 实现分享功能时，必须确保以下检查项全部通过：
 
-- [ ] 密码验证失败计数器使用 Redis 原子操作（INCR + EXPIRE）
-- [ ] Share Token 有效期不超过 1 小时
-- [ ] Share Token 包含 `type: "share"` 和 `scope` claim
-- [ ] 验证 Share Token 时检查分享状态和有效期
-- [ ] 分享取消时清理或使失效相关 Share Token
-- [ ] 敏感操作有独立的速率限制
-- [ ] 关键事件写入审计日志
-- [ ] 密码错误响应不泄露分享是否存在的信息（统一返回 60003）
+- [x] 密码验证失败计数器使用 Redis 原子操作（`INCR` + 首次 `EXPIRE` 在同一 Lua `EVAL` 中执行；证据：`ShareService::CheckPasswordRateLimit`、`RedisService::IncrWithExpire`、`RedisServiceRuntimeTest.IncrWithExpireAtomicallyIncrsAndSetsExpiry`；这里只确认原子性，计数时机语义仍由 P0.2 决定）
+- [x] Share Token 有效期不超过 1 小时（证据：`TokenService::GetShareTokenExpireSeconds()` 固定返回 3600，`TokenServiceShareTest.GetShareTokenExpireSecondsReturns3600`）
+- [x] Share Token 包含 `type: "share"` 和合法 `scope` claim（证据：`TokenServiceShareTest.GenerateShareTokenValidInputCorrectClaims` 及 scope 正向/负向测试）
+- [x] Share Token 验证通过后的所有访客操作检查分享状态和有效期（证据：`ShareTokenSecurityIntegration` 覆盖 browse、download metadata、content download、save-to-drive 的取消/过期旧 token）
+- [x] 分享取消时使所有相关 Share Token 失效（证据：`ShareTokenSecurityIntegration` 使用同一旧 token 验证 DB 状态撤销，不依赖逐 token Redis 黑名单）
+- [ ] 敏感操作有独立的速率限制（当前 `SharePublicRateLimitFilter` 仍让 access、browse、download 共用同一个 30 次/分钟/IP bucket，save-to-drive 也没有分享域独立 bucket）
+- [ ] 关键事件写入审计日志（当前未记录 `share_create`、`share_access`、`share_pwd_fail`、`share_download`、`share_cancel`）
+- [ ] 密码错误响应不泄露分享是否存在的信息（当前不存在的分享由 `FindShareByCode` 返回 `60001 ShareNotFound`，与密码失败的 `60003` 可区分）
 
 ---
 

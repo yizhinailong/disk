@@ -22,15 +22,9 @@
 
 ## P0 - Share Security Contract Closure
 
-The canonical checklist in `docs/design/02-API接口设计.md` section 9.4.5 is still unchecked and mixes implemented behavior with real gaps. Reconcile the contract before changing runtime behavior.
-
-### P0.1 Reconcile the security checklist
-
-- [ ] Audit every item in API section 9.4.5 against code and executable tests; mark only proven items complete.
-- [ ] Document the intended Share Token `scope` values and their mapping to share permissions and visitor operations.
-- [ ] Add a `scope` claim to generated Share Tokens, validate it, expose it through `ShareTokenClaims`, and add positive/negative tests.
-- [ ] Confirm every visitor browse, download, metadata, and save-to-drive path revalidates share status and expiry after token verification; add missing coverage before checking the item off.
-- [ ] Document cancellation semantics: current tokens may become unusable through share-status validation even when their individual hashes are not added to the Redis blacklist.
+The Share Token scope and live-state contract is reconciled in API section 9.4.2, with
+the evidence audit recorded in section 9.4.5. The remaining open checklist gaps are
+password response semantics, share-domain audit events, and operation-specific rate limits.
 
 ### P0.2 Correct password protection semantics
 
@@ -45,6 +39,12 @@ The canonical checklist in `docs/design/02-API接口设计.md` section 9.4.5 is 
 - [ ] Reconcile `operation_logs.user_id NOT NULL` with visitor events that have no authenticated owner, including the schema migration and retention/privacy rules.
 - [ ] Record the fields required by API section 9.4.4 without logging passwords or raw Share Tokens.
 - [ ] Add database-backed tests for successful events, rejected access, batch cancellation, and audit-write failure policy.
+
+### P0.4 Separate sensitive share-operation rate limits
+
+- [ ] Replace the shared `rate:share_public:{ip}` bucket with independent access, browse, and download limits matching API section 9.4.3.
+- [ ] Keep access keyed by client IP; key browse and download by a verified token identifier or hash without storing or logging the raw Share Token.
+- [ ] Define configuration and executable tests for each bucket before checking the API section 9.4.5 item complete.
 
 ---
 

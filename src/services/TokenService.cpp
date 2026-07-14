@@ -52,6 +52,10 @@ namespace disk::services {
 
         static PoolMetrics g_pool_metrics;
 
+        [[nodiscard]] auto IsValidSharePermission(const std::string& permission) -> bool {
+            return permission == "view" || permission == "download";
+        }
+
         auto CreateAuthCpuPool() -> trantor::EventLoopThreadPool* {
             const auto hardware_threads = std::max(1u, std::thread::hardware_concurrency());
             auto* pool = new trantor::EventLoopThreadPool(
@@ -532,14 +536,25 @@ namespace disk::services {
     auto TokenService::GenerateShareToken(
         const std::string& jwt_secret,
         const std::string& share_code,
-        uint64_t share_id
+        uint64_t share_id,
+        const std::string& permission
     ) -> Result<std::string> {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
+
+        if (!IsValidSharePermission(permission)) {
+            return std::unexpected(
+                ErrorInfo(disk::error::Code::InvalidParameter, "Invalid share permission")
+            );
+        }
 
         const auto now = std::chrono::system_clock::now();
         const auto jti = drogon::utils::getUuid();
 
         try {
+            Json::Value scope(Json::objectValue);
+            scope["share_id"] = share_code;
+            scope["permission"] = permission;
+
             jwt::builder<jwt::default_clock, traits> builder{ jwt::default_clock{} };
             auto token =
                 builder.set_issuer("disk_share")
@@ -548,6 +563,7 @@ namespace disk::services {
                     .set_payload_claim("share_code", share_code)
                     .set_payload_claim("type", "share")
                     .set_payload_claim("jti", jti)
+                    .set_payload_claim("scope", scope)
                     .set_issued_at(now)
                     .set_expires_at(now + std::chrono::seconds(GetShareTokenExpireSeconds()))
                     .sign(jwt::algorithm::hs256{ jwt_secret });
@@ -587,11 +603,36 @@ namespace disk::services {
             const auto share_code = decoded.get_payload_claim("share_code").as_string();
             const auto jti = decoded.get_payload_claim("jti").as_string();
             const auto share_id_str = decoded.get_subject();
-            const auto share_id = std::stoull(share_id_str);
+            std::size_t parsed_length = 0;
+            const auto share_id = std::stoull(share_id_str, &parsed_length);
+            if (share_code.empty() || jti.empty() || share_id == 0 || parsed_length != share_id_str.size()) {
+                return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
+            }
+
+            const auto scope = decoded.get_payload_claim("scope").to_json();
+            if (!scope.isObject() || !scope.isMember("share_id") ||
+                !scope["share_id"].isString() || !scope.isMember("permission") ||
+                !scope["permission"].isString()) {
+                return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
+            }
+
+            const auto scope_share_id = scope["share_id"].asString();
+            const auto scope_permission = scope["permission"].asString();
+            if (scope_share_id != share_code || !IsValidSharePermission(scope_permission)) {
+                return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
+            }
 
             Logger::Debug() << "Share token verification successful: share_code=" << share_code
                       << ", share_id=" << share_id;
-            return ShareTokenClaims{ .share_code = share_code, .share_id = share_id, .jti = jti };
+            return ShareTokenClaims{
+                .share_code = share_code,
+                .share_id = share_id,
+                .jti = jti,
+                .scope = {
+                    .share_id = scope_share_id,
+                    .permission = scope_permission,
+                },
+            };
 
         } catch (const jwt::error::token_verification_exception& e) {
             Logger::Warn() << "Share token verification failed: " << e.what();

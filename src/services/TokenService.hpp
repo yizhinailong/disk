@@ -63,12 +63,21 @@ namespace disk::services {
     };
 
     /**
+     * @brief 分享令牌作用域
+     */
+    struct ShareTokenScope {
+        std::string share_id;
+        std::string permission;
+    };
+
+    /**
      * @brief 分享令牌声明信息
      */
     struct ShareTokenClaims {
         std::string share_code;
         uint64_t share_id;
         std::string jti;
+        ShareTokenScope scope;
     };
 
     /**
@@ -256,19 +265,22 @@ namespace disk::services {
          * 契约：
          * - issuer = "disk_share"
          * - type = "share"
-         * - claims: share_code, share_id (subject), jti
+         * - claims: share_code, share_id (subject), jti, scope
+         * - scope: { share_id: share_code, permission: view|download }
          * - TTL = 3600 秒
          *
          * @param jwt_secret JWT签名密钥
          * @param share_code 分享码
          * @param share_id 分享ID
+         * @param permission 分享权限（view/download）
          * @return Result<std::string> 成功返回令牌，失败返回错误
          */
         [[nodiscard]]
         static auto GenerateShareToken(
             const std::string& jwt_secret,
             const std::string& share_code,
-            uint64_t share_id
+            uint64_t share_id,
+            const std::string& permission
         ) -> Result<std::string>;
 
         /**
