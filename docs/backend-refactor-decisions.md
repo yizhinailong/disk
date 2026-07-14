@@ -1,6 +1,6 @@
 # Backend Refactor Decisions
 
-This note records accepted product and policy decisions together with their current implementation status for the backend refactor roadmap.
+This note records accepted product and policy decisions together with their current implementation status for the completed backend refactor roadmap. The closed roadmap is archived at [`docs/archive/2026-07-14-backend-refactor-todo.md`](archive/2026-07-14-backend-refactor-todo.md); current work is tracked separately in [`docs/TODO.md`](TODO.md).
 
 Use `docs/backend-discovery.md` as the historical discovery baseline. The status and current-behavior paragraphs in this note are authoritative for decisions implemented after that discovery pass.
 
