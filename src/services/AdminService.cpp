@@ -39,7 +39,7 @@ namespace disk::services {
         -> drogon::Task<Result<admin::UserListResponse>> {
 
         Logger::Info() << "Admin list users: page=" << req.page
-                 << " page_size=" << req.page_size;
+                       << " page_size=" << req.page_size;
 
         try {
             std::string where_clause = " WHERE 1=1";
@@ -66,16 +66,11 @@ namespace disk::services {
             }
 
             int offset = (req.page - 1) * req.page_size;
-            int total_pages = req.page_size > 0
-                ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size))
-                : 0;
+            int total_pages = req.page_size > 0 ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size)) : 0;
 
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, username, email, nickname, avatar, "
-                "role, status, storage_quota, storage_used, storage_reserved, "
-                "created_at, last_login_at "
-                "FROM users" + where_clause +
-                " ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+                "SELECT id, username, email, nickname, avatar, " "role, status, storage_quota, storage_used, storage_reserved, " "created_at, last_login_at " "FROM users" + where_clause +
+                    " ORDER BY created_at DESC LIMIT $1 OFFSET $2",
                 req.page_size,
                 offset
             );
@@ -138,8 +133,7 @@ namespace disk::services {
             response.storage_used = user.getValueOfStorageUsed();
             response.storage_reserved = user.getValueOfStorageReserved();
             response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
-            response.last_login_at = user.getLastLoginAt()
-                ? user.getValueOfLastLoginAt().toDbStringLocal() : "";
+            response.last_login_at = user.getLastLoginAt() ? user.getValueOfLastLoginAt().toDbStringLocal() : "";
 
             Logger::Info() << "Admin get user detail successful: user_id=" << user_id;
             co_return response;
@@ -153,7 +147,7 @@ namespace disk::services {
             }
 
             Logger::Error() << "Admin get user detail database error: user_id=" << user_id
-                      << " - " << e.base().what();
+                            << " - " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get user detail"
@@ -165,7 +159,7 @@ namespace disk::services {
         -> drogon::Task<Result<void>> {
 
         Logger::Info() << "Admin change user status: target_id=" << target_id
-                 << " status=" << status << " operator_id=" << operator_id;
+                       << " status=" << status << " operator_id=" << operator_id;
 
         if (target_id == operator_id) {
             Logger::Warn() << "Admin cannot modify self: operator_id=" << operator_id;
@@ -184,7 +178,8 @@ namespace disk::services {
 
             auto details = std::format(
                 R"({{"target_id": {}, "status": {}}})",
-                target_id, status
+                target_id,
+                status
             );
             co_await LogOperation(
                 operator_id,
@@ -218,7 +213,7 @@ namespace disk::services {
         -> drogon::Task<Result<void>> {
 
         Logger::Info() << "Admin change user role: target_id=" << target_id
-                 << " role=" << role << " operator_id=" << operator_id;
+                       << " role=" << role << " operator_id=" << operator_id;
 
         if (target_id == operator_id) {
             Logger::Warn() << "Admin cannot modify self: operator_id=" << operator_id;
@@ -258,7 +253,8 @@ namespace disk::services {
 
             auto details = std::format(
                 R"({{"target_id": {}, "role": {}}})",
-                target_id, role
+                target_id,
+                role
             );
             co_await LogOperation(
                 operator_id,
@@ -288,14 +284,12 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::ChangeUserAvailableSpace(uint64_t target_id,
-                                                uint64_t available_space_g,
-                                                uint64_t operator_id)
+    auto AdminService::ChangeUserAvailableSpace(uint64_t target_id, uint64_t available_space_g, uint64_t operator_id)
         -> drogon::Task<Result<admin::UserDetailResponse>> {
 
         Logger::Info() << "Admin change user available space: target_id=" << target_id
-                 << " available_space_g=" << available_space_g
-                 << " operator_id=" << operator_id;
+                       << " available_space_g=" << available_space_g
+                       << " operator_id=" << operator_id;
 
         if (target_id == operator_id) {
             Logger::Warn() << "Admin cannot modify self available space: operator_id=" << operator_id;
@@ -364,8 +358,7 @@ namespace disk::services {
             response.storage_used = storage_used;
             response.storage_reserved = storage_reserved;
             response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
-            response.last_login_at = user.getLastLoginAt()
-                ? user.getValueOfLastLoginAt().toDbStringLocal() : "";
+            response.last_login_at = user.getLastLoginAt() ? user.getValueOfLastLoginAt().toDbStringLocal() : "";
 
             Logger::Info() << "Admin change user available space successful: target_id=" << target_id;
             co_return response;
@@ -386,12 +379,11 @@ namespace disk::services {
         }
     }
 
-
     auto AdminService::SoftDeleteUser(uint64_t target_id, uint64_t operator_id)
         -> drogon::Task<Result<void>> {
 
         Logger::Info() << "Admin soft delete user: target_id=" << target_id
-                 << " operator_id=" << operator_id;
+                       << " operator_id=" << operator_id;
 
         if (target_id == operator_id) {
             Logger::Warn() << "Admin cannot delete self: operator_id=" << operator_id;
@@ -410,7 +402,8 @@ namespace disk::services {
 
             auto details = std::format(
                 R"({{"target_id": {}, "username": "{}"}})",
-                target_id, user.getValueOfUsername()
+                target_id,
+                user.getValueOfUsername()
             );
             co_await LogOperation(
                 operator_id,
@@ -447,10 +440,7 @@ namespace disk::services {
 
         try {
             auto user_stats = co_await m_db_client->execSqlCoro(
-                "SELECT COUNT(*) AS total_users, "
-                "COALESCE(SUM(storage_used), 0) AS total_storage_used, "
-                "COALESCE(SUM(storage_quota), 0) AS total_storage_quota "
-                "FROM users"
+                "SELECT COUNT(*) AS total_users, " "COALESCE(SUM(storage_used), 0) AS total_storage_used, " "COALESCE(SUM(storage_quota), 0) AS total_storage_quota " "FROM users"
             );
 
             auto file_stats = co_await m_db_client->execSqlCoro(
@@ -462,21 +452,13 @@ namespace disk::services {
             );
 
             admin::StorageStatsResponse response;
-            response.total_users = user_stats.empty()
-                ? 0 : user_stats[0]["total_users"].as<int>();
-            response.total_storage_used = user_stats.empty()
-                ? 0 : user_stats[0]["total_storage_used"].as<uint64_t>();
-            response.total_storage_quota = user_stats.empty()
-                ? 0 : user_stats[0]["total_storage_quota"].as<uint64_t>();
-            response.total_files = file_stats.empty()
-                ? 0 : file_stats[0]["total_files"].as<int>();
-            response.active_shares = share_stats.empty()
-                ? 0 : share_stats[0]["active_shares"].as<int>();
+            response.total_users = user_stats.empty() ? 0 : user_stats[0]["total_users"].as<int>();
+            response.total_storage_used = user_stats.empty() ? 0 : user_stats[0]["total_storage_used"].as<uint64_t>();
+            response.total_storage_quota = user_stats.empty() ? 0 : user_stats[0]["total_storage_quota"].as<uint64_t>();
+            response.total_files = file_stats.empty() ? 0 : file_stats[0]["total_files"].as<int>();
+            response.active_shares = share_stats.empty() ? 0 : share_stats[0]["active_shares"].as<int>();
 
-            co_await LogOperation(0, "admin.storage.global_stats", "storage", 0, "全局存储统计",
-                std::format(R"({{"total_users": {}, "total_files": {}, "total_storage_used": {}, "active_shares": {}}})",
-                    response.total_users, response.total_files,
-                    response.total_storage_used, response.active_shares));
+            co_await LogOperation(0, "admin.storage.global_stats", "storage", 0, "全局存储统计", std::format(R"({{"total_users": {}, "total_files": {}, "total_storage_used": {}, "active_shares": {}}})", response.total_users, response.total_files, response.total_storage_used, response.active_shares));
 
             Logger::Info() << "Admin get global storage stats successful";
             co_return response;
@@ -494,13 +476,11 @@ namespace disk::services {
         -> drogon::Task<Result<admin::ShareListResponse>> {
 
         Logger::Info() << "Admin list shares: page=" << req.page
-                 << " page_size=" << req.page_size;
+                       << " page_size=" << req.page_size;
 
         try {
             co_await m_db_client->execSqlCoro(
-                "UPDATE shares s SET s.status = 0, s.updated_at = NOW() "
-                "WHERE s.status = 1 "
-                "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)"
+                "UPDATE shares s SET s.status = 0, s.updated_at = NOW() " "WHERE s.status = 1 " "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)"
             );
 
             std::string from_clause = " FROM shares s LEFT JOIN users u ON s.user_id = u.id";
@@ -519,14 +499,13 @@ namespace disk::services {
                 where_clause += " AND u.username LIKE $" + std::to_string(like_index);
             }
 
-            auto count_result = req.username.has_value()
-                ? co_await m_db_client->execSqlCoro(
-                    "SELECT COUNT(*) AS total" + from_clause + where_clause,
-                    username_like
-                )
-                : co_await m_db_client->execSqlCoro(
-                    "SELECT COUNT(*) AS total" + from_clause + where_clause
-                );
+            auto count_result = req.username.has_value() ? co_await m_db_client->execSqlCoro(
+                                                               "SELECT COUNT(*) AS total" + from_clause + where_clause,
+                                                               username_like
+                                                           ) :
+                                                           co_await m_db_client->execSqlCoro(
+                                                               "SELECT COUNT(*) AS total" + from_clause + where_clause
+                                                           );
 
             int total = 0;
             if (!count_result.empty()) {
@@ -534,37 +513,22 @@ namespace disk::services {
             }
 
             int offset = (req.page - 1) * req.page_size;
-            int total_pages = req.page_size > 0
-                ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size))
-                : 0;
+            int total_pages = req.page_size > 0 ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size)) : 0;
 
             auto limit_offset = " ORDER BY s.created_at DESC LIMIT $" + std::to_string(limit_index) + " OFFSET $" + std::to_string(offset_index);
             auto query_sql =
-                "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, "
-                "s.share_code, s.status, "
-                "(s.view_count + s.download_count) AS access_count, "
-                "(s.password_hash IS NOT NULL) AS password_set, "
-                "s.created_at, s.expires_at "
-                + from_clause + " "
-                "LEFT JOIN share_files sf ON sf.id = ("
-                "    SELECT MIN(sf2.id) "
-                "    FROM share_files sf2 "
-                "    WHERE sf2.share_id = s.id AND sf2.item_type = 'file'"
-                ") "
-                "LEFT JOIN files f ON sf.item_id = f.id "
-                + where_clause + limit_offset;
-            auto result = req.username.has_value()
-                ? co_await m_db_client->execSqlCoro(
-                    query_sql,
-                    username_like,
-                    req.page_size,
-                    offset
-                )
-                : co_await m_db_client->execSqlCoro(
-                    query_sql,
-                    req.page_size,
-                    offset
-                );
+                "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, " "s.share_code, s.status, " "(s.view_count + s.download_count) AS access_count, " "(s.password_hash IS NOT NULL) AS password_set, " "s.created_at, s.expires_at " + from_clause + " " "LEFT JOIN share_files sf ON sf.id = (" "    SELECT MIN(sf2.id) " "    FROM share_files sf2 " "    WHERE sf2.share_id = s.id AND sf2.item_type = 'file'" ") " "LEFT JOIN files f ON sf.item_id = f.id " + where_clause + limit_offset;
+            auto result = req.username.has_value() ? co_await m_db_client->execSqlCoro(
+                                                         query_sql,
+                                                         username_like,
+                                                         req.page_size,
+                                                         offset
+                                                     ) :
+                                                     co_await m_db_client->execSqlCoro(
+                                                         query_sql,
+                                                         req.page_size,
+                                                         offset
+                                                     );
 
             admin::ShareListResponse response;
             response.pagination.page = req.page;
@@ -588,9 +552,7 @@ namespace disk::services {
                 response.items.push_back(std::move(share));
             }
 
-            co_await LogOperation(0, "admin.share.list", "share", 0, "分享列表",
-                std::format(R"({{"page": {}, "page_size": {}, "total": {}}})",
-                    req.page, req.page_size, total));
+            co_await LogOperation(0, "admin.share.list", "share", 0, "分享列表", std::format(R"({{"page": {}, "page_size": {}, "total": {}}})", req.page, req.page_size, total));
 
             Logger::Info() << "Admin list shares successful: total=" << total;
             co_return response;
@@ -611,27 +573,12 @@ namespace disk::services {
 
         try {
             co_await m_db_client->execSqlCoro(
-                "UPDATE shares s SET s.status = 0, s.updated_at = NOW() "
-                "WHERE s.id = $1 AND s.status = 1 "
-                "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)",
+                "UPDATE shares s SET s.status = 0, s.updated_at = NOW() " "WHERE s.id = $1 AND s.status = 1 " "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)",
                 share_id
             );
 
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, "
-                "s.share_code, s.status, "
-                "(s.view_count + s.download_count) AS access_count, "
-                "(s.password_hash IS NOT NULL) AS password_set, "
-                "s.created_at, s.expires_at "
-                "FROM shares s "
-                "LEFT JOIN users u ON s.user_id = u.id "
-                "LEFT JOIN share_files sf ON sf.id = ("
-                "    SELECT MIN(sf2.id) "
-                "    FROM share_files sf2 "
-                "    WHERE sf2.share_id = s.id AND sf2.item_type = 'file'"
-                ") "
-                "LEFT JOIN files f ON sf.item_id = f.id "
-                "WHERE s.id = $1",
+                "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, " "s.share_code, s.status, " "(s.view_count + s.download_count) AS access_count, " "(s.password_hash IS NOT NULL) AS password_set, " "s.created_at, s.expires_at " "FROM shares s " "LEFT JOIN users u ON s.user_id = u.id " "LEFT JOIN share_files sf ON sf.id = (" "    SELECT MIN(sf2.id) " "    FROM share_files sf2 " "    WHERE sf2.share_id = s.id AND sf2.item_type = 'file'" ") " "LEFT JOIN files f ON sf.item_id = f.id " "WHERE s.id = $1",
                 share_id
             );
 
@@ -654,15 +601,14 @@ namespace disk::services {
             response.created_at = row["created_at"].as<std::string>();
             response.expires_at = row["expires_at"].isNull() ? "" : row["expires_at"].as<std::string>();
 
-            co_await LogOperation(0, "admin.share.detail", "share", share_id, response.share_code,
-                std::format(R"({{"share_id": {}}})", share_id));
+            co_await LogOperation(0, "admin.share.detail", "share", share_id, response.share_code, std::format(R"({{"share_id": {}}})", share_id));
 
             Logger::Info() << "Admin get share detail successful: share_id=" << share_id;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Error() << "Admin get share detail database error: share_id=" << share_id
-                      << " - " << e.base().what();
+                            << " - " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get share detail"
@@ -674,7 +620,7 @@ namespace disk::services {
         -> drogon::Task<Result<void>> {
 
         Logger::Info() << "Admin force cancel share: share_id=" << share_id
-                 << " operator_id=" << operator_id;
+                       << " operator_id=" << operator_id;
 
         try {
             auto result = co_await m_db_client->execSqlCoro(
@@ -703,9 +649,7 @@ namespace disk::services {
 
             auto share_code = result[0]["share_code"].as<std::string>();
             auto owner_id = result[0]["user_id"].as<uint64_t>();
-            co_await LogOperation(operator_id, "admin.share.force_cancel", "share", share_id, share_code,
-                std::format(R"({{"share_id": {}, "share_code": "{}", "owner_id": {}, "previous_status": {}}})",
-                    share_id, share_code, owner_id, current_status));
+            co_await LogOperation(operator_id, "admin.share.force_cancel", "share", share_id, share_code, std::format(R"({{"share_id": {}, "share_code": "{}", "owner_id": {}, "previous_status": {}}})", share_id, share_code, owner_id, current_status));
 
             Logger::Info() << "Admin force cancel share successful: share_id=" << share_id;
             co_return {};
@@ -726,10 +670,7 @@ namespace disk::services {
 
         try {
             auto user_stats = co_await m_db_client->execSqlCoro(
-                "SELECT COUNT(*) AS total_users, "
-                "COALESCE(SUM(storage_used), 0) AS total_storage_used, "
-                "COALESCE(SUM(storage_quota), 0) AS total_storage_quota "
-                "FROM users"
+                "SELECT COUNT(*) AS total_users, " "COALESCE(SUM(storage_used), 0) AS total_storage_used, " "COALESCE(SUM(storage_quota), 0) AS total_storage_quota " "FROM users"
             );
 
             auto file_stats = co_await m_db_client->execSqlCoro(
@@ -741,16 +682,11 @@ namespace disk::services {
             );
 
             admin::StorageStatsResponse response;
-            response.total_users = user_stats.empty()
-                ? 0 : user_stats[0]["total_users"].as<int>();
-            response.total_storage_used = user_stats.empty()
-                ? 0 : user_stats[0]["total_storage_used"].as<uint64_t>();
-            response.total_storage_quota = user_stats.empty()
-                ? 0 : user_stats[0]["total_storage_quota"].as<uint64_t>();
-            response.total_files = file_stats.empty()
-                ? 0 : file_stats[0]["total_files"].as<int>();
-            response.active_shares = share_stats.empty()
-                ? 0 : share_stats[0]["active_shares"].as<int>();
+            response.total_users = user_stats.empty() ? 0 : user_stats[0]["total_users"].as<int>();
+            response.total_storage_used = user_stats.empty() ? 0 : user_stats[0]["total_storage_used"].as<uint64_t>();
+            response.total_storage_quota = user_stats.empty() ? 0 : user_stats[0]["total_storage_quota"].as<uint64_t>();
+            response.total_files = file_stats.empty() ? 0 : file_stats[0]["total_files"].as<int>();
+            response.active_shares = share_stats.empty() ? 0 : share_stats[0]["active_shares"].as<int>();
 
             Logger::Info() << "admin.stats.overview successful";
             co_return response;
@@ -824,7 +760,7 @@ namespace disk::services {
         -> drogon::Task<Result<admin::AdminLogListResponse>> {
 
         Logger::Info() << "Admin list logs: page=" << req.page
-                 << " page_size=" << req.page_size;
+                       << " page_size=" << req.page_size;
 
         try {
             std::string where_clause = " WHERE 1=1";
@@ -848,14 +784,11 @@ namespace disk::services {
             }
 
             int offset = (req.page - 1) * req.page_size;
-            int total_pages = req.page_size > 0
-                ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size))
-                : 0;
+            int total_pages = req.page_size > 0 ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size)) : 0;
 
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, action, target_type, target_id, details, ip_address, created_at "
-                "FROM operation_logs" + where_clause +
-                " ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+                "SELECT id, user_id, action, target_type, target_id, details, ip_address, created_at " "FROM operation_logs" + where_clause +
+                    " ORDER BY created_at DESC LIMIT $1 OFFSET $2",
                 req.page_size,
                 offset
             );
@@ -869,11 +802,11 @@ namespace disk::services {
             for (const auto& row : result) {
                 admin::AdminLogDetailResponse log;
                 log.id = row["id"].as<uint64_t>();
-                log.user_id = row["user_id"].as<uint64_t>();
+                log.user_id = row["user_id"].isNull() ? std::optional<uint64_t>{} : std::optional<uint64_t>{ row["user_id"].as<uint64_t>() };
                 log.action = row["action"].as<std::string>();
                 log.target_type = row["target_type"].isNull() ? "" : row["target_type"].as<std::string>();
-                log.target_id = row["target_id"].isNull() ? std::optional<uint64_t>{} : std::optional<uint64_t>{row["target_id"].as<uint64_t>()};
-                log.details = row["details"].isNull() ? std::optional<std::string>{} : std::optional<std::string>{row["details"].as<std::string>()};
+                log.target_id = row["target_id"].isNull() ? std::optional<uint64_t>{} : std::optional<uint64_t>{ row["target_id"].as<uint64_t>() };
+                log.details = row["details"].isNull() ? std::optional<std::string>{} : std::optional<std::string>{ row["details"].as<std::string>() };
                 log.ip_address = row["ip_address"].as<std::string>();
                 log.created_at = row["created_at"].as<std::string>();
                 response.items.push_back(std::move(log));
@@ -891,16 +824,10 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::LogOperation(uint64_t operator_id,
-                                     const std::string& action,
-                                     const std::string& target_type,
-                                     uint64_t target_id,
-                                     const std::string& target_name,
-                                     const std::string& details) -> drogon::Task<void> {
+    auto AdminService::LogOperation(uint64_t operator_id, const std::string& action, const std::string& target_type, uint64_t target_id, const std::string& target_name, const std::string& details) -> drogon::Task<void> {
         try {
             co_await m_db_client->execSqlCoro(
-                "INSERT INTO operation_logs (user_id, action, target_type, target_id, target_name, details, ip_address) "
-                "VALUES ($1, $2, $3, $4, $5, $6, 'system')",
+                "INSERT INTO operation_logs (user_id, action, target_type, target_id, target_name, details, ip_address) " "VALUES ($1, $2, $3, $4, $5, $6, 'system')",
                 operator_id,
                 action,
                 target_type,
@@ -914,4 +841,4 @@ namespace disk::services {
         }
     }
 
-} ///< namespace disk::services
+} // namespace disk::services

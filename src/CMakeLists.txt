@@ -121,6 +121,7 @@ set(Services_HEADERS
     services/RedisService.hpp
     services/ScheduledTasks.hpp
     services/SearchQuery.hpp
+    services/ShareAuditService.hpp
     services/ShareService.hpp
     services/SystemService.hpp
     services/TokenService.hpp
@@ -150,6 +151,7 @@ set(Services_SOURCES
     services/RedisService.cpp
     services/ScheduledTasks.cpp
     services/SearchQuery.cpp
+    services/ShareAuditService.cpp
     services/ShareService.cpp
     services/SystemService.cpp
     services/TokenService.cpp

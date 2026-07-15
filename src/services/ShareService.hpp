@@ -29,6 +29,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -42,10 +43,19 @@
 #include "models/Folders.hpp"
 #include "models/Shares.hpp"
 #include "services/RedisService.hpp"
+#include "services/ShareAuditService.hpp"
 #include "services/TokenService.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::share {
+
+    struct ShareDownloadOutcome {
+        uint64_t bytes{ 0 };
+        int http_status{ 0 };
+        bool success{ false };
+        bool update_statistics{ false };
+        std::string result;
+    };
 
     /**
      * @brief 分享服务类
@@ -59,7 +69,7 @@ namespace disk::share {
      * - Cancel: 批量取消分享，返回混合结果
      * - Access: 验证分享访问权限，生成分享令牌
      * - Browse: 浏览分享内容（需分享令牌）
-     * - DownloadMeta: 获取下载文件元数据（需分享令牌）
+     * - GetDownloadInfo: 获取下载文件元数据（需分享令牌）
      *
      * 安全规则：
      * - 密码验证失败限制（5次/15分钟/IP/分享）
@@ -100,7 +110,11 @@ namespace disk::share {
          * @return drogon::Task<Result<CreateShareResponse>> 成功返回分享信息，失败返回错误
          */
         [[nodiscard]]
-        auto Create(CreateShareRequest request, uint64_t user_id)
+        auto Create(
+            CreateShareRequest request,
+            uint64_t user_id,
+            const ShareAuditContext& audit_context
+        )
             -> drogon::Task<Result<CreateShareResponse>>;
 
         /**
@@ -166,7 +180,11 @@ namespace disk::share {
          * @return drogon::Task<Result<CancelShareResponse>> 成功返回批量取消结果，失败返回错误
          */
         [[nodiscard]]
-        auto Cancel(const CancelShareRequest& request, uint64_t user_id)
+        auto Cancel(
+            const CancelShareRequest& request,
+            uint64_t user_id,
+            const ShareAuditContext& audit_context
+        )
             -> drogon::Task<Result<CancelShareResponse>>;
 
         /**
@@ -181,11 +199,11 @@ namespace disk::share {
          * - 增加访问次数
          *
          * @param request 访问分享请求
-         * @param ip_address 客户端IP地址
+         * @param audit_context 审计请求上下文
          * @return drogon::Task<Result<AccessShareResponse>> 成功返回分享令牌，失败返回错误
          */
         [[nodiscard]]
-        auto Access(const AccessShareRequest& request, const std::string& ip_address)
+        auto Access(const AccessShareRequest& request, const ShareAuditContext& audit_context)
             -> drogon::Task<Result<AccessShareResponse>>;
 
         /**
@@ -204,24 +222,6 @@ namespace disk::share {
         [[nodiscard]]
         auto Browse(const BrowseShareRequest& request, uint64_t share_id)
             -> drogon::Task<Result<BrowseShareResponse>>;
-
-        /**
-         * @brief 获取下载文件元数据
-         *
-         * 业务规则：
-         * - 验证分享令牌有效性
-         * - 验证权限（必须为 download）
-         * - 验证文件属于分享内容
-         * - 返回文件存储信息
-         * - 增加下载次数
-         *
-         * @param request 下载分享请求
-         * @param share_id 分享内部ID
-         * @return drogon::Task<Result<ShareFile>> 成功返回文件元数据，失败返回错误
-         */
-        [[nodiscard]]
-        auto DownloadMeta(const DownloadShareRequest& request, uint64_t share_id)
-            -> drogon::Task<Result<ShareFile>>;
 
         /**
          * @brief 获取下载文件完整信息（包含存储路径）
@@ -255,18 +255,14 @@ namespace disk::share {
             -> drogon::Task<Result<drogon_model::disk::Shares>>;
 
         /**
-         * @brief 增加下载次数
-         * @param share_id 分享内部ID
-         * @return drogon::Task<void>
+         * @brief 根据最终 HTTP 响应更新统计并写入下载审计
          */
-        auto IncrementDownloadCount(uint64_t share_id) -> drogon::Task<void>;
-
-        /**
-         * @brief 更新成功分享下载后的文件元数据
-         * @param file_id 文件ID
-         * @return drogon::Task<void>
-         */
-        auto UpdateFileDownloadMetadata(uint64_t file_id) -> drogon::Task<void>;
+        auto CompleteDownload(
+            const DownloadShareRequest& request,
+            uint64_t share_id,
+            const ShareDownloadOutcome& outcome,
+            const ShareAuditContext& audit_context
+        ) -> drogon::Task<void>;
 
     private:
         /**
@@ -348,6 +344,10 @@ namespace disk::share {
          */
         auto IncrementViewCount(uint64_t share_id) -> drogon::Task<void>;
 
+        auto IncrementDownloadCount(uint64_t share_id) -> drogon::Task<void>;
+
+        auto UpdateFileDownloadMetadata(uint64_t file_id) -> drogon::Task<void>;
+
         /**
          * @brief 更新分享的 updated_at 时间戳
          * @param share_id 分享内部ID
@@ -383,17 +383,31 @@ namespace disk::share {
          * @brief 记录失败的公开分享访问并构建统一错误
          * @param share_code 分享码
          * @param ip_address IP地址
-         * @return drogon::Task<ErrorInfo> 统一验证错误或超限错误
+         * @return drogon::Task<FailedShareAccessResult> 统一错误及失败计数状态
          */
+        struct FailedShareAccessResult {
+            ErrorInfo error;
+            uint64_t attempt_count{ 0 };
+            bool counter_available{ false };
+        };
+
         [[nodiscard]]
         auto HandleFailedShareAccess(const std::string& share_code, const std::string& ip_address) const
-            -> drogon::Task<ErrorInfo>;
+            -> drogon::Task<FailedShareAccessResult>;
+
+        auto RecordFailedShareAccess(
+            std::optional<uint64_t> share_id,
+            const std::string& share_code,
+            const FailedShareAccessResult& failure,
+            const ShareAuditContext& audit_context
+        ) const -> drogon::Task<void>;
 
     private:
-        drogon::orm::DbClientPtr m_db_client;                          ///< 数据库客户端
-        drogon::nosql::RedisClientPtr m_redis_client;                  ///< Redis客户端
+        drogon::orm::DbClientPtr m_db_client;                            ///< 数据库客户端
+        drogon::nosql::RedisClientPtr m_redis_client;                    ///< Redis客户端
         std::shared_ptr<disk::services::RedisService> m_redis_service{}; ///< Redis服务
-        std::string m_jwt_secret;                                      ///< JWT密钥
+        std::string m_jwt_secret;                                        ///< JWT密钥
+        ShareAuditService m_audit_service;                               ///< 分享审计服务
     };
 
-} ///< namespace disk::share
+} // namespace disk::share

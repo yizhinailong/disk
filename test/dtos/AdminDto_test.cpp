@@ -49,16 +49,20 @@ namespace {
 
     auto CreateQueryRequest(std::map<std::string, std::string> params) -> drogon::HttpRequestPtr {
         auto req = drogon::HttpRequest::newHttpRequest();
-        for (auto& [k, v] : params)
+        for (auto& [k, v] : params) {
             req->setParameter(k, v);
+        }
         return req;
     }
-} ///< namespace
+} // namespace
 
 /// ==================== ListUsersRequest Tests ====================
 
 TEST(ListUsersRequest, ValidParameters) {
-    auto req = CreateQueryRequest({{"page", "1"}, {"page_size", "20"}});
+    auto req = CreateQueryRequest({
+        {      "page",  "1" },
+        { "page_size", "20" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     ASSERT_TRUE(result.has_value()) << "Valid parameters should pass";
@@ -81,12 +85,12 @@ TEST(ListUsersRequest, DefaultPagination) {
 
 TEST(ListUsersRequest, WithAllFilters) {
     auto req = CreateQueryRequest({
-        {"page", "2"},
-        {"page_size", "50"},
-        {"username", "test"},
-        {"email", "t@e.com"},
-        {"status", "1"},
-        {"role", "0"},
+        {      "page",       "2" },
+        { "page_size",      "50" },
+        {  "username",    "test" },
+        {     "email", "t@e.com" },
+        {    "status",       "1" },
+        {      "role",       "0" },
     });
     auto result = ListUsersRequest::FromRequest(req);
 
@@ -104,7 +108,9 @@ TEST(ListUsersRequest, WithAllFilters) {
 }
 
 TEST(ListUsersRequest, InvalidPage_Zero) {
-    auto req = CreateQueryRequest({{"page", "0"}});
+    auto req = CreateQueryRequest({
+        { "page", "0" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "page=0 should fail";
@@ -114,7 +120,9 @@ TEST(ListUsersRequest, InvalidPage_Zero) {
 }
 
 TEST(ListUsersRequest, InvalidPage_Negative) {
-    auto req = CreateQueryRequest({{"page", "-1"}});
+    auto req = CreateQueryRequest({
+        { "page", "-1" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "page=-1 should fail";
@@ -124,7 +132,9 @@ TEST(ListUsersRequest, InvalidPage_Negative) {
 }
 
 TEST(ListUsersRequest, InvalidPage_NonNumeric) {
-    auto req = CreateQueryRequest({{"page", "abc"}});
+    auto req = CreateQueryRequest({
+        { "page", "abc" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "page=abc should fail";
@@ -134,7 +144,9 @@ TEST(ListUsersRequest, InvalidPage_NonNumeric) {
 }
 
 TEST(ListUsersRequest, InvalidPageSize_Zero) {
-    auto req = CreateQueryRequest({{"page_size", "0"}});
+    auto req = CreateQueryRequest({
+        { "page_size", "0" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "page_size=0 should fail";
@@ -144,7 +156,9 @@ TEST(ListUsersRequest, InvalidPageSize_Zero) {
 }
 
 TEST(ListUsersRequest, InvalidPageSize_Negative) {
-    auto req = CreateQueryRequest({{"page_size", "-5"}});
+    auto req = CreateQueryRequest({
+        { "page_size", "-5" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "page_size=-5 should fail";
@@ -154,7 +168,9 @@ TEST(ListUsersRequest, InvalidPageSize_Negative) {
 }
 
 TEST(ListUsersRequest, InvalidPageSize_TooLarge) {
-    auto req = CreateQueryRequest({{"page_size", "101"}});
+    auto req = CreateQueryRequest({
+        { "page_size", "101" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "page_size=101 should fail";
@@ -164,7 +180,9 @@ TEST(ListUsersRequest, InvalidPageSize_TooLarge) {
 }
 
 TEST(ListUsersRequest, InvalidPageSize_NonNumeric) {
-    auto req = CreateQueryRequest({{"page_size", "abc"}});
+    auto req = CreateQueryRequest({
+        { "page_size", "abc" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "page_size=abc should fail";
@@ -174,7 +192,9 @@ TEST(ListUsersRequest, InvalidPageSize_NonNumeric) {
 }
 
 TEST(ListUsersRequest, InvalidStatus_OutOfRange) {
-    auto req = CreateQueryRequest({{"status", "3"}});
+    auto req = CreateQueryRequest({
+        { "status", "3" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "status=3 should fail";
@@ -184,7 +204,9 @@ TEST(ListUsersRequest, InvalidStatus_OutOfRange) {
 }
 
 TEST(ListUsersRequest, InvalidStatus_Negative) {
-    auto req = CreateQueryRequest({{"status", "-1"}});
+    auto req = CreateQueryRequest({
+        { "status", "-1" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "status=-1 should fail";
@@ -194,7 +216,9 @@ TEST(ListUsersRequest, InvalidStatus_Negative) {
 }
 
 TEST(ListUsersRequest, InvalidStatus_NonNumeric) {
-    auto req = CreateQueryRequest({{"status", "abc"}});
+    auto req = CreateQueryRequest({
+        { "status", "abc" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "status=abc should fail";
@@ -204,7 +228,9 @@ TEST(ListUsersRequest, InvalidStatus_NonNumeric) {
 }
 
 TEST(ListUsersRequest, InvalidRole_OutOfRange) {
-    auto req = CreateQueryRequest({{"role", "2"}});
+    auto req = CreateQueryRequest({
+        { "role", "2" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "role=2 should fail";
@@ -214,7 +240,9 @@ TEST(ListUsersRequest, InvalidRole_OutOfRange) {
 }
 
 TEST(ListUsersRequest, InvalidRole_Negative) {
-    auto req = CreateQueryRequest({{"role", "-1"}});
+    auto req = CreateQueryRequest({
+        { "role", "-1" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "role=-1 should fail";
@@ -224,7 +252,9 @@ TEST(ListUsersRequest, InvalidRole_Negative) {
 }
 
 TEST(ListUsersRequest, InvalidRole_NonNumeric) {
-    auto req = CreateQueryRequest({{"role", "abc"}});
+    auto req = CreateQueryRequest({
+        { "role", "abc" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "role=abc should fail";
@@ -234,7 +264,9 @@ TEST(ListUsersRequest, InvalidRole_NonNumeric) {
 }
 
 TEST(ListUsersRequest, Boundary_PageSize_100) {
-    auto req = CreateQueryRequest({{"page_size", "100"}});
+    auto req = CreateQueryRequest({
+        { "page_size", "100" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     ASSERT_TRUE(result.has_value()) << "page_size=100 should pass (max allowed)";
@@ -242,7 +274,9 @@ TEST(ListUsersRequest, Boundary_PageSize_100) {
 }
 
 TEST(ListUsersRequest, Boundary_PageSize_1) {
-    auto req = CreateQueryRequest({{"page_size", "1"}});
+    auto req = CreateQueryRequest({
+        { "page_size", "1" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     ASSERT_TRUE(result.has_value()) << "page_size=1 should pass (min allowed)";
@@ -252,7 +286,9 @@ TEST(ListUsersRequest, Boundary_PageSize_1) {
 TEST(ListUsersRequest, ValidStatus_BoundaryValues) {
     /// status 0 (disabled)
     {
-        auto req = CreateQueryRequest({{"status", "0"}});
+        auto req = CreateQueryRequest({
+            { "status", "0" }
+        });
         auto result = ListUsersRequest::FromRequest(req);
         ASSERT_TRUE(result.has_value());
         ASSERT_TRUE(result->status.has_value());
@@ -260,7 +296,9 @@ TEST(ListUsersRequest, ValidStatus_BoundaryValues) {
     }
     /// status 1 (active)
     {
-        auto req = CreateQueryRequest({{"status", "1"}});
+        auto req = CreateQueryRequest({
+            { "status", "1" }
+        });
         auto result = ListUsersRequest::FromRequest(req);
         ASSERT_TRUE(result.has_value());
         ASSERT_TRUE(result->status.has_value());
@@ -268,7 +306,9 @@ TEST(ListUsersRequest, ValidStatus_BoundaryValues) {
     }
     /// status 2 (locked)
     {
-        auto req = CreateQueryRequest({{"status", "2"}});
+        auto req = CreateQueryRequest({
+            { "status", "2" }
+        });
         auto result = ListUsersRequest::FromRequest(req);
         ASSERT_TRUE(result.has_value());
         ASSERT_TRUE(result->status.has_value());
@@ -279,7 +319,9 @@ TEST(ListUsersRequest, ValidStatus_BoundaryValues) {
 TEST(ListUsersRequest, ValidRole_BoundaryValues) {
     /// role 0 (user)
     {
-        auto req = CreateQueryRequest({{"role", "0"}});
+        auto req = CreateQueryRequest({
+            { "role", "0" }
+        });
         auto result = ListUsersRequest::FromRequest(req);
         ASSERT_TRUE(result.has_value());
         ASSERT_TRUE(result->role.has_value());
@@ -287,7 +329,9 @@ TEST(ListUsersRequest, ValidRole_BoundaryValues) {
     }
     /// role 1 (admin)
     {
-        auto req = CreateQueryRequest({{"role", "1"}});
+        auto req = CreateQueryRequest({
+            { "role", "1" }
+        });
         auto result = ListUsersRequest::FromRequest(req);
         ASSERT_TRUE(result.has_value());
         ASSERT_TRUE(result->role.has_value());
@@ -296,7 +340,9 @@ TEST(ListUsersRequest, ValidRole_BoundaryValues) {
 }
 
 TEST(ListUsersRequest, PartialParameters_UsernameOnly) {
-    auto req = CreateQueryRequest({{"username", "alice"}});
+    auto req = CreateQueryRequest({
+        { "username", "alice" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     ASSERT_TRUE(result.has_value());
@@ -307,7 +353,9 @@ TEST(ListUsersRequest, PartialParameters_UsernameOnly) {
 }
 
 TEST(ListUsersRequest, PageWithTrailingChars) {
-    auto req = CreateQueryRequest({{"page", "1abc"}});
+    auto req = CreateQueryRequest({
+        { "page", "1abc" }
+    });
     auto result = ListUsersRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "page with trailing chars should fail";
@@ -620,10 +668,11 @@ TEST(ChangeAvailableSpaceRequest, Overflow) {
     }
 }
 
-
-
 TEST(ListSharesRequest, ValidParameters) {
-    auto req = CreateQueryRequest({{"page", "1"}, {"page_size", "20"}});
+    auto req = CreateQueryRequest({
+        {      "page",  "1" },
+        { "page_size", "20" }
+    });
     auto result = ListSharesRequest::FromRequest(req);
 
     ASSERT_TRUE(result.has_value()) << "Valid parameters should pass";
@@ -645,9 +694,9 @@ TEST(ListSharesRequest, DefaultPagination) {
 
 TEST(ListSharesRequest, WithFilters) {
     auto req = CreateQueryRequest({
-        {"status", "1"},
-        {"user_id", "42"},
-        {"username", "alice"},
+        {   "status",     "1" },
+        {  "user_id",    "42" },
+        { "username", "alice" },
     });
     auto result = ListSharesRequest::FromRequest(req);
 
@@ -661,7 +710,9 @@ TEST(ListSharesRequest, WithFilters) {
 }
 
 TEST(ListSharesRequest, InvalidStatus_OutOfRange) {
-    auto req = CreateQueryRequest({{"status", "3"}});
+    auto req = CreateQueryRequest({
+        { "status", "3" }
+    });
     auto result = ListSharesRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "status=3 should fail";
@@ -671,7 +722,9 @@ TEST(ListSharesRequest, InvalidStatus_OutOfRange) {
 }
 
 TEST(ListSharesRequest, InvalidStatus_Negative) {
-    auto req = CreateQueryRequest({{"status", "-1"}});
+    auto req = CreateQueryRequest({
+        { "status", "-1" }
+    });
     auto result = ListSharesRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "status=-1 should fail";
@@ -681,7 +734,9 @@ TEST(ListSharesRequest, InvalidStatus_Negative) {
 }
 
 TEST(ListSharesRequest, InvalidStatus_NonNumeric) {
-    auto req = CreateQueryRequest({{"status", "abc"}});
+    auto req = CreateQueryRequest({
+        { "status", "abc" }
+    });
     auto result = ListSharesRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "status=abc should fail";
@@ -691,7 +746,9 @@ TEST(ListSharesRequest, InvalidStatus_NonNumeric) {
 }
 
 TEST(ListSharesRequest, InvalidUserId_NonNumeric) {
-    auto req = CreateQueryRequest({{"user_id", "abc"}});
+    auto req = CreateQueryRequest({
+        { "user_id", "abc" }
+    });
     auto result = ListSharesRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "user_id=abc should fail";
@@ -701,7 +758,9 @@ TEST(ListSharesRequest, InvalidUserId_NonNumeric) {
 }
 
 TEST(ListSharesRequest, InvalidPage_Zero) {
-    auto req = CreateQueryRequest({{"page", "0"}});
+    auto req = CreateQueryRequest({
+        { "page", "0" }
+    });
     auto result = ListSharesRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "page=0 should fail";
@@ -711,7 +770,9 @@ TEST(ListSharesRequest, InvalidPage_Zero) {
 }
 
 TEST(ListSharesRequest, InvalidPageSize_TooLarge) {
-    auto req = CreateQueryRequest({{"page_size", "101"}});
+    auto req = CreateQueryRequest({
+        { "page_size", "101" }
+    });
     auto result = ListSharesRequest::FromRequest(req);
 
     EXPECT_FALSE(result.has_value()) << "page_size=101 should fail";
@@ -721,7 +782,9 @@ TEST(ListSharesRequest, InvalidPageSize_TooLarge) {
 }
 
 TEST(ListSharesRequest, Boundary_PageSize_100) {
-    auto req = CreateQueryRequest({{"page_size", "100"}});
+    auto req = CreateQueryRequest({
+        { "page_size", "100" }
+    });
     auto result = ListSharesRequest::FromRequest(req);
 
     ASSERT_TRUE(result.has_value()) << "page_size=100 should pass";
@@ -730,7 +793,9 @@ TEST(ListSharesRequest, Boundary_PageSize_100) {
 
 TEST(ListSharesRequest, ValidStatus_AllValues) {
     for (int s = 0; s <= 2; ++s) {
-        auto req = CreateQueryRequest({{"status", std::to_string(s)}});
+        auto req = CreateQueryRequest({
+            { "status", std::to_string(s) }
+        });
         auto result = ListSharesRequest::FromRequest(req);
         ASSERT_TRUE(result.has_value()) << "status=" << s << " should pass";
         ASSERT_TRUE(result->status.has_value());
@@ -739,7 +804,9 @@ TEST(ListSharesRequest, ValidStatus_AllValues) {
 }
 
 TEST(ListSharesRequest, UserId_LargeValue) {
-    auto req = CreateQueryRequest({{"user_id", "18446744073709551615"}});
+    auto req = CreateQueryRequest({
+        { "user_id", "18446744073709551615" }
+    });
     auto result = ListSharesRequest::FromRequest(req);
 
     ASSERT_TRUE(result.has_value()) << "Large user_id should pass";
@@ -1113,6 +1180,21 @@ TEST(ShareListResponse, EmptyItems) {
     EXPECT_TRUE(json["items"].isArray());
     EXPECT_EQ(json["items"].size(), 0u);
     EXPECT_EQ(json["pagination"]["total"].asInt(), 0);
+}
+
+TEST(AdminLogDetailResponse, AnonymousActorSerializesAsNull) {
+    AdminLogDetailResponse response;
+    response.id = 42;
+    response.user_id = std::nullopt;
+    response.action = "share_access";
+    response.target_type = "share";
+    response.ip_address = "127.0.0.1";
+    response.created_at = "2026-07-14 12:00:00";
+
+    const auto json = response.ToJson();
+
+    EXPECT_TRUE(json["user_id"].isNull());
+    EXPECT_EQ(json["action"].asString(), "share_access");
 }
 
 /// ==================== Error Code Contract Tests ====================

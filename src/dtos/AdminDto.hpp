@@ -93,14 +93,18 @@ namespace disk::admin {
 
             /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page", 1);
-            if (!page_result) return std::unexpected(page_result.error());
+            if (!page_result) {
+                return std::unexpected(page_result.error());
+            }
             if (page_result->has_value()) {
                 request.page = **page_result;
             }
 
             /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
-            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (!page_size_result) {
+                return std::unexpected(page_size_result.error());
+            }
             if (page_size_result->has_value()) {
                 request.page_size = **page_size_result;
             }
@@ -176,11 +180,11 @@ namespace disk::admin {
             }
 
             Logger::Debug() << "Parsed list users request: page=" << request.page
-                      << ", page_size=" << request.page_size
-                      << ", username=" << (request.username.has_value() ? "set" : "null")
-                      << ", email=" << (request.email.has_value() ? "set" : "null")
-                      << ", status=" << (request.status.has_value() ? std::to_string(*request.status) : "null")
-                      << ", role=" << (request.role.has_value() ? std::to_string(*request.role) : "null");
+                            << ", page_size=" << request.page_size
+                            << ", username=" << (request.username.has_value() ? "set" : "null")
+                            << ", email=" << (request.email.has_value() ? "set" : "null")
+                            << ", status=" << (request.status.has_value() ? std::to_string(*request.status) : "null")
+                            << ", role=" << (request.role.has_value() ? std::to_string(*request.role) : "null");
 
             return request;
         }
@@ -204,11 +208,15 @@ namespace disk::admin {
             Logger::Debug() << "Start parsing change status request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             auto status_result = RequireInt(json, "status");
-            if (!status_result) return std::unexpected(status_result.error());
+            if (!status_result) {
+                return std::unexpected(status_result.error());
+            }
 
             if (*status_result < 0 || *status_result > 2) {
                 Logger::Warn() << "Parameter 'status' invalid value: " << *status_result;
@@ -244,11 +252,15 @@ namespace disk::admin {
             Logger::Debug() << "Start parsing change role request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             auto role_result = RequireInt(json, "role");
-            if (!role_result) return std::unexpected(role_result.error());
+            if (!role_result) {
+                return std::unexpected(role_result.error());
+            }
 
             if (*role_result < 0 || *role_result > 1) {
                 Logger::Warn() << "Parameter 'role' invalid value: " << *role_result;
@@ -285,11 +297,15 @@ namespace disk::admin {
             Logger::Debug() << "Start parsing change available space request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             auto space_result = RequireUInt64(json, "available_space_g");
-            if (!space_result) return std::unexpected(space_result.error());
+            if (!space_result) {
+                return std::unexpected(space_result.error());
+            }
 
             if (*space_result > std::numeric_limits<uint64_t>::max() / BytesPerG) {
                 Logger::Warn() << "Parameter 'available_space_g' is too large: " << *space_result;
@@ -303,12 +319,11 @@ namespace disk::admin {
             request.available_space_g = *space_result;
 
             Logger::Debug() << "Parsed change available space request: available_space_g="
-                      << request.available_space_g;
+                            << request.available_space_g;
 
             return request;
         }
     };
-
 
     struct ListSharesRequest : DtoBase<ListSharesRequest> {
         int page{ 1 };
@@ -326,14 +341,18 @@ namespace disk::admin {
 
             /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page", 1);
-            if (!page_result) return std::unexpected(page_result.error());
+            if (!page_result) {
+                return std::unexpected(page_result.error());
+            }
             if (page_result->has_value()) {
                 request.page = **page_result;
             }
 
             /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
-            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (!page_size_result) {
+                return std::unexpected(page_size_result.error());
+            }
             if (page_size_result->has_value()) {
                 request.page_size = **page_size_result;
             }
@@ -369,7 +388,9 @@ namespace disk::admin {
 
             /// 解析可选参数 user_id
             auto user_id_result = QueryUInt64(req, "user_id");
-            if (!user_id_result) return std::unexpected(user_id_result.error());
+            if (!user_id_result) {
+                return std::unexpected(user_id_result.error());
+            }
             request.user_id = *user_id_result;
 
             /// 解析可选参数 username
@@ -379,10 +400,10 @@ namespace disk::admin {
             }
 
             Logger::Debug() << "Parsed list shares request: page=" << request.page
-                      << ", page_size=" << request.page_size
-                      << ", status=" << (request.status.has_value() ? std::to_string(*request.status) : "null")
-                      << ", user_id=" << (request.user_id.has_value() ? std::to_string(*request.user_id) : "null")
-                      << ", username=" << (request.username.has_value() ? *request.username : "null");
+                            << ", page_size=" << request.page_size
+                            << ", status=" << (request.status.has_value() ? std::to_string(*request.status) : "null")
+                            << ", user_id=" << (request.user_id.has_value() ? std::to_string(*request.user_id) : "null")
+                            << ", username=" << (request.username.has_value() ? *request.username : "null");
 
             return request;
         }
@@ -417,14 +438,18 @@ namespace disk::admin {
 
             /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page", 1);
-            if (!page_result) return std::unexpected(page_result.error());
+            if (!page_result) {
+                return std::unexpected(page_result.error());
+            }
             if (page_result->has_value()) {
                 request.page = **page_result;
             }
 
             /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
-            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (!page_size_result) {
+                return std::unexpected(page_size_result.error());
+            }
             if (page_size_result->has_value()) {
                 request.page_size = **page_size_result;
             }
@@ -448,10 +473,10 @@ namespace disk::admin {
             }
 
             Logger::Debug() << "Parsed admin log list request: page=" << request.page
-                      << ", page_size=" << request.page_size
-                      << ", action=" << (request.action.has_value() ? *request.action : "null")
-                      << ", start_date=" << (request.start_date.has_value() ? *request.start_date : "null")
-                      << ", end_date=" << (request.end_date.has_value() ? *request.end_date : "null");
+                            << ", page_size=" << request.page_size
+                            << ", action=" << (request.action.has_value() ? *request.action : "null")
+                            << ", start_date=" << (request.start_date.has_value() ? *request.start_date : "null")
+                            << ", end_date=" << (request.end_date.has_value() ? *request.end_date : "null");
 
             return request;
         }
@@ -639,7 +664,7 @@ namespace disk::admin {
      */
     struct AdminLogDetailResponse : DtoBase<AdminLogDetailResponse> {
         uint64_t id;
-        uint64_t user_id;
+        std::optional<uint64_t> user_id;
         std::string action;
         std::string target_type;
         std::optional<uint64_t> target_id;
@@ -652,7 +677,7 @@ namespace disk::admin {
         auto ToJson() const -> Json::Value {
             Json::Value json;
             SetField(json, "id", id);
-            SetField(json, "user_id", user_id);
+            SetOptionalOrNull(json, "user_id", user_id);
             SetField(json, "action", action);
             SetField(json, "target_type", target_type);
             SetOptionalOrNull(json, "target_id", target_id);
@@ -683,4 +708,4 @@ namespace disk::admin {
         }
     };
 
-} ///< namespace disk::admin
+} // namespace disk::admin

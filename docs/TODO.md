@@ -23,15 +23,8 @@
 ## P0 - Share Security Contract Closure
 
 The Share Token scope and live-state contract is reconciled in API section 9.4.2, with
-the evidence audit recorded in section 9.4.5. The remaining open checklist gaps are
-share-domain audit events and operation-specific rate limits.
-
-### P0.3 Add share-domain audit events
-
-- [ ] Define one share audit boundary for `share_create`, `share_access`, `share_pwd_fail`, `share_download`, and `share_cancel`; do not duplicate SQL across controllers.
-- [ ] Reconcile `operation_logs.user_id NOT NULL` with visitor events that have no authenticated owner, including the schema migration and retention/privacy rules.
-- [ ] Record the fields required by API section 9.4.4 without logging passwords or raw Share Tokens.
-- [ ] Add database-backed tests for successful events, rejected access, batch cancellation, and audit-write failure policy.
+the evidence audit recorded in section 9.4.5. The remaining open checklist gap is
+operation-specific rate limits.
 
 ### P0.4 Separate sensitive share-operation rate limits
 

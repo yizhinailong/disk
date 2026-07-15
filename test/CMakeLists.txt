@@ -31,6 +31,7 @@ set(TEST_SOURCES
     services/ShareService_test.cpp
     services/ShareServiceBatch_test.cpp
     services/ShareServiceQuery_test.cpp
+    services/ShareAuditService_test.cpp
     services/TokenService_test.cpp
     services/TokenServiceRevocation_test.cpp
     services/TrashService_test.cpp
@@ -77,6 +78,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ContentService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/QuotaService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/ShareAuditService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TrashQuery.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TrashService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/UploadLifecycleService.cpp
@@ -372,6 +374,19 @@ set_tests_properties(
     PROPERTIES
     RUN_SERIAL TRUE
     TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME ShareAuditIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_share_audit.py"
+)
+
+set_tests_properties(
+    ShareAuditIntegration
+    PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 180
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 

@@ -21,11 +21,6 @@ namespace disk::share {
         /// 说明：
         /// 本文件固化 ShareService 各路径的查询数量，验证优化后的常量查询模型。
 
-        /// DownloadMeta: 单次 JOIN 查询（share_files JOIN files WHERE share_id + file_id）
-        [[nodiscard]] constexpr auto EstimateDownloadMetaQueryCount() -> std::size_t {
-            return 1U;
-        }
-
         /// GetDownloadInfo: 单次 4 表 JOIN 查询（shares + share_files + files + file_contents）
         [[nodiscard]] constexpr auto EstimateGetDownloadInfoQueryCount() -> std::size_t {
             return 1U;
@@ -42,10 +37,6 @@ namespace disk::share {
         }
 
         class ShareServiceDownloadQueryTest : public ::testing::Test {};
-
-        TEST_F(ShareServiceDownloadQueryTest, DownloadMetaQueryCountIsConstantOne) {
-            EXPECT_EQ(EstimateDownloadMetaQueryCount(), 1U);
-        }
 
         TEST_F(ShareServiceDownloadQueryTest, GetDownloadInfoQueryCountIsConstantOne) {
             EXPECT_EQ(EstimateGetDownloadInfoQueryCount(), 1U);
@@ -70,7 +61,7 @@ namespace disk::share {
 
         TEST_F(ShareServiceDownloadQueryTest, FileOutsideShareStillReturnsFileNotFound) {
             /// 验证 FileNotFound 错误码在 ShareDto 上下文中稳定
-            /// DownloadMeta/GetDownloadInfo 的 JOIN 查询对不存在的 share_file 组合返回空集 → FileNotFound
+            /// GetDownloadInfo 的 JOIN 查询对不存在的 share_file 组合返回空集 → FileNotFound
             auto error = ErrorInfo(ErrorCode::FileNotFound, "File not in share");
             EXPECT_EQ(error.code, ErrorCode::FileNotFound);
         }
@@ -148,25 +139,5 @@ namespace disk::share {
             SUCCEED() << "测试已跳过：需要数据库环境";
         }
 
-        TEST_F(
-            ShareServiceQueryBaselineTest,
-            DISABLED_DbRequiredDownloadMetaJoinQueryBaselineAnalysis
-        ) {
-            /// 【需要 MySQL 环境】DownloadMeta JOIN 查询基线观测
-            /// 此测试仅用于记录优化后行为，不在单元测试环境执行。
-            ///
-            /// 代码路径（优化后）：
-            /// 单次 2 表 JOIN 查询：share_files JOIN files WHERE share_id + file_id
-            /// 总查询次数 = 1（与文件数无关）
-            ///
-            /// 建议 DB 验证步骤：
-            /// - 准备一个 share，挂载 N 个文件
-            /// - 开启 MySQL general log
-            /// - 调用 DownloadMeta 请求其中一个文件
-            /// - 验证只执行了 1 条 SELECT 语句
-
-            SUCCEED() << "测试已跳过：需要数据库环境";
-        }
-
-    } ///< namespace
-} ///< namespace disk::share
+    } // namespace
+} // namespace disk::share

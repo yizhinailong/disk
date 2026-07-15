@@ -314,7 +314,7 @@ COMMENT ON COLUMN share_files.created_at IS '创建时间';
 -- 操作日志表
 CREATE TABLE operation_logs (
     id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL,
+    user_id BIGINT DEFAULT NULL,
     action VARCHAR(32) NOT NULL,
     target_type VARCHAR(32) DEFAULT NULL,
     target_id BIGINT DEFAULT NULL,
@@ -323,7 +323,7 @@ CREATE TABLE operation_logs (
     ip_address VARCHAR(45) NOT NULL,
     user_agent VARCHAR(512) DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_operation_logs_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    CONSTRAINT fk_operation_logs_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_operation_logs_user_id ON operation_logs (user_id);
@@ -333,7 +333,7 @@ CREATE INDEX idx_operation_logs_target ON operation_logs (target_type, target_id
 
 COMMENT ON TABLE operation_logs IS '操作日志表';
 COMMENT ON COLUMN operation_logs.id IS '日志ID';
-COMMENT ON COLUMN operation_logs.user_id IS '用户ID';
+COMMENT ON COLUMN operation_logs.user_id IS '操作者用户ID，公开访客或已删除用户为NULL';
 COMMENT ON COLUMN operation_logs.action IS '操作类型';
 COMMENT ON COLUMN operation_logs.target_type IS '目标类型';
 COMMENT ON COLUMN operation_logs.target_id IS '目标ID';

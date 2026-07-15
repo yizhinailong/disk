@@ -9,8 +9,6 @@
 
 #include "services/ShareService.hpp"
 
-#include "services/ContentService.hpp"
-
 #include <algorithm>
 #include <chrono>
 #include <limits>
@@ -27,6 +25,7 @@
 #include "models/Folders.hpp"
 #include "models/ShareFiles.hpp"
 #include "models/Shares.hpp"
+#include "services/ContentService.hpp"
 #include "utils/BatchUtils.hpp"
 #include "utils/HashUtil.hpp"
 #include "utils/RedisKeyPrefix.hpp"
@@ -80,7 +79,7 @@ namespace disk::share {
             bind_parameters(binder);
             co_return co_await drogon::orm::internal::SqlAwaiter(std::move(binder));
         }
-    } ///< namespace
+    } // namespace
 
     /// ==================== 构造函数 ====================
 
@@ -92,7 +91,8 @@ namespace disk::share {
         : m_db_client(std::move(db_client)),
           m_redis_client(std::move(redis_client)),
           m_redis_service(disk::services::RedisService::GetInstance()),
-          m_jwt_secret(std::move(jwt_secret)) {
+          m_jwt_secret(std::move(jwt_secret)),
+          m_audit_service(m_db_client) {
         /// 初始化 RedisService 单例（如果尚未初始化）
         disk::services::RedisService::Initialize(m_redis_client);
         Logger::Debug() << "ShareService initialization completed";
@@ -100,11 +100,15 @@ namespace disk::share {
 
     /// ==================== 公共方法 ====================
 
-    auto ShareService::Create(CreateShareRequest request, uint64_t user_id)
+    auto ShareService::Create(
+        CreateShareRequest request,
+        uint64_t user_id,
+        const ShareAuditContext& audit_context
+    )
         -> drogon::Task<Result<CreateShareResponse>> {
         Logger::Info() << "Creating share: user_id=" << user_id
-                 << ", file_ids.size()=" << request.file_ids.size()
-                 << ", folder_ids.size()=" << request.folder_ids.size();
+                       << ", file_ids.size()=" << request.file_ids.size()
+                       << ", folder_ids.size()=" << request.folder_ids.size();
 
         /// 1. 验证文件和文件夹所有权
         std::vector<Files> files;
@@ -238,6 +242,9 @@ namespace disk::share {
             );
         }
 
+        // Commit and release the transaction connection before the fail-open audit insert.
+        transaction.reset();
+
         /// 7. 构建响应
         CreateShareResponse response;
         response.share_id = share_code;
@@ -248,6 +255,17 @@ namespace disk::share {
         response.permission = SharePermissionToString(request.permission);
         response.expires_at = expires_at.has_value() ? FormatDateTime(*expires_at) : "";
         response.created_at = FormatDateTime(created_share.getValueOfCreatedAt());
+
+        co_await m_audit_service.RecordCreate(ShareCreateAuditEvent{
+            .actor_user_id = user_id,
+            .share_id = static_cast<uint64_t>(created_share.getValueOfId()),
+            .share_code = share_code,
+            .file_ids = request.file_ids,
+            .folder_ids = request.folder_ids,
+            .permission = response.permission,
+            .expires_at = response.expires_at.empty() ? std::nullopt : std::optional<std::string>{ response.expires_at },
+            .context = audit_context,
+        });
 
         Logger::Info() << "Share created successfully: share_code=" << share_code;
         co_return response;
@@ -377,7 +395,7 @@ namespace disk::share {
     auto ShareService::Detail(const ShareDetailRequest& request, uint64_t user_id)
         -> drogon::Task<Result<ShareDetailResponse>> {
         Logger::Debug() << "Getting share details: share_id=" << request.share_id
-                  << ", user_id=" << user_id;
+                        << ", user_id=" << user_id;
 
         /// 验证分享所有权
         auto share_result = co_await ValidateShareOwnership(request.share_id, user_id);
@@ -433,7 +451,7 @@ namespace disk::share {
     auto ShareService::Update(const UpdateShareRequest& request, uint64_t user_id)
         -> drogon::Task<Result<UpdateShareResponse>> {
         Logger::Info() << "Updating share settings: share_id=" << request.share_id
-                 << ", user_id=" << user_id;
+                       << ", user_id=" << user_id;
 
         /// 验证分享所有权
         auto share_result = co_await ValidateShareOwnership(request.share_id, user_id);
@@ -509,10 +527,14 @@ namespace disk::share {
         co_return response;
     }
 
-    auto ShareService::Cancel(const CancelShareRequest& request, uint64_t user_id)
+    auto ShareService::Cancel(
+        const CancelShareRequest& request,
+        uint64_t user_id,
+        const ShareAuditContext& audit_context
+    )
         -> drogon::Task<Result<CancelShareResponse>> {
         Logger::Info() << "Batch cancel shares: user_id=" << user_id
-                 << ", share_ids.size()=" << request.share_ids.size();
+                       << ", share_ids.size()=" << request.share_ids.size();
 
         CancelShareResponse response;
         response.summary.total = static_cast<int>(request.share_ids.size());
@@ -524,23 +546,26 @@ namespace disk::share {
                 std::numeric_limits<size_t>::max()
             )) {
             Logger::Info() << "Batch cancel shares completed: succeeded=" << response.summary.succeeded
-                     << ", failed=" << response.summary.failed;
+                           << ", failed=" << response.summary.failed;
             co_return response;
         }
 
         auto chunks = BatchUtils::Chunk(request.share_ids, DEFAULT_BATCH_CHUNK_SIZE);
 
         for (const auto& chunk : chunks) {
+            const auto chunk_result_start = response.results.size();
             auto placeholders = BatchUtils::BuildInPlaceholders(chunk);
             auto select_sql =
                 "SELECT id, share_code, user_id, status, updated_at FROM shares WHERE share_code IN (" + placeholders + ")";
 
             struct ShareRow {
+                uint64_t id;
                 uint64_t user_id;
                 int8_t status;
             };
 
             std::unordered_map<std::string, ShareRow> share_map;
+            bool select_failed = false;
             try {
                 auto select_rows = co_await m_db_client->execSqlCoro(select_sql, chunk);
                 share_map.reserve(select_rows.size());
@@ -548,7 +573,8 @@ namespace disk::share {
                     auto share_code = row["share_code"].as<std::string>();
                     share_map.emplace(
                         std::move(share_code),
-                        ShareRow{ .user_id = row["user_id"].as<uint64_t>(),
+                        ShareRow{ .id = row["id"].as<uint64_t>(),
+                                  .user_id = row["user_id"].as<uint64_t>(),
                                   .status = row["status"].as<int8_t>() }
                     );
                 }
@@ -564,6 +590,22 @@ namespace disk::share {
                                                      .reason = "internal_error" };
                     response.results.push_back(result);
                     response.summary.failed++;
+                }
+                select_failed = true;
+            }
+
+            if (select_failed) {
+                for (auto result_it = response.results.begin() + static_cast<std::ptrdiff_t>(chunk_result_start);
+                     result_it != response.results.end();
+                     ++result_it) {
+                    co_await m_audit_service.RecordCancel(ShareCancelAuditEvent{
+                        .actor_user_id = user_id,
+                        .share_id = std::nullopt,
+                        .share_code = result_it->share_id,
+                        .success = false,
+                        .result = "internal_error",
+                        .context = audit_context,
+                    });
                 }
                 continue;
             }
@@ -640,25 +682,48 @@ namespace disk::share {
                 } catch (const DrogonDbException& e) {
                     Logger::Error() << "Failed to cancel share: " << e.base().what();
 
-                    for (auto& result : response.results) {
+                    for (auto result_it = response.results.begin() + static_cast<std::ptrdiff_t>(chunk_result_start);
+                         result_it != response.results.end();
+                         ++result_it) {
+                        auto& result = *result_it;
                         if (result.status == "success" && valid_codes_to_cancel.contains(result.share_id) && result.error == std::nullopt) {
                             result.status = "failed";
                             result.error = CancelShareError{ .code = static_cast<int>(ErrorCode::InternalError),
                                                              .message = "Operation failed",
                                                              .reason = "internal_error" };
+                            response.summary.succeeded--;
+                            response.summary.failed++;
                         }
                     }
                 }
             }
+
+            for (auto result_it = response.results.begin() + static_cast<std::ptrdiff_t>(chunk_result_start);
+                 result_it != response.results.end();
+                 ++result_it) {
+                const auto share_it = share_map.find(result_it->share_id);
+                const auto internal_share_id = share_it == share_map.end() ? std::optional<uint64_t>{} : std::optional<uint64_t>{ share_it->second.id };
+                co_await m_audit_service.RecordCancel(ShareCancelAuditEvent{
+                    .actor_user_id = user_id,
+                    .share_id = internal_share_id,
+                    .share_code = result_it->share_id,
+                    .success = result_it->status == "success",
+                    .result = result_it->error.has_value() ? result_it->error->reason : std::string("success"),
+                    .context = audit_context,
+                });
+            }
         }
 
         Logger::Info() << "Batch cancel shares completed: succeeded=" << response.summary.succeeded
-                 << ", failed=" << response.summary.failed;
+                       << ", failed=" << response.summary.failed;
 
         co_return response;
     }
 
-    auto ShareService::Access(const AccessShareRequest& request, const std::string& ip_address)
+    auto ShareService::Access(
+        const AccessShareRequest& request,
+        const ShareAuditContext& audit_context
+    )
         -> drogon::Task<Result<AccessShareResponse>> {
         Logger::Info() << "Verifying share access: share_id=" << request.share_id;
 
@@ -666,16 +731,31 @@ namespace disk::share {
         auto share_result = co_await FindShareByCode(request.share_id);
         if (!share_result) {
             if (share_result.error().code == ErrorCode::ShareNotFound) {
-                co_return std::unexpected(
-                    co_await HandleFailedShareAccess(request.share_id, ip_address)
+                auto failure = co_await HandleFailedShareAccess(
+                    request.share_id,
+                    audit_context.ip_address
                 );
+                co_await RecordFailedShareAccess(
+                    std::nullopt,
+                    request.share_id,
+                    failure,
+                    audit_context
+                );
+                co_return std::unexpected(failure.error);
             }
             co_return std::unexpected(share_result.error());
         }
         const auto& share = *share_result;
 
         /// 验证分享状态
-        if (!IsShareActive(share)) {
+        if (share.getValueOfStatus() != static_cast<int8_t>(ShareStatus::Active)) {
+            co_await m_audit_service.RecordAccess(ShareAccessAuditEvent{
+                .share_id = share.getValueOfId(),
+                .share_code = request.share_id,
+                .success = false,
+                .result = "cancelled",
+                .context = audit_context,
+            });
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ShareExpired, "Share has been cancelled")
             );
@@ -683,6 +763,13 @@ namespace disk::share {
 
         /// 验证是否过期
         if (share.getExpiresAt() != nullptr && IsShareExpired(share)) {
+            co_await m_audit_service.RecordAccess(ShareAccessAuditEvent{
+                .share_id = share.getValueOfId(),
+                .share_code = request.share_id,
+                .success = false,
+                .result = "expired",
+                .context = audit_context,
+            });
             co_return std::unexpected(ErrorInfo(ErrorCode::ShareExpired, "Share has expired"));
         }
 
@@ -690,9 +777,17 @@ namespace disk::share {
         if (share.getPasswordHash() != nullptr) {
             if (!request.password.has_value() || request.password->empty() ||
                 !VerifyPassword(share, *request.password)) {
-                co_return std::unexpected(
-                    co_await HandleFailedShareAccess(request.share_id, ip_address)
+                auto failure = co_await HandleFailedShareAccess(
+                    request.share_id,
+                    audit_context.ip_address
                 );
+                co_await RecordFailedShareAccess(
+                    share.getValueOfId(),
+                    request.share_id,
+                    failure,
+                    audit_context
+                );
+                co_return std::unexpected(failure.error);
             }
         }
         auto token_result = services::TokenService::GenerateShareToken(
@@ -702,6 +797,13 @@ namespace disk::share {
             share.getValueOfPermission()
         );
         if (!token_result) {
+            co_await m_audit_service.RecordAccess(ShareAccessAuditEvent{
+                .share_id = share.getValueOfId(),
+                .share_code = request.share_id,
+                .success = false,
+                .result = "token_generation_failed",
+                .context = audit_context,
+            });
             co_return std::unexpected(token_result.error());
         }
 
@@ -718,6 +820,14 @@ namespace disk::share {
         response.permission = share.getValueOfPermission();
         response.files = share_files;
 
+        co_await m_audit_service.RecordAccess(ShareAccessAuditEvent{
+            .share_id = share.getValueOfId(),
+            .share_code = request.share_id,
+            .success = true,
+            .result = "success",
+            .context = audit_context,
+        });
+
         Logger::Info() << "Share access verified successfully: share_id=" << request.share_id;
         co_return response;
     }
@@ -725,7 +835,7 @@ namespace disk::share {
     auto ShareService::Browse(const BrowseShareRequest& request, uint64_t share_id)
         -> drogon::Task<Result<BrowseShareResponse>> {
         Logger::Debug() << "Browsing share content: share_id=" << request.share_id
-                  << ", internal_share_id=" << share_id;
+                        << ", internal_share_id=" << share_id;
 
         auto active_result = co_await ValidateShareActive(share_id);
         if (!active_result) {
@@ -823,59 +933,10 @@ namespace disk::share {
         co_return response;
     }
 
-    auto ShareService::DownloadMeta(const DownloadShareRequest& request, uint64_t share_id)
-        -> drogon::Task<Result<ShareFile>> {
-        Logger::Debug() << "Getting download metadata: share_id=" << request.share_id
-                  << ", file_id=" << request.file_id;
-
-        /// 单次 JOIN 查询：验证分享状态、文件属于分享内容并获取元数据
-        try {
-            auto rows = co_await m_db_client->execSqlCoro(
-                "SELECT s.permission, s.status, " "(s.expires_at IS NOT NULL AND s.expires_at <= NOW()) AS is_expired, " "sf.id AS share_file_id, f.id, f.name, f.size, 'file' AS type " "FROM shares s " "LEFT JOIN share_files sf ON sf.share_id = s.id " "AND sf.item_type = 'file' AND sf.item_id = $1 " "LEFT JOIN files f ON sf.item_id = f.id " "WHERE s.id = $2",
-                request.file_id,
-                share_id
-            );
-
-            if (rows.empty()) {
-                co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "Share not found"));
-            }
-
-            const auto& row = rows[0];
-            auto status = row["status"].as<int>();
-            auto is_expired = row["is_expired"].as<bool>();
-            if (status != static_cast<int>(ShareStatus::Active) || is_expired) {
-                co_return std::unexpected(ErrorInfo(ErrorCode::ShareExpired, "Share is not active"));
-            }
-            if (row["permission"].as<std::string>() != "download") {
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::ShareAccessDenied, "Share is view-only, download not allowed")
-                );
-            }
-            if (row["id"].isNull()) {
-                co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "File not in share"));
-            }
-
-            ShareFile file;
-            file.id = row["id"].as<uint64_t>();
-            file.name = row["name"].as<std::string>();
-            file.type = row["type"].as<std::string>();
-            file.size = row["size"].as<uint64_t>();
-
-            /// 增加下载次数
-            co_await IncrementDownloadCount(share_id);
-            co_return file;
-        } catch (const DrogonDbException& e) {
-            Logger::Error() << "Failed to get download metadata: " << e.base().what();
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to get download metadata")
-            );
-        }
-    }
-
     auto ShareService::GetDownloadInfo(const DownloadShareRequest& request, uint64_t share_id)
         -> drogon::Task<Result<DownloadInfo>> {
         Logger::Debug() << "Getting download info: share_id=" << request.share_id
-                  << ", file_id=" << request.file_id;
+                        << ", file_id=" << request.file_id;
 
         /// 单次 4 表 JOIN 查询：shares + share_files + files + file_contents
         try {
@@ -905,7 +966,7 @@ namespace disk::share {
 
             if (permission != "download") {
                 Logger::Warn() << "Insufficient share permissions: share_id=" << share_id
-                         << ", permission=" << permission;
+                               << ", permission=" << permission;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::ShareAccessDenied, "Share is view-only, download not allowed")
                 );
@@ -934,13 +995,37 @@ namespace disk::share {
         }
     }
 
+    auto ShareService::CompleteDownload(
+        const DownloadShareRequest& request,
+        uint64_t share_id,
+        const ShareDownloadOutcome& outcome,
+        const ShareAuditContext& audit_context
+    ) -> drogon::Task<void> {
+        if (outcome.update_statistics) {
+            if (outcome.success) {
+                co_await UpdateFileDownloadMetadata(request.file_id);
+            }
+            co_await IncrementDownloadCount(share_id);
+        }
+        co_await m_audit_service.RecordDownload(ShareDownloadAuditEvent{
+            .share_id = share_id,
+            .share_code = request.share_id,
+            .file_id = request.file_id,
+            .bytes = outcome.bytes,
+            .http_status = outcome.http_status,
+            .success = outcome.success,
+            .result = outcome.result,
+            .context = audit_context,
+        });
+    }
+
     auto ShareService::SaveToDrive(
         const SaveShareItemsRequest& request,
         uint64_t share_id,
         uint64_t target_user_id
     ) -> drogon::Task<Result<SaveShareItemsResponse>> {
         Logger::Debug() << "Saving share items: internal_share_id=" << share_id
-                  << ", target_user_id=" << target_user_id;
+                        << ", target_user_id=" << target_user_id;
 
         std::shared_ptr<drogon::orm::Transaction> transaction;
         try {
@@ -1636,9 +1721,7 @@ namespace disk::share {
     auto ShareService::UpdateFileDownloadMetadata(uint64_t file_id) -> drogon::Task<void> {
         try {
             co_await m_db_client->execSqlCoro(
-                "UPDATE files "
-                "SET download_count = download_count + 1, last_accessed_at = NOW() "
-                "WHERE id = $1",
+                "UPDATE files " "SET download_count = download_count + 1, last_accessed_at = NOW() " "WHERE id = $1",
                 file_id
             );
         } catch (const DrogonDbException& e) {
@@ -1692,16 +1775,20 @@ namespace disk::share {
     auto ShareService::HandleFailedShareAccess(
         const std::string& share_code,
         const std::string& ip_address
-    ) const -> drogon::Task<ErrorInfo> {
-        const auto validation_error = [] {
-            return ErrorInfo(
-                ErrorCode::SharePasswordError,
-                std::string(SHARE_ACCESS_VALIDATION_ERROR_MESSAGE)
-            );
+    ) const -> drogon::Task<FailedShareAccessResult> {
+        const auto validation_failure = [](uint64_t attempt_count, bool counter_available) {
+            return FailedShareAccessResult{
+                .error = ErrorInfo(
+                    ErrorCode::SharePasswordError,
+                    std::string(SHARE_ACCESS_VALIDATION_ERROR_MESSAGE)
+                ),
+                .attempt_count = attempt_count,
+                .counter_available = counter_available,
+            };
         };
 
         if (!m_redis_service) {
-            co_return validation_error();
+            co_return validation_failure(0, false);
         }
 
         auto key = redis::RedisKeyPrefix::BuildSharePasswordRateLimitKey(share_code, ip_address);
@@ -1713,16 +1800,45 @@ namespace disk::share {
         );
         if (!incr_result) {
             Logger::Error() << "Redis IncrWithExpire failed: " << incr_result.error().message;
-            co_return validation_error();
+            co_return validation_failure(0, false);
         }
 
-        if (incr_result.value() > SHARE_ACCESS_FAILURE_LIMIT) {
-            co_return ErrorInfo(
-                ErrorCode::TooManyRequests,
-                std::string(SHARE_ACCESS_RATE_LIMIT_ERROR_MESSAGE)
-            );
+        const auto attempt_count = static_cast<uint64_t>(incr_result.value());
+        if (attempt_count > SHARE_ACCESS_FAILURE_LIMIT) {
+            co_return FailedShareAccessResult{
+                .error = ErrorInfo(
+                    ErrorCode::TooManyRequests,
+                    std::string(SHARE_ACCESS_RATE_LIMIT_ERROR_MESSAGE)
+                ),
+                .attempt_count = attempt_count,
+                .counter_available = true,
+            };
         }
 
-        co_return validation_error();
+        co_return validation_failure(attempt_count, true);
     }
-} ///< namespace disk::share
+
+    auto ShareService::RecordFailedShareAccess(
+        std::optional<uint64_t> share_id,
+        const std::string& share_code,
+        const FailedShareAccessResult& failure,
+        const ShareAuditContext& audit_context
+    ) const -> drogon::Task<void> {
+        const auto rate_limited = failure.error.code == ErrorCode::TooManyRequests;
+        co_await m_audit_service.RecordPasswordFailure(SharePasswordFailureAuditEvent{
+            .share_id = share_id,
+            .share_code = share_code,
+            .attempt_count = failure.attempt_count,
+            .counter_available = failure.counter_available,
+            .rate_limited = rate_limited,
+            .context = audit_context,
+        });
+        co_await m_audit_service.RecordAccess(ShareAccessAuditEvent{
+            .share_id = share_id,
+            .share_code = share_code,
+            .success = false,
+            .result = rate_limited ? "rate_limited" : "validation_failed",
+            .context = audit_context,
+        });
+    }
+} // namespace disk::share

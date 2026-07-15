@@ -9,6 +9,8 @@
 
 #include "ShareController.hpp"
 
+#include <charconv>
+
 #include "DownloadResponder.hpp"
 #include "application/ApplicationContext.hpp"
 #include "controllers/ControllerHelpers.hpp"
@@ -18,6 +20,13 @@
 namespace disk::share {
 
     namespace {
+        auto BuildAuditContext(const drogon::HttpRequestPtr& request) -> ShareAuditContext {
+            return ShareAuditContext{
+                .ip_address = request->getPeerAddr().toIp(),
+                .user_agent = std::string(request->getHeader("User-Agent")),
+            };
+        }
+
         auto IsSuccessfulContentDownload(const drogon::HttpResponsePtr& resp) -> bool {
             if (!resp) {
                 return false;
@@ -26,7 +35,64 @@ namespace disk::share {
             return status == drogon::HttpStatusCode::k200OK ||
                    status == drogon::HttpStatusCode::k206PartialContent;
         }
-    }
+
+        auto ParseContentLength(const drogon::HttpResponsePtr& response) -> uint64_t {
+            const auto value = response->getHeader("Content-Length");
+            uint64_t bytes = 0;
+            const auto [end, error] = std::from_chars(
+                value.data(),
+                value.data() + value.size(),
+                bytes
+            );
+            return error == std::errc{} && end == value.data() + value.size() ? bytes : 0;
+        }
+
+        auto BuildDownloadOutcome(
+            const drogon::HttpResponsePtr& response,
+            uint64_t file_size
+        ) -> ShareDownloadOutcome {
+            ShareDownloadOutcome outcome;
+            if (!response) {
+                outcome.result = "response_unavailable";
+                outcome.update_statistics = true;
+                return outcome;
+            }
+
+            const auto status = response->getStatusCode();
+            outcome.http_status = static_cast<int>(status);
+            outcome.success = IsSuccessfulContentDownload(response);
+            outcome.update_statistics = true;
+            if (outcome.success) {
+                outcome.bytes = ParseContentLength(response);
+                if (outcome.bytes == 0 && status == drogon::HttpStatusCode::k200OK) {
+                    outcome.bytes = file_size;
+                }
+            }
+
+            if (status == drogon::HttpStatusCode::k200OK) {
+                outcome.result = "success";
+            } else if (status == drogon::HttpStatusCode::k206PartialContent) {
+                outcome.result = "partial_content";
+            } else if (status == drogon::HttpStatusCode::k416RequestedRangeNotSatisfiable) {
+                outcome.result = "range_not_satisfiable";
+            } else if (status == drogon::HttpStatusCode::k404NotFound) {
+                outcome.result = "not_found";
+            } else {
+                outcome.result = "failed";
+            }
+            return outcome;
+        }
+
+        auto DownloadFailureResult(ErrorCode code) -> std::string {
+            switch (code) {
+                case ErrorCode::ShareNotFound    : return "share_not_found";
+                case ErrorCode::ShareExpired     : return "share_inactive";
+                case ErrorCode::ShareAccessDenied: return "access_denied";
+                case ErrorCode::FileNotFound     : return "file_not_found";
+                default                          : return "internal_error";
+            }
+        }
+    } // namespace
 
     ShareController::ShareController()
         : m_share_service(&disk::application::ApplicationContext::GetInstance()->Share()),
@@ -44,28 +110,32 @@ namespace disk::share {
         auto parse_result = CreateShareRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "Create share request parameter validation failed: "
-                     << parse_result.error().message;
+                           << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
         Logger::Debug() << "Create share parameter validation passed: file_ids.size()="
-                  << parse_result->file_ids.size() << ", expire_days=" << parse_result->expire_days
-                  << ", has_password=" << parse_result->password.has_value()
-                  << ", permission=" << SharePermissionToString(parse_result->permission);
+                        << parse_result->file_ids.size() << ", expire_days=" << parse_result->expire_days
+                        << ", has_password=" << parse_result->password.has_value()
+                        << ", permission=" << SharePermissionToString(parse_result->permission);
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层创建分享
-        auto result = co_await m_share_service->Create(*parse_result, user_id);
+        auto result = co_await m_share_service->Create(
+            *parse_result,
+            user_id,
+            BuildAuditContext(request)
+        );
         if (!result) {
             Logger::Error() << "Create share failed: " << result.error().message
-                      << " (user_id=" << user_id << ")";
+                            << " (user_id=" << user_id << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
         Logger::Info() << "Create share successful: share_id=" << result->share_id
-                 << " (user_id=" << user_id << ")";
+                       << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -78,11 +148,11 @@ namespace disk::share {
         auto parse_result = ShareListRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "Share list request parameter validation failed: "
-                     << parse_result.error().message;
+                           << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
         Logger::Debug() << "Share list parameter validation passed: status=" << parse_result->status
-                  << ", page=" << parse_result->page << ", page_size=" << parse_result->page_size;
+                        << ", page=" << parse_result->page << ", page_size=" << parse_result->page_size;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
@@ -91,13 +161,13 @@ namespace disk::share {
         auto result = co_await m_share_service->List(*parse_result, user_id);
         if (!result) {
             Logger::Error() << "Get share list failed: " << result.error().message
-                      << " (user_id=" << user_id << ")";
+                            << " (user_id=" << user_id << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
         Logger::Info() << "Get share list successful: items=" << result->items.size()
-                 << ", total=" << result->pagination.total << " (user_id=" << user_id << ")";
+                       << ", total=" << result->pagination.total << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -105,13 +175,13 @@ namespace disk::share {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         Logger::Info() << "Received get share details request: " << request->getPeerAddr().toIpPort()
-                 << ", share_id=" << share_id;
+                       << ", share_id=" << share_id;
 
         /// 1. 解析并验证路径参数
         auto parse_result = ShareDetailRequest::FromPath(share_id);
         if (!parse_result) {
             Logger::Warn() << "Share detail request parameter validation failed: "
-                     << parse_result.error().message;
+                           << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
@@ -122,13 +192,13 @@ namespace disk::share {
         auto result = co_await m_share_service->Detail(*parse_result, user_id);
         if (!result) {
             Logger::Error() << "Get share details failed: " << result.error().message
-                      << " (user_id=" << user_id << ", share_id=" << share_id << ")";
+                            << " (user_id=" << user_id << ", share_id=" << share_id << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
         Logger::Info() << "Get share details successful: share_id=" << share_id
-                 << ", files=" << result->files.size() << " (user_id=" << user_id << ")";
+                       << ", files=" << result->files.size() << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -136,25 +206,25 @@ namespace disk::share {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         Logger::Info() << "Received update share settings request: " << request->getPeerAddr().toIpPort()
-                 << ", share_id=" << share_id;
+                       << ", share_id=" << share_id;
 
         /// 1. 解析并验证请求参数
         auto parse_result = UpdateShareRequest::FromRequest(request, share_id);
         if (!parse_result) {
             Logger::Warn() << "Update share settings request parameter validation failed: "
-                     << parse_result.error().message;
+                           << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
         Logger::Debug() << "Update share settings parameter validation passed: share_id="
-                  << parse_result->share_id << ", expire_days="
-                  << (parse_result->expire_days.has_value() ?
-                          std::to_string(*parse_result->expire_days) :
-                          "null")
-                  << ", password=" << (parse_result->password.has_value() ? "set" : "null")
-                  << ", permission="
-                  << (parse_result->permission.has_value() ?
-                          SharePermissionToString(*parse_result->permission) :
-                          "null");
+                        << parse_result->share_id << ", expire_days="
+                        << (parse_result->expire_days.has_value() ?
+                                std::to_string(*parse_result->expire_days) :
+                                "null")
+                        << ", password=" << (parse_result->password.has_value() ? "set" : "null")
+                        << ", permission="
+                        << (parse_result->permission.has_value() ?
+                                SharePermissionToString(*parse_result->permission) :
+                                "null");
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
@@ -163,13 +233,13 @@ namespace disk::share {
         auto result = co_await m_share_service->Update(*parse_result, user_id);
         if (!result) {
             Logger::Error() << "Update share settings failed: " << result.error().message
-                      << " (user_id=" << user_id << ", share_id=" << share_id << ")";
+                            << " (user_id=" << user_id << ", share_id=" << share_id << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
         Logger::Info() << "Update share settings successful: share_id=" << share_id
-                 << " (user_id=" << user_id << ")";
+                       << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -182,27 +252,31 @@ namespace disk::share {
         auto parse_result = CancelShareRequest::FromRequest(request);
         if (!parse_result) {
             Logger::Warn() << "Batch cancel shares request parameter validation failed: "
-                     << parse_result.error().message;
+                           << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
         Logger::Debug() << "Batch cancel shares parameter validation passed: share_ids.size()="
-                  << parse_result->share_ids.size();
+                        << parse_result->share_ids.size();
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层批量取消分享
-        auto result = co_await m_share_service->Cancel(*parse_result, user_id);
+        auto result = co_await m_share_service->Cancel(
+            *parse_result,
+            user_id,
+            BuildAuditContext(request)
+        );
         if (!result) {
             Logger::Error() << "Batch cancel shares failed: " << result.error().message
-                      << " (user_id=" << user_id << ")";
+                            << " (user_id=" << user_id << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应（批量操作始终返回 200）
         Logger::Info() << "Batch cancel shares completed: total=" << result->summary.total
-                 << ", succeeded=" << result->summary.succeeded
-                 << ", failed=" << result->summary.failed << " (user_id=" << user_id << ")";
+                       << ", succeeded=" << result->summary.succeeded
+                       << ", failed=" << result->summary.failed << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -211,32 +285,33 @@ namespace disk::share {
     auto ShareController::Access(drogon::HttpRequestPtr request, std::string share_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        const auto ip_address = request->getPeerAddr().toIp();
+        const auto audit_context = BuildAuditContext(request);
+        const auto& ip_address = audit_context.ip_address;
         Logger::Info() << "Received verify share access request: " << request->getPeerAddr().toIpPort()
-                 << ", share_id=" << share_id;
+                       << ", share_id=" << share_id;
 
         /// 1. 解析并验证请求参数
         auto parse_result = AccessShareRequest::FromRequest(request, share_id);
         if (!parse_result) {
             Logger::Warn() << "Verify share access request parameter validation failed: "
-                     << parse_result.error().message;
+                           << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
         Logger::Debug() << "Verify share access parameter validation passed: share_id="
-                  << parse_result->share_id
-                  << ", has_password=" << parse_result->password.has_value();
+                        << parse_result->share_id
+                        << ", has_password=" << parse_result->password.has_value();
 
         /// 2. 调用 Service 层验证分享访问
-        auto result = co_await m_share_service->Access(*parse_result, ip_address);
+        auto result = co_await m_share_service->Access(*parse_result, audit_context);
         if (!result) {
             Logger::Warn() << "Verify share access failed: " << result.error().message
-                     << " (share_id=" << share_id << ", ip=" << ip_address << ")";
+                           << " (share_id=" << share_id << ", ip=" << ip_address << ")";
             co_return Response::Error(result.error());
         }
 
         /// 3. 构造响应
         Logger::Info() << "Verify share access successful: share_id=" << share_id
-                 << ", permission=" << result->permission << " (ip=" << ip_address << ")";
+                       << ", permission=" << result->permission << " (ip=" << ip_address << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -246,20 +321,20 @@ namespace disk::share {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         Logger::Info() << "Received browse share content request: " << request->getPeerAddr().toIpPort()
-                 << ", share_id=" << share_id;
+                       << ", share_id=" << share_id;
 
         /// 1. 解析并验证请求参数
         auto parse_result = BrowseShareRequest::FromRequest(request, share_id);
         if (!parse_result) {
             Logger::Warn() << "Browse share content request parameter validation failed: "
-                     << parse_result.error().message;
+                           << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
         Logger::Debug() << "Browse share content parameter validation passed: share_id="
-                  << parse_result->share_id << ", folder_id="
-                  << (parse_result->folder_id.has_value() ?
-                          std::to_string(*parse_result->folder_id) :
-                          "null");
+                        << parse_result->share_id << ", folder_id="
+                        << (parse_result->folder_id.has_value() ?
+                                std::to_string(*parse_result->folder_id) :
+                                "null");
 
         /// 2. 从请求属性获取 share_id（由 ShareAuthFilter 设置）
         const auto internal_share_id = request->attributes()->get<uint64_t>("share_id");
@@ -268,7 +343,7 @@ namespace disk::share {
         /// 3. 验证 share_id 匹配（防止令牌用于其他分享）
         if (share_id != share_code) {
             Logger::Warn() << "Share token does not match requested share_id: token_share_code="
-                     << share_code << ", request_share_id=" << share_id;
+                           << share_code << ", request_share_id=" << share_id;
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ShareAccessDenied,
                 "Share token does not match requested share"
@@ -279,14 +354,14 @@ namespace disk::share {
         auto result = co_await m_share_service->Browse(*parse_result, internal_share_id);
         if (!result) {
             Logger::Error() << "Browse share content failed: " << result.error().message
-                      << " (share_id=" << share_id << ")";
+                            << " (share_id=" << share_id << ")";
             co_return Response::Error(result.error());
         }
 
         /// 5. 构造响应
         Logger::Info() << "Browse share content successful: share_id=" << share_id
-                 << ", items=" << result->items.size()
-                 << " (internal_share_id=" << internal_share_id << ")";
+                       << ", items=" << result->items.size()
+                       << " (internal_share_id=" << internal_share_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -297,12 +372,12 @@ namespace disk::share {
     ) -> drogon::Task<drogon::HttpResponsePtr> {
 
         Logger::Info() << "Received share download info request: " << request->getPeerAddr().toIpPort()
-                 << ", share_id=" << share_id << ", file_id=" << file_id;
+                       << ", share_id=" << share_id << ", file_id=" << file_id;
 
         auto parse_result = DownloadShareRequest::FromPath(share_id, file_id);
         if (!parse_result) {
             Logger::Warn() << "Share download info request parameter validation failed: "
-                     << parse_result.error().message;
+                           << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
@@ -311,7 +386,7 @@ namespace disk::share {
 
         if (share_id != share_code) {
             Logger::Warn() << "Share token does not match requested share_id: token_share_code="
-                     << share_code << ", request_share_id=" << share_id;
+                           << share_code << ", request_share_id=" << share_id;
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ShareAccessDenied,
                 "Share token does not match requested share"
@@ -321,7 +396,7 @@ namespace disk::share {
         auto info_result = co_await m_share_service->GetDownloadInfo(*parse_result, internal_share_id);
         if (!info_result) {
             Logger::Error() << "Get share download info failed: " << info_result.error().message
-                      << " (share_id=" << share_id << ", file_id=" << file_id << ")";
+                            << " (share_id=" << share_id << ", file_id=" << file_id << ")";
             co_return Response::Error(info_result.error());
         }
 
@@ -335,7 +410,7 @@ namespace disk::share {
         response.supports_range = info.supports_range;
 
         Logger::Info() << "Share download info successful: share_id=" << share_id
-                 << ", file_id=" << file_id << ", size=" << info.file_size;
+                       << ", file_id=" << file_id << ", size=" << info.file_size;
         co_return Response::Success(response.ToJson());
     }
 
@@ -346,17 +421,17 @@ namespace disk::share {
     ) -> drogon::Task<drogon::HttpResponsePtr> {
 
         Logger::Info() << "Received download share file request: " << request->getPeerAddr().toIpPort()
-                 << ", share_id=" << share_id << ", file_id=" << file_id;
+                       << ", share_id=" << share_id << ", file_id=" << file_id;
 
         /// 1. 解析并验证路径参数
         auto parse_result = DownloadShareRequest::FromPath(share_id, file_id);
         if (!parse_result) {
             Logger::Warn() << "Download share file request parameter validation failed: "
-                     << parse_result.error().message;
+                           << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
         Logger::Debug() << "Download share file parameter validation passed: share_id="
-                  << parse_result->share_id << ", file_id=" << parse_result->file_id;
+                        << parse_result->share_id << ", file_id=" << parse_result->file_id;
 
         /// 2. 从请求属性获取 share_id（由 ShareAuthFilter 设置）
         const auto internal_share_id = request->attributes()->get<uint64_t>("share_id");
@@ -365,7 +440,7 @@ namespace disk::share {
         /// 3. 验证 share_id 匹配（防止令牌用于其他分享）
         if (share_id != share_code) {
             Logger::Warn() << "Share token does not match requested share_id: token_share_code="
-                     << share_code << ", request_share_id=" << share_id;
+                           << share_code << ", request_share_id=" << share_id;
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ShareAccessDenied,
                 "Share token does not match requested share"
@@ -373,18 +448,32 @@ namespace disk::share {
         }
 
         /// 4. 获取下载文件信息
+        const auto audit_context = BuildAuditContext(request);
         auto info_result =
             co_await m_share_service->GetDownloadInfo(*parse_result, internal_share_id);
         if (!info_result) {
             Logger::Error() << "Get download info failed: " << info_result.error().message
-                      << " (share_id=" << share_id << ", file_id=" << file_id << ")";
-            co_return Response::Error(info_result.error());
+                            << " (share_id=" << share_id << ", file_id=" << file_id << ")";
+            auto error_response = Response::Error(info_result.error());
+            co_await m_share_service->CompleteDownload(
+                *parse_result,
+                internal_share_id,
+                ShareDownloadOutcome{
+                    .bytes = 0,
+                    .http_status = static_cast<int>(error_response->getStatusCode()),
+                    .success = false,
+                    .update_statistics = false,
+                    .result = DownloadFailureResult(info_result.error().code),
+                },
+                audit_context
+            );
+            co_return error_response;
         }
 
         const auto& download_info = *info_result;
         Logger::Info() << "Get download info successful: share_id=" << share_id << ", file_id=" << file_id
-                 << ", filename=" << download_info.filename << ", size=" << download_info.file_size
-                 << ", content_id=" << download_info.blob.content_id;
+                       << ", filename=" << download_info.filename << ", size=" << download_info.file_size
+                       << ", content_id=" << download_info.blob.content_id;
 
         /// 5. 委托共享下载响应构造
         auto resp = co_await BuildDownloadResponse(
@@ -399,13 +488,13 @@ namespace disk::share {
             m_blob_store
         );
 
-        /// 6. 成功内容下载后更新文件级元数据
-        if (IsSuccessfulContentDownload(resp)) {
-            co_await m_share_service->UpdateFileDownloadMetadata(download_info.file_id);
-        }
-
-        /// 7. 增加下载次数
-        co_await m_share_service->IncrementDownloadCount(internal_share_id);
+        /// 6. 统一更新下载统计并记录审计结果
+        co_await m_share_service->CompleteDownload(
+            *parse_result,
+            internal_share_id,
+            BuildDownloadOutcome(resp, download_info.file_size),
+            audit_context
+        );
 
         co_return resp;
     }
@@ -414,12 +503,12 @@ namespace disk::share {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         Logger::Info() << "Received save share items request: " << request->getPeerAddr().toIpPort()
-                 << ", share_id=" << share_id;
+                       << ", share_id=" << share_id;
 
         auto parse_result = SaveShareItemsRequest::FromRequest(request, share_id);
         if (!parse_result) {
             Logger::Warn() << "Save share items request parameter validation failed: "
-                     << parse_result.error().message;
+                           << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
@@ -429,7 +518,7 @@ namespace disk::share {
 
         if (share_id != share_code) {
             Logger::Warn() << "Share token does not match requested share_id: token_share_code="
-                     << share_code << ", request_share_id=" << share_id;
+                           << share_code << ", request_share_id=" << share_id;
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ShareAccessDenied,
                 "Share token does not match requested share"
@@ -443,13 +532,13 @@ namespace disk::share {
         );
         if (!result) {
             Logger::Error() << "Save share items failed: " << result.error().message
-                      << " (share_id=" << share_id << ", user_id=" << target_user_id << ")";
+                            << " (share_id=" << share_id << ", user_id=" << target_user_id << ")";
             co_return Response::Error(result.error());
         }
 
         Logger::Info() << "Save share items successful: saved_count=" << result->saved_count
-                 << " (share_id=" << share_id << ", user_id=" << target_user_id << ")";
+                       << " (share_id=" << share_id << ", user_id=" << target_user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
-} ///< namespace disk::share
+} // namespace disk::share

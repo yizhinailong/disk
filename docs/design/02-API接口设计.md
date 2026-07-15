@@ -3883,7 +3883,7 @@ Share Token（通过 `/api/share/access` 获取）需要以下安全措施：
 | 访客操作 | HTTP/服务路径 | 允许的 `scope.permission` | 每次操作的数据库复查 |
 |---------|---------------|---------------------------|------------------------|
 | 浏览分享 | `GET /api/share/browse/{share_id}` / `Browse` | `view`, `download` | `status`、`expires_at` |
-| 获取下载元数据 | `GET /api/share/download/{share_id}/{file_id}/info` / `DownloadMeta`, `GetDownloadInfo` | `download` | `permission`、`status`、`expires_at` |
+| 获取下载元数据 | `GET /api/share/download/{share_id}/{file_id}/info` / `GetDownloadInfo` | `download` | `permission`、`status`、`expires_at` |
 | 下载文件内容 | `GET /api/share/download/{share_id}/{file_id}` / `GetDownloadInfo` 后构造响应 | `download` | `permission`、`status`、`expires_at` |
 | 保存到网盘 | `POST /api/share/save/{share_id}` / `SaveToDrive` | `download`，并同时要求有效 owner Access Token | `permission`、`status`、`expires_at` |
 
@@ -3954,21 +3954,25 @@ Share Token（通过 `/api/share/access` 获取）需要以下安全措施：
 
 以下分享相关事件必须记录到 `operation_logs` 表：
 
-| 事件类型 | `action` 值 | 记录字段 |
-|---------|------------|---------|
-| **分享创建** | `share_create` | `target_type`='share', `target_id`=shares.id, `details`={share_code, file_ids, permission, expires_at} |
-| **分享访问** | `share_access` | `target_type`='share', `target_id`=shares.id, `details`={share_code, ip, user_agent, success} |
-| **密码验证失败** | `share_pwd_fail` | `target_type`='share', `target_id`=shares.id, `details`={share_code, ip, attempt_count} |
-| **文件下载** | `share_download` | `target_type`='share', `target_id`=shares.id, `details`={share_code, file_id, ip, bytes} |
-| **分享取消** | `share_cancel` | `target_type`='share', `target_id`=shares.id, `details`={share_code, cancelled_by} |
+| 事件类型 | `action` 值 | `user_id` | `details` 稳定字段 |
+|---------|------------|-----------|-------------------|
+| **分享创建** | `share_create` | 所有者 ID | `share_code`, `file_ids`, `folder_ids`, `permission`, `expires_at`, `success`, `result` |
+| **分享访问** | `share_access` | `NULL` | `share_code`, `success`, `result` |
+| **公开验证失败** | `share_pwd_fail` | `NULL` | `share_code`, `attempt_count`, `counter_available`, `rate_limited`, `success`, `result` |
+| **文件下载** | `share_download` | `NULL` | `share_code`, `file_id`, `bytes`, `http_status`, `success`, `result` |
+| **分享取消** | `share_cancel` | 取消操作者 ID | `share_code`, `cancelled_by`, `success`, `result` |
 
-> **注意**：`target_id` 为数据库内部 `shares.id`（BIGINT），外部标识 `share_code` 存储于 `details` JSON 中用于追溯。
+所有事件固定使用 `target_type='share'`、`target_name=share_code`。能够解析分享时，`target_id` 必须是数据库内部 `shares.id`（BIGINT）；不存在的公开分享标识或批量取消项无法解析时，`target_id` 为 `NULL`，不得伪造内部 ID。外部标识 `share_code` 同时保存在 `details` 中用于追溯。
+
+`ip_address` 和 `user_agent` 使用表的普通列，不在 `details` 中重复。`share_access` 对成功和拒绝结果各写一条；公开密码/不存在分享验证失败还额外写一条 `share_pwd_fail`。批量取消按请求中的每一项写一条 `share_cancel`，包括成功、找不到、越权、已取消和内部失败结果。
+
+`share_download.bytes` 表示服务端为 HTTP 200/206 响应选择的内容负载长度；拒绝、找不到内容和 416 响应记录 0。它不是客户端断开连接后可证明的实际接收字节数。`GET .../info` 元数据请求不属于下载事件。
 
 **审计日志字段要求**（对应 `sql/init.sql` 定义）：
 
 ```sql
 -- operation_logs 表关键字段
-user_id     BIGINT           -- 操作者 ID（访客为 NULL，需调整 NOT NULL 约束）
+user_id     BIGINT NULL      -- 操作者 ID；公开访客为 NULL
 action      VARCHAR(32)      -- 操作类型
 target_type VARCHAR(32)      -- 目标类型（如 'share', 'file', 'folder'）
 target_id   BIGINT           -- 目标内部 ID（shares.id，非 share_code）
@@ -3976,8 +3980,12 @@ target_name VARCHAR(255)     -- 目标名称（可选，如分享的文件名）
 details     JSONB            -- 操作详情（含 share_code 等外部标识）
 ip_address  VARCHAR(45)      -- 客户端 IP
 user_agent  VARCHAR(512)     -- 客户端标识
-created_at  TIMESTAMPTZ      -- 操作时间
+created_at  TIMESTAMP        -- 操作时间
 ```
+
+分享审计统一由 `ShareAuditService` 写入，controller 只向业务 service 传递经过解析的 IP 和 User-Agent，不得包含审计 SQL。审计写入采用 **fail-open、无自动重试** 策略：创建、访问、验证失败、下载和逐项取消均先保持既有业务结果；审计写入失败时记录包含 action、内部分享 ID（若有）和 `share_code` 的错误日志，但不得把数据库错误改写成业务失败。无自动重试可避免未设置幂等键时重复记录；后续若引入可靠重试，必须先增加稳定事件 ID 和唯一约束。
+
+审计字段和应用日志严禁保存访问密码、密码哈希、原始 Share Token、Authorization/X-Share-Token 请求头或其他可重放凭据。User-Agent 最多保留 512 个字符。公开访问、验证失败和下载的 `user_id` 必须为 `NULL`，不得归到分享所有者名下。
 
 #### 9.4.5 安全检查清单
 
@@ -3989,7 +3997,7 @@ created_at  TIMESTAMPTZ      -- 操作时间
 - [x] Share Token 验证通过后的所有访客操作检查分享状态和有效期（证据：`ShareTokenSecurityIntegration` 覆盖 browse、download metadata、content download、save-to-drive 的取消/过期旧 token）
 - [x] 分享取消时使所有相关 Share Token 失效（证据：`ShareTokenSecurityIntegration` 使用同一旧 token 验证 DB 状态撤销，不依赖逐 token Redis 黑名单）
 - [ ] 敏感操作有独立的速率限制（当前 `SharePublicRateLimitFilter` 仍让 access、browse、download 共用同一个 30 次/分钟/IP bucket，save-to-drive 也没有分享域独立 bucket）
-- [ ] 关键事件写入审计日志（当前未记录 `share_create`、`share_access`、`share_pwd_fail`、`share_download`、`share_cancel`）
+- [x] 关键事件写入审计日志（证据：`ShareAuditService`、`ShareAuditServiceTest`、`ShareAuditIntegration` 覆盖 `share_create`、`share_access`、`share_pwd_fail`、`share_download`、逐项 `share_cancel` 及 fail-open 政策）
 - [x] 密码错误响应不泄露分享是否存在的信息（证据：`SharePasswordProtectionIntegration` 验证缺失密码、错误密码和不存在分享均统一返回 HTTP 400 / `60003`）
 
 ---
