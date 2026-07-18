@@ -1,6 +1,6 @@
 ## Purpose
 
-TBD.
+Defines PostgreSQL relational and Redis ephemeral persistence contracts for schemas, indexes, lifecycles, and accounting boundaries, while architecture decisions own database-selection rationale.
 
 ## Requirements
 

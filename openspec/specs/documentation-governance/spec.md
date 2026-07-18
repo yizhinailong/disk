@@ -1,6 +1,6 @@
 ## Purpose
 
-TBD.
+Defines OpenSpec authority, reference-source status, evidence and traceability rules, and current-versus-archived documentation lifecycle governance.
 
 ## Requirements
 
@@ -59,16 +59,20 @@ Documentation governance SHALL preserve traceability from active OpenSpec requir
 - **THEN** they SHALL be able to identify the relevant documentation source areas and any follow-up archival or reconciliation work that remains
 
 ### Requirement: Backend refactor decision documentation
-Documentation governance SHALL keep backend refactor decision notes traceable to the active backend roadmap and SHALL distinguish confirmed current behavior from accepted target decisions and implementation follow-up work.
+Documentation governance SHALL keep backend refactor decisions traceable to their current status, the completed historical roadmap, and any verified active follow-up work. OpenSpec SHALL remain the normative authority for migrated requirements, while decision, backlog, archive, discovery, and design sources SHALL retain the roles defined by the scenarios below.
 
 #### Scenario: Backend decision note is consulted
 - **WHEN** a maintainer reviews `docs/backend-refactor-decisions.md`
-- **THEN** the document SHALL identify whether each covered item is current implementation behavior, an accepted target decision, or a later implementation requirement
+- **THEN** the documentation SHALL distinguish accepted decisions, current implementation status, and any remaining follow-up work, SHALL trace completed roadmap history to `docs/archive/2026-07-14-backend-refactor-todo.md`, and SHALL trace only verified current unfinished work to `docs/TODO.md`
 
-#### Scenario: Backend roadmap is updated after decisions
-- **WHEN** `docs/TODO.md` lists backend refactor tasks covered by the backend decision note
-- **THEN** decision-only checklist items SHALL link to the decision note while behavior-changing implementation tasks SHALL remain open until implemented and tested
+#### Scenario: Completed backend roadmap is consulted
+- **WHEN** a maintainer needs the completed backend refactor sequence or its historical checklist
+- **THEN** documentation SHALL identify `docs/archive/2026-07-14-backend-refactor-todo.md` as the historical completion record and SHALL NOT describe that roadmap as active work
 
-#### Scenario: Discovery and decision documents disagree
-- **WHEN** `docs/backend-discovery.md` records current behavior that differs from an accepted backend refactor decision
-- **THEN** documentation SHALL preserve both facts by labeling discovery as current behavior and the decision note as target behavior for future implementation
+#### Scenario: Current backend backlog references a decision
+- **WHEN** `docs/TODO.md` lists verified unfinished backend work related to an accepted decision
+- **THEN** the backlog SHALL retain only the current open work and SHALL link the relevant OpenSpec requirement, `docs/design/` source, or decision record without recreating completed roadmap tasks as active items
+
+#### Scenario: Discovery and current decision status disagree
+- **WHEN** `docs/backend-discovery.md` describes behavior that differs from the current status in `docs/backend-refactor-decisions.md`
+- **THEN** documentation SHALL identify discovery as a historical observation, use the decision note for current decision and implementation status, and use OpenSpec as the normative requirement authority

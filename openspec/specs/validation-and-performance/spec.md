@@ -1,6 +1,6 @@
 ## Purpose
 
-TBD.
+Defines reproducible unit, integration, system, security, compatibility, and performance validation evidence and reporting contracts.
 
 ## Requirements
 

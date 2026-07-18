@@ -1,6 +1,6 @@
 ## Purpose
 
-TBD.
+Defines authoritative architecture decision-record contracts for rationale, alternatives, impact, revisit criteria, and behavior-preservation boundaries.
 
 ## Requirements
 

@@ -1,6 +1,6 @@
 ## Purpose
 
-TBD.
+Defines secure provisioning, build, configuration, migration, service, proxy, observability, backup, restore, upgrade, and rollback operational contracts.
 
 ## Requirements
 
