@@ -39,11 +39,6 @@ from lib_py import (
     fetch,
 )
 
-import atexit
-
-atexit.register(lambda: None)  # No specific cleanup needed
-
-
 # Test 1: System info requires authentication
 def test_system_info_requires_auth():
     log_info("Testing /api/system/info requires authentication...")

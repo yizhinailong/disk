@@ -37,7 +37,7 @@ from lib_py import (
     log_step,
     print_summary,
     save_evidence,
-    check_server,
+    ensure_server,
     cleanup,
     do_login,
     json_field,
@@ -343,7 +343,7 @@ def main() -> None:
     print("==========================================")
     print()
 
-    check_server() or sys.exit(1)
+    ensure_server()
 
     # Login for test_list_shares
     token = do_login(TEST_USER, TEST_PASS)

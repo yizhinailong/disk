@@ -156,405 +156,91 @@ target_link_libraries(disk-test
 
 gtest_discover_tests(disk-test)
 
-add_test(
-    NAME LoginRateLimitIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_login_rate_limit.py"
-)
+function(add_disk_server_integration_test test_name script_name timeout_seconds)
+    set(script_path "${CMAKE_SOURCE_DIR}/test/integration/${script_name}")
+    file(READ "${script_path}" script_source)
+    if(NOT script_source MATCHES "ensure_server[ \t\r\n]*\\(")
+        message(FATAL_ERROR "${script_name} must call ensure_server() before CTest registration")
+    endif()
 
+    add_test(NAME ${test_name} COMMAND uv run "${script_path}")
+    set_tests_properties(
+        ${test_name}
+        PROPERTIES
+        LABELS backend-integration
+        RUN_SERIAL TRUE
+        TIMEOUT ${timeout_seconds}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+endfunction()
+
+function(add_disk_gated_integration_test test_name script_name timeout_seconds skip_pattern)
+    add_test(
+        NAME ${test_name}
+        COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/${script_name}"
+    )
+    set_tests_properties(
+        ${test_name}
+        PROPERTIES
+        LABELS "backend-integration;environment-gated"
+        RUN_SERIAL TRUE
+        SKIP_REGULAR_EXPRESSION "${skip_pattern}"
+        TIMEOUT ${timeout_seconds}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+endfunction()
+
+add_test(
+    NAME ServerLifecycleHarness
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_server_lifecycle.py"
+)
 set_tests_properties(
-    LoginRateLimitIntegration
+    ServerLifecycleHarness
     PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
+    LABELS backend-harness
+    TIMEOUT 30
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
-add_test(
-    NAME UserProfileStorageIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_user_profile_storage.py"
-)
+add_disk_server_integration_test(LoginRateLimitIntegration test_login_rate_limit.py 120)
+add_disk_server_integration_test(UserProfileStorageIntegration test_user_profile_storage.py 120)
+add_disk_server_integration_test(AssemblyBackpressureIntegration test_assembly_backpressure.py 120)
+add_disk_server_integration_test(AuthFlowIntegration test_auth_flow.py 120)
+add_disk_server_integration_test(AuthLifecycleIntegration test_auth_lifecycle.py 120)
+add_disk_server_integration_test(CopyDeleteAtomicityIntegration test_copy_delete_atomicity.py 120)
+add_disk_server_integration_test(DownloadFlowIntegration test_download_flow.py 120)
+add_disk_server_integration_test(DomainExtractionInvariantsIntegration test_domain_extraction_invariants.py 180)
+add_disk_server_integration_test(FileMetadataQueryIntegration test_file_metadata_query.py 120)
+add_disk_server_integration_test(FileMutationOpsIntegration test_file_mutation_ops.py 120)
+add_disk_server_integration_test(FolderLifecycleIntegration test_folder_lifecycle.py 120)
+add_disk_server_integration_test(HealthAndLogsIntegration test_health_and_logs.py 120)
+add_disk_server_integration_test(PasswordUpdateIntegration test_password_update.py 120)
+add_disk_server_integration_test(RefreshTokenIntegration test_refresh_token.py 120)
+add_disk_server_integration_test(ShareBrowseIntegration test_share_browse.py 120)
+add_disk_server_integration_test(SharePasswordProtectionIntegration test_share_password_protection.py 180)
+add_disk_server_integration_test(ShareManagementIntegration test_share_management.py 120)
+add_disk_server_integration_test(ShareAuditIntegration test_share_audit.py 180)
+add_disk_server_integration_test(ShareTokenSecurityIntegration test_share_token_security.py 120)
+add_disk_server_integration_test(SystemInfoIntegration test_system_info.py 120)
+add_disk_server_integration_test(TrashLifecycleIntegration test_trash_lifecycle.py 120)
+add_disk_server_integration_test(UploadFlowIntegration test_upload_flow.py 120)
+add_disk_server_integration_test(UserProfileUpdateIntegration test_user_profile_update.py 120)
+add_disk_server_integration_test(FileDeleteRegressionIntegration test_file_delete_regression.py 120)
+add_disk_server_integration_test(BrowseBurstRegressionIntegration test_browse_burst_regression.py 120)
+add_disk_server_integration_test(UploadRateLimitIntegration test_upload_rate_limit.py 300)
+add_disk_server_integration_test(SafetyUploadInvariantsIntegration test_safety_upload_invariants.py 180)
+add_disk_server_integration_test(SafetyContentQuotaIntegration test_safety_content_quota.py 240)
+add_disk_server_integration_test(SafetyMoveCopyPathIntegration test_safety_move_copy_path.py 180)
 
-set_tests_properties(
-    UserProfileStorageIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME AssemblyBackpressureIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_assembly_backpressure.py"
-)
-
-set_tests_properties(
-    AssemblyBackpressureIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME AuthFlowIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_auth_flow.py"
-)
-
-set_tests_properties(
-    AuthFlowIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME AuthLifecycleIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_auth_lifecycle.py"
-)
-
-set_tests_properties(
-    AuthLifecycleIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME CopyDeleteAtomicityIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_copy_delete_atomicity.py"
-)
-
-set_tests_properties(
-    CopyDeleteAtomicityIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME DownloadFlowIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_download_flow.py"
-)
-
-set_tests_properties(
-    DownloadFlowIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME DomainExtractionInvariantsIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_domain_extraction_invariants.py"
-)
-
-set_tests_properties(
-    DomainExtractionInvariantsIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 180
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME FileMetadataQueryIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_file_metadata_query.py"
-)
-
-set_tests_properties(
-    FileMetadataQueryIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME FileMutationOpsIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_file_mutation_ops.py"
-)
-
-set_tests_properties(
-    FileMutationOpsIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME FolderLifecycleIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_folder_lifecycle.py"
-)
-
-set_tests_properties(
-    FolderLifecycleIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME HealthAndLogsIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_health_and_logs.py"
-)
-
-set_tests_properties(
-    HealthAndLogsIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME PasswordUpdateIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_password_update.py"
-)
-
-set_tests_properties(
-    PasswordUpdateIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME RefreshTokenIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_refresh_token.py"
-)
-
-set_tests_properties(
-    RefreshTokenIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME ShareBrowseIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_share_browse.py"
-)
-
-set_tests_properties(
-    ShareBrowseIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME SharePasswordProtectionIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_share_password_protection.py"
-)
-
-set_tests_properties(
-    SharePasswordProtectionIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 180
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME ShareManagementIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_share_management.py"
-)
-
-set_tests_properties(
-    ShareManagementIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME ShareAuditIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_share_audit.py"
-)
-
-set_tests_properties(
-    ShareAuditIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 180
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME ShareTokenSecurityIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_share_token_security.py"
-)
-
-set_tests_properties(
-    ShareTokenSecurityIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME SystemInfoIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_system_info.py"
-)
-
-set_tests_properties(
-    SystemInfoIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME TrashLifecycleIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_trash_lifecycle.py"
-)
-
-set_tests_properties(
-    TrashLifecycleIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME UploadFlowIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_upload_flow.py"
-)
-
-set_tests_properties(
-    UploadFlowIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME UserProfileUpdateIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_user_profile_update.py"
-)
-
-set_tests_properties(
-    UserProfileUpdateIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME FileDeleteRegressionIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_file_delete_regression.py"
-)
-
-set_tests_properties(
-    FileDeleteRegressionIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME BrowseBurstRegressionIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_browse_burst_regression.py"
-)
-
-set_tests_properties(
-    BrowseBurstRegressionIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 120
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME UploadRateLimitIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_upload_rate_limit.py"
-)
-
-set_tests_properties(
-    UploadRateLimitIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 300
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME SafetyUploadInvariantsIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_safety_upload_invariants.py"
-)
-
-set_tests_properties(
-    SafetyUploadInvariantsIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 180
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME SafetyContentQuotaIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_safety_content_quota.py"
-)
-
-set_tests_properties(
-    SafetyContentQuotaIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 240
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME SafetyMoveCopyPathIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_safety_move_copy_path.py"
-)
-
-set_tests_properties(
-    SafetyMoveCopyPathIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 180
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_test(
-    NAME S3StorageAdapterIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_s3_storage_adapter.py"
-)
-
-set_tests_properties(
+add_disk_gated_integration_test(
     S3StorageAdapterIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 300
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    test_s3_storage_adapter.py
+    300
+    "SKIP: DISK_S3_INTEGRATION is not 1"
 )
-
-add_test(
-    NAME S3AppFlowIntegration
-    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_s3_app_flow.py"
-)
-
-set_tests_properties(
+add_disk_gated_integration_test(
     S3AppFlowIntegration
-    PROPERTIES
-    RUN_SERIAL TRUE
-    TIMEOUT 300
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    test_s3_app_flow.py
+    300
+    "SKIP: DISK_S3_APP_INTEGRATION is not 1"
 )

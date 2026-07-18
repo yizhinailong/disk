@@ -41,11 +41,6 @@ from lib_py import (
     fetch,
 )
 
-import atexit
-
-atexit.register(lambda: None)  # No specific cleanup needed
-
-
 # ─── Test 1: Health check unauthenticated ──────────────────────────────────────
 
 

@@ -1,6 +1,6 @@
 # Backend TODO
 
-> Updated: 2026-07-14
+> Updated: 2026-07-18
 >
 > This file tracks verified, currently open backend work only. Client implementation,
 > client validation, and client-documentation synchronization are paused and listed
@@ -10,6 +10,8 @@
 >
 > The completed backend refactor roadmap is archived at
 > [`docs/archive/2026-07-14-backend-refactor-todo.md`](archive/2026-07-14-backend-refactor-todo.md).
+> The self-contained backend CTest closure is archived at
+> [`docs/archive/2026-07-18-ctest-self-contained.md`](archive/2026-07-18-ctest-self-contained.md).
 
 ## Working Rules
 
@@ -31,21 +33,6 @@ operation-specific rate limits.
 - [ ] Replace the shared `rate:share_public:{ip}` bucket with independent access, browse, and download limits matching API section 9.4.3.
 - [ ] Keep access keyed by client IP; key browse and download by a verified token identifier or hash without storing or logging the raw Share Token.
 - [ ] Define configuration and executable tests for each bucket before checking the API section 9.4.5 item complete.
-
----
-
-## P1 - Reproducible Validation
-
-### P1.1 Make the full CTest run self-contained
-
-The 2026-07-14 audit ran `ctest --preset linux-debug-clang --output-on-failure` from a clean `main` worktree. It reported 99%: 8 of 1155 enabled tests failed because their scripts reached `127.0.0.1:8080` while no server was running. Later integration scripts started a server and passed, so this is a test lifecycle/ordering defect rather than evidence for eight independent feature regressions.
-
-- [ ] Give every backend integration test a consistent server lifecycle through a shared CTest fixture or `ensure_server` helper.
-- [ ] Ensure one integration script cannot stop a server that later scripts assume is shared.
-- [ ] Fix the affected integration entries: assembly backpressure, auth lifecycle, copy/delete atomicity, download flow, domain extraction invariants, file metadata queries, file mutation operations, and folder lifecycle.
-- [ ] Run the full preset from an initially stopped server and require all enabled non-gated tests to pass without manual setup.
-- [ ] Audit the 20 disabled tests and one migration-continuity skip; enable, replace, or remove obsolete cases and record the rationale for anything intentionally retained.
-- [ ] Run the two S3 application/adapter tests with their gates enabled in a compatible environment; do not count their default skip result as current S3 execution evidence.
 
 ---
 

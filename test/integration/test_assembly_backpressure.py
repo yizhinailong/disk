@@ -38,7 +38,7 @@ from lib_py import (
     log_section,
     print_summary,
     save_evidence,
-    check_server,
+    ensure_server,
     cleanup,
     do_login,
     json_field,
@@ -405,8 +405,7 @@ def main():
     print("Assembly Backpressure Integration Tests")
     print("==========================================\n")
 
-    if not check_server():
-        sys.exit(1)
+    ensure_server()
 
     global TOKEN
     TOKEN = do_login(TEST_USER, TEST_PASS)

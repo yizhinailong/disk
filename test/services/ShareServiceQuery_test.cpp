@@ -119,25 +119,5 @@ namespace disk::share {
             EXPECT_EQ(json["files"][1]["type"].asString(), "folder");
         }
 
-        TEST_F(
-            ShareServiceQueryBaselineTest,
-            DISABLED_DbRequiredGetDownloadInfoJoinQueryBaselineAnalysis
-        ) {
-            /// 【需要 MySQL 环境】GetDownloadInfo JOIN 查询基线观测
-            /// 此测试仅用于记录优化后行为，不在单元测试环境执行。
-            ///
-            /// 代码路径（优化后）：
-            /// 单次 4 表 JOIN 查询：shares + share_files + files + file_contents
-            /// 总查询次数 = 1（与文件数无关）
-            ///
-            /// 建议 DB 验证步骤：
-            /// - 准备一个 download 权限的 share，挂载 N 个文件
-            /// - 开启 MySQL general log
-            /// - 调用 GetDownloadInfo 请求其中一个文件
-            /// - 验证只执行了 1 条 SELECT 语句
-
-            SUCCEED() << "测试已跳过：需要数据库环境";
-        }
-
     } // namespace
 } // namespace disk::share

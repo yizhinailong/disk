@@ -302,25 +302,5 @@ namespace disk::services {
             EXPECT_EQ(total_expired - fetched, 150);
         }
 
-        TEST(DISABLED_CleanupServiceIntegrationTest, BatchCleanupExpiredTrashMultipleItems) {
-            GTEST_SKIP();
-        }
-
-        TEST(DISABLED_CleanupServiceIntegrationTest, BatchCleanupExpiredTrashChunkFailureRollbackContinue) {
-            GTEST_SKIP();
-        }
-
-        TEST(DISABLED_CleanupServiceIntegrationTest, BatchCleanupExpiredTrashRepeatExecutionIdempotent) {
-            GTEST_SKIP();
-        }
-
-        TEST(DISABLED_CleanupServiceIntegrationTest, BatchCleanupExpiredTrashStorageDeltaCorrectness) {
-            GTEST_SKIP();
-        }
-
-        TEST(DISABLED_CleanupServiceIntegrationTest, BatchCleanupExpiredUploadTasks) {
-            GTEST_SKIP();
-        }
-
     } ///< namespace
 } ///< namespace disk::services

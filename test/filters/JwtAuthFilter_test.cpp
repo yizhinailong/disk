@@ -291,51 +291,6 @@ namespace {
         EXPECT_EQ(verify_result.value().jti, "jti-clear-cache");
     }
 
-    TEST_F(JwtAuthFilterTest, DISABLED_RevocationCacheNonRevokedToken) {
-        SUCCEED() << "Requires Redis/Drogon runtime to assert Redis bypass on cache hit";
-    }
-
-    TEST_F(JwtAuthFilterTest, DISABLED_RevocationCacheRevokedToken) {
-        SUCCEED() << "Requires Redis/Drogon runtime to validate revoked-token rejection path";
-    }
-
-    TEST_F(JwtAuthFilterTest, DISABLED_RevocationCacheInvalidation) {
-        SUCCEED() << "Requires Redis/Drogon runtime to validate immediate in-memory invalidation";
-    }
-
-    TEST_F(JwtAuthFilterTest, DISABLED_RevocationCacheExpiry) {
-        SUCCEED() << "Requires Redis/Drogon runtime to validate cache TTL expiry behavior";
-    }
-
-    /// ================================================================================
-    /// JwtAuthFilter doFilter — integration tests (require Drogon runtime)
-    ///
-    /// The filter's doFilter is a coroutine that requires:
-    ///   - drogon::HttpRequestPtr
-    ///   - Redis connection for IsAccessTokenRevoked
-    /// These are placeholder tests that document the expected behavior.
-    /// ================================================================================
-
-    TEST_F(JwtAuthFilterTest, DISABLED_FilterMissingAuthorizationHeaderReturnsTokenMissing) {
-        SUCCEED() << "Integration test requires Drogon runtime with HTTP request context";
-    }
-
-    TEST_F(JwtAuthFilterTest, DISABLED_FilterNonBearerPrefixReturnsTokenMalformed) {
-        SUCCEED() << "Integration test requires Drogon runtime with HTTP request context";
-    }
-
-    TEST_F(JwtAuthFilterTest, DISABLED_FilterExpiredTokenInHeaderReturnsTokenExpired) {
-        SUCCEED() << "Integration test requires Drogon runtime with HTTP request context";
-    }
-
-    TEST_F(JwtAuthFilterTest, DISABLED_FilterRevokedTokenReturnsTokenRevoked) {
-        SUCCEED() << "Integration test requires Drogon runtime with Redis connection";
-    }
-
-    TEST_F(JwtAuthFilterTest, DISABLED_FilterValidTokenSetsUserIdAndUsernameAttributes) {
-        SUCCEED() << "Integration test requires Drogon runtime with HTTP request context";
-    }
-
     /// ================================================================================
     /// Error code contract tests — lock in auth error codes before optimization
     ///

@@ -5,11 +5,12 @@
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import subprocess
 import time
-from typing import Any
+from typing import Any, IO
 
 from .common import log_fail, log_info, log_pass
 from .http import BASE_URL, Response, fetch, json_field
@@ -18,6 +19,7 @@ from .http import BASE_URL, Response, fetch, json_field
 
 _server_process: subprocess.Popen | None = None
 _managed_server: bool = False
+_server_log_handle: IO[str] | None = None
 
 
 # ─── Server readiness ──────────────────────────────────────────────────────────
@@ -51,8 +53,8 @@ def ensure_server(
     base_url: str | None = None,
     server_bin: str | None = None,
 ) -> None:
-    """Start server subprocess if not ready. Wait up to 30s."""
-    global _server_process, _managed_server
+    """Borrow a ready server or start and own one. Wait up to 30s."""
+    global _server_process, _managed_server, _server_log_handle
 
     url = base_url or BASE_URL
 
@@ -83,22 +85,29 @@ def ensure_server(
         "JWT_SECRET", "dev-only-jwt-secret-key-change-in-production-2024"
     )
 
-    log_fh = open(server_log, "w")
-    _server_process = subprocess.Popen(
-        [bin_path],
-        stdout=log_fh,
-        stderr=log_fh,
-        env=env,
-    )
+    _server_log_handle = open(server_log, "w")
+    try:
+        _server_process = subprocess.Popen(
+            [bin_path],
+            stdout=_server_log_handle,
+            stderr=_server_log_handle,
+            env=env,
+        )
+    except OSError:
+        cleanup()
+        raise
     _managed_server = True
 
     for _ in range(30):
         if server_ready(url):
             log_pass("Server started")
             return
+        if _server_process.poll() is not None:
+            break
         time.sleep(1)
 
     log_fail("Server did not become ready")
+    cleanup()
     if os.path.isfile(server_log):
         with open(server_log) as f:
             print(f.read())
@@ -106,17 +115,27 @@ def ensure_server(
 
 
 def cleanup() -> None:
-    """Kill managed server process if we started it."""
-    global _server_process, _managed_server
+    """Stop only the server process started by this Python process."""
+    global _server_process, _managed_server, _server_log_handle
 
     if _managed_server and _server_process is not None:
         try:
+            _server_process.terminate()
+            _server_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
             _server_process.kill()
             _server_process.wait(timeout=5)
-        except Exception:
+        except (OSError, subprocess.SubprocessError):
             pass
-        _server_process = None
-        _managed_server = False
+
+    _server_process = None
+    _managed_server = False
+    if _server_log_handle is not None:
+        _server_log_handle.close()
+        _server_log_handle = None
+
+
+atexit.register(cleanup)
 
 
 # ─── Login helpers ─────────────────────────────────────────────────────────────

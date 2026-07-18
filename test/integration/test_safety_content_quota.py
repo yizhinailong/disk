@@ -23,7 +23,7 @@ from lib_py import (  # noqa: E402
     assert_numeric_delta,
     assert_path_absent,
     assert_path_exists,
-    check_server,
+    ensure_server,
     cleanup,
     do_login,
     execute,
@@ -1475,8 +1475,7 @@ def main() -> None:
     print("==========================================")
     print()
 
-    if not check_server():
-        sys.exit(1)
+    ensure_server()
 
     global TOKEN, USER_ID
     TOKEN = do_login(TEST_USER, TEST_PASS)

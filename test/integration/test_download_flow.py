@@ -37,7 +37,7 @@ from lib_py import (
     print_summary,
     save_evidence,
     save_raw_evidence,
-    check_server,
+    ensure_server,
     cleanup,
     do_login,
     json_field,
@@ -817,8 +817,7 @@ def main():
     print("Download Flow Integration Tests")
     print("==========================================\n")
 
-    if not check_server():
-        sys.exit(1)
+    ensure_server()
 
     global TOKEN
     TOKEN = do_login(TEST_USER, TEST_PASS)

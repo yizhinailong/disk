@@ -482,23 +482,6 @@ namespace {
     /// 迁移连续性测试（已统一，此测试已过时）
     /// ================================================================================
 
-    /**
-     * @brief 迁移连续性测试（已过时）
-     *
-     * 此测试原本用于验证旧服务生成的分享令牌在新实现中可验证。
-     * 由于分享令牌能力已完全统一到 TokenService，此测试不再适用。
-     *
-     * 统一后的 TokenService 保持完全兼容的分享令牌语义：
-     * - issuer = "disk_share"
-     * - type = "share"
-     * - claims: share_code, share_id (subject), jti, scope
-     * - TTL = 3600 秒
-     */
-    TEST(TokenServiceShareTest, MigrationContinuityLegacyTokenVerifiableByUnified) {
-        /// 永久跳过 - 旧服务已移除，迁移已完成
-        GTEST_SKIP() << "Migration complete: share token APIs unified into TokenService";
-    }
-
     /// ================================================================================
     /// 分享令牌撤销缓存单元测试
     /// ================================================================================

@@ -30,7 +30,7 @@ from lib_py import (
     log_pass,
     print_summary,
     save_evidence,
-    check_server,
+    ensure_server,
     send_login_request,
     json_field,
     fetch,
@@ -216,7 +216,7 @@ def main():
     print("User Profile Update Integration Tests")
     print("==========================================\n")
 
-    check_server()
+    ensure_server()
 
     redis_delete_pattern("rate:*")
 

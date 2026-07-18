@@ -29,7 +29,7 @@ from lib_py import (
     log_section,
     print_summary,
     save_evidence,
-    check_server,
+    ensure_server,
     send_login_request,
     json_field,
     fetch,
@@ -202,8 +202,7 @@ def main():
     print("Auth Lifecycle Integration Tests")
     print("==========================================\n")
 
-    # Use check_server (not ensure_server) — server lifecycle managed by other scripts
-    check_server()
+    ensure_server()
 
     log_section("Test User Credentials")
     log_info(f"Username: {TEST_USERNAME}")

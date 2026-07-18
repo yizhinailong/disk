@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = []
+# dependencies = ["httpx"]
 # ///
 
 """
@@ -12,7 +12,8 @@ Covers the two critical post-fix scenarios:
   2. Invalid (folder-style / non-existent) delete returns structured
      JSON error without dropping the connection.
 
-Uses ONLY Python stdlib (urllib) — no httpx dependency.
+Uses Python stdlib (urllib) for HTTP assertions and the shared lifecycle helper
+for self-contained server startup.
 
 Prerequisites:
   - Server running on localhost:8080
@@ -34,6 +35,10 @@ import time
 import urllib.error
 import urllib.request
 from typing import Any
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+
+from lib_py import ensure_server
 
 # ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -535,17 +540,7 @@ def main() -> None:
     print("=" * 50)
     print()
 
-    log_info(f"Checking server at {BASE_URL}...")
-    try:
-        status, _, _ = http_request("/api/auth/login", method="GET")
-        if status in (400, 401, 405):
-            log_pass("Server is running")
-        else:
-            log_fail(f"Unexpected server status: {status}")
-            sys.exit(1)
-    except Exception as exc:
-        log_fail(f"Server not reachable: {exc}")
-        sys.exit(1)
+    ensure_server()
 
     # Fresh user to avoid ID collisions between folders and files tables
     username, password, token = register_test_user()
