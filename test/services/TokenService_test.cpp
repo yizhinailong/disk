@@ -1,12 +1,12 @@
 /**
  * @file TokenService_test.cpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief 统一 TokenService 的分享令牌契约测试
+ * @brief 统一 TokenService 的令牌与撤销缓存契约测试
  *
  * @copyright Copyright (c) 2026
  *
- * 这些测试定义并验证统一 TokenService（disk::services 命名空间）
- * 的分享令牌能力契约。
+ * 这些测试验证统一 TokenService（disk::services 命名空间）的访问令牌、
+ * 刷新令牌和分享令牌契约，以及分享令牌撤销缓存行为。
  */
 
 #include "services/TokenService.hpp"
@@ -477,10 +477,6 @@ namespace {
         EXPECT_NE(static_cast<uint32_t>(Code::TokenRevoked), static_cast<uint32_t>(Code::TokenExpired));
         EXPECT_NE(static_cast<uint32_t>(Code::TokenRevoked), static_cast<uint32_t>(Code::TokenWrongType));
     }
-
-    /// ================================================================================
-    /// 迁移连续性测试（已统一，此测试已过时）
-    /// ================================================================================
 
     /// ================================================================================
     /// 分享令牌撤销缓存单元测试

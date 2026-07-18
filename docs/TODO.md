@@ -12,6 +12,8 @@
 > [`docs/archive/2026-07-14-backend-refactor-todo.md`](archive/2026-07-14-backend-refactor-todo.md).
 > The self-contained backend CTest closure is archived at
 > [`docs/archive/2026-07-18-ctest-self-contained.md`](archive/2026-07-18-ctest-self-contained.md).
+> The backend implementation-marker audit is archived at
+> [`docs/archive/2026-07-18-backend-implementation-marker-audit.md`](archive/2026-07-18-backend-implementation-marker-audit.md).
 
 ## Working Rules
 
@@ -33,21 +35,6 @@ operation-specific rate limits.
 - [ ] Replace the shared `rate:share_public:{ip}` bucket with independent access, browse, and download limits matching API section 9.4.3.
 - [ ] Keep access keyed by client IP; key browse and download by a verified token identifier or hash without storing or logging the raw Share Token.
 - [ ] Define configuration and executable tests for each bucket before checking the API section 9.4.5 item complete.
-
----
-
-## P2 - Backend Documentation Truth Alignment
-
-### P2.1 Repair active backend specification placeholders
-
-- [ ] Replace the `TBD.` Purpose text in the backend-relevant OpenSpec capabilities: architecture decisions, deployment operations, documentation governance, persistence design, and validation/performance.
-- [ ] Use an OpenSpec change to update documentation-governance wording that still calls the completed backend refactor roadmap active and points backend tasks at `docs/TODO.md` instead of the archive.
-- [ ] Validate the updated backend-relevant OpenSpec capabilities with the repository's OpenSpec tooling.
-
-### P2.2 Remove stale backend implementation commentary
-
-- [ ] Update the obsolete TDD RED-stage header in `test/services/TokenService_test.cpp`, which still says Share Token support is unimplemented even though the tests are green.
-- [ ] Re-scan `src/`, `test/`, `docs/design/`, and backend-relevant OpenSpec capabilities for stale `TODO`, `FIXME`, `TBD`, and “not implemented” claims after the work above is complete.
 
 ---
 
