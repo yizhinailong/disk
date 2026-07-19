@@ -37,8 +37,6 @@
 namespace disk::upload {
 
     namespace {
-        constexpr int kUploadTaskCleanupBatchSize = 100;
-
         [[nodiscard]] auto ExtractExtension(const std::string& filename) -> std::string {
             auto pos = filename.rfind('.');
             if (pos == std::string::npos || pos == filename.length() - 1) {
@@ -1243,12 +1241,18 @@ namespace disk::upload {
         co_return true;
     }
 
-    auto UploadLifecycleService::ExpireInProgressUploads() const -> drogon::Task<Result<int>> {
-        disk::file::UploadTaskRepository upload_task_repository(m_db_client);
-        auto expired_tasks =
-            co_await upload_task_repository.FindExpiredInProgressBatch(kUploadTaskCleanupBatchSize);
+    auto UploadLifecycleService::ExpireInProgressUploads(size_t limit) const
+        -> drogon::Task<Result<UploadExpirationBatchResult>> {
+        if (limit == 0 || limit > disk::jobs::kMaxExpireUploadsPageSize) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Invalid upload expiration batch size")
+            );
+        }
 
-        int cleaned_count = 0;
+        disk::file::UploadTaskRepository upload_task_repository(m_db_client);
+        auto expired_tasks = co_await upload_task_repository.FindExpiredInProgressBatch(limit);
+
+        size_t cleaned_count = 0;
         for (const auto& task : expired_tasks) {
             auto expire_result = co_await ExpireInProgressUpload(task.id);
             if (!expire_result) {
@@ -1259,7 +1263,10 @@ namespace disk::upload {
             }
         }
 
-        co_return cleaned_count;
+        co_return UploadExpirationBatchResult{
+            .candidates = expired_tasks.size(),
+            .expired = cleaned_count,
+        };
     }
 
 } // namespace disk::upload

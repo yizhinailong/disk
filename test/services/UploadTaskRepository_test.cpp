@@ -216,6 +216,7 @@ namespace disk::file {
             EXPECT_TRUE(Contains(repository_source, "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2 "));
             EXPECT_TRUE(Contains(repository_source, "WHERE id = $3 AND status = $4 AND expires_at < NOW() "));
             EXPECT_TRUE(Contains(repository_source, "RETURNING id, temp_path, user_id, reserved_bytes"));
+            EXPECT_TRUE(Contains(repository_source, "ORDER BY expires_at, id LIMIT $2"));
 
             EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.MarkExpiredIfInProgressReturning("));
             EXPECT_FALSE(Contains(lifecycle_source, "UPDATE upload_tasks SET status"));

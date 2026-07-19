@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 
 #include <drogon/orm/DbClient.h>
 
@@ -73,6 +74,10 @@ namespace disk::jobs {
         ) -> uint32_t;
 
     private:
+        using JobHandler = drogon::Task<JobExecutionResult> (StorageJobWorker::*)(
+            const StorageJob&
+        ) const;
+
         enum class PersistDisposition {
             Succeeded,
             Retried,
@@ -84,7 +89,23 @@ namespace disk::jobs {
         auto ProcessClaimedJob(const StorageJob& job) const -> drogon::Task<PersistDisposition>;
 
         [[nodiscard]]
+        auto ExecuteStagingCleanup(const StorageJob& job) const
+            -> drogon::Task<JobExecutionResult>;
+
+        [[nodiscard]]
+        auto ExecuteMultipartAbort(const StorageJob& job) const
+            -> drogon::Task<JobExecutionResult>;
+
+        [[nodiscard]]
         auto ExecuteBlobGc(const StorageJob& job) const -> drogon::Task<JobExecutionResult>;
+
+        [[nodiscard]]
+        auto ExecuteExpireUploads(const StorageJob& job) const
+            -> drogon::Task<JobExecutionResult>;
+
+        [[nodiscard]]
+        auto ExecuteStorageReconcile(const StorageJob& job) const
+            -> drogon::Task<JobExecutionResult>;
 
         drogon::orm::DbClientPtr m_db_client;
         disk::storage::UploadStagingStorage* m_staging_storage{};
@@ -92,6 +113,7 @@ namespace disk::jobs {
         disk::storage::IMultipartUploadCleaner* m_multipart_upload_cleaner{};
         std::string m_instance_id;
         StorageJobWorkerOptions m_options;
+        std::unordered_map<std::string, JobHandler> m_handlers;
     };
 
 } // namespace disk::jobs

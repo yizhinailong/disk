@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "services/StorageJobContract.hpp"
 #include "storage/MultipartUploadRecovery.hpp"
 #include "storage/UploadStagingStorage.hpp"
 
@@ -131,6 +132,20 @@ namespace disk::jobs {
             };
         }
 
+        [[nodiscard]] auto MakePersistedJob(NewStorageJob job) -> StorageJob {
+            return StorageJob{
+                .id = 45,
+                .job_type = std::move(job.job_type),
+                .aggregate_id = std::move(job.aggregate_id),
+                .dedupe_key = std::move(job.dedupe_key),
+                .payload = std::move(job.payload),
+                .status = StorageJobStatus::Running,
+                .attempts = 1,
+                .max_attempts = job.max_attempts,
+                .locked_by = "worker-1",
+            };
+        }
+
         TEST(StorageJobWorkerHandlerTest, ExecutesPersistedStagingSessionExactly) {
             RecordingStagingStorage storage;
             StorageJobWorker worker(nullptr, &storage, nullptr, "worker-1");
@@ -244,6 +259,62 @@ namespace disk::jobs {
             auto permanent = drogon::sync_wait(worker.ExecuteJob(MakeMultipartAbortJob()));
             EXPECT_FALSE(permanent.succeeded);
             EXPECT_FALSE(permanent.retryable);
+        }
+
+        TEST(StorageJobWorkerHandlerTest, DispatchesExpireUploadsThroughRegistry) {
+            StorageJobWorker worker(nullptr, nullptr, nullptr, "worker-1");
+            auto built = BuildExpireUploadsJob(ExpireUploadsPageRequest{
+                .scan_id = "scan-expire",
+                .page = 0,
+                .limit = 100,
+            });
+            ASSERT_TRUE(built.has_value());
+
+            auto result = drogon::sync_wait(
+                worker.ExecuteJob(MakePersistedJob(std::move(built.value())))
+            );
+
+            EXPECT_FALSE(result.succeeded);
+            EXPECT_TRUE(result.retryable);
+            EXPECT_EQ(result.error, "Upload expiration database is not configured");
+        }
+
+        TEST(StorageJobWorkerHandlerTest, DispatchesReconciliationThroughRegistry) {
+            StorageJobWorker worker(nullptr, nullptr, nullptr, "worker-1");
+            auto built = BuildStorageReconcileJob(
+                disk::reconciliation::ReconciliationPageRequest{
+                    .scan_id = "scan-reconcile",
+                    .scope = disk::reconciliation::ReconciliationScope::Users,
+                    .limit = 100,
+                }
+            );
+            ASSERT_TRUE(built.has_value());
+
+            auto result = drogon::sync_wait(
+                worker.ExecuteJob(MakePersistedJob(std::move(built.value())))
+            );
+
+            EXPECT_FALSE(result.succeeded);
+            EXPECT_TRUE(result.retryable);
+            EXPECT_EQ(result.error, "Storage reconciliation database is not configured");
+        }
+
+        TEST(StorageJobWorkerHandlerTest, RejectsTamperedPeriodicTaskBeforeDatabaseAccess) {
+            StorageJobWorker worker(nullptr, nullptr, nullptr, "worker-1");
+            auto built = BuildExpireUploadsJob(ExpireUploadsPageRequest{
+                .scan_id = "scan-expire",
+                .page = 0,
+                .limit = 100,
+            });
+            ASSERT_TRUE(built.has_value());
+            auto job = MakePersistedJob(std::move(built.value()));
+            job.aggregate_id = "different-scan";
+
+            auto result = drogon::sync_wait(worker.ExecuteJob(job));
+
+            EXPECT_FALSE(result.succeeded);
+            EXPECT_FALSE(result.retryable);
+            EXPECT_EQ(result.error, "expire_uploads aggregate_id does not match scan_id");
         }
 
         TEST(StorageJobWorkerRetryTest, AppliesBoundedStableJitter) {

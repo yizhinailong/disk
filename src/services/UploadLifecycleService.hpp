@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <optional>
@@ -69,6 +70,18 @@ namespace disk::upload {
         std::vector<std::string> upload_task_ids;
         std::vector<uint64_t> file_list_folder_ids;
     };
+
+    struct UploadExpirationBatchResult {
+        size_t candidates{ 0 };
+        size_t expired{ 0 };
+    };
+
+    [[nodiscard]] constexpr auto ShouldContinueExpirationScan(
+        size_t candidates,
+        size_t limit
+    ) noexcept -> bool {
+        return limit > 0 && candidates == limit;
+    }
 
     struct LifecycleFileItem {
         uint64_t id{0};
@@ -162,7 +175,8 @@ namespace disk::upload {
             -> drogon::Task<Result<bool>>;
 
         [[nodiscard]]
-        auto ExpireInProgressUploads() const -> drogon::Task<Result<int>>;
+        auto ExpireInProgressUploads(size_t limit) const
+            -> drogon::Task<Result<UploadExpirationBatchResult>>;
 
     private:
         drogon::orm::DbClientPtr m_db_client;

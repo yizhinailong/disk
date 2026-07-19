@@ -87,12 +87,14 @@ namespace disk::services {
                 disk::storage::StorageMgr::GetUploadStagingStorage(),
                 disk::storage::BlobStoreMgr::GetBlobStore()
             );
-            auto cleanup_result = co_await lifecycle_service.ExpireInProgressUploads();
+            auto cleanup_result = co_await lifecycle_service.ExpireInProgressUploads(
+                kUploadTaskCleanupBatchSize
+            );
             if (!cleanup_result) {
                 co_return std::unexpected(cleanup_result.error());
             }
 
-            auto cleaned_count = cleanup_result.value();
+            auto cleaned_count = static_cast<int>(cleanup_result->expired);
             Logger::Info() << "[cleanup_batch] upload_tasks cleaned_count=" << cleaned_count
                      << " batch_duration_ms="
                      << std::chrono::duration_cast<std::chrono::milliseconds>(

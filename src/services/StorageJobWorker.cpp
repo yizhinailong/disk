@@ -18,6 +18,9 @@
 
 #include <drogon/drogon.h>
 
+#include "services/StorageJobContract.hpp"
+#include "services/StorageReconciliationService.hpp"
+#include "services/UploadLifecycleService.hpp"
 #include "storage/IBlobStore.hpp"
 #include "storage/MultipartUploadRecovery.hpp"
 #include "storage/UploadStagingStorage.hpp"
@@ -187,6 +190,24 @@ namespace disk::jobs {
             m_options.retry_cap_seconds < m_options.retry_base_seconds) {
             throw std::invalid_argument("Storage job worker retry delay bounds are invalid");
         }
+
+        m_handlers.emplace(
+            std::string(kStagingCleanupJobType),
+            &StorageJobWorker::ExecuteStagingCleanup
+        );
+        m_handlers.emplace(
+            std::string(kMultipartAbortJobType),
+            &StorageJobWorker::ExecuteMultipartAbort
+        );
+        m_handlers.emplace(std::string(kBlobGcJobType), &StorageJobWorker::ExecuteBlobGc);
+        m_handlers.emplace(
+            std::string(kExpireUploadsJobType),
+            &StorageJobWorker::ExecuteExpireUploads
+        );
+        m_handlers.emplace(
+            std::string(kStorageReconcileJobType),
+            &StorageJobWorker::ExecuteStorageReconcile
+        );
     }
 
     auto StorageJobWorker::ComputeRetryDelaySeconds(
@@ -216,60 +237,64 @@ namespace disk::jobs {
 
     auto StorageJobWorker::ExecuteJob(const StorageJob& job) const
         -> drogon::Task<JobExecutionResult> {
-        if (job.job_type == kStagingCleanupJobType) {
-            auto session = ParseStagingSession(job);
-            if (!session) {
-                co_return PermanentFailure(session.error());
-            }
-            if (m_staging_storage == nullptr) {
-                co_return RetryableFailure("Upload staging storage is not configured");
-            }
-
-            auto cleanup_result = co_await m_staging_storage->CleanupSession(session.value());
-            if (cleanup_result) {
-                co_return JobExecutionResult{ .succeeded = true };
-            }
-
-            const auto& error = cleanup_result.error();
-            const auto retryable =
-                error.code != ErrorCode::InvalidParameter &&
-                error.code != ErrorCode::ValidationFailed;
-            co_return JobExecutionResult{
-                .succeeded = false,
-                .retryable = retryable,
-                .error = error.message.empty() ? "staging_cleanup failed with code " + std::to_string(error.CodeInt()) : error.message,
-            };
+        const auto handler = m_handlers.find(job.job_type);
+        if (handler == m_handlers.end()) {
+            co_return PermanentFailure("Unsupported storage job type: " + job.job_type);
         }
-        if (job.job_type == kBlobGcJobType) {
-            co_return co_await ExecuteBlobGc(job);
-        }
-        if (job.job_type == kMultipartAbortJobType) {
-            auto descriptor = ParseMultipartUpload(job);
-            if (!descriptor) {
-                co_return PermanentFailure(descriptor.error());
-            }
-            if (m_multipart_upload_cleaner == nullptr) {
-                co_return RetryableFailure("Multipart upload cleaner is not configured");
-            }
+        co_return co_await (this->*(handler->second))(job);
+    }
 
-            auto abort_result = co_await m_multipart_upload_cleaner->AbortMultipartUpload(
-                descriptor.value()
-            );
-            if (abort_result) {
-                co_return JobExecutionResult{ .succeeded = true };
-            }
-            const auto& error = abort_result.error();
-            const auto retryable =
-                error.code != ErrorCode::InvalidParameter &&
-                error.code != ErrorCode::ValidationFailed;
-            co_return JobExecutionResult{
-                .succeeded = false,
-                .retryable = retryable,
-                .error = error.message.empty() ? "multipart_abort failed" : error.message,
-            };
+    auto StorageJobWorker::ExecuteStagingCleanup(const StorageJob& job) const
+        -> drogon::Task<JobExecutionResult> {
+        auto session = ParseStagingSession(job);
+        if (!session) {
+            co_return PermanentFailure(session.error());
+        }
+        if (m_staging_storage == nullptr) {
+            co_return RetryableFailure("Upload staging storage is not configured");
         }
 
-        co_return PermanentFailure("Unsupported storage job type: " + job.job_type);
+        auto cleanup_result = co_await m_staging_storage->CleanupSession(session.value());
+        if (cleanup_result) {
+            co_return JobExecutionResult{ .succeeded = true };
+        }
+
+        const auto& error = cleanup_result.error();
+        const auto retryable =
+            error.code != ErrorCode::InvalidParameter &&
+            error.code != ErrorCode::ValidationFailed;
+        co_return JobExecutionResult{
+            .succeeded = false,
+            .retryable = retryable,
+            .error = error.message.empty() ? "staging_cleanup failed with code " + std::to_string(error.CodeInt()) : error.message,
+        };
+    }
+
+    auto StorageJobWorker::ExecuteMultipartAbort(const StorageJob& job) const
+        -> drogon::Task<JobExecutionResult> {
+        auto descriptor = ParseMultipartUpload(job);
+        if (!descriptor) {
+            co_return PermanentFailure(descriptor.error());
+        }
+        if (m_multipart_upload_cleaner == nullptr) {
+            co_return RetryableFailure("Multipart upload cleaner is not configured");
+        }
+
+        auto abort_result = co_await m_multipart_upload_cleaner->AbortMultipartUpload(
+            descriptor.value()
+        );
+        if (abort_result) {
+            co_return JobExecutionResult{ .succeeded = true };
+        }
+        const auto& error = abort_result.error();
+        const auto retryable =
+            error.code != ErrorCode::InvalidParameter &&
+            error.code != ErrorCode::ValidationFailed;
+        co_return JobExecutionResult{
+            .succeeded = false,
+            .retryable = retryable,
+            .error = error.message.empty() ? "multipart_abort failed" : error.message,
+        };
     }
 
     auto StorageJobWorker::ExecuteBlobGc(const StorageJob& job) const
@@ -290,6 +315,13 @@ namespace disk::jobs {
             transaction = co_await m_db_client->newTransactionCoro();
             StorageJobRepository repository(m_db_client);
             const auto complete_transaction = [&]() -> drogon::Task<JobExecutionResult> {
+                co_await transaction->execSqlCoro(
+                    "UPDATE storage_reconciliation_findings SET "
+                    "  resolved_at = COALESCE(resolved_at, NOW()), last_seen_at = NOW() "
+                    "WHERE finding_type = 'zero_reference_content' "
+                    "  AND resource_id = $1 AND resolved_at IS NULL",
+                    std::to_string(candidate->content_id)
+                );
                 const auto persisted = co_await repository.MarkSucceeded(
                     transaction,
                     job.id,
@@ -361,6 +393,123 @@ namespace disk::jobs {
             RollbackQuietly(transaction);
             co_return RetryableFailure(std::string("blob_gc handler failure: ") + error.what());
         }
+    }
+
+    auto StorageJobWorker::ExecuteExpireUploads(const StorageJob& job) const
+        -> drogon::Task<JobExecutionResult> {
+        auto request = ParseExpireUploadsJob(job);
+        if (!request) {
+            co_return PermanentFailure(request.error());
+        }
+        if (m_db_client == nullptr) {
+            co_return RetryableFailure("Upload expiration database is not configured");
+        }
+
+        disk::upload::UploadLifecycleService lifecycle_service(
+            m_db_client,
+            nullptr,
+            m_staging_storage,
+            m_blob_store
+        );
+        auto expiration = co_await lifecycle_service.ExpireInProgressUploads(request->limit);
+        if (!expiration) {
+            const auto& error = expiration.error();
+            const auto retryable =
+                error.code != ErrorCode::InvalidParameter &&
+                error.code != ErrorCode::ValidationFailed;
+            co_return JobExecutionResult{
+                .succeeded = false,
+                .retryable = retryable,
+                .error = error.message.empty() ? "expire_uploads failed" : error.message,
+            };
+        }
+
+        bool continuation_enqueued = false;
+        if (disk::upload::ShouldContinueExpirationScan(
+                expiration->candidates,
+                request->limit
+            )) {
+            auto next_request = request.value();
+            ++next_request.page;
+            auto next_job = BuildExpireUploadsJob(next_request);
+            if (!next_job) {
+                co_return PermanentFailure(next_job.error());
+            }
+            StorageJobRepository repository(m_db_client);
+            continuation_enqueued = co_await repository.Enqueue(next_job.value());
+        }
+
+        Logger::Info() << "Storage job page completed: instance_id=" << m_instance_id
+                       << ", job_type=" << kExpireUploadsJobType
+                       << ", scan_id=" << request->scan_id << ", page=" << request->page
+                       << ", candidates=" << expiration->candidates
+                       << ", expired=" << expiration->expired
+                       << ", continuation_enqueued=" << continuation_enqueued;
+        co_return JobExecutionResult{ .succeeded = true };
+    }
+
+    auto StorageJobWorker::ExecuteStorageReconcile(const StorageJob& job) const
+        -> drogon::Task<JobExecutionResult> {
+        auto request = ParseStorageReconcileJob(job);
+        if (!request) {
+            co_return PermanentFailure(request.error());
+        }
+        if (m_db_client == nullptr) {
+            co_return RetryableFailure("Storage reconciliation database is not configured");
+        }
+
+        disk::reconciliation::StorageReconciliationService reconciliation_service(
+            m_db_client,
+            m_staging_storage,
+            m_blob_store
+        );
+        auto page = co_await reconciliation_service.RunPage(request.value());
+        if (!page) {
+            const auto& error = page.error();
+            const auto retryable =
+                error.code != ErrorCode::InvalidParameter &&
+                error.code != ErrorCode::ValidationFailed;
+            co_return JobExecutionResult{
+                .succeeded = false,
+                .retryable = retryable,
+                .error = error.message.empty() ? "storage_reconcile failed" : error.message,
+            };
+        }
+
+        bool continuation_enqueued = false;
+        if (page->has_more) {
+            auto next_request = request.value();
+            next_request.after_id = page->next_after_id;
+            next_request.continuation_token = page->next_continuation_token;
+            const auto is_database_scope =
+                request->scope == disk::reconciliation::ReconciliationScope::Contents ||
+                request->scope == disk::reconciliation::ReconciliationScope::Users;
+            const auto cursor_advanced = is_database_scope
+                                             ? next_request.after_id > request->after_id
+                                             : !next_request.continuation_token.empty() &&
+                                                   next_request.continuation_token !=
+                                                       request->continuation_token;
+            if (!cursor_advanced) {
+                co_return PermanentFailure("storage_reconcile continuation cursor did not advance");
+            }
+
+            auto next_job = BuildStorageReconcileJob(next_request);
+            if (!next_job) {
+                co_return PermanentFailure(next_job.error());
+            }
+            StorageJobRepository repository(m_db_client);
+            continuation_enqueued = co_await repository.Enqueue(next_job.value());
+        }
+
+        Logger::Info() << "Storage job page completed: instance_id=" << m_instance_id
+                       << ", job_type=" << kStorageReconcileJobType
+                       << ", scan_id=" << request->scan_id
+                       << ", scope=" << disk::reconciliation::ToStorageValue(request->scope)
+                       << ", inspected=" << page->inspected
+                       << ", findings=" << page->findings_recorded
+                       << ", repairs_enqueued=" << page->repairs_enqueued
+                       << ", continuation_enqueued=" << continuation_enqueued;
+        co_return JobExecutionResult{ .succeeded = true };
     }
 
     auto StorageJobWorker::ProcessClaimedJob(const StorageJob& job) const

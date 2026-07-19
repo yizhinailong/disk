@@ -86,5 +86,23 @@ namespace disk::upload {
             EXPECT_FALSE(decision.existing_content_id.has_value());
         }
 
+        TEST(UploadLifecycleExpirationTest, RejectsUnboundedBatchBeforeDatabaseAccess) {
+            UploadLifecycleService service(nullptr, nullptr, nullptr, nullptr);
+
+            auto empty = drogon::sync_wait(service.ExpireInProgressUploads(0));
+            auto oversized = drogon::sync_wait(service.ExpireInProgressUploads(501));
+
+            ASSERT_FALSE(empty.has_value());
+            EXPECT_EQ(empty.error().code, ErrorCode::ValidationFailed);
+            ASSERT_FALSE(oversized.has_value());
+            EXPECT_EQ(oversized.error().code, ErrorCode::ValidationFailed);
+        }
+
+        TEST(UploadLifecycleExpirationTest, ContinuesOnFullCandidatePageDespiteCasLoss) {
+            EXPECT_TRUE(ShouldContinueExpirationScan(100, 100));
+            EXPECT_FALSE(ShouldContinueExpirationScan(99, 100));
+            EXPECT_FALSE(ShouldContinueExpirationScan(0, 0));
+        }
+
     } // namespace
 } // namespace disk::upload

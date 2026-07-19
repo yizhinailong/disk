@@ -541,7 +541,7 @@ namespace disk::file {
     auto UploadTaskRepository::FindExpiredInProgressBatch(size_t limit) const
         -> drogon::Task<std::vector<ExpiredUploadTaskRecord>> {
         auto result = co_await m_db_client->execSqlCoro(
-            "SELECT id, temp_path, user_id, reserved_bytes, staging_backend, " "COALESCE(staging_prefix, temp_path) AS staging_prefix FROM upload_tasks " "WHERE status = $1 AND expires_at < NOW() " "LIMIT $2",
+            "SELECT id, temp_path, user_id, reserved_bytes, staging_backend, " "COALESCE(staging_prefix, temp_path) AS staging_prefix FROM upload_tasks " "WHERE status = $1 AND expires_at < NOW() " "ORDER BY expires_at, id LIMIT $2",
             disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress),
             static_cast<int64_t>(limit)
         );
