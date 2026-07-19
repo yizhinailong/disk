@@ -159,7 +159,7 @@ Additional contract rules:
   download settings above in `config.json` and `ConfigMgr`.
 - [ ] Add `RedisKeyPrefix` builders for all three key families, using normalized IP
   for access and verified JTI for browse/download. Remove ad hoc key construction.
-- [ ] Expose the verified Share Token JTI to downstream route filters through a
+- [x] Expose the verified Share Token JTI to downstream route filters through a
   narrowly named request attribute only after full Share Token verification and
   scope validation succeed.
 - [ ] Replace the global `SharePublicRateLimitFilter` path with route-owned

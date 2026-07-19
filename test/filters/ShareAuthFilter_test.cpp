@@ -20,6 +20,8 @@
 #include <drogon/utils/Utilities.h>
 #include <drogon/utils/coroutine.h>
 #include <gtest/gtest.h>
+#include <jwt-cpp/jwt.h>
+#include <jwt-cpp/traits/open-source-parsers-jsoncpp/traits.h>
 #include <trantor/net/InetAddress.h>
 
 #include "services/RedisService.hpp"
@@ -35,6 +37,27 @@ namespace {
     using disk::services::TokenService;
 
     constexpr const char* TEST_JWT_SECRET = "test_secret_key_for_share_token_32b";
+
+    auto BuildExpiredShareToken() -> std::string {
+        using traits = jwt::traits::open_source_parsers_jsoncpp;
+
+        const auto expired_at = std::chrono::system_clock::now() - std::chrono::hours(1);
+        Json::Value scope(Json::objectValue);
+        scope["share_id"] = "runtime-share-expired";
+        scope["permission"] = "view";
+
+        jwt::builder<jwt::default_clock, traits> builder{ jwt::default_clock{} };
+        return builder.set_issuer("disk_share")
+            .set_type("JWT")
+            .set_subject("9002")
+            .set_payload_claim("share_code", "runtime-share-expired")
+            .set_payload_claim("type", "share")
+            .set_payload_claim("jti", "runtime-jti-expired")
+            .set_payload_claim("scope", scope)
+            .set_issued_at(expired_at)
+            .set_expires_at(expired_at)
+            .sign(jwt::algorithm::hs256{ TEST_JWT_SECRET });
+    }
 
     auto WaitForRedisReady(const drogon::nosql::RedisClientPtr& redis_client) -> bool {
         for (int attempt = 0; attempt < 30; ++attempt) {
@@ -201,6 +224,33 @@ namespace {
         ASSERT_NE(json, nullptr);
         EXPECT_EQ((*json)["code"].asUInt(), static_cast<Json::UInt>(Code::TokenMissing));
         EXPECT_EQ((*json)["message"].asString(), "Token not provided");
+        EXPECT_FALSE(request->attributes()->find(ShareAuthFilter::SHARE_TOKEN_JTI_ATTRIBUTE));
+    }
+
+    TEST_F(ShareAuthFilterRuntimeTest, FilterMalformedTokenDoesNotSetJtiAttribute) {
+        auto request = BuildShareRequestWithToken("malformed.token.string");
+
+        auto response = drogon::sync_wait(m_filter->doFilter(request));
+        ASSERT_NE(response, nullptr);
+        EXPECT_EQ(response->getStatusCode(), drogon::k401Unauthorized);
+
+        auto json = response->getJsonObject();
+        ASSERT_NE(json, nullptr);
+        EXPECT_EQ((*json)["code"].asUInt(), static_cast<Json::UInt>(Code::TokenMalformed));
+        EXPECT_FALSE(request->attributes()->find(ShareAuthFilter::SHARE_TOKEN_JTI_ATTRIBUTE));
+    }
+
+    TEST_F(ShareAuthFilterRuntimeTest, FilterExpiredTokenDoesNotSetJtiAttribute) {
+        auto request = BuildShareRequestWithToken(BuildExpiredShareToken());
+
+        auto response = drogon::sync_wait(m_filter->doFilter(request));
+        ASSERT_NE(response, nullptr);
+        EXPECT_EQ(response->getStatusCode(), drogon::k401Unauthorized);
+
+        auto json = response->getJsonObject();
+        ASSERT_NE(json, nullptr);
+        EXPECT_EQ((*json)["code"].asUInt(), static_cast<Json::UInt>(Code::TokenExpired));
+        EXPECT_FALSE(request->attributes()->find(ShareAuthFilter::SHARE_TOKEN_JTI_ATTRIBUTE));
     }
 
     TEST_F(ShareAuthFilterRuntimeTest, FilterRevokedTokenReturnsTokenRevoked) {
@@ -225,6 +275,7 @@ namespace {
         ASSERT_NE(json, nullptr);
         EXPECT_EQ((*json)["code"].asUInt(), static_cast<Json::UInt>(Code::TokenRevoked));
         EXPECT_EQ((*json)["message"].asString(), "Token revoked");
+        EXPECT_FALSE(request->attributes()->find(ShareAuthFilter::SHARE_TOKEN_JTI_ATTRIBUTE));
     }
 
     TEST_F(ShareAuthFilterRuntimeTest, FilterValidTokenSetsRequestAttributes) {
@@ -235,6 +286,8 @@ namespace {
             "view"
         );
         ASSERT_TRUE(token_result.has_value());
+        const auto claims = TokenService::VerifyShareToken(TEST_JWT_SECRET, token_result.value());
+        ASSERT_TRUE(claims.has_value());
 
         auto request = BuildShareRequestWithToken(token_result.value());
         auto response = drogon::sync_wait(m_filter->doFilter(request));
@@ -242,8 +295,17 @@ namespace {
 
         ASSERT_TRUE(request->attributes()->find("share_code"));
         ASSERT_TRUE(request->attributes()->find("share_id"));
+        ASSERT_TRUE(request->attributes()->find(ShareAuthFilter::SHARE_TOKEN_JTI_ATTRIBUTE));
         EXPECT_EQ(request->attributes()->get<std::string>("share_code"), "runtime-share-valid");
         EXPECT_EQ(request->attributes()->get<uint64_t>("share_id"), 42u);
+        EXPECT_EQ(
+            request->attributes()->get<std::string>(ShareAuthFilter::SHARE_TOKEN_JTI_ATTRIBUTE),
+            claims->jti
+        );
+        EXPECT_NE(
+            request->attributes()->get<std::string>(ShareAuthFilter::SHARE_TOKEN_JTI_ATTRIBUTE),
+            token_result.value()
+        );
     }
 
     TEST_F(ShareAuthFilterRuntimeTest, ViewScopeRejectsDownloadMetadataContentAndSave) {
@@ -271,6 +333,9 @@ namespace {
             EXPECT_EQ(
                 (*json)["code"].asUInt(),
                 static_cast<Json::UInt>(Code::ShareAccessDenied)
+            ) << path;
+            EXPECT_FALSE(
+                request->attributes()->find(ShareAuthFilter::SHARE_TOKEN_JTI_ATTRIBUTE)
             ) << path;
         }
     }
@@ -338,4 +403,4 @@ namespace {
         EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
     }
 
-} ///< namespace
+} // namespace

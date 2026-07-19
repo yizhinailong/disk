@@ -16,8 +16,10 @@
 namespace disk::filters {
     class ShareAuthFilter : public drogon::HttpCoroFilter<ShareAuthFilter> {
     public:
+        static constexpr const char* SHARE_TOKEN_JTI_ATTRIBUTE = "share_token_jti";
+
         [[nodiscard]]
         auto doFilter(const drogon::HttpRequestPtr& request)
             -> drogon::Task<drogon::HttpResponsePtr> override;
     };
-} ///< namespace disk::filters
+} // namespace disk::filters

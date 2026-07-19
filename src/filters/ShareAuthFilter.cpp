@@ -24,7 +24,7 @@ namespace disk::filters {
                    path.rfind("/api/share/save/", 0) == 0;
         }
 
-    } ///< namespace
+    } // namespace
 
     auto ShareAuthFilter::doFilter(const drogon::HttpRequestPtr& request)
         -> drogon::Task<drogon::HttpResponsePtr> {
@@ -72,14 +72,15 @@ namespace disk::filters {
 
         request->attributes()->insert("share_code", claims.share_code);
         request->attributes()->insert("share_id", claims.share_id);
+        request->attributes()->insert(SHARE_TOKEN_JTI_ATTRIBUTE, claims.jti);
 
         auto end = std::chrono::steady_clock::now();
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         Logger::Info() << "[share_auth_filter] duration_us=" << duration_us
-                 << " outcome=success share_code=" << claims.share_code;
+                       << " outcome=success share_code=" << claims.share_code;
 
         co_return nullptr;
     }
 
-} ///< namespace disk::filters
+} // namespace disk::filters

@@ -14,7 +14,7 @@
 
 ## 3. Authentication and Route-Owned Filters
 
-- [ ] 3.1 Publish `share_token_jti` from `ShareAuthFilter` only after token verification and operation-scope authorization, with focused success and rejection tests
+- [x] 3.1 Publish `share_token_jti` from `ShareAuthFilter` only after token verification and operation-scope authorization, with focused success and rejection tests
 - [ ] 3.2 Implement the route-owned access limiter using normalized IP, access configuration, the access key builder, the shared fixed-window helper, standard 429 responses, and explicit Redis fail-open logging
 - [ ] 3.3 Implement the route-owned authenticated operation limiter using only `share_token_jti`, browse/download configuration and keys, shared download coverage, standard responses, and explicit Redis fail-open logging
 - [ ] 3.4 Attach filters in the required controller order, remove `SharePublicRateLimitFilter` from global configuration and build targets, and delete its obsolete source and declarations
