@@ -3,7 +3,6 @@
 #include <drogon/drogon.h>
 
 #include "application/ApplicationContext.hpp"
-#include "services/CleanupService.hpp"
 #include "services/MultipartUploadJournal.hpp"
 #include "services/ScheduledTasks.hpp"
 #include "services/TokenService.hpp"
@@ -51,16 +50,16 @@ auto main() -> int {
     /// 记录有效存储路径
     disk::utils::Logger::Info() << "Effective storage configuration:";
     disk::utils::Logger::Info() << "  storage_base_path: "
-                << disk::utils::ConfigMgr::GetInstance()->GetStorageBasePath();
+                                << disk::utils::ConfigMgr::GetInstance()->GetStorageBasePath();
     disk::utils::Logger::Info() << "  temp_upload_path: " << disk::utils::ConfigMgr::GetInstance()->GetTempUploadPath();
     disk::utils::Logger::Info() << "  chunk_size: " << disk::utils::ConfigMgr::GetInstance()->GetChunkSize();
     disk::utils::Logger::Info() << "  max_file_size: " << disk::utils::ConfigMgr::GetInstance()->GetMaxFileSize();
     disk::utils::Logger::Info() << "  upload_task_expiry_seconds: "
-                << disk::utils::ConfigMgr::GetInstance()->GetUploadTaskExpirySeconds();
+                                << disk::utils::ConfigMgr::GetInstance()->GetUploadTaskExpirySeconds();
     disk::utils::Logger::Info() << "  assembly_max_concurrent: "
-                << disk::utils::ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent();
+                                << disk::utils::ConfigMgr::GetInstance()->GetAssemblyMaxConcurrent();
     disk::utils::Logger::Info() << "  assemble_buffer_size_bytes: "
-                << disk::utils::ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes();
+                                << disk::utils::ConfigMgr::GetInstance()->GetAssembleBufferSizeBytes();
 
     /// 初始化文件存储和最终 Blob 存储
     try {
@@ -103,10 +102,8 @@ auto main() -> int {
         disk::utils::Logger::Info() << "Application service context initialized successfully";
 
         disk::services::ScheduledTasks::Initialize(
-            std::shared_ptr<disk::services::CleanupService>(
-                disk::application::ApplicationContext::GetInstance(),
-                &disk::application::ApplicationContext::GetInstance()->Cleanup()
-            )
+            db_client,
+            disk::utils::ConfigMgr::GetInstance()->GetInstanceId()
         );
         disk::services::ScheduledTasks::Register();
         disk::services::TokenService::GetInstance()->StartCacheMaintenance();

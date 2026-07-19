@@ -1,62 +1,67 @@
 /**
  * @file ScheduledTasks.hpp
- * @author LiuFeng (liufeng.code@outlook.com)
- * @brief 定时任务管理器
- *
- * @copyright Copyright (c) 2026
- *
+ * @brief 持久化周期任务播种器
  */
 
 #pragma once
 
+#include <atomic>
+#include <chrono>
+#include <expected>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include <drogon/orm/DbClient.h>
+#include <drogon/utils/coroutine.h>
+#include <trantor/net/EventLoop.h>
 
-#include "services/CleanupService.hpp"
+#include "services/StorageJobRepository.hpp"
+#include "utils/ErrorCode.hpp"
 #include "utils/Singleton.hpp"
 
 namespace disk::services {
 
-    /**
-     * @brief 定时任务管理器（单例）
-     *
-     * 管理系统定时任务，如回收站过期清理等。
-     * 继承自 Singleton<ScheduledTasks>，确保全局只有一个实例。
-     *
-     * 使用方式：
-     * @code
-     * ///< 在应用启动时初始化（只需调用一次）
-     * ScheduledTasks::Initialize(db_client);
-     *
-     * ///< 注册定时任务
-     * ScheduledTasks::Register();
-     * @endcode
-     */
-    class ScheduledTasks : public disk::utils::Singleton<ScheduledTasks> {
+    inline constexpr double kPeriodicSeedIntervalSeconds = 60.0;
+
+    struct PeriodicSeedPlan {
+        std::string hourly_scan_id;
+        std::string daily_scan_id;
+        std::vector<disk::jobs::NewStorageJob> jobs;
+    };
+
+    struct PeriodicSeedResult {
+        size_t attempted{ 0 };
+        size_t enqueued{ 0 };
+        size_t deduplicated{ 0 };
+    };
+
+    [[nodiscard]]
+    auto BuildPeriodicSeedPlan(std::chrono::system_clock::time_point now)
+        -> std::expected<PeriodicSeedPlan, std::string>;
+
+    class ScheduledTasks final : public disk::utils::Singleton<ScheduledTasks>,
+                                 public std::enable_shared_from_this<ScheduledTasks> {
         friend class disk::utils::Singleton<ScheduledTasks>;
 
     public:
-        /**
-         * @brief 初始化 ScheduledTasks 单例
-         * @param db_client 数据库客户端
-         *
-         * @note 此方法应在应用启动时调用一次。
-         *       多次调用是安全的，但只有第一次调用有效。
-         */
-        static auto Initialize(drogon::orm::DbClientPtr db_client) -> void;
+        static auto Initialize(
+            drogon::orm::DbClientPtr db_client,
+            std::string instance_id
+        ) -> void;
 
-        static auto Initialize(std::shared_ptr<CleanupService> cleanup_service) -> void;
-
-        /**
-         * @brief 注册所有定时任务
-         *
-         * 注册以下定时任务：
-         * - 每小时执行一次回收站过期清理
-         *
-         * @note 此方法应在 Initialize() 之后调用。
-         */
         static auto Register() -> void;
+
+        static auto Stop() -> void;
+
+        [[nodiscard]]
+        auto SeedOnce(std::chrono::system_clock::time_point now) -> drogon::Task<Result<PeriodicSeedResult>>;
+
+        [[nodiscard]]
+        auto IsAccepting() const noexcept -> bool;
+
+        [[nodiscard]]
+        auto IsDrained() const noexcept -> bool;
 
         ~ScheduledTasks() = default;
         ScheduledTasks(const ScheduledTasks&) = delete;
@@ -65,12 +70,17 @@ namespace disk::services {
         auto operator=(ScheduledTasks&&) -> ScheduledTasks& = delete;
 
     private:
-        /**
-         * @brief 私有构造函数（单例模式）
-         */
         ScheduledTasks() = default;
 
-        std::shared_ptr<CleanupService> m_cleanup_service{};
+        auto TriggerSeed() -> void;
+
+        std::shared_ptr<disk::jobs::StorageJobRepository> m_repository;
+        std::string m_instance_id;
+        trantor::EventLoop* m_loop{};
+        std::atomic<trantor::TimerId> m_seed_timer{ trantor::InvalidTimerId };
+        std::atomic_bool m_started{ false };
+        std::atomic_bool m_accepting{ false };
+        std::atomic_bool m_seed_inflight{ false };
     };
 
-} ///< namespace disk::services
+} // namespace disk::services
