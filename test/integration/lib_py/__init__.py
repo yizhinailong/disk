@@ -101,6 +101,7 @@ from .invariants import (
     assert_numeric_delta,
     assert_path_absent,
     assert_path_exists,
+    assert_storage_job_succeeded,
     assert_true,
 )
 

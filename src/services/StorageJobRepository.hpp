@@ -61,6 +61,16 @@ namespace disk::jobs {
         }
     }
 
+    [[nodiscard]]
+    auto StorageJobStatusName(StorageJobStatus status) noexcept -> std::string_view;
+
+    [[nodiscard]]
+    auto ParseStorageJobStatus(std::string_view value) noexcept
+        -> std::optional<StorageJobStatus>;
+
+    [[nodiscard]]
+    auto IsKnownStorageJobType(std::string_view value) noexcept -> bool;
+
     struct NewStorageJob {
         std::string job_type;
         std::string aggregate_id;
@@ -79,6 +89,7 @@ namespace disk::jobs {
         uint32_t attempts{ 0 };
         uint32_t max_attempts{ 0 };
         std::string locked_by;
+        bool lease_takeover{ false };
     };
 
     enum class BlobGcReferenceGate {

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +69,32 @@ def assert_path_absent(label: str, path: Path) -> bool:
         log_pass(label)
         return True
     log_fail(f"{label}: expected path to be absent: {path}")
+    return False
+
+
+def assert_storage_job_succeeded(
+    label: str,
+    dedupe_key: str,
+    timeout_seconds: float = 20.0,
+) -> bool:
+    """Poll one durable storage job until it succeeds or reaches a terminal failure."""
+    deadline = time.monotonic() + timeout_seconds
+    last_row: dict[str, Any] | None = None
+    while time.monotonic() < deadline:
+        last_row = query_one(
+            "SELECT id, status, attempts, last_error FROM storage_jobs WHERE dedupe_key = %s",
+            (dedupe_key,),
+        )
+        if last_row is not None:
+            status = int(last_row["status"])
+            if status == 3:
+                log_pass(label)
+                return True
+            if status == 4:
+                break
+        time.sleep(0.05)
+
+    log_fail(f"{label}: storage job did not succeed: key={dedupe_key}, row={last_row}")
     return False
 
 

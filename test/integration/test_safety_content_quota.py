@@ -23,6 +23,7 @@ from lib_py import (  # noqa: E402
     assert_numeric_delta,
     assert_path_absent,
     assert_path_exists,
+    assert_storage_job_succeeded,
     ensure_server,
     cleanup,
     do_login,
@@ -763,6 +764,10 @@ def test_completion_dedup_race_ref_count_and_accounting_current_rule() -> None:
         "dedup race keeps existing final blob",
         local_blob_path(str(content_row(content_id)["storage_path"])),
     )
+    assert_storage_job_succeeded(
+        "dedup race cleanup job converges",
+        f"staging-cleanup:{upload_id}",
+    )
     assert_path_absent("dedup race cleans temp upload directory", upload_temp_dir(upload_id))
 
 
@@ -1275,8 +1280,15 @@ def test_restore_preserves_ref_count_storage_used_and_removes_trash() -> None:
 def test_share_cleanup_on_soft_delete() -> None:
     """Verify move-to-trash removes share links and cancels shares only when empty."""
     log_section("Share Cleanup On Soft Delete")
-    first_file_id = upload_file(f"safety_share_cleanup_a_{unique_name()}.bin", b"share-cleanup-a")
-    second_file_id = upload_file(f"safety_share_cleanup_b_{unique_name()}.bin", b"share-cleanup-b")
+    share_fixture_id = unique_name()
+    first_file_id = upload_file(
+        f"safety_share_cleanup_a_{share_fixture_id}.bin",
+        f"share-cleanup-a-{share_fixture_id}".encode(),
+    )
+    second_file_id = upload_file(
+        f"safety_share_cleanup_b_{share_fixture_id}.bin",
+        f"share-cleanup-b-{share_fixture_id}".encode(),
+    )
     share_id = create_share_fixture([first_file_id, second_file_id])
 
     delete_file_to_trash(first_file_id)
@@ -1420,6 +1432,10 @@ def test_delete_all_ref_count_quota_and_blob_cleanup() -> None:
     assert_numeric_delta("delete-all decrements ref_count for both files", before_ref, final_ref, -2)
     assert_equal("delete-all does not drive ref_count negative", final_ref >= 0, True)
     assert_numeric_delta("delete-all releases used storage for both files", quota_before["storage_used"], quota_after["storage_used"], -2 * len(payload))
+    assert_storage_job_succeeded(
+        "delete-all Blob GC job converges",
+        f"blob-gc:{content_id}",
+    )
     assert_path_absent("delete-all deletes blob at zero ref_count", blob_path)
 
 
@@ -1449,6 +1465,10 @@ def test_permanent_delete_ref_count_and_blob_retention() -> None:
     final_ref = int(content_row(content_id)["ref_count"])
     assert_equal("second permanent delete reaches zero ref_count", final_ref, 0)
     assert_equal("permanent delete does not drive ref_count negative", final_ref >= 0, True)
+    assert_storage_job_succeeded(
+        "permanent delete Blob GC job converges",
+        f"blob-gc:{content_id}",
+    )
     assert_path_absent("blob deleted when ref_count reaches zero", blob_path)
 
 
@@ -1497,6 +1517,10 @@ def test_expired_trash_cleanup_ref_count_quota_and_blob_retention() -> None:
         quota_after_first["storage_used"],
         quota_after_second["storage_used"],
         -len(payload),
+    )
+    assert_storage_job_succeeded(
+        "expired cleanup Blob GC job converges",
+        f"blob-gc:{content_id}",
     )
     assert_path_absent("expired cleanup deletes blob only when ref_count reaches zero", blob_path)
 

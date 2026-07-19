@@ -5,6 +5,8 @@
 > 目标：将当前 Drogon 后端重构为可无粘性会话横向扩容、可故障恢复的模块化单体。
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
+>
+> 最近验证（2026-07-20）：`cmake --preset linux-debug-clang`、构建及完整 CTest 均通过，共 1312 项测试；S3 适配器、S3 应用流和真实分布式拓扑 3 项因当前主机缺少对应外部环境而按门控跳过，相关验收项继续保持未完成。
 
 ## 1. 目标与范围
 
@@ -151,7 +153,7 @@ API Instance A  API Instance B ... N
 - [x] 为去重键增加唯一约束，确保同一清理/删除任务只产生一个逻辑任务。
 - [x] 为 `pending/retry + available_at` 和 `running + lease_expires_at` 建立认领索引。
 - [x] 定义任务状态迁移：`Pending -> Running -> Succeeded`，失败进入 `Retry`，超过上限进入 `DeadLetter`。
-- [ ] 定义 dead-letter 查询、人工重试和审计流程。
+- [x] 定义 dead-letter 查询、人工重试和审计流程。
 
 ### 6.5 Phase 1 验收
 
@@ -171,7 +173,7 @@ API Instance A  API Instance B ... N
 - [x] `Completed` 的重复完成请求通过 `completed_file_id` 返回原文件。
 - [x] `Cancelled/Expired/Failed` 的重复请求具有稳定且文档化的结果。
 - [x] 续租使用数据库时间并校验 `lease_owner + state_version`，旧 owner 不得覆盖新 owner。
-- [ ] API/Worker 优雅退出时停止认领新任务；已认领任务完成或由租约超时接管。
+- [x] API/Worker 优雅退出时停止认领新任务；已认领任务完成或由租约超时接管。
 
 ### 7.2 分片写入正确性
 
@@ -190,7 +192,7 @@ API Instance A  API Instance B ... N
 - [x] 最终 Blob 创建必须幂等；内容去重使用数据库唯一约束和原子 upsert，而不是“先查再插”作为唯一防线。
 - [x] 文件名冲突依赖数据库唯一约束给出确定的领域错误。
 - [x] 最终短事务原子完成：内容引用、文件记录、文件夹计数、reserved-to-used 配额、上传终态、`completed_file_id` 和清理任务入队。
-- [ ] 事务提交失败后保留可识别的 staging 对象，由持久任务对账清理；禁止无引用复核就删除共享最终 Blob。
+- [x] 事务提交失败后保留可识别的 staging 对象，由持久任务对账清理；禁止无引用复核就删除共享最终 Blob。
 - [x] 完成响应丢失后，客户端重复调用可由数据库恢复原响应。
 
 ### 7.4 取消与过期
@@ -199,15 +201,15 @@ API Instance A  API Instance B ... N
 - [x] 取消事务同时删除/标记分片元数据并写入 staging cleanup 任务，实际对象删除在事务后执行。
 - [x] 过期流程继续使用条件更新，并与配额释放、分片元数据处理、清理任务入队放入同一事务。
 - [x] 明确定义 `Finalizing` 状态是否允许取消；推荐返回冲突并让完成/恢复流程收敛。
-- [ ] 所有清理操作可重复执行，对“对象不存在”按成功处理。
+- [x] 所有清理操作可重复执行，对“对象不存在”按成功处理。
 
 ### 7.5 Blob 引用与删除
 
 - [x] 内容创建/引用增加在数据库层原子化，覆盖两个上传同时命中相同内容的情况。
 - [x] Blob 删除改为事务内产生持久任务，Worker 删除前再次确认内容不存在或 `ref_count == 0`。
 - [x] Blob 删除成功后再完成任务；超时和临时错误指数退避重试。
-- [ ] 增加孤儿 staging、孤儿 final Blob、零引用内容记录和缺失 Blob 的对账作业。
-- [ ] 为每种不一致定义自动修复、告警或人工介入策略。
+- [x] 增加孤儿 staging、孤儿 final Blob、零引用内容记录和缺失 Blob 的对账作业。
+- [x] 为每种不一致定义自动修复、告警或人工介入策略。
 
 ### 7.6 Phase 2 验收
 
@@ -271,7 +273,7 @@ API Instance A  API Instance B ... N
 ### 9.2 任务认领与执行
 
 - [x] 使用 `FOR UPDATE SKIP LOCKED` 批量认领到期任务，并写入 `locked_by/locked_until`。
-- [ ] Worker 使用稳定且唯一的 instance ID，日志和指标均携带该 ID。
+- [x] Worker 使用稳定且唯一的 instance ID，日志和指标均携带该 ID。
 - [x] 长任务周期续租；续租和完成都必须校验当前 owner/version。
 - [x] Worker 崩溃后，其他 Worker 可在租约到期后接管。
 - [x] 任务 handler 按类型注册，至少覆盖 staging cleanup、multipart abort、Blob GC、过期上传和一致性对账。
@@ -291,7 +293,7 @@ API Instance A  API Instance B ... N
 - [ ] 两个 Worker 并发运行时，每个逻辑任务只成功执行一次，允许幂等重复尝试。
 - [ ] 杀死持有租约的 Worker 后，任务在约定恢复时间内被接管。
 - [ ] API 扩容或缩容不会改变周期任务执行次数。
-- [ ] dead-letter 可查询、告警、人工重放并保留审计信息。
+- [x] dead-letter 可查询、告警、人工重放并保留审计信息。
 
 ## 10. Phase 5：缓存、认证与跨实例一致性
 
@@ -378,18 +380,18 @@ API Instance A  API Instance B ... N
 ### 12.2 指标
 
 - [ ] 暴露请求量、错误率、延迟、活动上传数、分片吞吐和完成各阶段耗时。
-- [ ] 暴露上传状态数量、过期租约、接管次数、重试次数和失败终态数量。
-- [ ] 暴露任务队列深度、最老任务年龄、执行耗时、dead-letter 数量。
+- [x] 暴露上传状态数量、过期租约、接管次数、重试次数和失败终态数量。
+- [x] 暴露任务队列深度、最老任务年龄、执行耗时、dead-letter 数量。
 - [ ] 暴露 PostgreSQL/Redis/S3 调用耗时、错误分类、连接池使用率和线程队列深度。
-- [ ] 暴露 staging/final 孤儿数量、缺失对象和配额/ref_count 对账差异。
-- [ ] 指标标签禁止使用 `upload_id`、文件名等高基数字段。
+- [x] 暴露 staging/final 孤儿数量、缺失对象和配额/ref_count 对账差异。
+- [x] 指标标签禁止使用 `upload_id`、文件名等高基数字段。
 
 ### 12.3 告警与运维命令
 
 - [ ] 为可用性、错误率、P99、任务积压、租约反复接管、dead-letter、S3 错误和对账差异设置告警。
 - [ ] 提供只读诊断命令：查看上传状态、租约、分片元数据、对象 HEAD 和关联任务。
 - [ ] 提供受审计的任务重放、解除死租约、重建清理任务和对账命令。
-- [ ] 运维命令默认 dry-run，破坏性操作要求精确 ID 和二次确认。
+- [x] 运维命令默认 dry-run，破坏性操作要求精确 ID 和二次确认。
 
 ### 12.4 Phase 7 验收
 
@@ -401,12 +403,12 @@ API Instance A  API Instance B ... N
 
 ### 13.1 单元测试
 
-- [ ] 覆盖所有合法/非法上传状态迁移和版本号变化。
-- [ ] 覆盖租约认领、续租、过期接管和旧 owner 拒绝提交。
-- [ ] 覆盖分片幂等、终态拒绝、对象/DB 不一致处理。
-- [ ] 覆盖任务认领、去重、退避、dead-letter 和优雅关闭。
-- [ ] 覆盖 S3 错误分类、multipart abort、流式哈希和大对象 copy。
-- [ ] 覆盖重复完成、重复取消、配额与 ref_count 不变量。
+- [x] 覆盖所有合法/非法上传状态迁移和版本号变化。
+- [x] 覆盖租约认领、续租、过期接管和旧 owner 拒绝提交。
+- [x] 覆盖分片幂等、终态拒绝、对象/DB 不一致处理。
+- [x] 覆盖任务认领、去重、退避、dead-letter 和优雅关闭。
+- [x] 覆盖 S3 错误分类、multipart abort、流式哈希和大对象 copy。
+- [x] 覆盖重复完成、重复取消、配额与 ref_count 不变量。
 
 ### 13.2 多实例集成测试
 
@@ -448,9 +450,9 @@ API Instance A  API Instance B ... N
 
 ### 13.6 必跑验证命令
 
-- [ ] `cmake --preset linux-debug-clang`
-- [ ] `cmake --build --preset linux-debug-clang`
-- [ ] `ctest --preset linux-debug-clang -V`
+- [x] `cmake --preset linux-debug-clang`
+- [x] `cmake --build --preset linux-debug-clang`
+- [x] `ctest --preset linux-debug-clang -V`
 - [ ] 新增并运行多实例集成测试入口。
 - [ ] 新增并运行 S3/MinIO 环境门控测试。
 - [ ] 运行更新后的压力测试并保存基线对比证据。

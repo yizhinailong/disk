@@ -13,6 +13,7 @@ set(TEST_SOURCES
     utils/RuntimeConfig_test.cpp
     services/HashUtil_test.cpp
     services/HealthService_test.cpp
+    services/MetricsService_test.cpp
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp
     services/ModelDialect_test.cpp
@@ -67,6 +68,7 @@ set(TEST_SOURCES
     dtos/FileDto_test.cpp
     dtos/FolderDto_test.cpp
     dtos/ShareDto_test.cpp
+    dtos/StorageJobAdminDto_test.cpp
     dtos/TrashDto_test.cpp
     dtos/UserDto_test.cpp
     storage/AssemblyWorkerPool_test.cpp
@@ -90,6 +92,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileListCache.cpp
     ${CMAKE_SOURCE_DIR}/src/services/HealthService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/MetricsService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/MultipartUploadJournal.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ProcessRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
@@ -98,6 +101,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/services/ShareAuditService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ScheduledTasks.cpp
     ${CMAKE_SOURCE_DIR}/src/services/StorageJobContract.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/StorageJobAdminService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/StorageJobRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/StorageJobWorker.cpp
     ${CMAKE_SOURCE_DIR}/src/services/StorageWorkerRuntime.cpp
@@ -146,6 +150,8 @@ set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/src/services/TrashService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/QuotaService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ScheduledTasks.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/MetricsService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/StorageJobAdminService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/StorageJobRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/StorageJobWorker.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ContentService.cpp
@@ -346,6 +352,8 @@ add_disk_server_integration_test(FileMetadataQueryIntegration test_file_metadata
 add_disk_server_integration_test(FileMutationOpsIntegration test_file_mutation_ops.py 120)
 add_disk_server_integration_test(FolderLifecycleIntegration test_folder_lifecycle.py 120)
 add_disk_server_integration_test(HealthAndLogsIntegration test_health_and_logs.py 120)
+add_disk_server_integration_test(StorageJobOperationsIntegration test_storage_job_operations.py 120)
+add_disk_server_integration_test(StorageJobFailurePersistenceIntegration test_storage_job_failure_persistence.py 120)
 add_disk_server_integration_test(PasswordUpdateIntegration test_password_update.py 120)
 add_disk_server_integration_test(RefreshTokenIntegration test_refresh_token.py 120)
 add_disk_server_integration_test(ShareBrowseIntegration test_share_browse.py 120)

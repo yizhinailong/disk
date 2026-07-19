@@ -20,6 +20,11 @@ namespace disk::runtime {
                path == "/api/health/ready";
     }
 
+    [[nodiscard]] constexpr auto IsInternalOperationalPath(std::string_view path) noexcept
+        -> bool {
+        return IsHealthProbePath(path) || path == "/metrics";
+    }
+
     class ProcessRuntimeState final {
     public:
         ProcessRuntimeState(disk::utils::ProcessRole role, std::string instance_id);

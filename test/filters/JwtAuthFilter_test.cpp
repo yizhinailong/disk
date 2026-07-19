@@ -39,6 +39,11 @@ namespace {
         EXPECT_FALSE(disk::filters::JwtAuthFilter::IsPublicPath("/api/health/ready/extra"));
     }
 
+    TEST(JwtAuthFilterPathTest, ExemptsOnlyExactInternalMetricsPath) {
+        EXPECT_TRUE(disk::filters::JwtAuthFilter::IsPublicPath("/metrics"));
+        EXPECT_FALSE(disk::filters::JwtAuthFilter::IsPublicPath("/metrics/extra"));
+    }
+
     /// ================================================================================
     /// Helper: Build a valid access token with custom claims
     /// ================================================================================

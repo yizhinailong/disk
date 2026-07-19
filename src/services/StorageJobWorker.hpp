@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -25,6 +26,13 @@ namespace disk::storage {
 } // namespace disk::storage
 
 namespace disk::jobs {
+
+    [[nodiscard]] constexpr auto EffectiveWorkerClaimBatchSize(
+        size_t configured_batch_size,
+        size_t concurrency
+    ) noexcept -> size_t {
+        return std::min(configured_batch_size, concurrency);
+    }
 
     struct StorageJobWorkerOptions {
         size_t batch_size{ 16 };

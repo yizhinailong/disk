@@ -1,0 +1,76 @@
+groups:
+  - name: disk.distributed
+    rules:
+      - alert: DiskInstanceDown
+        expr: up{job=~"disk-(api|worker)"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Disk process is unavailable
+
+      - alert: DiskMetricsSnapshotFailed
+        expr: min_over_time(disk_metrics_snapshot_success[30s]) < 1
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: Disk database metrics snapshot is failing
+
+      - alert: DiskApiHighErrorRate
+        expr: |
+          sum(rate(disk_http_requests_total{status_class="5xx",operation!="health",operation!="metrics"}[5m]))
+          /
+          clamp_min(sum(rate(disk_http_requests_total{operation!="health",operation!="metrics"}[5m])), 1)
+          > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Disk API 5xx rate exceeds one percent
+
+      - alert: DiskApiP99LatencyHigh
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le) (
+              rate(disk_http_request_duration_seconds_bucket{operation!="health",operation!="metrics"}[10m])
+            )
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Disk API P99 latency exceeds one second
+
+      - alert: DiskStorageJobBacklog
+        expr: disk_storage_jobs_oldest_ready_age_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Disk storage job backlog is older than five minutes
+
+      - alert: DiskStorageJobDeadLetter
+        expr: disk_storage_jobs{status="dead_letter"} > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Disk storage jobs entered dead-letter state
+
+      - alert: DiskStorageJobRepeatedTakeover
+        expr: sum(increase(disk_storage_job_takeovers_total[10m])) > 3
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Disk storage job leases are repeatedly taken over
+
+      - alert: DiskReconciliationFindings
+        expr: sum(disk_reconciliation_findings_unresolved) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Disk has unresolved storage reconciliation findings

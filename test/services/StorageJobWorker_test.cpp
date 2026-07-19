@@ -13,6 +13,12 @@
 
 namespace disk::jobs {
     namespace {
+        TEST(StorageJobWorkerOptionsTest, ClaimBatchDoesNotExceedConcurrency) {
+            EXPECT_EQ(EffectiveWorkerClaimBatchSize(20, 1), 1U);
+            EXPECT_EQ(EffectiveWorkerClaimBatchSize(20, 4), 4U);
+            EXPECT_EQ(EffectiveWorkerClaimBatchSize(2, 4), 2U);
+        }
+
         class RecordingStagingStorage final : public disk::storage::UploadStagingStorage {
         public:
             auto EnsureUploadSession(const disk::storage::UploadStagingSession&)

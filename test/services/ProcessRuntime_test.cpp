@@ -14,6 +14,13 @@ namespace disk::runtime {
             EXPECT_FALSE(IsHealthProbePath("/api/system/info"));
         }
 
+        TEST(ProcessRuntimeTest, OperationalPathsIncludeHealthAndInternalMetrics) {
+            EXPECT_TRUE(IsInternalOperationalPath("/api/health"));
+            EXPECT_TRUE(IsInternalOperationalPath("/metrics"));
+            EXPECT_FALSE(IsInternalOperationalPath("/metrics/extra"));
+            EXPECT_FALSE(IsInternalOperationalPath("/api/file/list"));
+        }
+
         TEST(ProcessRuntimeTest, ApiAcceptsOnlyAfterInitializationAndBeforeDrain) {
             ProcessRuntimeState state(disk::utils::ProcessRole::Api, "api-1");
 

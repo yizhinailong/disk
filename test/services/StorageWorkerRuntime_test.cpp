@@ -29,12 +29,15 @@ namespace disk::jobs {
             );
         }
 
-        TEST(StorageWorkerRuntimeTest, PollsInjectedWorkerAndResetsInflightState) {
+        TEST(StorageWorkerRuntimeTest, DrainsReadyWorkBeforeWaitingForNextTimer) {
             size_t calls = 0;
             StorageWorkerRuntime runtime(
                 "worker-1",
                 [&calls]() -> drogon::Task<Result<StorageJobRunResult>> {
                     calls++;
+                    if (calls == 2) {
+                        co_return StorageJobRunResult{};
+                    }
                     co_return StorageJobRunResult{
                         .claimed = 2,
                         .succeeded = 1,
@@ -44,9 +47,29 @@ namespace disk::jobs {
             );
 
             EXPECT_TRUE(drogon::sync_wait(runtime.PollOnce()));
-            EXPECT_EQ(calls, 1);
+            EXPECT_EQ(calls, 2);
             EXPECT_TRUE(runtime.IsDrained());
             EXPECT_TRUE(runtime.IsAccepting());
+        }
+
+        TEST(StorageWorkerRuntimeTest, StopsContinuousDrainAfterRunnerFailure) {
+            size_t calls = 0;
+            StorageWorkerRuntime runtime(
+                "worker-1",
+                [&calls]() -> drogon::Task<Result<StorageJobRunResult>> {
+                    calls++;
+                    if (calls == 1) {
+                        co_return StorageJobRunResult{ .claimed = 1, .succeeded = 1 };
+                    }
+                    co_return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "injected result failure")
+                    );
+                }
+            );
+
+            EXPECT_TRUE(drogon::sync_wait(runtime.PollOnce()));
+            EXPECT_EQ(calls, 2);
+            EXPECT_TRUE(runtime.IsDrained());
         }
 
         TEST(StorageWorkerRuntimeTest, ContainsRunnerFailuresAndCanPollAgain) {

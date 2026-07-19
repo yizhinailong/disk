@@ -4167,6 +4167,53 @@ created_at  TIMESTAMP        -- 操作时间
 
 ## 10. 管理员接口
 
+### 10.0 分布式存储任务运维接口
+
+以下接口与本章其他接口一样，必须经过 `AdminAuthFilter` 和管理员限流。响应不得包含凭据、令牌、文件正文或带签名 URL；`payload` 只允许返回 `storage_jobs` 中经过任务合同约束的非敏感 JSON。
+
+#### 查询任务
+
+**GET** `/api/admin/storage-jobs`
+
+查询参数：`status` 可选值为 `pending/running/retry/succeeded/dead_letter`，`job_type` 为可选精确匹配，`page` 默认 1，`page_size` 默认 20 且最大 100。默认只查询 `dead_letter`，避免运维页面无意扫描完整历史表。
+
+响应 `data.items[]` 包含 `id/job_type/aggregate_id/dedupe_key/status/attempts/max_attempts/available_at/locked_by/locked_until/last_error/created_at/updated_at/completed_at`，并返回标准 `pagination`。列表不返回 `payload`。
+
+**GET** `/api/admin/storage-jobs/{id}`
+
+返回上述字段及 `payload`。ID 必须是正整数；任务不存在返回 HTTP 404 / `10003 ResourceNotFound`。
+
+#### 重放死信
+
+**POST** `/api/admin/storage-jobs/{id}/replay`
+
+```json
+{
+  "dry_run": true,
+  "confirm_job_id": 42,
+  "reason": "dependency recovered"
+}
+```
+
+- `dry_run` 默认为 `true`。dry-run 只返回当前任务和 `eligible`，不修改任务、不写审计。
+- 真正重放必须显式传 `dry_run=false`，且 `confirm_job_id` 与路径 ID 完全相同；`reason` 去除首尾空白后必须为 1-256 个字符。
+- 只有 `DeadLetter -> Pending` 合法；原子重置 `attempts/available_at/lease/last_error/completed_at`。
+- 状态变化与 `operation_logs` 中的 `admin.storage_job.replay` 审计必须在同一 PostgreSQL 事务提交。并发重放只有一个成功，其他请求返回 HTTP 409 / `10004 ResourceConflict`。
+
+### 10.0.1 内部指标接口
+
+**GET** `/metrics`
+
+返回 Prometheus text exposition，供私网监控抓取，不使用用户 JWT。公网反向代理必须精确拒绝 `/metrics`，监控系统直接访问 Pod/实例端口。指标至少包括：
+
+- 按固定 `operation/status_class` 标签聚合的 HTTP 请求量、错误量和延迟；
+- 按固定状态聚合的上传任务数、存储任务数、最老可执行任务年龄、过期租约和 dead-letter 数；
+- 按固定 `finding_type` 枚举聚合的未解决一致性 finding 数；未知类型归入 `unknown`，不得把资源 ID 或对象 key 用作标签；
+- 当前进程角色、启动状态、drain 状态、API 在途请求；
+- 指标快照数据库查询是否成功。
+
+标签集合由代码枚举，禁止使用请求路径参数、`request_id`、`upload_id`、文件名、对象 key、`job_id` 或异常文本。数据库快照失败时仍返回进程内指标，并将 `disk_metrics_snapshot_success` 置为 0。
+
 ### 10.1 管理员接口说明
 
 本章节所有接口均需要管理员权限，调用时必须携带有效的管理员 Access Token。

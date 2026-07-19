@@ -8,6 +8,8 @@
 #include <drogon/drogon.h>
 
 #include "application/ApplicationContext.hpp"
+#include "filters/RequestTraceFilter.hpp"
+#include "services/MetricsService.hpp"
 #include "services/MultipartUploadJournal.hpp"
 #include "services/ProcessRuntime.hpp"
 #include "services/RedisService.hpp"
@@ -27,6 +29,8 @@
 
 namespace {
     constexpr std::string_view kBusinessRequestMarker = "runtime_business_request";
+    constexpr std::string_view kRequestStartMarker = "runtime_request_started_at";
+    constexpr std::string_view kRequestOperationMarker = "runtime_request_operation";
 
     using BusinessRequestMarker = std::shared_ptr<std::atomic_bool>;
 
@@ -59,7 +63,23 @@ namespace {
                 drogon::AdviceCallback&& callback,
                 drogon::AdviceChainCallback&& chain_callback
             ) {
-                if (disk::runtime::IsHealthProbePath(request->path())) {
+                const auto attributes = request->attributes();
+                if (!attributes->find("request_id")) {
+                    attributes->insert(
+                        "request_id",
+                        disk::filters::RequestTraceFilter::GenerateRequestId()
+                    );
+                }
+                attributes->insert(
+                    std::string(kRequestStartMarker),
+                    std::chrono::steady_clock::now()
+                );
+                attributes->insert(
+                    std::string(kRequestOperationMarker),
+                    disk::metrics::ClassifyHttpOperation(request->path())
+                );
+
+                if (disk::runtime::IsInternalOperationalPath(request->path())) {
                     chain_callback();
                     return;
                 }
@@ -95,6 +115,45 @@ namespace {
                         "X-Request-Id",
                         attributes->get<std::string>("request_id")
                     );
+                }
+                response->addHeader("X-Disk-Instance-Id", services->state->InstanceId());
+
+                if (attributes->find(std::string(kRequestStartMarker)) &&
+                    attributes->find(std::string(kRequestOperationMarker))) {
+                    const auto started_at = attributes->get<std::chrono::steady_clock::time_point>(
+                        std::string(kRequestStartMarker)
+                    );
+                    const auto operation = attributes->get<disk::metrics::HttpOperation>(
+                        std::string(kRequestOperationMarker)
+                    );
+                    const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - started_at
+                    );
+                    const auto status_code = static_cast<int>(response->getStatusCode());
+                    disk::metrics::MetricsRegistry::GetInstance().RecordHttpRequest(
+                        operation,
+                        status_code,
+                        duration
+                    );
+
+                    const auto request_id = attributes->find("request_id") ?
+                                                attributes->get<std::string>("request_id") :
+                                                std::string("missing");
+                    if (status_code >= 400) {
+                        disk::utils::Logger::Warn()
+                            << "HTTP request completed: request_id=" << request_id
+                            << ", instance_id=" << services->state->InstanceId()
+                            << ", operation=" << disk::metrics::HttpOperationName(operation)
+                            << ", status=" << status_code
+                            << ", duration_us=" << duration.count();
+                    } else {
+                        disk::utils::Logger::Debug()
+                            << "HTTP request completed: request_id=" << request_id
+                            << ", instance_id=" << services->state->InstanceId()
+                            << ", operation=" << disk::metrics::HttpOperationName(operation)
+                            << ", status=" << status_code
+                            << ", duration_us=" << duration.count();
+                    }
                 }
             }
         );
@@ -281,7 +340,10 @@ auto main() -> int {
                 disk::storage::BlobStoreMgr::GetBlobStore(),
                 config->GetInstanceId(),
                 disk::jobs::StorageJobWorkerOptions{
-                    .batch_size = config->GetWorkerClaimBatchSize(),
+                    .batch_size = disk::jobs::EffectiveWorkerClaimBatchSize(
+                        config->GetWorkerClaimBatchSize(),
+                        config->GetWorkerConcurrency()
+                    ),
                     .lease_duration_seconds = config->GetWorkerLeaseDurationSeconds(),
                 },
                 dynamic_cast<disk::storage::IMultipartUploadCleaner*>(

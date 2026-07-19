@@ -82,22 +82,28 @@ namespace disk::jobs {
             co_return false;
         }
 
-        try {
-            auto result = co_await m_run_callback();
-            if (!result) {
-                Logger::Error() << "Storage worker poll failed: instance_id=" << m_instance_id
-                                << ", error=" << result.error().message;
-            } else if (result->claimed > 0) {
+        while (m_accepting.load()) {
+            try {
+                auto result = co_await m_run_callback();
+                if (!result) {
+                    Logger::Error() << "Storage worker poll failed: instance_id=" << m_instance_id
+                                    << ", error=" << result.error().message;
+                    break;
+                }
+                if (result->claimed == 0) {
+                    break;
+                }
                 Logger::Info() << "Storage worker poll completed: instance_id=" << m_instance_id
                                << ", claimed=" << result->claimed
                                << ", succeeded=" << result->succeeded
                                << ", retried=" << result->retried
                                << ", dead_lettered=" << result->dead_lettered
                                << ", ownership_lost=" << result->ownership_lost;
+            } catch (const std::exception& error) {
+                Logger::Error() << "Storage worker poll threw: instance_id=" << m_instance_id
+                                << ", error=" << error.what();
+                break;
             }
-        } catch (const std::exception& error) {
-            Logger::Error() << "Storage worker poll threw: instance_id=" << m_instance_id
-                            << ", error=" << error.what();
         }
 
         m_poll_inflight.store(false);

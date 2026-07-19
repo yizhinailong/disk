@@ -120,6 +120,7 @@ TEST(FilterOwnershipTest, PublicRoutesAreCentralJwtExemptions) {
     EXPECT_NE(jwt_filter.find("path == \"/api/health\""), std::string::npos);
     EXPECT_NE(jwt_filter.find("path == \"/api/health/live\""), std::string::npos);
     EXPECT_NE(jwt_filter.find("path == \"/api/health/ready\""), std::string::npos);
+    EXPECT_NE(jwt_filter.find("path == \"/metrics\""), std::string::npos);
     EXPECT_NE(jwt_filter.find("/api/share/access/"), std::string::npos);
     EXPECT_NE(jwt_filter.find("/api/share/browse/"), std::string::npos);
     EXPECT_NE(jwt_filter.find("/api/share/download/"), std::string::npos);

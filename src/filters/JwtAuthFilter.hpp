@@ -22,6 +22,7 @@ namespace disk::filters {
             return path == "/api/auth/register" || path == "/api/auth/login" ||
                    path == "/api/auth/refresh" || path == "/api/health" ||
                    path == "/api/health/live" || path == "/api/health/ready" ||
+                   path == "/metrics" ||
                    path.rfind("/api/share/access/", 0) == 0 ||
                    path.rfind("/api/share/browse/", 0) == 0 ||
                    path.rfind("/api/share/download/", 0) == 0;

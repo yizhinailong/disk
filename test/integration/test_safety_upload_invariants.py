@@ -26,6 +26,7 @@ from lib_py import (  # noqa: E402
     assert_numeric_delta,
     assert_path_absent,
     assert_path_exists,
+    assert_storage_job_succeeded,
     ensure_server,
     cleanup,
     configured_chunk_size,
@@ -249,6 +250,10 @@ def test_successful_chunked_upload_invariants() -> None:
         print_summary()
     log_pass("file_contents row exists for uploaded file")
     assert_equal("file_contents md5 matches payload", content_row["hash_md5"], file_hash)
+    assert_storage_job_succeeded(
+        "successful upload cleanup job converges",
+        f"staging-cleanup:{upload_id}",
+    )
     assert_path_absent("temp upload directory cleaned after success", upload_temp_dir(upload_id))
     assert_path_absent("assembled temp artifact cleaned after success", upload_temp_dir(upload_id).parent / f"{upload_id}.tmp")
     assert_equal(
@@ -392,6 +397,10 @@ def test_cancel_upload_invariants() -> None:
         "SELECT id FROM files WHERE user_id = %s AND name = %s",
         (USER_ID, filename),
     )
+    assert_storage_job_succeeded(
+        "cancel cleanup job converges",
+        f"staging-cleanup:{upload_id}",
+    )
     assert_path_absent("temp upload directory cleaned after cancel", upload_temp_dir(upload_id))
     assert_path_absent("final blob absent after cancel", final_blob_path(sha256_bytes(payload)))
 
@@ -440,6 +449,10 @@ def test_expired_upload_cleanup_invariants() -> None:
         "SELECT id FROM files WHERE user_id = %s AND name = %s",
         (USER_ID, filename),
     )
+    assert_storage_job_succeeded(
+        "expired upload cleanup job converges",
+        f"staging-cleanup:{upload_id}",
+    )
     assert_path_absent("temp upload directory cleaned after expiry", upload_temp_dir(upload_id))
     assert_path_absent("assembled temp artifact absent after expiry", upload_temp_dir(upload_id).parent / f"{upload_id}.tmp")
     assert_path_absent("final blob absent after expiry", final_blob_path(sha256_bytes(payload)))
@@ -487,6 +500,10 @@ def test_init_upload_expires_existing_task_invariants() -> None:
         "inline expired init creates no logical file row",
         "SELECT id FROM files WHERE user_id = %s AND name = %s",
         (USER_ID, filename),
+    )
+    assert_storage_job_succeeded(
+        "inline expiry cleanup job converges",
+        f"staging-cleanup:{old_upload_id}",
     )
     assert_path_absent("old temp upload directory cleaned by inline expiry", upload_temp_dir(old_upload_id))
     assert_path_absent(

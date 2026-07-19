@@ -358,5 +358,21 @@ namespace disk::file {
             EXPECT_EQ(state->commit_count, 1);
         }
 
+        TEST(TransactionRunner, RejectsPersistentOutstandingOwner) {
+            auto state = std::make_shared<FakeTransactionState>();
+            std::shared_ptr<drogon::orm::Transaction> transaction =
+                std::make_shared<FakeTransaction>(state);
+            auto persistent_owner = transaction;
+
+            auto result = drogon::sync_wait(TransactionRunner::Commit(transaction));
+
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::InternalError);
+            EXPECT_NE(transaction, nullptr);
+            EXPECT_EQ(state->commit_count, 0);
+            persistent_owner.reset();
+            transaction.reset();
+        }
+
     } // namespace
 } // namespace disk::file

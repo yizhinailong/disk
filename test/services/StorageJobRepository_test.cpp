@@ -21,6 +21,19 @@ namespace disk::jobs {
             EXPECT_FALSE(ParseStorageJobStatus(5).has_value());
         }
 
+        TEST(StorageJobStatusTest, RoundTripsOperationalNames) {
+            for (const auto status : {
+                     StorageJobStatus::Pending,
+                     StorageJobStatus::Running,
+                     StorageJobStatus::Retry,
+                     StorageJobStatus::Succeeded,
+                     StorageJobStatus::DeadLetter,
+                 }) {
+                EXPECT_EQ(ParseStorageJobStatus(StorageJobStatusName(status)), status);
+            }
+            EXPECT_FALSE(ParseStorageJobStatus("failed").has_value());
+        }
+
         TEST(StorageJobRepositoryContractTest, ExposesOwnerCheckedQueuePrimitives) {
             using EnqueueResult = decltype(std::declval<const StorageJobRepository&>().Enqueue(
                 std::declval<const NewStorageJob&>()
@@ -80,7 +93,10 @@ namespace disk::jobs {
             EXPECT_EQ(kMultipartAbortJobType, "multipart_abort");
             EXPECT_EQ(kBlobGcJobType, "blob_gc");
             EXPECT_EQ(kExpireUploadsJobType, "expire_uploads");
+            EXPECT_EQ(kExpireTrashJobType, "expire_trash");
             EXPECT_EQ(kStorageReconcileJobType, "storage_reconcile");
+            EXPECT_TRUE(IsKnownStorageJobType(kMultipartAbortJobType));
+            EXPECT_FALSE(IsKnownStorageJobType("custom"));
         }
     } // namespace
 } // namespace disk::jobs

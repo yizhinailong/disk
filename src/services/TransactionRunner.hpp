@@ -17,6 +17,8 @@
 #include <utility>
 
 #include <drogon/orm/DbClient.h>
+#include <drogon/utils/coroutine.h>
+#include <trantor/net/EventLoop.h>
 
 #include "utils/ErrorCode.hpp"
 #include "utils/LogHelper.hpp"
@@ -205,6 +207,15 @@ namespace disk::file {
                     ErrorCode::InternalError,
                     "Database transaction is not available"
                 ));
+            }
+
+            auto* current_loop = trantor::EventLoop::getEventLoopOfCurrentThread();
+            constexpr uint8_t kMaxOwnerReleaseYields = 3;
+            for (uint8_t attempt = 0;
+                 transaction.use_count() != 1 && current_loop != nullptr &&
+                 attempt < kMaxOwnerReleaseYields;
+                 ++attempt) {
+                co_await drogon::sleepCoro(current_loop, 0.0);
             }
 
             if (transaction.use_count() != 1) {

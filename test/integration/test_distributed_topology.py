@@ -94,6 +94,32 @@ def main() -> int:
     for header in ("X-Real-IP", "X-Forwarded-For", "X-Forwarded-Proto", "X-Request-Id"):
         require(f"proxy_set_header {header}" in nginx, f"proxy header {header} is missing")
     require("proxy_request_buffering off;" in nginx, "streaming request forwarding is missing")
+    require("location = /metrics" in nginx, "public metrics deny route is missing")
+    require("return 404;" in nginx, "public metrics route must return 404")
+
+    alert_groups = yaml.safe_load(
+        (root / "deploy/prometheus/disk-alerts.yml").read_text(encoding="utf-8")
+    )["groups"]
+    alerts = {
+        rule["alert"]: rule
+        for group in alert_groups
+        for rule in group["rules"]
+    }
+    expected_alerts = {
+        "DiskInstanceDown",
+        "DiskMetricsSnapshotFailed",
+        "DiskApiHighErrorRate",
+        "DiskApiP99LatencyHigh",
+        "DiskStorageJobBacklog",
+        "DiskStorageJobDeadLetter",
+        "DiskStorageJobRepeatedTakeover",
+        "DiskReconciliationFindings",
+    }
+    require(set(alerts) == expected_alerts, "distributed alert rule set drifted")
+    require(
+        all(rule.get("for") for rule in alerts.values()),
+        "every distributed alert must have a hold duration",
+    )
 
     print("PASS: distributed topology contract is valid")
     return 0

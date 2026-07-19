@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <expected>
 #include <filesystem>
 #include <memory>
@@ -18,6 +19,7 @@
 
 #include <drogon/drogon.h>
 
+#include "services/MetricsService.hpp"
 #include "services/StorageJobContract.hpp"
 #include "services/StorageReconciliationService.hpp"
 #include "services/TransactionRunner.hpp"
@@ -535,15 +537,16 @@ namespace disk::jobs {
             };
         }
 
+        const auto is_database_scope =
+            request->scope == disk::reconciliation::ReconciliationScope::Contents ||
+            request->scope == disk::reconciliation::ReconciliationScope::Users;
+        bool cursor_advanced = !page->has_more;
         bool continuation_enqueued = false;
         if (page->has_more) {
             auto next_request = request.value();
             next_request.after_id = page->next_after_id;
             next_request.continuation_token = page->next_continuation_token;
-            const auto is_database_scope =
-                request->scope == disk::reconciliation::ReconciliationScope::Contents ||
-                request->scope == disk::reconciliation::ReconciliationScope::Users;
-            const auto cursor_advanced = is_database_scope ? next_request.after_id > request->after_id : !next_request.continuation_token.empty() && next_request.continuation_token != request->continuation_token;
+            cursor_advanced = is_database_scope ? next_request.after_id > request->after_id : !next_request.continuation_token.empty() && next_request.continuation_token != request->continuation_token;
             if (!cursor_advanced) {
                 co_return PermanentFailure("storage_reconcile continuation cursor did not advance");
             }
@@ -563,6 +566,11 @@ namespace disk::jobs {
                        << ", inspected=" << page->inspected
                        << ", findings=" << page->findings_recorded
                        << ", repairs_enqueued=" << page->repairs_enqueued
+                       << ", has_more=" << page->has_more
+                       << ", cursor_kind=" << (is_database_scope ? "id" : "continuation")
+                       << ", next_after_id="
+                       << (is_database_scope ? page->next_after_id : 0)
+                       << ", cursor_advanced=" << cursor_advanced
                        << ", continuation_enqueued=" << continuation_enqueued;
         co_return JobExecutionResult{ .succeeded = true };
     }
@@ -695,21 +703,49 @@ namespace disk::jobs {
 
         StorageJobRunResult result{ .claimed = jobs.size() };
         for (const auto& job : jobs) {
+            const auto started_at = std::chrono::steady_clock::now();
+            Logger::Info() << "Storage job execution started: instance_id=" << m_instance_id
+                           << ", job_id=" << job.id
+                           << ", job_type=" << job.job_type
+                           << ", lease_owner=" << job.locked_by
+                           << ", attempts=" << job.attempts
+                           << ", lease_takeover=" << job.lease_takeover;
             const auto disposition = co_await ProcessClaimedJob(job);
+            disk::metrics::StorageJobOutcome metric_outcome;
             switch (disposition) {
                 case PersistDisposition::Succeeded:
                     result.succeeded++;
+                    metric_outcome = disk::metrics::StorageJobOutcome::Succeeded;
                     break;
                 case PersistDisposition::Retried:
                     result.retried++;
+                    metric_outcome = disk::metrics::StorageJobOutcome::Retry;
                     break;
                 case PersistDisposition::DeadLettered:
                     result.dead_lettered++;
+                    metric_outcome = disk::metrics::StorageJobOutcome::DeadLetter;
                     break;
                 case PersistDisposition::OwnershipLost:
                     result.ownership_lost++;
+                    metric_outcome = disk::metrics::StorageJobOutcome::OwnershipLost;
                     break;
             }
+            const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - started_at
+            );
+            disk::metrics::MetricsRegistry::GetInstance().RecordStorageJob(
+                job.job_type,
+                metric_outcome,
+                duration,
+                job.lease_takeover
+            );
+            Logger::Info() << "Storage job execution completed: instance_id=" << m_instance_id
+                           << ", job_id=" << job.id
+                           << ", job_type=" << job.job_type
+                           << ", lease_takeover=" << job.lease_takeover
+                           << ", outcome="
+                           << disk::metrics::StorageJobOutcomeName(metric_outcome)
+                           << ", duration_us=" << duration.count();
         }
 
         co_return result;

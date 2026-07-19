@@ -9,6 +9,7 @@
 #include "StorageJobRepository.hpp"
 
 #include <algorithm>
+#include <array>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -89,9 +90,53 @@ namespace disk::jobs {
                 .attempts = row["attempts"].template as<uint32_t>(),
                 .max_attempts = row["max_attempts"].template as<uint32_t>(),
                 .locked_by = row["locked_by"].template as<std::string>(),
+                .lease_takeover = row["lease_takeover"].template as<bool>(),
             };
         }
     } // namespace
+
+    auto StorageJobStatusName(StorageJobStatus status) noexcept -> std::string_view {
+        switch (status) {
+            case StorageJobStatus::Pending:
+                return "pending";
+            case StorageJobStatus::Running:
+                return "running";
+            case StorageJobStatus::Retry:
+                return "retry";
+            case StorageJobStatus::Succeeded:
+                return "succeeded";
+            case StorageJobStatus::DeadLetter:
+                return "dead_letter";
+        }
+        return "unknown";
+    }
+
+    auto ParseStorageJobStatus(std::string_view value) noexcept
+        -> std::optional<StorageJobStatus> {
+        constexpr std::array statuses{
+            StorageJobStatus::Pending,
+            StorageJobStatus::Running,
+            StorageJobStatus::Retry,
+            StorageJobStatus::Succeeded,
+            StorageJobStatus::DeadLetter,
+        };
+        const auto match = std::ranges::find_if(statuses, [value](StorageJobStatus status) {
+            return StorageJobStatusName(status) == value;
+        });
+        return match == statuses.end() ? std::nullopt : std::optional(*match);
+    }
+
+    auto IsKnownStorageJobType(std::string_view value) noexcept -> bool {
+        constexpr std::array types{
+            kStagingCleanupJobType,
+            kMultipartAbortJobType,
+            kBlobGcJobType,
+            kExpireUploadsJobType,
+            kExpireTrashJobType,
+            kStorageReconcileJobType,
+        };
+        return std::ranges::find(types, value) != types.end();
+    }
 
     StorageJobRepository::StorageJobRepository(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
@@ -196,7 +241,7 @@ namespace disk::jobs {
         );
 
         auto result = co_await m_db_client->execSqlCoro(
-            "WITH candidates AS (" "  SELECT id FROM storage_jobs " "  WHERE attempts < max_attempts AND (" "    (status IN ($1, $2) AND available_at <= NOW()) OR " "    (status = $3 AND locked_until <= NOW())" "  ) " "  ORDER BY COALESCE(locked_until, available_at), id " "  FOR UPDATE SKIP LOCKED " "  LIMIT $4" ") " "UPDATE storage_jobs AS job SET " "  status = $3, attempts = job.attempts + 1, locked_by = $5, " "  locked_until = NOW() + ($6::integer * INTERVAL '1 second'), " "  updated_at = NOW() " "FROM candidates " "WHERE job.id = candidates.id " "RETURNING job.id, job.job_type, job.aggregate_id, job.dedupe_key, " "  job.payload::text AS payload_json, job.status, job.attempts, " "  job.max_attempts, job.locked_by",
+            "WITH candidates AS (" "  SELECT id, status = $3 AS lease_takeover FROM storage_jobs " "  WHERE attempts < max_attempts AND (" "    (status IN ($1, $2) AND available_at <= NOW()) OR " "    (status = $3 AND locked_until <= NOW())" "  ) " "  ORDER BY COALESCE(locked_until, available_at), id " "  FOR UPDATE SKIP LOCKED " "  LIMIT $4" ") " "UPDATE storage_jobs AS job SET " "  status = $3, attempts = job.attempts + 1, locked_by = $5, " "  locked_until = NOW() + ($6::integer * INTERVAL '1 second'), " "  updated_at = NOW() " "FROM candidates " "WHERE job.id = candidates.id " "RETURNING job.id, job.job_type, job.aggregate_id, job.dedupe_key, " "  job.payload::text AS payload_json, job.status, job.attempts, " "  job.max_attempts, job.locked_by, candidates.lease_takeover",
             ToStorageValue(StorageJobStatus::Pending),
             ToStorageValue(StorageJobStatus::Retry),
             ToStorageValue(StorageJobStatus::Running),
@@ -262,7 +307,7 @@ namespace disk::jobs {
         ValidateBoundedValue(instance_id, kMaxInstanceIdLength, "Storage job instance ID");
         const auto bounded_error = error.substr(0, kMaxErrorLength);
         auto result = co_await m_db_client->execSqlCoro(
-            "UPDATE storage_jobs SET " "  status = CASE WHEN $1::boolean AND attempts < max_attempts THEN $2 ELSE $3 END, " "  available_at = CASE " "    WHEN $1::boolean AND attempts < max_attempts " "    THEN NOW() + ($4::integer * INTERVAL '1 second') " "    ELSE available_at END, " "  locked_by = NULL, locked_until = NULL, last_error = $5, updated_at = NOW() " "WHERE id = $6 AND status = $7 AND locked_by = $8 " "RETURNING status",
+            "UPDATE storage_jobs SET " "  status = CASE WHEN $1::boolean AND attempts < max_attempts " "    THEN $2::smallint ELSE $3::smallint END, " "  available_at = CASE " "    WHEN $1::boolean AND attempts < max_attempts " "    THEN NOW() + ($4::integer * INTERVAL '1 second') " "    ELSE available_at END, " "  locked_by = NULL, locked_until = NULL, last_error = $5, updated_at = NOW() " "WHERE id = $6 AND status = $7::smallint AND locked_by = $8 " "RETURNING status",
             retryable,
             ToStorageValue(StorageJobStatus::Retry),
             ToStorageValue(StorageJobStatus::DeadLetter),

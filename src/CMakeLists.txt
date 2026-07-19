@@ -17,9 +17,11 @@ set(Controllers_HEADERS
     controllers/FileController.hpp
     controllers/FolderController.hpp
     controllers/HealthController.hpp
+    controllers/MetricsController.hpp
     controllers/OperationLogController.hpp
     controllers/ShareController.hpp
     controllers/SystemController.hpp
+    controllers/StorageJobAdminController.hpp
     controllers/TrashController.hpp
     controllers/UserController.hpp
 )
@@ -30,9 +32,11 @@ set(Controllers_SOURCES
     controllers/FileController.cpp
     controllers/FolderController.cpp
     controllers/HealthController.cpp
+    controllers/MetricsController.cpp
     controllers/OperationLogController.cpp
     controllers/ShareController.cpp
     controllers/SystemController.cpp
+    controllers/StorageJobAdminController.cpp
     controllers/TrashController.cpp
     controllers/UserController.cpp
 )
@@ -43,6 +47,7 @@ set(Dtos_HEADERS
     dtos/FileDto.hpp
     dtos/FolderDto.hpp
     dtos/ShareDto.hpp
+    dtos/StorageJobAdminDto.hpp
     dtos/TrashDto.hpp
     dtos/UserDto.hpp
 )
@@ -117,6 +122,7 @@ set(Services_HEADERS
     services/FolderRepository.hpp
     services/FolderService.hpp
     services/HealthService.hpp
+    services/MetricsService.hpp
     services/MultipartUploadJournal.hpp
     services/OperationLogService.hpp
     services/ProcessRuntime.hpp
@@ -127,6 +133,7 @@ set(Services_HEADERS
     services/ShareAuditService.hpp
     services/ShareService.hpp
     services/StorageJobContract.hpp
+    services/StorageJobAdminService.hpp
     services/StorageJobRepository.hpp
     services/StorageJobWorker.hpp
     services/StorageWorkerRuntime.hpp
@@ -156,6 +163,7 @@ set(Services_SOURCES
     services/FolderRepository.cpp
     services/FolderService.cpp
     services/HealthService.cpp
+    services/MetricsService.cpp
     services/MultipartUploadJournal.cpp
     services/OperationLogService.cpp
     services/ProcessRuntime.cpp
@@ -166,6 +174,7 @@ set(Services_SOURCES
     services/ShareAuditService.cpp
     services/ShareService.cpp
     services/StorageJobContract.cpp
+    services/StorageJobAdminService.cpp
     services/StorageJobRepository.cpp
     services/StorageJobWorker.cpp
     services/StorageWorkerRuntime.cpp
