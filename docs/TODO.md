@@ -18,7 +18,7 @@
   [`docs/archive/2026-07-18-ctest-self-contained.md`](archive/2026-07-18-ctest-self-contained.md).
 - The backend implementation-marker audit is archived at
   [`docs/archive/2026-07-18-backend-implementation-marker-audit.md`](archive/2026-07-18-backend-implementation-marker-audit.md).
-- `openspec validate --all --strict --no-interactive` currently validates 23 of 25
+- `openspec validate --all --strict --no-interactive` currently validates 22 of 24
   items. The only accepted aggregate failures are the deferred `TBD.` Purpose text
   in `web-client-experience` and `desktop-client-experience`. No additional failure
   is an acceptable backend baseline.
@@ -50,19 +50,6 @@
 ---
 
 ## P0 - Backend Completion
-
-### P0.0 Archive the completed documentation-governance change
-
-`openspec/changes/align-backend-openspec-documentation` is reported as complete and
-all tasks are checked. Close that lifecycle before opening the behavioral P0.4
-change so completed work is not left in the active change set.
-
-- [ ] Run `openspec archive align-backend-openspec-documentation -y` and review the
-  resulting spec/archive diff for duplicate or lost governance requirements.
-- [ ] Run strict validation for `documentation-governance` and confirm that
-  `openspec list` no longer reports the completed change as active.
-- [ ] Preserve the aggregate validation baseline: no strict failure beyond the two
-  explicitly deferred client Purpose placeholders.
 
 ### P0.4 Separate sensitive share-operation rate limits
 
