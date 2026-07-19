@@ -7,6 +7,7 @@ CMakeUserPresets.json
 .sisyphus
 .qtcreator
 output
+.env.distributed
 .claude/worktrees
 .omc/
 .codegraph

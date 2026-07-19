@@ -83,6 +83,9 @@ namespace {
             mysql_guard.Unset();
             redis_guard.Unset();
             instance_guard.Unset();
+            s3_access_key_guard.Unset();
+            s3_secret_key_guard.Unset();
+            s3_session_token_guard.Unset();
             role_guard.Set("api");
 
             Json::Value cfg;
@@ -97,6 +100,9 @@ namespace {
         EnvVarGuard redis_guard{ "REDIS_PASSWORD" };
         EnvVarGuard instance_guard{ "DISK_INSTANCE_ID" };
         EnvVarGuard role_guard{ "DISK_PROCESS_ROLE" };
+        EnvVarGuard s3_access_key_guard{ "DISK_S3_ACCESS_KEY" };
+        EnvVarGuard s3_secret_key_guard{ "DISK_S3_SECRET_KEY" };
+        EnvVarGuard s3_session_token_guard{ "DISK_S3_SESSION_TOKEN" };
     };
 
     /// ================================================================================
@@ -237,6 +243,60 @@ namespace {
         mysql_guard.Set("mysql_pw");
         redis_guard.Set("redis_pw");
         EXPECT_NO_THROW({ ConfigMgr::GetInstance()->ValidateSecureConfig(); });
+    }
+
+    TEST_F(ConfigMgrJwtTest, ValidateSecureConfigRejectsInsecureS3Transport) {
+        Json::Value cfg;
+        auto& disk = cfg["custom_config"]["disk"];
+        disk["storage_backend"] = "s3";
+        disk["upload_staging_backend"] = "s3";
+        disk["s3"]["bucket"] = "disk-test";
+        disk["s3"]["endpoint"] = "http://minio:9000";
+        disk["s3"]["use_ssl"] = false;
+        disk["s3"]["verify_ssl"] = false;
+        drogon::app().loadConfigJson(cfg);
+        ConfigMgr::GetInstance()->LoadConfig();
+
+        secure_guard.Set("true");
+        jwt_guard.Set("a_valid_jwt_secret_that_is_at_least_32_chars_long");
+        mysql_guard.Set("db-password");
+        redis_guard.Set("redis-password");
+
+        EXPECT_THROW(ConfigMgr::GetInstance()->ValidateSecureConfig(), std::runtime_error);
+    }
+
+    TEST_F(ConfigMgrJwtTest, ValidateSecureConfigAcceptsVerifiedS3Tls) {
+        Json::Value cfg;
+        auto& disk = cfg["custom_config"]["disk"];
+        disk["storage_backend"] = "s3";
+        disk["upload_staging_backend"] = "s3";
+        disk["s3"]["bucket"] = "disk-test";
+        disk["s3"]["endpoint"] = "https://minio.internal:9000";
+        disk["s3"]["use_ssl"] = true;
+        disk["s3"]["verify_ssl"] = true;
+        drogon::app().loadConfigJson(cfg);
+        ConfigMgr::GetInstance()->LoadConfig();
+
+        secure_guard.Set("true");
+        jwt_guard.Set("a_valid_jwt_secret_that_is_at_least_32_chars_long");
+        mysql_guard.Set("db-password");
+        redis_guard.Set("redis-password");
+
+        EXPECT_NO_THROW(ConfigMgr::GetInstance()->ValidateSecureConfig());
+    }
+
+    TEST_F(ConfigMgrJwtTest, ValidateSecureConfigRejectsPartialS3Credentials) {
+        jwt_guard.Set("a_valid_jwt_secret_that_is_at_least_32_chars_long");
+        s3_access_key_guard.Set("access-key-only");
+
+        EXPECT_THROW(ConfigMgr::GetInstance()->ValidateSecureConfig(), std::runtime_error);
+    }
+
+    TEST_F(ConfigMgrJwtTest, ValidateSecureConfigRejectsEmptyS3CredentialVariable) {
+        jwt_guard.Set("a_valid_jwt_secret_that_is_at_least_32_chars_long");
+        s3_access_key_guard.Set("");
+
+        EXPECT_THROW(ConfigMgr::GetInstance()->ValidateSecureConfig(), std::runtime_error);
     }
 
     TEST_F(ConfigMgrJwtTest, ValidateSecureConfigRejectsImplicitOrAllRole) {
@@ -772,6 +832,19 @@ namespace {
         disk["storage_backend"] = "s3";
         disk["s3"]["bucket"] = "";
         disk["s3"]["region"] = "us-east-1";
+        drogon::app().loadConfigJson(cfg);
+
+        EXPECT_THROW({ ConfigMgr::GetInstance()->LoadConfig(); }, std::runtime_error);
+        RestoreAssemblyDefaults();
+    }
+
+    TEST_F(ConfigMgrJwtTest, LoadConfigRejectsS3EndpointSchemeMismatch) {
+        Json::Value cfg;
+        auto& disk = cfg["custom_config"]["disk"];
+        disk["storage_backend"] = "s3";
+        disk["s3"]["bucket"] = "disk-test";
+        disk["s3"]["endpoint"] = "http://minio:9000";
+        disk["s3"]["use_ssl"] = true;
         drogon::app().loadConfigJson(cfg);
 
         EXPECT_THROW({ ConfigMgr::GetInstance()->LoadConfig(); }, std::runtime_error);

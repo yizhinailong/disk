@@ -321,17 +321,17 @@ API Instance A  API Instance B ... N
 
 ### 11.1 可重复环境
 
-- [ ] 提供本地多实例环境：PostgreSQL、Redis、MinIO、两个 API、两个 Worker 和负载均衡器。
-- [ ] 所有实例使用同一镜像/制品，通过角色和环境变量区分职责。
-- [ ] 配置文件不包含生产凭据；S3、数据库、Redis 密钥从环境或 Secret 注入。
-- [ ] 配置启动校验覆盖 role、S3 staging、bucket、TLS 和不安全组合。
+- [x] 提供 `docker-compose.distributed.yml`：PostgreSQL、Redis、MinIO、两个 API、两个 Worker 和无粘性负载均衡器；当前主机无 Docker，真实启动验收仍由 Phase 6/8 验收项跟踪。
+- [x] 四个应用实例使用同一 `disk-distributed:local` 镜像，通过 `DISK_PROCESS_ROLE` 和 `DISK_INSTANCE_ID` 区分职责。
+- [x] 分布式 JSON 的密码字段为空；S3、数据库、Redis 密钥只从环境或 Secret 注入，占位 `.env.distributed` 不入库。
+- [x] 启动校验覆盖 role、S3 staging/final 组合、bucket、endpoint scheme、TLS 校验和成对 S3 凭据。
 
 ### 11.2 PostgreSQL
 
 - [ ] 采用主库写入端点和经过演练的故障切换方案；第一期不做业务分片。
-- [ ] 根据 API/Worker 副本数计算连接预算，必要时引入 PgBouncer。
+- [x] 本地双 API/双 Worker 固定 PostgreSQL 32、Redis 16 条应用连接预算并保留运维余量；扩容公式已写入部署指南。
 - [ ] 区分事务池模式限制，确认 Drogon ORM、prepared statement 和 advisory lock 兼容性。
-- [ ] 设置 statement、lock、idle transaction 超时，避免故障任务长期占用资源。
+- [x] Compose PostgreSQL 显式设置 statement、lock、idle transaction 超时，避免故障任务长期占用资源。
 - [ ] 建立备份、时间点恢复和恢复演练流程。
 - [ ] 只在可证明安全的只读查询上评估读副本；上传状态与权限判断不得读延迟副本。
 
@@ -339,7 +339,7 @@ API Instance A  API Instance B ... N
 
 - [ ] 使用私网高可用端点并开启认证/TLS（目标环境支持时）。
 - [ ] 验证故障切换期间连接重建、命令超时、Lua/CAS、SCAN 和 key TTL 行为。
-- [ ] 为每实例连接池设置总预算，避免扩容压垮 Redis。
+- [x] 分布式配置默认每实例 4 条 Redis 连接，双 API/双 Worker 总预算 16 条；扩容必须重新核算。
 - [ ] 备份或持久化要求按 refresh token/撤销语义明确，不把 Redis 当作可随意清空的纯缓存。
 
 ### 11.4 S3/MinIO
@@ -351,8 +351,8 @@ API Instance A  API Instance B ... N
 
 ### 11.5 负载均衡与发布
 
-- [ ] 负载均衡器采用无粘性路由并传递可信的客户端 IP/请求 ID 信息。
-- [ ] 明确上传请求体大小、超时、流式转发和重试规则；代理不得自动重放非幂等请求。
+- [x] Nginx 采用无 cookie/ip-hash 的 `least_conn`，覆盖并传递客户端 IP、协议和代理生成的请求 ID。
+- [x] Nginx 固定 20 MiB 请求体、330 秒转发超时、关闭请求缓冲，且未启用 `non_idempotent` 重放。
 - [x] API/Worker 支持 SIGTERM 优雅关闭和有界 drain。
 - [ ] 数据库迁移、API、Worker 按兼容顺序滚动发布。
 - [ ] 配置最小副本、反亲和/故障域、资源 requests/limits 和扩缩容指标。
@@ -410,13 +410,13 @@ API Instance A  API Instance B ... N
 
 ### 13.2 多实例集成测试
 
-- [ ] 新增可启动两个不同端口后端的测试夹具，共享 PostgreSQL、Redis 和 MinIO。
-- [ ] 每一步随机或轮询路由：init 在 A、偶数分片在 A、奇数分片在 B、complete 在随机实例。
-- [ ] 同时向 A/B 上传同一分片，验证对象与 DB 结果唯一且一致。
-- [ ] 同时向 A/B 调用 complete，验证稳定的单飞和幂等响应。
+- [x] 新增两个不同端口 API、两个 Worker、共享 PostgreSQL/Redis/MinIO 的 Compose 夹具和环境门控入口。
+- [x] 多实例脚本固定 init 在 A、分片跨 A/B、complete 并发到 A/B，并验证另一实例可完成。
+- [x] 多实例脚本同时向 A/B 上传同一分片，验证两次调用幂等并由完成后的 DB/对象唯一性兜底。
+- [x] 多实例脚本同时向 A/B 调用 complete，冲突方重试后必须收敛到同一文件记录。
 - [ ] 并发执行 complete/cancel/expire，验证单一合法终态和配额不变量。
-- [ ] 在 A 登出或取消分享，从 B 立即验证已批准的撤销语义。
-- [ ] 两个 Worker 并发清理同一候选集合，验证任务去重和 Blob 安全删除。
+- [x] 多实例脚本在 A 登出/取消分享后从 B 立即验证 access/share token 撤销，并并发验证 refresh CAS。
+- [x] 多实例脚本验证两个 Worker 共享队列，并在 A 停止后由 B 接管过期租约；周期任务去重继续由数据库集成测试覆盖。
 
 ### 13.3 故障注入
 

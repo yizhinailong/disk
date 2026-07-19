@@ -23,6 +23,7 @@
 #include "utils/ConfigMgr.hpp"
 #include "utils/LogHelper.hpp"
 #include "utils/Response.hpp"
+#include "utils/RuntimeConfig.hpp"
 
 namespace {
     constexpr std::string_view kBusinessRequestMarker = "runtime_business_request";
@@ -177,9 +178,14 @@ auto main() -> int {
     }
     disk::utils::Logger::Info() << "libsodium initialized successfully";
 
-    /// 加载配置文件
-    drogon::app().loadConfigFile("config.json");
-    disk::utils::Logger::Info() << "Configuration file loaded successfully";
+    /// 加载配置文件并在交给 Drogon 前应用严格的环境覆盖。
+    try {
+        drogon::app().loadConfigJson(disk::utils::RuntimeConfig::LoadFromEnvironment());
+    } catch (const std::exception& e) {
+        disk::utils::Logger::Error() << "Runtime configuration loading failed: " << e.what();
+        return 1;
+    }
+    disk::utils::Logger::Info() << "Runtime configuration loaded successfully";
 
     /// 使用 config.json 中的值初始化 ConfigMgr
     disk::utils::ConfigMgr::GetInstance()->LoadConfig();

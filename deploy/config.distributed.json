@@ -1,0 +1,101 @@
+{
+  "listeners": [
+    {
+      "address": "0.0.0.0",
+      "port": 8080
+    }
+  ],
+  "app": {
+    "upload_path": "/var/lib/disk/uploads",
+    "threads_num": 0,
+    "client_max_body_size": "20M"
+  },
+  "custom_config": {
+    "disk": {
+      "process_role": "api",
+      "storage_backend": "s3",
+      "upload_staging_backend": "s3",
+      "storage_base_path": "/var/lib/disk/blobs",
+      "temp_upload_path": "/var/lib/disk/temp",
+      "chunk_size": 5242880,
+      "max_file_size": 10737418240,
+      "upload_task_expiry_seconds": 86400,
+      "upload_finalize_lease_seconds": 120,
+      "worker_poll_interval_ms": 500,
+      "worker_claim_batch_size": 20,
+      "worker_concurrency": 1,
+      "worker_lease_duration_seconds": 30,
+      "worker_drain_timeout_seconds": 30,
+      "upload_rate_limit_per_minute": 240,
+      "upload_rate_limit_window_seconds": 60,
+      "download_rate_limit_per_minute": 120,
+      "download_rate_limit_window_seconds": 60,
+      "folder_rate_limit_per_minute": 100,
+      "folder_rate_limit_window_seconds": 60,
+      "admin_rate_limit_per_minute": 60,
+      "admin_rate_limit_window_seconds": 60,
+      "share_access_rate_limit_per_minute": 60,
+      "share_access_rate_limit_window_seconds": 60,
+      "share_browse_rate_limit_per_minute": 120,
+      "share_browse_rate_limit_window_seconds": 60,
+      "share_download_rate_limit_per_minute": 60,
+      "share_download_rate_limit_window_seconds": 60,
+      "register_rate_limit_per_window": 100,
+      "register_rate_limit_window_seconds": 300,
+      "assembly_max_concurrent": 2,
+      "assemble_buffer_size_bytes": 1048576,
+      "auth_cpu_pool_metrics_interval_seconds": 60,
+      "s3": {
+        "bucket": "disk",
+        "region": "us-east-1",
+        "endpoint": "http://minio:9000",
+        "use_ssl": false,
+        "force_path_style": true,
+        "verify_ssl": false,
+        "object_prefix": "objects",
+        "staging_prefix": "staging",
+        "connect_timeout_ms": 3000,
+        "request_timeout_ms": 300000
+      }
+    }
+  },
+  "db_clients": [
+    {
+      "name": "default",
+      "rdbms": "postgresql",
+      "host": "postgres",
+      "port": 5432,
+      "dbname": "disk",
+      "user": "disk",
+      "passwd": "",
+      "num_connection_number": 8,
+      "timeout": 30.0,
+      "auto_batch": false
+    }
+  ],
+  "redis_clients": [
+    {
+      "name": "default",
+      "host": "redis",
+      "port": 6379,
+      "passwd": "",
+      "db": 0,
+      "is_fast": false,
+      "number_of_connections": 4,
+      "timeout": 5.0
+    }
+  ],
+  "plugins": [
+    {
+      "name": "drogon::plugin::GlobalFilters",
+      "config": {
+        "filters": [
+          "disk::filters::RequestTraceFilter",
+          "disk::filters::JwtAuthFilter",
+          "disk::filters::RegisterRateLimitFilter"
+        ],
+        "exempt": []
+      }
+    }
+  ]
+}

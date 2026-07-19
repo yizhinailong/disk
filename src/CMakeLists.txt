@@ -218,10 +218,12 @@ set(Utils_HEADERS
     utils/Pch.hpp
     utils/RedisKeyPrefix.hpp
     utils/Response.hpp
+    utils/RuntimeConfig.hpp
     utils/Singleton.hpp
 )
 set(Utils_SOURCES
     utils/ConfigMgr.cpp
+    utils/RuntimeConfig.cpp
 )
 
 target_sources(${PROJECT_NAME}

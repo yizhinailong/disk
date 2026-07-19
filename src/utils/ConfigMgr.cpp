@@ -118,6 +118,28 @@ namespace disk::utils {
                    (right.size() < left.size() && left.starts_with(right) && left[right.size()] == '/');
         }
 
+        auto ValidateS3Endpoint(const S3StorageConfig& config) -> void {
+            if (config.endpoint.empty()) {
+                return;
+            }
+
+            const auto expected_scheme = config.use_ssl ? std::string_view("https://") :
+                                                          std::string_view("http://");
+            if (!std::string_view(config.endpoint).starts_with(expected_scheme)) {
+                throw std::runtime_error(
+                    "S3 endpoint scheme does not match s3.use_ssl"
+                );
+            }
+
+            const auto authority_start = expected_scheme.size();
+            const auto authority_end = config.endpoint.find('/', authority_start);
+            const auto authority = std::string_view(config.endpoint).substr(authority_start, authority_end == std::string::npos ? std::string::npos : authority_end - authority_start);
+            if (authority.empty() || authority.find('@') != std::string_view::npos ||
+                config.endpoint.find_first_of("?#\r\n\t ") != std::string::npos) {
+                throw std::runtime_error("Invalid S3 endpoint");
+            }
+        }
+
         auto IsValidInstanceId(const std::string& instance_id) -> bool {
             constexpr size_t MAX_INSTANCE_ID_LENGTH = 128;
             if (instance_id.empty() || instance_id.size() > MAX_INSTANCE_ID_LENGTH) {
@@ -357,6 +379,7 @@ namespace disk::utils {
                 if (m_s3_storage_config.region.empty()) {
                     throw std::runtime_error("S3 storage backend requires non-empty region");
                 }
+                ValidateS3Endpoint(m_s3_storage_config);
             }
 
             /// 从配置读取 upload_rate_limit_per_minute
@@ -449,7 +472,8 @@ namespace disk::utils {
 
         /// 读取数据库和 Redis 连接池大小
         {
-            std::ifstream ifs("config.json");
+            const auto* configured_path = std::getenv("DISK_CONFIG_FILE");
+            std::ifstream ifs(configured_path == nullptr ? "config.json" : configured_path);
             if (ifs.is_open()) {
                 Json::Value root;
                 Json::CharReaderBuilder builder;
@@ -466,6 +490,14 @@ namespace disk::utils {
                             root["redis_clients"][0].get("number_of_connections", 0).asInt64();
                     }
                 }
+            }
+            if (const auto* db_pool_size = std::getenv("DATABASE_POOL_SIZE");
+                db_pool_size != nullptr) {
+                m_db_pool_size = std::stoll(db_pool_size);
+            }
+            if (const auto* redis_pool_size = std::getenv("REDIS_POOL_SIZE");
+                redis_pool_size != nullptr) {
+                m_redis_pool_size = std::stoll(redis_pool_size);
             }
         }
     }
@@ -671,7 +703,25 @@ namespace disk::utils {
             throw std::runtime_error(error_msg);
         }
 
-        /// Only validate DATABASE_PASSWORD and REDIS_PASSWORD in secure mode
+        const auto* s3_access_key = std::getenv("DISK_S3_ACCESS_KEY");
+        const auto* s3_secret_key = std::getenv("DISK_S3_SECRET_KEY");
+        const auto* s3_session_token = std::getenv("DISK_S3_SESSION_TOKEN");
+        if ((s3_access_key != nullptr && *s3_access_key == '\0') ||
+            (s3_secret_key != nullptr && *s3_secret_key == '\0') ||
+            (s3_session_token != nullptr && *s3_session_token == '\0')) {
+            throw std::runtime_error("S3 credential environment variables must not be empty");
+        }
+        const auto has_s3_access_key = s3_access_key != nullptr && *s3_access_key != '\0';
+        const auto has_s3_secret_key = s3_secret_key != nullptr && *s3_secret_key != '\0';
+        const auto has_s3_session_token = s3_session_token != nullptr && *s3_session_token != '\0';
+        if (has_s3_access_key != has_s3_secret_key ||
+            (has_s3_session_token && !has_s3_access_key)) {
+            throw std::runtime_error(
+                "S3 credentials must provide access key and secret key together"
+            );
+        }
+
+        /// Only validate DATABASE_PASSWORD, REDIS_PASSWORD and transport policy in secure mode.
         if (!IsSecureMode()) {
             Logger::Info() << "Running in development mode - skipping DATABASE/REDIS password validation";
             return;
@@ -706,6 +756,15 @@ namespace disk::utils {
         if (!m_process_role_explicit || m_process_role == ProcessRole::All) {
             const std::string error_msg =
                 "Secure mode requires an explicit api or worker process role";
+            Logger::Error() << error_msg;
+            throw std::runtime_error(error_msg);
+        }
+
+        if ((m_storage_backend == StorageBackend::S3 ||
+             m_upload_staging_backend == StorageBackend::S3) &&
+            (!m_s3_storage_config.use_ssl || !m_s3_storage_config.verify_ssl)) {
+            const std::string error_msg =
+                "Secure mode requires S3 TLS with certificate verification";
             Logger::Error() << error_msg;
             throw std::runtime_error(error_msg);
         }

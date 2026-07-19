@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+build
+clients
+.sisyphus
+.cache
+output
+install
+__pycache__
+*.pyc
