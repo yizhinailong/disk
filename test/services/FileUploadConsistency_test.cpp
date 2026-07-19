@@ -278,10 +278,10 @@ namespace disk::file {
             ASSERT_TRUE(assemble_result.has_value());
 
             const auto& assembled = assemble_result.value();
-            ASSERT_TRUE(std::filesystem::exists(assembled.path));
+            ASSERT_TRUE(std::filesystem::exists(assembled.locator));
             EXPECT_EQ(assembled.size_bytes, expected_content.size());
-            EXPECT_EQ(std::filesystem::file_size(assembled.path), static_cast<uintmax_t>(expected_content.size()));
-            EXPECT_EQ(ReadBinaryFile(assembled.path), expected_content);
+            EXPECT_EQ(std::filesystem::file_size(assembled.locator), static_cast<uintmax_t>(expected_content.size()));
+            EXPECT_EQ(ReadBinaryFile(assembled.locator), expected_content);
             EXPECT_EQ(assembled.md5_hash, FileHashUtil::HashMd5(expected_content));
             EXPECT_EQ(assembled.sha256_hash, FileHashUtil::HashSha256(expected_content));
         }
@@ -312,7 +312,11 @@ namespace disk::file {
             output.close();
             ASSERT_TRUE(output);
 
-            auto promote_result = drogon::sync_wait(m_blob_store->PromoteToFinal(temp_path, hash));
+            const disk::storage::UploadStagingAssembly assembly{
+                .backend = disk::storage::UploadStagingBackend::Local,
+                .locator = temp_path.string()
+            };
+            auto promote_result = drogon::sync_wait(m_blob_store->PromoteToFinal(assembly, hash));
 
             ASSERT_TRUE(promote_result.has_value());
             EXPECT_TRUE(promote_result->created);
@@ -345,7 +349,11 @@ namespace disk::file {
             temp_output.close();
             ASSERT_TRUE(temp_output);
 
-            auto promote_result = drogon::sync_wait(m_blob_store->PromoteToFinal(temp_path, hash));
+            const disk::storage::UploadStagingAssembly assembly{
+                .backend = disk::storage::UploadStagingBackend::Local,
+                .locator = temp_path.string()
+            };
+            auto promote_result = drogon::sync_wait(m_blob_store->PromoteToFinal(assembly, hash));
 
             ASSERT_TRUE(promote_result.has_value());
             EXPECT_FALSE(promote_result->created);

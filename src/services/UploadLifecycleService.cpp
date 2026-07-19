@@ -698,7 +698,6 @@ namespace disk::upload {
             co_return std::unexpected(assemble_result.error());
         }
         const auto& assembled = assemble_result.value();
-        const auto& assemble_path = assembled.path;
         const auto& final_hash = assembled.md5_hash;
         const auto& precomputed_sha256 = assembled.sha256_hash;
 
@@ -861,7 +860,7 @@ namespace disk::upload {
                 );
             }
 
-            auto promote_result = co_await m_blob_store->PromoteToFinal(assemble_path, final_hash);
+            auto promote_result = co_await m_blob_store->PromoteToFinal(assembled, final_hash);
             if (!promote_result) {
                 Logger::Error() << "Failed to move file to final storage: error="
                                 << static_cast<int>(promote_result.error().code);

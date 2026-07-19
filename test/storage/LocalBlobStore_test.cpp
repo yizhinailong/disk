@@ -6,6 +6,8 @@
  * @copyright Copyright (c) 2026
  */
 
+#include "storage/LocalBlobStore.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -15,7 +17,6 @@
 #include <gtest/gtest.h>
 #include <json/json.h>
 
-#include "storage/LocalBlobStore.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
 
@@ -70,6 +71,13 @@ namespace disk::storage {
             ASSERT_TRUE(output);
         }
 
+        auto LocalAssembly(const std::filesystem::path& path) -> UploadStagingAssembly {
+            return UploadStagingAssembly{
+                .backend = UploadStagingBackend::Local,
+                .locator = path.string(),
+            };
+        }
+
         class LocalBlobStoreTest : public ::testing::Test {
         protected:
             void SetUp() override {
@@ -110,7 +118,9 @@ namespace disk::storage {
             const auto temp_path = TempPath("assembled.tmp");
             WriteBinaryFile(temp_path, content);
 
-            auto promote_result = drogon::sync_wait(m_blob_store->PromoteToFinal(temp_path, hash));
+            auto promote_result = drogon::sync_wait(
+                m_blob_store->PromoteToFinal(LocalAssembly(temp_path), hash)
+            );
 
             ASSERT_TRUE(promote_result.has_value());
             EXPECT_TRUE(promote_result->created);
@@ -141,7 +151,9 @@ namespace disk::storage {
             WriteBinaryFile(final_path, existing_content);
             WriteBinaryFile(temp_path, temp_content);
 
-            auto promote_result = drogon::sync_wait(m_blob_store->PromoteToFinal(temp_path, hash));
+            auto promote_result = drogon::sync_wait(
+                m_blob_store->PromoteToFinal(LocalAssembly(temp_path), hash)
+            );
 
             ASSERT_TRUE(promote_result.has_value());
             EXPECT_FALSE(promote_result->created);
@@ -173,5 +185,5 @@ namespace disk::storage {
             EXPECT_EQ(final_path, m_storage_base / "01" / (hash + ".bin"));
         }
 
-    } ///< namespace
-} ///< namespace disk::storage
+    } // namespace
+} // namespace disk::storage

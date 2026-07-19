@@ -21,6 +21,7 @@
 #include <drogon/orm/DbClient.h>
 
 #include "storage/BlobDescriptor.hpp"
+#include "storage/UploadStagingStorage.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::storage {
@@ -95,13 +96,13 @@ namespace disk::storage {
         virtual ~IBlobStore() = default;
 
         /**
-         * @brief 将已组装临时文件提升为最终 Blob
-         * @param temp_path 已组装临时文件路径
+         * @brief 将已组装暂存对象提升为最终 Blob
+         * @param assembly 后端无关的组装暂存对象描述符
          * @param hash 内容哈希（如 MD5）
          * @return 成功返回最终路径与是否由本次调用创建，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto PromoteToFinal(const std::filesystem::path& temp_path, const std::string& hash)
+        virtual auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& hash)
             -> drogon::Task<Result<BlobPromoteResult>> = 0;
 
         /**
@@ -218,4 +219,4 @@ namespace disk::storage {
             -> drogon::Task<Result<uint64_t>> = 0;
     };
 
-} ///< namespace disk::storage
+} // namespace disk::storage

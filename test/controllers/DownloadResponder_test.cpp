@@ -13,10 +13,6 @@
  */
 
 #include "../../src/controllers/DownloadResponder.hpp"
-#include "../../src/dtos/FileDto.hpp"
-#include "../../src/storage/IBlobStore.hpp"
-#include "../../src/utils/ErrorCode.hpp"
-#include "../../src/utils/Response.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -31,6 +27,11 @@
 #include <drogon/utils/coroutine.h>
 #include <gtest/gtest.h>
 #include <json/json.h>
+
+#include "../../src/dtos/FileDto.hpp"
+#include "../../src/storage/IBlobStore.hpp"
+#include "../../src/utils/ErrorCode.hpp"
+#include "../../src/utils/Response.hpp"
 
 namespace {
 
@@ -86,7 +87,7 @@ namespace {
         /// ---- IBlobStore 接口 ----
 
         auto PromoteToFinal(
-            const std::filesystem::path& /*temp_path*/,
+            const disk::storage::UploadStagingAssembly& /*assembly*/,
             const std::string& /*hash*/
         ) -> drogon::Task<Result<disk::storage::BlobPromoteResult>> override {
             co_return disk::storage::BlobPromoteResult{ .path = m_temp_dir / "final", .created = true };
@@ -210,7 +211,7 @@ namespace {
         std::filesystem::path m_path;
     };
 
-} ///< namespace
+} // namespace
 
 /// ================================================================
 /// Suite 1: RangeRequest::Parse 纯函数测试

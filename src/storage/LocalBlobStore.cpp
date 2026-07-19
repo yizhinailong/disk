@@ -122,9 +122,7 @@ namespace disk::storage {
                     m_resume_loop->runAfter(m_timeout_seconds, [this]() {
                         bool expected = false;
                         if (m_completed.compare_exchange_strong(expected, true)) {
-                            this->setValue(std::unexpected(
-                                ErrorInfo(ErrorCode::InternalError, "Delete operation timed out")
-                            ));
+                            this->setValue(std::unexpected(ErrorInfo(ErrorCode::InternalError, "Delete operation timed out")));
                             Resume();
                         }
                     });
@@ -163,7 +161,7 @@ namespace disk::storage {
             );
         }
 
-    } ///< namespace
+    } // namespace
 
     LocalBlobStore::LocalBlobStore(std::shared_ptr<disk::utils::ConfigMgr> config_mgr)
         : m_config_mgr(config_mgr == nullptr ? disk::utils::ConfigMgr::GetInstance() : std::move(config_mgr)) {
@@ -176,8 +174,15 @@ namespace disk::storage {
         Logger::Info() << "LocalBlobStore worker queue initialized: io_threads=" << worker_thread_count;
     }
 
-    auto LocalBlobStore::PromoteToFinal(const std::filesystem::path& temp_path, const std::string& hash)
+    auto LocalBlobStore::PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& hash)
         -> drogon::Task<Result<BlobPromoteResult>> {
+        if (assembly.backend != UploadStagingBackend::Local || assembly.locator.empty()) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Local blob store requires a local staging object")
+            );
+        }
+
+        const auto temp_path = std::filesystem::path(assembly.locator);
         const auto final_path = GetFinalStoragePath(hash);
         const auto final_dir = final_path.parent_path();
 
@@ -343,4 +348,4 @@ namespace disk::storage {
         co_return result;
     }
 
-} ///< namespace disk::storage
+} // namespace disk::storage

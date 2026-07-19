@@ -59,7 +59,7 @@ namespace disk::storage {
         auto CleanupTemp(const std::string& upload_id) -> drogon::Task<Result<void>> override;
 
         [[nodiscard]]
-        auto PromoteToFinal(const std::filesystem::path& temp_path, const std::string& hash)
+        auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& hash)
             -> drogon::Task<Result<BlobPromoteResult>> override;
 
         [[nodiscard]]

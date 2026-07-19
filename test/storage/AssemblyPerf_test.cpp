@@ -163,8 +163,8 @@ namespace disk::storage {
                 << "SHA256 mismatch: expected " << expected_sha256 << " got " << assembled.sha256_hash;
             EXPECT_EQ(assembled.size_bytes, kTotalSize);
 
-            ASSERT_TRUE(std::filesystem::exists(assembled.path));
-            EXPECT_EQ(std::filesystem::file_size(assembled.path), static_cast<uintmax_t>(kTotalSize));
+            ASSERT_TRUE(std::filesystem::exists(assembled.locator));
+            EXPECT_EQ(std::filesystem::file_size(assembled.locator), static_cast<uintmax_t>(kTotalSize));
 
             EXPECT_GT(assemble_ms, 0)
                 << "Assembly of 20MB completed in " << assemble_ms << "ms";
@@ -196,7 +196,7 @@ namespace disk::storage {
             EXPECT_EQ(assembled.md5_hash, expected_md5);
             EXPECT_EQ(assembled.sha256_hash, expected_sha256);
             EXPECT_EQ(assembled.size_bytes, kDataSize);
-            EXPECT_EQ(std::filesystem::file_size(assembled.path), static_cast<uintmax_t>(kDataSize));
+            EXPECT_EQ(std::filesystem::file_size(assembled.locator), static_cast<uintmax_t>(kDataSize));
         }
 
         TEST_F(AssemblyPerfTest, EightChunksFiveMbAssemblesWithCorrectHashes) {
@@ -239,7 +239,7 @@ namespace disk::storage {
             EXPECT_EQ(assembled.md5_hash, expected_md5);
             EXPECT_EQ(assembled.sha256_hash, expected_sha256);
             EXPECT_EQ(assembled.size_bytes, kTotalSize);
-            EXPECT_EQ(std::filesystem::file_size(assembled.path), static_cast<uintmax_t>(kTotalSize));
+            EXPECT_EQ(std::filesystem::file_size(assembled.locator), static_cast<uintmax_t>(kTotalSize));
 
             auto throughput_mbps = (static_cast<double>(kTotalSize) / (1024.0 * 1024.0)) /
                                    (static_cast<double>(assemble_ms) / 1000.0);

@@ -519,7 +519,8 @@ namespace disk::storage {
                 crypto_hash_sha256_final(&sha256_state, sha256_digest.data());
 
                 return UploadStagingAssembly{
-                    .path = assembled_path,
+                    .backend = UploadStagingBackend::Local,
+                    .locator = assembled_path.string(),
                     .size_bytes = total_size_bytes,
                     .md5_hash = FileHashUtil::BytesToHex(md5_digest.data(), md5_digest.size()),
                     .sha256_hash =
@@ -598,7 +599,12 @@ namespace disk::storage {
         const UploadStagingAssembly& assembly
     ) -> drogon::Task<Result<void>> {
         const auto expected_path = GetAssembleFilePath(upload_id);
-        const auto assembly_path = assembly.path;
+        if (assembly.backend != UploadStagingBackend::Local || assembly.locator.empty()) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Local staging requires a local assembly object")
+            );
+        }
+        const auto assembly_path = std::filesystem::path(assembly.locator);
 
         auto result = co_await RunBlockingFilesystemTask(
             m_worker_queue,

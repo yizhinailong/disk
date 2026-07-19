@@ -20,6 +20,11 @@
 
 namespace disk::storage {
 
+    enum class UploadStagingBackend {
+        Local,
+        S3,
+    };
+
     struct UploadStagingChunk {
         uint32_t chunk_index{ 0 };
         uint64_t size_bytes{ 0 };
@@ -29,7 +34,8 @@ namespace disk::storage {
     };
 
     struct UploadStagingAssembly {
-        std::filesystem::path path;
+        UploadStagingBackend backend{ UploadStagingBackend::Local };
+        std::string locator;
         uint64_t size_bytes{ 0 };
         std::string md5_hash;
         std::string sha256_hash;

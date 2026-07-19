@@ -173,6 +173,13 @@ namespace {
         std::unique_ptr<disk::storage::S3ObjectStorage> storage;
     };
 
+    auto LocalAssembly(const std::filesystem::path& path) -> disk::storage::UploadStagingAssembly {
+        return disk::storage::UploadStagingAssembly{
+            .backend = disk::storage::UploadStagingBackend::Local,
+            .locator = path.string(),
+        };
+    }
+
 } // namespace
 
 TEST_F(S3ObjectStorageTest, GetFinalStoragePathUsesHashShardedObjectKey) {
@@ -186,7 +193,7 @@ TEST_F(S3ObjectStorageTest, PromoteToFinalUploadsMissingObject) {
     const auto temp_path = WriteTempFile("assembled.tmp", "hello s3");
 
     auto result = drogon::sync_wait(
-        storage->PromoteToFinal(temp_path, "abcdef0123456789abcdef0123456789")
+        storage->PromoteToFinal(LocalAssembly(temp_path), "abcdef0123456789abcdef0123456789")
     );
 
     ASSERT_TRUE(result.has_value()) << result.error().message;
@@ -202,7 +209,7 @@ TEST_F(S3ObjectStorageTest, PromoteToFinalReusesExistingObject) {
     const auto temp_path = WriteTempFile("assembled.tmp", "new bytes");
 
     auto result = drogon::sync_wait(
-        storage->PromoteToFinal(temp_path, "abcdef0123456789abcdef0123456789")
+        storage->PromoteToFinal(LocalAssembly(temp_path), "abcdef0123456789abcdef0123456789")
     );
 
     ASSERT_TRUE(result.has_value()) << result.error().message;
@@ -219,7 +226,7 @@ TEST_F(S3ObjectStorageTest, PromoteToFinalSucceedsWhenTempCleanupFailsAfterUploa
     client->read_local_file = false;
 
     auto result = drogon::sync_wait(
-        storage->PromoteToFinal(temp_path, "abcdef0123456789abcdef0123456789")
+        storage->PromoteToFinal(LocalAssembly(temp_path), "abcdef0123456789abcdef0123456789")
     );
 
     ASSERT_TRUE(result.has_value()) << result.error().message;

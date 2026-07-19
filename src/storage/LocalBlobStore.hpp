@@ -49,7 +49,7 @@ namespace disk::storage {
         auto operator=(LocalBlobStore&&) -> LocalBlobStore& = default;
 
         [[nodiscard]]
-        auto PromoteToFinal(const std::filesystem::path& temp_path, const std::string& hash)
+        auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& hash)
             -> drogon::Task<Result<BlobPromoteResult>> override;
 
         [[nodiscard]]
@@ -77,4 +77,4 @@ namespace disk::storage {
         std::shared_ptr<trantor::ConcurrentTaskQueue> m_worker_queue{}; ///< 最终 Blob 文件系统工作队列
     };
 
-} ///< namespace disk::storage
+} // namespace disk::storage

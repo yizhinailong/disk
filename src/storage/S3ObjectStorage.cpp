@@ -131,8 +131,15 @@ namespace disk::storage {
         co_return co_await m_local_staging.CleanupTemp(upload_id);
     }
 
-    auto S3ObjectStorage::PromoteToFinal(const std::filesystem::path& temp_path, const std::string& hash)
+    auto S3ObjectStorage::PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& hash)
         -> drogon::Task<Result<BlobPromoteResult>> {
+        if (assembly.backend != UploadStagingBackend::Local || assembly.locator.empty()) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Unsupported staging object for S3 promotion")
+            );
+        }
+
+        const auto temp_path = std::filesystem::path(assembly.locator);
         const auto object_key = GetFinalStoragePath(hash);
         const auto key = ToObjectKey(object_key);
         auto client = m_s3_client;

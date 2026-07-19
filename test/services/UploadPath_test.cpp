@@ -445,10 +445,10 @@ namespace disk::file {
             ASSERT_TRUE(result.has_value());
 
             const auto& assembled = result.value();
-            EXPECT_TRUE(std::filesystem::exists(assembled.path));
+            EXPECT_TRUE(std::filesystem::exists(assembled.locator));
             EXPECT_EQ(assembled.size_bytes, expected_content.size());
-            EXPECT_EQ(std::filesystem::file_size(assembled.path), expected_content.size());
-            EXPECT_EQ(ReadBinaryFile(assembled.path), expected_content);
+            EXPECT_EQ(std::filesystem::file_size(assembled.locator), expected_content.size());
+            EXPECT_EQ(ReadBinaryFile(assembled.locator), expected_content);
         }
 
         TEST_F(UploadPathTest, AssembleChunksProducesCorrectMd5AndSha256) {
@@ -527,7 +527,7 @@ namespace disk::file {
             ASSERT_TRUE(result.has_value());
             EXPECT_EQ(result->size_bytes, chunk_data.size());
             EXPECT_EQ(result->md5_hash, FileHashUtil::HashMd5(chunk_data));
-            EXPECT_EQ(ReadBinaryFile(result->path), chunk_data);
+            EXPECT_EQ(ReadBinaryFile(result->locator), chunk_data);
         }
 
         /// =====================================================================
@@ -629,12 +629,12 @@ namespace disk::file {
             ASSERT_TRUE(assemble_result.has_value());
 
             const auto& assembled = assemble_result.value();
-            EXPECT_EQ(ReadBinaryFile(assembled.path), expected_content);
+            EXPECT_EQ(ReadBinaryFile(assembled.locator), expected_content);
             EXPECT_EQ(assembled.md5_hash, expected_md5);
 
             /// Step 4: Promote to final storage
             auto promote_result = drogon::sync_wait(
-                m_blob_store->PromoteToFinal(assembled.path, assembled.md5_hash)
+                m_blob_store->PromoteToFinal(assembled, assembled.md5_hash)
             );
             ASSERT_TRUE(promote_result.has_value());
 
@@ -666,7 +666,7 @@ namespace disk::file {
             auto assemble_result = drogon::sync_wait(m_storage->AssembleChunks(upload_id, 1));
             ASSERT_TRUE(assemble_result.has_value());
 
-            EXPECT_EQ(ReadBinaryFile(assemble_result->path), content);
+            EXPECT_EQ(ReadBinaryFile(assemble_result->locator), content);
             EXPECT_EQ(assemble_result->md5_hash, expected_md5);
         }
 
@@ -770,7 +770,7 @@ namespace disk::file {
 
             auto assemble_result = drogon::sync_wait(m_storage->AssembleChunks(upload_id, 1));
             ASSERT_TRUE(assemble_result.has_value());
-            ASSERT_TRUE(std::filesystem::exists(assemble_result->path));
+            ASSERT_TRUE(std::filesystem::exists(assemble_result->locator));
             ASSERT_TRUE(std::filesystem::exists(ChunkPath(upload_id, 0)));
 
             auto discard_result = drogon::sync_wait(
@@ -785,7 +785,8 @@ namespace disk::file {
         TEST_F(UploadPathTest, DiscardAssemblyIsIdempotentOnMissingArtifact) {
             const std::string upload_id = "discard-idempotent-test";
             const disk::storage::UploadStagingAssembly assembly{
-                .path = AssembledPath(upload_id),
+                .backend = disk::storage::UploadStagingBackend::Local,
+                .locator = AssembledPath(upload_id).string(),
                 .md5_hash = "",
                 .sha256_hash = ""
             };
@@ -800,7 +801,8 @@ namespace disk::file {
         TEST_F(UploadPathTest, DiscardAssemblyRejectsMismatchedArtifactPath) {
             const std::string upload_id = "discard-mismatch-test";
             const disk::storage::UploadStagingAssembly assembly{
-                .path = m_temp_base / "other-upload.tmp",
+                .backend = disk::storage::UploadStagingBackend::Local,
+                .locator = (m_temp_base / "other-upload.tmp").string(),
                 .md5_hash = "",
                 .sha256_hash = ""
             };
