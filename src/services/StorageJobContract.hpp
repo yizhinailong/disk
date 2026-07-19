@@ -33,6 +33,24 @@ namespace disk::jobs {
     auto ParseExpireUploadsJob(const StorageJob& job)
         -> std::expected<ExpireUploadsPageRequest, std::string>;
 
+    struct ExpireTrashPageRequest {
+        std::string scan_id;
+        uint64_t after_id{ 0 };
+        size_t limit{ kDefaultExpireTrashPageSize };
+    };
+
+    [[nodiscard]]
+    auto ValidateExpireTrashPageRequest(const ExpireTrashPageRequest& request)
+        -> std::expected<void, std::string>;
+
+    [[nodiscard]]
+    auto BuildExpireTrashJob(const ExpireTrashPageRequest& request)
+        -> std::expected<NewStorageJob, std::string>;
+
+    [[nodiscard]]
+    auto ParseExpireTrashJob(const StorageJob& job)
+        -> std::expected<ExpireTrashPageRequest, std::string>;
+
     [[nodiscard]]
     auto BuildStorageReconcileJob(
         const disk::reconciliation::ReconciliationPageRequest& request

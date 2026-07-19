@@ -84,6 +84,56 @@ namespace disk::jobs {
             EXPECT_EQ(parsed.error(), "expire_uploads payload has an invalid object shape");
         }
 
+        TEST(StorageJobContractTest, RoundTripsExpireTrashCursor) {
+            const ExpireTrashPageRequest request{
+                .scan_id = "20260719T12Z",
+                .after_id = 42,
+                .limit = kMaxExpireTrashPageSize,
+            };
+
+            auto built = BuildExpireTrashJob(request);
+            ASSERT_TRUE(built.has_value());
+            EXPECT_EQ(built->aggregate_id, request.scan_id);
+            EXPECT_EQ(
+                built->dedupe_key,
+                "periodic:expire-trash:20260719T12Z:42"
+            );
+
+            auto parsed = ParseExpireTrashJob(ToPersistedJob(std::move(built.value())));
+            ASSERT_TRUE(parsed.has_value());
+            EXPECT_EQ(parsed->scan_id, request.scan_id);
+            EXPECT_EQ(parsed->after_id, request.after_id);
+            EXPECT_EQ(parsed->limit, request.limit);
+        }
+
+        TEST(StorageJobContractTest, RejectsTamperedOrUnboundedExpireTrashPayload) {
+            EXPECT_FALSE(BuildExpireTrashJob(ExpireTrashPageRequest{
+                                                 .scan_id = "../scan",
+                                             })
+                             .has_value());
+            EXPECT_FALSE(BuildExpireTrashJob(ExpireTrashPageRequest{
+                                                 .scan_id = "scan-1",
+                                                 .after_id = std::numeric_limits<uint64_t>::max(),
+                                             })
+                             .has_value());
+            EXPECT_FALSE(BuildExpireTrashJob(ExpireTrashPageRequest{
+                                                 .scan_id = "scan-1",
+                                                 .limit = kMaxExpireTrashPageSize + 1,
+                                             })
+                             .has_value());
+
+            auto built = BuildExpireTrashJob(ExpireTrashPageRequest{
+                .scan_id = "scan-1",
+                .after_id = 5,
+            });
+            ASSERT_TRUE(built.has_value());
+            auto job = ToPersistedJob(std::move(built.value()));
+            job.dedupe_key = "periodic:expire-trash:scan-1:6";
+            auto parsed = ParseExpireTrashJob(job);
+            ASSERT_FALSE(parsed.has_value());
+            EXPECT_EQ(parsed.error(), "expire_trash dedupe_key does not match payload");
+        }
+
         TEST(StorageJobContractTest, UsesDocumentedReconciliationCursorDigest) {
             const disk::reconciliation::ReconciliationPageRequest request{
                 .scan_id = "scan-2",

@@ -24,9 +24,12 @@ namespace disk::jobs {
     inline constexpr std::string_view kMultipartAbortJobType = "multipart_abort";
     inline constexpr std::string_view kBlobGcJobType = "blob_gc";
     inline constexpr std::string_view kExpireUploadsJobType = "expire_uploads";
+    inline constexpr std::string_view kExpireTrashJobType = "expire_trash";
     inline constexpr std::string_view kStorageReconcileJobType = "storage_reconcile";
     inline constexpr size_t kDefaultExpireUploadsPageSize = 100;
     inline constexpr size_t kMaxExpireUploadsPageSize = 500;
+    inline constexpr size_t kDefaultExpireTrashPageSize = 100;
+    inline constexpr size_t kMaxExpireTrashPageSize = 500;
 
     enum class StorageJobStatus : int16_t {
         Pending = 0,

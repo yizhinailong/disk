@@ -113,6 +113,73 @@ namespace disk::jobs {
         return request;
     }
 
+    auto ValidateExpireTrashPageRequest(const ExpireTrashPageRequest& request)
+        -> std::expected<void, std::string> {
+        if (!IsSafeScanId(request.scan_id)) {
+            return std::unexpected("expire_trash scan_id is invalid");
+        }
+        if (request.after_id == std::numeric_limits<uint64_t>::max()) {
+            return std::unexpected("expire_trash after_id cannot advance");
+        }
+        if (request.limit == 0 || request.limit > kMaxExpireTrashPageSize) {
+            return std::unexpected("expire_trash limit must be in range 1-500");
+        }
+        return {};
+    }
+
+    auto BuildExpireTrashJob(const ExpireTrashPageRequest& request)
+        -> std::expected<NewStorageJob, std::string> {
+        auto validation = ValidateExpireTrashPageRequest(request);
+        if (!validation) {
+            return std::unexpected(validation.error());
+        }
+
+        Json::Value payload(Json::objectValue);
+        payload["scan_id"] = request.scan_id;
+        payload["after_id"] = Json::UInt64(request.after_id);
+        payload["limit"] = Json::UInt64(request.limit);
+        return NewStorageJob{
+            .job_type = std::string(kExpireTrashJobType),
+            .aggregate_id = request.scan_id,
+            .dedupe_key = "periodic:expire-trash:" + request.scan_id + ":" +
+                          std::to_string(request.after_id),
+            .payload = std::move(payload),
+        };
+    }
+
+    auto ParseExpireTrashJob(const StorageJob& job)
+        -> std::expected<ExpireTrashPageRequest, std::string> {
+        if (job.job_type != kExpireTrashJobType) {
+            return std::unexpected("expire_trash job type does not match parser");
+        }
+        auto shape = ValidateObjectShape(job.payload, 3, kExpireTrashJobType);
+        if (!shape) {
+            return std::unexpected(shape.error());
+        }
+        if (!job.payload["scan_id"].isString() || !job.payload["after_id"].isUInt64() ||
+            !job.payload["limit"].isUInt64() ||
+            job.payload["limit"].asUInt64() > std::numeric_limits<size_t>::max()) {
+            return std::unexpected("expire_trash payload field types are invalid");
+        }
+
+        ExpireTrashPageRequest request{
+            .scan_id = job.payload["scan_id"].asString(),
+            .after_id = job.payload["after_id"].asUInt64(),
+            .limit = static_cast<size_t>(job.payload["limit"].asUInt64()),
+        };
+        auto expected_job = BuildExpireTrashJob(request);
+        if (!expected_job) {
+            return std::unexpected(expected_job.error());
+        }
+        if (job.aggregate_id != expected_job->aggregate_id) {
+            return std::unexpected("expire_trash aggregate_id does not match scan_id");
+        }
+        if (job.dedupe_key != expected_job->dedupe_key) {
+            return std::unexpected("expire_trash dedupe_key does not match payload");
+        }
+        return request;
+    }
+
     auto BuildStorageReconcileJob(
         const disk::reconciliation::ReconciliationPageRequest& request
     ) -> std::expected<NewStorageJob, std::string> {
