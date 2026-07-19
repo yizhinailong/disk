@@ -35,7 +35,7 @@ RESPONSE=$(curl -s -X POST "${BENCH_HOST}/api/auth/login" \
     -d "{\"account\":\"${BENCH_ACCOUNT}\",\"password\":\"${BENCH_PASSWORD}\"}")
 
 # Extract token from response
-TOKEN=$(echo "$RESPONSE" | jq -r '.data.accessToken // empty')
+TOKEN=$(echo "$RESPONSE" | jq -r '.data.access_token // empty')
 
 if [[ -z "$TOKEN" ]]; then
     echo "ERROR: Failed to obtain JWT token" >&2
