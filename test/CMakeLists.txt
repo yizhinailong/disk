@@ -202,6 +202,19 @@ set_tests_properties(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
+add_test(
+    NAME V003MigrationIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_v003_migration.py"
+)
+set_tests_properties(
+    V003MigrationIntegration
+    PROPERTIES
+    LABELS "backend-integration;database-migration"
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 add_disk_server_integration_test(LoginRateLimitIntegration test_login_rate_limit.py 120)
 add_disk_server_integration_test(UserProfileStorageIntegration test_user_profile_storage.py 120)
 add_disk_server_integration_test(AssemblyBackpressureIntegration test_assembly_backpressure.py 120)

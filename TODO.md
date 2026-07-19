@@ -119,46 +119,46 @@ API Instance A  API Instance B ... N
 
 ### 6.1 建立迁移机制
 
-- [ ] 确认并固定数据库 schema migration 工具与目录，不再只依赖全量 `sql/init.sql` 初始化已有数据库。
-- [ ] 每次迁移提供 expand、数据回填、contract 三阶段计划；滚动发布期间新旧版本必须兼容。
-- [ ] 迁移命令由单独部署任务执行，禁止所有 API 实例启动时并发迁移。
-- [ ] 为全新安装同步更新 `sql/init.sql`，但不把它当作线上升级脚本。
-- [ ] 增加迁移前后 schema 验证和重复执行测试。
+- [x] 确认并固定数据库 schema migration 工具与目录，不再只依赖全量 `sql/init.sql` 初始化已有数据库。
+- [x] 每次迁移提供 expand、数据回填、contract 三阶段计划；滚动发布期间新旧版本必须兼容。
+- [x] 迁移命令由单独部署任务执行，禁止所有 API 实例启动时并发迁移。
+- [x] 为全新安装同步更新 `sql/init.sql`，但不把它当作线上升级脚本。
+- [x] 增加迁移前后 schema 验证和重复执行测试。
 
 ### 6.2 扩展 `upload_tasks`
 
-- [ ] 在保留既有状态值的前提下增加 `Finalizing`，评估是否需要终态 `Failed`。
-- [ ] 增加 `state_version BIGINT NOT NULL DEFAULT 0`，用于乐观并发控制和诊断。
-- [ ] 增加 `lease_owner`、`lease_expires_at`，用于完成任务认领和崩溃接管。
-- [ ] 增加 `finalize_attempts`、`last_error_code`、`last_error_at`，用于有限重试和运维诊断。
-- [ ] 增加 `completed_file_id`，使重复 `complete` 可以返回同一文件结果。
-- [ ] 增加 `staging_backend`、`staging_prefix`，支持迁移期间按任务选择 local/S3 暂存。
-- [ ] 按最终设计增加 multipart/staging object 标识，禁止把凭据写入数据库。
-- [ ] 为状态、过期时间、租约到期和待恢复任务建立必要索引。
-- [ ] 增加 CHECK/FK 约束，禁止非法状态与字段组合。
+- [x] 在保留既有状态值的前提下增加 `Finalizing`，评估是否需要终态 `Failed`。
+- [x] 增加 `state_version BIGINT NOT NULL DEFAULT 0`，用于乐观并发控制和诊断。
+- [x] 增加 `lease_owner`、`lease_expires_at`，用于完成任务认领和崩溃接管。
+- [x] 增加 `finalize_attempts`、`last_error_code`、`last_error_at`，用于有限重试和运维诊断。
+- [x] 增加 `completed_file_id`，使重复 `complete` 可以返回同一文件结果。
+- [x] 增加 `staging_backend`、`staging_prefix`，支持迁移期间按任务选择 local/S3 暂存。
+- [x] 按最终设计增加 multipart/staging object 标识，禁止把凭据写入数据库。
+- [x] 为状态、过期时间、租约到期和待恢复任务建立必要索引。
+- [x] 增加 CHECK/FK 约束，禁止非法状态与字段组合。
 
 ### 6.3 扩展 `upload_task_chunks`
 
-- [ ] 继续以该表作为唯一上传进度来源，不向 `upload_tasks` 添加兼容 JSON 分片字段。
-- [ ] 增加 `size_bytes`、`hash_md5`、`object_key`、`etag` 等恢复组装所需元数据。
-- [ ] 保持 `(task_id, chunk_index)` 唯一，并校验索引和大小边界。
-- [ ] 设计“对象已写但 DB 未记录”与“DB 已记录但对象缺失”的对账和修复语义。
+- [x] 继续以该表作为唯一上传进度来源，不向 `upload_tasks` 添加兼容 JSON 分片字段。
+- [x] 增加 `size_bytes`、`hash_md5`、`object_key`、`etag` 等恢复组装所需元数据。
+- [x] 保持 `(task_id, chunk_index)` 唯一，并校验索引和大小边界。
+- [x] 设计“对象已写但 DB 未记录”与“DB 已记录但对象缺失”的对账和修复语义。
 - [ ] 禁止终态任务继续写入分片记录；使用带任务状态条件的数据库写入原语。
 
 ### 6.4 增加持久任务表
 
-- [ ] 增加 `storage_jobs` 或等价表，字段至少包含任务类型、聚合 ID、去重键、状态、尝试次数、可执行时间、租约所有者、租约截止、错误和时间戳。
-- [ ] 为去重键增加唯一约束，确保同一清理/删除任务只产生一个逻辑任务。
-- [ ] 为 `pending/retry + available_at` 和 `running + lease_expires_at` 建立认领索引。
-- [ ] 定义任务状态迁移：`Pending -> Running -> Succeeded`，失败进入 `Retry`，超过上限进入 `DeadLetter`。
+- [x] 增加 `storage_jobs` 或等价表，字段至少包含任务类型、聚合 ID、去重键、状态、尝试次数、可执行时间、租约所有者、租约截止、错误和时间戳。
+- [x] 为去重键增加唯一约束，确保同一清理/删除任务只产生一个逻辑任务。
+- [x] 为 `pending/retry + available_at` 和 `running + lease_expires_at` 建立认领索引。
+- [x] 定义任务状态迁移：`Pending -> Running -> Succeeded`，失败进入 `Retry`，超过上限进入 `DeadLetter`。
 - [ ] 定义 dead-letter 查询、人工重试和审计流程。
 
 ### 6.5 Phase 1 验收
 
-- [ ] 新 schema 可从空库创建，也可从当前 schema 无损升级。
-- [ ] 旧版本可在 expand 阶段继续运行；contract 迁移在旧版本完全退出后执行。
-- [ ] 所有新增索引通过 `EXPLAIN` 验证目标查询。
-- [ ] 迁移回滚策略和不可逆步骤已写入部署文档。
+- [x] 新 schema 可从空库创建，也可从当前 schema 无损升级。
+- [x] 旧版本可在 expand 阶段继续运行；contract 迁移在旧版本完全退出后执行。
+- [x] 所有新增索引通过 `EXPLAIN` 验证目标查询。
+- [x] 迁移回滚策略和不可逆步骤已写入部署文档。
 
 ## 7. Phase 2：跨实例状态机、幂等与事务正确性
 

@@ -1,3 +1,10 @@
+-- Schema 迁移账本（V003 起由 scripts/migrate-db.sh 管理）
+CREATE TABLE schema_migrations (
+    version VARCHAR(128) PRIMARY KEY,
+    checksum CHAR(64) NOT NULL,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 用户表
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
@@ -169,13 +176,46 @@ CREATE TABLE upload_tasks (
     total_chunks INTEGER NOT NULL,
     reserved_bytes BIGINT NOT NULL DEFAULT 0,
     temp_path VARCHAR(512) NOT NULL,
+    staging_backend VARCHAR(16) NOT NULL DEFAULT 'local',
+    staging_prefix VARCHAR(1024) DEFAULT NULL,
     status SMALLINT NOT NULL DEFAULT 0,
+    state_version BIGINT NOT NULL DEFAULT 0,
+    lease_owner VARCHAR(128) DEFAULT NULL,
+    lease_expires_at TIMESTAMP DEFAULT NULL,
+    finalize_attempts INTEGER NOT NULL DEFAULT 0,
+    last_error_code INTEGER DEFAULT NULL,
+    last_error_at TIMESTAMP DEFAULT NULL,
+    completed_file_id BIGINT DEFAULT NULL,
     expires_at TIMESTAMP NOT NULL,
     finalized_at TIMESTAMP DEFAULT NULL,
     fail_reason VARCHAR(512) DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_upload_tasks_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    CONSTRAINT fk_upload_tasks_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_upload_tasks_completed_file_id FOREIGN KEY (completed_file_id) REFERENCES files (id) ON DELETE SET NULL,
+    CONSTRAINT ck_upload_tasks_status CHECK (status BETWEEN 0 AND 5),
+    CONSTRAINT ck_upload_tasks_staging_backend CHECK (staging_backend IN ('local', 's3')),
+    CONSTRAINT ck_upload_tasks_nonnegative CHECK (
+        reserved_bytes >= 0 AND state_version >= 0 AND finalize_attempts >= 0
+    ),
+    CONSTRAINT ck_upload_tasks_staging_prefix CHECK (
+        staging_backend <> 's3' OR staging_prefix IS NOT NULL
+    ),
+    CONSTRAINT ck_upload_tasks_finalizing_lease CHECK (
+        (
+            status = 4
+            AND lease_owner IS NOT NULL
+            AND lease_expires_at IS NOT NULL
+        )
+        OR (
+            status <> 4
+            AND lease_owner IS NULL
+            AND lease_expires_at IS NULL
+        )
+    ),
+    CONSTRAINT ck_upload_tasks_completed_file CHECK (
+        completed_file_id IS NULL OR status = 1
+    )
 );
 
 CREATE INDEX idx_upload_tasks_user_id ON upload_tasks (user_id);
@@ -184,6 +224,8 @@ CREATE INDEX idx_upload_tasks_expires_at ON upload_tasks (expires_at);
 CREATE INDEX idx_upload_tasks_user_hash ON upload_tasks (user_id, file_hash);
 CREATE INDEX idx_upload_tasks_status_expires ON upload_tasks (status, expires_at);
 CREATE INDEX idx_upload_tasks_user_status ON upload_tasks (user_id, status);
+CREATE INDEX idx_upload_tasks_finalizing_lease ON upload_tasks (lease_expires_at) WHERE status = 4;
+CREATE INDEX idx_upload_tasks_staging_backend ON upload_tasks (staging_backend, status);
 
 COMMENT ON TABLE upload_tasks IS '上传任务表';
 COMMENT ON COLUMN upload_tasks.id IS '上传任务ID';
@@ -196,7 +238,16 @@ COMMENT ON COLUMN upload_tasks.chunk_size IS '分片大小';
 COMMENT ON COLUMN upload_tasks.total_chunks IS '总分片数';
 COMMENT ON COLUMN upload_tasks.reserved_bytes IS '预占用字节数';
 COMMENT ON COLUMN upload_tasks.temp_path IS '临时存储路径';
-COMMENT ON COLUMN upload_tasks.status IS '状态: 0-进行中, 1-已完成, 2-已取消, 3-已过期';
+COMMENT ON COLUMN upload_tasks.staging_backend IS '暂存后端: local或s3，按任务固化';
+COMMENT ON COLUMN upload_tasks.staging_prefix IS '对象存储暂存前缀，不含凭据';
+COMMENT ON COLUMN upload_tasks.status IS '状态: 0-进行中, 1-已完成, 2-已取消, 3-已过期, 4-完成中, 5-失败';
+COMMENT ON COLUMN upload_tasks.state_version IS '状态版本，用于租约CAS和诊断';
+COMMENT ON COLUMN upload_tasks.lease_owner IS '当前完成租约所有者实例ID';
+COMMENT ON COLUMN upload_tasks.lease_expires_at IS '当前完成租约到期时间';
+COMMENT ON COLUMN upload_tasks.finalize_attempts IS '完成流程认领和接管次数';
+COMMENT ON COLUMN upload_tasks.last_error_code IS '最后一次完成错误码';
+COMMENT ON COLUMN upload_tasks.last_error_at IS '最后一次完成错误时间';
+COMMENT ON COLUMN upload_tasks.completed_file_id IS '完成后创建的文件ID，用于幂等返回';
 COMMENT ON COLUMN upload_tasks.expires_at IS '过期时间';
 COMMENT ON COLUMN upload_tasks.finalized_at IS '完成/失败时间';
 COMMENT ON COLUMN upload_tasks.fail_reason IS '失败原因';
@@ -207,9 +258,18 @@ COMMENT ON COLUMN upload_tasks.updated_at IS '更新时间';
 CREATE TABLE upload_task_chunks (
     task_id VARCHAR(64) NOT NULL,
     chunk_index INTEGER NOT NULL,
+    size_bytes BIGINT DEFAULT NULL,
+    hash_md5 CHAR(32) DEFAULT NULL,
+    object_key VARCHAR(1024) DEFAULT NULL,
+    etag VARCHAR(256) DEFAULT NULL,
     uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (task_id, chunk_index),
-    CONSTRAINT fk_upload_task_chunks_task_id FOREIGN KEY (task_id) REFERENCES upload_tasks (id) ON DELETE CASCADE
+    CONSTRAINT fk_upload_task_chunks_task_id FOREIGN KEY (task_id) REFERENCES upload_tasks (id) ON DELETE CASCADE,
+    CONSTRAINT ck_upload_task_chunks_index CHECK (chunk_index >= 0),
+    CONSTRAINT ck_upload_task_chunks_size CHECK (size_bytes IS NULL OR size_bytes > 0),
+    CONSTRAINT ck_upload_task_chunks_hash CHECK (
+        hash_md5 IS NULL OR hash_md5 ~ '^[0-9a-f]{32}$'
+    )
 );
 
 CREATE INDEX idx_upload_task_chunks_task_id ON upload_task_chunks (task_id);
@@ -217,7 +277,51 @@ CREATE INDEX idx_upload_task_chunks_task_id ON upload_task_chunks (task_id);
 COMMENT ON TABLE upload_task_chunks IS '上传任务分片表';
 COMMENT ON COLUMN upload_task_chunks.task_id IS '上传任务ID';
 COMMENT ON COLUMN upload_task_chunks.chunk_index IS '分片索引(从0开始)';
+COMMENT ON COLUMN upload_task_chunks.size_bytes IS '已验证分片对象大小';
+COMMENT ON COLUMN upload_task_chunks.hash_md5 IS '已验证分片MD5';
+COMMENT ON COLUMN upload_task_chunks.object_key IS '对象存储暂存key，不含凭据';
+COMMENT ON COLUMN upload_task_chunks.etag IS '对象存储版本诊断字段，不代表文件MD5';
 COMMENT ON COLUMN upload_task_chunks.uploaded_at IS '上传时间';
+
+-- 持久存储任务表
+CREATE TABLE storage_jobs (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    job_type VARCHAR(64) NOT NULL,
+    aggregate_id VARCHAR(128) NOT NULL,
+    dedupe_key VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status SMALLINT NOT NULL DEFAULT 0,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    max_attempts INTEGER NOT NULL DEFAULT 8,
+    available_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    locked_by VARCHAR(128) DEFAULT NULL,
+    locked_until TIMESTAMP DEFAULT NULL,
+    last_error VARCHAR(2048) DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP DEFAULT NULL,
+    CONSTRAINT uk_storage_jobs_dedupe_key UNIQUE (dedupe_key),
+    CONSTRAINT ck_storage_jobs_status CHECK (status BETWEEN 0 AND 4),
+    CONSTRAINT ck_storage_jobs_attempts CHECK (attempts >= 0 AND max_attempts > 0),
+    CONSTRAINT ck_storage_jobs_running_lease CHECK (
+        (
+            status = 1
+            AND locked_by IS NOT NULL
+            AND locked_until IS NOT NULL
+        )
+        OR (
+            status <> 1
+            AND locked_by IS NULL
+            AND locked_until IS NULL
+        )
+    )
+);
+
+CREATE INDEX idx_storage_jobs_ready ON storage_jobs (available_at, id) WHERE status IN (0, 2);
+CREATE INDEX idx_storage_jobs_expired_lease ON storage_jobs (locked_until, id) WHERE status = 1;
+CREATE INDEX idx_storage_jobs_type_status ON storage_jobs (job_type, status);
+
+COMMENT ON TABLE storage_jobs IS '持久对象存储副作用与一致性对账任务';
 
 -- 回收站表
 CREATE TABLE trash (
@@ -385,3 +489,7 @@ CREATE TRIGGER trigger_shares_updated_at
 -- 创建默认管理员用户 密码为 Admin123
 INSERT INTO users (username, email, password_hash, nickname, storage_quota, role)
 VALUES ('admin', 'admin@example.com', '$argon2id$v=19$m=65536,t=2,p=1$BjgpFYz8h/yjnJYjV497Tw$JCgRPDFvioq+FPQuR0i3a6kiTnLALv/F1A0eim7x7zE', '管理员', 107374182400, 1);
+
+-- 全新安装与增量迁移使用同一版本账本
+INSERT INTO schema_migrations (version, checksum)
+VALUES ('V003_distributed_upload', 'b5c24669b65eb801c1f7b51f386dd426e40b5248cc28b76697d501e68836f227');
