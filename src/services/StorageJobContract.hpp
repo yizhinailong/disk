@@ -1,0 +1,45 @@
+/**
+ * @file StorageJobContract.hpp
+ * @brief 周期存储任务的持久化 payload 与去重键合同
+ */
+
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <string>
+
+#include "services/StorageJobRepository.hpp"
+#include "services/StorageReconciliationService.hpp"
+
+namespace disk::jobs {
+
+    struct ExpireUploadsPageRequest {
+        std::string scan_id;
+        uint64_t page{ 0 };
+        size_t limit{ kDefaultExpireUploadsPageSize };
+    };
+
+    [[nodiscard]]
+    auto ValidateExpireUploadsPageRequest(const ExpireUploadsPageRequest& request)
+        -> std::expected<void, std::string>;
+
+    [[nodiscard]]
+    auto BuildExpireUploadsJob(const ExpireUploadsPageRequest& request)
+        -> std::expected<NewStorageJob, std::string>;
+
+    [[nodiscard]]
+    auto ParseExpireUploadsJob(const StorageJob& job)
+        -> std::expected<ExpireUploadsPageRequest, std::string>;
+
+    [[nodiscard]]
+    auto BuildStorageReconcileJob(
+        const disk::reconciliation::ReconciliationPageRequest& request
+    ) -> std::expected<NewStorageJob, std::string>;
+
+    [[nodiscard]]
+    auto ParseStorageReconcileJob(const StorageJob& job)
+        -> std::expected<disk::reconciliation::ReconciliationPageRequest, std::string>;
+
+} // namespace disk::jobs

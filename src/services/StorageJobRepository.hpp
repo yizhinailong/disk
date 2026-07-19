@@ -25,6 +25,8 @@ namespace disk::jobs {
     inline constexpr std::string_view kBlobGcJobType = "blob_gc";
     inline constexpr std::string_view kExpireUploadsJobType = "expire_uploads";
     inline constexpr std::string_view kStorageReconcileJobType = "storage_reconcile";
+    inline constexpr size_t kDefaultExpireUploadsPageSize = 100;
+    inline constexpr size_t kMaxExpireUploadsPageSize = 500;
 
     enum class StorageJobStatus : int16_t {
         Pending = 0,

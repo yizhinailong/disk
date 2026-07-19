@@ -124,6 +124,7 @@ set(Services_HEADERS
     services/SearchQuery.hpp
     services/ShareAuditService.hpp
     services/ShareService.hpp
+    services/StorageJobContract.hpp
     services/StorageJobRepository.hpp
     services/StorageJobWorker.hpp
     services/StorageReconciliationService.hpp
@@ -159,6 +160,7 @@ set(Services_SOURCES
     services/SearchQuery.cpp
     services/ShareAuditService.cpp
     services/ShareService.cpp
+    services/StorageJobContract.cpp
     services/StorageJobRepository.cpp
     services/StorageJobWorker.cpp
     services/StorageReconciliationService.cpp
