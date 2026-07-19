@@ -141,15 +141,15 @@ Additional contract rules:
   invalid-value fallback behavior.
 - [x] Update `validation-and-performance` with operation-specific share rate-limit
   validation rather than the legacy single share-access case.
-- [ ] Update API section 9.4.3 with the exact table above and keep the section 9.4.5
+- [x] Update API section 9.4.3 with the exact table above and keep the section 9.4.5
   checklist item unchecked until executable evidence exists.
-- [ ] Add focused system-test cases to `docs/design/04-系统测试计划.md`; change the
+- [x] Add focused system-test cases to `docs/design/04-系统测试计划.md`; change the
   share-module summary so it does not claim complete rate-limit coverage early.
-- [ ] Update `docs/design/06-单元测试用例.md` so its inventory and commands include
+- [x] Update `docs/design/06-单元测试用例.md` so its inventory and commands include
   the new Share Auth, configuration, Redis-key, limiter, and ownership coverage.
-- [ ] Document the new configuration keys, defaults, old-key removal, Redis key
+- [x] Document the new configuration keys, defaults, old-key removal, Redis key
   families, response contract, and fail-open policy in the deployment guide.
-- [ ] Record whether the new 429 surfaces require a client compatibility note. Do
+- [x] Record whether the new 429 surfaces require a client compatibility note. Do
   not expand this backend change into client implementation work without evidence.
 
 #### 2. Runtime implementation

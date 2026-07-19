@@ -1,10 +1,10 @@
 ## 1. Authority Documentation
 
-- [ ] 1.1 Replace API section 9.4.3 with the exact access, browse, download, authentication-order, fixed-window, response-header, key, and configuration contracts while leaving section 9.4.5 incomplete
-- [ ] 1.2 Add the ten evidence IDs and serial integration expectations to the system test plan without claiming implementation coverage early
-- [ ] 1.3 Update the unit-test inventory and focused commands for Share Auth, share rate-limit filters, configuration, Redis keys, ownership, and fail-open coverage
-- [ ] 1.4 Document the six new settings, defaults, obsolete-key removal, Redis key families, fixed-window behavior, response contract, failure policy, rollout, and rollback in the deployment guide
-- [ ] 1.5 Record that the new 429 surfaces reuse the existing response contract and require a compatibility note but no client implementation change
+- [x] 1.1 Replace API section 9.4.3 with the exact access, browse, download, authentication-order, fixed-window, response-header, key, and configuration contracts while leaving section 9.4.5 incomplete
+- [x] 1.2 Add the ten evidence IDs and serial integration expectations to the system test plan without claiming implementation coverage early
+- [x] 1.3 Update the unit-test inventory and focused commands for Share Auth, share rate-limit filters, configuration, Redis keys, ownership, and fail-open coverage
+- [x] 1.4 Document the six new settings, defaults, obsolete-key removal, Redis key families, fixed-window behavior, response contract, failure policy, rollout, and rollback in the deployment guide
+- [x] 1.5 Record that the new 429 surfaces reuse the existing response contract and require a compatibility note but no client implementation change
 
 ## 2. Configuration and Redis Keys
 

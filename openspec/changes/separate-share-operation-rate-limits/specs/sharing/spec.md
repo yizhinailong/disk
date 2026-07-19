@@ -34,9 +34,14 @@ download SHALL default to 10 requests per 60 seconds per verified Share Token JT
 - **THEN** each operation family and each distinct JTI SHALL consume only its own counter
 
 #### Scenario: Share Token authentication precedes authenticated limiting
-- **WHEN** a browse or download operation has a missing, malformed, expired, revoked, route-mismatched, or insufficient-scope Share Token
+- **WHEN** a browse or download operation has a missing, malformed, expired, revoked, or insufficient-scope Share Token
 - **THEN** the request SHALL retain its existing authentication or authorization response
 - **AND** it SHALL NOT consume a browse or download counter
+
+#### Scenario: Live share binding remains service owned
+- **WHEN** a structurally valid and scope-authorized Share Token is used against a route or live share record that the service rejects
+- **THEN** the existing service-layer binding, status, expiry, and current-permission response SHALL be preserved
+- **AND** the authenticated operation request MAY consume its browse or download counter before that business response
 
 #### Scenario: Save-to-drive requires both authentication domains
 - **WHEN** a save-to-drive request is evaluated

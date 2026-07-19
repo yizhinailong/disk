@@ -3929,26 +3929,58 @@ Share Token（通过 `/api/share/access` 获取）需要以下安全措施：
 
 #### 9.4.3 速率限制强化
 
-除通用分享访问限制外，对敏感操作实施更严格的限制：
+分享访问、浏览和下载使用相互独立的 Redis 固定窗口。第一次请求创建计数器并设置配置的 TTL，后续原子递增不得刷新过期时间。
 
-| 操作类型 | 限制规则 | 说明 |
-|---------|---------|------|
-| **分享访问验证** | 30 次/分钟/IP | `/api/share/access` 接口 |
-| **公开访问验证失败** | 5 次/固定 900 秒/IP/分享标识 | 缺失/空/错误密码及不存在分享；第 6 次起返回 429 |
-| **文件下载** | 10 次/分钟/share_token | 限制下载频率 |
-| **浏览目录** | 60 次/分钟/share_token | 限制目录遍历 |
+| 限流器 | 覆盖路由 | 默认限制 | 键身份 | 必须的过滤顺序 |
+|--------|----------|----------|--------|----------------|
+| **分享访问** | `POST /api/share/access/{share_id}` | 30 次 / 60 秒 | 规范化客户端 IP | 路由级访问限流器；不要求 owner JWT 或 Share Token |
+| **分享浏览** | `GET /api/share/browse/{share_id}` | 60 次 / 60 秒 | 已验证 Share Token 的 JTI | `ShareAuthFilter`，然后路由级分享操作限流器 |
+| **分享下载** | 下载元数据、内容和保存到网盘 | 10 次 / 60 秒 | 已验证 Share Token 的 JTI | `ShareAuthFilter`，然后路由级分享操作限流器 |
 
-**公开访问验证失败限流的 429 Too Many Requests 响应**：
+分享下载桶由以下请求共同消耗：
+
+- `GET /api/share/download/{share_id}/{file_id}/info`
+- `GET /api/share/download/{share_id}/{file_id}`
+- `POST /api/share/save/{share_id}`
+- 每一个二进制下载 HTTP 请求，包括首次请求、Range 续传和自动重试；服务端不把多个请求合并为一次逻辑下载计费。
+
+**认证和计数顺序**：
+
+- `ShareAuthFilter` 只有在签名、过期、Redis 单 token 撤销和操作 scope 全部验证通过后，才把 JTI 作为 `share_token_jti` 请求属性交给后续限流器。缺失、格式错误、过期、撤销或 scope 不足的 token 保留原认证/授权响应，不消耗 browse/download 桶。
+- 保存到网盘不是 owner JWT 公开豁免路径。全局 owner JWT、路由级 Share Token 认证和 download 桶依次通过后才进入业务处理；任一认证失败均不消耗 download 桶。
+- 分享取消、到期和数据库当前权限等实时状态仍由业务服务复查。结构和 scope 合法的 token 可能先消耗一次操作请求，再收到实时状态业务拒绝；本次限流变更不迁移数据库授权边界。
+
+**访问桶和密码失败桶**：
+
+通用访问桶统计所有 `/access` 请求，包括成功、无密码和被拒绝的请求。它与 `rate:share_password:{share_code}:{normalized_ip}` 失败验证桶完全独立：可计数密码失败同时消耗两个桶，但任一桶都不清除或消耗另一个桶。密码失败桶继续使用前 5 次 HTTP 400 / `60003`、第 6 次及后续 HTTP 429 / `10005` 的 900 秒合同。
+
+**Redis 键和运行配置**：
+
+| 限流器 | Redis 键 | limit 配置 | window 配置 |
+|--------|-----------|------------|---------------|
+| 分享访问 | `rate:share_access:{normalized_ip}:{window}` | `share_access_rate_limit_per_minute`（默认 30） | `share_access_rate_limit_window_seconds`（默认 60） |
+| 分享浏览 | `rate:share_browse:{jti}:{window}` | `share_browse_rate_limit_per_minute`（默认 60） | `share_browse_rate_limit_window_seconds`（默认 60） |
+| 分享下载 | `rate:share_download:{jti}:{window}` | `share_download_rate_limit_per_minute`（默认 10） | `share_download_rate_limit_window_seconds`（默认 60） |
+
+配置缺失、为零、为负数或不能作为正整数使用时回退到本表默认值。旧 `share_public_rate_limit_per_minute`、`share_public_rate_limit_window_seconds` 和 `rate:share_public:*` 不提供运行时别名或兼容读取。
+
+**操作限流的 429 响应**：
 
 ```json
 {
   "code": 10005,
-  "message": "Too many password verification attempts, please try again later",
+  "message": "Too many requests",
   "data": null
 }
 ```
 
-该响应仅用于同一 `rate:share_password:{share_code}:{normalized_ip}` 固定窗口内第 6 次及后续可计数验证失败；前 5 次统一返回 HTTP 400 / `60003` / `Share access validation failed` / `data: null`；第 6 次及后续返回 HTTP 429 / `10005` / `Too many password verification attempts, please try again later` / `data: null`。
+HTTP 状态为 429，并同时返回 `X-RateLimit-Limit`、`X-RateLimit-Remaining: 0`、`X-RateLimit-Reset` 和 `Retry-After`。Redis 计数失败时记录不含凭据的操作类型和诊断信息，并 fail open 继续底层业务请求，不得仅因限流状态不可用而返回 429 或 500。
+
+密码失败桶仍保留专用消息 `Too many password verification attempts, please try again later`；它不替换上述三类操作桶的标准响应。
+
+**客户端兼容性说明**：
+
+浏览、下载和保存新增了既有 HTTP 429 / `10005` 错误面，但路由、请求头、成功响应和错误 envelope 均未改变。Web 已识别通用 `10005`，Desktop `ErrorAdapter` 已将其映射为 `RateLimited` / `wait_and_retry`，其余二进制请求也按非 2xx 失败处理，因此本后端变更不要求同步客户端实现。客户端应优先使用 `Retry-After` 或 `X-RateLimit-Reset` 安排重试；更细致的倒计时或自动重试属于后续客户端体验增强。
 
 #### 9.4.4 审计日志
 
@@ -3996,7 +4028,7 @@ created_at  TIMESTAMP        -- 操作时间
 - [x] Share Token 包含 `type: "share"` 和合法 `scope` claim（证据：`TokenServiceShareTest.GenerateShareTokenValidInputCorrectClaims` 及 scope 正向/负向测试）
 - [x] Share Token 验证通过后的所有访客操作检查分享状态和有效期（证据：`ShareTokenSecurityIntegration` 覆盖 browse、download metadata、content download、save-to-drive 的取消/过期旧 token）
 - [x] 分享取消时使所有相关 Share Token 失效（证据：`ShareTokenSecurityIntegration` 使用同一旧 token 验证 DB 状态撤销，不依赖逐 token Redis 黑名单）
-- [ ] 敏感操作有独立的速率限制（当前 `SharePublicRateLimitFilter` 仍让 access、browse、download 共用同一个 30 次/分钟/IP bucket，save-to-drive 也没有分享域独立 bucket）
+- [ ] 敏感操作有独立的速率限制（目标合同已由 `separate-share-operation-rate-limits` OpenSpec 变更确定；当前运行时仍由 `SharePublicRateLimitFilter` 共用 30 次/分钟/IP bucket，且 save-to-drive 尚未进入分享下载桶，必须在十项可执行证据通过后勾选）
 - [x] 关键事件写入审计日志（证据：`ShareAuditService`、`ShareAuditServiceTest`、`ShareAuditIntegration` 覆盖 `share_create`、`share_access`、`share_pwd_fail`、`share_download`、逐项 `share_cancel` 及 fail-open 政策）
 - [x] 密码错误响应不泄露分享是否存在的信息（证据：`SharePasswordProtectionIntegration` 验证缺失密码、错误密码和不存在分享均统一返回 HTTP 400 / `60003`）
 

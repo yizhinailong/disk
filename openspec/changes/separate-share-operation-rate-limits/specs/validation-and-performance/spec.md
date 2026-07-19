@@ -27,7 +27,7 @@ access, browse, and download rate limits.
 - **THEN** evidence SHALL show that operation families and distinct JTIs do not consume one another's counters
 
 #### Scenario: SHARE-RATE-AUTH-001 authentication precedence is validated
-- **WHEN** the scenario sends missing, invalid, revoked, route-mismatched, or insufficient-scope tokens
+- **WHEN** the scenario sends missing, invalid, revoked, or insufficient-scope tokens
 - **THEN** evidence SHALL show the existing authentication or authorization responses and no authenticated counter consumption
 
 #### Scenario: SHARE-RATE-CONFIG-001 configuration is validated
