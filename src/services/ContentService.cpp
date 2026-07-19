@@ -107,21 +107,34 @@ namespace disk::content {
         co_return existing_ids;
     }
 
-    auto ContentService::Create(
+    auto ContentService::AcquireReference(
         const drogon::orm::DbClientPtr& client,
         const NewContent& content
-    ) const -> drogon::Task<ContentMetadata> {
-        auto result = co_await client->execSqlCoro(
-            "INSERT INTO file_contents (hash_md5, hash_sha256, size, storage_path, mime_type, ref_count) " "VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-            content.hash_md5,
-            content.hash_sha256,
-            content.size,
-            content.storage_path,
-            content.mime_type,
-            content.ref_count
-        );
+    ) const -> drogon::Task<Result<ContentMetadata>> {
+        try {
+            auto result = co_await client->execSqlCoro(
+                "INSERT INTO file_contents " "  (hash_md5, hash_sha256, size, storage_path, mime_type, ref_count) " "VALUES ($1, $2, $3, $4, $5, 1) " "ON CONFLICT (hash_md5, hash_sha256) DO UPDATE SET " "  ref_count = file_contents.ref_count + 1 " "WHERE file_contents.size = EXCLUDED.size " "RETURNING *",
+                content.hash_md5,
+                content.hash_sha256,
+                content.size,
+                content.storage_path,
+                content.mime_type
+            );
+            if (result.empty()) {
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::ChunkVerifyFailed,
+                    "Existing file content size does not match its hashes"
+                ));
+            }
 
-        co_return ToMetadata(FileContents(result[0], -1));
+            co_return ToMetadata(FileContents(result[0], -1));
+        } catch (const drogon::orm::DrogonDbException& e) {
+            Logger::Error() << "Failed to atomically acquire file content reference: "
+                            << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to acquire file content reference")
+            );
+        }
     }
 
     auto ContentService::IncrementRefCount(

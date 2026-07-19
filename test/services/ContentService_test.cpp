@@ -1,12 +1,12 @@
 #include "services/ContentService.hpp"
 
-#include <gtest/gtest.h>
-
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include <gtest/gtest.h>
 
 namespace disk::content {
     namespace {
@@ -16,14 +16,13 @@ namespace disk::content {
             SUCCEED();
         }
 
-        TEST(ContentServiceContractTest, NewContentDefaultsToSingleReference) {
+        TEST(ContentServiceContractTest, NewContentCarriesImmutableBlobMetadata) {
             NewContent content;
             content.hash_md5 = "0123456789abcdef0123456789abcdef";
             content.hash_sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
             content.size = 42;
             content.storage_path = "build/uploaded/01/blob.bin";
 
-            EXPECT_EQ(content.ref_count, 1);
             EXPECT_EQ(content.size, 42U);
             EXPECT_EQ(content.hash_md5.size(), 32U);
             EXPECT_EQ(content.hash_sha256.size(), 64U);
@@ -50,7 +49,7 @@ namespace disk::content {
                 std::declval<const drogon::orm::DbClientPtr&>(),
                 std::declval<const std::vector<uint64_t>&>()
             ));
-            using CreateResult = decltype(std::declval<ContentService&>().Create(
+            using AcquireReferenceResult = decltype(std::declval<ContentService&>().AcquireReference(
                 std::declval<const drogon::orm::DbClientPtr&>(),
                 std::declval<const NewContent&>()
             ));
@@ -81,7 +80,7 @@ namespace disk::content {
             EXPECT_TRUE((std::is_same_v<FindDefaultResult, drogon::Task<std::optional<ContentMetadata>>>));
             EXPECT_TRUE((std::is_same_v<FindWithClientResult, drogon::Task<std::optional<ContentMetadata>>>));
             EXPECT_TRUE((std::is_same_v<FindExistingIdsResult, drogon::Task<std::unordered_set<uint64_t>>>));
-            EXPECT_TRUE((std::is_same_v<CreateResult, drogon::Task<ContentMetadata>>));
+            EXPECT_TRUE((std::is_same_v<AcquireReferenceResult, drogon::Task<Result<ContentMetadata>>>));
             EXPECT_TRUE((std::is_same_v<IncrementResult, drogon::Task<Result<void>>>));
             EXPECT_TRUE((std::is_same_v<BatchIncrementResult, drogon::Task<std::unordered_set<uint64_t>>>));
             EXPECT_TRUE((std::is_same_v<CheckedBatchIncrementResult, drogon::Task<Result<std::unordered_set<uint64_t>>>>));
@@ -89,5 +88,5 @@ namespace disk::content {
             EXPECT_TRUE((std::is_same_v<VerifyResult, drogon::Task<std::vector<ZeroRefContent>>>));
         }
 
-    } ///< namespace
-} ///< namespace disk::content
+    } // namespace
+} // namespace disk::content

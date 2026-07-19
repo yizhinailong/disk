@@ -38,7 +38,6 @@ namespace disk::content {
         uint64_t size{ 0 };
         std::string storage_path;
         std::string mime_type;
-        int ref_count{ 1 };
     };
 
     struct ZeroRefContent {
@@ -76,8 +75,10 @@ namespace disk::content {
         ) const -> drogon::Task<std::unordered_set<uint64_t>>;
 
         [[nodiscard]]
-        auto Create(const drogon::orm::DbClientPtr& client, const NewContent& content) const
-            -> drogon::Task<ContentMetadata>;
+        auto AcquireReference(
+            const drogon::orm::DbClientPtr& client,
+            const NewContent& content
+        ) const -> drogon::Task<Result<ContentMetadata>>;
 
         [[nodiscard]]
         auto IncrementRefCount(
@@ -116,4 +117,4 @@ namespace disk::content {
         drogon::orm::DbClientPtr m_db_client;
     };
 
-} ///< namespace disk::content
+} // namespace disk::content

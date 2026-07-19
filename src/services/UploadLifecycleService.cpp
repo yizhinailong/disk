@@ -175,9 +175,9 @@ namespace disk::upload {
             uint64_t size,
             const std::string& mime_type,
             const std::string& path
-        ) -> drogon::Task<drogon_model::disk::Files> {
+        ) -> drogon::Task<Result<drogon_model::disk::Files>> {
             auto result = co_await client->execSqlCoro(
-                "INSERT INTO files (" "user_id, content_id, folder_id, name, extension, size, mime_type, path, " "is_favorite, download_count" ") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *",
+                "INSERT INTO files (" "user_id, content_id, folder_id, name, extension, size, mime_type, path, " "is_favorite, download_count" ") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) " "ON CONFLICT (user_id, folder_id, name) DO NOTHING RETURNING *",
                 user_id,
                 content_id,
                 folder_id,
@@ -190,6 +190,9 @@ namespace disk::upload {
                 static_cast<uint32_t>(0)
             );
 
+            if (result.empty()) {
+                co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
+            }
             co_return drogon_model::disk::Files(result[0], -1);
         }
     } // namespace
@@ -380,7 +383,7 @@ namespace disk::upload {
                         co_return std::unexpected(parent_location_result.error());
                     }
 
-                    file = co_await InsertFileRecord(
+                    auto file_result = co_await InsertFileRecord(
                         transaction,
                         command.user_id,
                         content_id,
@@ -391,6 +394,10 @@ namespace disk::upload {
                         content_mime_type,
                         disk::file::utils::BuildFilePath(parent_location_result->path, command.filename)
                     );
+                    if (!file_result) {
+                        co_return std::unexpected(file_result.error());
+                    }
+                    file = std::move(file_result.value());
 
                     if (command.parent_id > 0) {
                         disk::folder::FolderRepository folder_repository(m_db_client);
@@ -789,7 +796,7 @@ namespace disk::upload {
         Logger::Debug() << "File hash verification passed: " << final_hash;
 
         struct FinalizeLookupResult {
-            std::optional<uint64_t> existing_content_id;
+            std::optional<disk::content::ContentMetadata> existing_content;
             bool filename_exists = false;
         };
 
@@ -799,7 +806,7 @@ namespace disk::upload {
             disk::content::ContentService content_service(m_db_client);
             auto existing_content = co_await content_service.FindByMd5(final_hash);
             if (existing_content.has_value()) {
-                lookup.existing_content_id = existing_content->id;
+                lookup.existing_content = std::move(existing_content.value());
             }
 
             try {
@@ -844,7 +851,7 @@ namespace disk::upload {
                               )
                                   .count()
                            << " upload_id=" << command.upload_id
-                           << " dedup_hit=" << (lookup_result.existing_content_id.has_value() ? "true" : "false")
+                           << " dedup_hit=" << (lookup_result.existing_content.has_value() ? "true" : "false")
                            << " filename_exists=true";
 
             co_await RecordFinalizeErrorBestEffort(
@@ -856,14 +863,25 @@ namespace disk::upload {
             co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
         }
 
-        auto existing_content = lookup_result.existing_content_id;
-        auto finalize_storage_decision = DecideFinalizeStorage(existing_content);
+        auto existing_content = std::move(lookup_result.existing_content);
+        const bool existing_content_matches =
+            existing_content.has_value() &&
+            existing_content->hash_sha256 == precomputed_sha256 &&
+            existing_content->size == assembled.size_bytes;
+        if (existing_content.has_value() && !existing_content_matches) {
+            Logger::Warn() << "MD5 lookup did not match assembled SHA-256/size; promoting distinct content: upload_id="
+                           << command.upload_id << ", content_id=" << existing_content->id;
+        }
+        auto finalize_storage_decision = DecideFinalizeStorage(
+            existing_content_matches ? std::optional<uint64_t>(existing_content->id) : std::nullopt
+        );
         std::filesystem::path final_storage_path;
-        std::string final_sha256;
+        std::string final_sha256 = precomputed_sha256;
 
         if (finalize_storage_decision.type == FinalizeStorageDecisionType::ReuseExistingContent) {
             Logger::Debug() << "File dedup successful: content_id="
                             << finalize_storage_decision.existing_content_id.value();
+            final_storage_path = existing_content->storage_path;
         } else {
             if (m_blob_store == nullptr) {
                 Logger::Error() << "Blob store is not configured";
@@ -910,7 +928,6 @@ namespace disk::upload {
 
             const auto& promoted = promote_result.value();
             final_storage_path = promoted.path;
-            final_sha256 = precomputed_sha256;
         }
         Logger::Debug() << "[stage_timer] dedup_lookup duration_ms="
                         << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -918,7 +935,7 @@ namespace disk::upload {
                            )
                                .count()
                         << " upload_id=" << command.upload_id
-                        << " dedup_hit=" << (existing_content.has_value() ? "true" : "false")
+                        << " dedup_hit=" << (existing_content_matches ? "true" : "false")
                         << " filename_exists=false";
 
         auto renew_before_transaction = co_await RenewFinalizeLease(
@@ -939,27 +956,18 @@ namespace disk::upload {
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
                 disk::content::ContentService content_service(m_db_client);
 
-                uint64_t content_id = 0;
-                if (existing_content.has_value()) {
-                    content_id = existing_content.value();
-                    auto increment_result = co_await content_service.IncrementRefCount(transaction, content_id);
-                    if (!increment_result) {
-                        Logger::Warn() << "File content not found when finalizing upload: content_id="
-                                       << content_id;
-                        co_return std::unexpected(increment_result.error());
-                    }
-                } else {
-                    auto content = co_await content_service.Create(
-                        transaction,
-                        disk::content::NewContent{ .hash_md5 = final_hash,
-                                                   .hash_sha256 = final_sha256,
-                                                   .size = static_cast<uint64_t>(upload_task.getValueOfFileSize()),
-                                                   .storage_path = final_storage_path.string(),
-                                                   .mime_type = "" }
-                    );
-                    content_id = content.id;
-                    Logger::Debug() << "FileContents created successfully: content_id=" << content_id;
+                auto content_result = co_await content_service.AcquireReference(
+                    transaction,
+                    disk::content::NewContent{ .hash_md5 = final_hash,
+                                               .hash_sha256 = final_sha256,
+                                               .size = static_cast<uint64_t>(upload_task.getValueOfFileSize()),
+                                               .storage_path = final_storage_path.string(),
+                                               .mime_type = "" }
+                );
+                if (!content_result) {
+                    co_return std::unexpected(content_result.error());
                 }
+                const auto content_id = content_result->id;
 
                 auto parent_location_result = co_await disk::file::utils::ResolveFolderLocation(
                     transaction,
@@ -970,7 +978,7 @@ namespace disk::upload {
                     co_return std::unexpected(parent_location_result.error());
                 }
 
-                file = co_await InsertFileRecord(
+                auto file_result = co_await InsertFileRecord(
                     transaction,
                     command.user_id,
                     content_id,
@@ -981,6 +989,10 @@ namespace disk::upload {
                     "",
                     disk::file::utils::BuildFilePath(parent_location_result->path, upload_task.getValueOfFilename())
                 );
+                if (!file_result) {
+                    co_return std::unexpected(file_result.error());
+                }
+                file = std::move(file_result.value());
 
                 if (upload_task.getValueOfFolderId() > 0) {
                     disk::folder::FolderRepository folder_repository(m_db_client);
@@ -1037,7 +1049,7 @@ namespace disk::upload {
 
         if (db_operation_failed) {
             auto compensation_start = std::chrono::steady_clock::now();
-            if (!existing_content.has_value() && !final_storage_path.empty()) {
+            if (!existing_content_matches && !final_storage_path.empty()) {
                 Logger::Warn() << "Keeping promoted blob after transaction failure for retry/reconciliation: upload_id="
                                << command.upload_id << ", storage_path=" << final_storage_path;
             }

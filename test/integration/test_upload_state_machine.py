@@ -31,6 +31,26 @@ INIT_SQL = REPO_ROOT / "sql" / "init.sql"
 UPLOAD_ID = "state-machine-upload"
 LEASE_SECONDS = 30
 CONCURRENT_CLAIMERS = 24
+CONCURRENT_CONTENT_WRITERS = 24
+
+CONTENT_UPSERT_SQL = """
+INSERT INTO file_contents
+    (hash_md5, hash_sha256, size, storage_path, mime_type, ref_count)
+VALUES (%s, %s, %s, %s, %s, 1)
+ON CONFLICT (hash_md5, hash_sha256) DO UPDATE SET
+    ref_count = file_contents.ref_count + 1
+WHERE file_contents.size = EXCLUDED.size
+RETURNING id, ref_count, storage_path
+"""
+
+FILE_INSERT_SQL = """
+INSERT INTO files
+    (user_id, content_id, folder_id, name, extension, size, mime_type, path,
+     is_favorite, download_count)
+VALUES (%s, %s, 0, %s, 'bin', %s, 'application/octet-stream', %s, 0, 0)
+ON CONFLICT (user_id, folder_id, name) DO NOTHING
+RETURNING id
+"""
 
 CLAIM_SQL = """
 UPDATE upload_tasks AS task SET
@@ -222,8 +242,114 @@ def insert_completed_file(database_name: str, user_id: int) -> int:
         return int(file_row["id"])
 
 
+def verify_atomic_finalize_primitives(database_name: str, user_id: int) -> None:
+    hash_md5 = "a" * 32
+    hash_sha256 = "b" * 64
+    blob_size = 17
+    canonical_path = f"objects/sha256/{hash_sha256[:2]}/{hash_sha256}.bin"
+    barrier = threading.Barrier(CONCURRENT_CONTENT_WRITERS)
+
+    def acquire_content_reference(_: int) -> dict[str, Any] | None:
+        with connect(database_name) as connection:
+            barrier.wait(timeout=10)
+            return connection.execute(
+                CONTENT_UPSERT_SQL,
+                (hash_md5, hash_sha256, blob_size, canonical_path, "application/octet-stream"),
+            ).fetchone()
+
+    with ThreadPoolExecutor(max_workers=CONCURRENT_CONTENT_WRITERS) as executor:
+        results = list(executor.map(acquire_content_reference, range(CONCURRENT_CONTENT_WRITERS)))
+
+    assert all(row is not None for row in results)
+    content_ids = {int(row["id"]) for row in results if row is not None}
+    assert len(content_ids) == 1
+    content_id = content_ids.pop()
+
+    with connect(database_name) as connection:
+        content = connection.execute(
+            "SELECT id, ref_count, storage_path, size FROM file_contents "
+            "WHERE hash_md5 = %s AND hash_sha256 = %s",
+            (hash_md5, hash_sha256),
+        ).fetchone()
+        assert content == {
+            "id": content_id,
+            "ref_count": CONCURRENT_CONTENT_WRITERS,
+            "storage_path": canonical_path,
+            "size": blob_size,
+        }
+
+        reused = connection.execute(
+            CONTENT_UPSERT_SQL,
+            (hash_md5, hash_sha256, blob_size, "objects/must-not-replace.bin", "ignored/type"),
+        ).fetchone()
+        assert reused == {
+            "id": content_id,
+            "ref_count": CONCURRENT_CONTENT_WRITERS + 1,
+            "storage_path": canonical_path,
+        }
+
+        mismatch = connection.execute(
+            CONTENT_UPSERT_SQL,
+            (hash_md5, hash_sha256, blob_size + 1, canonical_path, "application/octet-stream"),
+        ).fetchone()
+        assert mismatch is None
+
+        before_file_race = connection.execute(
+            "SELECT ref_count FROM file_contents WHERE id = %s",
+            (content_id,),
+        ).fetchone()
+        assert before_file_race == {"ref_count": CONCURRENT_CONTENT_WRITERS + 1}
+
+    filename = "atomic-file-name.bin"
+    file_barrier = threading.Barrier(2)
+
+    def create_same_file(_: int) -> bool:
+        with connect(database_name) as connection:
+            connection.autocommit = False
+            try:
+                file_barrier.wait(timeout=10)
+                content = connection.execute(
+                    CONTENT_UPSERT_SQL,
+                    (hash_md5, hash_sha256, blob_size, canonical_path, "application/octet-stream"),
+                ).fetchone()
+                assert content is not None
+                file_row = connection.execute(
+                    FILE_INSERT_SQL,
+                    (user_id, content_id, filename, blob_size, f"/{filename}"),
+                ).fetchone()
+                if file_row is None:
+                    connection.rollback()
+                    return False
+                connection.commit()
+                return True
+            except Exception:
+                connection.rollback()
+                raise
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        file_results = list(executor.map(create_same_file, range(2)))
+    assert sorted(file_results) == [False, True]
+
+    with connect(database_name) as connection:
+        final_content = connection.execute(
+            "SELECT ref_count, storage_path FROM file_contents WHERE id = %s",
+            (content_id,),
+        ).fetchone()
+        assert final_content == {
+            "ref_count": CONCURRENT_CONTENT_WRITERS + 2,
+            "storage_path": canonical_path,
+        }
+        file_count = connection.execute(
+            "SELECT COUNT(*) AS count FROM files "
+            "WHERE user_id = %s AND folder_id = 0 AND name = %s",
+            (user_id, filename),
+        ).fetchone()
+        assert file_count == {"count": 1}
+
+
 def verify_state_machine(database_name: str) -> None:
     user_id = seed_upload(database_name)
+    verify_atomic_finalize_primitives(database_name, user_id)
 
     with connect(database_name) as connection:
         expired_upload_id = "expired-state-machine-upload"
