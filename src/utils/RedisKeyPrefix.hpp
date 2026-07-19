@@ -37,6 +37,9 @@ namespace disk::redis {
         static constexpr std::string_view SHARE_TOKEN_PREFIX = "share_token";
         static constexpr std::string_view SHARE_TOKEN_BLACKLIST_PREFIX = "share_token_blacklist";
         static constexpr std::string_view SHARE_PASSWORD_RATE_LIMIT_PREFIX = "rate:share_password";
+        static constexpr std::string_view SHARE_ACCESS_RATE_LIMIT_PREFIX = "rate:share_access";
+        static constexpr std::string_view SHARE_BROWSE_RATE_LIMIT_PREFIX = "rate:share_browse";
+        static constexpr std::string_view SHARE_DOWNLOAD_RATE_LIMIT_PREFIX = "rate:share_download";
         static constexpr std::string_view API_RATE_LIMIT_PREFIX = "rate:api";
         static constexpr std::string_view UPLOAD_RATE_LIMIT_PREFIX = "rate:upload";
         static constexpr std::string_view FILE_LIST_CACHE_PREFIX = "file_list";
@@ -113,6 +116,33 @@ namespace disk::redis {
             -> std::string {
             return std::string(SHARE_PASSWORD_RATE_LIMIT_PREFIX) + ":" + share_code + ":" +
                    ExtractIPOnly(ip_address);
+        }
+
+        [[nodiscard]]
+        static auto BuildShareAccessRateLimitKey(
+            const std::string& ip_address,
+            int64_t window_timestamp
+        ) -> std::string {
+            return std::string(SHARE_ACCESS_RATE_LIMIT_PREFIX) + ":" +
+                   ExtractIPOnly(ip_address) + ":" + std::to_string(window_timestamp);
+        }
+
+        [[nodiscard]]
+        static auto BuildShareBrowseRateLimitKey(
+            const std::string& jti,
+            int64_t window_timestamp
+        ) -> std::string {
+            return std::string(SHARE_BROWSE_RATE_LIMIT_PREFIX) + ":" + jti + ":" +
+                   std::to_string(window_timestamp);
+        }
+
+        [[nodiscard]]
+        static auto BuildShareDownloadRateLimitKey(
+            const std::string& jti,
+            int64_t window_timestamp
+        ) -> std::string {
+            return std::string(SHARE_DOWNLOAD_RATE_LIMIT_PREFIX) + ":" + jti + ":" +
+                   std::to_string(window_timestamp);
         }
 
         /**
@@ -232,4 +262,4 @@ namespace disk::redis {
         }
     };
 
-} ///< namespace disk::redis
+} // namespace disk::redis

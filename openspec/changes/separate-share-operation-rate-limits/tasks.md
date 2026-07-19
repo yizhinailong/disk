@@ -8,7 +8,7 @@
 
 ## 2. Configuration and Redis Keys
 
-- [ ] 2.1 Replace the two public-share settings with six operation-specific settings in `config.json` and `ConfigMgr`, including positive-value normalization and documented defaults
+- [x] 2.1 Replace the two public-share settings with six operation-specific settings in `config.json` and `ConfigMgr`, including positive-value normalization and documented defaults
 - [ ] 2.2 Add centralized access, browse, and download fixed-window builders to `RedisKeyPrefix` and remove ad hoc public-share key construction
 - [ ] 2.3 Add focused configuration tests for valid, absent, zero, and negative values and Redis key tests for IPv4, IPv6, windows, JTI isolation, operation isolation, and raw-token exclusion
 

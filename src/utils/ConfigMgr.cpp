@@ -10,6 +10,7 @@
 
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -36,7 +37,7 @@ namespace disk::utils {
             }
             return prefix.empty() ? "objects" : prefix;
         }
-    }
+    } // namespace
 
     ConfigMgr::ConfigMgr() = default;
 
@@ -44,6 +45,12 @@ namespace disk::utils {
         const auto& custom_config = drogon::app().getCustomConfig();
         m_storage_backend = StorageBackend::Local;
         m_s3_storage_config = S3StorageConfig{};
+        m_share_access_rate_limit_per_minute = DEFAULT_SHARE_ACCESS_RATE_LIMIT_PER_MINUTE;
+        m_share_access_rate_limit_window_seconds = DEFAULT_SHARE_ACCESS_RATE_LIMIT_WINDOW_SECONDS;
+        m_share_browse_rate_limit_per_minute = DEFAULT_SHARE_BROWSE_RATE_LIMIT_PER_MINUTE;
+        m_share_browse_rate_limit_window_seconds = DEFAULT_SHARE_BROWSE_RATE_LIMIT_WINDOW_SECONDS;
+        m_share_download_rate_limit_per_minute = DEFAULT_SHARE_DOWNLOAD_RATE_LIMIT_PER_MINUTE;
+        m_share_download_rate_limit_window_seconds = DEFAULT_SHARE_DOWNLOAD_RATE_LIMIT_WINDOW_SECONDS;
 
         if (custom_config.isMember("disk")) {
             const auto& app_config = custom_config["disk"];
@@ -137,12 +144,30 @@ namespace disk::utils {
             if (app_config.isMember("upload_rate_limit_per_minute")) {
                 m_upload_rate_limit_per_minute = app_config["upload_rate_limit_per_minute"].asInt();
                 Logger::Info() << "Loaded upload_rate_limit_per_minute from config: "
-                         << m_upload_rate_limit_per_minute;
+                               << m_upload_rate_limit_per_minute;
             }
 
             const auto load_int = [&app_config](const char* key, int current_value) -> int {
                 const auto configured_value = app_config.get(key, current_value).asInt();
                 return configured_value > 0 ? configured_value : current_value;
+            };
+
+            const auto load_positive_int = [&app_config](const char* key, int default_value) -> int {
+                if (!app_config.isMember(key)) {
+                    return default_value;
+                }
+
+                const auto& value = app_config[key];
+                if (!value.isInt() && !value.isUInt()) {
+                    return default_value;
+                }
+
+                const auto configured_value = value.asInt64();
+                if (configured_value <= 0 ||
+                    configured_value > std::numeric_limits<int>::max()) {
+                    return default_value;
+                }
+                return static_cast<int>(configured_value);
             };
 
             m_download_rate_limit_per_minute =
@@ -151,8 +176,18 @@ namespace disk::utils {
                 load_int("folder_rate_limit_per_minute", m_folder_rate_limit_per_minute);
             m_admin_rate_limit_per_minute =
                 load_int("admin_rate_limit_per_minute", m_admin_rate_limit_per_minute);
-            m_share_public_rate_limit_per_minute =
-                load_int("share_public_rate_limit_per_minute", m_share_public_rate_limit_per_minute);
+            m_share_access_rate_limit_per_minute = load_positive_int(
+                "share_access_rate_limit_per_minute",
+                DEFAULT_SHARE_ACCESS_RATE_LIMIT_PER_MINUTE
+            );
+            m_share_browse_rate_limit_per_minute = load_positive_int(
+                "share_browse_rate_limit_per_minute",
+                DEFAULT_SHARE_BROWSE_RATE_LIMIT_PER_MINUTE
+            );
+            m_share_download_rate_limit_per_minute = load_positive_int(
+                "share_download_rate_limit_per_minute",
+                DEFAULT_SHARE_DOWNLOAD_RATE_LIMIT_PER_MINUTE
+            );
             m_register_rate_limit_per_window =
                 load_int("register_rate_limit_per_window", m_register_rate_limit_per_window);
             m_upload_rate_limit_window_seconds =
@@ -163,9 +198,17 @@ namespace disk::utils {
                 load_int("folder_rate_limit_window_seconds", m_folder_rate_limit_window_seconds);
             m_admin_rate_limit_window_seconds =
                 load_int("admin_rate_limit_window_seconds", m_admin_rate_limit_window_seconds);
-            m_share_public_rate_limit_window_seconds = load_int(
-                "share_public_rate_limit_window_seconds",
-                m_share_public_rate_limit_window_seconds
+            m_share_access_rate_limit_window_seconds = load_positive_int(
+                "share_access_rate_limit_window_seconds",
+                DEFAULT_SHARE_ACCESS_RATE_LIMIT_WINDOW_SECONDS
+            );
+            m_share_browse_rate_limit_window_seconds = load_positive_int(
+                "share_browse_rate_limit_window_seconds",
+                DEFAULT_SHARE_BROWSE_RATE_LIMIT_WINDOW_SECONDS
+            );
+            m_share_download_rate_limit_window_seconds = load_positive_int(
+                "share_download_rate_limit_window_seconds",
+                DEFAULT_SHARE_DOWNLOAD_RATE_LIMIT_WINDOW_SECONDS
             );
             m_register_rate_limit_window_seconds =
                 load_int("register_rate_limit_window_seconds", m_register_rate_limit_window_seconds);
@@ -280,8 +323,16 @@ namespace disk::utils {
         return m_admin_rate_limit_per_minute;
     }
 
-    auto ConfigMgr::GetSharePublicRateLimitPerMinute() const noexcept -> int {
-        return m_share_public_rate_limit_per_minute;
+    auto ConfigMgr::GetShareAccessRateLimitPerMinute() const noexcept -> int {
+        return m_share_access_rate_limit_per_minute;
+    }
+
+    auto ConfigMgr::GetShareBrowseRateLimitPerMinute() const noexcept -> int {
+        return m_share_browse_rate_limit_per_minute;
+    }
+
+    auto ConfigMgr::GetShareDownloadRateLimitPerMinute() const noexcept -> int {
+        return m_share_download_rate_limit_per_minute;
     }
 
     auto ConfigMgr::GetRegisterRateLimitPerWindow() const noexcept -> int {
@@ -304,8 +355,16 @@ namespace disk::utils {
         return m_admin_rate_limit_window_seconds;
     }
 
-    auto ConfigMgr::GetSharePublicRateLimitWindowSeconds() const noexcept -> int {
-        return m_share_public_rate_limit_window_seconds;
+    auto ConfigMgr::GetShareAccessRateLimitWindowSeconds() const noexcept -> int {
+        return m_share_access_rate_limit_window_seconds;
+    }
+
+    auto ConfigMgr::GetShareBrowseRateLimitWindowSeconds() const noexcept -> int {
+        return m_share_browse_rate_limit_window_seconds;
+    }
+
+    auto ConfigMgr::GetShareDownloadRateLimitWindowSeconds() const noexcept -> int {
+        return m_share_download_rate_limit_window_seconds;
     }
 
     auto ConfigMgr::GetRegisterRateLimitWindowSeconds() const noexcept -> int {
@@ -388,4 +447,4 @@ namespace disk::utils {
         return m_redis_pool_size;
     }
 
-} ///< namespace disk::utils
+} // namespace disk::utils

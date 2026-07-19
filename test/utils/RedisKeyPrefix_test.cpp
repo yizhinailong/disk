@@ -147,3 +147,33 @@ TEST(RedisKeyPrefix, BuildSharePasswordRateLimitKeyIPv6WithPort) {
     auto result = RedisKeyPrefix::BuildSharePasswordRateLimitKey(share_code, ip);
     EXPECT_EQ(result, "rate:share_password:Test01:2001:db8::1");
 }
+
+TEST(RedisKeyPrefix, BuildShareAccessRateLimitKeyNormalizesIPv4Port) {
+    const auto result =
+        RedisKeyPrefix::BuildShareAccessRateLimitKey("192.168.1.100:8080", 120);
+    EXPECT_EQ(result, "rate:share_access:192.168.1.100:120");
+}
+
+TEST(RedisKeyPrefix, BuildShareAccessRateLimitKeyNormalizesIPv6Port) {
+    const auto result =
+        RedisKeyPrefix::BuildShareAccessRateLimitKey("[2001:db8::1]:8080", 180);
+    EXPECT_EQ(result, "rate:share_access:2001:db8::1:180");
+}
+
+TEST(RedisKeyPrefix, BuildShareRateLimitKeysSeparateOperations) {
+    const auto browse = RedisKeyPrefix::BuildShareBrowseRateLimitKey("jti-123", 240);
+    const auto download = RedisKeyPrefix::BuildShareDownloadRateLimitKey("jti-123", 240);
+
+    EXPECT_EQ(browse, "rate:share_browse:jti-123:240");
+    EXPECT_EQ(download, "rate:share_download:jti-123:240");
+    EXPECT_NE(browse, download);
+}
+
+TEST(RedisKeyPrefix, BuildShareRateLimitKeysSeparateJtisAndWindows) {
+    const auto first_jti = RedisKeyPrefix::BuildShareBrowseRateLimitKey("jti-123", 240);
+    const auto second_jti = RedisKeyPrefix::BuildShareBrowseRateLimitKey("jti-456", 240);
+    const auto next_window = RedisKeyPrefix::BuildShareBrowseRateLimitKey("jti-123", 300);
+
+    EXPECT_NE(first_jti, second_jti);
+    EXPECT_NE(first_jti, next_window);
+}

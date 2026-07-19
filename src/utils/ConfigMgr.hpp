@@ -187,7 +187,13 @@ namespace disk::utils {
         auto GetAdminRateLimitPerMinute() const noexcept -> int;
 
         [[nodiscard]]
-        auto GetSharePublicRateLimitPerMinute() const noexcept -> int;
+        auto GetShareAccessRateLimitPerMinute() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetShareBrowseRateLimitPerMinute() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetShareDownloadRateLimitPerMinute() const noexcept -> int;
 
         [[nodiscard]]
         auto GetRegisterRateLimitPerWindow() const noexcept -> int;
@@ -205,7 +211,13 @@ namespace disk::utils {
         auto GetAdminRateLimitWindowSeconds() const noexcept -> int;
 
         [[nodiscard]]
-        auto GetSharePublicRateLimitWindowSeconds() const noexcept -> int;
+        auto GetShareAccessRateLimitWindowSeconds() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetShareBrowseRateLimitWindowSeconds() const noexcept -> int;
+
+        [[nodiscard]]
+        auto GetShareDownloadRateLimitWindowSeconds() const noexcept -> int;
 
         [[nodiscard]]
         auto GetRegisterRateLimitWindowSeconds() const noexcept -> int;
@@ -248,6 +260,13 @@ namespace disk::utils {
         auto GetRedisPoolSize() const noexcept -> int64_t;
 
     private:
+        static constexpr int DEFAULT_SHARE_ACCESS_RATE_LIMIT_PER_MINUTE = 30;
+        static constexpr int DEFAULT_SHARE_ACCESS_RATE_LIMIT_WINDOW_SECONDS = 60;
+        static constexpr int DEFAULT_SHARE_BROWSE_RATE_LIMIT_PER_MINUTE = 60;
+        static constexpr int DEFAULT_SHARE_BROWSE_RATE_LIMIT_WINDOW_SECONDS = 60;
+        static constexpr int DEFAULT_SHARE_DOWNLOAD_RATE_LIMIT_PER_MINUTE = 10;
+        static constexpr int DEFAULT_SHARE_DOWNLOAD_RATE_LIMIT_WINDOW_SECONDS = 60;
+
         /// JWT 配置
         int m_access_token_expire_seconds{ 7200 };
         int m_refresh_token_expire_seconds{ 604800 };
@@ -264,13 +283,17 @@ namespace disk::utils {
         int m_download_rate_limit_per_minute{ 60 };
         int m_folder_rate_limit_per_minute{ 100 };
         int m_admin_rate_limit_per_minute{ 30 };
-        int m_share_public_rate_limit_per_minute{ 30 };
+        int m_share_access_rate_limit_per_minute{ DEFAULT_SHARE_ACCESS_RATE_LIMIT_PER_MINUTE };
+        int m_share_browse_rate_limit_per_minute{ DEFAULT_SHARE_BROWSE_RATE_LIMIT_PER_MINUTE };
+        int m_share_download_rate_limit_per_minute{ DEFAULT_SHARE_DOWNLOAD_RATE_LIMIT_PER_MINUTE };
         int m_register_rate_limit_per_window{ 5 };
         int m_upload_rate_limit_window_seconds{ 60 };
         int m_download_rate_limit_window_seconds{ 60 };
         int m_folder_rate_limit_window_seconds{ 60 };
         int m_admin_rate_limit_window_seconds{ 60 };
-        int m_share_public_rate_limit_window_seconds{ 60 };
+        int m_share_access_rate_limit_window_seconds{ DEFAULT_SHARE_ACCESS_RATE_LIMIT_WINDOW_SECONDS };
+        int m_share_browse_rate_limit_window_seconds{ DEFAULT_SHARE_BROWSE_RATE_LIMIT_WINDOW_SECONDS };
+        int m_share_download_rate_limit_window_seconds{ DEFAULT_SHARE_DOWNLOAD_RATE_LIMIT_WINDOW_SECONDS };
         int m_register_rate_limit_window_seconds{ 300 };
         uint32_t m_file_io_threads{ 0 };
         StorageBackend m_storage_backend{ StorageBackend::Local };
@@ -280,4 +303,4 @@ namespace disk::utils {
         int64_t m_redis_pool_size{ 0 };
     };
 
-} ///< namespace disk::utils
+} // namespace disk::utils

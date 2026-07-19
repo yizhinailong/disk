@@ -154,7 +154,7 @@ Additional contract rules:
 
 #### 2. Runtime implementation
 
-- [ ] Replace `share_public_rate_limit_per_minute` and
+- [x] Replace `share_public_rate_limit_per_minute` and
   `share_public_rate_limit_window_seconds` with the six named access, browse, and
   download settings above in `config.json` and `ConfigMgr`.
 - [ ] Add `RedisKeyPrefix` builders for all three key families, using normalized IP

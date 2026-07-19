@@ -312,6 +312,91 @@ namespace {
         ConfigMgr::GetInstance()->LoadConfig();
     }
 
+    class ConfigMgrShareRateLimitTest : public ::testing::Test {
+    protected:
+        void TearDown() override { RestoreAssemblyDefaults(); }
+
+        static auto LoadDiskConfig(const Json::Value& disk_config) -> ConfigMgr* {
+            Json::Value cfg;
+            cfg["custom_config"]["disk"] = disk_config;
+            drogon::app().loadConfigJson(cfg);
+            const auto config = ConfigMgr::GetInstance();
+            config->LoadConfig();
+            return config.get();
+        }
+
+        static auto ExpectShareRateLimitDefaults(const ConfigMgr* config) -> void {
+            EXPECT_EQ(config->GetShareAccessRateLimitPerMinute(), 30);
+            EXPECT_EQ(config->GetShareAccessRateLimitWindowSeconds(), 60);
+            EXPECT_EQ(config->GetShareBrowseRateLimitPerMinute(), 60);
+            EXPECT_EQ(config->GetShareBrowseRateLimitWindowSeconds(), 60);
+            EXPECT_EQ(config->GetShareDownloadRateLimitPerMinute(), 10);
+            EXPECT_EQ(config->GetShareDownloadRateLimitWindowSeconds(), 60);
+        }
+    };
+
+    TEST_F(ConfigMgrShareRateLimitTest, LoadsExplicitPositiveValues) {
+        Json::Value disk_config;
+        disk_config["share_access_rate_limit_per_minute"] = 31;
+        disk_config["share_access_rate_limit_window_seconds"] = 61;
+        disk_config["share_browse_rate_limit_per_minute"] = 62;
+        disk_config["share_browse_rate_limit_window_seconds"] = 63;
+        disk_config["share_download_rate_limit_per_minute"] = 11;
+        disk_config["share_download_rate_limit_window_seconds"] = 64;
+
+        const auto* config = LoadDiskConfig(disk_config);
+
+        EXPECT_EQ(config->GetShareAccessRateLimitPerMinute(), 31);
+        EXPECT_EQ(config->GetShareAccessRateLimitWindowSeconds(), 61);
+        EXPECT_EQ(config->GetShareBrowseRateLimitPerMinute(), 62);
+        EXPECT_EQ(config->GetShareBrowseRateLimitWindowSeconds(), 63);
+        EXPECT_EQ(config->GetShareDownloadRateLimitPerMinute(), 11);
+        EXPECT_EQ(config->GetShareDownloadRateLimitWindowSeconds(), 64);
+    }
+
+    TEST_F(ConfigMgrShareRateLimitTest, MissingValuesResetToDefaults) {
+        Json::Value explicit_config;
+        explicit_config["share_access_rate_limit_per_minute"] = 99;
+        explicit_config["share_access_rate_limit_window_seconds"] = 96;
+        explicit_config["share_browse_rate_limit_per_minute"] = 98;
+        explicit_config["share_browse_rate_limit_window_seconds"] = 95;
+        explicit_config["share_download_rate_limit_per_minute"] = 97;
+        explicit_config["share_download_rate_limit_window_seconds"] = 94;
+        (void)LoadDiskConfig(explicit_config);
+
+        Json::Value missing_config;
+        missing_config["storage_base_path"] = "test";
+        const auto* config = LoadDiskConfig(missing_config);
+
+        ExpectShareRateLimitDefaults(config);
+    }
+
+    TEST_F(ConfigMgrShareRateLimitTest, ZeroAndNegativeValuesUseDefaults) {
+        Json::Value disk_config;
+        disk_config["share_access_rate_limit_per_minute"] = 0;
+        disk_config["share_access_rate_limit_window_seconds"] = -1;
+        disk_config["share_browse_rate_limit_per_minute"] = -2;
+        disk_config["share_browse_rate_limit_window_seconds"] = 0;
+        disk_config["share_download_rate_limit_per_minute"] = 0;
+        disk_config["share_download_rate_limit_window_seconds"] = -3;
+
+        ExpectShareRateLimitDefaults(LoadDiskConfig(disk_config));
+    }
+
+    TEST_F(ConfigMgrShareRateLimitTest, WrongTypesAndLegacyAliasesUseDefaults) {
+        Json::Value disk_config;
+        disk_config["share_access_rate_limit_per_minute"] = "31";
+        disk_config["share_access_rate_limit_window_seconds"] = true;
+        disk_config["share_browse_rate_limit_per_minute"] = 12.5;
+        disk_config["share_browse_rate_limit_window_seconds"] = "63";
+        disk_config["share_download_rate_limit_per_minute"] = false;
+        disk_config["share_download_rate_limit_window_seconds"] = 64.5;
+        disk_config["share_public_rate_limit_per_minute"] = 999;
+        disk_config["share_public_rate_limit_window_seconds"] = 999;
+
+        ExpectShareRateLimitDefaults(LoadDiskConfig(disk_config));
+    }
+
     /// ================================================================================
     /// LoadConfig — explicit assembly values are read correctly
     /// ================================================================================
@@ -462,4 +547,4 @@ namespace {
         RestoreAssemblyDefaults();
     }
 
-} ///< namespace
+} // namespace
