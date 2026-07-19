@@ -27,10 +27,10 @@
 #include "models/UploadTasks.hpp"
 #include "services/ContentService.hpp"
 #include "services/QuotaService.hpp"
+#include "services/StorageJobRepository.hpp"
 #include "services/UploadTaskRepository.hpp"
 #include "storage/IBlobStore.hpp"
 #include "storage/IFileStorage.hpp"
-#include "storage/StorageMgr.hpp"
 #include "storage/UploadStagingStorage.hpp"
 #include "utils/ConfigMgr.hpp"
 
@@ -194,6 +194,22 @@ namespace disk::upload {
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
             }
             co_return drogon_model::disk::Files(result[0], -1);
+        }
+
+        [[nodiscard]] auto BuildStagingCleanupJob(
+            const disk::storage::UploadStagingSession& session
+        ) -> disk::jobs::NewStorageJob {
+            Json::Value payload(Json::objectValue);
+            payload["upload_id"] = session.upload_id;
+            payload["backend"] = std::string(disk::storage::ToStorageValue(session.backend));
+            payload["prefix"] = session.prefix;
+
+            return disk::jobs::NewStorageJob{
+                .job_type = std::string(disk::jobs::kStagingCleanupJobType),
+                .aggregate_id = session.upload_id,
+                .dedupe_key = "staging-cleanup:" + session.upload_id,
+                .payload = std::move(payload),
+            };
         }
     } // namespace
 
@@ -952,6 +968,7 @@ namespace disk::upload {
         bool db_operation_failed = false;
         auto tx_start = std::chrono::steady_clock::now();
         disk::file::TransactionRunner transaction_runner(m_db_client);
+        disk::jobs::StorageJobRepository storage_job_repository(m_db_client);
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
                 disk::content::ContentService content_service(m_db_client);
@@ -1030,6 +1047,10 @@ namespace disk::upload {
                     ));
                 }
 
+                co_await storage_job_repository.Enqueue(
+                    transaction,
+                    BuildStagingCleanupJob(staging_session.value())
+                );
                 co_await upload_task_repository.DeleteChunks(transaction, command.upload_id);
 
                 co_return {};
@@ -1077,21 +1098,6 @@ namespace disk::upload {
 
         Logger::Debug() << "Files record created successfully: file_id=" << file.getValueOfId();
 
-        auto temp_cleanup_start = std::chrono::steady_clock::now();
-        auto cleanup_result = co_await m_upload_staging_storage->CleanupSession(
-            staging_session.value()
-        );
-        Logger::Debug() << "[stage_timer] temp_cleanup duration_ms="
-                        << std::chrono::duration_cast<std::chrono::milliseconds>(
-                               std::chrono::steady_clock::now() - temp_cleanup_start
-                           )
-                               .count()
-                        << " upload_id=" << command.upload_id;
-        if (!cleanup_result) {
-            Logger::Warn() << "Failed to cleanup temp artifacts: "
-                           << static_cast<int>(cleanup_result.error().code);
-        }
-
         CompleteUploadOutcome outcome;
         outcome.file = ToLifecycleFileItem(file, final_hash);
         outcome.invalidation.upload_task_ids.push_back(command.upload_id);
@@ -1113,10 +1119,10 @@ namespace disk::upload {
         const std::string& upload_id,
         uint64_t user_id
     ) const -> drogon::Task<Result<void>> {
-        std::optional<disk::storage::UploadStagingSession> staging_session;
         bool cancelled = false;
 
         disk::file::UploadTaskRepository upload_task_repository(m_db_client);
+        disk::jobs::StorageJobRepository storage_job_repository(m_db_client);
         disk::file::TransactionRunner transaction_runner(m_db_client);
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
@@ -1140,8 +1146,11 @@ namespace disk::upload {
                     co_return std::unexpected(release_result.error());
                 }
 
+                co_await storage_job_repository.Enqueue(
+                    transaction,
+                    BuildStagingCleanupJob(cancelled_record->staging_session)
+                );
                 co_await upload_task_repository.DeleteChunks(transaction, upload_id);
-                staging_session = cancelled_record->staging_session;
                 cancelled = true;
                 co_return {};
             }
@@ -1172,28 +1181,17 @@ namespace disk::upload {
             }
         }
 
-        if (m_upload_staging_storage != nullptr && staging_session.has_value()) {
-            auto cleanup_result = co_await m_upload_staging_storage->CleanupSession(
-                staging_session.value()
-            );
-            if (!cleanup_result) {
-                Logger::Warn() << "Failed to delete upload staging session: upload_id=" << upload_id
-                               << ", error=" << static_cast<int>(cleanup_result.error().code);
-            }
-        }
-
         co_return {};
     }
 
     auto UploadLifecycleService::ExpireInProgressUpload(const std::string& upload_id) const
         -> drogon::Task<Result<bool>> {
         bool expired = false;
-        std::string temp_path;
         uint64_t user_id = 0;
         uint64_t reserved_bytes = 0;
-        std::optional<disk::storage::UploadStagingSession> staging_session;
 
         disk::file::UploadTaskRepository upload_task_repository(m_db_client);
+        disk::jobs::StorageJobRepository storage_job_repository(m_db_client);
         disk::file::TransactionRunner transaction_runner(m_db_client);
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
@@ -1209,9 +1207,6 @@ namespace disk::upload {
 
                 user_id = expired_record->user_id;
                 reserved_bytes = expired_record->reserved_bytes;
-                temp_path = expired_record->temp_path;
-                staging_session = expired_record->staging_session;
-
                 disk::quota::QuotaService quota_service(m_db_client);
                 auto release_result = co_await quota_service.ReleaseReservedStorageChecked(
                     transaction,
@@ -1222,6 +1217,10 @@ namespace disk::upload {
                     co_return std::unexpected(release_result.error());
                 }
 
+                co_await storage_job_repository.Enqueue(
+                    transaction,
+                    BuildStagingCleanupJob(expired_record->staging_session)
+                );
                 co_await upload_task_repository.DeleteChunks(transaction, upload_id);
 
                 expired = true;
@@ -1235,20 +1234,6 @@ namespace disk::upload {
 
         if (!expired) {
             co_return false;
-        }
-
-        auto* storage = m_upload_staging_storage != nullptr ? m_upload_staging_storage : disk::storage::StorageMgr::GetUploadStagingStorage();
-        if (storage != nullptr && staging_session.has_value()) {
-            auto cleanup_result = co_await storage->CleanupSession(staging_session.value());
-            if (!cleanup_result.has_value()) {
-                Logger::Warn() << "Failed to cleanup temp file for expired upload task: task_id="
-                               << upload_id << ", temp_path=" << temp_path
-                               << ", error_code=" << static_cast<uint32_t>(cleanup_result.error().code)
-                               << ", error_message=" << cleanup_result.error().message;
-            } else {
-                Logger::Debug() << "Temp file cleaned for expired upload task: task_id="
-                                << upload_id << ", temp_path=" << temp_path;
-            }
         }
 
         Logger::Debug() << "Expired upload task marked as expired: task_id=" << upload_id

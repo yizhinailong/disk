@@ -52,6 +52,14 @@ ON CONFLICT (user_id, folder_id, name) DO NOTHING
 RETURNING id
 """
 
+STAGING_CLEANUP_ENQUEUE_SQL = """
+INSERT INTO storage_jobs
+    (job_type, aggregate_id, dedupe_key, payload)
+VALUES ('staging_cleanup', %s, %s, %s::jsonb)
+ON CONFLICT (dedupe_key) DO NOTHING
+RETURNING id
+"""
+
 CLAIM_SQL = """
 UPDATE upload_tasks AS task SET
     status = 4,
@@ -347,9 +355,148 @@ def verify_atomic_finalize_primitives(database_name: str, user_id: int) -> None:
         assert file_count == {"count": 1}
 
 
+def enqueue_staging_cleanup(
+    connection: psycopg.Connection[dict[str, Any]],
+    upload_id: str,
+) -> dict[str, Any] | None:
+    payload = (
+        '{"upload_id":"'
+        + upload_id
+        + '","backend":"s3","prefix":"staging/'
+        + upload_id
+        + '"}'
+    )
+    return connection.execute(
+        STAGING_CLEANUP_ENQUEUE_SQL,
+        (upload_id, f"staging-cleanup:{upload_id}", payload),
+    ).fetchone()
+
+
+def verify_terminal_cleanup_atomicity(database_name: str, user_id: int) -> None:
+    def seed(upload_id: str, *, expired: bool) -> None:
+        expiry = "NOW() - INTERVAL '1 second'" if expired else "NOW() + INTERVAL '1 day'"
+        with connect(database_name) as connection:
+            connection.execute(
+                "INSERT INTO upload_tasks "
+                "(id, user_id, filename, file_size, file_hash, chunk_size, total_chunks, "
+                " reserved_bytes, temp_path, staging_backend, staging_prefix, expires_at) "
+                f"VALUES (%s, %s, %s, 4, %s, 4, 1, 4, %s, 's3', %s, {expiry})",
+                (
+                    upload_id,
+                    user_id,
+                    f"{upload_id}.bin",
+                    "c" * 32,
+                    upload_id,
+                    f"staging/{upload_id}",
+                ),
+            )
+            connection.execute(
+                "INSERT INTO upload_task_chunks "
+                "(task_id, chunk_index, size_bytes, hash_md5, object_key) "
+                "VALUES (%s, 0, 4, %s, %s)",
+                (upload_id, "c" * 32, f"staging/{upload_id}/0"),
+            )
+            connection.execute(
+                "UPDATE users SET storage_reserved = storage_reserved + 4 WHERE id = %s",
+                (user_id,),
+            )
+
+    def transition(upload_id: str, status: int, *, require_expired: bool) -> None:
+        expiry_guard = " AND expires_at < NOW()" if require_expired else ""
+        with connect(database_name) as connection:
+            with connection.transaction():
+                transitioned = connection.execute(
+                    "UPDATE upload_tasks SET status = %s, finalized_at = NOW() "
+                    f"WHERE id = %s AND status = 0{expiry_guard} RETURNING reserved_bytes",
+                    (status, upload_id),
+                ).fetchone()
+                assert transitioned == {"reserved_bytes": 4}
+                quota = connection.execute(
+                    "UPDATE users SET storage_reserved = storage_reserved - 4 "
+                    "WHERE id = %s AND storage_reserved >= 4 RETURNING storage_reserved",
+                    (user_id,),
+                ).fetchone()
+                assert quota is not None
+                assert enqueue_staging_cleanup(connection, upload_id) is not None
+                deleted = connection.execute(
+                    "DELETE FROM upload_task_chunks WHERE task_id = %s",
+                    (upload_id,),
+                )
+                assert deleted.rowcount == 1
+
+    rollback_id = "atomic-terminal-rollback"
+    seed(rollback_id, expired=False)
+    with connect(database_name) as connection:
+        reserved_before = connection.execute(
+            "SELECT storage_reserved FROM users WHERE id = %s",
+            (user_id,),
+        ).fetchone()
+        assert reserved_before is not None
+        try:
+            with connection.transaction():
+                assert connection.execute(
+                    "UPDATE upload_tasks SET status = 2 WHERE id = %s AND status = 0 RETURNING id",
+                    (rollback_id,),
+                ).fetchone() == {"id": rollback_id}
+                connection.execute(
+                    "UPDATE users SET storage_reserved = storage_reserved - 4 WHERE id = %s",
+                    (user_id,),
+                )
+                assert enqueue_staging_cleanup(connection, rollback_id) is not None
+                connection.execute(
+                    "DELETE FROM upload_task_chunks WHERE task_id = %s",
+                    (rollback_id,),
+                )
+                raise RuntimeError("force terminal transaction rollback")
+        except RuntimeError as error:
+            assert str(error) == "force terminal transaction rollback"
+
+        rolled_back = connection.execute(
+            "SELECT status FROM upload_tasks WHERE id = %s",
+            (rollback_id,),
+        ).fetchone()
+        assert rolled_back == {"status": 0}
+        assert connection.execute(
+            "SELECT storage_reserved FROM users WHERE id = %s",
+            (user_id,),
+        ).fetchone() == reserved_before
+        assert connection.execute(
+            "SELECT COUNT(*) AS count FROM upload_task_chunks WHERE task_id = %s",
+            (rollback_id,),
+        ).fetchone() == {"count": 1}
+        assert connection.execute(
+            "SELECT COUNT(*) AS count FROM storage_jobs WHERE aggregate_id = %s",
+            (rollback_id,),
+        ).fetchone() == {"count": 0}
+
+    transition(rollback_id, 2, require_expired=False)
+    expired_id = "atomic-terminal-expired"
+    seed(expired_id, expired=True)
+    transition(expired_id, 3, require_expired=True)
+
+    with connect(database_name) as connection:
+        jobs = connection.execute(
+            "SELECT aggregate_id, dedupe_key, payload, status FROM storage_jobs "
+            "WHERE aggregate_id IN (%s, %s) ORDER BY aggregate_id",
+            (expired_id, rollback_id),
+        ).fetchall()
+        assert len(jobs) == 2
+        for job in jobs:
+            upload_id = str(job["aggregate_id"])
+            assert job["dedupe_key"] == f"staging-cleanup:{upload_id}"
+            assert job["status"] == 0
+            assert job["payload"] == {
+                "upload_id": upload_id,
+                "backend": "s3",
+                "prefix": f"staging/{upload_id}",
+            }
+            assert enqueue_staging_cleanup(connection, upload_id) is None
+
+
 def verify_state_machine(database_name: str) -> None:
     user_id = seed_upload(database_name)
     verify_atomic_finalize_primitives(database_name, user_id)
+    verify_terminal_cleanup_atomicity(database_name, user_id)
 
     with connect(database_name) as connection:
         expired_upload_id = "expired-state-machine-upload"
@@ -468,11 +615,18 @@ def verify_state_machine(database_name: str) -> None:
             (completed_file_id, UPLOAD_ID, user_id, takeover_owner, 2),
         ).fetchone() is None
 
-        completed = connection.execute(
-            COMPLETE_SQL,
-            (completed_file_id, UPLOAD_ID, user_id, takeover_owner, 3),
-        ).fetchone()
-        assert completed == {"state_version": 4}
+        with connection.transaction():
+            completed = connection.execute(
+                COMPLETE_SQL,
+                (completed_file_id, UPLOAD_ID, user_id, takeover_owner, 3),
+            ).fetchone()
+            assert completed == {"state_version": 4}
+            assert enqueue_staging_cleanup(connection, UPLOAD_ID) is not None
+            deleted_chunks = connection.execute(
+                "DELETE FROM upload_task_chunks WHERE task_id = %s",
+                (UPLOAD_ID,),
+            )
+            assert deleted_chunks.rowcount == 3
 
     assert claim(database_name, user_id, "post-complete-owner") is None
     with connect(database_name) as connection:
@@ -495,6 +649,11 @@ def verify_state_machine(database_name: str) -> None:
             (UPLOAD_ID, user_id),
         ).fetchone()
         assert replay == {"completed_file_id": completed_file_id}
+        cleanup_job = connection.execute(
+            "SELECT dedupe_key, status FROM storage_jobs WHERE aggregate_id = %s",
+            (UPLOAD_ID,),
+        ).fetchone()
+        assert cleanup_job == {"dedupe_key": f"staging-cleanup:{UPLOAD_ID}", "status": 0}
 
 
 def main() -> int:

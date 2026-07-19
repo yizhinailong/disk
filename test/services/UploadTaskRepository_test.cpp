@@ -63,7 +63,10 @@ namespace disk::file {
             EXPECT_TRUE(Contains(lifecycle_source, "config->GetS3StorageConfig().staging_prefix + \"/\" + upload_id"));
             EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.Create(std::move(task), staging_session)"));
             EXPECT_TRUE(Contains(lifecycle_source, "FindStagingSessionForUser("));
-            EXPECT_TRUE(Contains(lifecycle_source, "CleanupSession(staging_session.value())"));
+            EXPECT_TRUE(Contains(lifecycle_source, "BuildStagingCleanupJob("));
+            EXPECT_TRUE(Contains(lifecycle_source, "payload[\"backend\"]"));
+            EXPECT_TRUE(Contains(lifecycle_source, "payload[\"prefix\"]"));
+            EXPECT_TRUE(Contains(lifecycle_source, "\"staging-cleanup:\" + session.upload_id"));
             EXPECT_TRUE(Contains(lifecycle_source, "staging_session.value(),\n            state_version"));
 
             const auto service_source = ReadSourceFile("src/services/UploadService.cpp");
@@ -119,12 +122,16 @@ namespace disk::file {
 
             const auto transition = lifecycle_source.find("MarkCancelledIfInProgressReturning(");
             const auto quota_release = lifecycle_source.find("ReleaseReservedStorageChecked(", transition);
-            const auto chunk_delete = lifecycle_source.find("DeleteChunks(transaction, upload_id)", quota_release);
+            const auto cleanup_enqueue = lifecycle_source.find("storage_job_repository.Enqueue(", quota_release);
+            const auto chunk_delete = lifecycle_source.find("DeleteChunks(transaction, upload_id)", cleanup_enqueue);
             ASSERT_NE(transition, std::string::npos);
             ASSERT_NE(quota_release, std::string::npos);
+            ASSERT_NE(cleanup_enqueue, std::string::npos);
             ASSERT_NE(chunk_delete, std::string::npos);
             EXPECT_LT(transition, quota_release);
-            EXPECT_LT(quota_release, chunk_delete);
+            EXPECT_LT(quota_release, cleanup_enqueue);
+            EXPECT_LT(cleanup_enqueue, chunk_delete);
+            EXPECT_FALSE(Contains(lifecycle_source, "->CleanupSession("));
             EXPECT_TRUE(Contains(lifecycle_source, "DecideCancelRequest(current_task->getValueOfStatus())"));
             EXPECT_TRUE(Contains(service_source, "DecideCancelRequest(task.getValueOfStatus())"));
         }
@@ -161,6 +168,12 @@ namespace disk::file {
             EXPECT_LT(claim, assemble);
             EXPECT_LT(assemble, first_renew);
             EXPECT_LT(first_renew, guarded_commit);
+            const auto cleanup_enqueue = source.find("storage_job_repository.Enqueue(", guarded_commit);
+            const auto chunk_delete = source.find("DeleteChunks(transaction, command.upload_id)", cleanup_enqueue);
+            ASSERT_NE(cleanup_enqueue, std::string::npos);
+            ASSERT_NE(chunk_delete, std::string::npos);
+            EXPECT_LT(guarded_commit, cleanup_enqueue);
+            EXPECT_LT(cleanup_enqueue, chunk_delete);
             EXPECT_TRUE(Contains(source, "completed_file_id"));
             EXPECT_FALSE(Contains(source, "m_blob_store->DeleteBlob(final_storage_path)"));
         }
@@ -207,8 +220,10 @@ namespace disk::file {
             EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.MarkExpiredIfInProgressReturning("));
             EXPECT_FALSE(Contains(lifecycle_source, "UPDATE upload_tasks SET status"));
             EXPECT_TRUE(Contains(lifecycle_source, "quota_service.ReleaseReservedStorageChecked("));
+            EXPECT_TRUE(Contains(lifecycle_source, "BuildStagingCleanupJob(expired_record->staging_session)"));
+            EXPECT_TRUE(Contains(lifecycle_source, "storage_job_repository.Enqueue("));
             EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.DeleteChunks(transaction, upload_id)"));
-            EXPECT_TRUE(Contains(lifecycle_source, "CleanupSession(staging_session.value())"));
+            EXPECT_FALSE(Contains(lifecycle_source, "->CleanupSession("));
         }
 
         TEST(UploadTaskRepositoryExpirationBoundaryTest, ReturningExpirationPrimitiveKeepsExpectedSignature) {
