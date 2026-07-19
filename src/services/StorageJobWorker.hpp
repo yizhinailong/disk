@@ -18,8 +18,9 @@
 #include "utils/ErrorCode.hpp"
 
 namespace disk::storage {
+    class IBlobStore;
     class UploadStagingStorage;
-}
+} // namespace disk::storage
 
 namespace disk::jobs {
 
@@ -33,6 +34,7 @@ namespace disk::jobs {
     struct JobExecutionResult {
         bool succeeded{ false };
         bool retryable{ false };
+        bool outcome_persisted{ false };
         std::string error;
     };
 
@@ -49,6 +51,7 @@ namespace disk::jobs {
         StorageJobWorker(
             drogon::orm::DbClientPtr db_client,
             disk::storage::UploadStagingStorage* staging_storage,
+            disk::storage::IBlobStore* blob_store,
             std::string instance_id,
             StorageJobWorkerOptions options = {}
         );
@@ -78,8 +81,12 @@ namespace disk::jobs {
         [[nodiscard]]
         auto ProcessClaimedJob(const StorageJob& job) const -> drogon::Task<PersistDisposition>;
 
+        [[nodiscard]]
+        auto ExecuteBlobGc(const StorageJob& job) const -> drogon::Task<JobExecutionResult>;
+
         drogon::orm::DbClientPtr m_db_client;
         disk::storage::UploadStagingStorage* m_staging_storage{};
+        disk::storage::IBlobStore* m_blob_store{};
         std::string m_instance_id;
         StorageJobWorkerOptions m_options;
     };

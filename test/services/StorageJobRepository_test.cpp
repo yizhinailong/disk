@@ -29,6 +29,14 @@ namespace disk::jobs {
                 std::declval<const drogon::orm::DbClientPtr&>(),
                 std::declval<const NewStorageJob&>()
             ));
+            using RearmResult = decltype(std::declval<const StorageJobRepository&>().EnqueueOrRearmSucceeded(
+                std::declval<const drogon::orm::DbClientPtr&>(),
+                std::declval<const NewStorageJob&>()
+            ));
+            using BlobGcGateResult = decltype(std::declval<const StorageJobRepository&>().CheckBlobGcReferenceGate(
+                std::declval<const drogon::orm::DbClientPtr&>(),
+                std::declval<uint64_t>()
+            ));
             using ClaimResult = decltype(std::declval<const StorageJobRepository&>().ClaimReadyBatch(
                 std::declval<const std::string&>(),
                 std::declval<size_t>(),
@@ -43,6 +51,11 @@ namespace disk::jobs {
                 std::declval<uint64_t>(),
                 std::declval<const std::string&>()
             ));
+            using TransactionalCompleteResult = decltype(std::declval<const StorageJobRepository&>().MarkSucceeded(
+                std::declval<const drogon::orm::DbClientPtr&>(),
+                std::declval<uint64_t>(),
+                std::declval<const std::string&>()
+            ));
             using FailureResult = decltype(std::declval<const StorageJobRepository&>().MarkFailed(
                 std::declval<uint64_t>(),
                 std::declval<const std::string&>(),
@@ -53,9 +66,12 @@ namespace disk::jobs {
 
             EXPECT_TRUE((std::is_same_v<EnqueueResult, drogon::Task<bool>>));
             EXPECT_TRUE((std::is_same_v<TransactionalEnqueueResult, drogon::Task<bool>>));
+            EXPECT_TRUE((std::is_same_v<RearmResult, drogon::Task<bool>>));
+            EXPECT_TRUE((std::is_same_v<BlobGcGateResult, drogon::Task<BlobGcReferenceGate>>));
             EXPECT_TRUE((std::is_same_v<ClaimResult, drogon::Task<std::vector<StorageJob>>>));
             EXPECT_TRUE((std::is_same_v<RenewResult, drogon::Task<bool>>));
             EXPECT_TRUE((std::is_same_v<CompleteResult, drogon::Task<bool>>));
+            EXPECT_TRUE((std::is_same_v<TransactionalCompleteResult, drogon::Task<bool>>));
             EXPECT_TRUE((std::is_same_v<FailureResult, drogon::Task<std::optional<StorageJobStatus>>>));
         }
 

@@ -40,7 +40,6 @@ set(TEST_SOURCES
     services/TrashService_test.cpp
     services/TrashQuery_test.cpp
     services/TrashServiceBatch_test.cpp
-    services/ParallelDeletePaths_test.cpp
     services/UserService_test.cpp
     services/CleanupService_test.cpp
     services/SystemService_test.cpp
@@ -242,6 +241,19 @@ add_test(
 )
 set_tests_properties(
     StorageJobQueueIntegration
+    PROPERTIES
+    LABELS "backend-integration;database-state-machine"
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME BlobGcProtocolIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_blob_gc_protocol.py"
+)
+set_tests_properties(
+    BlobGcProtocolIntegration
     PROPERTIES
     LABELS "backend-integration;database-state-machine"
     RUN_SERIAL TRUE

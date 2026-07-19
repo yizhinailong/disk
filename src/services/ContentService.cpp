@@ -9,6 +9,7 @@
 
 #include "ContentService.hpp"
 
+#include <algorithm>
 #include <utility>
 
 #include <drogon/orm/CoroMapper.h>
@@ -16,6 +17,7 @@
 
 #include "models/FileContents.hpp"
 #include "services/FileServiceUtils.hpp"
+#include "services/StorageJobRepository.hpp"
 #include "utils/BatchUtils.hpp"
 #include "utils/LogHelper.hpp"
 
@@ -51,6 +53,11 @@ namespace disk::content {
             }
             return content_ids;
         }
+
+        struct ZeroRefContent {
+            uint64_t id{ 0 };
+            std::string storage_path;
+        };
 
     } // namespace
 
@@ -109,9 +116,40 @@ namespace disk::content {
 
     auto ContentService::AcquireReference(
         const drogon::orm::DbClientPtr& client,
-        const NewContent& content
+        const NewContent& content,
+        std::optional<uint64_t> expected_existing_content_id
     ) const -> drogon::Task<Result<ContentMetadata>> {
         try {
+            auto existing = co_await client->execSqlCoro(
+                "SELECT id, size FROM file_contents " "WHERE hash_md5 = $1 AND hash_sha256 = $2 FOR UPDATE",
+                content.hash_md5,
+                content.hash_sha256
+            );
+            if (expected_existing_content_id.has_value()) {
+                if (existing.empty() ||
+                    existing[0]["id"].as<uint64_t>() != expected_existing_content_id.value()) {
+                    co_return std::unexpected(ErrorInfo(
+                        ErrorCode::ResourceConflict,
+                        "File content changed while finalizing upload"
+                    ));
+                }
+            }
+            if (!existing.empty()) {
+                if (existing[0]["size"].as<uint64_t>() != content.size) {
+                    co_return std::unexpected(ErrorInfo(
+                        ErrorCode::ChunkVerifyFailed,
+                        "Existing file content size does not match its hashes"
+                    ));
+                }
+                auto gate_result = co_await CheckReferenceGate(
+                    client,
+                    existing[0]["id"].as<uint64_t>()
+                );
+                if (!gate_result) {
+                    co_return std::unexpected(gate_result.error());
+                }
+            }
+
             auto result = co_await client->execSqlCoro(
                 "INSERT INTO file_contents " "  (hash_md5, hash_sha256, size, storage_path, mime_type, ref_count) " "VALUES ($1, $2, $3, $4, $5, 1) " "ON CONFLICT (hash_md5, hash_sha256) DO UPDATE SET " "  ref_count = file_contents.ref_count + 1 " "WHERE file_contents.size = EXCLUDED.size " "RETURNING *",
                 content.hash_md5,
@@ -127,7 +165,22 @@ namespace disk::content {
                 ));
             }
 
-            co_return ToMetadata(FileContents(result[0], -1));
+            auto metadata = ToMetadata(FileContents(result[0], -1));
+            if (expected_existing_content_id.has_value() &&
+                metadata.id != expected_existing_content_id.value()) {
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::ResourceConflict,
+                    "File content changed while finalizing upload"
+                ));
+            }
+            if (existing.empty()) {
+                auto gate_result = co_await CheckReferenceGate(client, metadata.id);
+                if (!gate_result) {
+                    co_return std::unexpected(gate_result.error());
+                }
+            }
+
+            co_return metadata;
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Error() << "Failed to atomically acquire file content reference: "
                             << e.base().what();
@@ -147,15 +200,32 @@ namespace disk::content {
         }
 
         try {
+            auto locked = co_await client->execSqlCoro(
+                "SELECT id FROM file_contents WHERE id = $1 FOR UPDATE",
+                static_cast<int64_t>(content_id)
+            );
+            if (locked.empty()) {
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::ResourceConflict,
+                    "File content changed while acquiring a reference"
+                ));
+            }
+
+            auto gate_result = co_await CheckReferenceGate(client, content_id);
+            if (!gate_result) {
+                co_return std::unexpected(gate_result.error());
+            }
+
             auto result = co_await client->execSqlCoro(
                 "UPDATE file_contents SET ref_count = ref_count + $1 WHERE id = $2",
                 static_cast<int32_t>(increment),
                 static_cast<int64_t>(content_id)
             );
             if (result.affectedRows() == 0) {
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::FileNotFound, "File content not found")
-                );
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::ResourceConflict,
+                    "File content changed while acquiring a reference"
+                ));
             }
             co_return {};
         } catch (const drogon::orm::DrogonDbException& e) {
@@ -204,10 +274,30 @@ namespace disk::content {
             co_return incremented_ids;
         }
 
+        std::sort(valid_content_ids.begin(), valid_content_ids.end());
+
         update_sql += " ELSE 0 END WHERE id IN (" +
                       BatchUtils::BuildSafeNumericInClause(valid_content_ids) + ")";
 
         try {
+            auto locked = co_await client->execSqlCoro(
+                "SELECT id FROM file_contents WHERE id IN (" +
+                BatchUtils::BuildSafeNumericInClause(valid_content_ids) +
+                ") ORDER BY id FOR UPDATE"
+            );
+            if (locked.size() != valid_content_ids.size()) {
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::ResourceConflict,
+                    "File content changed while copying"
+                ));
+            }
+            for (const auto content_id : valid_content_ids) {
+                auto gate_result = co_await CheckReferenceGate(client, content_id);
+                if (!gate_result) {
+                    co_return std::unexpected(gate_result.error());
+                }
+            }
+
             auto result = co_await client->execSqlCoro(update_sql);
             if (result.affectedRows() != valid_content_ids.size()) {
                 Logger::Warn() << "File content batch ref_count increment affected unexpected rows: expected="
@@ -229,13 +319,13 @@ namespace disk::content {
         co_return incremented_ids;
     }
 
-    auto ContentService::DecrementRefCounts(
+    auto ContentService::DecrementRefCountsAndEnqueueGc(
         const drogon::orm::DbClientPtr& client,
         const std::unordered_map<uint64_t, uint64_t>& decrements
-    ) const -> drogon::Task<std::vector<ZeroRefContent>> {
+    ) const -> drogon::Task<Result<size_t>> {
         auto content_ids = CollectContentIds(decrements);
         if (content_ids.empty()) {
-            co_return std::vector<ZeroRefContent>{};
+            co_return size_t{ 0 };
         }
 
         std::string update_sql =
@@ -267,37 +357,72 @@ namespace disk::content {
                     }
                 }
             );
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "File content batch ref_count decrement failed: " << e.base().what();
-            co_return std::vector<ZeroRefContent>{};
-        }
-
-        co_return co_await VerifyZeroRefContents(client, content_ids);
-    }
-
-    auto ContentService::VerifyZeroRefContents(
-        const drogon::orm::DbClientPtr& client,
-        const std::vector<uint64_t>& content_ids
-    ) const -> drogon::Task<std::vector<ZeroRefContent>> {
-        if (content_ids.empty()) {
-            co_return std::vector<ZeroRefContent>{};
-        }
-
-        std::vector<ZeroRefContent> zero_ref_contents;
-        try {
             auto rows = co_await client->execSqlCoro(
                 "SELECT id, storage_path FROM file_contents WHERE ref_count = 0 AND id IN (" +
                 BatchUtils::BuildSafeNumericInClause(content_ids) + ")"
             );
+            std::vector<ZeroRefContent> zero_ref_contents;
             zero_ref_contents.reserve(rows.size());
             for (const auto& row : rows) {
                 zero_ref_contents.push_back({ .id = row["id"].as<uint64_t>(), .storage_path = row["storage_path"].as<std::string>() });
             }
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "File content zero-ref verification failed: " << e.base().what();
-        }
 
-        co_return zero_ref_contents;
+            disk::jobs::StorageJobRepository job_repository(m_db_client);
+            for (const auto& content : zero_ref_contents) {
+                Json::Value payload(Json::objectValue);
+                payload["content_id"] = Json::UInt64(content.id);
+                payload["storage_path"] = content.storage_path;
+                const auto aggregate_id = std::to_string(content.id);
+                (void)co_await job_repository.EnqueueOrRearmSucceeded(
+                    client,
+                    disk::jobs::NewStorageJob{
+                        .job_type = std::string(disk::jobs::kBlobGcJobType),
+                        .aggregate_id = aggregate_id,
+                        .dedupe_key = "blob-gc:" + aggregate_id,
+                        .payload = std::move(payload),
+                    }
+                );
+            }
+
+            co_return zero_ref_contents.size();
+        } catch (const drogon::orm::DrogonDbException& e) {
+            Logger::Warn() << "File content decrement and Blob GC enqueue failed: "
+                           << e.base().what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to update file content references"
+            ));
+        } catch (const std::exception& e) {
+            Logger::Warn() << "Blob GC enqueue failed: " << e.what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to enqueue Blob garbage collection"
+            ));
+        }
+    }
+
+    auto ContentService::CheckReferenceGate(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t content_id
+    ) const -> drogon::Task<Result<void>> {
+        try {
+            disk::jobs::StorageJobRepository repository(m_db_client);
+            auto gate = co_await repository.CheckBlobGcReferenceGate(client, content_id);
+            if (gate == disk::jobs::BlobGcReferenceGate::Blocked) {
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::ResourceConflict,
+                    "File content is pending garbage collection"
+                ));
+            }
+            co_return {};
+        } catch (const std::exception& e) {
+            Logger::Warn() << "Blob GC reference gate failed: content_id=" << content_id
+                           << " - " << e.what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to verify file content lifecycle"
+            ));
+        }
     }
 
 } // namespace disk::content

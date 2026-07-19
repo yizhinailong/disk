@@ -979,7 +979,8 @@ namespace disk::upload {
                                                .hash_sha256 = final_sha256,
                                                .size = static_cast<uint64_t>(upload_task.getValueOfFileSize()),
                                                .storage_path = final_storage_path.string(),
-                                               .mime_type = "" }
+                                               .mime_type = "" },
+                    finalize_storage_decision.existing_content_id
                 );
                 if (!content_result) {
                     co_return std::unexpected(content_result.error());

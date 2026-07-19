@@ -117,6 +117,65 @@ namespace disk::jobs {
         co_return !result.empty();
     }
 
+    auto StorageJobRepository::EnqueueOrRearmSucceeded(
+        const drogon::orm::DbClientPtr& client,
+        const NewStorageJob& job
+    ) const -> drogon::Task<bool> {
+        ValidateNewJob(job);
+        auto result = co_await client->execSqlCoro(
+            "INSERT INTO storage_jobs " "  (job_type, aggregate_id, dedupe_key, payload, max_attempts) " "VALUES ($1, $2, $3, $4::jsonb, $5) " "ON CONFLICT (dedupe_key) DO UPDATE SET " "  job_type = EXCLUDED.job_type, aggregate_id = EXCLUDED.aggregate_id, " "  payload = EXCLUDED.payload, status = $6, attempts = 0, " "  max_attempts = EXCLUDED.max_attempts, available_at = NOW(), " "  locked_by = NULL, locked_until = NULL, last_error = NULL, " "  completed_at = NULL, updated_at = NOW() " "WHERE storage_jobs.status = $7 " "  AND storage_jobs.job_type = EXCLUDED.job_type " "  AND storage_jobs.aggregate_id = EXCLUDED.aggregate_id " "RETURNING id",
+            job.job_type,
+            job.aggregate_id,
+            job.dedupe_key,
+            SerializePayload(job.payload),
+            static_cast<int32_t>(job.max_attempts),
+            ToStorageValue(StorageJobStatus::Pending),
+            ToStorageValue(StorageJobStatus::Succeeded)
+        );
+        if (!result.empty()) {
+            co_return true;
+        }
+
+        auto existing = co_await client->execSqlCoro(
+            "SELECT job_type, aggregate_id FROM storage_jobs WHERE dedupe_key = $1",
+            job.dedupe_key
+        );
+        if (existing.empty()) {
+            throw std::runtime_error("Storage job conflict disappeared during enqueue");
+        }
+        if (existing[0]["job_type"].as<std::string>() != job.job_type ||
+            existing[0]["aggregate_id"].as<std::string>() != job.aggregate_id) {
+            throw std::runtime_error("Storage job dedupe key is owned by another aggregate");
+        }
+        co_return false;
+    }
+
+    auto StorageJobRepository::CheckBlobGcReferenceGate(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t content_id
+    ) const -> drogon::Task<BlobGcReferenceGate> {
+        const auto aggregate_id = std::to_string(content_id);
+        auto result = co_await client->execSqlCoro(
+            "SELECT job_type, aggregate_id, status FROM storage_jobs " "WHERE dedupe_key = $1 FOR SHARE",
+            "blob-gc:" + aggregate_id
+        );
+        if (result.empty()) {
+            co_return BlobGcReferenceGate::Allowed;
+        }
+
+        const auto& row = result[0];
+        if (row["job_type"].as<std::string>() != kBlobGcJobType ||
+            row["aggregate_id"].as<std::string>() != aggregate_id) {
+            throw std::runtime_error("Blob GC dedupe key is owned by an incompatible storage job");
+        }
+
+        const auto status = ParseStorageJobStatus(row["status"].as<int16_t>());
+        if (!status.has_value()) {
+            throw std::runtime_error("Blob GC job contains an invalid status");
+        }
+        co_return status.value() == StorageJobStatus::Succeeded ? BlobGcReferenceGate::Allowed : BlobGcReferenceGate::Blocked;
+    }
+
     auto StorageJobRepository::ClaimReadyBatch(
         const std::string& instance_id,
         size_t limit,
@@ -174,8 +233,16 @@ namespace disk::jobs {
         uint64_t job_id,
         const std::string& instance_id
     ) const -> drogon::Task<bool> {
+        co_return co_await MarkSucceeded(m_db_client, job_id, instance_id);
+    }
+
+    auto StorageJobRepository::MarkSucceeded(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t job_id,
+        const std::string& instance_id
+    ) const -> drogon::Task<bool> {
         ValidateBoundedValue(instance_id, kMaxInstanceIdLength, "Storage job instance ID");
-        auto result = co_await m_db_client->execSqlCoro(
+        auto result = co_await client->execSqlCoro(
             "UPDATE storage_jobs SET " "  status = $1, locked_by = NULL, locked_until = NULL, last_error = NULL, " "  completed_at = NOW(), updated_at = NOW() " "WHERE id = $2 AND status = $3 AND locked_by = $4",
             ToStorageValue(StorageJobStatus::Succeeded),
             static_cast<int64_t>(job_id),

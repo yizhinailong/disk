@@ -5,6 +5,8 @@
  * @copyright Copyright (c) 2026
  */
 
+#include "services/TrashQuery.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -14,8 +16,6 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-
-#include "services/TrashQuery.hpp"
 
 namespace disk::trash {
     namespace {
@@ -113,12 +113,14 @@ namespace disk::trash {
             EXPECT_TRUE(Contains(service_source, "m_trash_query.FetchExpiredLifecycleBatchAfterId("));
             EXPECT_TRUE(Contains(service_source, "last_seen_id = batch_max_id;"));
             EXPECT_TRUE(Contains(service_source, "PermanentlyDeleteTrashItems(chunk, false)"));
-            EXPECT_TRUE(Contains(service_source, "CleanupVerifiedZeroRefBlobs("));
+            EXPECT_TRUE(Contains(service_source, "DecrementRefCountsAndEnqueueGc("));
+            EXPECT_FALSE(Contains(service_source, "CleanupVerifiedZeroRefBlobs("));
+            EXPECT_FALSE(Contains(service_source, "DeleteBlob("));
             EXPECT_FALSE(Contains(query_source, "PermanentlyDeleteTrashItems"));
             EXPECT_FALSE(Contains(query_source, "CleanupVerifiedZeroRefBlobs"));
             EXPECT_FALSE(Contains(query_source, "AdjustUsedStorage"));
             EXPECT_FALSE(Contains(query_source, "DecrementRefCounts"));
         }
 
-    } ///< namespace
-} ///< namespace disk::trash
+    } // namespace
+} // namespace disk::trash

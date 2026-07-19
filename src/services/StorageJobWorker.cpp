@@ -11,12 +11,14 @@
 #include <algorithm>
 #include <atomic>
 #include <expected>
+#include <filesystem>
 #include <memory>
 #include <stdexcept>
 #include <utility>
 
 #include <drogon/drogon.h>
 
+#include "storage/IBlobStore.hpp"
 #include "storage/UploadStagingStorage.hpp"
 #include "utils/LogHelper.hpp"
 
@@ -77,6 +79,48 @@ namespace disk::jobs {
             };
         }
 
+        struct BlobGcCandidate {
+            uint64_t content_id{ 0 };
+            std::filesystem::path storage_path;
+        };
+
+        [[nodiscard]] auto ParseBlobGcCandidate(const StorageJob& job)
+            -> std::expected<BlobGcCandidate, std::string> {
+            if (!job.payload.isObject()) {
+                return std::unexpected("blob_gc payload must be a JSON object");
+            }
+            if (!job.payload.isMember("content_id") || !job.payload["content_id"].isUInt64() ||
+                job.payload["content_id"].asUInt64() == 0) {
+                return std::unexpected("blob_gc payload requires a positive uint64 content_id");
+            }
+            if (!job.payload.isMember("storage_path") ||
+                !job.payload["storage_path"].isString() ||
+                job.payload["storage_path"].asString().empty()) {
+                return std::unexpected("blob_gc payload requires a non-empty storage_path");
+            }
+
+            const auto content_id = job.payload["content_id"].asUInt64();
+            if (job.aggregate_id != std::to_string(content_id)) {
+                return std::unexpected("blob_gc aggregate_id does not match content_id");
+            }
+
+            return BlobGcCandidate{
+                .content_id = content_id,
+                .storage_path = std::filesystem::path(job.payload["storage_path"].asString()),
+            };
+        }
+
+        auto RollbackQuietly(const std::shared_ptr<drogon::orm::Transaction>& transaction) -> void {
+            if (transaction == nullptr) {
+                return;
+            }
+            try {
+                transaction->rollback();
+            } catch (const std::exception& error) {
+                Logger::Warn() << "Blob GC transaction rollback failed: " << error.what();
+            }
+        }
+
         [[nodiscard]] auto MixRetrySeed(uint64_t value) noexcept -> uint64_t {
             value += 0x9e3779b97f4a7c15ULL;
             value = (value ^ (value >> 30U)) * 0xbf58476d1ce4e5b9ULL;
@@ -88,10 +132,12 @@ namespace disk::jobs {
     StorageJobWorker::StorageJobWorker(
         drogon::orm::DbClientPtr db_client,
         disk::storage::UploadStagingStorage* staging_storage,
+        disk::storage::IBlobStore* blob_store,
         std::string instance_id,
         StorageJobWorkerOptions options
     ) : m_db_client(std::move(db_client)),
         m_staging_storage(staging_storage),
+        m_blob_store(blob_store),
         m_instance_id(std::move(instance_id)),
         m_options(options) {
         if (m_instance_id.empty() || m_instance_id.size() > 128) {
@@ -136,32 +182,126 @@ namespace disk::jobs {
 
     auto StorageJobWorker::ExecuteJob(const StorageJob& job) const
         -> drogon::Task<JobExecutionResult> {
-        if (job.job_type != kStagingCleanupJobType) {
-            co_return PermanentFailure("Unsupported storage job type: " + job.job_type);
+        if (job.job_type == kStagingCleanupJobType) {
+            auto session = ParseStagingSession(job);
+            if (!session) {
+                co_return PermanentFailure(session.error());
+            }
+            if (m_staging_storage == nullptr) {
+                co_return RetryableFailure("Upload staging storage is not configured");
+            }
+
+            auto cleanup_result = co_await m_staging_storage->CleanupSession(session.value());
+            if (cleanup_result) {
+                co_return JobExecutionResult{ .succeeded = true };
+            }
+
+            const auto& error = cleanup_result.error();
+            const auto retryable =
+                error.code != ErrorCode::InvalidParameter &&
+                error.code != ErrorCode::ValidationFailed;
+            co_return JobExecutionResult{
+                .succeeded = false,
+                .retryable = retryable,
+                .error = error.message.empty() ? "staging_cleanup failed with code " + std::to_string(error.CodeInt()) : error.message,
+            };
+        }
+        if (job.job_type == kBlobGcJobType) {
+            co_return co_await ExecuteBlobGc(job);
         }
 
-        auto session = ParseStagingSession(job);
-        if (!session) {
-            co_return PermanentFailure(session.error());
+        co_return PermanentFailure("Unsupported storage job type: " + job.job_type);
+    }
+
+    auto StorageJobWorker::ExecuteBlobGc(const StorageJob& job) const
+        -> drogon::Task<JobExecutionResult> {
+        auto candidate = ParseBlobGcCandidate(job);
+        if (!candidate) {
+            co_return PermanentFailure(candidate.error());
         }
-        if (m_staging_storage == nullptr) {
-            co_return RetryableFailure("Upload staging storage is not configured");
+        if (m_db_client == nullptr) {
+            co_return RetryableFailure("Blob GC database is not configured");
+        }
+        if (m_blob_store == nullptr) {
+            co_return RetryableFailure("Blob store is not configured");
         }
 
-        auto cleanup_result = co_await m_staging_storage->CleanupSession(session.value());
-        if (cleanup_result) {
-            co_return JobExecutionResult{ .succeeded = true };
-        }
+        std::shared_ptr<drogon::orm::Transaction> transaction;
+        try {
+            transaction = co_await m_db_client->newTransactionCoro();
+            StorageJobRepository repository(m_db_client);
+            const auto complete_transaction = [&]() -> drogon::Task<JobExecutionResult> {
+                const auto persisted = co_await repository.MarkSucceeded(
+                    transaction,
+                    job.id,
+                    m_instance_id
+                );
+                if (!persisted) {
+                    RollbackQuietly(transaction);
+                    co_return RetryableFailure("blob_gc ownership changed before commit");
+                }
+                transaction.reset();
+                co_return JobExecutionResult{
+                    .succeeded = true,
+                    .outcome_persisted = true,
+                };
+            };
 
-        const auto& error = cleanup_result.error();
-        const auto retryable =
-            error.code != ErrorCode::InvalidParameter &&
-            error.code != ErrorCode::ValidationFailed;
-        co_return JobExecutionResult{
-            .succeeded = false,
-            .retryable = retryable,
-            .error = error.message.empty() ? "staging_cleanup failed with code " + std::to_string(error.CodeInt()) : error.message,
-        };
+            auto content = co_await transaction->execSqlCoro(
+                "SELECT content.storage_path, content.ref_count, " "  EXISTS (SELECT 1 FROM files WHERE content_id = content.id) AS has_file_ref, " "  EXISTS (SELECT 1 FROM trash WHERE content_id = content.id) AS has_trash_ref " "FROM file_contents AS content WHERE content.id = $1 FOR UPDATE OF content",
+                static_cast<int64_t>(candidate->content_id)
+            );
+            if (content.empty()) {
+                co_return co_await complete_transaction();
+            }
+
+            const auto persisted_path = content[0]["storage_path"].as<std::string>();
+            if (persisted_path != candidate->storage_path.string()) {
+                RollbackQuietly(transaction);
+                co_return PermanentFailure("blob_gc storage_path does not match file_contents");
+            }
+
+            const auto ref_count = content[0]["ref_count"].as<int32_t>();
+            if (ref_count > 0) {
+                co_return co_await complete_transaction();
+            }
+            if (ref_count < 0 || content[0]["has_file_ref"].as<bool>() ||
+                content[0]["has_trash_ref"].as<bool>()) {
+                RollbackQuietly(transaction);
+                co_return PermanentFailure("blob_gc found inconsistent content references");
+            }
+
+            auto delete_result = co_await m_blob_store->DeleteBlob(candidate->storage_path);
+            if (!delete_result) {
+                RollbackQuietly(transaction);
+                const auto& error = delete_result.error();
+                const auto retryable =
+                    error.code != ErrorCode::InvalidParameter &&
+                    error.code != ErrorCode::ValidationFailed;
+                co_return JobExecutionResult{
+                    .succeeded = false,
+                    .retryable = retryable,
+                    .error = error.message.empty() ? "blob_gc storage deletion failed" : error.message,
+                };
+            }
+
+            auto deleted = co_await transaction->execSqlCoro(
+                "DELETE FROM file_contents AS content " "WHERE content.id = $1 AND content.ref_count = 0 " "  AND NOT EXISTS (SELECT 1 FROM files WHERE content_id = content.id) " "  AND NOT EXISTS (SELECT 1 FROM trash WHERE content_id = content.id) " "RETURNING content.id",
+                static_cast<int64_t>(candidate->content_id)
+            );
+            if (deleted.size() != 1) {
+                RollbackQuietly(transaction);
+                co_return RetryableFailure("blob_gc content row changed before deletion");
+            }
+
+            co_return co_await complete_transaction();
+        } catch (const drogon::orm::DrogonDbException& error) {
+            RollbackQuietly(transaction);
+            co_return RetryableFailure(std::string("blob_gc database failure: ") + error.base().what());
+        } catch (const std::exception& error) {
+            RollbackQuietly(transaction);
+            co_return RetryableFailure(std::string("blob_gc handler failure: ") + error.what());
+        }
     }
 
     auto StorageJobWorker::ProcessClaimedJob(const StorageJob& job) const
@@ -235,6 +375,9 @@ namespace disk::jobs {
         heartbeat_state->active.store(false);
         if (loop != nullptr && heartbeat_timer != 0) {
             loop->invalidateTimer(heartbeat_timer);
+        }
+        if (execution.outcome_persisted) {
+            co_return PersistDisposition::Succeeded;
         }
         if (heartbeat_state->ownership_lost.load()) {
             co_return PersistDisposition::OwnershipLost;

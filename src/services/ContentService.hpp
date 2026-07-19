@@ -40,16 +40,10 @@ namespace disk::content {
         std::string mime_type;
     };
 
-    struct ZeroRefContent {
-        uint64_t id{ 0 };
-        std::string storage_path;
-    };
-
     /**
      * @brief 文件内容领域服务
      *
-     * 集中封装 file_contents 的查找、创建、引用计数更新与零引用验证。
-     * 物理 blob 删除仍由调用方在显式安全检查后执行。
+     * 集中封装 file_contents 的查找、创建、引用计数更新与 Blob GC 任务创建。
      */
     class ContentService {
     public:
@@ -77,7 +71,8 @@ namespace disk::content {
         [[nodiscard]]
         auto AcquireReference(
             const drogon::orm::DbClientPtr& client,
-            const NewContent& content
+            const NewContent& content,
+            std::optional<uint64_t> expected_existing_content_id = std::nullopt
         ) const -> drogon::Task<Result<ContentMetadata>>;
 
         [[nodiscard]]
@@ -102,18 +97,18 @@ namespace disk::content {
         ) const -> drogon::Task<Result<std::unordered_set<uint64_t>>>;
 
         [[nodiscard]]
-        auto DecrementRefCounts(
+        auto DecrementRefCountsAndEnqueueGc(
             const drogon::orm::DbClientPtr& client,
             const std::unordered_map<uint64_t, uint64_t>& decrements
-        ) const -> drogon::Task<std::vector<ZeroRefContent>>;
-
-        [[nodiscard]]
-        auto VerifyZeroRefContents(
-            const drogon::orm::DbClientPtr& client,
-            const std::vector<uint64_t>& content_ids
-        ) const -> drogon::Task<std::vector<ZeroRefContent>>;
+        ) const -> drogon::Task<Result<size_t>>;
 
     private:
+        [[nodiscard]]
+        auto CheckReferenceGate(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t content_id
+        ) const -> drogon::Task<Result<void>>;
+
         drogon::orm::DbClientPtr m_db_client;
     };
 

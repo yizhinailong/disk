@@ -76,6 +76,11 @@ namespace disk::jobs {
         std::string locked_by;
     };
 
+    enum class BlobGcReferenceGate {
+        Allowed,
+        Blocked,
+    };
+
     class StorageJobRepository {
     public:
         explicit StorageJobRepository(drogon::orm::DbClientPtr db_client);
@@ -88,6 +93,18 @@ namespace disk::jobs {
             const drogon::orm::DbClientPtr& client,
             const NewStorageJob& job
         ) const -> drogon::Task<bool>;
+
+        [[nodiscard]]
+        auto EnqueueOrRearmSucceeded(
+            const drogon::orm::DbClientPtr& client,
+            const NewStorageJob& job
+        ) const -> drogon::Task<bool>;
+
+        [[nodiscard]]
+        auto CheckBlobGcReferenceGate(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t content_id
+        ) const -> drogon::Task<BlobGcReferenceGate>;
 
         [[nodiscard]]
         auto ClaimReadyBatch(
@@ -106,6 +123,13 @@ namespace disk::jobs {
         [[nodiscard]]
         auto MarkSucceeded(uint64_t job_id, const std::string& instance_id) const
             -> drogon::Task<bool>;
+
+        [[nodiscard]]
+        auto MarkSucceeded(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t job_id,
+            const std::string& instance_id
+        ) const -> drogon::Task<bool>;
 
         [[nodiscard]]
         auto MarkFailed(

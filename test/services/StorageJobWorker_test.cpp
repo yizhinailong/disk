@@ -74,9 +74,26 @@ namespace disk::jobs {
             };
         }
 
+        [[nodiscard]] auto MakeBlobGcJob() -> StorageJob {
+            Json::Value payload(Json::objectValue);
+            payload["content_id"] = Json::UInt64(91);
+            payload["storage_path"] = "blobs/sha256/aa/blob";
+            return StorageJob{
+                .id = 43,
+                .job_type = std::string(kBlobGcJobType),
+                .aggregate_id = "91",
+                .dedupe_key = "blob-gc:91",
+                .payload = std::move(payload),
+                .status = StorageJobStatus::Running,
+                .attempts = 1,
+                .max_attempts = 8,
+                .locked_by = "worker-1",
+            };
+        }
+
         TEST(StorageJobWorkerHandlerTest, ExecutesPersistedStagingSessionExactly) {
             RecordingStagingStorage storage;
-            StorageJobWorker worker(nullptr, &storage, "worker-1");
+            StorageJobWorker worker(nullptr, &storage, nullptr, "worker-1");
 
             auto result = drogon::sync_wait(worker.ExecuteJob(MakeCleanupJob()));
 
@@ -89,7 +106,7 @@ namespace disk::jobs {
 
         TEST(StorageJobWorkerHandlerTest, RejectsMismatchedAggregateWithoutDeleting) {
             RecordingStagingStorage storage;
-            StorageJobWorker worker(nullptr, &storage, "worker-1");
+            StorageJobWorker worker(nullptr, &storage, nullptr, "worker-1");
             auto job = MakeCleanupJob();
             job.aggregate_id = "different-upload";
 
@@ -102,7 +119,7 @@ namespace disk::jobs {
 
         TEST(StorageJobWorkerHandlerTest, ClassifiesStorageErrors) {
             RecordingStagingStorage storage;
-            StorageJobWorker worker(nullptr, &storage, "worker-1");
+            StorageJobWorker worker(nullptr, &storage, nullptr, "worker-1");
             storage.cleanup_error = ErrorInfo(ErrorCode::InternalError, "temporary outage");
 
             auto retryable = drogon::sync_wait(worker.ExecuteJob(MakeCleanupJob()));
@@ -117,7 +134,7 @@ namespace disk::jobs {
 
         TEST(StorageJobWorkerHandlerTest, UnknownTypesArePermanentFailures) {
             RecordingStagingStorage storage;
-            StorageJobWorker worker(nullptr, &storage, "worker-1");
+            StorageJobWorker worker(nullptr, &storage, nullptr, "worker-1");
             auto job = MakeCleanupJob();
             job.job_type = "future_job";
 
@@ -126,6 +143,27 @@ namespace disk::jobs {
             EXPECT_FALSE(result.succeeded);
             EXPECT_FALSE(result.retryable);
             EXPECT_TRUE(storage.cleaned_sessions.empty());
+        }
+
+        TEST(StorageJobWorkerHandlerTest, RejectsMalformedBlobGcBeforeStorageAccess) {
+            StorageJobWorker worker(nullptr, nullptr, nullptr, "worker-1");
+            auto job = MakeBlobGcJob();
+            job.aggregate_id = "92";
+
+            auto result = drogon::sync_wait(worker.ExecuteJob(job));
+
+            EXPECT_FALSE(result.succeeded);
+            EXPECT_FALSE(result.retryable);
+        }
+
+        TEST(StorageJobWorkerHandlerTest, RetriesValidBlobGcWhenDependencyIsUnavailable) {
+            StorageJobWorker worker(nullptr, nullptr, nullptr, "worker-1");
+
+            auto result = drogon::sync_wait(worker.ExecuteJob(MakeBlobGcJob()));
+
+            EXPECT_FALSE(result.succeeded);
+            EXPECT_TRUE(result.retryable);
+            EXPECT_EQ(result.error, "Blob GC database is not configured");
         }
 
         TEST(StorageJobWorkerRetryTest, AppliesBoundedStableJitter) {

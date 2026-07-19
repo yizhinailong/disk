@@ -28,13 +28,6 @@ namespace disk::content {
             EXPECT_EQ(content.hash_sha256.size(), 64U);
         }
 
-        TEST(ContentServiceContractTest, ZeroRefContentCarriesVerifiedDeletionCandidate) {
-            ZeroRefContent candidate{ .id = 7, .storage_path = "build/uploaded/aa/blob.bin" };
-
-            EXPECT_EQ(candidate.id, 7U);
-            EXPECT_EQ(candidate.storage_path, "build/uploaded/aa/blob.bin");
-        }
-
         TEST(ContentServiceContractTest, OwnsFileContentsLifecycleBoundary) {
             /// file_contents lookup, creation, ref-count mutation, and zero-ref verification are
             /// intentionally exposed together so callers keep DB changes transaction-aware.
@@ -51,7 +44,8 @@ namespace disk::content {
             ));
             using AcquireReferenceResult = decltype(std::declval<ContentService&>().AcquireReference(
                 std::declval<const drogon::orm::DbClientPtr&>(),
-                std::declval<const NewContent&>()
+                std::declval<const NewContent&>(),
+                std::declval<std::optional<uint64_t>>()
             ));
             using IncrementResult = decltype(std::declval<ContentService&>().IncrementRefCount(
                 std::declval<const drogon::orm::DbClientPtr&>(),
@@ -68,13 +62,9 @@ namespace disk::content {
                 std::declval<const std::unordered_map<uint64_t, uint64_t>&>(),
                 std::declval<const std::unordered_set<uint64_t>&>()
             ));
-            using DecrementResult = decltype(std::declval<ContentService&>().DecrementRefCounts(
+            using DecrementResult = decltype(std::declval<ContentService&>().DecrementRefCountsAndEnqueueGc(
                 std::declval<const drogon::orm::DbClientPtr&>(),
                 std::declval<const std::unordered_map<uint64_t, uint64_t>&>()
-            ));
-            using VerifyResult = decltype(std::declval<ContentService&>().VerifyZeroRefContents(
-                std::declval<const drogon::orm::DbClientPtr&>(),
-                std::declval<const std::vector<uint64_t>&>()
             ));
 
             EXPECT_TRUE((std::is_same_v<FindDefaultResult, drogon::Task<std::optional<ContentMetadata>>>));
@@ -84,8 +74,7 @@ namespace disk::content {
             EXPECT_TRUE((std::is_same_v<IncrementResult, drogon::Task<Result<void>>>));
             EXPECT_TRUE((std::is_same_v<BatchIncrementResult, drogon::Task<std::unordered_set<uint64_t>>>));
             EXPECT_TRUE((std::is_same_v<CheckedBatchIncrementResult, drogon::Task<Result<std::unordered_set<uint64_t>>>>));
-            EXPECT_TRUE((std::is_same_v<DecrementResult, drogon::Task<std::vector<ZeroRefContent>>>));
-            EXPECT_TRUE((std::is_same_v<VerifyResult, drogon::Task<std::vector<ZeroRefContent>>>));
+            EXPECT_TRUE((std::is_same_v<DecrementResult, drogon::Task<Result<size_t>>>));
         }
 
     } // namespace

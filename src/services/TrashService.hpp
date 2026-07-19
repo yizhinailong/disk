@@ -183,12 +183,6 @@ namespace disk::trash {
         struct PermanentDeleteResult {
             int deleted_count{ 0 };
             uint64_t freed_space{ 0 };
-            std::vector<uint64_t> zero_ref_content_ids;
-        };
-
-        struct BlobCleanupStats {
-            int verified_count{ 0 };
-            int deleted_count{ 0 };
         };
 
         struct ShareCleanupStats {
@@ -212,12 +206,6 @@ namespace disk::trash {
             const std::vector<TrashLifecycleRecord>& trash_items,
             bool require_valid_file_content
         ) -> drogon::Task<PermanentDeleteResult>;
-
-        [[nodiscard]]
-        auto CleanupVerifiedZeroRefBlobs(
-            const std::vector<uint64_t>& content_ids,
-            const std::string& log_context
-        ) -> drogon::Task<BlobCleanupStats>;
 
         /**
          * @brief 生成唯一文件名（用于冲突自动重命名）

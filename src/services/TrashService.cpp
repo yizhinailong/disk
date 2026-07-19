@@ -11,7 +11,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <filesystem>
 #include <optional>
 #include <unordered_map>
 #include <unordered_set>
@@ -20,7 +19,6 @@
 #include <drogon/orm/Criteria.h>
 #include <json/writer.h>
 
-#include "models/FileContents.hpp"
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
 #include "models/Trash.hpp"
@@ -29,8 +27,6 @@
 #include "services/QuotaService.hpp"
 #include "services/TransactionRunner.hpp"
 #include "services/TrashContentIdResolver.hpp"
-#include "storage/BlobStoreMgr.hpp"
-#include "storage/IBlobStore.hpp"
 #include "utils/BatchUtils.hpp"
 #include "utils/RedisKeyPrefix.hpp"
 
@@ -41,14 +37,10 @@ namespace disk::trash {
     using drogon::orm::CompareOperator;
     using drogon::orm::CoroMapper;
     using drogon::orm::Criteria;
-    using drogon_model::disk::FileContents;
     using drogon_model::disk::Files;
     using drogon_model::disk::Folders;
     using drogon_model::disk::Trash;
     using drogon_model::disk::Users;
-
-
-    constexpr size_t MAX_PARALLEL_DELETE_PATHS = 4;
 
     struct SnapshotFolder {
         uint64_t id{ 0 };
@@ -164,23 +156,6 @@ namespace disk::trash {
             content_ids.push_back(file.content_id);
         }
         return content_ids;
-    }
-
-    [[nodiscard]]
-    auto ParallelDeletePaths(
-        disk::storage::IBlobStore* blob_store,
-        const std::vector<std::filesystem::path>& paths,
-        size_t max_concurrent = MAX_PARALLEL_DELETE_PATHS
-    ) -> drogon::Task<std::vector<Result<void>>> {
-        std::vector<Result<void>> results;
-        results.reserve(paths.size());
-        (void)max_concurrent;
-
-        for (const auto& path : paths) {
-            results.push_back(co_await blob_store->DeleteBlob(path));
-        }
-
-        co_return results;
     }
 
     TrashService::TrashService(drogon::orm::DbClientPtr db_client)
@@ -490,9 +465,6 @@ namespace disk::trash {
 
                 int chunks_succeeded = 0;
                 int chunks_failed = 0;
-                int blobs_verified = 0;
-                int blobs_deleted = 0;
-
                 auto chunks = BatchUtils::Chunk(trash_items, DEFAULT_BATCH_CHUNK_SIZE);
                 for (const auto& chunk : chunks) {
                     if (chunk.empty()) {
@@ -503,15 +475,6 @@ namespace disk::trash {
                         auto delete_result = co_await PermanentlyDeleteTrashItems(chunk, false);
                         deleted_count += delete_result.deleted_count;
                         chunks_succeeded++;
-
-                        if (!delete_result.zero_ref_content_ids.empty()) {
-                            auto blob_stats = co_await CleanupVerifiedZeroRefBlobs(
-                                delete_result.zero_ref_content_ids,
-                                "expired-trash"
-                            );
-                            blobs_verified += blob_stats.verified_count;
-                            blobs_deleted += blob_stats.deleted_count;
-                        }
                     } catch (const std::exception& e) {
                         Logger::Error() << "Failed to cleanup expired trash chunk atomically: " << e.what();
                         chunks_failed++;
@@ -525,8 +488,6 @@ namespace disk::trash {
                                << " rows_deleted_so_far=" << deleted_count
                                << " chunks_succeeded=" << chunks_succeeded
                                << " chunks_failed=" << chunks_failed
-                               << " blobs_verified=" << blobs_verified
-                               << " blobs_deleted=" << blobs_deleted
                                << " batch_duration_ms="
                                << std::chrono::duration_cast<std::chrono::milliseconds>(
                                       std::chrono::steady_clock::now() - batch_start
@@ -789,11 +750,6 @@ namespace disk::trash {
 
             try {
                 auto delete_result = co_await PermanentlyDeleteTrashItems({ trash_item }, true);
-                auto blob_stats = co_await CleanupVerifiedZeroRefBlobs(
-                    delete_result.zero_ref_content_ids,
-                    "manual-trash-delete"
-                );
-                (void)blob_stats;
 
                 result.status = "success";
                 result.freed_space = delete_result.freed_space;
@@ -842,12 +798,6 @@ namespace disk::trash {
                     auto delete_result = co_await PermanentlyDeleteTrashItems(chunk, false);
                     response.deleted_count += delete_result.deleted_count;
                     response.freed_space += delete_result.freed_space;
-
-                    auto blob_stats = co_await CleanupVerifiedZeroRefBlobs(
-                        delete_result.zero_ref_content_ids,
-                        "empty-trash"
-                    );
-                    (void)blob_stats;
                 } catch (const std::exception& e) {
                     Logger::Error() << "Failed to process DeleteAll chunk atomically: user_id="
                                     << user_id << " - " << e.what();
@@ -1300,11 +1250,6 @@ namespace disk::trash {
 
         try {
             auto delete_result = co_await PermanentlyDeleteTrashItems({ trash_item }, true);
-            auto blob_stats = co_await CleanupVerifiedZeroRefBlobs(
-                delete_result.zero_ref_content_ids,
-                "manual-file-delete"
-            );
-            (void)blob_stats;
 
             result.status = "success";
             result.freed_space = delete_result.freed_space;
@@ -1371,11 +1316,6 @@ namespace disk::trash {
 
         try {
             auto delete_result = co_await PermanentlyDeleteTrashItems({ trash_item }, true);
-            auto blob_stats = co_await CleanupVerifiedZeroRefBlobs(
-                delete_result.zero_ref_content_ids,
-                "manual-folder-delete"
-            );
-            (void)blob_stats;
 
             auto snapshot_content_ids = ExtractSnapshotContentIds(trash_item.item_data);
             result.status = "success";
@@ -1456,13 +1396,12 @@ namespace disk::trash {
 
             if (!content_ref_decrements.empty()) {
                 disk::content::ContentService content_service(m_db_client);
-                auto zero_ref_contents = co_await content_service.DecrementRefCounts(
+                auto decrement_result = co_await content_service.DecrementRefCountsAndEnqueueGc(
                     transaction,
                     content_ref_decrements
                 );
-                result.zero_ref_content_ids.reserve(zero_ref_contents.size());
-                for (const auto& content : zero_ref_contents) {
-                    result.zero_ref_content_ids.push_back(content.id);
+                if (!decrement_result) {
+                    throw std::runtime_error(decrement_result.error().message);
                 }
             }
 
@@ -1494,67 +1433,6 @@ namespace disk::trash {
             }
             throw;
         }
-    }
-
-    auto TrashService::CleanupVerifiedZeroRefBlobs(
-        const std::vector<uint64_t>& content_ids,
-        const std::string& log_context
-    ) -> drogon::Task<BlobCleanupStats> {
-        BlobCleanupStats stats;
-        if (content_ids.empty()) {
-            co_return stats;
-        }
-
-        std::vector<uint64_t> unique_content_ids = content_ids;
-        std::sort(unique_content_ids.begin(), unique_content_ids.end());
-        unique_content_ids.erase(
-            std::unique(unique_content_ids.begin(), unique_content_ids.end()),
-            unique_content_ids.end()
-        );
-
-        disk::content::ContentService content_service(m_db_client);
-        auto verified_contents = co_await content_service.VerifyZeroRefContents(
-            m_db_client,
-            unique_content_ids
-        );
-        stats.verified_count = static_cast<int>(verified_contents.size());
-
-        if (verified_contents.size() < unique_content_ids.size()) {
-            Logger::Info() << "[" << log_context << "] blob safety check: candidates="
-                           << unique_content_ids.size()
-                           << " verified=" << verified_contents.size()
-                           << " reclaimed_by_concurrent="
-                           << (unique_content_ids.size() - verified_contents.size());
-        }
-
-        auto* blob_store = disk::storage::BlobStoreMgr::GetBlobStore();
-        if (blob_store == nullptr) {
-            Logger::Warn() << "Blob store manager is not initialized, skip " << log_context
-                           << " blob cleanup: blob_count=" << verified_contents.size();
-            co_return stats;
-        }
-
-        std::vector<std::filesystem::path> paths_to_delete;
-        paths_to_delete.reserve(verified_contents.size());
-        for (const auto& content : verified_contents) {
-            paths_to_delete.emplace_back(content.storage_path);
-        }
-
-        auto delete_results = co_await ParallelDeletePaths(blob_store, paths_to_delete, MAX_PARALLEL_DELETE_PATHS);
-        for (size_t i = 0; i < delete_results.size(); ++i) {
-            if (!delete_results[i].has_value()) {
-                Logger::Warn() << "Failed to cleanup " << log_context << " blob: storage_path="
-                               << paths_to_delete[i] << ", error_code="
-                               << static_cast<uint32_t>(delete_results[i].error().code)
-                               << ", error_message=" << delete_results[i].error().message;
-            } else {
-                stats.deleted_count++;
-                Logger::Info() << "Blob cleanup completed for " << log_context
-                               << ": storage_path=" << paths_to_delete[i];
-            }
-        }
-
-        co_return stats;
     }
 
     auto TrashService::GenerateUniqueFilename(

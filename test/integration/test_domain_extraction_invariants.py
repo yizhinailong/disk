@@ -7,9 +7,10 @@
 """
 Backend domain extraction characterization tests.
 
-These tests assert DB and filesystem invariants that the ContentService,
-QuotaService, UploadLifecycleService, and TrashService extractions must
-preserve. They intentionally verify side effects, not only API responses.
+These tests assert DB, persistent-job, and filesystem invariants that the
+ContentService, QuotaService, UploadLifecycleService, and TrashService
+extractions must preserve. They intentionally verify side effects, not only
+API responses.
 """
 
 from __future__ import annotations
@@ -173,6 +174,37 @@ def content_row(content_id: int) -> dict[str, object]:
     return row
 
 
+def storage_job(dedupe_key: str) -> dict[str, object]:
+    row = query_one("SELECT * FROM storage_jobs WHERE dedupe_key = %s", (dedupe_key,))
+    if row is None:
+        log_fail(f"storage job exists: dedupe_key={dedupe_key}")
+        print_summary()
+    return row
+
+
+def job_payload(job: dict[str, object]) -> dict[str, object]:
+    payload = job["payload"]
+    if isinstance(payload, str):
+        return json.loads(payload)
+    if not isinstance(payload, dict):
+        log_fail(f"storage job payload is an object: job_id={job['id']}")
+        print_summary()
+    return payload
+
+
+def assert_staging_cleanup_persisted(upload_id: str, context: str) -> dict[str, object]:
+    job = storage_job(f"staging-cleanup:{upload_id}")
+    payload = job_payload(job)
+    assert_equal(f"{context} cleanup job type", job["job_type"], "staging_cleanup")
+    assert_equal(f"{context} cleanup aggregate", job["aggregate_id"], upload_id)
+    assert_equal(f"{context} cleanup payload upload_id", payload["upload_id"], upload_id)
+    if int(job["status"]) not in (0, 1, 2, 3, 4):
+        log_fail(f"{context} cleanup job has valid status")
+        print_summary()
+    log_pass(f"{context} cleanup job is durable")
+    return job
+
+
 def create_folder(name: str, parent_id: int = 0) -> int:
     resp = fetch(
         "/api/folder/create",
@@ -270,8 +302,12 @@ def test_successful_upload_invariants() -> None:
     content = content_row(int(uploaded_file["content_id"]))
     assert_equal("file_contents md5 matches payload", content["hash_md5"], file_hash)
     assert_equal("new content ref_count starts at 1", int(content["ref_count"]), 1)
-    assert_path_absent("temp upload directory cleaned after success", upload_temp_dir(upload_id))
-    assert_path_absent("assembled temp artifact cleaned after success", upload_temp_dir(upload_id).parent / f"{upload_id}.tmp")
+    cleanup_job = assert_staging_cleanup_persisted(upload_id, "completed upload")
+    if int(cleanup_job["status"]) == 3:
+        assert_path_absent("temp upload directory cleaned after worker success", upload_temp_dir(upload_id))
+        assert_path_absent("assembled temp artifact cleaned after worker success", upload_temp_dir(upload_id).parent / f"{upload_id}.tmp")
+    else:
+        log_pass("completed upload cleanup may remain until Worker success")
     assert_path_exists("final blob exists after success", local_blob_path(str(content["storage_path"])))
 
 
@@ -305,7 +341,11 @@ def test_cancel_upload_invariants() -> None:
     assert_numeric_delta("cancel releases reserved storage", quota_after_init["storage_reserved"], quota_after_cancel["storage_reserved"], -len(payload))
     assert_equal("cancel preserves used storage", quota_after_cancel["storage_used"], quota_before["storage_used"])
     assert_db_row_absent("cancel creates no file row", "SELECT id FROM files WHERE user_id = %s AND name = %s", (USER_ID, filename))
-    assert_path_absent("temp upload directory cleaned after cancel", upload_temp_dir(upload_id))
+    cleanup_job = assert_staging_cleanup_persisted(upload_id, "cancelled upload")
+    if int(cleanup_job["status"]) == 3:
+        assert_path_absent("temp upload directory cleaned after cancel worker success", upload_temp_dir(upload_id))
+    else:
+        log_pass("cancelled upload cleanup may remain until Worker success")
     assert_path_absent("final blob absent after cancel", final_blob_path(sha256_bytes(payload)))
 
 
@@ -435,10 +475,23 @@ def test_trash_permanent_delete_invariants() -> None:
 
     permanent_delete_trash(int(trash["id"]))
     quota_after_permanent_delete = user_quota()
-    content_after_permanent_delete = content_row(content_id)
     assert_numeric_delta("permanent delete releases used storage", quota_after_soft_delete["storage_used"], quota_after_permanent_delete["storage_used"], -len(payload))
-    assert_equal("permanent delete decrements ref_count to zero", int(content_after_permanent_delete["ref_count"]), 0)
-    assert_path_absent("zero-ref blob deleted after permanent delete", blob_path)
+    gc_job = storage_job(f"blob-gc:{content_id}")
+    gc_payload = job_payload(gc_job)
+    assert_equal("permanent delete persists Blob GC type", gc_job["job_type"], "blob_gc")
+    assert_equal("permanent delete persists Blob GC aggregate", gc_job["aggregate_id"], str(content_id))
+    assert_equal("Blob GC payload content_id", int(gc_payload["content_id"]), content_id)
+    assert_equal("Blob GC payload storage_path", gc_payload["storage_path"], str(content_before_delete["storage_path"]))
+    content_after_permanent_delete = query_one("SELECT * FROM file_contents WHERE id = %s", (content_id,))
+    if int(gc_job["status"]) == 3:
+        assert_equal("successful Blob GC removes content row", content_after_permanent_delete, None)
+        assert_path_absent("successful Blob GC removes zero-ref blob", blob_path)
+    else:
+        if content_after_permanent_delete is None:
+            log_fail("unfinished Blob GC retains content metadata")
+            print_summary()
+        assert_equal("permanent delete decrements ref_count to zero", int(content_after_permanent_delete["ref_count"]), 0)
+        log_pass("zero-ref Blob remains recoverable until Worker success")
     assert_db_row_absent("trash row removed after permanent delete", "SELECT id FROM trash WHERE id = %s", (int(trash["id"]),))
 
 
@@ -510,18 +563,19 @@ def test_content_boundary_source_invariant() -> None:
 
     trash_source = project_root / "src" / "services" / "TrashService.cpp"
     trash_text = trash_source.read_text(encoding="utf-8")
-    cleanup_start = trash_text.find("auto TrashService::CleanupVerifiedZeroRefBlobs")
-    verify_index = trash_text.find("VerifyZeroRefContents", cleanup_start)
-    storage_path_index = trash_text.find("content.storage_path", cleanup_start)
-    delete_index = trash_text.find("ParallelDeletePaths", cleanup_start)
-    if cleanup_start == -1 or verify_index == -1 or storage_path_index == -1 or delete_index == -1:
-        log_fail("Trash blob cleanup no longer exposes explicit zero-ref verification and deletion steps")
+    if "DecrementRefCountsAndEnqueueGc(" not in trash_text:
+        log_fail("Trash permanent deletion no longer persists Blob GC with ref-count decrement")
         print_summary()
-    if not (cleanup_start < verify_index < storage_path_index < delete_index):
-        log_fail("Trash blob cleanup must verify zero refs before collecting storage paths and deleting blobs")
+    if "DeleteBlob(" in trash_text or "CleanupVerifiedZeroRefBlobs" in trash_text:
+        log_fail("Trash request paths must not delete final Blobs directly")
         print_summary()
 
-    log_pass("Content lifecycle SQL and zero-ref blob deletion checks remain centralized")
+    content_text = content_service_source.read_text(encoding="utf-8")
+    if "EnqueueOrRearmSucceeded(" not in content_text or '"blob-gc:" + aggregate_id' not in content_text:
+        log_fail("Content boundary no longer persists stable zero-ref Blob GC tasks")
+        print_summary()
+
+    log_pass("Content lifecycle SQL and persistent zero-ref Blob GC remain centralized")
 
 
 def main() -> None:
