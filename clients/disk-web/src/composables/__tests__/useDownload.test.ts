@@ -312,7 +312,7 @@ describe('useDownload', () => {
         createWritable: async () => ({ write, close, abort }),
       }))
       const originalPicker = (window as typeof window & { showSaveFilePicker?: unknown }).showSaveFilePicker
-      ;(window as typeof window & { showSaveFilePicker?: unknown }).showSaveFilePicker = showSaveFilePicker
+      Object.defineProperty(window, 'showSaveFilePicker', { value: showSaveFilePicker, configurable: true })
 
       const originalFetch = globalThis.fetch
       globalThis.fetch = vi.fn().mockResolvedValue({
@@ -335,14 +335,14 @@ describe('useDownload', () => {
       expect(progress).toHaveBeenLastCalledWith(6, 6, 100)
 
       globalThis.fetch = originalFetch
-      ;(window as typeof window & { showSaveFilePicker?: unknown }).showSaveFilePicker = originalPicker
+      Object.defineProperty(window, 'showSaveFilePicker', { value: originalPicker, configurable: true })
     })
 
     it('falls back to Blob download and surfaces progress when streaming save is unavailable', async () => {
       vi.mocked(fileApi.getDownloadInfo).mockResolvedValue(mockDownloadInfo({ file_size: 4 }))
 
       const originalPicker = (window as typeof window & { showSaveFilePicker?: unknown }).showSaveFilePicker
-      ;(window as typeof window & { showSaveFilePicker?: unknown }).showSaveFilePicker = undefined
+      Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true })
 
       const originalFetch = globalThis.fetch
       globalThis.fetch = vi.fn().mockResolvedValue({
@@ -362,7 +362,7 @@ describe('useDownload', () => {
       expect(progress).toHaveBeenLastCalledWith(4, 4, 100)
 
       globalThis.fetch = originalFetch
-      ;(window as typeof window & { showSaveFilePicker?: unknown }).showSaveFilePicker = originalPicker
+      Object.defineProperty(window, 'showSaveFilePicker', { value: originalPicker, configurable: true })
     })
 
     it('throws abort errors from the streaming save path as terminal interruption feedback', async () => {
@@ -374,9 +374,9 @@ describe('useDownload', () => {
       })
       const abort = vi.fn(async () => undefined)
       const originalPicker = (window as typeof window & { showSaveFilePicker?: unknown }).showSaveFilePicker
-      ;(window as typeof window & { showSaveFilePicker?: unknown }).showSaveFilePicker = vi.fn(async () => ({
+      Object.defineProperty(window, 'showSaveFilePicker', { value: vi.fn(async () => ({
         createWritable: async () => ({ write, close: vi.fn(async () => undefined), abort }),
-      }))
+      })), configurable: true })
 
       const originalFetch = globalThis.fetch
       globalThis.fetch = vi.fn().mockResolvedValue({
@@ -391,7 +391,7 @@ describe('useDownload', () => {
       expect(abort).toHaveBeenCalled()
 
       globalThis.fetch = originalFetch
-      ;(window as typeof window & { showSaveFilePicker?: unknown }).showSaveFilePicker = originalPicker
+      Object.defineProperty(window, 'showSaveFilePicker', { value: originalPicker, configurable: true })
     })
   })
 

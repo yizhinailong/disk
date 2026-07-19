@@ -1,13 +1,22 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import type { MountingOptions } from '@vue/test-utils'
+import type { ComponentMountingOptions } from '@vue/test-utils'
 import PageState from '../PageState.vue'
 
 const ElStub = (name: string) => ({
   template: `<div class="${name}"><slot /></div>`,
 })
 
-function mountPageState(props: Record<string, unknown>, options: MountingOptions<Record<string, unknown>> = {}) {
+type PageStateProps = {
+  state: 'loading' | 'empty' | 'error' | 'content'
+  emptyText?: string
+  errorText?: string
+}
+
+function mountPageState(
+  props: PageStateProps,
+  options: Omit<ComponentMountingOptions<typeof PageState>, 'props'> = {},
+) {
   return mount(PageState, {
     props,
     global: {

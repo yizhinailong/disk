@@ -9,6 +9,8 @@ import type {
   SearchResultItem,
   Pagination,
   SearchQuery,
+  CreateFolderResponse,
+  RenameResponse,
 } from '@/types';
 
 export const useDriveStore = defineStore('drive', () => {
@@ -167,8 +169,88 @@ export const useDriveStore = defineStore('drive', () => {
     selectedIds.value = new Set();
   }
 
+  function setSelection(ids: readonly number[]): void {
+    selectedIds.value = new Set(ids);
+  }
+
+  function updatePaginationTotal(delta: number): void {
+    if (!pagination.value) return;
+    const total = Math.max(0, pagination.value.total + delta);
+    pagination.value = {
+      ...pagination.value,
+      total,
+      total_pages: pagination.value.page_size > 0
+        ? Math.ceil(total / pagination.value.page_size)
+        : 0,
+    };
+  }
+
+  function applyCreatedFolder(folder: CreateFolderResponse): void {
+    const index = files.value.findIndex((item) => item.id === folder.id);
+    const item: FileItem = {
+      id: folder.id,
+      name: folder.name,
+      type: 'folder',
+      item_count: 0,
+      created_at: folder.created_at,
+      updated_at: folder.created_at,
+    };
+    if (index >= 0) {
+      files.value[index] = item;
+      return;
+    }
+    files.value = [...files.value, item];
+    updatePaginationTotal(1);
+  }
+
+  function applyItemRename(result: RenameResponse): void {
+    files.value = files.value.map((item) => item.id === result.id
+      ? { ...item, name: result.name, updated_at: result.updated_at }
+      : item);
+  }
+
+  function applyItemsRemoved(ids: readonly number[]): void {
+    const removedIds = new Set(ids);
+    const removedCount = files.value.filter((item) => removedIds.has(item.id)).length;
+    files.value = files.value.filter((item) => !removedIds.has(item.id));
+    selectedIds.value = new Set([...selectedIds.value].filter((id) => !removedIds.has(id)));
+    updatePaginationTotal(-removedCount);
+  }
+
+  function relocateFolderNodes(
+    folderIds: readonly number[],
+    targetFolderId: number,
+    fallbackNodes: readonly FolderTreeNode[] = [],
+  ): FolderTreeNode[] {
+    if (!folderTree.value || folderIds.length === 0) return [...fallbackNodes];
+
+    const movedIds = new Set(folderIds);
+    const detachedNodes: FolderTreeNode[] = [];
+    const detach = (nodes: readonly FolderTreeNode[]): FolderTreeNode[] => nodes.flatMap((node) => {
+      if (movedIds.has(node.id)) {
+        detachedNodes.push(node);
+        return [];
+      }
+      return [{ ...node, children: detach(node.children) }];
+    });
+
+    const detachedRoot: FolderTreeNode = {
+      ...folderTree.value,
+      children: detach(folderTree.value.children),
+    };
+    const nodesToInsert = detachedNodes.length > 0 ? detachedNodes : [...fallbackNodes];
+    const insert = (node: FolderTreeNode): FolderTreeNode => {
+      const children = node.children.map(insert);
+      return node.id === targetFolderId
+        ? { ...node, children: [...children, ...nodesToInsert] }
+        : { ...node, children };
+    };
+
+    folderTree.value = insert(detachedRoot);
+    return nodesToInsert;
+  }
+
   async function refreshCurrentView(): Promise<void> {
-    invalidateFolderTree();
     await Promise.all([
       fetchFiles(pagination.value?.page ?? 1),
       fetchBreadcrumb(),
@@ -177,11 +259,23 @@ export const useDriveStore = defineStore('drive', () => {
   }
 
   async function refreshNavigationMetadata(): Promise<void> {
-    await Promise.all([fetchBreadcrumb(), fetchFolderTree()]);
+    await Promise.all([
+      fetchBreadcrumb(),
+      refreshFolderTree().catch(() => undefined),
+    ]);
+  }
+
+  async function refreshAfterFolderMove(
+    folderIds: readonly number[],
+    targetFolderId: number,
+  ): Promise<void> {
+    const movedNodes = relocateFolderNodes(folderIds, targetFolderId);
+    await refreshNavigationMetadata();
+    relocateFolderNodes(folderIds, targetFolderId, movedNodes);
   }
 
   async function refreshHierarchyView(): Promise<void> {
-    await Promise.all([refreshCurrentView(), fetchBreadcrumb(), fetchFolderTree()]);
+    await refreshCurrentView();
   }
 
   return {
@@ -221,8 +315,13 @@ export const useDriveStore = defineStore('drive', () => {
     toggleSelect,
     selectAll,
     clearSelection,
+    setSelection,
+    applyCreatedFolder,
+    applyItemRename,
+    applyItemsRemoved,
     refreshCurrentView,
     refreshNavigationMetadata,
+    refreshAfterFolderMove,
     refreshHierarchyView,
   };
 });

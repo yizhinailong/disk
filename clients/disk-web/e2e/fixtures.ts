@@ -5,22 +5,48 @@
  * No source files are modified to add data-testid attributes.
  *
  * NOTE: These E2E tests assume the backend is running at localhost:8080.
- * For CI or isolated runs, API mocking via Playwright route interception
- * should be added at the describe/block level.
+ * Credentials are provided by the environment and are never committed here.
  */
 import { type Page, type Locator, expect } from '@playwright/test'
 
 // ==================== Test Credentials ====================
-// TODO: Replace with seeded test data or environment variables in CI.
-export const TEST_USER = {
-  username: 'e2e_tester',
-  password: 'TestPass123!',
-  email: 'e2e@tester.local',
+
+export interface TestCredentials {
+  readonly username: string
+  readonly password: string
 }
 
-export const TEST_ADMIN = {
-  username: 'e2e_admin',
-  password: 'AdminPass123!',
+function requiredEnvironment(name: string): string {
+  const value = process.env[name]?.trim()
+  if (!value) {
+    throw new Error(`Missing required Playwright configuration: ${name}`)
+  }
+  return value
+}
+
+export function getTestUserCredentials(): TestCredentials {
+  return {
+    username: requiredEnvironment('DISK_E2E_USERNAME'),
+    password: requiredEnvironment('DISK_E2E_PASSWORD'),
+  }
+}
+
+export function getTestAdminCredentials(): TestCredentials {
+  return {
+    username: requiredEnvironment('DISK_E2E_ADMIN_USERNAME'),
+    password: requiredEnvironment('DISK_E2E_ADMIN_PASSWORD'),
+  }
+}
+
+// Compatibility accessors keep the existing placeholder specs environment-driven.
+export const TEST_USER: TestCredentials = {
+  get username() { return getTestUserCredentials().username },
+  get password() { return getTestUserCredentials().password },
+}
+
+export const TEST_ADMIN: TestCredentials = {
+  get username() { return getTestAdminCredentials().username },
+  get password() { return getTestAdminCredentials().password },
 }
 
 // ==================== Route Paths ====================
@@ -145,12 +171,15 @@ export const AdminSystemSelectors = {
  */
 export async function loginViaUI(
   page: Page,
-  username: string = TEST_USER.username,
-  password: string = TEST_USER.password,
+  username?: string,
+  password?: string,
 ): Promise<void> {
+  const credentials = username && password
+    ? { username, password }
+    : getTestUserCredentials()
   await page.goto(Routes.login)
-  await page.locator('input[placeholder="请输入用户名"]').fill(username)
-  await page.locator('input[placeholder="请输入密码"]').fill(password)
+  await page.locator('input[placeholder="请输入用户名"]').fill(credentials.username)
+  await page.locator('input[placeholder="请输入密码"]').fill(credentials.password)
   await page.locator(AuthSelectors.submitButton).click()
   // Wait for navigation to drive (or redirect target)
   await page.waitForURL('**/drive**', { timeout: 15_000 })

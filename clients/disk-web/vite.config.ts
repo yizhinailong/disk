@@ -5,6 +5,13 @@ import Components from 'unplugin-vue-components/vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
+const apiProxy = {
+  '/api': {
+    target: process.env.DISK_E2E_PROXY_TARGET ?? 'http://localhost:8080',
+    changeOrigin: true,
+  },
+}
+
 export default defineConfig({
   plugins: [
     vue(),
@@ -25,12 +32,10 @@ export default defineConfig({
   server: {
     port: 5173,
     host: '0.0.0.0',
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      },
-    },
+    proxy: apiProxy,
+  },
+  preview: {
+    proxy: apiProxy,
   },
   build: {
     target: 'es2020',

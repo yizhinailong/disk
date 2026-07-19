@@ -2044,6 +2044,55 @@ Authorization: Bearer <access_token>
 
 ---
 
+### 5.4 重命名文件夹
+
+**PUT** `/api/folder/{folder_id}/rename`
+
+#### 实现状态
+**已实现**
+
+重命名当前用户拥有的文件夹，并同步更新子树中文件夹和文件的路径。
+
+#### 请求参数
+
+```json
+{
+  "new_name": "新文件夹名"
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| folder_id | integer | 是 | 路径中的文件夹 ID，必须为正整数 |
+| new_name | string | 是 | 新名称，遵循 5.1 的文件夹名称约束 |
+
+#### 错误响应矩阵
+
+| HTTP 状态码 | 业务码 | 枚举名称 | 触发场景 |
+|------------|--------|----------|----------|
+| 400 | 10001 | `InvalidParameter` | folder_id 格式错误 |
+| 400 | 10002 | `ValidationFailed` | new_name 长度无效 |
+| 400 | 50001 | `InvalidFilename` | new_name 违反文件夹名称约束 |
+| 404 | 50006 | `FolderNotFound` | 文件夹不存在或不属于当前用户 |
+| 409 | 50010 | `FolderAlreadyExists` | 同一父目录已存在同名文件夹 |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "id": 10,
+    "name": "新文件夹名",
+    "path": "/新文件夹名/",
+    "updated_at": "2026-01-13 11:30:00"
+  }
+}
+```
+
+---
+
 ## 6. 回收站接口
 
 ### 6.1 获取回收站列表
