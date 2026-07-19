@@ -50,6 +50,11 @@ namespace disk::storage {
                    exception_name == "NotFound";
         }
 
+        auto IsPreconditionFailedError(const Aws::S3::S3Error& error) -> bool {
+            return error.GetResponseCode() == Aws::Http::HttpResponseCode::PRECONDITION_FAILED ||
+                   error.GetExceptionName() == "PreconditionFailed";
+        }
+
         auto ToErrorInfo(const Aws::S3::S3Error& error, ErrorCode code, const std::string& operation)
             -> ErrorInfo {
             std::string message = operation + " failed";
@@ -215,7 +220,7 @@ namespace disk::storage {
         };
     }
 
-    auto AwsS3Client::PutObject(const std::string& key, std::string data)
+    auto AwsS3Client::PutObjectIfAbsent(const std::string& key, std::string data)
         -> Result<S3PutObjectResult> {
         auto input_data = Aws::MakeShared<Aws::StringStream>(AWS_ALLOC_TAG);
         input_data->write(data.data(), static_cast<std::streamsize>(data.size()));
@@ -226,9 +231,13 @@ namespace disk::storage {
         request.SetKey(key);
         request.SetContentLength(static_cast<long long>(data.size()));
         request.SetBody(input_data);
+        request.SetIfNoneMatch("*");
 
         auto outcome = m_impl->client->PutObject(request);
         if (!outcome.IsSuccess()) {
+            if (IsPreconditionFailedError(outcome.GetError())) {
+                return S3PutObjectResult{ .etag = {}, .created = false };
+            }
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::InternalError,
@@ -236,7 +245,10 @@ namespace disk::storage {
             ));
         }
 
-        return S3PutObjectResult{ .etag = outcome.GetResult().GetETag() };
+        return S3PutObjectResult{
+            .etag = outcome.GetResult().GetETag(),
+            .created = true,
+        };
     }
 
     auto AwsS3Client::PutObjectFromFile(const std::string& key, const std::filesystem::path& local_path)

@@ -20,6 +20,7 @@ namespace disk::storage {
 
     struct S3PutObjectResult {
         std::string etag;
+        bool created{ false };
     };
 
     struct S3ListObjectsResult {
@@ -44,7 +45,7 @@ namespace disk::storage {
         virtual auto HeadObject(const std::string& key) -> Result<S3HeadObjectResult> = 0;
 
         [[nodiscard]]
-        virtual auto PutObject(const std::string& key, std::string data)
+        virtual auto PutObjectIfAbsent(const std::string& key, std::string data)
             -> Result<S3PutObjectResult> = 0;
 
         [[nodiscard]]
@@ -118,7 +119,7 @@ namespace disk::storage {
         auto HeadObject(const std::string& key) -> Result<S3HeadObjectResult> override;
 
         [[nodiscard]]
-        auto PutObject(const std::string& key, std::string data)
+        auto PutObjectIfAbsent(const std::string& key, std::string data)
             -> Result<S3PutObjectResult> override;
 
         [[nodiscard]]

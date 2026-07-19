@@ -5,6 +5,7 @@
 #include <fstream>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -14,6 +15,7 @@
 #include <json/json.h>
 
 #include "utils/ConfigMgr.hpp"
+#include "utils/FileHashUtil.hpp"
 
 namespace {
 
@@ -55,13 +57,22 @@ namespace {
             };
         }
 
-        auto PutObject(const std::string& key, std::string data)
+        auto PutObjectIfAbsent(const std::string& key, std::string data)
             -> Result<disk::storage::S3PutObjectResult> override {
             ++put_calls;
             uploaded_keys.push_back(key);
+            if (objects.contains(key)) {
+                return disk::storage::S3PutObjectResult{
+                    .etag = {},
+                    .created = false,
+                };
+            }
             const auto etag = EtagFor(data);
             objects[key] = std::move(data);
-            return disk::storage::S3PutObjectResult{ .etag = etag };
+            return disk::storage::S3PutObjectResult{
+                .etag = etag,
+                .created = true,
+            };
         }
 
         auto PutObjectFromFile(const std::string& key, const std::filesystem::path& local_path)
@@ -106,7 +117,11 @@ namespace {
                 return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "fake object not found"));
             }
             const auto bounded_start = std::min<uint64_t>(start, it->second.size());
-            const auto bounded_length = std::min<uint64_t>(length, it->second.size() - bounded_start);
+            auto bounded_length = std::min<uint64_t>(length, it->second.size() - bounded_start);
+            if (truncate_next_range_by > 0) {
+                bounded_length = bounded_length > truncate_next_range_by ? bounded_length - truncate_next_range_by : 0;
+                truncate_next_range_by = 0;
+            }
             return std::shared_ptr<disk::storage::StorageReadStream>(
                 std::make_shared<MemoryReadStream>(it->second.substr(bounded_start, bounded_length))
             );
@@ -117,6 +132,7 @@ namespace {
             const std::string& continuation_token,
             uint32_t max_keys
         ) -> Result<disk::storage::S3ListObjectsResult> override {
+            ++list_calls;
             disk::storage::S3ListObjectsResult result;
             auto it = continuation_token.empty() ? objects.lower_bound(prefix) : objects.upper_bound(continuation_token);
             for (; it != objects.end() && it->first.starts_with(prefix); ++it) {
@@ -127,10 +143,16 @@ namespace {
                 }
                 result.keys.push_back(it->first);
             }
+            if (list_outside_prefix_key.has_value()) {
+                result.keys.push_back(list_outside_prefix_key.value());
+                list_outside_prefix_key.reset();
+            }
             return result;
         }
 
         auto DeleteObjects(const std::vector<std::string>& keys) -> Result<void> override {
+            ++delete_batch_calls;
+            delete_batch_sizes.push_back(keys.size());
             for (const auto& key : keys) {
                 objects.erase(key);
                 deleted_keys.push_back(key);
@@ -139,6 +161,7 @@ namespace {
         }
 
         auto CreateMultipartUpload(const std::string& key) -> Result<std::string> override {
+            ++create_multipart_calls;
             const auto upload_id = "multipart-" + std::to_string(++next_multipart_id);
             multipart_uploads.emplace(upload_id, MultipartUpload{ .key = key });
             return upload_id;
@@ -154,6 +177,12 @@ namespace {
             if (upload == multipart_uploads.end() || upload->second.key != key) {
                 return std::unexpected(ErrorInfo(ErrorCode::InternalError, "fake multipart not found"));
             }
+            if (upload_part_failure_number == part_number) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "fake upload part failure")
+                );
+            }
+            uploaded_part_sizes.push_back(data.size());
             const auto etag = EtagFor(data);
             upload->second.parts[part_number] = std::move(data);
             return etag;
@@ -184,9 +213,15 @@ namespace {
             const std::string& upload_id,
             const std::vector<disk::storage::S3CompletedPart>& parts
         ) -> Result<void> override {
+            ++complete_multipart_calls;
             auto upload = multipart_uploads.find(upload_id);
             if (upload == multipart_uploads.end() || upload->second.key != key) {
                 return std::unexpected(ErrorInfo(ErrorCode::InternalError, "fake multipart not found"));
+            }
+            if (complete_multipart_failure) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "fake multipart completion failure")
+                );
             }
 
             std::string content;
@@ -195,6 +230,7 @@ namespace {
                 if (stored_part == upload->second.parts.end() || EtagFor(stored_part->second) != part.etag) {
                     return std::unexpected(ErrorInfo(ErrorCode::InternalError, "fake multipart part mismatch"));
                 }
+                completed_part_numbers.push_back(part.part_number);
                 content += stored_part->second;
             }
             objects[key] = std::move(content);
@@ -204,6 +240,8 @@ namespace {
 
         auto AbortMultipartUpload(const std::string& /*key*/, const std::string& upload_id)
             -> Result<void> override {
+            ++abort_multipart_calls;
+            aborted_upload_ids.push_back(upload_id);
             multipart_uploads.erase(upload_id);
             return {};
         }
@@ -225,12 +263,25 @@ namespace {
         std::string last_range_key;
         uint64_t last_range_start{ 0 };
         uint64_t last_range_length{ 0 };
+        uint64_t truncate_next_range_by{ 0 };
         int head_calls{ 0 };
         int put_calls{ 0 };
         int delete_calls{ 0 };
         int get_calls{ 0 };
+        int list_calls{ 0 };
+        int delete_batch_calls{ 0 };
         int delete_failures_remaining{ 0 };
         int next_multipart_id{ 0 };
+        int create_multipart_calls{ 0 };
+        int complete_multipart_calls{ 0 };
+        int abort_multipart_calls{ 0 };
+        int upload_part_failure_number{ 0 };
+        bool complete_multipart_failure{ false };
+        std::optional<std::string> list_outside_prefix_key;
+        std::vector<size_t> delete_batch_sizes;
+        std::vector<size_t> uploaded_part_sizes;
+        std::vector<int> completed_part_numbers;
+        std::vector<std::string> aborted_upload_ids;
         std::map<std::string, MultipartUpload> multipart_uploads;
         ErrorInfo delete_error{ ErrorCode::InternalError, "fake delete failure" };
     };
@@ -285,6 +336,33 @@ namespace {
             return path;
         }
 
+        [[nodiscard]] static auto S3Session(std::string upload_id = "upload-123")
+            -> disk::storage::UploadStagingSession {
+            return disk::storage::UploadStagingSession{
+                .upload_id = upload_id,
+                .backend = disk::storage::UploadStagingBackend::S3,
+                .prefix = "staging/" + upload_id,
+            };
+        }
+
+        auto WriteS3Chunk(
+            const disk::storage::UploadStagingSession& session,
+            uint32_t chunk_index,
+            const std::string& data
+        ) -> disk::storage::UploadStagingChunk {
+            auto result = drogon::sync_wait(storage->WriteChunk(
+                session,
+                chunk_index,
+                disk::utils::FileHashUtil::HashMd5(data),
+                data
+            ));
+            if (!result) {
+                ADD_FAILURE() << result.error().message;
+                return {};
+            }
+            return result.value();
+        }
+
         std::filesystem::path root;
         std::shared_ptr<FakeS3Client> client;
         std::unique_ptr<disk::storage::S3ObjectStorage> storage;
@@ -298,6 +376,332 @@ namespace {
     }
 
 } // namespace
+
+TEST_F(S3ObjectStorageTest, S3SessionValidationRejectsUnsafeOrMismatchedPrefixes) {
+    auto valid_result = drogon::sync_wait(storage->EnsureUploadSession(S3Session()));
+    ASSERT_TRUE(valid_result.has_value()) << valid_result.error().message;
+
+    const std::vector<disk::storage::UploadStagingSession> invalid_sessions{
+        { .upload_id = "upload-123",
+         .backend = disk::storage::UploadStagingBackend::S3,
+         .prefix = "staging/../upload-123"   },
+        { .upload_id = "upload-123",
+         .backend = disk::storage::UploadStagingBackend::S3,
+         .prefix = "staging/another-upload"  },
+        { .upload_id = "upload-123",
+         .backend = disk::storage::UploadStagingBackend::S3,
+         .prefix = "other-staging/upload-123" },
+        { .upload_id = "upload-123",
+         .backend = disk::storage::UploadStagingBackend::S3,
+         .prefix = "staging\\upload-123"     },
+    };
+    for (const auto& session : invalid_sessions) {
+        auto result = drogon::sync_wait(storage->EnsureUploadSession(session));
+        ASSERT_FALSE(result.has_value());
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST_F(S3ObjectStorageTest, S3ChunkWriteIsConditionalAndIdempotent) {
+    const auto session = S3Session();
+    const std::string data = "immutable-s3-chunk";
+    const auto md5_hash = disk::utils::FileHashUtil::HashMd5(data);
+    const auto expected_key = "staging/upload-123/chunks/3-" + md5_hash + ".part";
+
+    auto first = drogon::sync_wait(storage->WriteChunk(session, 3, md5_hash, data));
+    auto repeated = drogon::sync_wait(storage->WriteChunk(session, 3, md5_hash, data));
+
+    ASSERT_TRUE(first.has_value()) << first.error().message;
+    ASSERT_TRUE(repeated.has_value()) << repeated.error().message;
+    EXPECT_EQ(first->object_key, expected_key);
+    EXPECT_EQ(first->etag, FakeS3Client::EtagFor(data));
+    EXPECT_EQ(repeated->object_key, first->object_key);
+    EXPECT_EQ(repeated->etag, first->etag);
+    EXPECT_EQ(client->objects.at(expected_key), data);
+    EXPECT_EQ(client->put_calls, 2);
+    EXPECT_EQ(client->get_calls, 1);
+}
+
+TEST_F(S3ObjectStorageTest, S3ChunkWriteNeverOverwritesConflictingObject) {
+    const auto session = S3Session();
+    const std::string requested_data = "good";
+    const std::string existing_data = "evil";
+    const auto md5_hash = disk::utils::FileHashUtil::HashMd5(requested_data);
+    const auto key = "staging/upload-123/chunks/0-" + md5_hash + ".part";
+    client->objects[key] = existing_data;
+
+    auto result = drogon::sync_wait(
+        storage->WriteChunk(session, 0, md5_hash, requested_data)
+    );
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::ChunkVerifyFailed);
+    EXPECT_EQ(client->objects.at(key), existing_data);
+    EXPECT_EQ(client->put_calls, 1);
+    EXPECT_EQ(client->get_calls, 1);
+}
+
+TEST_F(S3ObjectStorageTest, S3ChunkWriteRejectsUnverifiedHashBeforePut) {
+    const auto session = S3Session();
+
+    auto result = drogon::sync_wait(storage->WriteChunk(
+        session,
+        0,
+        "00000000000000000000000000000000",
+        "payload"
+    ));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::ChunkVerifyFailed);
+    EXPECT_EQ(client->put_calls, 0);
+    EXPECT_TRUE(client->objects.empty());
+}
+
+TEST_F(S3ObjectStorageTest, S3AssemblyStreamsChunksToVersionedMultipartObject) {
+    const auto session = S3Session();
+    const std::string first_data = "first-";
+    const std::string second_data = "second";
+    const auto first = WriteS3Chunk(session, 0, first_data);
+    const auto second = WriteS3Chunk(session, 1, second_data);
+
+    auto result = drogon::sync_wait(storage->AssembleChunks(
+        session,
+        7,
+        2,
+        std::vector{ first, second }
+    ));
+
+    const auto expected_data = first_data + second_data;
+    ASSERT_TRUE(result.has_value()) << result.error().message;
+    EXPECT_EQ(result->backend, disk::storage::UploadStagingBackend::S3);
+    EXPECT_EQ(result->locator, "staging/upload-123/assembled/7.bin");
+    EXPECT_EQ(result->size_bytes, expected_data.size());
+    EXPECT_EQ(result->md5_hash, disk::utils::FileHashUtil::HashMd5(expected_data));
+    EXPECT_EQ(result->sha256_hash, disk::utils::FileHashUtil::HashSha256(expected_data));
+    EXPECT_EQ(client->objects.at(result->locator), expected_data);
+    EXPECT_EQ(client->create_multipart_calls, 1);
+    EXPECT_EQ(client->complete_multipart_calls, 1);
+    EXPECT_EQ(client->abort_multipart_calls, 0);
+    EXPECT_EQ(client->uploaded_part_sizes, std::vector<size_t>{ expected_data.size() });
+    EXPECT_EQ(client->completed_part_numbers, std::vector<int>{ 1 });
+}
+
+TEST_F(S3ObjectStorageTest, S3AssemblyUsesFiveMiBNonFinalParts) {
+    const auto session = S3Session("upload-large");
+    constexpr size_t part_size = 5 * 1024 * 1024;
+    const std::string data(part_size + 17, 'x');
+    const auto chunk = WriteS3Chunk(session, 0, data);
+
+    auto result = drogon::sync_wait(storage->AssembleChunks(
+        session,
+        11,
+        1,
+        std::vector{ chunk }
+    ));
+
+    ASSERT_TRUE(result.has_value()) << result.error().message;
+    EXPECT_EQ(result->size_bytes, data.size());
+    EXPECT_EQ(client->uploaded_part_sizes, (std::vector<size_t>{ part_size, 17 }));
+    EXPECT_EQ(client->completed_part_numbers, (std::vector<int>{ 1, 2 }));
+    EXPECT_EQ(client->objects.at(result->locator), data);
+}
+
+TEST_F(S3ObjectStorageTest, S3AssemblyRejectsDescriptorBeforeCreatingMultipart) {
+    const auto session = S3Session();
+    auto chunk = WriteS3Chunk(session, 0, "payload");
+    chunk.object_key = "staging/another-upload/chunks/0-invalid.part";
+
+    auto result = drogon::sync_wait(storage->AssembleChunks(
+        session,
+        2,
+        1,
+        std::vector{ chunk }
+    ));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::ChunkVerifyFailed);
+    EXPECT_EQ(client->create_multipart_calls, 0);
+}
+
+TEST_F(S3ObjectStorageTest, S3AssemblyAbortsForMissingOrMismatchedHeadMetadata) {
+    const auto session = S3Session();
+    const std::string data = "head-metadata";
+    const auto chunk = WriteS3Chunk(session, 0, data);
+
+    auto wrong_etag = chunk;
+    wrong_etag.etag = "\"wrong-etag\"";
+    auto etag_result = drogon::sync_wait(storage->AssembleChunks(
+        session,
+        20,
+        1,
+        std::vector{ wrong_etag }
+    ));
+    ASSERT_FALSE(etag_result.has_value());
+    EXPECT_EQ(etag_result.error().code, ErrorCode::ChunkVerifyFailed);
+
+    auto wrong_size = chunk;
+    ++wrong_size.size_bytes;
+    auto size_result = drogon::sync_wait(storage->AssembleChunks(
+        session,
+        21,
+        1,
+        std::vector{ wrong_size }
+    ));
+    ASSERT_FALSE(size_result.has_value());
+    EXPECT_EQ(size_result.error().code, ErrorCode::ChunkVerifyFailed);
+
+    client->objects.erase(chunk.object_key);
+    auto missing_result = drogon::sync_wait(storage->AssembleChunks(
+        session,
+        22,
+        1,
+        std::vector{ chunk }
+    ));
+    ASSERT_FALSE(missing_result.has_value());
+    EXPECT_EQ(missing_result.error().code, ErrorCode::ChunkVerifyFailed);
+
+    EXPECT_EQ(client->create_multipart_calls, 3);
+    EXPECT_EQ(client->abort_multipart_calls, 3);
+    EXPECT_TRUE(client->multipart_uploads.empty());
+}
+
+TEST_F(S3ObjectStorageTest, S3AssemblyAbortsWhenChunkContentDoesNotMatchDescriptor) {
+    const auto session = S3Session();
+    const auto chunk = WriteS3Chunk(session, 0, "expected");
+    client->objects[chunk.object_key] = "tampered";
+
+    auto result = drogon::sync_wait(storage->AssembleChunks(
+        session,
+        3,
+        1,
+        std::vector{ chunk }
+    ));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::ChunkVerifyFailed);
+    EXPECT_EQ(client->abort_multipart_calls, 1);
+    EXPECT_TRUE(client->multipart_uploads.empty());
+    EXPECT_FALSE(client->objects.contains("staging/upload-123/assembled/3.bin"));
+}
+
+TEST_F(S3ObjectStorageTest, S3AssemblyAbortsWhenRangeReadIsShort) {
+    const auto session = S3Session();
+    const auto chunk = WriteS3Chunk(session, 0, "range-payload");
+    client->truncate_next_range_by = 1;
+
+    auto result = drogon::sync_wait(storage->AssembleChunks(
+        session,
+        4,
+        1,
+        std::vector{ chunk }
+    ));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::ChunkVerifyFailed);
+    EXPECT_EQ(client->abort_multipart_calls, 1);
+    EXPECT_TRUE(client->multipart_uploads.empty());
+}
+
+TEST_F(S3ObjectStorageTest, S3AssemblyAbortsWhenPartUploadFails) {
+    const auto session = S3Session();
+    const auto chunk = WriteS3Chunk(session, 0, "part-failure");
+    client->upload_part_failure_number = 1;
+
+    auto result = drogon::sync_wait(storage->AssembleChunks(
+        session,
+        5,
+        1,
+        std::vector{ chunk }
+    ));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::InternalError);
+    EXPECT_EQ(client->abort_multipart_calls, 1);
+    EXPECT_TRUE(client->multipart_uploads.empty());
+}
+
+TEST_F(S3ObjectStorageTest, S3AssemblyAbortsWhenMultipartCompletionFails) {
+    const auto session = S3Session();
+    const auto chunk = WriteS3Chunk(session, 0, "complete-failure");
+    client->complete_multipart_failure = true;
+
+    auto result = drogon::sync_wait(storage->AssembleChunks(
+        session,
+        6,
+        1,
+        std::vector{ chunk }
+    ));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::InternalError);
+    EXPECT_EQ(client->complete_multipart_calls, 1);
+    EXPECT_EQ(client->abort_multipart_calls, 1);
+    EXPECT_TRUE(client->multipart_uploads.empty());
+}
+
+TEST_F(S3ObjectStorageTest, S3AssemblyDiscardIsExactAndIdempotent) {
+    const auto session = S3Session();
+    const auto key = "staging/upload-123/assembled/9.bin";
+    client->objects[key] = "assembled";
+    const disk::storage::UploadStagingAssembly assembly{
+        .backend = disk::storage::UploadStagingBackend::S3,
+        .locator = key,
+    };
+
+    auto first = drogon::sync_wait(storage->DiscardAssembly(session, assembly));
+    auto repeated = drogon::sync_wait(storage->DiscardAssembly(session, assembly));
+
+    ASSERT_TRUE(first.has_value()) << first.error().message;
+    ASSERT_TRUE(repeated.has_value()) << repeated.error().message;
+    EXPECT_EQ(client->delete_calls, 2);
+    EXPECT_FALSE(client->objects.contains(key));
+
+    const disk::storage::UploadStagingAssembly outside{
+        .backend = disk::storage::UploadStagingBackend::S3,
+        .locator = "staging/another-upload/assembled/9.bin",
+    };
+    auto outside_result = drogon::sync_wait(storage->DiscardAssembly(session, outside));
+    ASSERT_FALSE(outside_result.has_value());
+    EXPECT_EQ(outside_result.error().code, ErrorCode::ValidationFailed);
+    EXPECT_EQ(client->delete_calls, 2);
+}
+
+TEST_F(S3ObjectStorageTest, S3SessionCleanupPagesWithinExactPrefix) {
+    const auto session = S3Session("upload-cleanup");
+    for (size_t index = 0; index < 1005; ++index) {
+        client->objects[session.prefix + "/chunks/" + std::to_string(index)] = "x";
+    }
+    client->objects["staging/upload-cleanup-sibling/chunks/0"] = "keep";
+    client->objects["objects/ab/final.bin"] = "keep";
+
+    auto result = drogon::sync_wait(storage->CleanupSession(session));
+
+    ASSERT_TRUE(result.has_value()) << result.error().message;
+    EXPECT_EQ(client->list_calls, 2);
+    EXPECT_EQ(client->delete_batch_calls, 2);
+    EXPECT_EQ(client->delete_batch_sizes, (std::vector<size_t>{ 1000, 5 }));
+    EXPECT_TRUE(client->objects.contains("staging/upload-cleanup-sibling/chunks/0"));
+    EXPECT_TRUE(client->objects.contains("objects/ab/final.bin"));
+    EXPECT_EQ(
+        std::ranges::count_if(client->objects, [&session](const auto& entry) {
+            return entry.first.starts_with(session.prefix + "/");
+        }),
+        0
+    );
+}
+
+TEST_F(S3ObjectStorageTest, S3SessionCleanupRejectsOutOfPrefixListResult) {
+    const auto session = S3Session("upload-cleanup");
+    client->objects[session.prefix + "/chunks/0"] = "delete-only-if-safe";
+    client->list_outside_prefix_key = "objects/ab/final.bin";
+
+    auto result = drogon::sync_wait(storage->CleanupSession(session));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::InternalError);
+    EXPECT_EQ(client->delete_batch_calls, 0);
+    EXPECT_TRUE(client->objects.contains(session.prefix + "/chunks/0"));
+}
 
 TEST_F(S3ObjectStorageTest, GetFinalStoragePathUsesHashShardedObjectKey) {
     EXPECT_EQ(

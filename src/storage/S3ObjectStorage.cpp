@@ -1,19 +1,28 @@
 #include "storage/S3ObjectStorage.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <bit>
+#include <charconv>
 #include <chrono>
 #include <filesystem>
 #include <functional>
+#include <limits>
 #include <stdexcept>
+#include <string_view>
 #include <system_error>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include <drogon/utils/coroutine.h>
+#include <sodium/crypto_hash_sha256.h>
 #include <trantor/net/EventLoop.h>
 #include <trantor/utils/ConcurrentTaskQueue.h>
 
+#include "storage/AssemblyWorkerPool.hpp"
+#include "utils/FileHashUtil.hpp"
 #include "utils/LogHelper.hpp"
 
 namespace disk::storage {
@@ -21,7 +30,448 @@ namespace disk::storage {
     namespace {
         constexpr size_t DEFAULT_S3_STORAGE_THREADS = 4;
         constexpr int S3_DELETE_MAX_ATTEMPTS = 3;
+        constexpr uint32_t S3_LIST_PAGE_SIZE = 1000;
+        constexpr uint64_t S3_MULTIPART_PART_SIZE_BYTES = 5ULL * 1024 * 1024;
+        constexpr int S3_MAX_MULTIPART_PARTS = 10000;
+        constexpr size_t S3_MIN_READ_BUFFER_BYTES = 64 * 1024;
+        constexpr size_t S3_MAX_READ_BUFFER_BYTES = 1024 * 1024;
         constexpr std::string_view S3_STORAGE_QUEUE_NAME = "s3-object-storage";
+
+        [[nodiscard]] auto IsSafeObjectComponent(std::string_view value) -> bool {
+            return !value.empty() && std::ranges::all_of(value, [](char character) {
+                return (character >= 'a' && character <= 'z') ||
+                       (character >= 'A' && character <= 'Z') ||
+                       (character >= '0' && character <= '9') ||
+                       character == '-' || character == '_';
+            });
+        }
+
+        [[nodiscard]] auto IsLowerHex(std::string_view value, size_t expected_size) -> bool {
+            return value.size() == expected_size &&
+                   std::ranges::all_of(value, [](char character) {
+                       return (character >= '0' && character <= '9') ||
+                              (character >= 'a' && character <= 'f');
+                   });
+        }
+
+        [[nodiscard]] auto IsSafeObjectPrefix(std::string_view prefix) -> bool {
+            if (prefix.empty() || prefix.size() > 1024 || prefix.front() == '/' ||
+                prefix.back() == '/' || prefix.contains('\\')) {
+                return false;
+            }
+
+            size_t segment_start = 0;
+            while (segment_start < prefix.size()) {
+                const auto delimiter = prefix.find('/', segment_start);
+                const auto segment_end = delimiter == std::string_view::npos ? prefix.size() : delimiter;
+                const auto segment = prefix.substr(segment_start, segment_end - segment_start);
+                if (segment.empty() || segment == "." || segment == ".." ||
+                    !std::ranges::all_of(segment, [](char character) {
+                        return (character >= 'a' && character <= 'z') ||
+                               (character >= 'A' && character <= 'Z') ||
+                               (character >= '0' && character <= '9') ||
+                               character == '.' || character == '_' || character == '-';
+                    })) {
+                    return false;
+                }
+                if (delimiter == std::string_view::npos) {
+                    break;
+                }
+                segment_start = delimiter + 1;
+            }
+            return true;
+        }
+
+        [[nodiscard]] auto ValidateS3Session(
+            const UploadStagingSession& session,
+            std::string_view configured_staging_prefix
+        )
+            -> Result<void> {
+            const auto expected_prefix =
+                std::string(configured_staging_prefix) + "/" + session.upload_id;
+            if (session.backend != UploadStagingBackend::S3 ||
+                !IsSafeObjectComponent(session.upload_id) ||
+                !IsSafeObjectPrefix(session.prefix) ||
+                session.prefix != expected_prefix) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 upload staging session")
+                );
+            }
+            return {};
+        }
+
+        [[nodiscard]] auto BuildS3ChunkKey(
+            const UploadStagingSession& session,
+            uint32_t chunk_index,
+            std::string_view md5_hash
+        ) -> std::string {
+            return session.prefix + "/chunks/" + std::to_string(chunk_index) + "-" +
+                   std::string(md5_hash) + ".part";
+        }
+
+        [[nodiscard]] auto BuildS3AssemblyKey(
+            const UploadStagingSession& session,
+            uint64_t state_version
+        ) -> std::string {
+            return session.prefix + "/assembled/" + std::to_string(state_version) + ".bin";
+        }
+
+        [[nodiscard]] auto IsAssemblyKeyForSession(
+            const UploadStagingSession& session,
+            std::string_view key
+        ) -> bool {
+            const auto prefix = session.prefix + "/assembled/";
+            constexpr std::string_view suffix = ".bin";
+            if (!key.starts_with(prefix) || !key.ends_with(suffix) ||
+                key.size() <= prefix.size() + suffix.size()) {
+                return false;
+            }
+
+            const auto version_text = key.substr(prefix.size(), key.size() - prefix.size() - suffix.size());
+            uint64_t state_version = 0;
+            const auto [end, error] = std::from_chars(
+                version_text.data(),
+                version_text.data() + version_text.size(),
+                state_version
+            );
+            return error == std::errc{} && end == version_text.data() + version_text.size() &&
+                   state_version > 0 && std::to_string(state_version) == version_text;
+        }
+
+        [[nodiscard]] auto ValidateS3ChunkDescriptor(
+            const UploadStagingSession& session,
+            size_t expected_position,
+            const UploadStagingChunk& chunk
+        ) -> Result<void> {
+            if (chunk.chunk_index != expected_position || !IsLowerHex(chunk.md5_hash, 32) ||
+                chunk.object_key != BuildS3ChunkKey(session, chunk.chunk_index, chunk.md5_hash) ||
+                chunk.etag.empty()) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ChunkVerifyFailed, "Invalid S3 staging chunk descriptor")
+                );
+            }
+            return {};
+        }
+
+        [[nodiscard]] auto ResolveS3ReadBufferSize(uint32_t configured_size) -> size_t {
+            return std::clamp(
+                static_cast<size_t>(configured_size),
+                S3_MIN_READ_BUFFER_BYTES,
+                S3_MAX_READ_BUFFER_BYTES
+            );
+        }
+
+        class MultipartAbortGuard final {
+        public:
+            MultipartAbortGuard(
+                std::shared_ptr<IS3Client> client,
+                std::string key,
+                std::string upload_id
+            ) : m_client(std::move(client)),
+                m_key(std::move(key)),
+                m_upload_id(std::move(upload_id)) {}
+
+            ~MultipartAbortGuard() {
+                if (!m_active) {
+                    return;
+                }
+                auto abort_result = m_client->AbortMultipartUpload(m_key, m_upload_id);
+                if (!abort_result) {
+                    Logger::Warn() << "Failed to abort S3 staging multipart upload: key=" << m_key
+                                   << ", error=" << abort_result.error().message;
+                }
+            }
+
+            MultipartAbortGuard(const MultipartAbortGuard&) = delete;
+            auto operator=(const MultipartAbortGuard&) -> MultipartAbortGuard& = delete;
+
+            auto Release() noexcept -> void { m_active = false; }
+
+        private:
+            std::shared_ptr<IS3Client> m_client;
+            std::string m_key;
+            std::string m_upload_id;
+            bool m_active{ true };
+        };
+
+        [[nodiscard]] auto VerifyS3ChunkObject(
+            const std::shared_ptr<IS3Client>& client,
+            const UploadStagingChunk& chunk,
+            size_t buffer_size,
+            bool verify_etag
+        ) -> Result<S3HeadObjectResult> {
+            auto head_result = client->HeadObject(chunk.object_key);
+            if (!head_result) {
+                return std::unexpected(head_result.error());
+            }
+            if (!head_result->exists) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 staging chunk object is missing")
+                );
+            }
+            if (head_result->etag.empty()) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 staging chunk ETag is empty")
+                );
+            }
+            if (head_result->size != chunk.size_bytes ||
+                (verify_etag && head_result->etag != chunk.etag)) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 staging chunk metadata mismatch")
+                );
+            }
+
+            auto stream_result = client->GetObjectRange(
+                chunk.object_key,
+                0,
+                chunk.size_bytes
+            );
+            if (!stream_result) {
+                return std::unexpected(stream_result.error());
+            }
+            if (stream_result.value() == nullptr) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::FileReadError, "S3 staging chunk stream is unavailable")
+                );
+            }
+
+            disk::utils::FileHashUtil::Md5Context md5_context{};
+            disk::utils::FileHashUtil::Md5Init(md5_context);
+            std::vector<char> buffer(buffer_size);
+            uint64_t total_read = 0;
+            while (total_read < chunk.size_bytes) {
+                const auto remaining = chunk.size_bytes - total_read;
+                const auto requested = static_cast<size_t>(std::min<uint64_t>(
+                    remaining,
+                    static_cast<uint64_t>(buffer.size())
+                ));
+                const auto bytes_read = stream_result.value()->Read(buffer.data(), requested);
+                if (bytes_read == 0 || bytes_read > requested) {
+                    stream_result.value()->Close();
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 staging chunk range is incomplete")
+                    );
+                }
+                disk::utils::FileHashUtil::Md5Update(
+                    md5_context,
+                    std::bit_cast<const uint8_t*>(buffer.data()),
+                    bytes_read
+                );
+                total_read += bytes_read;
+            }
+            stream_result.value()->Close();
+
+            std::array<uint8_t, 16> digest{};
+            disk::utils::FileHashUtil::Md5Final(md5_context, digest.data());
+            if (disk::utils::FileHashUtil::BytesToHex(digest.data(), digest.size()) !=
+                chunk.md5_hash) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 staging chunk hash mismatch")
+                );
+            }
+            return head_result.value();
+        }
+
+        [[nodiscard]] auto AssembleS3ChunksBlocking(
+            const std::shared_ptr<IS3Client>& client,
+            const UploadStagingSession& session,
+            uint64_t state_version,
+            const std::vector<UploadStagingChunk>& chunks,
+            size_t read_buffer_size
+        ) -> Result<UploadStagingAssembly> {
+            const auto assembly_key = BuildS3AssemblyKey(session, state_version);
+            auto create_result = client->CreateMultipartUpload(assembly_key);
+            if (!create_result) {
+                return std::unexpected(create_result.error());
+            }
+            MultipartAbortGuard abort_guard(client, assembly_key, create_result.value());
+
+            disk::utils::FileHashUtil::Md5Context full_md5_context{};
+            disk::utils::FileHashUtil::Md5Init(full_md5_context);
+            crypto_hash_sha256_state full_sha256_context{};
+            crypto_hash_sha256_init(&full_sha256_context);
+
+            std::vector<char> read_buffer(read_buffer_size);
+            std::string part_buffer;
+            part_buffer.reserve(static_cast<size_t>(S3_MULTIPART_PART_SIZE_BYTES));
+            std::vector<S3CompletedPart> completed_parts;
+            uint64_t total_size_bytes = 0;
+            int next_part_number = 1;
+
+            const auto upload_part = [&]() -> Result<void> {
+                if (part_buffer.empty()) {
+                    return {};
+                }
+                if (next_part_number > S3_MAX_MULTIPART_PARTS) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ValidationFailed, "S3 staging multipart exceeds 10000 parts")
+                    );
+                }
+
+                auto upload_result = client->UploadPart(
+                    assembly_key,
+                    create_result.value(),
+                    next_part_number,
+                    std::move(part_buffer)
+                );
+                if (!upload_result) {
+                    return std::unexpected(upload_result.error());
+                }
+                completed_parts.push_back(S3CompletedPart{
+                    .part_number = next_part_number,
+                    .etag = std::move(upload_result.value()),
+                });
+                ++next_part_number;
+                part_buffer = {};
+                part_buffer.reserve(static_cast<size_t>(S3_MULTIPART_PART_SIZE_BYTES));
+                return {};
+            };
+
+            for (const auto& chunk : chunks) {
+                auto head_result = client->HeadObject(chunk.object_key);
+                if (!head_result) {
+                    return std::unexpected(head_result.error());
+                }
+                if (!head_result->exists || head_result->size != chunk.size_bytes ||
+                    head_result->etag != chunk.etag) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 staging chunk metadata mismatch")
+                    );
+                }
+
+                auto stream_result = client->GetObjectRange(
+                    chunk.object_key,
+                    0,
+                    chunk.size_bytes
+                );
+                if (!stream_result) {
+                    return std::unexpected(stream_result.error());
+                }
+                if (stream_result.value() == nullptr) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::FileReadError, "S3 staging chunk stream is unavailable")
+                    );
+                }
+
+                disk::utils::FileHashUtil::Md5Context chunk_md5_context{};
+                disk::utils::FileHashUtil::Md5Init(chunk_md5_context);
+                uint64_t chunk_size_bytes = 0;
+                while (chunk_size_bytes < chunk.size_bytes) {
+                    const auto chunk_remaining = chunk.size_bytes - chunk_size_bytes;
+                    const auto part_remaining = S3_MULTIPART_PART_SIZE_BYTES - part_buffer.size();
+                    const auto requested = static_cast<size_t>(std::min<uint64_t>(
+                        std::min<uint64_t>(chunk_remaining, part_remaining),
+                        static_cast<uint64_t>(read_buffer.size())
+                    ));
+                    const auto bytes_read = stream_result.value()->Read(read_buffer.data(), requested);
+                    if (bytes_read == 0 || bytes_read > requested) {
+                        stream_result.value()->Close();
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 staging chunk range is incomplete")
+                        );
+                    }
+
+                    const auto* md5_bytes = std::bit_cast<const uint8_t*>(read_buffer.data());
+                    const auto* sha256_bytes = std::bit_cast<const unsigned char*>(read_buffer.data());
+                    disk::utils::FileHashUtil::Md5Update(
+                        chunk_md5_context,
+                        md5_bytes,
+                        bytes_read
+                    );
+                    disk::utils::FileHashUtil::Md5Update(
+                        full_md5_context,
+                        md5_bytes,
+                        bytes_read
+                    );
+                    crypto_hash_sha256_update(
+                        &full_sha256_context,
+                        sha256_bytes,
+                        bytes_read
+                    );
+                    part_buffer.append(read_buffer.data(), bytes_read);
+                    chunk_size_bytes += bytes_read;
+                    if (total_size_bytes > std::numeric_limits<uint64_t>::max() - bytes_read) {
+                        stream_result.value()->Close();
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::ValidationFailed, "S3 staging assembly size overflow")
+                        );
+                    }
+                    total_size_bytes += bytes_read;
+
+                    if (part_buffer.size() == S3_MULTIPART_PART_SIZE_BYTES) {
+                        auto upload_result = upload_part();
+                        if (!upload_result) {
+                            stream_result.value()->Close();
+                            return std::unexpected(upload_result.error());
+                        }
+                    }
+                }
+                stream_result.value()->Close();
+
+                std::array<uint8_t, 16> chunk_digest{};
+                disk::utils::FileHashUtil::Md5Final(
+                    chunk_md5_context,
+                    chunk_digest.data()
+                );
+                if (disk::utils::FileHashUtil::BytesToHex(
+                        chunk_digest.data(),
+                        chunk_digest.size()
+                    ) != chunk.md5_hash) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 staging chunk hash mismatch")
+                    );
+                }
+            }
+
+            auto final_part_result = upload_part();
+            if (!final_part_result) {
+                return std::unexpected(final_part_result.error());
+            }
+            if (completed_parts.empty()) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 staging assembly is empty")
+                );
+            }
+
+            auto complete_result = client->CompleteMultipartUpload(
+                assembly_key,
+                create_result.value(),
+                completed_parts
+            );
+            if (!complete_result) {
+                return std::unexpected(complete_result.error());
+            }
+            abort_guard.Release();
+
+            auto assembled_head = client->HeadObject(assembly_key);
+            if (!assembled_head) {
+                return std::unexpected(assembled_head.error());
+            }
+            if (!assembled_head->exists || assembled_head->size != total_size_bytes) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 assembled object metadata mismatch")
+                );
+            }
+
+            std::array<uint8_t, 16> md5_digest{};
+            disk::utils::FileHashUtil::Md5Final(full_md5_context, md5_digest.data());
+            std::array<uint8_t, crypto_hash_sha256_BYTES> sha256_digest{};
+            crypto_hash_sha256_final(&full_sha256_context, sha256_digest.data());
+
+            return UploadStagingAssembly{
+                .backend = UploadStagingBackend::S3,
+                .locator = assembly_key,
+                .size_bytes = total_size_bytes,
+                .md5_hash = disk::utils::FileHashUtil::BytesToHex(
+                    md5_digest.data(),
+                    md5_digest.size()
+                ),
+                .sha256_hash = disk::utils::FileHashUtil::BytesToHex(
+                    sha256_digest.data(),
+                    sha256_digest.size()
+                ),
+            };
+        }
 
         template <typename T>
         class ConcurrentQueueAwaiter : public drogon::CallbackAwaiter<T> {
@@ -93,7 +543,7 @@ namespace disk::storage {
         if (session.backend == UploadStagingBackend::Local) {
             co_return co_await m_local_staging.EnsureUploadSession(session);
         }
-        co_return {};
+        co_return ValidateS3Session(session, m_s3_config.staging_prefix);
     }
 
     auto S3ObjectStorage::WriteChunk(
@@ -110,9 +560,75 @@ namespace disk::storage {
                 std::move(data)
             );
         }
-        co_return std::unexpected(
-            ErrorInfo(ErrorCode::InternalError, "S3 upload staging is not available")
+        auto session_validation = ValidateS3Session(session, m_s3_config.staging_prefix);
+        if (!session_validation || !IsLowerHex(md5_hash, 32)) {
+            co_return std::unexpected(
+                session_validation ? ErrorInfo(ErrorCode::ChunkVerifyFailed, "Invalid S3 staging chunk hash") : session_validation.error()
+            );
+        }
+
+        const auto key = BuildS3ChunkKey(session, chunk_index, md5_hash);
+        const auto size_bytes = static_cast<uint64_t>(data.size());
+        const auto read_buffer_size = ResolveS3ReadBufferSize(
+            m_config_mgr->GetAssembleBufferSizeBytes()
         );
+        auto client = m_s3_client;
+        auto result = co_await RunBlockingS3Task(
+            m_worker_queue,
+            [client, key, chunk_index, md5_hash, size_bytes, read_buffer_size, data = std::move(data)]() mutable
+                -> Result<UploadStagingChunk> {
+                if (disk::utils::FileHashUtil::HashMd5(data) != md5_hash) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 staging chunk hash mismatch")
+                    );
+                }
+
+                auto put_result = client->PutObjectIfAbsent(key, std::move(data));
+                if (!put_result) {
+                    return std::unexpected(put_result.error());
+                }
+
+                UploadStagingChunk chunk{
+                    .chunk_index = chunk_index,
+                    .size_bytes = size_bytes,
+                    .md5_hash = md5_hash,
+                    .object_key = key,
+                    .etag = put_result->etag,
+                };
+                if (!put_result->created) {
+                    auto verify_result = VerifyS3ChunkObject(
+                        client,
+                        chunk,
+                        read_buffer_size,
+                        false
+                    );
+                    if (!verify_result) {
+                        return std::unexpected(verify_result.error());
+                    }
+                    chunk.etag = verify_result->etag;
+                    return chunk;
+                }
+
+                auto head_result = client->HeadObject(key);
+                if (!head_result) {
+                    return std::unexpected(head_result.error());
+                }
+                if (!head_result->exists || head_result->size != size_bytes ||
+                    (!put_result->etag.empty() && head_result->etag != put_result->etag)) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 staging chunk metadata mismatch")
+                    );
+                }
+                chunk.etag = head_result->etag;
+                if (chunk.etag.empty()) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 staging chunk ETag is empty")
+                    );
+                }
+                return chunk;
+            }
+        );
+        co_return result;
     }
 
     auto S3ObjectStorage::AssembleChunks(
@@ -130,9 +646,49 @@ namespace disk::storage {
                 chunks
             );
         }
-        co_return std::unexpected(
-            ErrorInfo(ErrorCode::InternalError, "S3 upload staging is not available")
+        auto session_validation = ValidateS3Session(session, m_s3_config.staging_prefix);
+        if (!session_validation) {
+            co_return std::unexpected(session_validation.error());
+        }
+        if (state_version == 0 || chunks.size() != expected_chunk_count) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ChunkVerifyFailed, "Upload chunk descriptor count mismatch")
+            );
+        }
+        for (size_t position = 0; position < chunks.size(); ++position) {
+            auto chunk_validation = ValidateS3ChunkDescriptor(session, position, chunks[position]);
+            if (!chunk_validation) {
+                co_return std::unexpected(chunk_validation.error());
+            }
+        }
+
+        auto& pool = AssemblyWorkerPool::GetInstance();
+        auto slot_guard = pool.TryAcquireGuard(session.upload_id);
+        if (!slot_guard.has_value()) {
+            const auto upload_already_active = pool.IsUploadActive(session.upload_id);
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::TooManyRequests,
+                upload_already_active ? "Upload assembly already in progress for this upload_id, please retry later" : "Too many concurrent assembly operations, please retry later"
+            ));
+        }
+
+        const auto read_buffer_size = ResolveS3ReadBufferSize(
+            m_config_mgr->GetAssembleBufferSizeBytes()
         );
+        auto client = m_s3_client;
+        auto result = co_await RunBlockingS3Task(
+            m_worker_queue,
+            [client, session, state_version, chunks, read_buffer_size]() {
+                return AssembleS3ChunksBlocking(
+                    client,
+                    session,
+                    state_version,
+                    chunks,
+                    read_buffer_size
+                );
+            }
+        );
+        co_return result;
     }
 
     auto S3ObjectStorage::DiscardAssembly(
@@ -142,9 +698,24 @@ namespace disk::storage {
         if (session.backend == UploadStagingBackend::Local) {
             co_return co_await m_local_staging.DiscardAssembly(session, assembly);
         }
-        co_return std::unexpected(
-            ErrorInfo(ErrorCode::InternalError, "S3 upload staging is not available")
+        auto session_validation = ValidateS3Session(session, m_s3_config.staging_prefix);
+        if (!session_validation) {
+            co_return std::unexpected(session_validation.error());
+        }
+        if (assembly.backend != UploadStagingBackend::S3 ||
+            !IsAssemblyKeyForSession(session, assembly.locator)) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 staging assembly locator")
+            );
+        }
+
+        auto client = m_s3_client;
+        const auto key = assembly.locator;
+        auto result = co_await RunBlockingS3Task(
+            m_worker_queue,
+            [client, key]() { return client->DeleteObject(key); }
         );
+        co_return result;
     }
 
     auto S3ObjectStorage::CleanupSession(const UploadStagingSession& session)
@@ -152,9 +723,53 @@ namespace disk::storage {
         if (session.backend == UploadStagingBackend::Local) {
             co_return co_await m_local_staging.CleanupSession(session);
         }
-        co_return std::unexpected(
-            ErrorInfo(ErrorCode::InternalError, "S3 upload staging is not available")
+        auto session_validation = ValidateS3Session(session, m_s3_config.staging_prefix);
+        if (!session_validation) {
+            co_return std::unexpected(session_validation.error());
+        }
+
+        const auto cleanup_prefix = session.prefix + "/";
+        auto client = m_s3_client;
+        auto result = co_await RunBlockingS3Task(
+            m_worker_queue,
+            [client, cleanup_prefix]() -> Result<void> {
+                std::string continuation_token;
+                while (true) {
+                    auto list_result = client->ListObjects(
+                        cleanup_prefix,
+                        continuation_token,
+                        S3_LIST_PAGE_SIZE
+                    );
+                    if (!list_result) {
+                        return std::unexpected(list_result.error());
+                    }
+                    if (!std::ranges::all_of(list_result->keys, [&cleanup_prefix](const auto& key) {
+                            return key.starts_with(cleanup_prefix);
+                        })) {
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::InternalError, "S3 cleanup listed an object outside the upload session")
+                        );
+                    }
+                    if (!list_result->keys.empty()) {
+                        auto delete_result = client->DeleteObjects(list_result->keys);
+                        if (!delete_result) {
+                            return std::unexpected(delete_result.error());
+                        }
+                    }
+                    if (!list_result->is_truncated) {
+                        return {};
+                    }
+                    if (list_result->continuation_token.empty() ||
+                        list_result->continuation_token == continuation_token) {
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::InternalError, "S3 cleanup pagination did not advance")
+                        );
+                    }
+                    continuation_token = std::move(list_result->continuation_token);
+                }
+            }
         );
+        co_return result;
     }
 
     auto S3ObjectStorage::PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& hash)

@@ -28,9 +28,9 @@ namespace {
             return disk::storage::S3HeadObjectResult{};
         }
 
-        auto PutObject(const std::string& /*key*/, std::string /*data*/)
+        auto PutObjectIfAbsent(const std::string& /*key*/, std::string /*data*/)
             -> Result<disk::storage::S3PutObjectResult> override {
-            return disk::storage::S3PutObjectResult{};
+            return disk::storage::S3PutObjectResult{ .created = true };
         }
 
         auto PutObjectFromFile(

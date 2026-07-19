@@ -223,23 +223,24 @@ API Instance A  API Instance B ... N
 - [x] 修改现有 `UploadStagingStorage`，使描述符不再以 `std::filesystem::path` 代表所有后端。
 - [x] 定义后端无关的上传会话、分片对象和组装结果描述符。
 - [x] 将“分片暂存”“组装/流式读取”“最终 Blob 提升”职责保持清晰，不把 HTTP、数据库或权限逻辑放进存储层。
-- [ ] 保留 local 实现用于开发和单机测试，但生产多实例路径不得调用本地暂存。
+- [x] 保留 local 实现用于开发和单机测试，但生产多实例路径不得调用本地暂存。
 - [ ] 迁移完成后删除仅为旧流程服务的重复接口和死代码。
 
 ### 8.2 扩展 S3 客户端能力
 
-- [ ] 支持上传分片对象、HEAD、流式/Range 读取、幂等删除和批量清理。
-- [ ] 按 D-01/D-06 的设计支持流式组装至临时完整对象或 multipart 目标。
+- [x] 支持上传分片对象、HEAD、流式/Range 读取、幂等删除和批量清理。
+- [x] 按 D-01/D-06 的设计支持流式组装至临时完整对象或 multipart 目标。
 - [ ] 支持大对象的 server-side multipart copy/promote，不能假设单次 `CopyObject` 可覆盖所有文件大小。
-- [ ] 所有阻塞 AWS SDK 调用继续运行在专用工作线程，不阻塞 Drogon event loop。
+- [x] 所有阻塞 AWS SDK 调用继续运行在专用工作线程，不阻塞 Drogon event loop。
 - [ ] 为超时、限流、5xx、连接失败建立分类重试；认证和参数错误不做无界重试。
-- [ ] multipart 流程必须在失败或过期后执行 `AbortMultipartUpload`，并由生命周期规则兜底。
-- [ ] 不记录 access key、secret、session token 或带签名 URL。
+- [x] multipart 流程在请求内失败时执行 `AbortMultipartUpload`。
+- [ ] multipart 在进程退出或 Abort 失败后由持久任务与 bucket 生命周期规则兜底。
+- [x] 不记录 access key、secret、session token 或带签名 URL。
 
 ### 8.3 对象 key 与生命周期
 
 - [ ] 规范 staging、assembled、final 三类 key 前缀并进行严格输入规范化，禁止路径穿越。
-- [ ] staging key 必须按 `upload_id` 隔离，清理任务不得使用未经验证的宽泛前缀。
+- [x] staging key 必须按 `upload_id` 隔离，清理任务不得使用未经验证的宽泛前缀。
 - [ ] final key 与 D-05 内容寻址决策一致，数据库 `storage_path` 仍为读取权威。
 - [ ] 在 MinIO/AWS S3 配置 staging/multipart 生命周期过期规则，作为应用清理失败的最后保护。
 - [ ] final 前缀不得配置自动过期规则。
