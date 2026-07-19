@@ -816,7 +816,7 @@ Authorization: Bearer <access_token>
 **POST** `/api/file/upload/chunk`
 
 #### 实现状态
-**已实现**
+**现有接口已实现；ADR-002 跨实例暂存与条件写语义待实现**
 
 上传文件分片数据。
 
@@ -854,6 +854,15 @@ Content-Type: application/octet-stream
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
 | 400 | 50008 | `UploadTaskNotFound` | 上传任务不存在 | upload_id 不存在或已过期 |
 | 400 | 50009 | `ChunkVerifyFailed` | 分片校验失败 | 分片哈希与实际数据不匹配 |
+| 409 | 10004 | `ResourceConflict` | 资源冲突 | 任务已进入完成/取消/过期等不再接受分片的状态 |
+
+#### 幂等与跨实例语义
+
+- 分片对象保存在共享 S3/MinIO staging 前缀，请求不要求命中初始化上传的 API 实例。
+- 同一 `upload_id + chunk_index + chunk_hash` 可安全重复提交，成功响应保持 `uploaded=true`。
+- 服务端在对象写入前校验任务和分片几何信息，写入后仅在任务仍为 `InProgress` 时记录分片。
+- 如果完成、取消或过期在分片写入期间获胜，迟到请求返回 `409 + 10004`，不得改变终态；已产生的孤儿对象由清理任务回收。
+- `uploaded_chunks` 和完成覆盖判断只以 PostgreSQL `upload_task_chunks` 为准，不以对象列表或进程内缓存为准。
 
 #### 响应示例
 
@@ -875,7 +884,7 @@ Content-Type: application/octet-stream
 **POST** `/api/file/upload/complete`
 
 #### 实现状态
-**已实现**
+**现有同步接口已实现；ADR-002 完成租约、接管与幂等重放待实现**
 
 完成文件上传，合并所有分片。
 
@@ -906,6 +915,20 @@ Authorization: Bearer <access_token>
 > - `storage_used` 增加 `file_size`（记录实际使用）
 > - 原子性操作，确保配额一致性
 
+#### 分布式完成与重试语义
+
+完成接口保持同步响应，但由 PostgreSQL 状态机和有期限租约保证跨实例单飞：
+
+| 当前状态 | 行为 |
+|----------|------|
+| `InProgress` | 完整覆盖校验通过后，当前请求原子认领 `Finalizing` 租约并执行完成流程 |
+| `Finalizing`，租约有效 | 返回 `409 + 10004 ResourceConflict`；响应可携带 `Retry-After`，客户端稍后使用同一 `upload_id` 重试 |
+| `Finalizing`，租约过期 | 当前请求可通过条件更新接管并恢复完成流程 |
+| `Completed` | 幂等返回首次完成创建的同一 `file`，不重新组装、不重复结算配额 |
+| `Cancelled` / `Expired` / `Failed` | 返回 `400 + 50008 UploadTaskNotFound`，不得恢复为进行中 |
+
+完成过程按“租约认领 → 事务外对象组装/校验 → 短事务提交 → 异步清理”执行。服务端验证分片对象、总大小、整文件 MD5 与 SHA-256；multipart ETag 不作为文件 MD5。HTTP 响应丢失后，客户端重复调用可从 `completed_file_id` 恢复原成功响应。
+
 #### 错误响应矩阵
 
 | HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
@@ -915,6 +938,7 @@ Authorization: Bearer <access_token>
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
 | 400 | 50008 | `UploadTaskNotFound` | 上传任务不存在 | upload_id 不存在或已过期 |
 | 400 | 10002 | `ValidationFailed` | 参数校验失败 | 分片不完整、哈希校验失败 |
+| 409 | 10004 | `ResourceConflict` | 资源冲突 | 其他实例持有有效完成租约，请求应稍后重试 |
 
 #### 响应示例
 
@@ -943,13 +967,22 @@ Authorization: Bearer <access_token>
 **DELETE** `/api/file/upload/{upload_id}`
 
 #### 实现状态
-**已实现**
+**现有接口已实现；ADR-002 事务幂等与持久清理任务待实现**
 
 取消上传任务，清理临时数据。
 
 > **❌ 上传取消释放预占用（CRITICAL）**：本接口执行**释放预占用空间**：
 > - `storage_reserved` 减少 `file_size`（释放预占用）
-> - 清理临时文件和上传任务记录
+> - 在同一事务中迁移任务状态并写入 staging 清理任务
+> - 对象实际删除由 Worker 幂等执行，不影响取消结果
+
+#### 幂等与竞态语义
+
+- `InProgress`：只有成功执行 `InProgress -> Cancelled` 条件更新的事务释放 reserved quota。
+- `Cancelled`：重复取消返回成功，不再次释放配额。
+- `Finalizing` 或 `Completed`：返回 `409 + 10004 ResourceConflict`，取消不能覆盖完成流程。
+- `Expired` 或 `Failed`：返回 `400 + 50008 UploadTaskNotFound`。
+- 取消事务提交后，即使对象清理暂时失败，任务仍保持 `Cancelled`；Worker 负责重试清理。
 
 #### 请求头
 
@@ -975,6 +1008,7 @@ Authorization: Bearer <access_token>
 | 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
 | 400 | 50008 | `UploadTaskNotFound` | 上传任务不存在 | upload_id 不存在或不属于当前用户 |
+| 409 | 10004 | `ResourceConflict` | 资源冲突 | 上传正在完成或已经完成，不能取消 |
 
 #### 响应示例
 
