@@ -5,42 +5,16 @@
  * @copyright Copyright (c) 2026
  */
 
+#include "services/UploadLifecycleService.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <string>
 
 #include <gtest/gtest.h>
 
-#include "services/UploadLifecycleService.hpp"
-
 namespace disk::upload {
     namespace {
-
-        TEST(UploadLifecycleStateTransitionTest, StorageValuesMatchSchema) {
-            EXPECT_EQ(ToStorageValue(UploadTaskStatus::InProgress), 0);
-            EXPECT_EQ(ToStorageValue(UploadTaskStatus::Completed), 1);
-            EXPECT_EQ(ToStorageValue(UploadTaskStatus::Cancelled), 2);
-            EXPECT_EQ(ToStorageValue(UploadTaskStatus::Expired), 3);
-        }
-
-        TEST(UploadLifecycleStateTransitionTest, TerminalStatusDetection) {
-            EXPECT_FALSE(IsTerminalStatus(ToStorageValue(UploadTaskStatus::InProgress)));
-            EXPECT_TRUE(IsTerminalStatus(ToStorageValue(UploadTaskStatus::Completed)));
-            EXPECT_TRUE(IsTerminalStatus(ToStorageValue(UploadTaskStatus::Cancelled)));
-            EXPECT_TRUE(IsTerminalStatus(ToStorageValue(UploadTaskStatus::Expired)));
-        }
-
-        TEST(UploadLifecycleStateTransitionTest, TransitionGuardsOnlyAllowInProgress) {
-            EXPECT_TRUE(CanComplete(ToStorageValue(UploadTaskStatus::InProgress)));
-            EXPECT_FALSE(CanComplete(ToStorageValue(UploadTaskStatus::Completed)));
-            EXPECT_FALSE(CanComplete(ToStorageValue(UploadTaskStatus::Cancelled)));
-            EXPECT_FALSE(CanComplete(ToStorageValue(UploadTaskStatus::Expired)));
-
-            EXPECT_TRUE(CanCancelOrExpire(ToStorageValue(UploadTaskStatus::InProgress)));
-            EXPECT_FALSE(CanCancelOrExpire(ToStorageValue(UploadTaskStatus::Completed)));
-            EXPECT_FALSE(CanCancelOrExpire(ToStorageValue(UploadTaskStatus::Cancelled)));
-            EXPECT_FALSE(CanCancelOrExpire(ToStorageValue(UploadTaskStatus::Expired)));
-        }
 
         TEST(UploadLifecycleInitDecisionTest, ExistingContentWins) {
             auto decision = DecideInitFlow(true, "upload-id");

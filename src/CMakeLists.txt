@@ -129,6 +129,7 @@ set(Services_HEADERS
     services/TrashService.hpp
     services/TransactionRunner.hpp
     services/UploadLifecycleService.hpp
+    services/UploadStateMachine.hpp
     services/UploadService.hpp
     services/UploadTaskRepository.hpp
     services/UserService.hpp
@@ -158,6 +159,7 @@ set(Services_SOURCES
     services/TrashQuery.cpp
     services/TrashService.cpp
     services/UploadLifecycleService.cpp
+    services/UploadStateMachine.cpp
     services/UploadService.cpp
     services/UploadTaskRepository.cpp
     services/UserService.cpp

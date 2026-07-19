@@ -19,6 +19,7 @@
 #include <trantor/utils/Date.h>
 #include <drogon/orm/DbClient.h>
 
+#include "services/UploadStateMachine.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::storage {
@@ -28,13 +29,6 @@ namespace disk::storage {
 }
 
 namespace disk::upload {
-
-    enum class UploadTaskStatus : int8_t {
-        InProgress = 0,
-        Completed = 1,
-        Cancelled = 2,
-        Expired = 3,
-    };
 
     enum class InitDecisionType {
         InstantUpload,
@@ -117,10 +111,6 @@ namespace disk::upload {
         UploadCacheInvalidation invalidation;
     };
 
-    [[nodiscard]] auto ToStorageValue(UploadTaskStatus status) -> int16_t;
-    [[nodiscard]] auto IsTerminalStatus(int status) -> bool;
-    [[nodiscard]] auto CanComplete(int current_status) -> bool;
-    [[nodiscard]] auto CanCancelOrExpire(int current_status) -> bool;
     [[nodiscard]] auto IsExpired(const trantor::Date& expires_at, const trantor::Date& now) -> bool;
 
     [[nodiscard]] auto DecideInitFlow(

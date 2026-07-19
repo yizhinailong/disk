@@ -21,6 +21,7 @@ set(TEST_SOURCES
     services/UploadPath_test.cpp
     services/CompleteUploadSingleflight_test.cpp
     services/UploadLifecycleService_test.cpp
+    services/UploadStateMachine_test.cpp
     services/UploadTaskRepository_test.cpp
     services/FileRepository_test.cpp
     services/FolderRepository_test.cpp
@@ -82,6 +83,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/services/TrashQuery.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TrashService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/UploadLifecycleService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/UploadStateMachine.cpp
     ${CMAKE_SOURCE_DIR}/src/services/UploadTaskRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/ShareAuthFilter.cpp

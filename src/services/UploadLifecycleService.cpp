@@ -127,24 +127,6 @@ namespace disk::upload {
         Logger::Debug() << "UploadLifecycleService initialization completed";
     }
 
-    auto ToStorageValue(UploadTaskStatus status) -> int16_t {
-        return static_cast<int16_t>(status);
-    }
-
-    auto IsTerminalStatus(int status) -> bool {
-        return status == ToStorageValue(UploadTaskStatus::Completed) ||
-               status == ToStorageValue(UploadTaskStatus::Cancelled) ||
-               status == ToStorageValue(UploadTaskStatus::Expired);
-    }
-
-    auto CanComplete(int current_status) -> bool {
-        return current_status == ToStorageValue(UploadTaskStatus::InProgress);
-    }
-
-    auto CanCancelOrExpire(int current_status) -> bool {
-        return current_status == ToStorageValue(UploadTaskStatus::InProgress);
-    }
-
     auto IsExpired(const trantor::Date& expires_at, const trantor::Date& now) -> bool {
         return expires_at < now;
     }
