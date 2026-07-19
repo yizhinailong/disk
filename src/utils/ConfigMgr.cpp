@@ -119,6 +119,7 @@ namespace disk::utils {
         m_instance_id = m_generated_instance_id;
         m_upload_finalize_lease_seconds = DEFAULT_UPLOAD_FINALIZE_LEASE_SECONDS;
         m_storage_backend = StorageBackend::Local;
+        m_upload_staging_backend = StorageBackend::Local;
         m_s3_storage_config = S3StorageConfig{};
         m_share_access_rate_limit_per_minute = DEFAULT_SHARE_ACCESS_RATE_LIMIT_PER_MINUTE;
         m_share_access_rate_limit_window_seconds = DEFAULT_SHARE_ACCESS_RATE_LIMIT_WINDOW_SECONDS;
@@ -204,6 +205,17 @@ namespace disk::utils {
             const auto backend_value = app_config.get("storage_backend", "local").asString();
             m_storage_backend = ParseStorageBackend(backend_value);
             Logger::Info() << "Loaded storage_backend from config: " << backend_value;
+
+            const auto staging_backend_value =
+                app_config.get("upload_staging_backend", "local").asString();
+            m_upload_staging_backend = ParseStorageBackend(staging_backend_value);
+            Logger::Info() << "Loaded upload_staging_backend from config: " << staging_backend_value;
+            if (m_upload_staging_backend == StorageBackend::S3 &&
+                m_storage_backend != StorageBackend::S3) {
+                throw std::runtime_error(
+                    "upload_staging_backend=s3 requires storage_backend=s3"
+                );
+            }
 
             if (app_config.isMember("s3")) {
                 const auto& s3_config = app_config["s3"];
@@ -433,6 +445,10 @@ namespace disk::utils {
 
     auto ConfigMgr::GetStorageBackend() const noexcept -> StorageBackend {
         return m_storage_backend;
+    }
+
+    auto ConfigMgr::GetUploadStagingBackend() const noexcept -> StorageBackend {
+        return m_upload_staging_backend;
     }
 
     auto ConfigMgr::GetS3StorageConfig() const noexcept -> S3StorageConfig {

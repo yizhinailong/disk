@@ -585,6 +585,10 @@ namespace {
         ConfigMgr::GetInstance()->LoadConfig();
 
         EXPECT_EQ(ConfigMgr::GetInstance()->GetStorageBackend(), disk::utils::StorageBackend::Local);
+        EXPECT_EQ(
+            ConfigMgr::GetInstance()->GetUploadStagingBackend(),
+            disk::utils::StorageBackend::Local
+        );
         RestoreAssemblyDefaults();
     }
 
@@ -592,6 +596,7 @@ namespace {
         Json::Value cfg;
         auto& disk = cfg["custom_config"]["disk"];
         disk["storage_backend"] = "s3";
+        disk["upload_staging_backend"] = "s3";
         disk["s3"]["bucket"] = "disk-test";
         disk["s3"]["region"] = "us-west-2";
         disk["s3"]["endpoint"] = "http://127.0.0.1:9000";
@@ -607,6 +612,10 @@ namespace {
         ConfigMgr::GetInstance()->LoadConfig();
 
         EXPECT_EQ(ConfigMgr::GetInstance()->GetStorageBackend(), disk::utils::StorageBackend::S3);
+        EXPECT_EQ(
+            ConfigMgr::GetInstance()->GetUploadStagingBackend(),
+            disk::utils::StorageBackend::S3
+        );
         const auto s3 = ConfigMgr::GetInstance()->GetS3StorageConfig();
         EXPECT_EQ(s3.bucket, "disk-test");
         EXPECT_EQ(s3.region, "us-west-2");
@@ -642,6 +651,17 @@ namespace {
     TEST_F(ConfigMgrJwtTest, LoadConfigRejectsInvalidStorageBackend) {
         Json::Value cfg;
         cfg["custom_config"]["disk"]["storage_backend"] = "ftp";
+        drogon::app().loadConfigJson(cfg);
+
+        EXPECT_THROW({ ConfigMgr::GetInstance()->LoadConfig(); }, std::runtime_error);
+        RestoreAssemblyDefaults();
+    }
+
+    TEST_F(ConfigMgrJwtTest, LoadConfigRejectsS3StagingWithLocalFinalStorage) {
+        Json::Value cfg;
+        auto& disk = cfg["custom_config"]["disk"];
+        disk["storage_backend"] = "local";
+        disk["upload_staging_backend"] = "s3";
         drogon::app().loadConfigJson(cfg);
 
         EXPECT_THROW({ ConfigMgr::GetInstance()->LoadConfig(); }, std::runtime_error);
