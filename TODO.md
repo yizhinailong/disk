@@ -234,7 +234,7 @@ API Instance A  API Instance B ... N
 - [x] 所有阻塞 AWS SDK 调用继续运行在专用工作线程，不阻塞 Drogon event loop。
 - [ ] 为超时、限流、5xx、连接失败建立分类重试；认证和参数错误不做无界重试。
 - [x] multipart 流程在请求内失败时执行 `AbortMultipartUpload`。
-- [ ] multipart 在进程退出或 Abort 失败后由持久任务与 bucket 生命周期规则兜底。
+- [x] multipart 在进程退出或 Abort 失败后由持久任务与 bucket 生命周期规则兜底。
 - [x] 不记录 access key、secret、session token 或带签名 URL。
 
 ### 8.3 对象 key 与生命周期
@@ -242,8 +242,8 @@ API Instance A  API Instance B ... N
 - [x] 规范 staging、assembled、final 三类 key 前缀并进行严格输入规范化，禁止路径穿越。
 - [x] staging key 必须按 `upload_id` 隔离，清理任务不得使用未经验证的宽泛前缀。
 - [x] final key 与 D-05 内容寻址决策一致，数据库 `storage_path` 仍为读取权威。
-- [ ] 在 MinIO/AWS S3 配置 staging/multipart 生命周期过期规则，作为应用清理失败的最后保护。
-- [ ] final 前缀不得配置自动过期规则。
+- [x] 在 MinIO/AWS S3 配置 staging/multipart 生命周期过期规则，作为应用清理失败的最后保护。
+- [x] final 前缀不得配置自动过期规则。
 
 ### 8.4 下载路径
 
