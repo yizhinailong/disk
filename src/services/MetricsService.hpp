@@ -57,7 +57,7 @@ namespace disk::metrics {
     inline constexpr size_t kHttpStatusClassCount = static_cast<size_t>(HttpStatusClass::Count);
     inline constexpr size_t kStorageJobOutcomeCount = static_cast<size_t>(StorageJobOutcome::Count);
     inline constexpr size_t kStorageJobTypeCount = 7;
-    inline constexpr size_t kReconciliationFindingTypeCount = 9;
+    inline constexpr size_t kReconciliationFindingTypeCount = 10;
     inline constexpr std::array<double, 8> kDurationBucketsSeconds{
         0.005,
         0.01,

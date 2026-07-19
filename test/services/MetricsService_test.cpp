@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "services/StorageJobRepository.hpp"
+#include "services/StorageReconciliationService.hpp"
 
 namespace disk::metrics {
     namespace {
@@ -79,6 +80,9 @@ namespace disk::metrics {
             database.reconciliation_findings[ReconciliationFindingTypeIndex(
                 "missing_final_blob"
             )] = 4;
+            database.reconciliation_findings[ReconciliationFindingTypeIndex(
+                disk::reconciliation::kUploadStagingMismatchFindingType
+            )] = 2;
             database.success = true;
             disk::runtime::ProcessRuntimeState runtime(
                 disk::utils::ProcessRole::Api,
@@ -92,6 +96,7 @@ namespace disk::metrics {
             EXPECT_NE(output.find("disk_storage_jobs{status=\"dead_letter\"} 2"), std::string::npos);
             EXPECT_NE(output.find("disk_upload_tasks{status=\"finalizing\"} 5"), std::string::npos);
             EXPECT_NE(output.find("disk_reconciliation_findings_unresolved{finding_type=\"missing_final_blob\"} 4"), std::string::npos);
+            EXPECT_NE(output.find("disk_reconciliation_findings_unresolved{finding_type=\"upload_staging_mismatch\"} 2"), std::string::npos);
             EXPECT_NE(output.find("disk_metrics_snapshot_success 1"), std::string::npos);
             EXPECT_NE(output.find("instance_id=\"api-quoted\\\"\""), std::string::npos);
             EXPECT_EQ(output.find("upload_id="), std::string::npos);
@@ -100,6 +105,12 @@ namespace disk::metrics {
 
         TEST(MetricsServiceTest, ReconciliationFindingTypesUseFixedUnknownBucket) {
             EXPECT_EQ(ReconciliationFindingTypeIndex("content_ref_count_mismatch"), 0);
+            EXPECT_NE(
+                ReconciliationFindingTypeIndex(
+                    disk::reconciliation::kUploadStagingMismatchFindingType
+                ),
+                kReconciliationFindingTypeCount - 1
+            );
             EXPECT_EQ(
                 ReconciliationFindingTypeIndex("future_finding_type"),
                 kReconciliationFindingTypeCount - 1

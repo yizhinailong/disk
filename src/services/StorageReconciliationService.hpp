@@ -25,6 +25,8 @@ namespace disk::reconciliation {
 
     inline constexpr size_t kMaxDatabaseReconciliationPageSize = 500;
     inline constexpr size_t kMaxObjectReconciliationPageSize = 1000;
+    inline constexpr std::string_view kUploadStagingMismatchFindingType =
+        "upload_staging_mismatch";
 
     enum class ReconciliationScope {
         Contents,
@@ -141,6 +143,8 @@ namespace disk::reconciliation {
         auto RunPage(const ReconciliationPageRequest& request) const
             -> drogon::Task<Result<ReconciliationPageResult>>;
 
+        auto RecordFinding(const ReconciliationFinding& finding) const -> drogon::Task<void>;
+
     private:
         [[nodiscard]]
         auto RunContentPage(const ReconciliationPageRequest& request) const
@@ -154,7 +158,6 @@ namespace disk::reconciliation {
         auto RunObjectPage(const ReconciliationPageRequest& request) const
             -> drogon::Task<Result<ReconciliationPageResult>>;
 
-        auto RecordFinding(const ReconciliationFinding& finding) const -> drogon::Task<void>;
         auto ResolveFinding(std::string_view finding_type, std::string_view resource_id) const
             -> drogon::Task<void>;
 

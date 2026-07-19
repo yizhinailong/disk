@@ -27,7 +27,9 @@
 #include "models/UploadTasks.hpp"
 #include "services/ContentService.hpp"
 #include "services/QuotaService.hpp"
+#include "services/StorageJobContract.hpp"
 #include "services/StorageJobRepository.hpp"
+#include "services/StorageReconciliationService.hpp"
 #include "services/UploadTaskRepository.hpp"
 #include "storage/IBlobStore.hpp"
 #include "storage/IFileStorage.hpp"
@@ -136,6 +138,76 @@ namespace disk::upload {
             } catch (const std::exception& e) {
                 Logger::Warn() << "Failed to record upload finalize error: upload_id="
                                << command.upload_id << ", error=" << e.what();
+            }
+        }
+
+        auto TriggerStagingReconciliationBestEffort(
+            const drogon::orm::DbClientPtr& db_client,
+            disk::storage::UploadStagingStorage* staging_storage,
+            disk::storage::IBlobStore* blob_store,
+            const disk::storage::UploadStagingSession& session,
+            const CompleteUploadCommand& command,
+            uint64_t state_version
+        ) -> drogon::Task<void> {
+            const auto scan_id =
+                "upload-integrity-" +
+                disk::reconciliation::BuildObjectResourceId(command.upload_id).substr(0, 32);
+            Json::Value details(Json::objectValue);
+            details["scan_id"] = scan_id;
+            details["staging_backend"] = std::string(
+                disk::storage::ToStorageValue(session.backend)
+            );
+            details["state_version"] = Json::UInt64(state_version);
+            details["error_code"] = ErrorInfo(ErrorCode::ChunkVerifyFailed).CodeInt();
+            details["lease_owner"] = command.lease_owner;
+
+            disk::reconciliation::StorageReconciliationService reconciliation_service(
+                db_client,
+                staging_storage,
+                blob_store
+            );
+            try {
+                co_await reconciliation_service.RecordFinding(
+                    disk::reconciliation::ReconciliationFinding{
+                        .finding_type = std::string(
+                            disk::reconciliation::kUploadStagingMismatchFindingType
+                        ),
+                        .resource_id = command.upload_id,
+                        .resource_locator = session.prefix,
+                        .severity = disk::reconciliation::ReconciliationSeverity::Critical,
+                        .resolution_strategy =
+                            disk::reconciliation::ResolutionStrategy::Manual,
+                        .details = std::move(details),
+                    }
+                );
+            } catch (const std::exception& error) {
+                Logger::Warn() << "Failed to persist upload staging mismatch: upload_id="
+                               << command.upload_id << ", error=" << error.what();
+            }
+
+            auto reconciliation_job = disk::jobs::BuildStorageReconcileJob(
+                disk::reconciliation::ReconciliationPageRequest{
+                    .scan_id = scan_id,
+                    .scope = disk::reconciliation::ReconciliationScope::Staging,
+                    .limit = disk::reconciliation::kMaxObjectReconciliationPageSize,
+                }
+            );
+            if (!reconciliation_job) {
+                Logger::Warn() << "Failed to build upload staging reconciliation job: upload_id="
+                               << command.upload_id << ", error="
+                               << reconciliation_job.error();
+                co_return;
+            }
+
+            try {
+                disk::jobs::StorageJobRepository storage_job_repository(db_client);
+                co_await storage_job_repository.EnqueueOrRearmSucceeded(
+                    db_client,
+                    reconciliation_job.value()
+                );
+            } catch (const std::exception& error) {
+                Logger::Warn() << "Failed to enqueue upload staging reconciliation: upload_id="
+                               << command.upload_id << ", error=" << error.what();
             }
         }
 
@@ -750,6 +822,16 @@ namespace disk::upload {
                 state_version,
                 assemble_result.error().code
             );
+            if (assemble_result.error().code == ErrorCode::ChunkVerifyFailed) {
+                co_await TriggerStagingReconciliationBestEffort(
+                    m_db_client,
+                    m_upload_staging_storage,
+                    m_blob_store,
+                    staging_session.value(),
+                    command,
+                    state_version
+                );
+            }
             co_return std::unexpected(assemble_result.error());
         }
         const auto& assembled = assemble_result.value();

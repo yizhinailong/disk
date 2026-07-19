@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "services/StorageJobRepository.hpp"
+#include "services/StorageReconciliationService.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/LogHelper.hpp"
 
@@ -58,6 +59,7 @@ namespace disk::metrics {
                 "final_blob_size_mismatch",
                 "quota_used_mismatch",
                 "quota_reserved_mismatch",
+                disk::reconciliation::kUploadStagingMismatchFindingType,
                 "orphan_staging_object",
                 "orphan_final_blob",
                 "unknown",

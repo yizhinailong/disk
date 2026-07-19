@@ -369,6 +369,79 @@ def test_db_failure_after_promotion_preserves_preexisting_blob() -> None:
     cleanup_failed_finalize_fixture(upload_id, blob_path)
 
 
+def test_missing_staging_object_records_reconciliation() -> None:
+    """Verify a DB/object mismatch fails completion and leaves durable evidence."""
+    log_section("Missing Staging Object Reconciliation")
+    payload = f"safety-missing-staging-{unique_name()}".encode()
+    filename = f"safety_missing_staging_{unique_name()}.bin"
+    upload_id, file_hash = init_upload(filename, payload)
+    scan_id: str | None = None
+
+    try:
+        upload_single_chunk(upload_id, payload)
+        chunk = query_one(
+            "SELECT object_key FROM upload_task_chunks WHERE task_id = %s AND chunk_index = 0",
+            (upload_id,),
+        )
+        if chunk is None or not chunk["object_key"]:
+            log_fail("missing-staging fixture has a persisted object key")
+            print_summary()
+        chunk_path = upload_temp_dir(upload_id).parent / str(chunk["object_key"])
+        assert_path_exists("missing-staging fixture object exists before fault injection", chunk_path)
+        chunk_path.unlink()
+        assert_path_absent("missing-staging fixture removes only the object", chunk_path)
+
+        quota_before_complete = user_quota()
+        resp = complete_upload_raw(upload_id)
+        assert_equal("missing staging object returns HTTP 400", resp.status_code, 400)
+        assert_equal("missing staging object returns ChunkVerifyFailed", json_field(resp.text, "code"), "50009")
+        assert_failed_finalize_recoverable(
+            upload_id,
+            filename,
+            file_hash,
+            quota_before_complete,
+        )
+
+        finding = query_one(
+            "SELECT severity, resolution_strategy, resource_locator, details "
+            "FROM storage_reconciliation_findings "
+            "WHERE finding_type = 'upload_staging_mismatch' AND resource_id = %s",
+            (upload_id,),
+        )
+        if finding is None:
+            log_fail("missing staging object persists upload_staging_mismatch")
+            print_summary()
+        log_pass("missing staging object persists upload_staging_mismatch")
+        assert_equal("staging mismatch is critical", int(finding["severity"]), 2)
+        assert_equal("staging mismatch requires manual resolution", finding["resolution_strategy"], "manual")
+        details = finding["details"]
+        scan_id = str(details["scan_id"])
+        assert_equal("staging mismatch records bounded scan id", scan_id.startswith("upload-integrity-"), True)
+        assert_equal("staging mismatch records state version", int(details["state_version"]) >= 1, True)
+
+        job = query_one(
+            "SELECT id, job_type, aggregate_id FROM storage_jobs "
+            "WHERE job_type = 'storage_reconcile' AND aggregate_id = %s",
+            (scan_id,),
+        )
+        if job is None:
+            log_fail("missing staging object enqueues a durable reconciliation job")
+            print_summary()
+        log_pass("missing staging object enqueues a durable reconciliation job")
+    finally:
+        if scan_id is not None:
+            execute(
+                "DELETE FROM storage_jobs WHERE job_type = 'storage_reconcile' AND aggregate_id = %s",
+                (scan_id,),
+            )
+        execute(
+            "DELETE FROM storage_reconciliation_findings "
+            "WHERE finding_type = 'upload_staging_mismatch' AND resource_id = %s",
+            (upload_id,),
+        )
+        cleanup_failed_finalize_fixture(upload_id, final_blob_path(sha256_bytes(payload)))
+
+
 def test_cancel_upload_invariants() -> None:
     """Verify cancel releases reservations and removes temp artifacts."""
     log_section("Canceled Upload Invariants")
@@ -601,6 +674,7 @@ def main() -> None:
     test_successful_chunked_upload_invariants()
     test_db_failure_after_blob_promotion_retains_created_blob()
     test_db_failure_after_promotion_preserves_preexisting_blob()
+    test_missing_staging_object_records_reconciliation()
     test_cancel_upload_invariants()
     test_expired_upload_cleanup_invariants()
     test_init_upload_expires_existing_task_invariants()

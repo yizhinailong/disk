@@ -884,7 +884,7 @@ Content-Type: application/octet-stream
 **POST** `/api/file/upload/complete`
 
 #### 实现状态
-**同步接口、PostgreSQL 完成租约、过期接管与 `completed_file_id` 幂等重放已实现；S3-native 暂存和持久清理 Worker 仍按 ADR-002 后续阶段推进**
+**同步接口、PostgreSQL 完成租约、S3-native 暂存、持久清理 Worker、过期接管与 `completed_file_id` 幂等重放均已实现**
 
 完成文件上传，合并所有分片。
 
@@ -927,7 +927,7 @@ Authorization: Bearer <access_token>
 | `Completed` | 幂等返回首次完成创建的同一 `file`，不重新组装、不重复结算配额 |
 | `Cancelled` / `Expired` / `Failed` | 返回 `400 + 50008 UploadTaskNotFound`，不得恢复为进行中 |
 
-完成过程按“租约认领 → 事务外对象组装/校验 → 短事务提交 → 异步清理”执行。服务端在组装后、最终 Blob 晋升后分别用最新 `state_version` 续租；续租或最终 CAS 未命中时，当前请求失去完成权限并返回可重试冲突，不得提交文件、配额或上传终态。服务端验证分片对象、总大小、整文件 MD5 与 SHA-256；multipart ETag 不作为文件 MD5。HTTP 响应丢失后，客户端重复调用可从 `completed_file_id` 恢复原成功响应。
+完成过程按“租约认领 → 事务外对象组装/校验 → 短事务提交 → 异步清理”执行。服务端在组装后、最终 Blob 晋升后分别用最新 `state_version` 续租；续租或最终 CAS 未命中时，当前请求失去完成权限并返回可重试冲突，不得提交文件、配额或上传终态。服务端验证分片对象、总大小、整文件 MD5 与 SHA-256；multipart ETag 不作为文件 MD5。数据库分片描述符对应的对象缺失、大小、ETag 或内容哈希不一致时返回 `400 + 50009 ChunkVerifyFailed`，并持久化 `upload_staging_mismatch` finding 与一项去重的 staging 对账任务。HTTP 响应丢失后，客户端重复调用可从 `completed_file_id` 恢复原成功响应。
 
 #### 错误响应矩阵
 
@@ -938,6 +938,7 @@ Authorization: Bearer <access_token>
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
 | 400 | 50008 | `UploadTaskNotFound` | 上传任务不存在 | upload_id 不存在或已过期 |
 | 400 | 10002 | `ValidationFailed` | 参数校验失败 | 分片不完整、哈希校验失败 |
+| 400 | 50009 | `ChunkVerifyFailed` | 分片校验失败 | DB 分片描述符对应对象缺失或元数据/内容不一致；服务端已排入对账 |
 | 409 | 10004 | `ResourceConflict` | 资源冲突 | 其他实例持有有效完成租约，请求应稍后重试 |
 
 #### 响应示例
