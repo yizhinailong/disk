@@ -1,6 +1,6 @@
 ## Purpose
 
-TBD.
+Defines the Qt/QML desktop experience across platform-compatible Owner, Visitor, and Admin shells, with isolated authentication, a coherent explorer navigation and interaction model, evidence-based implementation traceability, and consistent Chinese terminology. It also governs secure visitor download resumption and integrity validation before completed transfers are presented to users.
 
 ## Requirements
 

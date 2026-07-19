@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD.
+Defines Web client capabilities for administrator storage-quota editing, centralized and resilient folder-tree synchronization, and memory-safe large-file downloads with accurate lifecycle feedback.
 
 ## Requirements
 
