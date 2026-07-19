@@ -707,6 +707,25 @@ namespace disk::storage {
         co_return result;
     }
 
+    auto LocalFileStorage::ListStagingObjects(
+        const std::string& continuation_token,
+        size_t limit
+    ) -> drogon::Task<Result<StorageInventoryPage>> {
+        const auto root = std::filesystem::path(m_config_mgr->GetTempUploadPath());
+        auto result = co_await RunBlockingFilesystemTask(
+            m_worker_queue,
+            [root, continuation_token, limit]() {
+                return ListLocalStorageInventory(
+                    root,
+                    continuation_token,
+                    limit,
+                    LocalInventoryLocator::RelativeToRoot
+                );
+            }
+        );
+        co_return result;
+    }
+
     auto LocalFileStorage::GetTempDirPath(const std::string& upload_id) const -> std::filesystem::path {
         return std::filesystem::path(m_config_mgr->GetTempUploadPath()) / upload_id;
     }

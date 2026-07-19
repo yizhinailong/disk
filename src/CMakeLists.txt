@@ -183,6 +183,7 @@ set(Storage_HEADERS
     storage/S3Client.hpp
     storage/S3ObjectStorage.hpp
     storage/StorageFactory.hpp
+    storage/StorageInventory.hpp
     storage/StorageMgr.hpp
     storage/UploadStagingStorage.hpp
 )
@@ -194,6 +195,7 @@ set(Storage_SOURCES
     storage/S3Client.cpp
     storage/S3ObjectStorage.cpp
     storage/StorageFactory.cpp
+    storage/StorageInventory.cpp
     storage/StorageMgr.cpp
 )
 

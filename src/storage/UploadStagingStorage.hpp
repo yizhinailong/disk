@@ -17,6 +17,7 @@
 
 #include <drogon/orm/DbClient.h>
 
+#include "storage/StorageInventory.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::storage {
@@ -145,6 +146,21 @@ namespace disk::storage {
         [[nodiscard]]
         virtual auto CleanupSession(const UploadStagingSession& session)
             -> drogon::Task<Result<void>> = 0;
+
+        /**
+         * @brief 分页列举当前后端配置的全部 staging 对象
+         */
+        [[nodiscard]]
+        virtual auto ListStagingObjects(
+            const std::string& continuation_token,
+            size_t limit
+        ) -> drogon::Task<Result<StorageInventoryPage>> {
+            static_cast<void>(continuation_token);
+            static_cast<void>(limit);
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Staging inventory is not supported")
+            );
+        }
     };
 
 } // namespace disk::storage

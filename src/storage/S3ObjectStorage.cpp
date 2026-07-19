@@ -247,6 +247,62 @@ namespace disk::storage {
             return {};
         }
 
+        [[nodiscard]] auto ListS3Inventory(
+            const std::shared_ptr<IS3Client>& client,
+            const std::string& prefix,
+            const std::string& continuation_token,
+            size_t limit
+        ) -> Result<StorageInventoryPage> {
+            if (limit == 0 || limit > kMaxStorageInventoryPageSize || prefix.empty()) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 inventory request")
+                );
+            }
+            auto listed = client->ListObjects(
+                prefix,
+                continuation_token,
+                static_cast<uint32_t>(limit)
+            );
+            if (!listed) {
+                return std::unexpected(listed.error());
+            }
+            if (!std::ranges::all_of(listed->keys, [&prefix](const auto& key) {
+                    return key.starts_with(prefix);
+                })) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "S3 inventory returned an object outside its prefix")
+                );
+            }
+            if (listed->is_truncated &&
+                (listed->continuation_token.empty() ||
+                 listed->continuation_token == continuation_token)) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "S3 inventory pagination did not advance")
+                );
+            }
+
+            StorageInventoryPage page;
+            page.objects.reserve(listed->keys.size());
+            for (const auto& key : listed->keys) {
+                auto head = client->HeadObject(key);
+                if (!head) {
+                    return std::unexpected(head.error());
+                }
+                if (!head->exists) {
+                    continue;
+                }
+                page.objects.push_back(StorageInventoryObject{
+                    .locator = key,
+                    .size_bytes = head->size,
+                });
+            }
+            page.has_more = listed->is_truncated;
+            if (page.has_more) {
+                page.continuation_token = listed->continuation_token;
+            }
+            return page;
+        }
+
         class MultipartAbortGuard final {
         public:
             MultipartAbortGuard(
@@ -973,6 +1029,21 @@ namespace disk::storage {
         co_return result;
     }
 
+    auto S3ObjectStorage::ListStagingObjects(
+        const std::string& continuation_token,
+        size_t limit
+    ) -> drogon::Task<Result<StorageInventoryPage>> {
+        const auto prefix = m_s3_config.staging_prefix + "/";
+        auto client = m_s3_client;
+        auto result = co_await RunBlockingS3Task(
+            m_worker_queue,
+            [client, prefix, continuation_token, limit]() {
+                return ListS3Inventory(client, prefix, continuation_token, limit);
+            }
+        );
+        co_return result;
+    }
+
     auto S3ObjectStorage::PromoteToFinal(
         const UploadStagingAssembly& assembly,
         const std::string& sha256_hash
@@ -1277,6 +1348,21 @@ namespace disk::storage {
                     return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "S3 object not found"));
                 }
                 return head_result->size;
+            }
+        );
+        co_return result;
+    }
+
+    auto S3ObjectStorage::ListFinalObjects(
+        const std::string& continuation_token,
+        size_t limit
+    ) -> drogon::Task<Result<StorageInventoryPage>> {
+        const auto prefix = m_s3_config.object_prefix + "/";
+        auto client = m_s3_client;
+        auto result = co_await RunBlockingS3Task(
+            m_worker_queue,
+            [client, prefix, continuation_token, limit]() {
+                return ListS3Inventory(client, prefix, continuation_token, limit);
             }
         );
         co_return result;

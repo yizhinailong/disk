@@ -499,6 +499,51 @@ TEST_F(S3ObjectStorageTest, S3SessionValidationRejectsUnsafeOrMismatchedPrefixes
     }
 }
 
+TEST_F(S3ObjectStorageTest, InventoriesUseConfiguredPrefixesAndContinuationTokens) {
+    client->objects["staging/upload-a/chunks/0-a.part"] = "a";
+    client->objects["staging/upload-b/chunks/0-b.part"] = "bb";
+    client->objects["staging/upload-c/assembled/1.bin"] = "ccc";
+    client->objects["objects/sha256/aa/a.bin"] = "final";
+    client->objects["outside/ignored.bin"] = "ignored";
+
+    auto first = drogon::sync_wait(storage->ListStagingObjects({}, 2));
+    ASSERT_TRUE(first.has_value()) << first.error().message;
+    ASSERT_EQ(first->objects.size(), 2U);
+    EXPECT_EQ(first->objects[0].locator, "staging/upload-a/chunks/0-a.part");
+    EXPECT_EQ(first->objects[0].size_bytes, 1U);
+    EXPECT_EQ(first->objects[1].locator, "staging/upload-b/chunks/0-b.part");
+    EXPECT_EQ(first->objects[1].size_bytes, 2U);
+    EXPECT_TRUE(first->has_more);
+    EXPECT_FALSE(first->continuation_token.empty());
+
+    auto second = drogon::sync_wait(
+        storage->ListStagingObjects(first->continuation_token, 2)
+    );
+    ASSERT_TRUE(second.has_value()) << second.error().message;
+    ASSERT_EQ(second->objects.size(), 1U);
+    EXPECT_EQ(second->objects[0].locator, "staging/upload-c/assembled/1.bin");
+    EXPECT_FALSE(second->has_more);
+
+    auto final = drogon::sync_wait(storage->ListFinalObjects({}, 10));
+    ASSERT_TRUE(final.has_value()) << final.error().message;
+    ASSERT_EQ(final->objects.size(), 1U);
+    EXPECT_EQ(final->objects[0].locator, "objects/sha256/aa/a.bin");
+    EXPECT_EQ(final->objects[0].size_bytes, 5U);
+}
+
+TEST_F(S3ObjectStorageTest, InventoryRejectsInvalidPageAndOutOfPrefixResult) {
+    auto invalid = drogon::sync_wait(storage->ListFinalObjects({}, 0));
+    ASSERT_FALSE(invalid.has_value());
+    EXPECT_EQ(invalid.error().code, ErrorCode::ValidationFailed);
+    EXPECT_EQ(client->list_calls, 0);
+
+    client->list_outside_prefix_key = "staging/unsafe.bin";
+    auto outside = drogon::sync_wait(storage->ListFinalObjects({}, 10));
+    ASSERT_FALSE(outside.has_value());
+    EXPECT_EQ(outside.error().code, ErrorCode::InternalError);
+    EXPECT_EQ(client->head_calls, 0);
+}
+
 TEST_F(S3ObjectStorageTest, S3ChunkWriteIsConditionalAndIdempotent) {
     const auto session = S3Session();
     const std::string data = "immutable-s3-chunk";

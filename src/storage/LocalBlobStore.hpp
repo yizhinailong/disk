@@ -72,6 +72,10 @@ namespace disk::storage {
         [[nodiscard]]
         auto GetFileSize(const std::filesystem::path& storage_path) -> drogon::Task<Result<uint64_t>> override;
 
+        [[nodiscard]]
+        auto ListFinalObjects(const std::string& continuation_token, size_t limit)
+            -> drogon::Task<Result<StorageInventoryPage>> override;
+
     private:
         std::shared_ptr<disk::utils::ConfigMgr> m_config_mgr{};         ///< 配置管理器
         std::shared_ptr<trantor::ConcurrentTaskQueue> m_worker_queue{}; ///< 最终 Blob 文件系统工作队列

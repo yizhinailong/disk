@@ -68,6 +68,10 @@ namespace disk::storage {
             -> drogon::Task<Result<void>> override;
 
         [[nodiscard]]
+        auto ListStagingObjects(const std::string& continuation_token, size_t limit)
+            -> drogon::Task<Result<StorageInventoryPage>> override;
+
+        [[nodiscard]]
         auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& sha256_hash)
             -> drogon::Task<Result<BlobPromoteResult>> override;
 
@@ -93,6 +97,10 @@ namespace disk::storage {
 
         [[nodiscard]]
         auto GetFileSize(const std::filesystem::path& storage_path) -> drogon::Task<Result<uint64_t>> override;
+
+        [[nodiscard]]
+        auto ListFinalObjects(const std::string& continuation_token, size_t limit)
+            -> drogon::Task<Result<StorageInventoryPage>> override;
 
         [[nodiscard]]
         auto AbortMultipartUpload(const MultipartUploadDescriptor& descriptor)

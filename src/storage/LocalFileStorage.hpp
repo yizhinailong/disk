@@ -120,6 +120,10 @@ namespace disk::storage {
         auto CleanupSession(const UploadStagingSession& session)
             -> drogon::Task<Result<void>> override;
 
+        [[nodiscard]]
+        auto ListStagingObjects(const std::string& continuation_token, size_t limit)
+            -> drogon::Task<Result<StorageInventoryPage>> override;
+
     private:
         /**
          * @brief 获取上传会话的临时目录路径

@@ -405,4 +405,23 @@ namespace disk::storage {
         co_return result;
     }
 
+    auto LocalBlobStore::ListFinalObjects(
+        const std::string& continuation_token,
+        size_t limit
+    ) -> drogon::Task<Result<StorageInventoryPage>> {
+        const auto root = std::filesystem::path(m_config_mgr->GetStorageBasePath());
+        auto result = co_await RunBlockingFilesystemTask(
+            m_worker_queue,
+            [root, continuation_token, limit]() {
+                return ListLocalStorageInventory(
+                    root,
+                    continuation_token,
+                    limit,
+                    LocalInventoryLocator::IncludeRoot
+                );
+            }
+        );
+        co_return result;
+    }
+
 } // namespace disk::storage
