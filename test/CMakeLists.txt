@@ -49,6 +49,7 @@ set(TEST_SOURCES
     services/SystemService_test.cpp
     services/OperationLogJsonDetails_test.cpp
     services/OperationLogService_test.cpp
+    services/ProcessRuntime_test.cpp
     filters/AdminAuthFilter_test.cpp
     filters/ShareAuthFilter_test.cpp
     filters/ShareRateLimitFilter_test.cpp
@@ -85,6 +86,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/services/FolderRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
     ${CMAKE_SOURCE_DIR}/src/services/MultipartUploadJournal.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/ProcessRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ContentService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/QuotaService.cpp

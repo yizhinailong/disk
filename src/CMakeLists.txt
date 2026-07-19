@@ -118,6 +118,7 @@ set(Services_HEADERS
     services/HealthService.hpp
     services/MultipartUploadJournal.hpp
     services/OperationLogService.hpp
+    services/ProcessRuntime.hpp
     services/QuotaService.hpp
     services/RedisService.hpp
     services/ScheduledTasks.hpp
@@ -155,6 +156,7 @@ set(Services_SOURCES
     services/HealthService.cpp
     services/MultipartUploadJournal.cpp
     services/OperationLogService.cpp
+    services/ProcessRuntime.cpp
     services/QuotaService.cpp
     services/RedisService.cpp
     services/ScheduledTasks.cpp
