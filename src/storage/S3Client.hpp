@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "storage/IBlobStore.hpp"
 #include "utils/ConfigMgr.hpp"
@@ -14,6 +15,22 @@ namespace disk::storage {
     struct S3HeadObjectResult {
         bool exists{ false };
         uint64_t size{ 0 };
+        std::string etag;
+    };
+
+    struct S3PutObjectResult {
+        std::string etag;
+    };
+
+    struct S3ListObjectsResult {
+        std::vector<std::string> keys;
+        std::string continuation_token;
+        bool is_truncated{ false };
+    };
+
+    struct S3CompletedPart {
+        int part_number{ 0 };
+        std::string etag;
     };
 
     class IS3Client {
@@ -27,6 +44,10 @@ namespace disk::storage {
         virtual auto HeadObject(const std::string& key) -> Result<S3HeadObjectResult> = 0;
 
         [[nodiscard]]
+        virtual auto PutObject(const std::string& key, std::string data)
+            -> Result<S3PutObjectResult> = 0;
+
+        [[nodiscard]]
         virtual auto PutObjectFromFile(const std::string& key, const std::filesystem::path& local_path)
             -> Result<void> = 0;
 
@@ -36,6 +57,48 @@ namespace disk::storage {
         [[nodiscard]]
         virtual auto GetObjectRange(const std::string& key, uint64_t start, uint64_t length)
             -> Result<std::shared_ptr<StorageReadStream>> = 0;
+
+        [[nodiscard]]
+        virtual auto ListObjects(
+            const std::string& prefix,
+            const std::string& continuation_token,
+            uint32_t max_keys
+        ) -> Result<S3ListObjectsResult> = 0;
+
+        [[nodiscard]]
+        virtual auto DeleteObjects(const std::vector<std::string>& keys) -> Result<void> = 0;
+
+        [[nodiscard]]
+        virtual auto CreateMultipartUpload(const std::string& key) -> Result<std::string> = 0;
+
+        [[nodiscard]]
+        virtual auto UploadPart(
+            const std::string& key,
+            const std::string& upload_id,
+            int part_number,
+            std::string data
+        ) -> Result<std::string> = 0;
+
+        [[nodiscard]]
+        virtual auto UploadPartCopy(
+            const std::string& source_key,
+            const std::string& destination_key,
+            const std::string& upload_id,
+            int part_number,
+            uint64_t start,
+            uint64_t length
+        ) -> Result<std::string> = 0;
+
+        [[nodiscard]]
+        virtual auto CompleteMultipartUpload(
+            const std::string& key,
+            const std::string& upload_id,
+            const std::vector<S3CompletedPart>& parts
+        ) -> Result<void> = 0;
+
+        [[nodiscard]]
+        virtual auto AbortMultipartUpload(const std::string& key, const std::string& upload_id)
+            -> Result<void> = 0;
     };
 
     class AwsS3Client final : public IS3Client {
@@ -55,6 +118,10 @@ namespace disk::storage {
         auto HeadObject(const std::string& key) -> Result<S3HeadObjectResult> override;
 
         [[nodiscard]]
+        auto PutObject(const std::string& key, std::string data)
+            -> Result<S3PutObjectResult> override;
+
+        [[nodiscard]]
         auto PutObjectFromFile(const std::string& key, const std::filesystem::path& local_path)
             -> Result<void> override;
 
@@ -65,9 +132,51 @@ namespace disk::storage {
         auto GetObjectRange(const std::string& key, uint64_t start, uint64_t length)
             -> Result<std::shared_ptr<StorageReadStream>> override;
 
+        [[nodiscard]]
+        auto ListObjects(
+            const std::string& prefix,
+            const std::string& continuation_token,
+            uint32_t max_keys
+        ) -> Result<S3ListObjectsResult> override;
+
+        [[nodiscard]]
+        auto DeleteObjects(const std::vector<std::string>& keys) -> Result<void> override;
+
+        [[nodiscard]]
+        auto CreateMultipartUpload(const std::string& key) -> Result<std::string> override;
+
+        [[nodiscard]]
+        auto UploadPart(
+            const std::string& key,
+            const std::string& upload_id,
+            int part_number,
+            std::string data
+        ) -> Result<std::string> override;
+
+        [[nodiscard]]
+        auto UploadPartCopy(
+            const std::string& source_key,
+            const std::string& destination_key,
+            const std::string& upload_id,
+            int part_number,
+            uint64_t start,
+            uint64_t length
+        ) -> Result<std::string> override;
+
+        [[nodiscard]]
+        auto CompleteMultipartUpload(
+            const std::string& key,
+            const std::string& upload_id,
+            const std::vector<S3CompletedPart>& parts
+        ) -> Result<void> override;
+
+        [[nodiscard]]
+        auto AbortMultipartUpload(const std::string& key, const std::string& upload_id)
+            -> Result<void> override;
+
     private:
         class Impl;
         std::unique_ptr<Impl> m_impl;
     };
 
-} ///< namespace disk::storage
+} // namespace disk::storage

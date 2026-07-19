@@ -13,12 +13,24 @@
 #include <aws/core/client/ClientConfiguration.h>
 #include <aws/core/http/HttpResponse.h>
 #include <aws/core/utils/memory/stl/AWSStreamFwd.h>
+#include <aws/core/utils/memory/stl/AWSStringStream.h>
 #include <aws/s3/S3Client.h>
+#include <aws/s3/model/AbortMultipartUploadRequest.h>
+#include <aws/s3/model/CompleteMultipartUploadRequest.h>
+#include <aws/s3/model/CompletedMultipartUpload.h>
+#include <aws/s3/model/CompletedPart.h>
+#include <aws/s3/model/CreateMultipartUploadRequest.h>
+#include <aws/s3/model/Delete.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
+#include <aws/s3/model/DeleteObjectsRequest.h>
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/HeadBucketRequest.h>
 #include <aws/s3/model/HeadObjectRequest.h>
+#include <aws/s3/model/ListObjectsV2Request.h>
+#include <aws/s3/model/ObjectIdentifier.h>
 #include <aws/s3/model/PutObjectRequest.h>
+#include <aws/s3/model/UploadPartCopyRequest.h>
+#include <aws/s3/model/UploadPartRequest.h>
 
 #include "utils/LogHelper.hpp"
 
@@ -26,12 +38,16 @@ namespace disk::storage {
 
     namespace {
         constexpr const char* AWS_ALLOC_TAG = "disk-s3-storage";
+        constexpr uint32_t MAX_DELETE_OBJECTS = 1000;
+        constexpr int MIN_MULTIPART_PART_NUMBER = 1;
+        constexpr int MAX_MULTIPART_PART_NUMBER = 10000;
 
         auto IsNotFoundError(const Aws::S3::S3Error& error) -> bool {
             const auto response_code = error.GetResponseCode();
             const auto exception_name = error.GetExceptionName();
             return response_code == Aws::Http::HttpResponseCode::NOT_FOUND ||
-                   exception_name == "NoSuchKey" || exception_name == "NotFound";
+                   exception_name == "NoSuchKey" || exception_name == "NoSuchUpload" ||
+                   exception_name == "NotFound";
         }
 
         auto ToErrorInfo(const Aws::S3::S3Error& error, ErrorCode code, const std::string& operation)
@@ -42,6 +58,15 @@ namespace disk::storage {
                 message += error.GetMessage();
             }
             return ErrorInfo(code, message);
+        }
+
+        auto ValidatePartNumber(int part_number) -> Result<void> {
+            if (part_number < MIN_MULTIPART_PART_NUMBER || part_number > MAX_MULTIPART_PART_NUMBER) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 multipart part number")
+                );
+            }
+            return {};
         }
 
         class AwsApiRuntime final {
@@ -97,7 +122,7 @@ namespace disk::storage {
             Aws::IOStream* m_body{ nullptr };
             uint64_t m_remaining{ 0 };
         };
-    } ///< namespace
+    } // namespace
 
     class AwsS3Client::Impl {
     public:
@@ -174,7 +199,7 @@ namespace disk::storage {
         auto outcome = m_impl->client->HeadObject(request);
         if (!outcome.IsSuccess()) {
             if (IsNotFoundError(outcome.GetError())) {
-                return S3HeadObjectResult{ .exists = false, .size = 0 };
+                return S3HeadObjectResult{ .exists = false, .size = 0, .etag = {} };
             }
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
@@ -185,8 +210,33 @@ namespace disk::storage {
 
         return S3HeadObjectResult{
             .exists = true,
-            .size = static_cast<uint64_t>(outcome.GetResult().GetContentLength())
+            .size = static_cast<uint64_t>(outcome.GetResult().GetContentLength()),
+            .etag = outcome.GetResult().GetETag()
         };
+    }
+
+    auto AwsS3Client::PutObject(const std::string& key, std::string data)
+        -> Result<S3PutObjectResult> {
+        auto input_data = Aws::MakeShared<Aws::StringStream>(AWS_ALLOC_TAG);
+        input_data->write(data.data(), static_cast<std::streamsize>(data.size()));
+        input_data->seekg(0);
+
+        Aws::S3::Model::PutObjectRequest request;
+        request.SetBucket(m_impl->storage_config.bucket);
+        request.SetKey(key);
+        request.SetContentLength(static_cast<long long>(data.size()));
+        request.SetBody(input_data);
+
+        auto outcome = m_impl->client->PutObject(request);
+        if (!outcome.IsSuccess()) {
+            return std::unexpected(ToErrorInfo(
+                outcome.GetError(),
+                ErrorCode::InternalError,
+                "S3 PutObject"
+            ));
+        }
+
+        return S3PutObjectResult{ .etag = outcome.GetResult().GetETag() };
     }
 
     auto AwsS3Client::PutObjectFromFile(const std::string& key, const std::filesystem::path& local_path)
@@ -242,6 +292,11 @@ namespace disk::storage {
         request.SetBucket(m_impl->storage_config.bucket);
         request.SetKey(key);
         if (length > 0) {
+            if (start > std::numeric_limits<uint64_t>::max() - (length - 1)) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 object range")
+                );
+            }
             const auto end = start + length - 1;
             request.SetRange("bytes=" + std::to_string(start) + "-" + std::to_string(end));
         }
@@ -263,4 +318,258 @@ namespace disk::storage {
         );
     }
 
-} ///< namespace disk::storage
+    auto AwsS3Client::ListObjects(
+        const std::string& prefix,
+        const std::string& continuation_token,
+        uint32_t max_keys
+    ) -> Result<S3ListObjectsResult> {
+        if (max_keys == 0 || max_keys > MAX_DELETE_OBJECTS) {
+            return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 list page size")
+            );
+        }
+
+        Aws::S3::Model::ListObjectsV2Request request;
+        request.SetBucket(m_impl->storage_config.bucket);
+        request.SetPrefix(prefix);
+        request.SetMaxKeys(static_cast<int>(max_keys));
+        if (!continuation_token.empty()) {
+            request.SetContinuationToken(continuation_token);
+        }
+
+        auto outcome = m_impl->client->ListObjectsV2(request);
+        if (!outcome.IsSuccess()) {
+            return std::unexpected(ToErrorInfo(
+                outcome.GetError(),
+                ErrorCode::FileReadError,
+                "S3 ListObjectsV2"
+            ));
+        }
+
+        S3ListObjectsResult result;
+        result.keys.reserve(outcome.GetResult().GetContents().size());
+        for (const auto& object : outcome.GetResult().GetContents()) {
+            result.keys.emplace_back(object.GetKey());
+        }
+        result.is_truncated = outcome.GetResult().GetIsTruncated();
+        result.continuation_token = outcome.GetResult().GetNextContinuationToken();
+        return result;
+    }
+
+    auto AwsS3Client::DeleteObjects(const std::vector<std::string>& keys) -> Result<void> {
+        if (keys.empty()) {
+            return {};
+        }
+        if (keys.size() > MAX_DELETE_OBJECTS) {
+            return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "S3 batch delete exceeds 1000 objects")
+            );
+        }
+
+        Aws::S3::Model::Delete delete_payload;
+        delete_payload.SetQuiet(true);
+        for (const auto& key : keys) {
+            Aws::S3::Model::ObjectIdentifier object;
+            object.SetKey(key);
+            delete_payload.AddObjects(std::move(object));
+        }
+
+        Aws::S3::Model::DeleteObjectsRequest request;
+        request.SetBucket(m_impl->storage_config.bucket);
+        request.SetDelete(std::move(delete_payload));
+
+        auto outcome = m_impl->client->DeleteObjects(request);
+        if (!outcome.IsSuccess()) {
+            return std::unexpected(ToErrorInfo(
+                outcome.GetError(),
+                ErrorCode::InternalError,
+                "S3 DeleteObjects"
+            ));
+        }
+        if (!outcome.GetResult().GetErrors().empty()) {
+            const auto& error = outcome.GetResult().GetErrors().front();
+            return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "S3 DeleteObjects partially failed: " + std::string(error.GetCode()) +
+                    ": " + std::string(error.GetMessage())
+            ));
+        }
+        return {};
+    }
+
+    auto AwsS3Client::CreateMultipartUpload(const std::string& key) -> Result<std::string> {
+        Aws::S3::Model::CreateMultipartUploadRequest request;
+        request.SetBucket(m_impl->storage_config.bucket);
+        request.SetKey(key);
+
+        auto outcome = m_impl->client->CreateMultipartUpload(request);
+        if (!outcome.IsSuccess()) {
+            return std::unexpected(ToErrorInfo(
+                outcome.GetError(),
+                ErrorCode::InternalError,
+                "S3 CreateMultipartUpload"
+            ));
+        }
+        if (outcome.GetResult().GetUploadId().empty()) {
+            return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "S3 multipart upload ID is empty")
+            );
+        }
+        return std::string(outcome.GetResult().GetUploadId());
+    }
+
+    auto AwsS3Client::UploadPart(
+        const std::string& key,
+        const std::string& upload_id,
+        int part_number,
+        std::string data
+    ) -> Result<std::string> {
+        auto part_validation = ValidatePartNumber(part_number);
+        if (!part_validation) {
+            return std::unexpected(part_validation.error());
+        }
+        if (upload_id.empty()) {
+            return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "S3 multipart upload ID is empty")
+            );
+        }
+
+        auto input_data = Aws::MakeShared<Aws::StringStream>(AWS_ALLOC_TAG);
+        input_data->write(data.data(), static_cast<std::streamsize>(data.size()));
+        input_data->seekg(0);
+
+        Aws::S3::Model::UploadPartRequest request;
+        request.SetBucket(m_impl->storage_config.bucket);
+        request.SetKey(key);
+        request.SetUploadId(upload_id);
+        request.SetPartNumber(part_number);
+        request.SetContentLength(static_cast<long long>(data.size()));
+        request.SetBody(input_data);
+
+        auto outcome = m_impl->client->UploadPart(request);
+        if (!outcome.IsSuccess()) {
+            return std::unexpected(ToErrorInfo(
+                outcome.GetError(),
+                ErrorCode::InternalError,
+                "S3 UploadPart"
+            ));
+        }
+        if (outcome.GetResult().GetETag().empty()) {
+            return std::unexpected(ErrorInfo(ErrorCode::InternalError, "S3 upload part ETag is empty"));
+        }
+        return std::string(outcome.GetResult().GetETag());
+    }
+
+    auto AwsS3Client::UploadPartCopy(
+        const std::string& source_key,
+        const std::string& destination_key,
+        const std::string& upload_id,
+        int part_number,
+        uint64_t start,
+        uint64_t length
+    ) -> Result<std::string> {
+        auto part_validation = ValidatePartNumber(part_number);
+        if (!part_validation) {
+            return std::unexpected(part_validation.error());
+        }
+        if (upload_id.empty() || length == 0 ||
+            start > std::numeric_limits<uint64_t>::max() - (length - 1)) {
+            return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 multipart copy request")
+            );
+        }
+
+        const auto end = start + length - 1;
+        Aws::S3::Model::UploadPartCopyRequest request;
+        request.SetBucket(m_impl->storage_config.bucket);
+        request.SetKey(destination_key);
+        request.SetUploadId(upload_id);
+        request.SetPartNumber(part_number);
+        request.SetCopySource(m_impl->storage_config.bucket + "/" + source_key);
+        request.SetCopySourceRange("bytes=" + std::to_string(start) + "-" + std::to_string(end));
+
+        auto outcome = m_impl->client->UploadPartCopy(request);
+        if (!outcome.IsSuccess()) {
+            return std::unexpected(ToErrorInfo(
+                outcome.GetError(),
+                ErrorCode::InternalError,
+                "S3 UploadPartCopy"
+            ));
+        }
+        const auto& etag = outcome.GetResult().GetCopyPartResult().GetETag();
+        if (etag.empty()) {
+            return std::unexpected(ErrorInfo(ErrorCode::InternalError, "S3 copied part ETag is empty"));
+        }
+        return std::string(etag);
+    }
+
+    auto AwsS3Client::CompleteMultipartUpload(
+        const std::string& key,
+        const std::string& upload_id,
+        const std::vector<S3CompletedPart>& parts
+    ) -> Result<void> {
+        if (upload_id.empty() || parts.empty()) {
+            return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 multipart completion")
+            );
+        }
+
+        Aws::S3::Model::CompletedMultipartUpload completed_upload;
+        int previous_part_number = 0;
+        for (const auto& part : parts) {
+            auto part_validation = ValidatePartNumber(part.part_number);
+            if (!part_validation || part.part_number <= previous_part_number || part.etag.empty()) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 completed part list")
+                );
+            }
+
+            Aws::S3::Model::CompletedPart completed_part;
+            completed_part.SetPartNumber(part.part_number);
+            completed_part.SetETag(part.etag);
+            completed_upload.AddParts(std::move(completed_part));
+            previous_part_number = part.part_number;
+        }
+
+        Aws::S3::Model::CompleteMultipartUploadRequest request;
+        request.SetBucket(m_impl->storage_config.bucket);
+        request.SetKey(key);
+        request.SetUploadId(upload_id);
+        request.SetMultipartUpload(std::move(completed_upload));
+
+        auto outcome = m_impl->client->CompleteMultipartUpload(request);
+        if (!outcome.IsSuccess()) {
+            return std::unexpected(ToErrorInfo(
+                outcome.GetError(),
+                ErrorCode::InternalError,
+                "S3 CompleteMultipartUpload"
+            ));
+        }
+        return {};
+    }
+
+    auto AwsS3Client::AbortMultipartUpload(const std::string& key, const std::string& upload_id)
+        -> Result<void> {
+        if (upload_id.empty()) {
+            return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "S3 multipart upload ID is empty")
+            );
+        }
+
+        Aws::S3::Model::AbortMultipartUploadRequest request;
+        request.SetBucket(m_impl->storage_config.bucket);
+        request.SetKey(key);
+        request.SetUploadId(upload_id);
+
+        auto outcome = m_impl->client->AbortMultipartUpload(request);
+        if (!outcome.IsSuccess() && !IsNotFoundError(outcome.GetError())) {
+            return std::unexpected(ToErrorInfo(
+                outcome.GetError(),
+                ErrorCode::InternalError,
+                "S3 AbortMultipartUpload"
+            ));
+        }
+        return {};
+    }
+
+} // namespace disk::storage

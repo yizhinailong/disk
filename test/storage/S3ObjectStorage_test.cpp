@@ -46,12 +46,22 @@ namespace {
             ++head_calls;
             const auto it = objects.find(key);
             if (it == objects.end()) {
-                return disk::storage::S3HeadObjectResult{ .exists = false, .size = 0 };
+                return disk::storage::S3HeadObjectResult{ .exists = false, .size = 0, .etag = {} };
             }
             return disk::storage::S3HeadObjectResult{
                 .exists = true,
-                .size = static_cast<uint64_t>(it->second.size())
+                .size = static_cast<uint64_t>(it->second.size()),
+                .etag = EtagFor(it->second)
             };
+        }
+
+        auto PutObject(const std::string& key, std::string data)
+            -> Result<disk::storage::S3PutObjectResult> override {
+            ++put_calls;
+            uploaded_keys.push_back(key);
+            const auto etag = EtagFor(data);
+            objects[key] = std::move(data);
+            return disk::storage::S3PutObjectResult{ .etag = etag };
         }
 
         auto PutObjectFromFile(const std::string& key, const std::filesystem::path& local_path)
@@ -102,6 +112,111 @@ namespace {
             );
         }
 
+        auto ListObjects(
+            const std::string& prefix,
+            const std::string& continuation_token,
+            uint32_t max_keys
+        ) -> Result<disk::storage::S3ListObjectsResult> override {
+            disk::storage::S3ListObjectsResult result;
+            auto it = continuation_token.empty() ? objects.lower_bound(prefix) : objects.upper_bound(continuation_token);
+            for (; it != objects.end() && it->first.starts_with(prefix); ++it) {
+                if (result.keys.size() == max_keys) {
+                    result.is_truncated = true;
+                    result.continuation_token = result.keys.back();
+                    break;
+                }
+                result.keys.push_back(it->first);
+            }
+            return result;
+        }
+
+        auto DeleteObjects(const std::vector<std::string>& keys) -> Result<void> override {
+            for (const auto& key : keys) {
+                objects.erase(key);
+                deleted_keys.push_back(key);
+            }
+            return {};
+        }
+
+        auto CreateMultipartUpload(const std::string& key) -> Result<std::string> override {
+            const auto upload_id = "multipart-" + std::to_string(++next_multipart_id);
+            multipart_uploads.emplace(upload_id, MultipartUpload{ .key = key });
+            return upload_id;
+        }
+
+        auto UploadPart(
+            const std::string& key,
+            const std::string& upload_id,
+            int part_number,
+            std::string data
+        ) -> Result<std::string> override {
+            auto upload = multipart_uploads.find(upload_id);
+            if (upload == multipart_uploads.end() || upload->second.key != key) {
+                return std::unexpected(ErrorInfo(ErrorCode::InternalError, "fake multipart not found"));
+            }
+            const auto etag = EtagFor(data);
+            upload->second.parts[part_number] = std::move(data);
+            return etag;
+        }
+
+        auto UploadPartCopy(
+            const std::string& source_key,
+            const std::string& destination_key,
+            const std::string& upload_id,
+            int part_number,
+            uint64_t start,
+            uint64_t length
+        ) -> Result<std::string> override {
+            const auto source = objects.find(source_key);
+            if (source == objects.end() || start > source->second.size()) {
+                return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "fake copy source not found"));
+            }
+            return UploadPart(
+                destination_key,
+                upload_id,
+                part_number,
+                source->second.substr(static_cast<size_t>(start), static_cast<size_t>(length))
+            );
+        }
+
+        auto CompleteMultipartUpload(
+            const std::string& key,
+            const std::string& upload_id,
+            const std::vector<disk::storage::S3CompletedPart>& parts
+        ) -> Result<void> override {
+            auto upload = multipart_uploads.find(upload_id);
+            if (upload == multipart_uploads.end() || upload->second.key != key) {
+                return std::unexpected(ErrorInfo(ErrorCode::InternalError, "fake multipart not found"));
+            }
+
+            std::string content;
+            for (const auto& part : parts) {
+                const auto stored_part = upload->second.parts.find(part.part_number);
+                if (stored_part == upload->second.parts.end() || EtagFor(stored_part->second) != part.etag) {
+                    return std::unexpected(ErrorInfo(ErrorCode::InternalError, "fake multipart part mismatch"));
+                }
+                content += stored_part->second;
+            }
+            objects[key] = std::move(content);
+            multipart_uploads.erase(upload);
+            return {};
+        }
+
+        auto AbortMultipartUpload(const std::string& /*key*/, const std::string& upload_id)
+            -> Result<void> override {
+            multipart_uploads.erase(upload_id);
+            return {};
+        }
+
+        struct MultipartUpload {
+            std::string key;
+            std::map<int, std::string> parts;
+        };
+
+        static auto EtagFor(const std::string& data) -> std::string {
+            return "\"fake-etag-" + std::to_string(data.size()) + "\"";
+        }
+
         std::map<std::string, std::string> objects;
         std::string uploaded_fallback_content{ "fallback" };
         bool read_local_file{ true };
@@ -115,6 +230,8 @@ namespace {
         int delete_calls{ 0 };
         int get_calls{ 0 };
         int delete_failures_remaining{ 0 };
+        int next_multipart_id{ 0 };
+        std::map<std::string, MultipartUpload> multipart_uploads;
         ErrorInfo delete_error{ ErrorCode::InternalError, "fake delete failure" };
     };
 

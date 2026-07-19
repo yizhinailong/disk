@@ -28,6 +28,11 @@ namespace {
             return disk::storage::S3HeadObjectResult{};
         }
 
+        auto PutObject(const std::string& /*key*/, std::string /*data*/)
+            -> Result<disk::storage::S3PutObjectResult> override {
+            return disk::storage::S3PutObjectResult{};
+        }
+
         auto PutObjectFromFile(
             const std::string& /*key*/,
             const std::filesystem::path& /*local_path*/
@@ -43,6 +48,57 @@ namespace {
             uint64_t /*length*/
         ) -> Result<std::shared_ptr<disk::storage::StorageReadStream>> override {
             return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "unused fake range"));
+        }
+
+        auto ListObjects(
+            const std::string& /*prefix*/,
+            const std::string& /*continuation_token*/,
+            uint32_t /*max_keys*/
+        ) -> Result<disk::storage::S3ListObjectsResult> override {
+            return disk::storage::S3ListObjectsResult{};
+        }
+
+        auto DeleteObjects(const std::vector<std::string>& /*keys*/) -> Result<void> override {
+            return {};
+        }
+
+        auto CreateMultipartUpload(const std::string& /*key*/) -> Result<std::string> override {
+            return "unused-upload";
+        }
+
+        auto UploadPart(
+            const std::string& /*key*/,
+            const std::string& /*upload_id*/,
+            int /*part_number*/,
+            std::string /*data*/
+        ) -> Result<std::string> override {
+            return "unused-etag";
+        }
+
+        auto UploadPartCopy(
+            const std::string& /*source_key*/,
+            const std::string& /*destination_key*/,
+            const std::string& /*upload_id*/,
+            int /*part_number*/,
+            uint64_t /*start*/,
+            uint64_t /*length*/
+        ) -> Result<std::string> override {
+            return "unused-etag";
+        }
+
+        auto CompleteMultipartUpload(
+            const std::string& /*key*/,
+            const std::string& /*upload_id*/,
+            const std::vector<disk::storage::S3CompletedPart>& /*parts*/
+        ) -> Result<void> override {
+            return {};
+        }
+
+        auto AbortMultipartUpload(
+            const std::string& /*key*/,
+            const std::string& /*upload_id*/
+        ) -> Result<void> override {
+            return {};
         }
 
         Result<void> validate_result{};
