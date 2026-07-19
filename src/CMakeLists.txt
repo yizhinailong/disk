@@ -57,7 +57,7 @@ set(Filters_HEADERS
     filters/RegisterRateLimitFilter.hpp
     filters/RequestTraceFilter.hpp
     filters/ShareAuthFilter.hpp
-    filters/SharePublicRateLimitFilter.hpp
+    filters/ShareRateLimitFilter.hpp
     filters/UploadRateLimitFilter.hpp
     filters/DownloadRateLimitFilter.hpp
     filters/FolderRateLimitFilter.hpp
@@ -70,7 +70,7 @@ set(Filters_SOURCES
     filters/RegisterRateLimitFilter.cpp
     filters/RequestTraceFilter.cpp
     filters/ShareAuthFilter.cpp
-    filters/SharePublicRateLimitFilter.cpp
+    filters/ShareRateLimitFilter.cpp
     filters/UploadRateLimitFilter.cpp
     filters/DownloadRateLimitFilter.cpp
     filters/FolderRateLimitFilter.cpp

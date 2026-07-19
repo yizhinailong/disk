@@ -20,7 +20,7 @@
 namespace {
 
     auto ReadTextFile(const std::filesystem::path& path) -> std::string {
-        std::ifstream input{path};
+        std::ifstream input{ path };
         std::ostringstream buffer;
         buffer << input.rdbuf();
         return buffer.str();
@@ -66,12 +66,12 @@ namespace {
     }
 
     auto ControllerText(std::string_view controller_name) -> std::string {
-        return ReadTextFile(SourceRoot() / "src" / "controllers" / std::string{controller_name});
+        return ReadTextFile(SourceRoot() / "src" / "controllers" / std::string{ controller_name });
     }
 
 } // namespace
 
-TEST(FilterOwnershipTest, GlobalFiltersContainGlobalJwtAndPublicRateLimiters) {
+TEST(FilterOwnershipTest, GlobalFiltersContainOnlyGlobalOwners) {
     const auto config_text = ReadTextFile(SourceRoot() / "config.json");
 
     EXPECT_EQ(CountOccurrences(config_text, "\"name\": \"drogon::plugin::GlobalFilters\""), 1U);
@@ -81,7 +81,6 @@ TEST(FilterOwnershipTest, GlobalFiltersContainGlobalJwtAndPublicRateLimiters) {
             "disk::filters::RequestTraceFilter",
             "disk::filters::JwtAuthFilter",
             "disk::filters::RegisterRateLimitFilter",
-            "disk::filters::SharePublicRateLimitFilter",
         }
     ));
 
@@ -89,7 +88,6 @@ TEST(FilterOwnershipTest, GlobalFiltersContainGlobalJwtAndPublicRateLimiters) {
         "disk::filters::RequestTraceFilter",
         "disk::filters::JwtAuthFilter",
         "disk::filters::RegisterRateLimitFilter",
-        "disk::filters::SharePublicRateLimitFilter",
     };
 
     for (const auto filter : global_filters) {
@@ -104,6 +102,8 @@ TEST(FilterOwnershipTest, GlobalFiltersContainGlobalJwtAndPublicRateLimiters) {
         "disk::filters::UploadRateLimitFilter",
         "disk::filters::RateLimitFilter",
         "disk::filters::ShareAuthFilter",
+        "disk::filters::ShareAccessRateLimitFilter",
+        "disk::filters::ShareOperationRateLimitFilter",
     };
 
     for (const auto filter : route_owned_filters) {
@@ -121,6 +121,7 @@ TEST(FilterOwnershipTest, PublicRoutesAreCentralJwtExemptions) {
     EXPECT_NE(jwt_filter.find("/api/share/access/"), std::string::npos);
     EXPECT_NE(jwt_filter.find("/api/share/browse/"), std::string::npos);
     EXPECT_NE(jwt_filter.find("/api/share/download/"), std::string::npos);
+    EXPECT_EQ(jwt_filter.find("/api/share/save/"), std::string::npos);
 
     EXPECT_EQ(jwt_filter.find("/api/auth/logout"), std::string::npos);
     EXPECT_EQ(jwt_filter.find("/api/file/list"), std::string::npos);
@@ -167,18 +168,53 @@ TEST(FilterOwnershipTest, AuthenticatedRateLimitersRemainRouteOwnedExactlyOnce) 
     ));
 }
 
+TEST(FilterOwnershipTest, ShareRateLimitersHaveExactRouteOwnershipAndOrder) {
+    const auto share_controller = ControllerText("ShareController.hpp");
+
+    EXPECT_EQ(
+        CountOccurrences(share_controller, "\"disk::filters::ShareAccessRateLimitFilter\""),
+        1U
+    );
+    EXPECT_EQ(
+        CountOccurrences(share_controller, "\"disk::filters::ShareAuthFilter\""),
+        4U
+    );
+    EXPECT_EQ(
+        CountOccurrences(share_controller, "\"disk::filters::ShareOperationRateLimitFilter\""),
+        4U
+    );
+    EXPECT_TRUE(ContainsAllInOrder(
+        share_controller,
+        {
+            "ShareController::Access",
+            "\"disk::filters::ShareAccessRateLimitFilter\"",
+            "ShareController::Browse",
+            "\"disk::filters::ShareAuthFilter\"",
+            "\"disk::filters::ShareOperationRateLimitFilter\"",
+            "ShareController::DownloadInfo",
+            "\"disk::filters::ShareAuthFilter\"",
+            "\"disk::filters::ShareOperationRateLimitFilter\"",
+            "ShareController::Download",
+            "\"disk::filters::ShareAuthFilter\"",
+            "\"disk::filters::ShareOperationRateLimitFilter\"",
+            "ShareController::Save",
+            "\"disk::filters::ShareAuthFilter\"",
+            "\"disk::filters::ShareOperationRateLimitFilter\"",
+        }
+    ));
+}
+
 TEST(FilterOwnershipTest, RateLimitFiltersFailOpenOnRedisFailure) {
     const std::vector<std::string_view> filter_files{
         "UploadRateLimitFilter.cpp",
         "DownloadRateLimitFilter.cpp",
         "FolderRateLimitFilter.cpp",
         "AdminRateLimitFilter.cpp",
-        "SharePublicRateLimitFilter.cpp",
         "RegisterRateLimitFilter.cpp",
     };
 
     for (const auto filter_file : filter_files) {
-        const auto text = ReadTextFile(SourceRoot() / "src" / "filters" / std::string{filter_file});
+        const auto text = ReadTextFile(SourceRoot() / "src" / "filters" / std::string{ filter_file });
         EXPECT_TRUE(ContainsAllInOrder(
             text,
             {
@@ -193,20 +229,56 @@ TEST(FilterOwnershipTest, RateLimitFiltersFailOpenOnRedisFailure) {
 
 TEST(FilterOwnershipTest, RateLimitFiltersUseNormalizedConfiguration) {
     const std::vector<std::pair<std::string_view, std::vector<std::string_view>>> expected_getters{
-        {"UploadRateLimitFilter.cpp", {"GetUploadRateLimitWindowSeconds", "GetUploadRateLimitPerMinute"}},
-        {"DownloadRateLimitFilter.cpp", {"GetDownloadRateLimitWindowSeconds", "GetDownloadRateLimitPerMinute"}},
-        {"FolderRateLimitFilter.cpp", {"GetFolderRateLimitWindowSeconds", "GetFolderRateLimitPerMinute"}},
-        {"AdminRateLimitFilter.cpp", {"GetAdminRateLimitWindowSeconds", "GetAdminRateLimitPerMinute"}},
-        {"SharePublicRateLimitFilter.cpp", {"GetSharePublicRateLimitWindowSeconds", "GetSharePublicRateLimitPerMinute"}},
-        {"RegisterRateLimitFilter.cpp", {"GetRegisterRateLimitWindowSeconds", "GetRegisterRateLimitPerWindow"}},
+        {   "UploadRateLimitFilter.cpp",{ "GetUploadRateLimitWindowSeconds", "GetUploadRateLimitPerMinute" }                                        },
+        { "DownloadRateLimitFilter.cpp", { "GetDownloadRateLimitWindowSeconds", "GetDownloadRateLimitPerMinute" } },
+        {   "FolderRateLimitFilter.cpp",     { "GetFolderRateLimitWindowSeconds", "GetFolderRateLimitPerMinute" } },
+        {    "AdminRateLimitFilter.cpp",       { "GetAdminRateLimitWindowSeconds", "GetAdminRateLimitPerMinute" } },
+        {    "ShareRateLimitFilter.cpp",
+         {
+         "GetShareAccessRateLimitWindowSeconds",
+         "GetShareAccessRateLimitPerMinute",
+         "GetShareBrowseRateLimitWindowSeconds",
+         "GetShareBrowseRateLimitPerMinute",
+         "GetShareDownloadRateLimitWindowSeconds",
+         "GetShareDownloadRateLimitPerMinute",
+         }                                                                                                       },
+        { "RegisterRateLimitFilter.cpp", { "GetRegisterRateLimitWindowSeconds", "GetRegisterRateLimitPerWindow" } },
     };
 
     for (const auto& [filter_file, getters] : expected_getters) {
-        const auto text = ReadTextFile(SourceRoot() / "src" / "filters" / std::string{filter_file});
+        const auto text = ReadTextFile(SourceRoot() / "src" / "filters" / std::string{ filter_file });
         for (const auto getter : getters) {
             EXPECT_NE(text.find(getter), std::string::npos) << filter_file << ": " << getter;
         }
         EXPECT_NE(text.find("window_seconds"), std::string::npos) << filter_file;
         EXPECT_NE(text.find("const auto limit"), std::string::npos) << filter_file;
     }
+}
+
+TEST(FilterOwnershipTest, ObsoleteSharePublicLimiterIsAbsent) {
+    const auto root = SourceRoot();
+    EXPECT_FALSE(std::filesystem::exists(root / "src" / "filters" / "SharePublicRateLimitFilter.hpp"));
+    EXPECT_FALSE(std::filesystem::exists(root / "src" / "filters" / "SharePublicRateLimitFilter.cpp"));
+    EXPECT_FALSE(std::filesystem::exists(root / "test" / "filters" / "SharePublicRateLimit_test.cpp"));
+
+    const auto config_text = ReadTextFile(root / "config.json");
+    const auto source_cmake = ReadTextFile(root / "src" / "CMakeLists.txt");
+    const auto test_cmake = ReadTextFile(root / "test" / "CMakeLists.txt");
+    EXPECT_EQ(config_text.find("SharePublicRateLimitFilter"), std::string::npos);
+    EXPECT_EQ(source_cmake.find("SharePublicRateLimitFilter"), std::string::npos);
+    EXPECT_EQ(test_cmake.find("SharePublicRateLimit"), std::string::npos);
+}
+
+TEST(FilterOwnershipTest, ShareOperationLimiterDoesNotReadReplayableHeaders) {
+    const auto filter = ReadTextFile(
+        SourceRoot() / "src" / "filters" / "ShareRateLimitFilter.cpp"
+    );
+
+    EXPECT_EQ(filter.find("X-Share-Token"), std::string::npos);
+    EXPECT_EQ(filter.find("Authorization"), std::string::npos);
+    EXPECT_EQ(filter.find("getHeader"), std::string::npos);
+    EXPECT_NE(filter.find("SHARE_TOKEN_JTI_ATTRIBUTE"), std::string::npos);
+    EXPECT_NE(filter.find("BuildShareAccessRateLimitKey"), std::string::npos);
+    EXPECT_NE(filter.find("BuildShareBrowseRateLimitKey"), std::string::npos);
+    EXPECT_NE(filter.find("BuildShareDownloadRateLimitKey"), std::string::npos);
 }

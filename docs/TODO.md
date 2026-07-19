@@ -157,39 +157,39 @@ Additional contract rules:
 - [x] Replace `share_public_rate_limit_per_minute` and
   `share_public_rate_limit_window_seconds` with the six named access, browse, and
   download settings above in `config.json` and `ConfigMgr`.
-- [ ] Add `RedisKeyPrefix` builders for all three key families, using normalized IP
+- [x] Add `RedisKeyPrefix` builders for all three key families, using normalized IP
   for access and verified JTI for browse/download. Remove ad hoc key construction.
 - [x] Expose the verified Share Token JTI to downstream route filters through a
   narrowly named request attribute only after full Share Token verification and
   scope validation succeed.
-- [ ] Replace the global `SharePublicRateLimitFilter` path with route-owned
+- [x] Replace the global `SharePublicRateLimitFilter` path with route-owned
   operation-specific limiting. Remove it from `GlobalFilters`; do not keep a second
   global copy.
-- [ ] Attach the access limiter to the access route and attach authenticated
+- [x] Attach the access limiter to the access route and attach authenticated
   operation limiting after `ShareAuthFilter` on browse, download metadata, download
   content, and save-to-drive routes.
-- [ ] Preserve shared fixed-window mechanics, standard 429 construction, and
+- [x] Preserve shared fixed-window mechanics, standard 429 construction, and
   fail-open Redis behavior through the existing rate-limit helpers.
-- [ ] Remove obsolete source declarations, CMake entries, getters, constants,
+- [x] Remove obsolete source declarations, CMake entries, getters, constants,
   key patterns, cleanup helpers, and tests that only describe the shared public IP
   bucket.
-- [ ] Ensure application logs expose operation type and non-secret diagnostics but
+- [x] Ensure application logs expose operation type and non-secret diagnostics but
   never the raw token, token header, or password material.
 
 #### 3. Executable coverage
 
-- [ ] Add unit coverage for all new configuration getters, documented defaults,
+- [x] Add unit coverage for all new configuration getters, documented defaults,
   valid configured values, and absent/zero/negative fallback behavior.
-- [ ] Add `RedisKeyPrefix` tests for IPv4, IPv6, port normalization, JTI separation,
+- [x] Add `RedisKeyPrefix` tests for IPv4, IPv6, port normalization, JTI separation,
   operation separation, and absence of raw-token input.
-- [ ] Add Share Auth/filter tests proving JTI is exposed only after successful
+- [x] Add Share Auth/filter tests proving JTI is exposed only after successful
   verification and that the limiter executes after the required authentication and
   scope checks.
-- [ ] Update filter ownership tests to prove each limiter has one owner, the old
+- [x] Update filter ownership tests to prove each limiter has one owner, the old
   global filter is absent, and Redis failures remain fail-open.
 - [ ] Add and register a serial integration test such as
   `test/integration/test_share_rate_limit.py` in `test/CMakeLists.txt`.
-- [ ] Update existing share-password integration cleanup so it removes only the
+- [x] Update existing share-password integration cleanup so it removes only the
   new access keys it owns and cannot hide browse/download counter leakage.
 
 The executable matrix must prove all of the following, using configured values

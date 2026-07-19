@@ -505,12 +505,12 @@ namespace disk::services {
 
             const auto count = result.asInteger();
 
-            Logger::Trace() << "Redis IncrWithExpire: key=" << key << ", count=" << count;
+            Logger::Trace() << "Redis IncrWithExpire succeeded: count=" << count;
 
             co_return count;
 
         } catch (const drogon::nosql::RedisException& ex) {
-            Logger::Error() << "Redis operation failed: IncrWithExpire, key=" << key << ", error=" << ex.what();
+            Logger::Error() << "Redis operation failed: IncrWithExpire, error=" << ex.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::RedisOperationFailed,
                 "Redis operation failed: " + std::string(ex.what())

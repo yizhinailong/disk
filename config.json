@@ -80,8 +80,7 @@
         "filters": [
           "disk::filters::RequestTraceFilter",
           "disk::filters::JwtAuthFilter",
-          "disk::filters::RegisterRateLimitFilter",
-          "disk::filters::SharePublicRateLimitFilter"
+          "disk::filters::RegisterRateLimitFilter"
         ],
         "exempt": []
       }

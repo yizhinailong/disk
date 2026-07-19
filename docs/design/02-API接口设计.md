@@ -4028,7 +4028,7 @@ created_at  TIMESTAMP        -- 操作时间
 - [x] Share Token 包含 `type: "share"` 和合法 `scope` claim（证据：`TokenServiceShareTest.GenerateShareTokenValidInputCorrectClaims` 及 scope 正向/负向测试）
 - [x] Share Token 验证通过后的所有访客操作检查分享状态和有效期（证据：`ShareTokenSecurityIntegration` 覆盖 browse、download metadata、content download、save-to-drive 的取消/过期旧 token）
 - [x] 分享取消时使所有相关 Share Token 失效（证据：`ShareTokenSecurityIntegration` 使用同一旧 token 验证 DB 状态撤销，不依赖逐 token Redis 黑名单）
-- [ ] 敏感操作有独立的速率限制（目标合同已由 `separate-share-operation-rate-limits` OpenSpec 变更确定；当前运行时仍由 `SharePublicRateLimitFilter` 共用 30 次/分钟/IP bucket，且 save-to-drive 尚未进入分享下载桶，必须在十项可执行证据通过后勾选）
+- [ ] 敏感操作有独立的速率限制（运行时已改为路由级 access/browse/download 固定窗口，聚焦单测覆盖边界、共享/隔离桶、429 和 Redis fail-open；必须在十项串行集成证据通过后勾选）
 - [x] 关键事件写入审计日志（证据：`ShareAuditService`、`ShareAuditServiceTest`、`ShareAuditIntegration` 覆盖 `share_create`、`share_access`、`share_pwd_fail`、`share_download`、逐项 `share_cancel` 及 fail-open 政策）
 - [x] 密码错误响应不泄露分享是否存在的信息（证据：`SharePasswordProtectionIntegration` 验证缺失密码、错误密码和不存在分享均统一返回 HTTP 400 / `60003`）
 

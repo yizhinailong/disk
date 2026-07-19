@@ -45,10 +45,10 @@ set(TEST_SOURCES
     services/OperationLogService_test.cpp
     filters/AdminAuthFilter_test.cpp
     filters/ShareAuthFilter_test.cpp
+    filters/ShareRateLimitFilter_test.cpp
     filters/JwtAuthFilter_test.cpp
     filters/RegisterRateLimit_test.cpp
     filters/DownloadRateLimit_test.cpp
-    filters/SharePublicRateLimit_test.cpp
     filters/AdminRateLimit_test.cpp
     filters/FolderRateLimit_test.cpp
     filters/FilterOwnership_test.cpp
@@ -85,9 +85,9 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/services/UploadTaskRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/ShareAuthFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/ShareRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/RegisterRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/DownloadRateLimitFilter.cpp
-    ${CMAKE_SOURCE_DIR}/src/filters/SharePublicRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/FolderRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
@@ -123,15 +123,15 @@ set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/src/services/RedisService.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/ShareAuthFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/ShareRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/RegisterRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/DownloadRateLimitFilter.cpp
-    ${CMAKE_SOURCE_DIR}/src/filters/SharePublicRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/FolderRateLimitFilter.cpp
     filters/AdminAuthFilter_test.cpp
+    filters/ShareRateLimitFilter_test.cpp
     filters/RegisterRateLimit_test.cpp
     filters/DownloadRateLimit_test.cpp
-    filters/SharePublicRateLimit_test.cpp
     filters/AdminRateLimit_test.cpp
     filters/FolderRateLimit_test.cpp
     PROPERTIES COMPILE_FLAGS "-include drogon/HttpAppFramework.h -include utils/LogHelper.hpp"

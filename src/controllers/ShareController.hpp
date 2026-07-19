@@ -72,31 +72,40 @@ namespace disk::share {
             drogon::Post
         );
 
-        ADD_METHOD_TO(ShareController::Access, "/api/share/access/{share_id}", drogon::Post);
+        ADD_METHOD_TO(
+            ShareController::Access,
+            "/api/share/access/{share_id}",
+            drogon::Post,
+            "disk::filters::ShareAccessRateLimitFilter"
+        );
 
         ADD_METHOD_TO(
             ShareController::Browse,
             "/api/share/browse/{share_id}",
             drogon::Get,
-            "disk::filters::ShareAuthFilter"
+            "disk::filters::ShareAuthFilter",
+            "disk::filters::ShareOperationRateLimitFilter"
         );
         ADD_METHOD_TO(
             ShareController::DownloadInfo,
             "/api/share/download/{share_id}/{file_id}/info",
             drogon::Get,
-            "disk::filters::ShareAuthFilter"
+            "disk::filters::ShareAuthFilter",
+            "disk::filters::ShareOperationRateLimitFilter"
         );
         ADD_METHOD_TO(
             ShareController::Download,
             "/api/share/download/{share_id}/{file_id}",
             drogon::Get,
-            "disk::filters::ShareAuthFilter"
+            "disk::filters::ShareAuthFilter",
+            "disk::filters::ShareOperationRateLimitFilter"
         );
         ADD_METHOD_TO(
             ShareController::Save,
             "/api/share/save/{share_id}",
             drogon::Post,
-            "disk::filters::ShareAuthFilter"
+            "disk::filters::ShareAuthFilter",
+            "disk::filters::ShareOperationRateLimitFilter"
         );
         METHOD_LIST_END
 

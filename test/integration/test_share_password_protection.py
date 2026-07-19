@@ -60,20 +60,20 @@ def password_key(share_id: str) -> str:
     return f"rate:share_password:{share_id}:{CLIENT_IP}"
 
 
-def clear_public_limiter() -> None:
-    """Clear the independent public-share filter without touching password counters."""
-    redis_delete_pattern(f"rate:share_public:{CLIENT_IP}:*")
+def clear_access_limiter() -> None:
+    """Clear this scenario's access bucket without touching authenticated buckets."""
+    redis_delete_pattern(f"rate:share_access:{CLIENT_IP}:*")
 
 
 def reset_counter(share_id: str) -> None:
     redis_delete_pattern(f"rate:share_password:{share_id}:*")
-    clear_public_limiter()
+    clear_access_limiter()
 
 
 def teardown() -> None:
     for share_id in CREATED_SHARE_IDS + NONEXISTENT_SHARE_IDS:
         redis_delete_pattern(f"rate:share_password:{share_id}:*")
-    clear_public_limiter()
+    clear_access_limiter()
 
     if CREATED_SHARE_IDS:
         try:
