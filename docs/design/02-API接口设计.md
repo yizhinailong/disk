@@ -884,7 +884,7 @@ Content-Type: application/octet-stream
 **POST** `/api/file/upload/complete`
 
 #### 实现状态
-**现有同步接口已实现；ADR-002 完成租约、接管与幂等重放待实现**
+**同步接口、PostgreSQL 完成租约、过期接管与 `completed_file_id` 幂等重放已实现；S3-native 暂存和持久清理 Worker 仍按 ADR-002 后续阶段推进**
 
 完成文件上传，合并所有分片。
 
@@ -927,7 +927,7 @@ Authorization: Bearer <access_token>
 | `Completed` | 幂等返回首次完成创建的同一 `file`，不重新组装、不重复结算配额 |
 | `Cancelled` / `Expired` / `Failed` | 返回 `400 + 50008 UploadTaskNotFound`，不得恢复为进行中 |
 
-完成过程按“租约认领 → 事务外对象组装/校验 → 短事务提交 → 异步清理”执行。服务端验证分片对象、总大小、整文件 MD5 与 SHA-256；multipart ETag 不作为文件 MD5。HTTP 响应丢失后，客户端重复调用可从 `completed_file_id` 恢复原成功响应。
+完成过程按“租约认领 → 事务外对象组装/校验 → 短事务提交 → 异步清理”执行。服务端在组装后、最终 Blob 晋升后分别用最新 `state_version` 续租；续租或最终 CAS 未命中时，当前请求失去完成权限并返回可重试冲突，不得提交文件、配额或上传终态。服务端验证分片对象、总大小、整文件 MD5 与 SHA-256；multipart ETag 不作为文件 MD5。HTTP 响应丢失后，客户端重复调用可从 `completed_file_id` 恢复原成功响应。
 
 #### 错误响应矩阵
 

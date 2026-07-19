@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["httpx"]
+# dependencies = ["httpx", "psycopg[binary]"]
 # ///
 
 """
@@ -34,6 +34,7 @@ from lib_py import (
     ensure_server,
     cleanup,
     do_login,
+    execute,
     json_field,
     fetch,
     unique_name,
@@ -188,6 +189,41 @@ def test_happy_path_upload():
     log_pass("Upload Chunk 1 (happy path)")
     save_evidence("upload-chunk-1.json", resp.text)
 
+    # Simulate a different instance holding an active finalize lease.
+    execute(
+        "UPDATE upload_tasks SET status = 4, lease_owner = %s, "
+        "lease_expires_at = NOW() + INTERVAL '1 minute', "
+        "state_version = state_version + 1, finalize_attempts = finalize_attempts + 1 "
+        "WHERE id = %s AND status = 0",
+        ("integration-old-owner", upload_id),
+    )
+    conflict_resp = fetch(
+        "/api/file/upload/complete",
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "Content-Type": "application/json",
+        },
+        json_body={"upload_id": upload_id},
+    )
+    conflict_code = json_field(conflict_resp.text, "code")
+    if conflict_resp.status_code != 409 or conflict_code != "10004":
+        log_fail(
+            "Complete Upload Active Lease - expected HTTP 409 / code 10004, "
+            f"got HTTP {conflict_resp.status_code} / code {conflict_code}"
+        )
+        print(conflict_resp.text)
+        return
+    log_pass("Complete Upload Active Lease - returned retryable conflict")
+    save_evidence("complete-upload-active-lease.json", conflict_resp.text)
+
+    # Expire the old lease using database time; the normal completion below must take it over.
+    execute(
+        "UPDATE upload_tasks SET lease_expires_at = NOW() - INTERVAL '1 second' "
+        "WHERE id = %s AND status = 4 AND lease_owner = %s",
+        (upload_id, "integration-old-owner"),
+    )
+
     # Complete upload
     resp = fetch(
         "/api/file/upload/complete",
@@ -224,6 +260,31 @@ def test_happy_path_upload():
 
     log_pass(f"Complete Upload (happy path) - file_id: {file_id}, hash verified")
     save_evidence("complete-upload-success.json", resp.text)
+
+    # Retry the same completion request to verify durable idempotent replay.
+    replay_resp = fetch(
+        "/api/file/upload/complete",
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "Content-Type": "application/json",
+        },
+        json_body={"upload_id": upload_id},
+    )
+    replay_file_id = json_field(replay_resp.text, "data.file.id")
+    replay_file_name = json_field(replay_resp.text, "data.file.name")
+    replay_hash = json_field(replay_resp.text, "data.file.hash")
+    if replay_resp.status_code != 200:
+        log_fail(f"Complete Upload Replay - expected HTTP 200, got {replay_resp.status_code}")
+        print(replay_resp.text)
+        return
+    if (replay_file_id, replay_file_name, replay_hash) != (file_id, file_name, returned_hash):
+        log_fail("Complete Upload Replay - response differs from first completion")
+        print(replay_resp.text)
+        return
+
+    log_pass(f"Complete Upload Replay - returned original file_id: {replay_file_id}")
+    save_evidence("complete-upload-replay.json", replay_resp.text)
 
 
 # ─── Test 2: Missing chunk upload ───────────────────────────────────────────

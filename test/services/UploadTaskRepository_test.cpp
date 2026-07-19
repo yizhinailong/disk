@@ -85,6 +85,24 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "AND lease_expires_at > NOW()"));
         }
 
+        TEST(UploadTaskRepositoryFinalizeLeaseContractTest, LifecycleClaimsAndRenewsBeforeLeaseGuardedCommit) {
+            const auto source = ReadSourceFile("src/services/UploadLifecycleService.cpp");
+            const auto claim = source.find("upload_task_repository.ClaimFinalizeLease(");
+            const auto assemble = source.find("m_upload_staging_storage->AssembleChunks(");
+            const auto first_renew = source.find("RenewFinalizeLease(", assemble);
+            const auto guarded_commit = source.find("upload_task_repository.MarkCompletedIfLeaseOwned(");
+
+            ASSERT_NE(claim, std::string::npos);
+            ASSERT_NE(assemble, std::string::npos);
+            ASSERT_NE(first_renew, std::string::npos);
+            ASSERT_NE(guarded_commit, std::string::npos);
+            EXPECT_LT(claim, assemble);
+            EXPECT_LT(assemble, first_renew);
+            EXPECT_LT(first_renew, guarded_commit);
+            EXPECT_TRUE(Contains(source, "completed_file_id"));
+            EXPECT_FALSE(Contains(source, "m_blob_store->DeleteBlob(final_storage_path)"));
+        }
+
         TEST(UploadTaskRepositoryChunkPrimitiveContractTest, ChunkPersistencePrimitivesKeepIdempotencySortingAndCoverage) {
             const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
 

@@ -165,12 +165,12 @@ API Instance A  API Instance B ... N
 ### 7.1 上传状态机
 
 - [x] 用独立领域类型集中定义允许的状态迁移，禁止在多个服务中散落魔法状态值。
-- [ ] 实现 `InProgress -> Finalizing` 条件认领：校验用户、完整分片覆盖、状态和租约，并原子写入 owner/version/expiry。
-- [ ] `Finalizing` 且租约有效时，其他完成请求返回文档定义的可重试结果。
-- [ ] `Finalizing` 且租约过期时，允许新实例通过 CAS 接管并增加尝试次数。
-- [ ] `Completed` 的重复完成请求通过 `completed_file_id` 返回原文件。
-- [ ] `Cancelled/Expired/Failed` 的重复请求具有稳定且文档化的结果。
-- [ ] 续租使用数据库时间并校验 `lease_owner + state_version`，旧 owner 不得覆盖新 owner。
+- [x] 实现 `InProgress -> Finalizing` 条件认领：校验用户、完整分片覆盖、状态和租约，并原子写入 owner/version/expiry。
+- [x] `Finalizing` 且租约有效时，其他完成请求返回文档定义的可重试结果。
+- [x] `Finalizing` 且租约过期时，允许新实例通过 CAS 接管并增加尝试次数。
+- [x] `Completed` 的重复完成请求通过 `completed_file_id` 返回原文件。
+- [x] `Cancelled/Expired/Failed` 的重复请求具有稳定且文档化的结果。
+- [x] 续租使用数据库时间并校验 `lease_owner + state_version`，旧 owner 不得覆盖新 owner。
 - [ ] API/Worker 优雅退出时停止认领新任务；已认领任务完成或由租约超时接管。
 
 ### 7.2 分片写入正确性
@@ -184,14 +184,14 @@ API Instance A  API Instance B ... N
 ### 7.3 完成上传 Saga
 
 - [ ] 完成流程固定为：校验覆盖 -> CAS 认领 -> 外部组装/校验 -> 短事务提交元数据 -> 持久化清理任务。
-- [ ] 对象存储组装、哈希和复制不得占用长数据库事务。
+- [x] 对象存储组装、哈希和复制不得占用长数据库事务。
 - [ ] 组装时按 chunk index 流式读取，限制缓冲区，不把整文件加载进内存。
 - [ ] 同时校验总大小、整文件 MD5 和 SHA-256；不信任客户端 hash 或 S3 ETag。
 - [ ] 最终 Blob 创建必须幂等；内容去重使用数据库唯一约束和原子 upsert，而不是“先查再插”作为唯一防线。
 - [ ] 文件名冲突依赖数据库唯一约束给出确定的领域错误。
 - [ ] 最终短事务原子完成：内容引用、文件记录、文件夹计数、reserved-to-used 配额、上传终态、`completed_file_id` 和清理任务入队。
 - [ ] 事务提交失败后保留可识别的 staging 对象，由持久任务对账清理；禁止无引用复核就删除共享最终 Blob。
-- [ ] 完成响应丢失后，客户端重复调用可由数据库恢复原响应。
+- [x] 完成响应丢失后，客户端重复调用可由数据库恢复原响应。
 
 ### 7.4 取消与过期
 

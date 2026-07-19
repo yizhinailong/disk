@@ -140,7 +140,7 @@ namespace disk::file {
         auto claimed = co_await m_db_client->execSqlCoro(
             "UPDATE upload_tasks AS task SET "
             "status = $1, lease_owner = $2, "
-            "lease_expires_at = NOW() + ($3 * INTERVAL '1 second'), "
+            "lease_expires_at = NOW() + ($3::integer * INTERVAL '1 second'), "
             "state_version = state_version + 1, "
             "finalize_attempts = finalize_attempts + 1, "
             "last_error_code = NULL, last_error_at = NULL "
@@ -155,7 +155,7 @@ namespace disk::file {
             "RETURNING state_version, finalize_attempts",
             disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Finalizing),
             lease_owner,
-            lease_duration_seconds,
+            static_cast<int32_t>(lease_duration_seconds),
             upload_id,
             user_id,
             disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
@@ -171,7 +171,8 @@ namespace disk::file {
 
         auto current = co_await m_db_client->execSqlCoro(
             "SELECT status, state_version, finalize_attempts, completed_file_id, "
-            "COALESCE(lease_expires_at <= NOW(), FALSE) AS lease_expired "
+            "COALESCE(lease_expires_at <= NOW(), FALSE) AS lease_expired, "
+            "expires_at < NOW() AS task_expired "
             "FROM upload_tasks WHERE id = $1 AND user_id = $2",
             upload_id,
             user_id
@@ -196,19 +197,19 @@ namespace disk::file {
         }
 
         switch (action) {
-        case disk::upload::FinalizeRequestAction::ClaimLease:
-            result.disposition = FinalizeClaimDisposition::IncompleteChunks;
-            break;
-        case disk::upload::FinalizeRequestAction::TakeOverExpiredLease:
-        case disk::upload::FinalizeRequestAction::RetryLater:
-            result.disposition = FinalizeClaimDisposition::LeaseHeld;
-            break;
-        case disk::upload::FinalizeRequestAction::ReplayCompleted:
-            result.disposition = FinalizeClaimDisposition::CompletedReplay;
-            break;
-        case disk::upload::FinalizeRequestAction::RejectTerminal:
-            result.disposition = FinalizeClaimDisposition::Terminal;
-            break;
+            case disk::upload::FinalizeRequestAction::ClaimLease:
+                result.disposition = row["task_expired"].as<bool>() ? FinalizeClaimDisposition::Terminal : FinalizeClaimDisposition::IncompleteChunks;
+                break;
+            case disk::upload::FinalizeRequestAction::TakeOverExpiredLease:
+            case disk::upload::FinalizeRequestAction::RetryLater:
+                result.disposition = FinalizeClaimDisposition::LeaseHeld;
+                break;
+            case disk::upload::FinalizeRequestAction::ReplayCompleted:
+                result.disposition = FinalizeClaimDisposition::CompletedReplay;
+                break;
+            case disk::upload::FinalizeRequestAction::RejectTerminal:
+                result.disposition = FinalizeClaimDisposition::Terminal;
+                break;
         }
 
         co_return result;
@@ -225,13 +226,13 @@ namespace disk::file {
 
         auto result = co_await m_db_client->execSqlCoro(
             "UPDATE upload_tasks SET "
-            "lease_expires_at = NOW() + ($1 * INTERVAL '1 second'), "
+            "lease_expires_at = NOW() + ($1::integer * INTERVAL '1 second'), "
             "state_version = state_version + 1 "
             "WHERE id = $2 AND user_id = $3 AND status = $4 "
             "AND lease_owner = $5 AND state_version = $6 "
             "AND lease_expires_at > NOW() "
             "RETURNING state_version",
-            lease_duration_seconds,
+            static_cast<int32_t>(lease_duration_seconds),
             upload_id,
             user_id,
             disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Finalizing),

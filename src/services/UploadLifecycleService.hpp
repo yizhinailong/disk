@@ -104,6 +104,8 @@ namespace disk::upload {
     struct CompleteUploadCommand {
         std::string upload_id;
         uint64_t user_id{0};
+        std::string lease_owner;
+        uint32_t lease_duration_seconds{ 0 };
     };
 
     struct CompleteUploadOutcome {
