@@ -208,6 +208,7 @@ import {
   copyFiles,
   deleteFiles,
   createFolder,
+  renameFolder,
 } from '@/api'
 import type {
   FileItem,
@@ -266,13 +267,14 @@ async function confirmNewFolder(): Promise<void> {
 
   operationLoading.value = true
   try {
-    await createFolder({
+    const folder = await createFolder({
       name,
       parent_id: driveStore.currentFolderId || undefined,
     })
+    driveStore.applyCreatedFolder(folder)
     ElMessage.success(`文件夹「${name}」创建成功`)
     showNewFolderDialog.value = false
-    await driveStore.refreshHierarchyView()
+    await driveStore.refreshNavigationMetadata()
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : '创建文件夹失败'
     ElMessage.error(msg)
@@ -318,10 +320,13 @@ async function confirmRename(): Promise<void> {
 
   operationLoading.value = true
   try {
-    await renameFile(item.id, { new_name: newName })
+    const result = item.type === 'folder'
+      ? await renameFolder(item.id, { new_name: newName })
+      : await renameFile(item.id, { new_name: newName })
+    driveStore.applyItemRename(result)
     ElMessage.success('重命名成功')
     showRenameDialog.value = false
-    await driveStore.refreshHierarchyView()
+    await driveStore.refreshNavigationMetadata()
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : '重命名失败'
     ElMessage.error(msg)
@@ -397,6 +402,7 @@ async function confirmMoveCopy(): Promise<void> {
   if (tid === null) return
 
   const { fileIds, folderIds } = splitSelectedIds()
+  const movedIds = [...fileIds, ...folderIds]
 
   operationLoading.value = true
   try {
@@ -406,6 +412,7 @@ async function confirmMoveCopy(): Promise<void> {
         file_ids: fileIds.length > 0 ? fileIds : undefined,
         folder_ids: folderIds.length > 0 ? folderIds : undefined,
       })
+      driveStore.applyItemsRemoved(movedIds)
       ElMessage.success(`已移动 ${result.moved_count} 项`)
     } else {
       const result = await copyFiles({
@@ -416,7 +423,11 @@ async function confirmMoveCopy(): Promise<void> {
       ElMessage.success(`已复制 ${result.copied_count} 项`)
     }
     showMoveCopyDialog.value = false
-    await driveStore.refreshHierarchyView()
+    if (moveCopyMode.value === 'move') {
+      await driveStore.refreshAfterFolderMove(folderIds, tid)
+    } else {
+      await driveStore.refreshHierarchyView()
+    }
   } catch (err: unknown) {
     const msg = err instanceof Error
       ? err.message
@@ -455,6 +466,7 @@ async function handleDelete(): Promise<void> {
   }
 
   const { fileIds, folderIds } = splitSelectedIds()
+  const deletedIds = [...fileIds, ...folderIds]
 
   operationLoading.value = true
   try {
@@ -462,8 +474,9 @@ async function handleDelete(): Promise<void> {
       file_ids: fileIds.length > 0 ? fileIds : undefined,
       folder_ids: folderIds.length > 0 ? folderIds : undefined,
     })
+    driveStore.applyItemsRemoved(deletedIds)
     ElMessage.success(`已删除 ${result.deleted_count} 项`)
-    await driveStore.refreshHierarchyView()
+    await driveStore.refreshNavigationMetadata()
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : '删除失败'
     ElMessage.error(msg)

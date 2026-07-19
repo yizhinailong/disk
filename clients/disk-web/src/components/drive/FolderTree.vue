@@ -17,8 +17,6 @@
           :props="treeProps"
           node-key="id"
           highlight-current
-          lazy
-          :load="loadNode"
           :default-expanded-keys="defaultExpanded"
           :current-node-key="driveStore.currentFolderId"
           :expand-on-click-node="false"
@@ -26,7 +24,11 @@
           @node-click="handleNodeClick"
         >
           <template #default="{ data }">
-            <div class="tree-node" :title="data.name">
+            <div
+              class="tree-node"
+              :title="data.name"
+              :aria-current="data.id === driveStore.currentFolderId ? 'page' : undefined"
+            >
               <el-icon class="tree-node-icon">
                 <Folder />
               </el-icon>
@@ -35,9 +37,17 @@
           </template>
         </el-tree>
 
+        <div v-if="driveStore.folderTreeError" class="tree-error" role="alert">
+          <span>{{ driveStore.folderTreeError }}</span>
+          <el-button text size="small" @click="retryFolderTree">重试</el-button>
+        </div>
+
         <!-- Empty state -->
-        <div v-if="!driveStore.folderTreeLoading && treeData.length === 0" class="tree-empty">
-          <span>{{ driveStore.folderTreeError || '暂无文件夹' }}</span>
+        <div
+          v-if="!driveStore.folderTreeLoading && !driveStore.folderTreeError && treeData.length === 0"
+          class="tree-empty"
+        >
+          <span>暂无文件夹</span>
         </div>
 
         <!-- Loading state -->
@@ -54,10 +64,12 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import type { ElTree } from 'element-plus'
 import { Folder, ArrowRight, Loading } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import { useDriveStore } from '@/stores/drive'
 import type { FolderTreeNode } from '@/types'
 
 const driveStore = useDriveStore()
+const router = useRouter()
 
 // ==================== State ====================
 const treeRef = ref<InstanceType<typeof ElTree> | null>(null)
@@ -89,36 +101,17 @@ function findAncestorPath(
   return null
 }
 
-// ==================== Lazy Load ====================
-async function loadNode(
-  node: { level: number; data?: FolderTreeNode; isLeaf: boolean },
-  resolve: (data: FolderTreeNode[]) => void,
-) {
-  try {
-    if (node.level === 0) {
-      const tree = driveStore.folderTree ?? await driveStore.fetchFolderTree()
-      defaultExpanded.value = tree.children.map((c) => c.id)
-      resolve([...tree.children])
-      return
-    }
-
-    if (node.data && node.data.children.length > 0) {
-      resolve([...node.data.children])
-      return
-    }
-
-    const tree = await driveStore.fetchFolderTree({ parent_id: node.data?.id, depth: 1 })
-    resolve([...tree.children])
-  } catch {
-    resolve([])
-  }
-}
-
 function syncCurrentFolder(folderId: number): void {
-  const expanded = folderId === 0 ? [] : findAncestorPath(treeData.value, folderId) ?? []
-  defaultExpanded.value = expanded
+  const rootIds = treeData.value.map((node) => node.id)
+  const ancestors = folderId === 0 ? [] : findAncestorPath(treeData.value, folderId) ?? []
+  const current = folderId === 0 ? [] : [folderId]
+  defaultExpanded.value = [...new Set([...rootIds, ...ancestors, ...current])]
 
   nextTick(() => {
+    for (const id of defaultExpanded.value) {
+      const node = treeRef.value?.getNode(id)
+      if (node) node.expanded = true
+    }
     if (folderId === 0) {
       treeRef.value?.setCurrentKey(null)
     } else {
@@ -130,8 +123,12 @@ function syncCurrentFolder(folderId: number): void {
 // ==================== Node Click ====================
 function handleNodeClick(data: FolderTreeNode) {
   if (data.id !== driveStore.currentFolderId) {
-    driveStore.navigateToFolder(data.id)
+    router.push({ path: '/drive', query: { folderId: String(data.id) } })
   }
+}
+
+async function retryFolderTree(): Promise<void> {
+  await driveStore.refreshFolderTree().catch(() => undefined)
 }
 
 // ==================== Sync Current Folder Highlight ====================
@@ -139,13 +136,6 @@ watch(
   () => [driveStore.currentFolderId, driveStore.folderTree] as const,
   ([folderId]) => {
     syncCurrentFolder(folderId)
-  },
-)
-
-watch(
-  () => driveStore.folderTree,
-  (tree) => {
-    defaultExpanded.value = tree?.children.map((c) => c.id) ?? []
   },
 )
 
@@ -263,6 +253,24 @@ onMounted(async () => {
   padding: 20px 12px;
   color: #c0c4cc;
   font-size: 13px;
+}
+
+.tree-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 6px 8px 8px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--el-color-danger);
+  background: var(--el-color-danger-light-9);
+  color: var(--el-color-danger-dark-2);
+  font-size: 12px;
+}
+
+.tree-error span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .tree-loading {

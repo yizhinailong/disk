@@ -760,6 +760,35 @@ interface BreadcrumbResponse {
 
 ---
 
+### PUT /api/folder/{folder_id}/rename
+**认证**: Bearer
+
+**请求**:
+```typescript
+interface RenameRequest {
+  new_name: string;
+}
+```
+
+**响应**:
+```typescript
+interface RenameFolderResponse {
+  id: number;
+  name: string;
+  path: string;
+  updated_at: string;
+}
+```
+
+**错误码**:
+- `10001` - 请求参数错误
+- `10002` - 参数校验失败
+- `50001` - 文件夹名称无效
+- `50006` - 文件夹不存在
+- `50010` - 同名文件夹已存在
+
+---
+
 ## 6. 回收站接口（Trash）
 
 ### GET /api/trash

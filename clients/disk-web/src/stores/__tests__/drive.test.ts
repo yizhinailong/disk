@@ -203,6 +203,57 @@ describe('useDriveStore', () => {
       store.clearSelection()
       expect(store.selectedCount).toBe(0)
     })
+
+    it('setSelection replaces the current table selection', () => {
+      const store = useDriveStore()
+      store.selectedIds = new Set([1])
+      store.setSelection([2, 3])
+      expect([...store.selectedIds]).toEqual([2, 3])
+    })
+  })
+
+  describe('mutation reconciliation', () => {
+    it('adds a created folder and updates pagination without duplicating it', () => {
+      const store = useDriveStore()
+      store.files = [...sampleFiles]
+      store.pagination = { page: 1, page_size: 2, total: 3, total_pages: 2 }
+      const created = {
+        id: 8,
+        name: 'created',
+        parent_id: 0,
+        path: '/created/',
+        created_at: '2024-01-04',
+      }
+
+      store.applyCreatedFolder(created)
+      store.applyCreatedFolder(created)
+
+      expect(store.files.filter((item) => item.id === 8)).toHaveLength(1)
+      expect(store.files.find((item) => item.id === 8)).toMatchObject({
+        name: 'created',
+        type: 'folder',
+        updated_at: '2024-01-04',
+      })
+      expect(store.pagination).toMatchObject({ total: 4, total_pages: 2 })
+    })
+
+    it('applies successful rename and removal results to visible rows', () => {
+      const store = useDriveStore()
+      store.files = [...sampleFiles]
+      store.pagination = { page: 1, page_size: 20, total: 3, total_pages: 1 }
+      store.selectedIds = new Set([2, 3])
+
+      store.applyItemRename({ id: 3, name: 'renamed', updated_at: '2024-01-05' })
+      store.applyItemsRemoved([2])
+
+      expect(store.files.find((item) => item.id === 3)).toMatchObject({
+        name: 'renamed',
+        updated_at: '2024-01-05',
+      })
+      expect(store.files.some((item) => item.id === 2)).toBe(false)
+      expect([...store.selectedIds]).toEqual([3])
+      expect(store.pagination).toMatchObject({ total: 2, total_pages: 1 })
+    })
   })
 
   describe('setSortBy / setSortOrder / setFilterType', () => {
@@ -289,6 +340,99 @@ describe('useDriveStore', () => {
       expect(store.selectedIds.size).toBe(0)
       expect(store.breadcrumbs.map((item) => item.id)).toEqual([5, 9])
       expect(store.folderTree?.children[0]?.children?.[0]?.id).toBe(9)
+    })
+
+    it('preserves the last safe tree and navigation state when a tree refresh fails', async () => {
+      vi.mocked(fileApi.listFiles).mockResolvedValue({
+        items: [{ id: 12, name: 'fresh.txt', type: 'file', size: 5, mime_type: 'text/plain', created_at: '2024-01-01', updated_at: '2024-01-01' }],
+        pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+      })
+      vi.mocked(folderApi.getBreadcrumb).mockResolvedValue({
+        path: [{ id: 5, name: 'Docs' }],
+      })
+      vi.mocked(folderApi.getFolderTree).mockRejectedValueOnce(new Error('tree unavailable'))
+
+      const store = useDriveStore()
+      const safeTree = {
+        id: 0,
+        name: 'Root',
+        children: [{ id: 5, name: 'Docs', children: [{ id: 8, name: 'Safe', children: [] }] }],
+      }
+      store.currentFolderId = 5
+      store.folderTree = safeTree
+
+      await store.refreshCurrentView()
+
+      expect(store.currentFolderId).toBe(5)
+      expect(store.folderTree).toEqual(safeTree)
+      expect(store.folderTreeError).toBe('tree unavailable')
+      expect(store.files[0]?.name).toBe('fresh.txt')
+      expect(store.breadcrumbs).toEqual([{ id: 5, name: 'Docs' }])
+
+      vi.mocked(folderApi.getFolderTree).mockResolvedValueOnce({
+        id: 0,
+        name: 'Root',
+        children: [{ id: 5, name: 'Docs', children: [{ id: 9, name: 'Recovered', children: [] }] }],
+      })
+      await store.refreshFolderTree()
+
+      expect(store.folderTreeError).toBeNull()
+      expect(store.folderTree?.children[0]?.children[0]?.name).toBe('Recovered')
+    })
+
+    it('refreshes navigation metadata without discarding a safe tree on failure', async () => {
+      vi.mocked(folderApi.getBreadcrumb).mockResolvedValue({
+        path: [{ id: 5, name: 'Docs' }],
+      })
+      vi.mocked(folderApi.getFolderTree).mockRejectedValue(new Error('retry tree'))
+
+      const store = useDriveStore()
+      const safeTree = {
+        id: 0,
+        name: 'Root',
+        children: [{ id: 5, name: 'Docs', children: [] }],
+      }
+      store.currentFolderId = 5
+      store.folderTree = safeTree
+
+      await store.refreshNavigationMetadata()
+
+      expect(fileApi.listFiles).not.toHaveBeenCalled()
+      expect(store.breadcrumbs).toEqual([{ id: 5, name: 'Docs' }])
+      expect(store.folderTree).toEqual(safeTree)
+      expect(store.folderTreeError).toBe('retry tree')
+    })
+
+    it('reapplies a confirmed folder move after a stale tree refresh', async () => {
+      vi.mocked(folderApi.getBreadcrumb).mockResolvedValue({
+        path: [{ id: 5, name: 'Source' }],
+      })
+      vi.mocked(folderApi.getFolderTree).mockResolvedValue({
+        id: 0,
+        name: 'Root',
+        children: [
+          { id: 5, name: 'Source', children: [] },
+          { id: 6, name: 'Target', children: [] },
+        ],
+      })
+
+      const store = useDriveStore()
+      store.currentFolderId = 5
+      store.folderTree = {
+        id: 0,
+        name: 'Root',
+        children: [
+          { id: 5, name: 'Source', children: [{ id: 9, name: 'Moved', children: [] }] },
+          { id: 6, name: 'Target', children: [] },
+        ],
+      }
+
+      await store.refreshAfterFolderMove([9], 6)
+
+      expect(store.folderTree?.children[0]?.children).toEqual([])
+      expect(store.folderTree?.children[1]?.children).toEqual([
+        { id: 9, name: 'Moved', children: [] },
+      ])
     })
   })
 

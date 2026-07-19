@@ -60,6 +60,7 @@ export type {
   DeleteResponse,
   CreateFolderRequest,
   CreateFolderResponse,
+  RenameFolderResponse,
   FolderTreeNode,
   FolderTreeQuery,
   FolderTreeResponse,

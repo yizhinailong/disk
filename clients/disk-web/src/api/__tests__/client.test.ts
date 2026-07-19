@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { AxiosHeaders } from 'axios'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { ApiError } from '../client'
@@ -96,7 +96,7 @@ describe('apiClient interceptors', () => {
     vi.stubGlobal('localStorage', storage)
 
     const mod = await import('../client?cachebust=' + Date.now())
-    const config: Partial<InternalAxiosRequestConfig> = { headers: { Authorization: '' } }
+    const config: Partial<InternalAxiosRequestConfig> = { headers: new AxiosHeaders({ Authorization: '' }) }
     const handlers = mod.apiClient.interceptors.request as { handlers: Array<{ fulfilled: (config: InternalAxiosRequestConfig) => InternalAxiosRequestConfig }> }
     const result = handlers.handlers[0].fulfilled(config as InternalAxiosRequestConfig)
 

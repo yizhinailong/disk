@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "es2023",
     "module": "esnext",
-    "lib": ["ES2023"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
 
     "moduleResolution": "bundler",
@@ -17,5 +17,11 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts"]
+  "include": [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "e2e/fixtures.ts",
+    "e2e/folder-tree-fixtures.ts",
+    "e2e/folder-tree.spec.ts"
+  ]
 }

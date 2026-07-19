@@ -154,6 +154,11 @@ export interface CreateFolderResponse {
   readonly created_at: string;
 }
 
+/** 重命名目录响应 */
+export interface RenameFolderResponse extends RenameResponse {
+  readonly path: string;
+}
+
 /** 目录树节点 */
 export interface FolderTreeNode {
   readonly id: number;

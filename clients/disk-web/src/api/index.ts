@@ -18,7 +18,7 @@ export {
   deleteFiles,
   searchFiles,
 } from './file'
-export { createFolder, getFolderTree, getBreadcrumb } from './folder'
+export { createFolder, getFolderTree, getBreadcrumb, renameFolder } from './folder'
 export {
   createShare,
   listShares,

@@ -61,75 +61,95 @@
 
     <!-- 正常文件列表模式 -->
     <template v-else>
-      <!-- 面包屑导航 -->
-      <div class="drive-page__breadcrumb">
-        <el-breadcrumb separator="/">
-          <el-breadcrumb-item @click="goToRoot">
-            <span class="drive-page__breadcrumb-root">全部文件</span>
-          </el-breadcrumb-item>
-          <el-breadcrumb-item
-            v-for="crumb in store.breadcrumbs"
-            :key="crumb.id"
-            @click="goToBreadcrumb(crumb.id)"
+      <DriveToolbar />
+      <div class="drive-page__workspace">
+        <aside class="drive-page__tree" aria-label="文件夹树">
+          <FolderTree />
+        </aside>
+
+        <section class="drive-page__content" :aria-label="`当前文件夹 ${currentFolderName}`">
+          <!-- 面包屑导航 -->
+          <nav class="drive-page__breadcrumb" aria-label="文件夹路径">
+            <el-tooltip v-if="!store.isRoot" content="返回上一级" placement="bottom">
+              <el-button
+                :icon="ArrowUpBold"
+                text
+                circle
+                aria-label="返回上一级"
+                @click="goToParent"
+              />
+            </el-tooltip>
+            <el-breadcrumb separator="/">
+              <el-breadcrumb-item @click="goToRoot">
+                <span class="drive-page__breadcrumb-root">全部文件</span>
+              </el-breadcrumb-item>
+              <el-breadcrumb-item
+                v-for="crumb in store.breadcrumbs"
+                :key="crumb.id"
+                @click="goToBreadcrumb(crumb.id)"
+              >
+                <span class="drive-page__breadcrumb-link">{{ crumb.name }}</span>
+              </el-breadcrumb-item>
+            </el-breadcrumb>
+          </nav>
+
+          <!-- 文件列表 -->
+          <PageState
+            :state="pageState"
+            empty-text="此文件夹为空"
+            error-text="加载文件列表失败"
+            @retry="store.refreshCurrentView()"
           >
-            <span class="drive-page__breadcrumb-link">{{ crumb.name }}</span>
-          </el-breadcrumb-item>
-        </el-breadcrumb>
+            <el-table
+              v-loading="store.loading"
+              :data="store.sortedFiles"
+              class="drive-page__table"
+              @selection-change="onSelectionChange"
+              @sort-change="onSortChange"
+              @row-click="onRowClick"
+              @row-dblclick="onRowDblclick"
+            >
+              <el-table-column type="selection" width="48" />
+              <el-table-column :label="'名称'" min-width="320" prop="name" sortable="custom">
+                <template #default="{ row }">
+                  <div class="drive-page__name-cell">
+                    <FileIcon :is-folder="row.type === 'folder'" :mime-type="row.mime_type ?? ''" :size="24" />
+                    <span class="drive-page__name-text">{{ row.name }}</span>
+                  </div>
+                </template>
+              </el-table-column>
+
+              <el-table-column :label="'大小'" width="140" prop="size" sortable="custom">
+                <template #default="{ row }">
+                  <SizeDisplay v-if="row.size != null" :bytes="row.size" />
+                  <span v-else class="drive-page__dash">—</span>
+                </template>
+              </el-table-column>
+
+              <el-table-column :label="'修改时间'" width="200" prop="updated_at" sortable="custom">
+                <template #default="{ row }">
+                  <TimeDisplay :time="row.updated_at" format="absolute" />
+                </template>
+              </el-table-column>
+
+              <el-table-column :label="'类型'" width="120">
+                <template #default="{ row }">
+                  {{ row.type === 'folder' ? '文件夹' : formatMimeType(row.mime_type) }}
+                </template>
+              </el-table-column>
+            </el-table>
+
+            <!-- 分页 -->
+            <Pagination
+              v-if="store.pagination"
+              :total="store.pagination.total"
+              :page="store.pagination.page"
+              :page-size="store.pagination.page_size"
+              @change="onPageChange"
+            />
+          </PageState>
+        </section>
       </div>
-
-      <!-- 文件列表 -->
-      <PageState
-        :state="pageState"
-        empty-text="此文件夹为空"
-        error-text="加载文件列表失败"
-        @retry="store.refreshCurrentView()"
-      >
-        <el-table
-          v-loading="store.loading"
-          :data="store.sortedFiles"
-          class="drive-page__table"
-      @sort-change="onSortChange"
-      @row-click="onRowClick"
-      @row-dblclick="onRowDblclick"
-    >
-          <el-table-column :label="'名称'" min-width="320" prop="name" sortable="custom">
-            <template #default="{ row }">
-              <div class="drive-page__name-cell">
-                <FileIcon :is-folder="row.type === 'folder'" :mime-type="row.mime_type ?? ''" :size="24" />
-                <span class="drive-page__name-text">{{ row.name }}</span>
-              </div>
-            </template>
-          </el-table-column>
-
-          <el-table-column :label="'大小'" width="140" prop="size" sortable="custom">
-            <template #default="{ row }">
-              <SizeDisplay v-if="row.size != null" :bytes="row.size" />
-              <span v-else class="drive-page__dash">—</span>
-            </template>
-          </el-table-column>
-
-          <el-table-column :label="'修改时间'" width="200" prop="updated_at" sortable="custom">
-            <template #default="{ row }">
-              <TimeDisplay :time="row.updated_at" format="absolute" />
-            </template>
-          </el-table-column>
-
-          <el-table-column :label="'类型'" width="120">
-            <template #default="{ row }">
-              {{ row.type === 'folder' ? '文件夹' : formatMimeType(row.mime_type) }}
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <!-- 分页 -->
-        <Pagination
-          v-if="store.pagination"
-          :total="store.pagination.total"
-          :page="store.pagination.page"
-          :page-size="store.pagination.page_size"
-          @change="onPageChange"
-        />
-      </PageState>
     </template>
   </div>
 </template>
@@ -144,6 +164,9 @@ import FileIcon from '@/components/base/FileIcon.vue';
 import SizeDisplay from '@/components/base/SizeDisplay.vue';
 import TimeDisplay from '@/components/base/TimeDisplay.vue';
 import Pagination from '@/components/base/Pagination.vue';
+import DriveToolbar from '@/components/drive/DriveToolbar.vue';
+import FolderTree from '@/components/drive/FolderTree.vue';
+import { ArrowUpBold } from '@element-plus/icons-vue';
 import type { FileItem, SearchResultItem } from '@/types';
 
 const store = useDriveStore();
@@ -163,12 +186,25 @@ const searchPageState = computed<'loading' | 'empty' | 'content'>(() => {
   return 'content';
 });
 
+const currentFolderName = computed(() => {
+  return store.breadcrumbs.at(-1)?.name ?? '全部文件';
+});
+
 function goToRoot(): void {
   router.replace({ path: '/drive' });
 }
 
 function goToBreadcrumb(folderId: number): void {
   router.push({ path: '/drive', query: folderId === 0 ? {} : { folderId: String(folderId) } });
+}
+
+function goToParent(): void {
+  const parentId = store.breadcrumbs.at(-2)?.id ?? 0;
+  goToBreadcrumb(parentId);
+}
+
+function onSelectionChange(items: FileItem[]): void {
+  store.setSelection(items.map((item) => item.id));
 }
 
 function onSortChange({ prop, order }: { prop: string; order: string | null }): void {
@@ -273,7 +309,32 @@ onMounted(() => {
   flex-direction: column;
 }
 
+.drive-page__workspace {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  background: var(--el-bg-color);
+}
+
+.drive-page__tree {
+  min-width: 0;
+  padding: 12px;
+  overflow: auto;
+  border-right: 1px solid var(--el-border-color-lighter);
+}
+
+.drive-page__content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 .drive-page__breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--el-border-color-lighter);
 }
