@@ -597,6 +597,7 @@ namespace disk::file {
             };
             const std::string expected_content = chunks[0] + chunks[1];
             const auto expected_md5 = FileHashUtil::HashMd5(expected_content);
+            const auto expected_sha256 = FileHashUtil::HashSha256(expected_content);
 
             /// Step 1: Init — ensure temp directory
             auto init_result = drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id));
@@ -634,7 +635,7 @@ namespace disk::file {
 
             /// Step 4: Promote to final storage
             auto promote_result = drogon::sync_wait(
-                m_blob_store->PromoteToFinal(assembled, assembled.md5_hash)
+                m_blob_store->PromoteToFinal(assembled, assembled.sha256_hash)
             );
             ASSERT_TRUE(promote_result.has_value());
 
@@ -645,7 +646,7 @@ namespace disk::file {
             EXPECT_EQ(ReadBinaryFile(final_path), expected_content);
 
             /// Verify final storage path matches expected pattern
-            const auto expected_final = m_blob_store->GetFinalStoragePath(assembled.md5_hash);
+            const auto expected_final = m_blob_store->GetFinalStoragePath(expected_sha256);
             EXPECT_EQ(final_path, expected_final);
 
             /// Step 5: Cleanup temp

@@ -251,8 +251,18 @@ namespace disk::storage {
         };
     }
 
-    auto AwsS3Client::PutObjectFromFile(const std::string& key, const std::filesystem::path& local_path)
-        -> Result<void> {
+    auto AwsS3Client::PutObjectFromFileIfAbsent(
+        const std::string& key,
+        const std::filesystem::path& local_path
+    ) -> Result<S3PutObjectResult> {
+        std::error_code size_error;
+        const auto file_size = std::filesystem::file_size(local_path, size_error);
+        if (size_error || file_size > static_cast<uintmax_t>(std::numeric_limits<long long>::max())) {
+            return std::unexpected(
+                ErrorInfo(ErrorCode::FileReadError, "Failed to inspect assembled file for S3 upload")
+            );
+        }
+
         auto input_data = Aws::MakeShared<Aws::FStream>(
             AWS_ALLOC_TAG,
             local_path.string().c_str(),
@@ -267,10 +277,15 @@ namespace disk::storage {
         Aws::S3::Model::PutObjectRequest request;
         request.SetBucket(m_impl->storage_config.bucket);
         request.SetKey(key);
+        request.SetContentLength(static_cast<long long>(file_size));
         request.SetBody(input_data);
+        request.SetIfNoneMatch("*");
 
         auto outcome = m_impl->client->PutObject(request);
         if (!outcome.IsSuccess()) {
+            if (IsPreconditionFailedError(outcome.GetError())) {
+                return S3PutObjectResult{ .etag = {}, .created = false };
+            }
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::InternalError,
@@ -278,7 +293,10 @@ namespace disk::storage {
             ));
         }
 
-        return {};
+        return S3PutObjectResult{
+            .etag = outcome.GetResult().GetETag(),
+            .created = true,
+        };
     }
 
     auto AwsS3Client::DeleteObject(const std::string& key) -> Result<void> {
@@ -518,8 +536,9 @@ namespace disk::storage {
     auto AwsS3Client::CompleteMultipartUpload(
         const std::string& key,
         const std::string& upload_id,
-        const std::vector<S3CompletedPart>& parts
-    ) -> Result<void> {
+        const std::vector<S3CompletedPart>& parts,
+        bool only_if_absent
+    ) -> Result<S3CompleteMultipartResult> {
         if (upload_id.empty() || parts.empty()) {
             return std::unexpected(
                 ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 multipart completion")
@@ -548,16 +567,22 @@ namespace disk::storage {
         request.SetKey(key);
         request.SetUploadId(upload_id);
         request.SetMultipartUpload(std::move(completed_upload));
+        if (only_if_absent) {
+            request.SetIfNoneMatch("*");
+        }
 
         auto outcome = m_impl->client->CompleteMultipartUpload(request);
         if (!outcome.IsSuccess()) {
+            if (only_if_absent && IsPreconditionFailedError(outcome.GetError())) {
+                return S3CompleteMultipartResult{ .created = false };
+            }
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::InternalError,
                 "S3 CompleteMultipartUpload"
             ));
         }
-        return {};
+        return S3CompleteMultipartResult{ .created = true };
     }
 
     auto AwsS3Client::AbortMultipartUpload(const std::string& key, const std::string& upload_id)

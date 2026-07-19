@@ -98,11 +98,11 @@ namespace disk::storage {
         /**
          * @brief 将已组装暂存对象提升为最终 Blob
          * @param assembly 后端无关的组装暂存对象描述符
-         * @param hash 内容哈希（如 MD5）
+         * @param sha256_hash 64 位小写十六进制 SHA-256 内容哈希
          * @return 成功返回最终路径与是否由本次调用创建，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& hash)
+        virtual auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& sha256_hash)
             -> drogon::Task<Result<BlobPromoteResult>> = 0;
 
         /**
@@ -122,7 +122,12 @@ namespace disk::storage {
         [[nodiscard]]
         virtual auto OpenBlobForRead(const BlobDescriptor& blob)
             -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> {
-            co_return co_await OpenForRead(GetFinalStoragePath(blob.hash_md5));
+            if (blob.storage_path.empty()) {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::FileReadError, "Blob storage path is empty")
+                );
+            }
+            co_return co_await OpenForRead(std::filesystem::path(blob.storage_path));
         }
 
         /**
@@ -169,7 +174,12 @@ namespace disk::storage {
          */
         [[nodiscard]]
         virtual auto BlobExists(const BlobDescriptor& blob) -> drogon::Task<Result<bool>> {
-            co_return co_await Exists(GetFinalStoragePath(blob.hash_md5));
+            if (blob.storage_path.empty()) {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::FileReadError, "Blob storage path is empty")
+                );
+            }
+            co_return co_await Exists(std::filesystem::path(blob.storage_path));
         }
 
         /**
@@ -202,12 +212,12 @@ namespace disk::storage {
         virtual auto Exists(const std::filesystem::path& storage_path) -> drogon::Task<Result<bool>> = 0;
 
         /**
-         * @brief 根据内容哈希计算最终 Blob 存储路径
-         * @param hash 文件内容哈希（如 MD5）
+         * @brief 根据 SHA-256 内容哈希计算新 Blob 的最终存储路径
+         * @param sha256_hash 64 位小写十六进制 SHA-256 内容哈希
          * @return 最终 Blob 存储路径
          */
         [[nodiscard]]
-        virtual auto GetFinalStoragePath(const std::string& hash) const -> std::filesystem::path = 0;
+        virtual auto GetFinalStoragePath(const std::string& sha256_hash) const -> std::filesystem::path = 0;
 
         /**
          * @brief 获取最终 Blob 大小（字节）

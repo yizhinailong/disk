@@ -48,7 +48,7 @@ from lib_py import (
     assert_header_contains,
     assert_json_field,
     query_one,
-    final_blob_path,
+    local_blob_path,
 )
 
 import atexit
@@ -81,6 +81,17 @@ def file_download_metadata():
         log_fail(f"file metadata row missing: file_id={FILE_ID}")
         return {"download_count": -1, "last_accessed_at": None}
     return row
+
+
+def file_blob_path():
+    row = query_one(
+        "SELECT fc.storage_path FROM files f JOIN file_contents fc ON fc.id = f.content_id WHERE f.id = %s",
+        (int(FILE_ID),),
+    )
+    if row is None or not row["storage_path"]:
+        log_fail(f"file storage_path missing: file_id={FILE_ID}")
+        print_summary()
+    return local_blob_path(str(row["storage_path"]))
 
 
 def share_download_count():
@@ -589,7 +600,7 @@ def test_file_download_not_found():
 def test_missing_final_blob_error_mapping_and_side_effects():
     log_step("Test: missing final blob maps to 404 and preserves current side effects")
 
-    blob_path = final_blob_path(FILE_HASH)
+    blob_path = file_blob_path()
     backup_path = blob_path.with_suffix(blob_path.suffix + ".missing-download-test")
     if not blob_path.exists():
         log_fail(f"missing-blob setup: final blob does not exist: {blob_path}")

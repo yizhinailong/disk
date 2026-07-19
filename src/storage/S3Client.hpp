@@ -34,6 +34,10 @@ namespace disk::storage {
         std::string etag;
     };
 
+    struct S3CompleteMultipartResult {
+        bool created{ false };
+    };
+
     class IS3Client {
     public:
         virtual ~IS3Client() = default;
@@ -49,8 +53,10 @@ namespace disk::storage {
             -> Result<S3PutObjectResult> = 0;
 
         [[nodiscard]]
-        virtual auto PutObjectFromFile(const std::string& key, const std::filesystem::path& local_path)
-            -> Result<void> = 0;
+        virtual auto PutObjectFromFileIfAbsent(
+            const std::string& key,
+            const std::filesystem::path& local_path
+        ) -> Result<S3PutObjectResult> = 0;
 
         [[nodiscard]]
         virtual auto DeleteObject(const std::string& key) -> Result<void> = 0;
@@ -94,8 +100,9 @@ namespace disk::storage {
         virtual auto CompleteMultipartUpload(
             const std::string& key,
             const std::string& upload_id,
-            const std::vector<S3CompletedPart>& parts
-        ) -> Result<void> = 0;
+            const std::vector<S3CompletedPart>& parts,
+            bool only_if_absent
+        ) -> Result<S3CompleteMultipartResult> = 0;
 
         [[nodiscard]]
         virtual auto AbortMultipartUpload(const std::string& key, const std::string& upload_id)
@@ -123,8 +130,10 @@ namespace disk::storage {
             -> Result<S3PutObjectResult> override;
 
         [[nodiscard]]
-        auto PutObjectFromFile(const std::string& key, const std::filesystem::path& local_path)
-            -> Result<void> override;
+        auto PutObjectFromFileIfAbsent(
+            const std::string& key,
+            const std::filesystem::path& local_path
+        ) -> Result<S3PutObjectResult> override;
 
         [[nodiscard]]
         auto DeleteObject(const std::string& key) -> Result<void> override;
@@ -168,8 +177,9 @@ namespace disk::storage {
         auto CompleteMultipartUpload(
             const std::string& key,
             const std::string& upload_id,
-            const std::vector<S3CompletedPart>& parts
-        ) -> Result<void> override;
+            const std::vector<S3CompletedPart>& parts,
+            bool only_if_absent
+        ) -> Result<S3CompleteMultipartResult> override;
 
         [[nodiscard]]
         auto AbortMultipartUpload(const std::string& key, const std::string& upload_id)

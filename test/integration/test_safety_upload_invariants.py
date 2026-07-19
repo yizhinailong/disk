@@ -34,6 +34,7 @@ from lib_py import (  # noqa: E402
     fetch,
     final_blob_path,
     json_field,
+    local_blob_path,
     log_fail,
     log_info,
     log_pass,
@@ -44,6 +45,7 @@ from lib_py import (  # noqa: E402
     query_one,
     save_evidence,
     scalar,
+    sha256_bytes,
     unique_name,
     upload_temp_dir,
 )
@@ -249,7 +251,11 @@ def test_successful_chunked_upload_invariants() -> None:
     assert_equal("file_contents md5 matches payload", content_row["hash_md5"], file_hash)
     assert_path_absent("temp upload directory cleaned after success", upload_temp_dir(upload_id))
     assert_path_absent("assembled temp artifact cleaned after success", upload_temp_dir(upload_id).parent / f"{upload_id}.tmp")
-    assert_equal("final blob path exists after success", final_blob_path(file_hash).exists(), True)
+    assert_equal(
+        "final blob path exists after success",
+        local_blob_path(str(content_row["storage_path"])).exists(),
+        True,
+    )
 
 
 def assert_failed_finalize_recoverable(upload_id: str, filename: str, file_hash: str, quota_before_complete: dict[str, int]) -> None:
@@ -312,7 +318,7 @@ def test_db_failure_after_blob_promotion_retains_created_blob() -> None:
     upload_single_chunk(upload_id, payload)
     assert_chunk_row_count(upload_id, 1)
     quota_before_complete = user_quota()
-    blob_path = final_blob_path(file_hash)
+    blob_path = final_blob_path(sha256_bytes(payload))
     assert_path_absent("new-blob failure fixture starts without final blob", blob_path)
 
     affected = execute(
@@ -334,7 +340,7 @@ def test_db_failure_after_promotion_preserves_preexisting_blob() -> None:
     payload = f"safety-db-failure-reused-{unique_name()}".encode()
     filename = f"safety_db_failure_reused_{unique_name()}.bin"
     file_hash = md5_bytes(payload)
-    blob_path = final_blob_path(file_hash)
+    blob_path = final_blob_path(sha256_bytes(payload))
 
     upload_id, _ = init_upload(filename, payload)
     blob_path.parent.mkdir(parents=True, exist_ok=True)
@@ -387,7 +393,7 @@ def test_cancel_upload_invariants() -> None:
         (USER_ID, filename),
     )
     assert_path_absent("temp upload directory cleaned after cancel", upload_temp_dir(upload_id))
-    assert_path_absent("final blob absent after cancel", final_blob_path(file_hash))
+    assert_path_absent("final blob absent after cancel", final_blob_path(sha256_bytes(payload)))
 
 
 def test_expired_upload_cleanup_invariants() -> None:
@@ -436,7 +442,7 @@ def test_expired_upload_cleanup_invariants() -> None:
     )
     assert_path_absent("temp upload directory cleaned after expiry", upload_temp_dir(upload_id))
     assert_path_absent("assembled temp artifact absent after expiry", upload_temp_dir(upload_id).parent / f"{upload_id}.tmp")
-    assert_path_absent("final blob absent after expiry", final_blob_path(file_hash))
+    assert_path_absent("final blob absent after expiry", final_blob_path(sha256_bytes(payload)))
 
 
 def test_init_upload_expires_existing_task_invariants() -> None:
@@ -487,7 +493,7 @@ def test_init_upload_expires_existing_task_invariants() -> None:
         "old assembled temp artifact absent after inline expiry",
         upload_temp_dir(old_upload_id).parent / f"{old_upload_id}.tmp",
     )
-    assert_path_absent("final blob absent after inline expiry", final_blob_path(file_hash))
+    assert_path_absent("final blob absent after inline expiry", final_blob_path(sha256_bytes(payload)))
 
 
 def test_complete_upload_db_failure_after_promotion_retains_final_blob() -> None:
@@ -553,7 +559,7 @@ def test_complete_upload_db_failure_after_promotion_retains_final_blob() -> None
         "SELECT id FROM file_contents WHERE hash_md5 = %s",
         (file_hash,),
     )
-    blob_path = final_blob_path(file_hash)
+    blob_path = final_blob_path(sha256_bytes(payload))
     assert_path_exists("promoted final blob retained after DB failure", blob_path)
     assert_equal("temp upload directory remains for retry", upload_temp_dir(upload_id).exists(), True)
     cleanup_failed_finalize_fixture(upload_id, blob_path)

@@ -84,6 +84,7 @@ from .storage import (
     configured_temp_upload_path,
     disk_config,
     final_blob_path,
+    local_blob_path,
     load_disk_config,
     md5_bytes,
     sha256_bytes,

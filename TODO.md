@@ -230,7 +230,7 @@ API Instance A  API Instance B ... N
 
 - [x] 支持上传分片对象、HEAD、流式/Range 读取、幂等删除和批量清理。
 - [x] 按 D-01/D-06 的设计支持流式组装至临时完整对象或 multipart 目标。
-- [ ] 支持大对象的 server-side multipart copy/promote，不能假设单次 `CopyObject` 可覆盖所有文件大小。
+- [x] 支持大对象的 server-side multipart copy/promote，不能假设单次 `CopyObject` 可覆盖所有文件大小。
 - [x] 所有阻塞 AWS SDK 调用继续运行在专用工作线程，不阻塞 Drogon event loop。
 - [ ] 为超时、限流、5xx、连接失败建立分类重试；认证和参数错误不做无界重试。
 - [x] multipart 流程在请求内失败时执行 `AbortMultipartUpload`。
@@ -239,15 +239,15 @@ API Instance A  API Instance B ... N
 
 ### 8.3 对象 key 与生命周期
 
-- [ ] 规范 staging、assembled、final 三类 key 前缀并进行严格输入规范化，禁止路径穿越。
+- [x] 规范 staging、assembled、final 三类 key 前缀并进行严格输入规范化，禁止路径穿越。
 - [x] staging key 必须按 `upload_id` 隔离，清理任务不得使用未经验证的宽泛前缀。
-- [ ] final key 与 D-05 内容寻址决策一致，数据库 `storage_path` 仍为读取权威。
+- [x] final key 与 D-05 内容寻址决策一致，数据库 `storage_path` 仍为读取权威。
 - [ ] 在 MinIO/AWS S3 配置 staging/multipart 生命周期过期规则，作为应用清理失败的最后保护。
 - [ ] final 前缀不得配置自动过期规则。
 
 ### 8.4 下载路径
 
-- [ ] 保持现有 Range、ETag、权限和分享下载合同。
+- [x] 保持现有 Range、ETag、权限和分享下载合同。
 - [ ] 验证每个 API 实例都能从 S3/MinIO 读取任意 Blob，不依赖本地缓存文件。
 - [ ] 对对象缺失、长度不一致和 Range 上游中断返回一致错误并记录可对账信息。
 - [ ] 评估后续增加短期签名下载 URL，但不作为本轮多实例上线前置条件。

@@ -36,6 +36,7 @@ from lib_py import (  # noqa: E402
     fetch,
     final_blob_path,
     json_field,
+    local_blob_path,
     log_fail,
     log_info,
     log_pass,
@@ -45,6 +46,7 @@ from lib_py import (  # noqa: E402
     query_one,
     save_evidence,
     scalar,
+    sha256_bytes,
     unique_name,
     upload_temp_dir,
 )
@@ -270,7 +272,7 @@ def test_successful_upload_invariants() -> None:
     assert_equal("new content ref_count starts at 1", int(content["ref_count"]), 1)
     assert_path_absent("temp upload directory cleaned after success", upload_temp_dir(upload_id))
     assert_path_absent("assembled temp artifact cleaned after success", upload_temp_dir(upload_id).parent / f"{upload_id}.tmp")
-    assert_path_exists("final blob exists after success", final_blob_path(file_hash))
+    assert_path_exists("final blob exists after success", local_blob_path(str(content["storage_path"])))
 
 
 def test_cancel_upload_invariants() -> None:
@@ -304,7 +306,7 @@ def test_cancel_upload_invariants() -> None:
     assert_equal("cancel preserves used storage", quota_after_cancel["storage_used"], quota_before["storage_used"])
     assert_db_row_absent("cancel creates no file row", "SELECT id FROM files WHERE user_id = %s AND name = %s", (USER_ID, filename))
     assert_path_absent("temp upload directory cleaned after cancel", upload_temp_dir(upload_id))
-    assert_path_absent("final blob absent after cancel", final_blob_path(file_hash))
+    assert_path_absent("final blob absent after cancel", final_blob_path(sha256_bytes(payload)))
 
 
 def test_instant_upload_ref_count_and_accounting() -> None:
@@ -348,7 +350,10 @@ def test_instant_upload_ref_count_and_accounting() -> None:
         len(payload),
     )
     assert_equal("instant upload preserves storage_reserved", quota_after_instant["storage_reserved"], quota_before_instant["storage_reserved"])
-    assert_path_exists("dedup final blob still exists", final_blob_path(file_hash))
+    assert_path_exists(
+        "dedup final blob still exists",
+        local_blob_path(str(content_after_first["storage_path"])),
+    )
 
 
 def test_copy_file_and_folder_ref_counts_and_quota() -> None:
@@ -417,6 +422,7 @@ def test_trash_permanent_delete_invariants() -> None:
     uploaded_file = file_row(file_id)
     content_id = int(uploaded_file["content_id"])
     content_before_delete = content_row(content_id)
+    blob_path = local_blob_path(str(content_before_delete["storage_path"]))
     quota_before_soft_delete = user_quota()
 
     soft_delete_file(file_id)
@@ -425,14 +431,14 @@ def test_trash_permanent_delete_invariants() -> None:
     content_after_soft_delete = content_row(content_id)
     assert_equal("soft delete keeps storage_used", quota_after_soft_delete["storage_used"], quota_before_soft_delete["storage_used"])
     assert_equal("soft delete keeps content ref_count", int(content_after_soft_delete["ref_count"]), int(content_before_delete["ref_count"]))
-    assert_path_exists("blob remains while item is in trash", final_blob_path(file_hash))
+    assert_path_exists("blob remains while item is in trash", blob_path)
 
     permanent_delete_trash(int(trash["id"]))
     quota_after_permanent_delete = user_quota()
     content_after_permanent_delete = content_row(content_id)
     assert_numeric_delta("permanent delete releases used storage", quota_after_soft_delete["storage_used"], quota_after_permanent_delete["storage_used"], -len(payload))
     assert_equal("permanent delete decrements ref_count to zero", int(content_after_permanent_delete["ref_count"]), 0)
-    assert_path_absent("zero-ref blob deleted after permanent delete", final_blob_path(file_hash))
+    assert_path_absent("zero-ref blob deleted after permanent delete", blob_path)
     assert_db_row_absent("trash row removed after permanent delete", "SELECT id FROM trash WHERE id = %s", (int(trash["id"]),))
 
 

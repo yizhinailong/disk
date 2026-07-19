@@ -154,7 +154,9 @@ namespace disk::file {
                 return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
             }
 
-            auto promote_result = drogon::sync_wait(blob_store.PromoteToFinal(assembled, assembled.md5_hash));
+            auto promote_result = drogon::sync_wait(
+                blob_store.PromoteToFinal(assembled, assembled.sha256_hash)
+            );
             if (!promote_result) {
                 return std::unexpected(promote_result.error());
             }
@@ -477,7 +479,7 @@ namespace disk::file {
             EXPECT_EQ(result->file.hash, expected_md5);
             EXPECT_EQ(result->file.parent_id, 7U);
 
-            const auto final_path = FinalStoragePath(expected_md5);
+            const auto final_path = FinalStoragePath(FileHashUtil::HashSha256(merged));
             ASSERT_TRUE(std::filesystem::exists(final_path));
             EXPECT_EQ(ReadBinaryFile(final_path), merged);
             EXPECT_FALSE(std::filesystem::exists(TempDir(upload_id)));
@@ -634,7 +636,7 @@ namespace disk::file {
             EXPECT_EQ(result.error().code, ErrorCode::FileAlreadyExists);
             EXPECT_TRUE(file_records.empty());
             EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
-            EXPECT_FALSE(std::filesystem::exists(FinalStoragePath(task.file_hash)));
+            EXPECT_FALSE(std::filesystem::exists(FinalStoragePath(FileHashUtil::HashSha256(merged))));
         }
 
         TEST_F(FileServiceUploadAtomicityModelTest, CompleteUploadHashMismatchDeletesAssembledTempFile) {

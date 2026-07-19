@@ -64,7 +64,7 @@ namespace disk::storage {
             -> drogon::Task<Result<void>> override;
 
         [[nodiscard]]
-        auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& hash)
+        auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& sha256_hash)
             -> drogon::Task<Result<BlobPromoteResult>> override;
 
         [[nodiscard]]
@@ -85,15 +85,12 @@ namespace disk::storage {
         auto Exists(const std::filesystem::path& storage_path) -> drogon::Task<Result<bool>> override;
 
         [[nodiscard]]
-        auto GetFinalStoragePath(const std::string& hash) const -> std::filesystem::path override;
+        auto GetFinalStoragePath(const std::string& sha256_hash) const -> std::filesystem::path override;
 
         [[nodiscard]]
         auto GetFileSize(const std::filesystem::path& storage_path) -> drogon::Task<Result<uint64_t>> override;
 
     private:
-        [[nodiscard]]
-        auto ToObjectKey(const std::filesystem::path& path) const -> std::string;
-
         std::shared_ptr<disk::utils::ConfigMgr> m_config_mgr;
         disk::utils::S3StorageConfig m_s3_config;
         std::shared_ptr<IS3Client> m_s3_client;

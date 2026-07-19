@@ -23,7 +23,8 @@ namespace disk::storage {
     struct BlobDescriptor {
         uint64_t content_id{ 0 };
         std::string hash_md5;
+        std::string storage_path;
         uint64_t size{ 0 };
     };
 
-} ///< namespace disk::storage
+} // namespace disk::storage

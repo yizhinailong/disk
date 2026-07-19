@@ -84,6 +84,20 @@ def remove_prefix(client: Any, bucket: str, prefix: str) -> None:
         continuation_token = response.get("NextContinuationToken")
 
 
+def list_prefix_keys(client: Any, bucket: str, prefix: str) -> list[str]:
+    keys: list[str] = []
+    continuation_token: str | None = None
+    while True:
+        request: dict[str, Any] = {"Bucket": bucket, "Prefix": prefix}
+        if continuation_token:
+            request["ContinuationToken"] = continuation_token
+        response = client.list_objects_v2(**request)
+        keys.extend(str(item["Key"]) for item in response.get("Contents", []))
+        if not response.get("IsTruncated"):
+            return keys
+        continuation_token = response.get("NextContinuationToken")
+
+
 def main() -> int:
     if os.environ.get("DISK_S3_APP_INTEGRATION") != "1":
         print("SKIP: DISK_S3_APP_INTEGRATION is not 1; skipping Disk S3 application flow")
@@ -121,8 +135,10 @@ def main() -> int:
     base_url = f"http://127.0.0.1:{port}"
     run_id = uuid.uuid4().hex[:12]
     object_prefix = f"objects/app-{run_id}"
+    staging_prefix = f"staging/app-{run_id}"
     payload = (f"disk-s3-app-flow-{run_id}-".encode() + bytes(range(256))) * 64
     payload_hash = hashlib.md5(payload).hexdigest()
+    payload_sha256 = hashlib.sha256(payload).hexdigest()
     filename = f"s3_app_{run_id}.bin"
 
     s3_client = boto3.client(
@@ -160,6 +176,19 @@ def main() -> int:
             connection.commit()
             return affected
 
+    def remove_failed_upload(upload_id: str, user: int, baseline_reserved: int) -> None:
+        with psycopg.connect(**db_connect) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE users SET storage_reserved = %s WHERE id = %s",
+                    (baseline_reserved, user),
+                )
+                cursor.execute(
+                    "DELETE FROM upload_tasks WHERE id = %s AND user_id = %s",
+                    (upload_id, user),
+                )
+            connection.commit()
+
     server: subprocess.Popen[bytes] | None = None
     log_handle: Any = None
     log_path = repo_root / ".sisyphus/evidence" / f"s3-app-server-{run_id}.log"
@@ -177,6 +206,7 @@ def main() -> int:
         config["app"]["upload_path"] = str(temp_dir / "drogon-upload")
         disk_config = config["custom_config"]["disk"]
         disk_config["storage_backend"] = "s3"
+        disk_config["upload_staging_backend"] = "s3"
         disk_config["storage_base_path"] = str(temp_dir / "unused-local-blobs")
         disk_config["temp_upload_path"] = str(temp_dir / "staging")
         disk_config["s3"] = {
@@ -187,6 +217,7 @@ def main() -> int:
             "force_path_style": True,
             "verify_ssl": False,
             "object_prefix": object_prefix,
+            "staging_prefix": staging_prefix,
             "connect_timeout_ms": 3000,
             "request_timeout_ms": 300000,
         }
@@ -264,6 +295,26 @@ def main() -> int:
                 )
                 chunk_payload = require_envelope(chunk, 200, "upload chunk")
                 require(chunk_payload["data"]["uploaded"] is True, "upload chunk succeeds")
+                require(
+                    not (temp_dir / "staging" / upload_id).exists(),
+                    "S3-native chunk upload creates no node-local session directory",
+                )
+                task_staging = query_one(
+                    "SELECT staging_backend, staging_prefix FROM upload_tasks WHERE id = %s",
+                    (upload_id,),
+                )
+                require(
+                    task_staging is not None
+                    and task_staging["staging_backend"] == "s3"
+                    and task_staging["staging_prefix"] == f"{staging_prefix}/{upload_id}",
+                    "upload task persists its exact S3 staging session",
+                )
+                staged_keys = list_prefix_keys(
+                    s3_client,
+                    bucket,
+                    f"{staging_prefix}/{upload_id}/",
+                )
+                require(len(staged_keys) == 1 and "/chunks/0-" in staged_keys[0], "chunk is stored in S3 staging")
 
                 complete = http.post(
                     "/api/file/upload/complete",
@@ -274,11 +325,25 @@ def main() -> int:
                 require(str(complete_payload["code"]) == "0", "S3 upload finalization succeeds")
                 file_id = int(complete_payload["data"]["file"]["id"])
 
-                object_key = f"{object_prefix}/{payload_hash[:2]}/{payload_hash}.bin"
+                object_key = f"{object_prefix}/sha256/{payload_sha256[:2]}/{payload_sha256}.bin"
                 wait_for_object_state(s3_client, bucket, object_key, True)
                 head = s3_client.head_object(Bucket=bucket, Key=object_key)
                 require(head["ContentLength"] == len(payload), "final S3 object has the uploaded size")
-                require(not (temp_dir / "staging" / upload_id).exists(), "local upload staging is cleaned after S3 promotion")
+                require(
+                    not list_prefix_keys(s3_client, bucket, f"{staging_prefix}/{upload_id}/"),
+                    "successful finalization cleans only the completed S3 staging session",
+                )
+                content_row = query_one(
+                    "SELECT fc.hash_sha256, fc.storage_path FROM files f "
+                    "JOIN file_contents fc ON fc.id = f.content_id WHERE f.id = %s",
+                    (file_id,),
+                )
+                require(
+                    content_row is not None
+                    and content_row["hash_sha256"] == payload_sha256
+                    and content_row["storage_path"] == object_key,
+                    "database persists SHA-256 and the authoritative final object key",
+                )
 
                 full = http.get(f"/api/file/download/{file_id}", headers=auth_headers)
                 require(full.status_code == 200, "full S3-backed download returns HTTP 200")
@@ -328,7 +393,8 @@ def main() -> int:
 
                 fault_payload = (f"disk-s3-compensation-{run_id}".encode() + bytes(range(128))) * 32
                 fault_hash = hashlib.md5(fault_payload).hexdigest()
-                fault_name = f"s3_compensation_{run_id}.bin"
+                fault_sha256 = hashlib.sha256(fault_payload).hexdigest()
+                fault_name = f"s3_recovery_{run_id}.bin"
                 baseline_quota = query_one(
                     "SELECT storage_reserved FROM users WHERE id = %s",
                     (user_id,),
@@ -382,9 +448,9 @@ def main() -> int:
                 fault_complete_payload = require_envelope(fault_complete, 500, "compensation upload complete")
                 require(str(fault_complete_payload["code"]) == "10006", "DB finalization failure keeps InternalError code")
 
-                fault_key = f"{object_prefix}/{fault_hash[:2]}/{fault_hash}.bin"
-                wait_for_object_state(s3_client, bucket, fault_key, False)
-                require(True, "DB failure after S3 promotion compensates the new object")
+                fault_key = f"{object_prefix}/sha256/{fault_sha256[:2]}/{fault_sha256}.bin"
+                wait_for_object_state(s3_client, bucket, fault_key, True)
+                require(True, "DB failure retains the promoted final object for reconciliation")
                 require(
                     query_one("SELECT id FROM files WHERE user_id = %s AND name = %s", (user_id, fault_name)) is None,
                     "compensation failure creates no file row",
@@ -393,31 +459,24 @@ def main() -> int:
                     "SELECT status, reserved_bytes FROM upload_tasks WHERE id = %s AND user_id = %s",
                     (under_upload_id, user_id),
                 )
-                require(task_row is not None and int(task_row["status"]) == 0, "failed finalization leaves a retryable upload task")
-
                 require(
-                    execute(
-                        "UPDATE users SET storage_reserved = %s WHERE id = %s",
-                        (expected_reserved, user_id),
-                    )
-                    == 1,
-                    "compensation test restores the task reservation before cancel",
+                    task_row is not None and int(task_row["status"]) == 4,
+                    "failed finalization keeps the upload in Finalizing for lease recovery",
                 )
-                cancel = http.request(
-                    "DELETE",
-                    f"/api/file/upload/{under_upload_id}",
-                    headers=auth_headers,
+                require(
+                    bool(list_prefix_keys(s3_client, bucket, f"{staging_prefix}/{under_upload_id}/")),
+                    "DB failure retains identifiable S3 staging objects",
                 )
-                cancel_payload = require_envelope(cancel, 200, "compensation upload cancel")
-                require(str(cancel_payload["code"]) == "0", "compensation fixture cleanup succeeds")
+
+                remove_failed_upload(under_upload_id, user_id, under_baseline_reserved)
                 under_upload_id = None
                 final_quota = query_one("SELECT storage_reserved FROM users WHERE id = %s", (user_id,))
                 require(
                     final_quota is not None and int(final_quota["storage_reserved"]) == under_baseline_reserved,
-                    "compensation fixture restores reserved quota",
+                    "recovery fixture restores reserved quota",
                 )
 
-            print("PASS: Disk S3 application upload/download/delete/compensation flow succeeded")
+            print("PASS: Disk S3-native upload/download/delete/recovery flow succeeded")
             return 0
         except Exception as exc:
             print(f"FAIL: {exc}")
@@ -428,20 +487,7 @@ def main() -> int:
                     with httpx.Client(base_url=base_url, timeout=10) as cleanup_http:
                         headers = {"Authorization": f"Bearer {token}"}
                         if under_upload_id is not None and user_id and under_baseline_reserved is not None:
-                            task_row = query_one(
-                                "SELECT reserved_bytes FROM upload_tasks WHERE id = %s AND user_id = %s",
-                                (under_upload_id, user_id),
-                            )
-                            if task_row is not None:
-                                execute(
-                                    "UPDATE users SET storage_reserved = %s WHERE id = %s",
-                                    (under_baseline_reserved + int(task_row["reserved_bytes"]), user_id),
-                                )
-                                cleanup_http.request(
-                                    "DELETE",
-                                    f"/api/file/upload/{under_upload_id}",
-                                    headers=headers,
-                                )
+                            remove_failed_upload(under_upload_id, user_id, under_baseline_reserved)
                         if file_id is not None and user_id:
                             cleanup_http.request(
                                 "DELETE",
@@ -465,6 +511,7 @@ def main() -> int:
 
             try:
                 remove_prefix(s3_client, bucket, object_prefix)
+                remove_prefix(s3_client, bucket, staging_prefix)
             except Exception as cleanup_exc:
                 print(f"WARN: S3 prefix cleanup failed: {cleanup_exc}")
 

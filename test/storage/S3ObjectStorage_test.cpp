@@ -75,10 +75,15 @@ namespace {
             };
         }
 
-        auto PutObjectFromFile(const std::string& key, const std::filesystem::path& local_path)
-            -> Result<void> override {
+        auto PutObjectFromFileIfAbsent(
+            const std::string& key,
+            const std::filesystem::path& local_path
+        ) -> Result<disk::storage::S3PutObjectResult> override {
             ++put_calls;
             uploaded_keys.push_back(key);
+            if (objects.contains(key)) {
+                return disk::storage::S3PutObjectResult{ .created = false };
+            }
             if (read_local_file) {
                 std::ifstream input(local_path, std::ios::binary);
                 if (input) {
@@ -92,7 +97,10 @@ namespace {
             } else {
                 objects[key] = uploaded_fallback_content;
             }
-            return {};
+            return disk::storage::S3PutObjectResult{
+                .etag = EtagFor(objects.at(key)),
+                .created = true,
+            };
         }
 
         auto DeleteObject(const std::string& key) -> Result<void> override {
@@ -196,6 +204,13 @@ namespace {
             uint64_t start,
             uint64_t length
         ) -> Result<std::string> override {
+            copied_ranges.push_back(CopiedRange{
+                .source_key = source_key,
+                .destination_key = destination_key,
+                .part_number = part_number,
+                .start = start,
+                .length = length,
+            });
             const auto source = objects.find(source_key);
             if (source == objects.end() || start > source->second.size()) {
                 return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "fake copy source not found"));
@@ -211,8 +226,9 @@ namespace {
         auto CompleteMultipartUpload(
             const std::string& key,
             const std::string& upload_id,
-            const std::vector<disk::storage::S3CompletedPart>& parts
-        ) -> Result<void> override {
+            const std::vector<disk::storage::S3CompletedPart>& parts,
+            bool only_if_absent
+        ) -> Result<disk::storage::S3CompleteMultipartResult> override {
             ++complete_multipart_calls;
             auto upload = multipart_uploads.find(upload_id);
             if (upload == multipart_uploads.end() || upload->second.key != key) {
@@ -222,6 +238,13 @@ namespace {
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "fake multipart completion failure")
                 );
+            }
+            if (concurrent_final_content.has_value() && only_if_absent) {
+                objects[key] = concurrent_final_content.value();
+                concurrent_final_content.reset();
+            }
+            if (only_if_absent && objects.contains(key)) {
+                return disk::storage::S3CompleteMultipartResult{ .created = false };
             }
 
             std::string content;
@@ -235,7 +258,7 @@ namespace {
             }
             objects[key] = std::move(content);
             multipart_uploads.erase(upload);
-            return {};
+            return disk::storage::S3CompleteMultipartResult{ .created = true };
         }
 
         auto AbortMultipartUpload(const std::string& /*key*/, const std::string& upload_id)
@@ -249,6 +272,16 @@ namespace {
         struct MultipartUpload {
             std::string key;
             std::map<int, std::string> parts;
+        };
+
+        struct CopiedRange {
+            std::string source_key;
+            std::string destination_key;
+            int part_number{ 0 };
+            uint64_t start{ 0 };
+            uint64_t length{ 0 };
+
+            auto operator==(const CopiedRange&) const -> bool = default;
         };
 
         static auto EtagFor(const std::string& data) -> std::string {
@@ -277,11 +310,13 @@ namespace {
         int abort_multipart_calls{ 0 };
         int upload_part_failure_number{ 0 };
         bool complete_multipart_failure{ false };
+        std::optional<std::string> concurrent_final_content;
         std::optional<std::string> list_outside_prefix_key;
         std::vector<size_t> delete_batch_sizes;
         std::vector<size_t> uploaded_part_sizes;
         std::vector<int> completed_part_numbers;
         std::vector<std::string> aborted_upload_ids;
+        std::vector<CopiedRange> copied_ranges;
         std::map<std::string, MultipartUpload> multipart_uploads;
         ErrorInfo delete_error{ ErrorCode::InternalError, "fake delete failure" };
     };
@@ -368,10 +403,16 @@ namespace {
         std::unique_ptr<disk::storage::S3ObjectStorage> storage;
     };
 
-    auto LocalAssembly(const std::filesystem::path& path) -> disk::storage::UploadStagingAssembly {
+    auto LocalAssembly(
+        const std::filesystem::path& path,
+        const std::string& content
+    ) -> disk::storage::UploadStagingAssembly {
         return disk::storage::UploadStagingAssembly{
             .backend = disk::storage::UploadStagingBackend::Local,
             .locator = path.string(),
+            .size_bytes = content.size(),
+            .md5_hash = disk::utils::FileHashUtil::HashMd5(content),
+            .sha256_hash = disk::utils::FileHashUtil::HashSha256(content),
         };
     }
 
@@ -703,60 +744,215 @@ TEST_F(S3ObjectStorageTest, S3SessionCleanupRejectsOutOfPrefixListResult) {
     EXPECT_TRUE(client->objects.contains(session.prefix + "/chunks/0"));
 }
 
-TEST_F(S3ObjectStorageTest, GetFinalStoragePathUsesHashShardedObjectKey) {
+TEST_F(S3ObjectStorageTest, GetFinalStoragePathUsesSha256Namespace) {
+    const std::string sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
     EXPECT_EQ(
-        storage->GetFinalStoragePath("abcdef0123456789abcdef0123456789").generic_string(),
-        "objects/ab/abcdef0123456789abcdef0123456789.bin"
+        storage->GetFinalStoragePath(sha256).generic_string(),
+        "objects/sha256/ab/" + sha256 + ".bin"
     );
 }
 
-TEST_F(S3ObjectStorageTest, PromoteToFinalUploadsMissingObject) {
-    const auto temp_path = WriteTempFile("assembled.tmp", "hello s3");
+TEST_F(S3ObjectStorageTest, LocalAssemblyPromotionConditionallyCreatesSha256Object) {
+    const std::string content = "hello s3";
+    const auto sha256 = disk::utils::FileHashUtil::HashSha256(content);
+    const auto temp_path = WriteTempFile("assembled.tmp", content);
+    const auto final_key = "objects/sha256/" + sha256.substr(0, 2) + "/" + sha256 + ".bin";
 
     auto result = drogon::sync_wait(
-        storage->PromoteToFinal(LocalAssembly(temp_path), "abcdef0123456789abcdef0123456789")
+        storage->PromoteToFinal(LocalAssembly(temp_path, content), sha256)
     );
 
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_TRUE(result->created);
-    EXPECT_EQ(result->path.generic_string(), "objects/ab/abcdef0123456789abcdef0123456789.bin");
+    EXPECT_EQ(result->path.generic_string(), final_key);
     EXPECT_EQ(client->put_calls, 1);
-    EXPECT_EQ(client->objects["objects/ab/abcdef0123456789abcdef0123456789.bin"], "hello s3");
-    EXPECT_FALSE(std::filesystem::exists(temp_path));
+    EXPECT_EQ(client->objects[final_key], content);
+    EXPECT_TRUE(std::filesystem::exists(temp_path));
 }
 
-TEST_F(S3ObjectStorageTest, PromoteToFinalReusesExistingObject) {
-    client->objects["objects/ab/abcdef0123456789abcdef0123456789.bin"] = "existing";
-    const auto temp_path = WriteTempFile("assembled.tmp", "new bytes");
+TEST_F(S3ObjectStorageTest, LocalAssemblyPromotionReusesSameSizeObject) {
+    const std::string content = "existing";
+    const auto sha256 = disk::utils::FileHashUtil::HashSha256(content);
+    const auto final_key = "objects/sha256/" + sha256.substr(0, 2) + "/" + sha256 + ".bin";
+    client->objects[final_key] = content;
+    const auto temp_path = WriteTempFile("assembled.tmp", content);
 
     auto result = drogon::sync_wait(
-        storage->PromoteToFinal(LocalAssembly(temp_path), "abcdef0123456789abcdef0123456789")
+        storage->PromoteToFinal(LocalAssembly(temp_path, content), sha256)
     );
 
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_FALSE(result->created);
     EXPECT_EQ(client->put_calls, 0);
-    EXPECT_EQ(client->objects["objects/ab/abcdef0123456789abcdef0123456789.bin"], "existing");
-    EXPECT_FALSE(std::filesystem::exists(temp_path));
-}
-
-TEST_F(S3ObjectStorageTest, PromoteToFinalSucceedsWhenTempCleanupFailsAfterUpload) {
-    const auto temp_path = root / "non_empty_dir.tmp";
-    std::filesystem::create_directories(temp_path);
-    WriteTempFile("non_empty_dir.tmp/child", "child");
-    client->read_local_file = false;
-
-    auto result = drogon::sync_wait(
-        storage->PromoteToFinal(LocalAssembly(temp_path), "abcdef0123456789abcdef0123456789")
-    );
-
-    ASSERT_TRUE(result.has_value()) << result.error().message;
-    EXPECT_TRUE(result->created);
-    EXPECT_EQ(client->put_calls, 1);
+    EXPECT_EQ(client->objects[final_key], content);
     EXPECT_TRUE(std::filesystem::exists(temp_path));
 }
 
-TEST_F(S3ObjectStorageTest, ExistsSizeRangeAndDeleteUseObjectKey) {
+TEST_F(S3ObjectStorageTest, PromotionRejectsInvalidSha256BeforeStorageAccess) {
+    const std::string content = "invalid hash";
+    const auto temp_path = WriteTempFile("assembled.tmp", content);
+
+    auto result = drogon::sync_wait(
+        storage->PromoteToFinal(LocalAssembly(temp_path, content), "abcdef")
+    );
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    EXPECT_EQ(client->head_calls, 0);
+}
+
+TEST_F(S3ObjectStorageTest, S3AssemblyPromotionUsesMultipartServerSideCopy) {
+    constexpr size_t part_size = 5 * 1024 * 1024;
+    const std::string content(part_size + 17, 'p');
+    const auto sha256 = disk::utils::FileHashUtil::HashSha256(content);
+    const auto source_key = "staging/upload-promote/assembled/9.bin";
+    const auto final_key = "objects/sha256/" + sha256.substr(0, 2) + "/" + sha256 + ".bin";
+    client->objects[source_key] = content;
+    const disk::storage::UploadStagingAssembly assembly{
+        .backend = disk::storage::UploadStagingBackend::S3,
+        .locator = source_key,
+        .size_bytes = content.size(),
+        .md5_hash = disk::utils::FileHashUtil::HashMd5(content),
+        .sha256_hash = sha256,
+    };
+
+    auto result = drogon::sync_wait(storage->PromoteToFinal(assembly, sha256));
+
+    ASSERT_TRUE(result.has_value()) << result.error().message;
+    EXPECT_TRUE(result->created);
+    EXPECT_EQ(result->path.generic_string(), final_key);
+    EXPECT_EQ(client->objects.at(final_key), content);
+    EXPECT_EQ(client->objects.at(source_key), content);
+    ASSERT_EQ(client->copied_ranges.size(), 2U);
+    EXPECT_EQ(client->copied_ranges[0], (FakeS3Client::CopiedRange{
+                                            .source_key = source_key,
+                                            .destination_key = final_key,
+                                            .part_number = 1,
+                                            .start = 0,
+                                            .length = part_size,
+                                        }));
+    EXPECT_EQ(client->copied_ranges[1], (FakeS3Client::CopiedRange{
+                                            .source_key = source_key,
+                                            .destination_key = final_key,
+                                            .part_number = 2,
+                                            .start = part_size,
+                                            .length = 17,
+                                        }));
+    EXPECT_EQ(client->abort_multipart_calls, 0);
+}
+
+TEST_F(S3ObjectStorageTest, S3AssemblyPromotionAbortsWhenCopyPartFails) {
+    constexpr size_t part_size = 5 * 1024 * 1024;
+    const std::string content(part_size + 1, 'f');
+    const auto sha256 = disk::utils::FileHashUtil::HashSha256(content);
+    const auto source_key = "staging/upload-copy-fail/assembled/3.bin";
+    const auto final_key = "objects/sha256/" + sha256.substr(0, 2) + "/" + sha256 + ".bin";
+    client->objects[source_key] = content;
+    client->upload_part_failure_number = 2;
+    const disk::storage::UploadStagingAssembly assembly{
+        .backend = disk::storage::UploadStagingBackend::S3,
+        .locator = source_key,
+        .size_bytes = content.size(),
+        .sha256_hash = sha256,
+    };
+
+    auto result = drogon::sync_wait(storage->PromoteToFinal(assembly, sha256));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(client->abort_multipart_calls, 1);
+    EXPECT_TRUE(client->multipart_uploads.empty());
+    EXPECT_FALSE(client->objects.contains(final_key));
+    EXPECT_TRUE(client->objects.contains(source_key));
+}
+
+TEST_F(S3ObjectStorageTest, S3AssemblyPromotionAbortsWhenCompletionFails) {
+    const std::string content = "final-completion-failure";
+    const auto sha256 = disk::utils::FileHashUtil::HashSha256(content);
+    const auto source_key = "staging/upload-complete-fail/assembled/6.bin";
+    const auto final_key = "objects/sha256/" + sha256.substr(0, 2) + "/" + sha256 + ".bin";
+    client->objects[source_key] = content;
+    client->complete_multipart_failure = true;
+    const disk::storage::UploadStagingAssembly assembly{
+        .backend = disk::storage::UploadStagingBackend::S3,
+        .locator = source_key,
+        .size_bytes = content.size(),
+        .sha256_hash = sha256,
+    };
+
+    auto result = drogon::sync_wait(storage->PromoteToFinal(assembly, sha256));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(client->complete_multipart_calls, 1);
+    EXPECT_EQ(client->abort_multipart_calls, 1);
+    EXPECT_TRUE(client->multipart_uploads.empty());
+    EXPECT_FALSE(client->objects.contains(final_key));
+    EXPECT_TRUE(client->objects.contains(source_key));
+}
+
+TEST_F(S3ObjectStorageTest, PromotionRejectsAssemblyLocatorOutsideConfiguredPrefix) {
+    const std::string content = "outside-staging-prefix";
+    const auto sha256 = disk::utils::FileHashUtil::HashSha256(content);
+    const disk::storage::UploadStagingAssembly assembly{
+        .backend = disk::storage::UploadStagingBackend::S3,
+        .locator = "other-staging/upload-123/assembled/1.bin",
+        .size_bytes = content.size(),
+        .sha256_hash = sha256,
+    };
+
+    auto result = drogon::sync_wait(storage->PromoteToFinal(assembly, sha256));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    EXPECT_EQ(client->head_calls, 0);
+    EXPECT_EQ(client->create_multipart_calls, 0);
+}
+
+TEST_F(S3ObjectStorageTest, S3AssemblyPromotionAbortsWhenConditionalCompleteLosesRace) {
+    const std::string content = "concurrent final object";
+    const auto sha256 = disk::utils::FileHashUtil::HashSha256(content);
+    const auto source_key = "staging/upload-race/assembled/4.bin";
+    const auto final_key = "objects/sha256/" + sha256.substr(0, 2) + "/" + sha256 + ".bin";
+    client->objects[source_key] = content;
+    client->concurrent_final_content = content;
+    const disk::storage::UploadStagingAssembly assembly{
+        .backend = disk::storage::UploadStagingBackend::S3,
+        .locator = source_key,
+        .size_bytes = content.size(),
+        .sha256_hash = sha256,
+    };
+
+    auto result = drogon::sync_wait(storage->PromoteToFinal(assembly, sha256));
+
+    ASSERT_TRUE(result.has_value()) << result.error().message;
+    EXPECT_FALSE(result->created);
+    EXPECT_EQ(client->objects.at(final_key), content);
+    EXPECT_EQ(client->abort_multipart_calls, 1);
+    EXPECT_TRUE(client->multipart_uploads.empty());
+}
+
+TEST_F(S3ObjectStorageTest, PromotionRejectsExistingFinalSizeMismatchWithoutOverwrite) {
+    const std::string content = "expected-content";
+    const auto sha256 = disk::utils::FileHashUtil::HashSha256(content);
+    const auto source_key = "staging/upload-size-conflict/assembled/5.bin";
+    const auto final_key = "objects/sha256/" + sha256.substr(0, 2) + "/" + sha256 + ".bin";
+    client->objects[source_key] = content;
+    client->objects[final_key] = "wrong";
+    const disk::storage::UploadStagingAssembly assembly{
+        .backend = disk::storage::UploadStagingBackend::S3,
+        .locator = source_key,
+        .size_bytes = content.size(),
+        .sha256_hash = sha256,
+    };
+
+    auto result = drogon::sync_wait(storage->PromoteToFinal(assembly, sha256));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::ChunkVerifyFailed);
+    EXPECT_EQ(client->objects.at(final_key), "wrong");
+    EXPECT_EQ(client->create_multipart_calls, 0);
+}
+
+TEST_F(S3ObjectStorageTest, ExistsSizeRangeAndDeleteUsePersistedObjectKey) {
     client->objects["objects/ab/abcdef0123456789abcdef0123456789.bin"] = "0123456789";
     const auto key = std::filesystem::path("objects/ab/abcdef0123456789abcdef0123456789.bin");
 
@@ -769,7 +965,12 @@ TEST_F(S3ObjectStorageTest, ExistsSizeRangeAndDeleteUseObjectKey) {
     EXPECT_EQ(*size, 10U);
 
     auto stream_result = drogon::sync_wait(storage->OpenBlobRangeForRead(
-        disk::storage::BlobDescriptor{ .content_id = 1, .hash_md5 = "abcdef0123456789abcdef0123456789", .size = 10 },
+        disk::storage::BlobDescriptor{
+            .content_id = 1,
+            .hash_md5 = "00000000000000000000000000000000",
+            .storage_path = key.generic_string(),
+            .size = 10,
+        },
         2,
         4
     ));
@@ -785,6 +986,34 @@ TEST_F(S3ObjectStorageTest, ExistsSizeRangeAndDeleteUseObjectKey) {
     ASSERT_TRUE(delete_result.has_value()) << delete_result.error().message;
     EXPECT_EQ(client->delete_calls, 1);
     EXPECT_FALSE(client->objects.contains(key.generic_string()));
+}
+
+TEST_F(S3ObjectStorageTest, FinalObjectOperationsRejectKeysOutsideConfiguredPrefix) {
+    const auto outside = std::filesystem::path("staging/upload-123/assembled/1.bin");
+    const auto traversal = std::filesystem::path("objects/../staging/object.bin");
+
+    auto outside_exists = drogon::sync_wait(storage->Exists(outside));
+    auto traversal_delete = drogon::sync_wait(storage->DeleteBlob(traversal));
+    auto range_result = drogon::sync_wait(storage->OpenBlobRangeForRead(
+        disk::storage::BlobDescriptor{
+            .content_id = 1,
+            .hash_md5 = "00000000000000000000000000000000",
+            .storage_path = outside.generic_string(),
+            .size = 1,
+        },
+        0,
+        1
+    ));
+
+    ASSERT_FALSE(outside_exists.has_value());
+    ASSERT_FALSE(traversal_delete.has_value());
+    ASSERT_FALSE(range_result.has_value());
+    EXPECT_EQ(outside_exists.error().code, ErrorCode::ValidationFailed);
+    EXPECT_EQ(traversal_delete.error().code, ErrorCode::ValidationFailed);
+    EXPECT_EQ(range_result.error().code, ErrorCode::ValidationFailed);
+    EXPECT_EQ(client->head_calls, 0);
+    EXPECT_EQ(client->delete_calls, 0);
+    EXPECT_EQ(client->get_calls, 0);
 }
 
 TEST_F(S3ObjectStorageTest, DeleteBlobRetriesTransientFailures) {

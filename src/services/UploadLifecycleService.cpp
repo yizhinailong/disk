@@ -862,14 +862,6 @@ namespace disk::upload {
         std::string final_sha256;
 
         if (finalize_storage_decision.type == FinalizeStorageDecisionType::ReuseExistingContent) {
-            auto delete_result = co_await m_upload_staging_storage->DiscardAssembly(
-                staging_session.value(),
-                assembled
-            );
-            if (!delete_result) {
-                Logger::Warn() << "Failed to cleanup assemble file after dedup: "
-                               << static_cast<int>(delete_result.error().code);
-            }
             Logger::Debug() << "File dedup successful: content_id="
                             << finalize_storage_decision.existing_content_id.value();
         } else {
@@ -894,18 +886,12 @@ namespace disk::upload {
                 );
             }
 
-            auto promote_result = co_await m_blob_store->PromoteToFinal(assembled, final_hash);
+            auto promote_result = co_await m_blob_store->PromoteToFinal(assembled, precomputed_sha256);
             if (!promote_result) {
                 Logger::Error() << "Failed to move file to final storage: error="
                                 << static_cast<int>(promote_result.error().code);
-                auto cleanup_result = co_await m_upload_staging_storage->DiscardAssembly(
-                    staging_session.value(),
-                    assembled
-                );
-                if (!cleanup_result) {
-                    Logger::Warn() << "Failed to cleanup assemble file after promote failure: "
-                                   << static_cast<int>(cleanup_result.error().code);
-                }
+                Logger::Warn() << "Keeping assembled staging object after promote failure: upload_id="
+                               << command.upload_id << ", locator=" << assembled.locator;
 
                 auto end = std::chrono::steady_clock::now();
                 auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();

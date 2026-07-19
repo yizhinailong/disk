@@ -37,6 +37,7 @@ namespace {
 
     constexpr uint64_t TEST_CONTENT_ID = 1;
     constexpr std::string_view TEST_BLOB_HASH = "abc123hash";
+    constexpr std::string_view TEST_BLOB_PATH = "legacy/ab/persisted-object.bin";
 
     /// ============================================================
     /// 辅助：解析 JSON body
@@ -68,11 +69,13 @@ namespace {
 
         auto CreateBlob(const disk::storage::BlobDescriptor& blob, const std::string& content)
             -> std::filesystem::path {
-            auto path = m_temp_dir / (blob.hash_md5 + ".bin");
+            auto path = std::filesystem::path(blob.storage_path);
+            std::error_code ec;
+            std::filesystem::create_directories(path.parent_path(), ec);
             std::ofstream ofs(path, std::ios::binary);
             ofs.write(content.data(), static_cast<std::streamsize>(content.size()));
             ofs.close();
-            m_blob_paths[blob.hash_md5] = path;
+            m_blob_paths[blob.storage_path] = path;
             return path;
         }
 
@@ -107,7 +110,7 @@ namespace {
                     ErrorInfo(ErrorCode::FileReadError, "Failed to open blob for reading")
                 );
             }
-            auto path_it = m_blob_paths.find(blob.hash_md5);
+            auto path_it = m_blob_paths.find(blob.storage_path);
             if (path_it == m_blob_paths.end()) {
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::FileReadError, "Failed to open blob for reading")
@@ -139,7 +142,7 @@ namespace {
             if (!local_path_available) {
                 return std::nullopt;
             }
-            auto path_it = m_blob_paths.find(blob.hash_md5);
+            auto path_it = m_blob_paths.find(blob.storage_path);
             if (path_it == m_blob_paths.end()) {
                 return std::nullopt;
             }
@@ -304,6 +307,7 @@ protected:
         auto blob = disk::storage::BlobDescriptor{
             .content_id = TEST_CONTENT_ID,
             .hash_md5 = std::string(TEST_BLOB_HASH),
+            .storage_path = (m_temp_dir->Path() / TEST_BLOB_PATH).string(),
             .size = content.size()
         };
         m_storage->CreateBlob(blob, content);

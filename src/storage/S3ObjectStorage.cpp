@@ -138,6 +138,75 @@ namespace disk::storage {
                    state_version > 0 && std::to_string(state_version) == version_text;
         }
 
+        [[nodiscard]] auto ValidateS3AssemblyLocator(
+            const UploadStagingAssembly& assembly,
+            std::string_view configured_staging_prefix
+        ) -> Result<std::string> {
+            const auto session_root = std::string(configured_staging_prefix) + "/";
+            if (assembly.backend != UploadStagingBackend::S3 ||
+                !assembly.locator.starts_with(session_root)) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 assembled object locator")
+                );
+            }
+
+            const auto upload_id_start = session_root.size();
+            const auto upload_id_end = assembly.locator.find('/', upload_id_start);
+            if (upload_id_end == std::string::npos) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 assembled object locator")
+                );
+            }
+
+            const auto upload_id = assembly.locator.substr(
+                upload_id_start,
+                upload_id_end - upload_id_start
+            );
+            const UploadStagingSession session{
+                .upload_id = upload_id,
+                .backend = UploadStagingBackend::S3,
+                .prefix = session_root + upload_id,
+            };
+            if (!ValidateS3Session(session, configured_staging_prefix) ||
+                !IsAssemblyKeyForSession(session, assembly.locator)) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 assembled object locator")
+                );
+            }
+            return assembly.locator;
+        }
+
+        [[nodiscard]] auto ResolveFinalObjectKey(
+            const std::filesystem::path& storage_path,
+            std::string_view configured_object_prefix
+        ) -> Result<std::string> {
+            const auto key = storage_path.generic_string();
+            const auto required_prefix = std::string(configured_object_prefix) + "/";
+            if (!key.starts_with(required_prefix) || !IsSafeObjectPrefix(key)) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 final object key")
+                );
+            }
+            return key;
+        }
+
+        [[nodiscard]] auto VerifyFinalObjectSize(
+            const std::shared_ptr<IS3Client>& client,
+            const std::string& key,
+            uint64_t expected_size
+        ) -> Result<void> {
+            auto head_result = client->HeadObject(key);
+            if (!head_result) {
+                return std::unexpected(head_result.error());
+            }
+            if (!head_result->exists || head_result->size != expected_size) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 final object size mismatch")
+                );
+            }
+            return {};
+        }
+
         [[nodiscard]] auto ValidateS3ChunkDescriptor(
             const UploadStagingSession& session,
             size_t expected_position,
@@ -177,7 +246,7 @@ namespace disk::storage {
                 }
                 auto abort_result = m_client->AbortMultipartUpload(m_key, m_upload_id);
                 if (!abort_result) {
-                    Logger::Warn() << "Failed to abort S3 staging multipart upload: key=" << m_key
+                    Logger::Warn() << "Failed to abort S3 multipart upload: key=" << m_key
                                    << ", error=" << abort_result.error().message;
                 }
             }
@@ -436,7 +505,8 @@ namespace disk::storage {
             auto complete_result = client->CompleteMultipartUpload(
                 assembly_key,
                 create_result.value(),
-                completed_parts
+                completed_parts,
+                false
             );
             if (!complete_result) {
                 return std::unexpected(complete_result.error());
@@ -772,49 +842,162 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto S3ObjectStorage::PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& hash)
-        -> drogon::Task<Result<BlobPromoteResult>> {
-        if (assembly.backend != UploadStagingBackend::Local || assembly.locator.empty()) {
+    auto S3ObjectStorage::PromoteToFinal(
+        const UploadStagingAssembly& assembly,
+        const std::string& sha256_hash
+    ) -> drogon::Task<Result<BlobPromoteResult>> {
+        if (!IsLowerHex(sha256_hash, 64) || assembly.sha256_hash != sha256_hash ||
+            assembly.locator.empty()) {
             co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Unsupported staging object for S3 promotion")
+                ErrorInfo(ErrorCode::ValidationFailed, "Invalid SHA-256 S3 blob promotion request")
             );
         }
 
-        const auto temp_path = std::filesystem::path(assembly.locator);
-        const auto object_key = GetFinalStoragePath(hash);
-        const auto key = ToObjectKey(object_key);
+        std::string source_key;
+        if (assembly.backend == UploadStagingBackend::S3) {
+            auto source_result = ValidateS3AssemblyLocator(assembly, m_s3_config.staging_prefix);
+            if (!source_result) {
+                co_return std::unexpected(source_result.error());
+            }
+            source_key = std::move(source_result.value());
+        } else if (assembly.backend != UploadStagingBackend::Local) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Unsupported staging backend for S3 promotion")
+            );
+        }
+
+        const auto local_source_path = std::filesystem::path(assembly.locator);
+        const auto object_key = GetFinalStoragePath(sha256_hash);
+        const auto key = object_key.generic_string();
+        const auto expected_size = assembly.size_bytes;
         auto client = m_s3_client;
 
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, key, temp_path, object_key]() -> Result<BlobPromoteResult> {
+            [client, key, source_key, local_source_path, object_key, expected_size, backend = assembly.backend]()
+                -> Result<BlobPromoteResult> {
                 auto head_result = client->HeadObject(key);
                 if (!head_result) {
                     return std::unexpected(head_result.error());
                 }
-
-                std::error_code ec;
                 if (head_result->exists) {
-                    std::filesystem::remove(temp_path, ec);
-                    if (ec) {
-                        Logger::Warn() << "Failed to remove reused assembled temp file after S3 dedup: "
-                                       << temp_path << ", error=" << ec.message();
+                    if (head_result->size != expected_size) {
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::ChunkVerifyFailed, "Existing S3 final object size mismatch")
+                        );
                     }
                     return BlobPromoteResult{ .path = object_key, .created = false };
                 }
 
-                auto put_result = client->PutObjectFromFile(key, temp_path);
-                if (!put_result) {
-                    return std::unexpected(put_result.error());
+                if (backend == UploadStagingBackend::Local) {
+                    std::error_code size_error;
+                    const auto source_size = std::filesystem::file_size(local_source_path, size_error);
+                    if (size_error || source_size != expected_size) {
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::ChunkVerifyFailed, "Local assembled blob size mismatch")
+                        );
+                    }
+
+                    auto put_result = client->PutObjectFromFileIfAbsent(key, local_source_path);
+                    if (!put_result) {
+                        return std::unexpected(put_result.error());
+                    }
+                    auto verify_result = VerifyFinalObjectSize(client, key, expected_size);
+                    if (!verify_result) {
+                        return std::unexpected(verify_result.error());
+                    }
+                    return BlobPromoteResult{
+                        .path = object_key,
+                        .created = put_result->created,
+                    };
                 }
 
-                std::filesystem::remove(temp_path, ec);
-                if (ec) {
-                    Logger::Warn() << "Failed to remove assembled temp file after S3 upload: "
-                                   << temp_path << ", error=" << ec.message();
+                auto source_head = client->HeadObject(source_key);
+                if (!source_head) {
+                    return std::unexpected(source_head.error());
+                }
+                if (!source_head->exists || source_head->size != expected_size) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ChunkVerifyFailed, "S3 assembled source size mismatch")
+                    );
                 }
 
-                return BlobPromoteResult{ .path = object_key, .created = true };
+                if (expected_size == 0) {
+                    auto put_result = client->PutObjectIfAbsent(key, {});
+                    if (!put_result) {
+                        return std::unexpected(put_result.error());
+                    }
+                    auto verify_result = VerifyFinalObjectSize(client, key, expected_size);
+                    if (!verify_result) {
+                        return std::unexpected(verify_result.error());
+                    }
+                    return BlobPromoteResult{
+                        .path = object_key,
+                        .created = put_result->created,
+                    };
+                }
+
+                const auto part_count =
+                    1 + ((expected_size - 1) / S3_MULTIPART_PART_SIZE_BYTES);
+                if (part_count > static_cast<uint64_t>(S3_MAX_MULTIPART_PARTS)) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ValidationFailed, "S3 final copy exceeds multipart part limit")
+                    );
+                }
+
+                auto create_result = client->CreateMultipartUpload(key);
+                if (!create_result) {
+                    return std::unexpected(create_result.error());
+                }
+                MultipartAbortGuard abort_guard(client, key, create_result.value());
+
+                std::vector<S3CompletedPart> completed_parts;
+                completed_parts.reserve(static_cast<size_t>(part_count));
+                uint64_t offset = 0;
+                for (uint64_t part_index = 0; part_index < part_count; ++part_index) {
+                    const auto length = std::min(
+                        S3_MULTIPART_PART_SIZE_BYTES,
+                        expected_size - offset
+                    );
+                    const auto part_number = static_cast<int>(part_index + 1);
+                    auto copy_result = client->UploadPartCopy(
+                        source_key,
+                        key,
+                        create_result.value(),
+                        part_number,
+                        offset,
+                        length
+                    );
+                    if (!copy_result) {
+                        return std::unexpected(copy_result.error());
+                    }
+                    completed_parts.push_back(S3CompletedPart{
+                        .part_number = part_number,
+                        .etag = std::move(copy_result.value()),
+                    });
+                    offset += length;
+                }
+
+                auto complete_result = client->CompleteMultipartUpload(
+                    key,
+                    create_result.value(),
+                    completed_parts,
+                    true
+                );
+                if (!complete_result) {
+                    return std::unexpected(complete_result.error());
+                }
+                const bool created = complete_result->created;
+                if (created) {
+                    abort_guard.Release();
+                }
+
+                auto verify_result = VerifyFinalObjectSize(client, key, expected_size);
+                if (!verify_result) {
+                    return std::unexpected(verify_result.error());
+                }
+
+                return BlobPromoteResult{ .path = object_key, .created = created };
             }
         );
 
@@ -833,7 +1016,14 @@ namespace disk::storage {
         uint64_t start,
         uint64_t length
     ) -> drogon::Task<Result<std::shared_ptr<StorageReadStream>>> {
-        const auto key = ToObjectKey(GetFinalStoragePath(blob.hash_md5));
+        auto key_result = ResolveFinalObjectKey(
+            std::filesystem::path(blob.storage_path),
+            m_s3_config.object_prefix
+        );
+        if (!key_result) {
+            co_return std::unexpected(key_result.error());
+        }
+        auto key = std::move(key_result.value());
         auto client = m_s3_client;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
@@ -846,7 +1036,11 @@ namespace disk::storage {
 
     auto S3ObjectStorage::DeleteBlob(const std::filesystem::path& storage_path)
         -> drogon::Task<Result<void>> {
-        const auto key = ToObjectKey(storage_path);
+        auto key_result = ResolveFinalObjectKey(storage_path, m_s3_config.object_prefix);
+        if (!key_result) {
+            co_return std::unexpected(key_result.error());
+        }
+        auto key = std::move(key_result.value());
         auto client = m_s3_client;
         const auto bucket = m_s3_config.bucket;
         auto result = co_await RunBlockingS3Task(
@@ -883,7 +1077,11 @@ namespace disk::storage {
 
     auto S3ObjectStorage::Exists(const std::filesystem::path& storage_path)
         -> drogon::Task<Result<bool>> {
-        const auto key = ToObjectKey(storage_path);
+        auto key_result = ResolveFinalObjectKey(storage_path, m_s3_config.object_prefix);
+        if (!key_result) {
+            co_return std::unexpected(key_result.error());
+        }
+        auto key = std::move(key_result.value());
         auto client = m_s3_client;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
@@ -898,13 +1096,19 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto S3ObjectStorage::GetFinalStoragePath(const std::string& hash) const -> std::filesystem::path {
-        return std::filesystem::path(m_s3_config.object_prefix) / hash.substr(0, 2) / (hash + ".bin");
+    auto S3ObjectStorage::GetFinalStoragePath(const std::string& sha256_hash) const
+        -> std::filesystem::path {
+        return std::filesystem::path(m_s3_config.object_prefix) / "sha256" /
+               sha256_hash.substr(0, 2) / (sha256_hash + ".bin");
     }
 
     auto S3ObjectStorage::GetFileSize(const std::filesystem::path& storage_path)
         -> drogon::Task<Result<uint64_t>> {
-        const auto key = ToObjectKey(storage_path);
+        auto key_result = ResolveFinalObjectKey(storage_path, m_s3_config.object_prefix);
+        if (!key_result) {
+            co_return std::unexpected(key_result.error());
+        }
+        auto key = std::move(key_result.value());
         auto client = m_s3_client;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
@@ -920,10 +1124,6 @@ namespace disk::storage {
             }
         );
         co_return result;
-    }
-
-    auto S3ObjectStorage::ToObjectKey(const std::filesystem::path& path) const -> std::string {
-        return path.generic_string();
     }
 
 } // namespace disk::storage

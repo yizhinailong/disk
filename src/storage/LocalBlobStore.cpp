@@ -14,6 +14,7 @@
 #include <trantor/utils/ConcurrentTaskQueue.h>
 
 #include "utils/ConfigMgr.hpp"
+#include "utils/FileHashUtil.hpp"
 #include "utils/LogHelper.hpp"
 
 namespace disk::storage {
@@ -25,6 +26,35 @@ namespace disk::storage {
         constexpr size_t DEFAULT_LOCAL_BLOB_IO_THREADS = 4;
         constexpr size_t DEFAULT_DELETE_TIMEOUT_SECONDS = 30;
         constexpr std::string_view LOCAL_BLOB_IO_QUEUE_NAME = "local-blob-store";
+
+        [[nodiscard]] auto IsSha256Hash(std::string_view value) -> bool {
+            return value.size() == 64 && std::ranges::all_of(value, [](char character) {
+                       return (character >= '0' && character <= '9') ||
+                              (character >= 'a' && character <= 'f');
+                   });
+        }
+
+        [[nodiscard]] auto VerifyExistingLocalBlob(
+            const std::filesystem::path& final_path,
+            uint64_t expected_size,
+            std::string_view expected_sha256
+        ) -> Result<void> {
+            std::error_code ec;
+            const auto size = std::filesystem::file_size(final_path, ec);
+            if (ec || size != expected_size) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ChunkVerifyFailed, "Existing local final blob size mismatch")
+                );
+            }
+
+            auto hash_result = disk::utils::FileHashUtil::HashFileSha256(final_path);
+            if (!hash_result || hash_result.value() != expected_sha256) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ChunkVerifyFailed, "Existing local final blob hash mismatch")
+                );
+            }
+            return {};
+        }
 
         auto ResolveLocalBlobIoThreadCount(const disk::utils::ConfigMgr& config_mgr) -> size_t {
             const auto configured = static_cast<size_t>(config_mgr.GetFileIoThreads());
@@ -174,21 +204,30 @@ namespace disk::storage {
         Logger::Info() << "LocalBlobStore worker queue initialized: io_threads=" << worker_thread_count;
     }
 
-    auto LocalBlobStore::PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& hash)
+    auto LocalBlobStore::PromoteToFinal(
+        const UploadStagingAssembly& assembly,
+        const std::string& sha256_hash
+    )
         -> drogon::Task<Result<BlobPromoteResult>> {
         if (assembly.backend != UploadStagingBackend::Local || assembly.locator.empty()) {
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Local blob store requires a local staging object")
             );
         }
+        if (!IsSha256Hash(sha256_hash) || assembly.sha256_hash != sha256_hash) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Invalid SHA-256 hash for local blob promotion")
+            );
+        }
 
         const auto temp_path = std::filesystem::path(assembly.locator);
-        const auto final_path = GetFinalStoragePath(hash);
+        const auto final_path = GetFinalStoragePath(sha256_hash);
         const auto final_dir = final_path.parent_path();
+        const auto expected_size = assembly.size_bytes;
 
         auto result = co_await RunBlockingFilesystemTask(
             m_worker_queue,
-            [temp_path, final_path, final_dir]() -> Result<BlobPromoteResult> {
+            [temp_path, final_path, final_dir, expected_size, sha256_hash]() -> Result<BlobPromoteResult> {
                 std::error_code ec;
                 std::filesystem::create_directories(final_dir, ec);
                 if (ec) {
@@ -198,37 +237,53 @@ namespace disk::storage {
                 }
 
                 if (std::filesystem::exists(final_path, ec)) {
-                    std::filesystem::remove(temp_path, ec);
+                    auto verify_result = VerifyExistingLocalBlob(final_path, expected_size, sha256_hash);
+                    if (!verify_result) {
+                        return std::unexpected(verify_result.error());
+                    }
                     return BlobPromoteResult{ .path = final_path, .created = false };
+                }
+                if (ec) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Failed to inspect final storage path")
+                    );
                 }
                 ec.clear();
 
-                std::filesystem::rename(temp_path, final_path, ec);
-                if (!ec) {
+                const auto source_size = std::filesystem::file_size(temp_path, ec);
+                if (ec || source_size != expected_size) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::ChunkVerifyFailed, "Local assembled blob size mismatch")
+                    );
+                }
+                ec.clear();
+
+                const bool created = std::filesystem::copy_file(
+                    temp_path,
+                    final_path,
+                    std::filesystem::copy_options::none,
+                    ec
+                );
+                if (created && !ec) {
                     return BlobPromoteResult{ .path = final_path, .created = true };
                 }
 
-                ec.clear();
-                std::filesystem::copy_file(
-                    temp_path,
-                    final_path,
-                    std::filesystem::copy_options::overwrite_existing,
-                    ec
+                if (ec == std::errc::file_exists || (!ec && std::filesystem::exists(final_path))) {
+                    auto verify_result = VerifyExistingLocalBlob(final_path, expected_size, sha256_hash);
+                    if (!verify_result) {
+                        return std::unexpected(verify_result.error());
+                    }
+                    return BlobPromoteResult{ .path = final_path, .created = false };
+                }
+
+                if (ec) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Failed to copy file to final storage path")
+                    );
+                }
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Final blob copy did not create an object")
                 );
-                if (ec) {
-                    return std::unexpected(
-                        ErrorInfo(ErrorCode::InternalError, "Failed to move file to final storage path")
-                    );
-                }
-
-                std::filesystem::remove(temp_path, ec);
-                if (ec) {
-                    return std::unexpected(
-                        ErrorInfo(ErrorCode::InternalError, "Failed to cleanup temp file after copy")
-                    );
-                }
-
-                return BlobPromoteResult{ .path = final_path, .created = true };
             }
         );
 
@@ -318,14 +373,16 @@ namespace disk::storage {
 
     auto LocalBlobStore::GetLocalBlobPathForDownload(const BlobDescriptor& blob) const
         -> std::optional<std::filesystem::path> {
-        if (blob.hash_md5.empty()) {
+        if (blob.storage_path.empty()) {
             return std::nullopt;
         }
-        return GetFinalStoragePath(blob.hash_md5);
+        return std::filesystem::path(blob.storage_path);
     }
 
-    auto LocalBlobStore::GetFinalStoragePath(const std::string& hash) const -> std::filesystem::path {
-        return std::filesystem::path(m_config_mgr->GetStorageBasePath()) / hash.substr(0, 2) / (hash + ".bin");
+    auto LocalBlobStore::GetFinalStoragePath(const std::string& sha256_hash) const
+        -> std::filesystem::path {
+        return std::filesystem::path(m_config_mgr->GetStorageBasePath()) / "sha256" /
+               sha256_hash.substr(0, 2) / (sha256_hash + ".bin");
     }
 
     auto LocalBlobStore::GetFileSize(const std::filesystem::path& storage_path)

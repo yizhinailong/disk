@@ -30,6 +30,7 @@ from lib_py import (  # noqa: E402
     fetch,
     final_blob_path,
     json_field,
+    local_blob_path,
     log_fail,
     log_info,
     log_pass,
@@ -669,14 +670,17 @@ def test_instant_upload_quota_rejection_no_side_effects() -> None:
     assert_equal("instant upload quota rejection restores used", restored["storage_used"], original["storage_used"])
     assert_equal("instant upload quota rejection restores reserved", restored["storage_reserved"], original["storage_reserved"])
     assert_equal("instant upload quota rejection creates no duplicate content row", after_same_hash_rows, before_same_hash_rows)
-    assert_path_exists("instant upload quota rejection keeps existing final blob", final_blob_path(file_hash))
+    assert_path_exists(
+        "instant upload quota rejection keeps existing final blob",
+        local_blob_path(str(content_row(content_id)["storage_path"])),
+    )
 
 
 def create_matching_content_fixture(filename: str, payload: bytes) -> tuple[int, int, str]:
     """Create matching content and a logical file after upload init to simulate finalize-time dedup."""
     file_hash = md5_bytes(payload)
     sha256_hash = sha256_bytes(payload)
-    blob_path = final_blob_path(file_hash)
+    blob_path = final_blob_path(sha256_hash)
     blob_path.parent.mkdir(parents=True, exist_ok=True)
     blob_path.write_bytes(payload)
 
@@ -755,7 +759,10 @@ def test_completion_dedup_race_ref_count_and_accounting_current_rule() -> None:
     )
     same_hash_rows = int(scalar("SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s", (file_hash,)) or 0)
     assert_equal("completion dedup creates no duplicate content row", same_hash_rows, 1)
-    assert_path_exists("dedup race keeps existing final blob", final_blob_path(file_hash))
+    assert_path_exists(
+        "dedup race keeps existing final blob",
+        local_blob_path(str(content_row(content_id)["storage_path"])),
+    )
     assert_path_absent("dedup race cleans temp upload directory", upload_temp_dir(upload_id))
 
 
@@ -839,7 +846,7 @@ def test_commit_under_reservation_retains_recovery_artifacts() -> None:
         "SELECT id FROM file_contents WHERE hash_md5 = %s",
         (file_hash,),
     )
-    blob_path = final_blob_path(file_hash)
+    blob_path = final_blob_path(sha256_bytes(payload))
     assert_path_exists("under-reservation retains promoted blob for reconciliation", blob_path)
     assert_equal("under-reservation leaves upload task retryable", task_after_failure is not None, True)
     if task_after_failure is not None:
@@ -1144,10 +1151,11 @@ def test_soft_delete_preserves_ref_count_storage_used_and_blob() -> None:
     file_id = upload_file(f"safety_soft_delete_{unique_name()}.bin", payload)
     original_file = file_row(file_id)
     content_id = int(original_file["content_id"])
-    file_hash = str(content_row(content_id)["hash_md5"])
-    before_ref = int(content_row(content_id)["ref_count"])
+    content = content_row(content_id)
+    blob_path = local_blob_path(str(content["storage_path"]))
+    before_ref = int(content["ref_count"])
     quota_before = user_quota()
-    assert_path_exists("blob exists before soft delete", final_blob_path(file_hash))
+    assert_path_exists("blob exists before soft delete", blob_path)
 
     trash_id = delete_file_to_trash(file_id)
     trash_row = query_one(
@@ -1164,7 +1172,7 @@ def test_soft_delete_preserves_ref_count_storage_used_and_blob() -> None:
     assert_equal("trash row keeps content_id", int(trash_row["content_id"]), content_id)
     assert_equal("soft delete keeps ref_count", after_ref, before_ref)
     assert_equal("soft delete keeps storage_used", quota_after["storage_used"], quota_before["storage_used"])
-    assert_path_exists("soft delete keeps blob while in trash", final_blob_path(file_hash))
+    assert_path_exists("soft delete keeps blob while in trash", blob_path)
 
 
 def test_move_to_trash_trash_insert_failure_preserves_active_state() -> None:
@@ -1175,8 +1183,9 @@ def test_move_to_trash_trash_insert_failure_preserves_active_state() -> None:
     file_id = upload_file(filename, payload)
     original_file = file_row(file_id)
     content_id = int(original_file["content_id"])
-    file_hash = str(content_row(content_id)["hash_md5"])
-    before_ref = int(content_row(content_id)["ref_count"])
+    content = content_row(content_id)
+    blob_path = local_blob_path(str(content["storage_path"]))
+    before_ref = int(content["ref_count"])
     quota_before = user_quota()
     share_id = create_share_fixture([file_id])
     cleanup_trigger = install_trash_insert_failure_trigger(str(original_file["name"]))
@@ -1201,7 +1210,7 @@ def test_move_to_trash_trash_insert_failure_preserves_active_state() -> None:
     assert_equal("trash insert failure keeps share active", share_status(share_id), 1)
     assert_equal("trash insert failure keeps ref_count", int(content_row(content_id)["ref_count"]), before_ref)
     assert_equal("trash insert failure keeps storage_used", user_quota()["storage_used"], quota_before["storage_used"])
-    assert_path_exists("trash insert failure keeps blob", final_blob_path(file_hash))
+    assert_path_exists("trash insert failure keeps blob", blob_path)
 
 
 def test_move_to_trash_active_file_delete_failure_rolls_back_trash_and_share_cleanup() -> None:
@@ -1211,8 +1220,9 @@ def test_move_to_trash_active_file_delete_failure_rolls_back_trash_and_share_cle
     file_id = upload_file(f"safety_file_delete_failure_{unique_name()}.bin", payload)
     original_file = file_row(file_id)
     content_id = int(original_file["content_id"])
-    file_hash = str(content_row(content_id)["hash_md5"])
-    before_ref = int(content_row(content_id)["ref_count"])
+    content = content_row(content_id)
+    blob_path = local_blob_path(str(content["storage_path"]))
+    before_ref = int(content["ref_count"])
     quota_before = user_quota()
     share_id = create_share_fixture([file_id])
     cleanup_trigger = install_file_delete_failure_trigger(file_id)
@@ -1237,7 +1247,7 @@ def test_move_to_trash_active_file_delete_failure_rolls_back_trash_and_share_cle
     assert_equal("active file delete failure keeps share active", share_status(share_id), 1)
     assert_equal("active file delete failure keeps ref_count", int(content_row(content_id)["ref_count"]), before_ref)
     assert_equal("active file delete failure keeps storage_used", user_quota()["storage_used"], quota_before["storage_used"])
-    assert_path_exists("active file delete failure keeps blob", final_blob_path(file_hash))
+    assert_path_exists("active file delete failure keeps blob", blob_path)
 
 
 def test_restore_preserves_ref_count_storage_used_and_removes_trash() -> None:
@@ -1345,11 +1355,13 @@ def test_move_to_trash_active_folder_delete_failure_rolls_back_snapshot_and_shar
     child_file_id = upload_file(f"safety_folder_delete_failure_child_file_{unique_name()}.bin", child_payload, child_folder_id)
     root_content_id = int(file_row(root_file_id)["content_id"])
     child_content_id = int(file_row(child_file_id)["content_id"])
-    root_hash = str(content_row(root_content_id)["hash_md5"])
-    child_hash = str(content_row(child_content_id)["hash_md5"])
+    root_content = content_row(root_content_id)
+    child_content = content_row(child_content_id)
+    root_blob_path = local_blob_path(str(root_content["storage_path"]))
+    child_blob_path = local_blob_path(str(child_content["storage_path"]))
     before_refs = {
-        root_content_id: int(content_row(root_content_id)["ref_count"]),
-        child_content_id: int(content_row(child_content_id)["ref_count"]),
+        root_content_id: int(root_content["ref_count"]),
+        child_content_id: int(child_content["ref_count"]),
     }
     quota_before = user_quota()
     folder_share_id = create_share_fixture(folder_ids=[root_folder_id])
@@ -1379,8 +1391,8 @@ def test_move_to_trash_active_folder_delete_failure_rolls_back_snapshot_and_shar
     assert_equal("active folder delete failure keeps root ref_count", int(content_row(root_content_id)["ref_count"]), before_refs[root_content_id])
     assert_equal("active folder delete failure keeps child ref_count", int(content_row(child_content_id)["ref_count"]), before_refs[child_content_id])
     assert_equal("active folder delete failure keeps storage_used", user_quota()["storage_used"], quota_before["storage_used"])
-    assert_path_exists("active folder delete failure keeps root blob", final_blob_path(root_hash))
-    assert_path_exists("active folder delete failure keeps child blob", final_blob_path(child_hash))
+    assert_path_exists("active folder delete failure keeps root blob", root_blob_path)
+    assert_path_exists("active folder delete failure keeps child blob", child_blob_path)
 
 
 def test_delete_all_ref_count_quota_and_blob_cleanup() -> None:
@@ -1391,8 +1403,9 @@ def test_delete_all_ref_count_quota_and_blob_cleanup() -> None:
     first_file_id = upload_file(f"safety_delete_all_a_{unique_name()}.bin", payload)
     second_file_id = upload_file(f"safety_delete_all_b_{unique_name()}.bin", payload)
     content_id = int(file_row(first_file_id)["content_id"])
-    file_hash = str(content_row(content_id)["hash_md5"])
-    before_ref = int(content_row(content_id)["ref_count"])
+    content = content_row(content_id)
+    blob_path = local_blob_path(str(content["storage_path"]))
+    before_ref = int(content["ref_count"])
     quota_before = user_quota()
 
     first_trash = delete_file_to_trash(first_file_id)
@@ -1407,7 +1420,7 @@ def test_delete_all_ref_count_quota_and_blob_cleanup() -> None:
     assert_numeric_delta("delete-all decrements ref_count for both files", before_ref, final_ref, -2)
     assert_equal("delete-all does not drive ref_count negative", final_ref >= 0, True)
     assert_numeric_delta("delete-all releases used storage for both files", quota_before["storage_used"], quota_after["storage_used"], -2 * len(payload))
-    assert_path_absent("delete-all deletes blob at zero ref_count", final_blob_path(file_hash))
+    assert_path_absent("delete-all deletes blob at zero ref_count", blob_path)
 
 
 def test_permanent_delete_ref_count_and_blob_retention() -> None:
@@ -1417,17 +1430,18 @@ def test_permanent_delete_ref_count_and_blob_retention() -> None:
     first_file_id = upload_file(f"safety_trash_a_{unique_name()}.bin", payload)
     second_file_id = upload_file(f"safety_trash_b_{unique_name()}.bin", payload)
     content_id = int(file_row(first_file_id)["content_id"])
-    file_hash = str(content_row(content_id)["hash_md5"])
+    content = content_row(content_id)
+    blob_path = local_blob_path(str(content["storage_path"]))
     quota_before = user_quota()
-    before_ref = int(content_row(content_id)["ref_count"])
-    assert_path_exists("shared blob exists before permanent delete", final_blob_path(file_hash))
+    before_ref = int(content["ref_count"])
+    assert_path_exists("shared blob exists before permanent delete", blob_path)
 
     trash_first = delete_file_to_trash(first_file_id)
     permanently_delete_trash(trash_first)
     mid_ref = int(content_row(content_id)["ref_count"])
     quota_after_first = user_quota()
     assert_numeric_delta("first permanent delete decrements ref_count", before_ref, mid_ref, -1)
-    assert_path_exists("blob retained while ref_count remains positive", final_blob_path(file_hash))
+    assert_path_exists("blob retained while ref_count remains positive", blob_path)
     assert_numeric_delta("first permanent delete releases used storage", quota_before["storage_used"], quota_after_first["storage_used"], -len(payload))
 
     trash_second = delete_file_to_trash(second_file_id)
@@ -1435,7 +1449,7 @@ def test_permanent_delete_ref_count_and_blob_retention() -> None:
     final_ref = int(content_row(content_id)["ref_count"])
     assert_equal("second permanent delete reaches zero ref_count", final_ref, 0)
     assert_equal("permanent delete does not drive ref_count negative", final_ref >= 0, True)
-    assert_path_absent("blob deleted when ref_count reaches zero", final_blob_path(file_hash))
+    assert_path_absent("blob deleted when ref_count reaches zero", blob_path)
 
 
 def test_expired_trash_cleanup_ref_count_quota_and_blob_retention() -> None:
@@ -1445,10 +1459,11 @@ def test_expired_trash_cleanup_ref_count_quota_and_blob_retention() -> None:
     first_file_id = upload_file(f"safety_expired_trash_a_{unique_name()}.bin", payload)
     second_file_id = upload_file(f"safety_expired_trash_b_{unique_name()}.bin", payload)
     content_id = int(file_row(first_file_id)["content_id"])
-    file_hash = str(content_row(content_id)["hash_md5"])
+    content = content_row(content_id)
+    blob_path = local_blob_path(str(content["storage_path"]))
     quota_before = user_quota()
-    before_ref = int(content_row(content_id)["ref_count"])
-    assert_path_exists("shared blob exists before expired-trash cleanup", final_blob_path(file_hash))
+    before_ref = int(content["ref_count"])
+    assert_path_exists("shared blob exists before expired-trash cleanup", blob_path)
 
     trash_first = delete_file_to_trash(first_file_id)
     expire_trash_row(trash_first)
@@ -1465,7 +1480,7 @@ def test_expired_trash_cleanup_ref_count_quota_and_blob_retention() -> None:
         quota_after_first["storage_used"],
         -len(payload),
     )
-    assert_path_exists("expired cleanup retains shared blob while ref_count remains positive", final_blob_path(file_hash))
+    assert_path_exists("expired cleanup retains shared blob while ref_count remains positive", blob_path)
 
     trash_second = delete_file_to_trash(second_file_id)
     expire_trash_row(trash_second)
@@ -1483,7 +1498,7 @@ def test_expired_trash_cleanup_ref_count_quota_and_blob_retention() -> None:
         quota_after_second["storage_used"],
         -len(payload),
     )
-    assert_path_absent("expired cleanup deletes blob only when ref_count reaches zero", final_blob_path(file_hash))
+    assert_path_absent("expired cleanup deletes blob only when ref_count reaches zero", blob_path)
 
 
 def main() -> None:

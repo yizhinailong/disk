@@ -71,10 +71,16 @@ namespace disk::storage {
             ASSERT_TRUE(output);
         }
 
-        auto LocalAssembly(const std::filesystem::path& path) -> UploadStagingAssembly {
+        auto LocalAssembly(
+            const std::filesystem::path& path,
+            const std::string& content
+        ) -> UploadStagingAssembly {
             return UploadStagingAssembly{
                 .backend = UploadStagingBackend::Local,
                 .locator = path.string(),
+                .size_bytes = content.size(),
+                .md5_hash = FileHashUtil::HashMd5(content),
+                .sha256_hash = FileHashUtil::HashSha256(content),
             };
         }
 
@@ -114,17 +120,17 @@ namespace disk::storage {
 
         TEST_F(LocalBlobStoreTest, PromoteReadAndDeleteFinalBlob) {
             const std::string content = "promote-read-delete-content";
-            const auto hash = FileHashUtil::HashMd5(content);
+            const auto hash = FileHashUtil::HashSha256(content);
             const auto temp_path = TempPath("assembled.tmp");
             WriteBinaryFile(temp_path, content);
 
             auto promote_result = drogon::sync_wait(
-                m_blob_store->PromoteToFinal(LocalAssembly(temp_path), hash)
+                m_blob_store->PromoteToFinal(LocalAssembly(temp_path, content), hash)
             );
 
             ASSERT_TRUE(promote_result.has_value());
             EXPECT_TRUE(promote_result->created);
-            EXPECT_FALSE(std::filesystem::exists(temp_path));
+            EXPECT_TRUE(std::filesystem::exists(temp_path));
             ASSERT_TRUE(std::filesystem::exists(promote_result->path));
             EXPECT_EQ(ReadBinaryFile(promote_result->path), content);
 
@@ -142,30 +148,47 @@ namespace disk::storage {
         }
 
         TEST_F(LocalBlobStoreTest, PromoteReusesExistingBlobAndPreservesContent) {
-            const std::string existing_content = "existing-final-content";
-            const std::string temp_content = "temp-content-for-same-md5-path";
-            const auto hash = FileHashUtil::HashMd5(temp_content);
+            const std::string content = "existing-final-content";
+            const auto hash = FileHashUtil::HashSha256(content);
             const auto final_path = m_blob_store->GetFinalStoragePath(hash);
             const auto temp_path = TempPath("dedup.tmp");
 
-            WriteBinaryFile(final_path, existing_content);
-            WriteBinaryFile(temp_path, temp_content);
+            WriteBinaryFile(final_path, content);
+            WriteBinaryFile(temp_path, content);
 
             auto promote_result = drogon::sync_wait(
-                m_blob_store->PromoteToFinal(LocalAssembly(temp_path), hash)
+                m_blob_store->PromoteToFinal(LocalAssembly(temp_path, content), hash)
             );
 
             ASSERT_TRUE(promote_result.has_value());
             EXPECT_FALSE(promote_result->created);
             EXPECT_EQ(promote_result->path, final_path);
-            EXPECT_FALSE(std::filesystem::exists(temp_path));
+            EXPECT_TRUE(std::filesystem::exists(temp_path));
             ASSERT_TRUE(std::filesystem::exists(final_path));
-            EXPECT_EQ(ReadBinaryFile(final_path), existing_content);
+            EXPECT_EQ(ReadBinaryFile(final_path), content);
+        }
+
+        TEST_F(LocalBlobStoreTest, PromoteRejectsCorruptExistingBlob) {
+            const std::string content = "expected-final-content";
+            const auto hash = FileHashUtil::HashSha256(content);
+            const auto final_path = m_blob_store->GetFinalStoragePath(hash);
+            const auto temp_path = TempPath("conflict.tmp");
+            WriteBinaryFile(final_path, "corrupt-final-content");
+            WriteBinaryFile(temp_path, content);
+
+            auto promote_result = drogon::sync_wait(
+                m_blob_store->PromoteToFinal(LocalAssembly(temp_path, content), hash)
+            );
+
+            ASSERT_FALSE(promote_result.has_value());
+            EXPECT_EQ(promote_result.error().code, ErrorCode::ChunkVerifyFailed);
+            EXPECT_EQ(ReadBinaryFile(final_path), "corrupt-final-content");
+            EXPECT_TRUE(std::filesystem::exists(temp_path));
         }
 
         TEST_F(LocalBlobStoreTest, DeleteBlobIsIdempotent) {
             const std::string content = "delete-idempotent";
-            const auto hash = FileHashUtil::HashMd5(content);
+            const auto hash = FileHashUtil::HashSha256(content);
             const auto final_path = m_blob_store->GetFinalStoragePath(hash);
             WriteBinaryFile(final_path, content);
 
@@ -177,12 +200,27 @@ namespace disk::storage {
             EXPECT_FALSE(std::filesystem::exists(final_path));
         }
 
-        TEST_F(LocalBlobStoreTest, GetFinalStoragePathPreservesMd5PrefixLayout) {
-            const std::string hash = "0123456789abcdef0123456789abcdef";
+        TEST_F(LocalBlobStoreTest, GetFinalStoragePathUsesSha256Namespace) {
+            const std::string hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
             const auto final_path = m_blob_store->GetFinalStoragePath(hash);
 
-            EXPECT_EQ(final_path, m_storage_base / "01" / (hash + ".bin"));
+            EXPECT_EQ(final_path, m_storage_base / "sha256" / "01" / (hash + ".bin"));
+        }
+
+        TEST_F(LocalBlobStoreTest, DownloadPathUsesPersistedStoragePath) {
+            const auto legacy_path = m_storage_base / "ab" / "legacy-md5.bin";
+            const BlobDescriptor blob{
+                .content_id = 1,
+                .hash_md5 = "00000000000000000000000000000000",
+                .storage_path = legacy_path.string(),
+                .size = 10,
+            };
+
+            auto resolved = m_blob_store->GetLocalBlobPathForDownload(blob);
+
+            ASSERT_TRUE(resolved.has_value());
+            EXPECT_EQ(resolved.value(), legacy_path);
         }
 
     } // namespace

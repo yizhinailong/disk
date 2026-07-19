@@ -33,11 +33,11 @@ namespace {
             return disk::storage::S3PutObjectResult{ .created = true };
         }
 
-        auto PutObjectFromFile(
+        auto PutObjectFromFileIfAbsent(
             const std::string& /*key*/,
             const std::filesystem::path& /*local_path*/
-        ) -> Result<void> override {
-            return {};
+        ) -> Result<disk::storage::S3PutObjectResult> override {
+            return disk::storage::S3PutObjectResult{ .created = true };
         }
 
         auto DeleteObject(const std::string& /*key*/) -> Result<void> override { return {}; }
@@ -89,9 +89,10 @@ namespace {
         auto CompleteMultipartUpload(
             const std::string& /*key*/,
             const std::string& /*upload_id*/,
-            const std::vector<disk::storage::S3CompletedPart>& /*parts*/
-        ) -> Result<void> override {
-            return {};
+            const std::vector<disk::storage::S3CompletedPart>& /*parts*/,
+            bool /*only_if_absent*/
+        ) -> Result<disk::storage::S3CompleteMultipartResult> override {
+            return disk::storage::S3CompleteMultipartResult{ .created = true };
         }
 
         auto AbortMultipartUpload(

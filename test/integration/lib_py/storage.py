@@ -44,9 +44,16 @@ def configured_temp_upload_path() -> Path:
     return _resolve_repo_path(value)
 
 
-def final_blob_path(file_hash: str) -> Path:
-    """Return the local final blob path for an MD5 hash."""
-    return configured_storage_base_path() / file_hash[:2] / f"{file_hash}.bin"
+def final_blob_path(sha256_hash: str) -> Path:
+    """Return the local final blob path for a SHA-256 hash."""
+    if len(sha256_hash) != 64 or any(character not in "0123456789abcdef" for character in sha256_hash):
+        raise ValueError("sha256_hash must be 64 lowercase hexadecimal characters")
+    return configured_storage_base_path() / "sha256" / sha256_hash[:2] / f"{sha256_hash}.bin"
+
+
+def local_blob_path(storage_path: str | os.PathLike[str]) -> Path:
+    """Resolve a persisted local storage_path against the repository root."""
+    return _resolve_repo_path(storage_path)
 
 
 def upload_temp_dir(upload_id: str) -> Path:

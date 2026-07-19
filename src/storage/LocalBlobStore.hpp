@@ -49,7 +49,7 @@ namespace disk::storage {
         auto operator=(LocalBlobStore&&) -> LocalBlobStore& = default;
 
         [[nodiscard]]
-        auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& hash)
+        auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& sha256_hash)
             -> drogon::Task<Result<BlobPromoteResult>> override;
 
         [[nodiscard]]
@@ -67,7 +67,7 @@ namespace disk::storage {
             -> std::optional<std::filesystem::path> override;
 
         [[nodiscard]]
-        auto GetFinalStoragePath(const std::string& hash) const -> std::filesystem::path override;
+        auto GetFinalStoragePath(const std::string& sha256_hash) const -> std::filesystem::path override;
 
         [[nodiscard]]
         auto GetFileSize(const std::filesystem::path& storage_path) -> drogon::Task<Result<uint64_t>> override;

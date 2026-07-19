@@ -9,17 +9,15 @@
 
 #include "FileQueryService.hpp"
 
-#include <string>
-
-#include "FileListQuery.hpp"
-#include "SearchQuery.hpp"
-
 #include <sstream>
+#include <string>
 
 #include <json/reader.h>
 #include <json/writer.h>
 
+#include "FileListQuery.hpp"
 #include "FileServiceUtils.hpp"
+#include "SearchQuery.hpp"
 #include "models/FileContents.hpp"
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
@@ -48,14 +46,19 @@ namespace disk::file {
         const auto& query_params = request.query;
 
         Logger::Debug() << "Starting get file list: parent_id=" << query_params.parent_id
-                  << ", page=" << query_params.page << ", page_size=" << query_params.page_size
-                  << ", sort_by=" << query_params.sort_by << ", sort_order=" << query_params.sort_order
-                  << ", type=" << query_params.type << ", user_id=" << user_id;
+                        << ", page=" << query_params.page << ", page_size=" << query_params.page_size
+                        << ", sort_by=" << query_params.sort_by << ", sort_order=" << query_params.sort_order
+                        << ", type=" << query_params.type << ", user_id=" << user_id;
 
         /// 0. Try Redis cache
         auto cache_key = disk::redis::RedisKeyPrefix::BuildFileListCacheKey(
-            user_id, query_params.parent_id, query_params.type,
-            query_params.sort_by, query_params.sort_order, query_params.page, query_params.page_size
+            user_id,
+            query_params.parent_id,
+            query_params.type,
+            query_params.sort_by,
+            query_params.sort_order,
+            query_params.page,
+            query_params.page_size
         );
 
         auto cache_result = co_await m_redis_service->Get(cache_key);
@@ -97,7 +100,7 @@ namespace disk::file {
         }
 
         Logger::Debug() << "File list retrieved successfully: total=" << response.pagination.total
-                  << ", page=" << query_params.page;
+                        << ", page=" << query_params.page;
 
         /// Cache the response
         {
@@ -199,7 +202,7 @@ namespace disk::file {
             response.supports_range = true;
 
             Logger::Debug() << "Download info retrieved successfully: filename=" << response.filename
-                      << ", size=" << response.file_size;
+                            << ", size=" << response.file_size;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
@@ -247,12 +250,13 @@ namespace disk::file {
             info.blob = disk::storage::BlobDescriptor{
                 .content_id = static_cast<uint64_t>(content.getValueOfId()),
                 .hash_md5 = content.getValueOfHashMd5(),
+                .storage_path = content.getValueOfStoragePath(),
                 .size = static_cast<uint64_t>(content.getValueOfSize())
             };
             info.supports_range = true;
 
             Logger::Debug() << "Download data retrieved successfully: filename=" << info.filename
-                      << ", content_id=" << info.blob.content_id;
+                            << ", content_id=" << info.blob.content_id;
             co_return info;
 
         } catch (const drogon::orm::DrogonDbException& e) {
@@ -267,9 +271,7 @@ namespace disk::file {
         -> drogon::Task<void> {
         try {
             co_await m_db_client->execSqlCoro(
-                "UPDATE files "
-                "SET download_count = download_count + 1, last_accessed_at = NOW() "
-                "WHERE id = $1 AND user_id = $2",
+                "UPDATE files " "SET download_count = download_count + 1, last_accessed_at = NOW() " "WHERE id = $1 AND user_id = $2",
                 file_id,
                 user_id
             );
@@ -286,10 +288,10 @@ namespace disk::file {
         const auto& query_params = request.query;
 
         Logger::Debug() << "Starting search file: keyword=\"" << query_params.keyword
-                  << "\", type=" << query_params.type << ", folder_id="
-                  << (query_params.folder_id.has_value() ? std::to_string(*query_params.folder_id) : "null")
-                  << ", page=" << query_params.page << ", page_size=" << query_params.page_size
-                  << ", user_id=" << user_id;
+                        << "\", type=" << query_params.type << ", folder_id="
+                        << (query_params.folder_id.has_value() ? std::to_string(*query_params.folder_id) : "null")
+                        << ", page=" << query_params.page << ", page_size=" << query_params.page_size
+                        << ", user_id=" << user_id;
 
         SearchResponse response;
         try {
@@ -303,4 +305,4 @@ namespace disk::file {
         co_return response;
     }
 
-} ///< namespace disk::file
+} // namespace disk::file
