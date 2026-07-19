@@ -83,6 +83,12 @@ namespace {
             mysql_guard.Unset();
             redis_guard.Unset();
             instance_guard.Unset();
+            role_guard.Set("api");
+
+            Json::Value cfg;
+            cfg["custom_config"]["disk"] = Json::Value(Json::objectValue);
+            drogon::app().loadConfigJson(cfg);
+            ConfigMgr::GetInstance()->LoadConfig();
         }
 
         EnvVarGuard jwt_guard{ "JWT_SECRET" };
@@ -90,6 +96,7 @@ namespace {
         EnvVarGuard mysql_guard{ "DATABASE_PASSWORD" };
         EnvVarGuard redis_guard{ "REDIS_PASSWORD" };
         EnvVarGuard instance_guard{ "DISK_INSTANCE_ID" };
+        EnvVarGuard role_guard{ "DISK_PROCESS_ROLE" };
     };
 
     /// ================================================================================
@@ -232,6 +239,24 @@ namespace {
         EXPECT_NO_THROW({ ConfigMgr::GetInstance()->ValidateSecureConfig(); });
     }
 
+    TEST_F(ConfigMgrJwtTest, ValidateSecureConfigRejectsImplicitOrAllRole) {
+        secure_guard.Set("true");
+        jwt_guard.Set("a_valid_jwt_secret_that_is_at_least_32_chars_long");
+        mysql_guard.Set("mysql_pw");
+        redis_guard.Set("redis_pw");
+
+        role_guard.Unset();
+        Json::Value cfg;
+        cfg["custom_config"]["disk"] = Json::Value(Json::objectValue);
+        drogon::app().loadConfigJson(cfg);
+        ConfigMgr::GetInstance()->LoadConfig();
+        EXPECT_THROW(ConfigMgr::GetInstance()->ValidateSecureConfig(), std::runtime_error);
+
+        role_guard.Set("all");
+        ConfigMgr::GetInstance()->LoadConfig();
+        EXPECT_THROW(ConfigMgr::GetInstance()->ValidateSecureConfig(), std::runtime_error);
+    }
+
     /// ================================================================================
     /// ValidateSecureConfig — DISK_SECURE_MODE=1 also enables secure mode
     /// ================================================================================
@@ -316,10 +341,14 @@ namespace {
 
     class ConfigMgrDistributedTest : public ::testing::Test {
     protected:
-        void SetUp() override { instance_guard.Unset(); }
+        void SetUp() override {
+            instance_guard.Unset();
+            role_guard.Unset();
+        }
 
         void TearDown() override {
             instance_guard.Unset();
+            role_guard.Unset();
             RestoreAssemblyDefaults();
         }
 
@@ -333,6 +362,7 @@ namespace {
         }
 
         EnvVarGuard instance_guard{ "DISK_INSTANCE_ID" };
+        EnvVarGuard role_guard{ "DISK_PROCESS_ROLE" };
     };
 
     TEST_F(ConfigMgrDistributedTest, GeneratedInstanceIdIsStableAcrossReloads) {
@@ -344,6 +374,74 @@ namespace {
         EXPECT_EQ(config->GetInstanceId(), first_instance_id);
         EXPECT_EQ(first_instance_id.rfind("disk-", 0), 0);
         EXPECT_EQ(config->GetUploadFinalizeLeaseSeconds(), 120);
+        EXPECT_EQ(config->GetProcessRole(), disk::utils::ProcessRole::All);
+        EXPECT_EQ(config->GetWorkerPollIntervalMs(), 1000);
+        EXPECT_EQ(config->GetWorkerClaimBatchSize(), 20);
+        EXPECT_EQ(config->GetWorkerConcurrency(), 1);
+        EXPECT_EQ(config->GetWorkerLeaseDurationSeconds(), 120);
+        EXPECT_EQ(config->GetWorkerDrainTimeoutSeconds(), 30);
+    }
+
+    TEST_F(ConfigMgrDistributedTest, LoadsProcessRoleAndWorkerSettings) {
+        Json::Value disk_config;
+        disk_config["process_role"] = "worker";
+        disk_config["worker_poll_interval_ms"] = 250;
+        disk_config["worker_claim_batch_size"] = 75;
+        disk_config["worker_concurrency"] = 1;
+        disk_config["worker_lease_duration_seconds"] = 300;
+        disk_config["worker_drain_timeout_seconds"] = 45;
+
+        const auto* config = LoadDiskConfig(disk_config);
+
+        EXPECT_EQ(config->GetProcessRole(), disk::utils::ProcessRole::Worker);
+        EXPECT_FALSE(disk::utils::IncludesApi(config->GetProcessRole()));
+        EXPECT_TRUE(disk::utils::IncludesWorker(config->GetProcessRole()));
+        EXPECT_EQ(config->GetWorkerPollIntervalMs(), 250);
+        EXPECT_EQ(config->GetWorkerClaimBatchSize(), 75);
+        EXPECT_EQ(config->GetWorkerConcurrency(), 1);
+        EXPECT_EQ(config->GetWorkerLeaseDurationSeconds(), 300);
+        EXPECT_EQ(config->GetWorkerDrainTimeoutSeconds(), 45);
+    }
+
+    TEST_F(ConfigMgrDistributedTest, EnvironmentProcessRoleOverridesJson) {
+        role_guard.Set("api");
+        Json::Value disk_config;
+        disk_config["process_role"] = "worker";
+
+        const auto* config = LoadDiskConfig(disk_config);
+        EXPECT_EQ(config->GetProcessRole(), disk::utils::ProcessRole::Api);
+        EXPECT_TRUE(disk::utils::IncludesApi(config->GetProcessRole()));
+        EXPECT_FALSE(disk::utils::IncludesWorker(config->GetProcessRole()));
+    }
+
+    TEST_F(ConfigMgrDistributedTest, RejectsInvalidProcessRoles) {
+        Json::Value disk_config;
+        disk_config["process_role"] = "scheduler";
+        EXPECT_THROW((void)LoadDiskConfig(disk_config), std::runtime_error);
+
+        disk_config["process_role"] = 1;
+        EXPECT_THROW((void)LoadDiskConfig(disk_config), std::runtime_error);
+
+        role_guard.Set("");
+        EXPECT_THROW(
+            (void)LoadDiskConfig(Json::Value(Json::objectValue)),
+            std::runtime_error
+        );
+    }
+
+    TEST_F(ConfigMgrDistributedTest, RejectsInvalidWorkerSettings) {
+        const auto expect_invalid = [](const char* field, const Json::Value& value) {
+            Json::Value disk_config;
+            disk_config[field] = value;
+            EXPECT_THROW((void)LoadDiskConfig(disk_config), std::runtime_error);
+        };
+
+        expect_invalid("worker_poll_interval_ms", 99);
+        expect_invalid("worker_claim_batch_size", 0);
+        expect_invalid("worker_concurrency", 2);
+        expect_invalid("worker_lease_duration_seconds", 29);
+        expect_invalid("worker_drain_timeout_seconds", 301);
+        expect_invalid("worker_claim_batch_size", "20");
     }
 
     TEST_F(ConfigMgrDistributedTest, LoadsExplicitInstanceIdAndLeaseDuration) {

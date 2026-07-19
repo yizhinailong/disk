@@ -19,6 +19,43 @@
 
 namespace disk::utils {
     namespace {
+        auto ParseProcessRole(std::string_view value) -> ProcessRole {
+            if (value == "api") {
+                return ProcessRole::Api;
+            }
+            if (value == "worker") {
+                return ProcessRole::Worker;
+            }
+            if (value == "all") {
+                return ProcessRole::All;
+            }
+            throw std::runtime_error(
+                "Invalid process_role: expected one of api, worker, all"
+            );
+        }
+
+        auto ReadBoundedUInt(
+            const Json::Value& config,
+            const char* field,
+            uint32_t fallback,
+            uint32_t minimum,
+            uint32_t maximum
+        ) -> uint32_t {
+            if (!config.isMember(field)) {
+                return fallback;
+            }
+
+            const auto& value = config[field];
+            if ((!value.isInt() && !value.isUInt()) || value.asInt64() < minimum ||
+                value.asInt64() > maximum) {
+                throw std::runtime_error(
+                    std::string("Invalid ") + field + ": expected integer in range " +
+                    std::to_string(minimum) + "-" + std::to_string(maximum)
+                );
+            }
+            return static_cast<uint32_t>(value.asUInt());
+        }
+
         auto ParseStorageBackend(std::string value) -> StorageBackend {
             if (value == "local") {
                 return StorageBackend::Local;
@@ -117,6 +154,13 @@ namespace disk::utils {
     auto ConfigMgr::LoadConfig() -> void {
         const auto& custom_config = drogon::app().getCustomConfig();
         m_instance_id = m_generated_instance_id;
+        m_process_role = ProcessRole::All;
+        m_process_role_explicit = false;
+        m_worker_poll_interval_ms = DEFAULT_WORKER_POLL_INTERVAL_MS;
+        m_worker_claim_batch_size = DEFAULT_WORKER_CLAIM_BATCH_SIZE;
+        m_worker_concurrency = DEFAULT_WORKER_CONCURRENCY;
+        m_worker_lease_duration_seconds = DEFAULT_WORKER_LEASE_DURATION_SECONDS;
+        m_worker_drain_timeout_seconds = DEFAULT_WORKER_DRAIN_TIMEOUT_SECONDS;
         m_upload_finalize_lease_seconds = DEFAULT_UPLOAD_FINALIZE_LEASE_SECONDS;
         m_storage_backend = StorageBackend::Local;
         m_upload_staging_backend = StorageBackend::Local;
@@ -130,6 +174,16 @@ namespace disk::utils {
 
         if (custom_config.isMember("disk")) {
             const auto& app_config = custom_config["disk"];
+
+            if (app_config.isMember("process_role")) {
+                if (!app_config["process_role"].isString()) {
+                    throw std::runtime_error(
+                        "Invalid process_role from custom_config.disk: expected string"
+                    );
+                }
+                m_process_role = ParseProcessRole(app_config["process_role"].asString());
+                m_process_role_explicit = true;
+            }
 
             if (app_config.isMember("instance_id")) {
                 if (!app_config["instance_id"].isString()) {
@@ -149,6 +203,42 @@ namespace disk::utils {
                 }
                 m_upload_finalize_lease_seconds = static_cast<uint32_t>(lease_seconds.asUInt());
             }
+
+            m_worker_poll_interval_ms = ReadBoundedUInt(
+                app_config,
+                "worker_poll_interval_ms",
+                DEFAULT_WORKER_POLL_INTERVAL_MS,
+                100,
+                60000
+            );
+            m_worker_claim_batch_size = ReadBoundedUInt(
+                app_config,
+                "worker_claim_batch_size",
+                DEFAULT_WORKER_CLAIM_BATCH_SIZE,
+                1,
+                1000
+            );
+            m_worker_concurrency = ReadBoundedUInt(
+                app_config,
+                "worker_concurrency",
+                DEFAULT_WORKER_CONCURRENCY,
+                1,
+                1
+            );
+            m_worker_lease_duration_seconds = ReadBoundedUInt(
+                app_config,
+                "worker_lease_duration_seconds",
+                DEFAULT_WORKER_LEASE_DURATION_SECONDS,
+                30,
+                3600
+            );
+            m_worker_drain_timeout_seconds = ReadBoundedUInt(
+                app_config,
+                "worker_drain_timeout_seconds",
+                DEFAULT_WORKER_DRAIN_TIMEOUT_SECONDS,
+                1,
+                300
+            );
 
             /// 从配置读取 storage_base_path
             if (app_config.isMember("storage_base_path")) {
@@ -349,7 +439,12 @@ namespace disk::utils {
             ValidateInstanceId(instance_id, "DISK_INSTANCE_ID");
             m_instance_id = instance_id;
         }
-        Logger::Info() << "Using distributed instance_id: " << m_instance_id
+        if (const auto* process_role = std::getenv("DISK_PROCESS_ROLE"); process_role != nullptr) {
+            m_process_role = ParseProcessRole(process_role);
+            m_process_role_explicit = true;
+        }
+        Logger::Info() << "Using process_role: " << ProcessRoleName(m_process_role)
+                       << ", instance_id: " << m_instance_id
                        << ", upload_finalize_lease_seconds: " << m_upload_finalize_lease_seconds;
 
         /// 读取数据库和 Redis 连接池大小
@@ -403,6 +498,30 @@ namespace disk::utils {
 
     auto ConfigMgr::GetInstanceId() const noexcept -> std::string {
         return m_instance_id;
+    }
+
+    auto ConfigMgr::GetProcessRole() const noexcept -> ProcessRole {
+        return m_process_role;
+    }
+
+    auto ConfigMgr::GetWorkerPollIntervalMs() const noexcept -> uint32_t {
+        return m_worker_poll_interval_ms;
+    }
+
+    auto ConfigMgr::GetWorkerClaimBatchSize() const noexcept -> uint32_t {
+        return m_worker_claim_batch_size;
+    }
+
+    auto ConfigMgr::GetWorkerConcurrency() const noexcept -> uint32_t {
+        return m_worker_concurrency;
+    }
+
+    auto ConfigMgr::GetWorkerLeaseDurationSeconds() const noexcept -> uint32_t {
+        return m_worker_lease_duration_seconds;
+    }
+
+    auto ConfigMgr::GetWorkerDrainTimeoutSeconds() const noexcept -> uint32_t {
+        return m_worker_drain_timeout_seconds;
     }
 
     auto ConfigMgr::GetUploadFinalizeLeaseSeconds() const noexcept -> uint32_t {
@@ -580,6 +699,13 @@ namespace disk::utils {
                 }
                 error_msg += missing_vars[i];
             }
+            Logger::Error() << error_msg;
+            throw std::runtime_error(error_msg);
+        }
+
+        if (!m_process_role_explicit || m_process_role == ProcessRole::All) {
+            const std::string error_msg =
+                "Secure mode requires an explicit api or worker process role";
             Logger::Error() << error_msg;
             throw std::runtime_error(error_msg);
         }

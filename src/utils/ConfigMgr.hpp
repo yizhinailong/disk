@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "Singleton.hpp"
 
@@ -19,6 +20,35 @@ namespace disk::utils {
         Local,
         S3,
     };
+
+    enum class ProcessRole {
+        Api,
+        Worker,
+        All,
+    };
+
+    [[nodiscard]]
+    constexpr auto ProcessRoleName(ProcessRole role) noexcept -> std::string_view {
+        switch (role) {
+            case ProcessRole::Api:
+                return "api";
+            case ProcessRole::Worker:
+                return "worker";
+            case ProcessRole::All:
+                return "all";
+        }
+        return "unknown";
+    }
+
+    [[nodiscard]]
+    constexpr auto IncludesApi(ProcessRole role) noexcept -> bool {
+        return role == ProcessRole::Api || role == ProcessRole::All;
+    }
+
+    [[nodiscard]]
+    constexpr auto IncludesWorker(ProcessRole role) noexcept -> bool {
+        return role == ProcessRole::Worker || role == ProcessRole::All;
+    }
 
     struct S3StorageConfig {
         std::string bucket{ "disk" };
@@ -109,6 +139,24 @@ namespace disk::utils {
 
         [[nodiscard]]
         auto GetInstanceId() const noexcept -> std::string;
+
+        [[nodiscard]]
+        auto GetProcessRole() const noexcept -> ProcessRole;
+
+        [[nodiscard]]
+        auto GetWorkerPollIntervalMs() const noexcept -> uint32_t;
+
+        [[nodiscard]]
+        auto GetWorkerClaimBatchSize() const noexcept -> uint32_t;
+
+        [[nodiscard]]
+        auto GetWorkerConcurrency() const noexcept -> uint32_t;
+
+        [[nodiscard]]
+        auto GetWorkerLeaseDurationSeconds() const noexcept -> uint32_t;
+
+        [[nodiscard]]
+        auto GetWorkerDrainTimeoutSeconds() const noexcept -> uint32_t;
 
         [[nodiscard]]
         auto GetUploadFinalizeLeaseSeconds() const noexcept -> uint32_t;
@@ -277,6 +325,11 @@ namespace disk::utils {
         static constexpr int DEFAULT_SHARE_DOWNLOAD_RATE_LIMIT_PER_MINUTE = 10;
         static constexpr int DEFAULT_SHARE_DOWNLOAD_RATE_LIMIT_WINDOW_SECONDS = 60;
         static constexpr uint32_t DEFAULT_UPLOAD_FINALIZE_LEASE_SECONDS = 120;
+        static constexpr uint32_t DEFAULT_WORKER_POLL_INTERVAL_MS = 1000;
+        static constexpr uint32_t DEFAULT_WORKER_CLAIM_BATCH_SIZE = 20;
+        static constexpr uint32_t DEFAULT_WORKER_CONCURRENCY = 1;
+        static constexpr uint32_t DEFAULT_WORKER_LEASE_DURATION_SECONDS = 120;
+        static constexpr uint32_t DEFAULT_WORKER_DRAIN_TIMEOUT_SECONDS = 30;
 
         /// JWT 配置
         int m_access_token_expire_seconds{ 7200 };
@@ -285,6 +338,13 @@ namespace disk::utils {
         /// 分布式进程配置
         std::string m_generated_instance_id;
         std::string m_instance_id;
+        ProcessRole m_process_role{ ProcessRole::All };
+        bool m_process_role_explicit{ false };
+        uint32_t m_worker_poll_interval_ms{ DEFAULT_WORKER_POLL_INTERVAL_MS };
+        uint32_t m_worker_claim_batch_size{ DEFAULT_WORKER_CLAIM_BATCH_SIZE };
+        uint32_t m_worker_concurrency{ DEFAULT_WORKER_CONCURRENCY };
+        uint32_t m_worker_lease_duration_seconds{ DEFAULT_WORKER_LEASE_DURATION_SECONDS };
+        uint32_t m_worker_drain_timeout_seconds{ DEFAULT_WORKER_DRAIN_TIMEOUT_SECONDS };
         uint32_t m_upload_finalize_lease_seconds{ DEFAULT_UPLOAD_FINALIZE_LEASE_SECONDS };
 
         /// 存储配置
