@@ -111,7 +111,9 @@ namespace disk::trash {
             EXPECT_TRUE(Contains(query_source, "LIMIT $2"));
 
             EXPECT_TRUE(Contains(service_source, "m_trash_query.FetchExpiredLifecycleBatchAfterId("));
-            EXPECT_TRUE(Contains(service_source, "last_seen_id = batch_max_id;"));
+            EXPECT_TRUE(Contains(service_source, "auto TrashService::CleanupExpiredTrashPage("));
+            EXPECT_TRUE(Contains(service_source, "page.next_after_id = trash_items.back().id;"));
+            EXPECT_TRUE(Contains(service_source, "Expired trash page contains an invalid content reference"));
             EXPECT_TRUE(Contains(service_source, "PermanentlyDeleteTrashItems(chunk, false)"));
             EXPECT_TRUE(Contains(service_source, "DecrementRefCountsAndEnqueueGc("));
             EXPECT_FALSE(Contains(service_source, "CleanupVerifiedZeroRefBlobs("));

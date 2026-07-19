@@ -52,6 +52,13 @@ namespace disk::trash {
         std::vector<uint64_t> removed_folder_ids;
     };
 
+    struct ExpiredTrashCleanupPageResult {
+        size_t candidates{ 0 };
+        size_t deleted{ 0 };
+        uint64_t next_after_id{ 0 };
+        bool has_more{ false };
+    };
+
     /**
      * @brief 回收站服务类
      *
@@ -101,6 +108,10 @@ namespace disk::trash {
         [[nodiscard]]
         auto CleanupExpiredTrashItems(int fetch_batch_size, int max_batches_per_run)
             -> drogon::Task<Result<int>>;
+
+        [[nodiscard]]
+        auto CleanupExpiredTrashPage(uint64_t after_id, size_t limit)
+            -> drogon::Task<Result<ExpiredTrashCleanupPageResult>>;
 
         /**
          * @brief 列出回收站项目

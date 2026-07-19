@@ -104,6 +104,10 @@ namespace disk::jobs {
             -> drogon::Task<JobExecutionResult>;
 
         [[nodiscard]]
+        auto ExecuteExpireTrash(const StorageJob& job) const
+            -> drogon::Task<JobExecutionResult>;
+
+        [[nodiscard]]
         auto ExecuteStorageReconcile(const StorageJob& job) const
             -> drogon::Task<JobExecutionResult>;
 

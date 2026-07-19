@@ -1,5 +1,6 @@
 #include "services/CleanupService.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 
@@ -92,64 +93,25 @@ namespace disk::services {
             EXPECT_EQ(iterations, 3);
         }
 
-        TEST(CleanupServiceBatchingTest, CursorAdvancesPastFailedBatchWithoutRetry) {
+        TEST(CleanupServiceBatchingTest, CursorDoesNotAdvancePastFailedPage) {
             constexpr int kFetchBatchSize = 3;
-            std::vector<uint64_t> all_ids = { 10, 20, 30, 40, 50, 60 };
+            std::vector<uint64_t> all_ids = { 10, 20, 30 };
             std::vector<uint64_t> failing_ids = { 20, 30 };
-            uint64_t last_seen_id = 0;
-            std::vector<uint64_t> successfully_processed;
-            int iterations = 0;
-
-            while (true) {
-                std::vector<uint64_t> batch;
-                for (auto id : all_ids) {
-                    if (id > last_seen_id && batch.size() < static_cast<size_t>(kFetchBatchSize)) {
-                        batch.push_back(id);
-                    }
-                }
-
-                if (batch.empty()) {
-                    break;
-                }
-
-                uint64_t batch_max_id = 0;
-                for (auto id : batch) {
-                    if (id > batch_max_id) {
-                        batch_max_id = id;
-                    }
-                }
-
-                bool batch_has_failure = false;
-                for (auto id : batch) {
-                    for (auto fid : failing_ids) {
-                        if (id == fid) {
-                            batch_has_failure = true;
-                            break;
-                        }
-                    }
-                    if (batch_has_failure) {
-                        break;
-                    }
-                }
-
-                if (!batch_has_failure) {
-                    for (auto id : batch) {
-                        successfully_processed.push_back(id);
-                    }
-                }
-
-                /// 游标始终推进，不论该批次是否处理失败
-                last_seen_id = batch_max_id;
-                iterations++;
-
-                if (batch.size() < static_cast<size_t>(kFetchBatchSize)) {
-                    break;
+            const uint64_t after_id = 0;
+            std::vector<uint64_t> batch;
+            for (auto id : all_ids) {
+                if (id > after_id && batch.size() < static_cast<size_t>(kFetchBatchSize)) {
+                    batch.push_back(id);
                 }
             }
 
-            EXPECT_EQ(last_seen_id, 60u);
-            EXPECT_EQ(iterations, 2);
-            EXPECT_EQ(successfully_processed, (std::vector<uint64_t>{ 40, 50, 60 }));
+            const auto page_failed = std::ranges::any_of(batch, [&failing_ids](uint64_t id) {
+                return std::ranges::find(failing_ids, id) != failing_ids.end();
+            });
+            const auto next_after_id = page_failed ? after_id : batch.back();
+
+            EXPECT_TRUE(page_failed);
+            EXPECT_EQ(next_after_id, after_id);
         }
 
         TEST(CleanupServiceBatchingTest, EmptyResultTerminatesImmediately) {
@@ -302,5 +264,5 @@ namespace disk::services {
             EXPECT_EQ(total_expired - fetched, 150);
         }
 
-    } ///< namespace
-} ///< namespace disk::services
+    } // namespace
+} // namespace disk::services

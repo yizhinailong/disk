@@ -279,6 +279,23 @@ namespace disk::jobs {
             EXPECT_EQ(result.error, "Upload expiration database is not configured");
         }
 
+        TEST(StorageJobWorkerHandlerTest, DispatchesExpireTrashThroughRegistry) {
+            StorageJobWorker worker(nullptr, nullptr, nullptr, "worker-1");
+            auto built = BuildExpireTrashJob(ExpireTrashPageRequest{
+                .scan_id = "scan-trash",
+                .limit = 100,
+            });
+            ASSERT_TRUE(built.has_value());
+
+            auto result = drogon::sync_wait(
+                worker.ExecuteJob(MakePersistedJob(std::move(built.value())))
+            );
+
+            EXPECT_FALSE(result.succeeded);
+            EXPECT_TRUE(result.retryable);
+            EXPECT_EQ(result.error, "Trash expiration database is not configured");
+        }
+
         TEST(StorageJobWorkerHandlerTest, DispatchesReconciliationThroughRegistry) {
             StorageJobWorker worker(nullptr, nullptr, nullptr, "worker-1");
             auto built = BuildStorageReconcileJob(

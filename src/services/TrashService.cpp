@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 #include <optional>
 #include <unordered_map>
 #include <unordered_set>
@@ -440,87 +441,109 @@ namespace disk::trash {
     ) -> drogon::Task<Result<int>> {
         Logger::Info() << "Starting cleanup of expired trash items";
 
-        try {
-            int deleted_count = 0;
-            uint64_t last_seen_id = 0;
-            int batch_iteration = 0;
-
-            while (batch_iteration < max_batches_per_run) {
-                auto batch_start = std::chrono::steady_clock::now();
-                auto trash_items = co_await m_trash_query.FetchExpiredLifecycleBatchAfterId(
-                    last_seen_id,
-                    fetch_batch_size
-                );
-
-                if (trash_items.empty()) {
-                    break;
-                }
-
-                uint64_t batch_max_id = 0;
-                for (const auto& item : trash_items) {
-                    if (item.id > batch_max_id) {
-                        batch_max_id = item.id;
-                    }
-                }
-
-                int chunks_succeeded = 0;
-                int chunks_failed = 0;
-                auto chunks = BatchUtils::Chunk(trash_items, DEFAULT_BATCH_CHUNK_SIZE);
-                for (const auto& chunk : chunks) {
-                    if (chunk.empty()) {
-                        continue;
-                    }
-
-                    try {
-                        auto delete_result = co_await PermanentlyDeleteTrashItems(chunk, false);
-                        deleted_count += delete_result.deleted_count;
-                        chunks_succeeded++;
-                    } catch (const std::exception& e) {
-                        Logger::Error() << "Failed to cleanup expired trash chunk atomically: " << e.what();
-                        chunks_failed++;
-                        continue;
-                    }
-                }
-
-                Logger::Info() << "[cleanup_batch] trash batch_iteration="
-                               << batch_iteration
-                               << " fetch_size=" << trash_items.size()
-                               << " rows_deleted_so_far=" << deleted_count
-                               << " chunks_succeeded=" << chunks_succeeded
-                               << " chunks_failed=" << chunks_failed
-                               << " batch_duration_ms="
-                               << std::chrono::duration_cast<std::chrono::milliseconds>(
-                                      std::chrono::steady_clock::now() - batch_start
-                                  )
-                                      .count();
-
-                last_seen_id = batch_max_id;
-                batch_iteration++;
-
-                if (trash_items.size() < static_cast<size_t>(fetch_batch_size)) {
-                    break;
-                }
-            }
-
-            if (batch_iteration >= max_batches_per_run) {
-                Logger::Info() << "[cleanup_batch] trash reached max batches per run cap: max="
-                               << max_batches_per_run << " rows_deleted=" << deleted_count;
-            }
-
-            Logger::Info() << "Trash cleanup completed: deleted_count=" << deleted_count;
-            co_return deleted_count;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Database error cleaning expired trash: " << e.base().what();
+        if (fetch_batch_size <= 0 || max_batches_per_run <= 0) {
             co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to clean expired trash")
-            );
-        } catch (const std::exception& e) {
-            Logger::Error() << "Unknown error cleaning expired trash: " << e.what();
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to clean expired trash")
+                ErrorInfo(ErrorCode::InvalidParameter, "Trash cleanup bounds must be positive")
             );
         }
+
+        int deleted_count = 0;
+        uint64_t after_id = 0;
+        int batch_iteration = 0;
+        while (batch_iteration < max_batches_per_run) {
+            auto page = co_await CleanupExpiredTrashPage(
+                after_id,
+                static_cast<size_t>(fetch_batch_size)
+            );
+            if (!page) {
+                co_return std::unexpected(page.error());
+            }
+
+            deleted_count += static_cast<int>(page->deleted);
+            batch_iteration++;
+            if (!page->has_more) {
+                break;
+            }
+            if (page->next_after_id <= after_id) {
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Expired trash cleanup cursor did not advance"
+                ));
+            }
+            after_id = page->next_after_id;
+        }
+
+        if (batch_iteration >= max_batches_per_run) {
+            Logger::Info() << "[cleanup_batch] trash reached max batches per run cap: max="
+                           << max_batches_per_run << " rows_deleted=" << deleted_count;
+        }
+        Logger::Info() << "Trash cleanup completed: deleted_count=" << deleted_count;
+        co_return deleted_count;
+    }
+
+    auto TrashService::CleanupExpiredTrashPage(uint64_t after_id, size_t limit)
+        -> drogon::Task<Result<ExpiredTrashCleanupPageResult>> {
+        constexpr size_t kMaxPageSize = 500;
+        if (limit == 0 || limit > kMaxPageSize ||
+            after_id == std::numeric_limits<uint64_t>::max()) {
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InvalidParameter,
+                "Expired trash page bounds are invalid"
+            ));
+        }
+
+        const auto started_at = std::chrono::steady_clock::now();
+        try {
+            auto trash_items = co_await m_trash_query.FetchExpiredLifecycleBatchAfterId(
+                after_id,
+                static_cast<int>(limit)
+            );
+            ExpiredTrashCleanupPageResult page{
+                .candidates = trash_items.size(),
+                .next_after_id = after_id,
+                .has_more = trash_items.size() == limit,
+            };
+            if (trash_items.empty()) {
+                co_return page;
+            }
+            page.next_after_id = trash_items.back().id;
+
+            auto chunks = BatchUtils::Chunk(trash_items, DEFAULT_BATCH_CHUNK_SIZE);
+            for (const auto& chunk : chunks) {
+                if (chunk.empty()) {
+                    continue;
+                }
+
+                auto delete_result = co_await PermanentlyDeleteTrashItems(chunk, false);
+                page.deleted += static_cast<size_t>(delete_result.deleted_count);
+                if (delete_result.deleted_count != static_cast<int>(chunk.size())) {
+                    co_return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Expired trash page contains an invalid content reference"
+                    ));
+                }
+            }
+
+            Logger::Info() << "[cleanup_batch] trash after_id=" << after_id
+                           << " candidates=" << page.candidates
+                           << " deleted=" << page.deleted
+                           << " next_after_id=" << page.next_after_id
+                           << " has_more=" << page.has_more
+                           << " batch_duration_ms="
+                           << std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  std::chrono::steady_clock::now() - started_at
+                              )
+                                  .count();
+            co_return page;
+        } catch (const drogon::orm::DrogonDbException& error) {
+            Logger::Error() << "Database error cleaning expired trash page: "
+                            << error.base().what();
+        } catch (const std::exception& error) {
+            Logger::Error() << "Failed to clean expired trash page: " << error.what();
+        }
+        co_return std::unexpected(
+            ErrorInfo(ErrorCode::InternalError, "Failed to clean expired trash")
+        );
     }
 
     /// ==================== 公共方法实现 ====================

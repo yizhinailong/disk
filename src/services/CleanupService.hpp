@@ -62,7 +62,7 @@ namespace disk::services {
          * 业务规则：
          * - 使用游标分批查找 expires_at < NOW() 的回收站记录（id ASC + LIMIT）
          * - 每批内部分块事务处理，释放存储配额并更新引用计数
-         * - 游标始终推进，失败的行不会在同次运行中重试
+         * - 单页任一分块失败时不推进持久游标，由 Worker 重试
          * - 单次运行最多处理 kMaxTrashBatchesPerRun 批次（保守有界）
          * - blob 删除前在事务外二次验证 ref_count=0（防止并发上传竞争）
          * - 删除回收站记录
@@ -98,7 +98,6 @@ namespace disk::services {
          * @return drogon::Task<void>
          */
         auto UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void>;
-
     };
 
-} ///< namespace disk::services
+} // namespace disk::services

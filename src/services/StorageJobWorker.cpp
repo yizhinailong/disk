@@ -20,6 +20,7 @@
 
 #include "services/StorageJobContract.hpp"
 #include "services/StorageReconciliationService.hpp"
+#include "services/TrashService.hpp"
 #include "services/UploadLifecycleService.hpp"
 #include "storage/IBlobStore.hpp"
 #include "storage/MultipartUploadRecovery.hpp"
@@ -205,6 +206,10 @@ namespace disk::jobs {
             &StorageJobWorker::ExecuteExpireUploads
         );
         m_handlers.emplace(
+            std::string(kExpireTrashJobType),
+            &StorageJobWorker::ExecuteExpireTrash
+        );
+        m_handlers.emplace(
             std::string(kStorageReconcileJobType),
             &StorageJobWorker::ExecuteStorageReconcile
         );
@@ -316,10 +321,7 @@ namespace disk::jobs {
             StorageJobRepository repository(m_db_client);
             const auto complete_transaction = [&]() -> drogon::Task<JobExecutionResult> {
                 co_await transaction->execSqlCoro(
-                    "UPDATE storage_reconciliation_findings SET "
-                    "  resolved_at = COALESCE(resolved_at, NOW()), last_seen_at = NOW() "
-                    "WHERE finding_type = 'zero_reference_content' "
-                    "  AND resource_id = $1 AND resolved_at IS NULL",
+                    "UPDATE storage_reconciliation_findings SET " "  resolved_at = COALESCE(resolved_at, NOW()), last_seen_at = NOW() " "WHERE finding_type = 'zero_reference_content' " "  AND resource_id = $1 AND resolved_at IS NULL",
                     std::to_string(candidate->content_id)
                 );
                 const auto persisted = co_await repository.MarkSucceeded(
@@ -448,6 +450,59 @@ namespace disk::jobs {
         co_return JobExecutionResult{ .succeeded = true };
     }
 
+    auto StorageJobWorker::ExecuteExpireTrash(const StorageJob& job) const
+        -> drogon::Task<JobExecutionResult> {
+        auto request = ParseExpireTrashJob(job);
+        if (!request) {
+            co_return PermanentFailure(request.error());
+        }
+        if (m_db_client == nullptr) {
+            co_return RetryableFailure("Trash expiration database is not configured");
+        }
+
+        disk::trash::TrashService trash_service(m_db_client);
+        auto page = co_await trash_service.CleanupExpiredTrashPage(
+            request->after_id,
+            request->limit
+        );
+        if (!page) {
+            const auto& error = page.error();
+            const auto retryable =
+                error.code != ErrorCode::InvalidParameter &&
+                error.code != ErrorCode::ValidationFailed;
+            co_return JobExecutionResult{
+                .succeeded = false,
+                .retryable = retryable,
+                .error = error.message.empty() ? "expire_trash failed" : error.message,
+            };
+        }
+
+        bool continuation_enqueued = false;
+        if (page->has_more) {
+            if (page->next_after_id <= request->after_id) {
+                co_return PermanentFailure("expire_trash continuation cursor did not advance");
+            }
+            auto next_request = request.value();
+            next_request.after_id = page->next_after_id;
+            auto next_job = BuildExpireTrashJob(next_request);
+            if (!next_job) {
+                co_return PermanentFailure(next_job.error());
+            }
+            StorageJobRepository repository(m_db_client);
+            continuation_enqueued = co_await repository.Enqueue(next_job.value());
+        }
+
+        Logger::Info() << "Storage job page completed: instance_id=" << m_instance_id
+                       << ", job_type=" << kExpireTrashJobType
+                       << ", scan_id=" << request->scan_id
+                       << ", after_id=" << request->after_id
+                       << ", candidates=" << page->candidates
+                       << ", deleted=" << page->deleted
+                       << ", next_after_id=" << page->next_after_id
+                       << ", continuation_enqueued=" << continuation_enqueued;
+        co_return JobExecutionResult{ .succeeded = true };
+    }
+
     auto StorageJobWorker::ExecuteStorageReconcile(const StorageJob& job) const
         -> drogon::Task<JobExecutionResult> {
         auto request = ParseStorageReconcileJob(job);
@@ -484,11 +539,7 @@ namespace disk::jobs {
             const auto is_database_scope =
                 request->scope == disk::reconciliation::ReconciliationScope::Contents ||
                 request->scope == disk::reconciliation::ReconciliationScope::Users;
-            const auto cursor_advanced = is_database_scope
-                                             ? next_request.after_id > request->after_id
-                                             : !next_request.continuation_token.empty() &&
-                                                   next_request.continuation_token !=
-                                                       request->continuation_token;
+            const auto cursor_advanced = is_database_scope ? next_request.after_id > request->after_id : !next_request.continuation_token.empty() && next_request.continuation_token != request->continuation_token;
             if (!cursor_advanced) {
                 co_return PermanentFailure("storage_reconcile continuation cursor did not advance");
             }
