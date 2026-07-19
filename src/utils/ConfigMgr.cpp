@@ -12,6 +12,7 @@
 #include <fstream>
 #include <limits>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 #include <drogon/utils/Utilities.h>
@@ -28,14 +29,56 @@ namespace disk::utils {
             throw std::runtime_error("Invalid storage_backend: " + value);
         }
 
-        auto NormalizeObjectPrefix(std::string prefix) -> std::string {
+        auto NormalizeObjectPrefix(
+            std::string prefix,
+            std::string_view fallback,
+            std::string_view field_name
+        ) -> std::string {
             while (!prefix.empty() && prefix.front() == '/') {
                 prefix.erase(prefix.begin());
             }
             while (!prefix.empty() && prefix.back() == '/') {
                 prefix.pop_back();
             }
-            return prefix.empty() ? "objects" : prefix;
+            if (prefix.empty()) {
+                return std::string(fallback);
+            }
+
+            size_t segment_start = 0;
+            for (size_t index = 0; index <= prefix.size(); ++index) {
+                if (index < prefix.size() && prefix[index] != '/') {
+                    const auto character = prefix[index];
+                    const auto is_ascii_letter =
+                        (character >= 'A' && character <= 'Z') ||
+                        (character >= 'a' && character <= 'z');
+                    const auto is_ascii_digit = character >= '0' && character <= '9';
+                    if (!is_ascii_letter && !is_ascii_digit &&
+                        character != '.' && character != '_' && character != '-') {
+                        throw std::runtime_error(
+                            "Invalid " + std::string(field_name) + ": unsupported character"
+                        );
+                    }
+                    continue;
+                }
+
+                const auto segment = std::string_view(prefix).substr(segment_start, index - segment_start);
+                if (segment.empty() || segment == "." || segment == "..") {
+                    throw std::runtime_error(
+                        "Invalid " + std::string(field_name) + ": unsafe path segment"
+                    );
+                }
+                segment_start = index + 1;
+            }
+
+            return prefix;
+        }
+
+        auto PrefixesOverlap(std::string_view left, std::string_view right) -> bool {
+            if (left == right) {
+                return true;
+            }
+            return (left.size() < right.size() && right.starts_with(left) && right[left.size()] == '/') ||
+                   (right.size() < left.size() && left.starts_with(right) && left[right.size()] == '/');
         }
 
         auto IsValidInstanceId(const std::string& instance_id) -> bool {
@@ -172,14 +215,37 @@ namespace disk::utils {
                     s3_config.get("force_path_style", m_s3_storage_config.force_path_style).asBool();
                 m_s3_storage_config.verify_ssl = s3_config.get("verify_ssl", m_s3_storage_config.verify_ssl).asBool();
                 m_s3_storage_config.object_prefix = NormalizeObjectPrefix(
-                    s3_config.get("object_prefix", m_s3_storage_config.object_prefix).asString()
+                    s3_config.get("object_prefix", m_s3_storage_config.object_prefix).asString(),
+                    "objects",
+                    "s3.object_prefix"
+                );
+                m_s3_storage_config.staging_prefix = NormalizeObjectPrefix(
+                    s3_config.get("staging_prefix", m_s3_storage_config.staging_prefix).asString(),
+                    "staging",
+                    "s3.staging_prefix"
                 );
                 m_s3_storage_config.connect_timeout_ms =
                     s3_config.get("connect_timeout_ms", m_s3_storage_config.connect_timeout_ms).asInt();
                 m_s3_storage_config.request_timeout_ms =
                     s3_config.get("request_timeout_ms", m_s3_storage_config.request_timeout_ms).asInt();
             } else {
-                m_s3_storage_config.object_prefix = NormalizeObjectPrefix(m_s3_storage_config.object_prefix);
+                m_s3_storage_config.object_prefix = NormalizeObjectPrefix(
+                    m_s3_storage_config.object_prefix,
+                    "objects",
+                    "s3.object_prefix"
+                );
+                m_s3_storage_config.staging_prefix = NormalizeObjectPrefix(
+                    m_s3_storage_config.staging_prefix,
+                    "staging",
+                    "s3.staging_prefix"
+                );
+            }
+
+            if (PrefixesOverlap(
+                    m_s3_storage_config.object_prefix,
+                    m_s3_storage_config.staging_prefix
+                )) {
+                throw std::runtime_error("S3 object and staging prefixes must not overlap");
             }
 
             if (m_storage_backend == StorageBackend::S3) {

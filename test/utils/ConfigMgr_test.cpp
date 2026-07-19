@@ -599,6 +599,7 @@ namespace {
         disk["s3"]["force_path_style"] = true;
         disk["s3"]["verify_ssl"] = false;
         disk["s3"]["object_prefix"] = "/uploads/objects/";
+        disk["s3"]["staging_prefix"] = "/uploads/staging/";
         disk["s3"]["connect_timeout_ms"] = 1234;
         disk["s3"]["request_timeout_ms"] = 5678;
         drogon::app().loadConfigJson(cfg);
@@ -614,8 +615,26 @@ namespace {
         EXPECT_TRUE(s3.force_path_style);
         EXPECT_FALSE(s3.verify_ssl);
         EXPECT_EQ(s3.object_prefix, "uploads/objects");
+        EXPECT_EQ(s3.staging_prefix, "uploads/staging");
         EXPECT_EQ(s3.connect_timeout_ms, 1234);
         EXPECT_EQ(s3.request_timeout_ms, 5678);
+
+        RestoreAssemblyDefaults();
+    }
+
+    TEST_F(ConfigMgrJwtTest, LoadConfigRejectsUnsafeOrOverlappingS3Prefixes) {
+        const auto load_prefixes = [](const std::string& object_prefix, const std::string& staging_prefix) {
+            Json::Value cfg;
+            auto& disk = cfg["custom_config"]["disk"];
+            disk["s3"]["object_prefix"] = object_prefix;
+            disk["s3"]["staging_prefix"] = staging_prefix;
+            drogon::app().loadConfigJson(cfg);
+            ConfigMgr::GetInstance()->LoadConfig();
+        };
+
+        EXPECT_THROW(load_prefixes("../objects", "staging"), std::runtime_error);
+        EXPECT_THROW(load_prefixes("objects", "staging\\unsafe"), std::runtime_error);
+        EXPECT_THROW(load_prefixes("objects", "objects/staging"), std::runtime_error);
 
         RestoreAssemblyDefaults();
     }

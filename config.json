@@ -46,6 +46,7 @@
         "force_path_style": false,
         "verify_ssl": true,
         "object_prefix": "objects",
+        "staging_prefix": "staging",
         "connect_timeout_ms": 3000,
         "request_timeout_ms": 300000
       }

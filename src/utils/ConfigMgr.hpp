@@ -28,6 +28,7 @@ namespace disk::utils {
         bool force_path_style{ false };
         bool verify_ssl{ true };
         std::string object_prefix{ "objects" };
+        std::string staging_prefix{ "staging" };
         int connect_timeout_ms{ 3000 };
         int request_timeout_ms{ 300000 };
     };
