@@ -126,6 +126,7 @@ set(Services_HEADERS
     services/ShareService.hpp
     services/StorageJobRepository.hpp
     services/StorageJobWorker.hpp
+    services/StorageReconciliationService.hpp
     services/SystemService.hpp
     services/TokenService.hpp
     services/TrashQuery.hpp
@@ -160,6 +161,7 @@ set(Services_SOURCES
     services/ShareService.cpp
     services/StorageJobRepository.cpp
     services/StorageJobWorker.cpp
+    services/StorageReconciliationService.cpp
     services/SystemService.cpp
     services/TokenService.cpp
     services/TrashQuery.cpp

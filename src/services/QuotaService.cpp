@@ -279,7 +279,7 @@ namespace disk::quota {
                 "COALESCE((SELECT SUM(size) FROM files WHERE user_id = u.id), 0) AS active_file_bytes, "
                 "COALESCE((SELECT SUM(item_size) FROM trash WHERE user_id = u.id), 0) AS trash_item_bytes, "
                 "COALESCE((SELECT SUM(reserved_bytes) FROM upload_tasks "
-                "          WHERE user_id = u.id AND status = 0), 0) AS in_progress_reserved_bytes "
+                "          WHERE user_id = u.id AND status IN (0, 4)), 0) AS in_progress_reserved_bytes "
                 "FROM users u WHERE u.id = $1",
                 user_id
             );
