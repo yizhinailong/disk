@@ -262,13 +262,13 @@ private slots:
         QVERIFY(!qml.contains(QStringLiteral("stackView.replace(\"DriveBrowserPage.qml\")")));
         QVERIFY(!qml.contains(QStringLiteral("stackView.replace(\"TransferCenterPage.qml\")")));
 
-        // DOC-01 §4, DOC-03 §2.2: three top-level pages only
-        QVERIFY(qml.contains(QStringLiteral("id: driveBrowserPageComponent")));
-        QVERIFY(qml.contains(QStringLiteral("id: transferCenterPageComponent")));
-        QVERIFY(qml.contains(QStringLiteral("id: settingsPageComponent")));
+        // DOC-01 §4, DOC-03 §2.2: three cached top-level pages only
+        QVERIFY(qml.contains(QStringLiteral("property Item driveHostItem: DriveBrowserPage {}")));
+        QVERIFY(qml.contains(QStringLiteral("property Item transferCenterHostItem: TransferCenterPage {}")));
+        QVERIFY(qml.contains(QStringLiteral("property Item settingsHostItem: SettingsPage {}")));
 
-        QVERIFY(qml.contains(QStringLiteral("root.showPage(transferCenterPageComponent)")));
-        QVERIFY(qml.contains(QStringLiteral("root.showPage(settingsPageComponent)")));
+        QVERIFY(qml.contains(QStringLiteral("root.showPage(\"transfers\", root.transferCenterHostItem)")));
+        QVERIFY(qml.contains(QStringLiteral("root.showPage(\"settings\", root.settingsHostItem)")));
         QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"myfiles\")")));
         QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"shared\")")));
         QVERIFY(qml.contains(QStringLiteral("root.showDriveViewMode(\"trash\")")));
@@ -280,8 +280,7 @@ private slots:
         QVERIFY(qml.contains(QStringLiteral("property string activeDestination: \"drive\"")));
         QVERIFY(qml.contains(QStringLiteral("property string activeDriveViewMode: \"myfiles\"")));
         QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"drive\"")));
-        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"transfers\"")));
-        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = \"settings\"")));
+        QVERIFY(qml.contains(QStringLiteral("root.activeDestination = destination")));
         QVERIFY(!qml.contains(QStringLiteral("root.activeDestination = \"shares\"")));
         QVERIFY(!qml.contains(QStringLiteral("root.activeDestination = \"trash\"")));
         QVERIFY(!qml.contains(QStringLiteral("root.activeDestination = \"files\"")));
@@ -295,7 +294,7 @@ private slots:
         QVERIFY(qml.contains(QStringLiteral("label: \"设置\"")));
         QVERIFY(qml.contains(QStringLiteral("text: \"导航\"")));
         QVERIFY(qml.contains(QStringLiteral("text: \"会话\"")));
-        QVERIFY(qml.contains(QStringLiteral("function showPage(pageComponent)")));
+        QVERIFY(qml.contains(QStringLiteral("function showPage(destination, pageItem)")));
         QVERIFY(qml.contains(QStringLiteral("function showDriveViewMode(viewMode)")));
 
         QVERIFY(!qml.contains(QStringLiteral("PageStateView")));

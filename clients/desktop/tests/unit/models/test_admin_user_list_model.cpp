@@ -15,10 +15,10 @@ private slots:
         QCOMPARE(model.rowCount(), 0);
     }
 
-    void RoleNamesHas10Entries() {
+    void RoleNamesHas11Entries() {
         AdminUserListModel model;
         auto roles = model.roleNames();
-        QCOMPARE(roles.size(), 10);
+        QCOMPARE(roles.size(), 11);
         QVERIFY(roles.contains(AdminUserListModel::IdRole));
         QCOMPARE(roles.value(AdminUserListModel::IdRole), QByteArray("userId"));
         QVERIFY(roles.contains(AdminUserListModel::UsernameRole));
@@ -28,6 +28,8 @@ private slots:
         QVERIFY(roles.contains(AdminUserListModel::StatusRole));
         QVERIFY(roles.contains(AdminUserListModel::StorageQuotaRole));
         QVERIFY(roles.contains(AdminUserListModel::StorageUsedRole));
+        QVERIFY(roles.contains(AdminUserListModel::StorageReservedRole));
+        QCOMPARE(roles.value(AdminUserListModel::StorageReservedRole), QByteArray("storageReserved"));
         QVERIFY(roles.contains(AdminUserListModel::CreatedAtRole));
         QVERIFY(roles.contains(AdminUserListModel::LastLoginAtRole));
     }
@@ -81,6 +83,7 @@ private slots:
         item.status = 1;
         item.storage_quota = 10737418240;
         item.storage_used = 5368709120;
+        item.storage_reserved = 268435456;
         item.created_at = "2026-01-15T08:00:00";
         item.last_login_at = "2026-05-10T14:30:00";
 
@@ -97,6 +100,7 @@ private slots:
         QCOMPARE(model.data(index, AdminUserListModel::StatusRole).toInt(), 1);
         QCOMPARE(model.data(index, AdminUserListModel::StorageQuotaRole).toLongLong(), qint64(10737418240));
         QCOMPARE(model.data(index, AdminUserListModel::StorageUsedRole).toLongLong(), qint64(5368709120));
+        QCOMPARE(model.data(index, AdminUserListModel::StorageReservedRole).toLongLong(), qint64(268435456));
         QCOMPARE(model.data(index, AdminUserListModel::CreatedAtRole).toString(), QString("2026-01-15T08:00:00"));
         QCOMPARE(model.data(index, AdminUserListModel::LastLoginAtRole).toString(), QString("2026-05-10T14:30:00"));
     }
