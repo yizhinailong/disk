@@ -15,6 +15,7 @@
 #include <json/reader.h>
 #include <json/writer.h>
 
+#include "FileListCache.hpp"
 #include "FileListQuery.hpp"
 #include "FileServiceUtils.hpp"
 #include "SearchQuery.hpp"
@@ -50,30 +51,44 @@ namespace disk::file {
                         << ", sort_by=" << query_params.sort_by << ", sort_order=" << query_params.sort_order
                         << ", type=" << query_params.type << ", user_id=" << user_id;
 
-        /// 0. Try Redis cache
-        auto cache_key = disk::redis::RedisKeyPrefix::BuildFileListCacheKey(
-            user_id,
-            query_params.parent_id,
-            query_params.type,
-            query_params.sort_by,
-            query_params.sort_order,
-            query_params.page,
-            query_params.page_size
-        );
+        /// 0. Try the current per-user Redis cache generation.
+        std::string cache_key;
+        bool cache_available = false;
+        auto version_result = co_await FileListCache::GetVersion(m_redis_service, user_id);
+        if (version_result) {
+            cache_available = true;
+            cache_key = disk::redis::RedisKeyPrefix::BuildFileListCacheKey(
+                user_id,
+                *version_result,
+                query_params.parent_id,
+                query_params.type,
+                query_params.sort_by,
+                query_params.sort_order,
+                query_params.page,
+                query_params.page_size
+            );
 
-        auto cache_result = co_await m_redis_service->Get(cache_key);
-        if (cache_result.has_value()) {
-            Logger::Debug() << "File list cache hit: key=" << cache_key;
-            Json::Value cached_json;
-            Json::CharReaderBuilder builder;
-            std::istringstream stream(*cache_result);
-            std::string errors;
-            if (Json::parseFromStream(builder, stream, &cached_json, &errors)) {
-                co_return FileListResponse::FromJson(cached_json);
+            auto cache_result = co_await m_redis_service->Get(cache_key);
+            if (cache_result.has_value()) {
+                Logger::Debug() << "File list cache hit: key=" << cache_key;
+                Json::Value cached_json;
+                Json::CharReaderBuilder builder;
+                std::istringstream stream(*cache_result);
+                std::string errors;
+                if (Json::parseFromStream(builder, stream, &cached_json, &errors)) {
+                    co_return FileListResponse::FromJson(cached_json);
+                }
+                Logger::Warn() << "File list cache parse error: " << errors;
+            } else if (cache_result.error().code != ErrorCode::RedisKeyNotFound) {
+                Logger::Warn() << "File list cache read failed; falling back to database: user_id="
+                               << user_id;
+                cache_available = false;
             }
-            Logger::Warn() << "File list cache parse error: " << errors;
+            Logger::Debug() << "File list cache miss: key=" << cache_key;
+        } else {
+            Logger::Warn() << "File list cache version read failed; falling back to database: user_id="
+                           << user_id;
         }
-        Logger::Debug() << "File list cache miss: key=" << cache_key;
 
         /// 1. 验证 parent_id 文件夹存在且属于用户（如果 parent_id != 0）
         if (query_params.parent_id != 0) {
@@ -97,18 +112,29 @@ namespace disk::file {
             response = co_await query.Execute(query_params, user_id);
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Warn() << "Failed to query file list: " << e.base().what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to query file list"
+            ));
         }
 
         Logger::Debug() << "File list retrieved successfully: total=" << response.pagination.total
                         << ", page=" << query_params.page;
 
-        /// Cache the response
-        {
+        /// Cache only when the generation read succeeded.
+        if (cache_available) {
             auto response_json = response.ToJson();
             Json::StreamWriterBuilder writer_builder;
             writer_builder["indentation"] = "";
             auto serialized = Json::writeString(writer_builder, response_json);
-            co_await m_redis_service->Set(cache_key, serialized, 30);
+            auto set_result = co_await m_redis_service->Set(
+                cache_key,
+                serialized,
+                FileListCache::ENTRY_TTL_SECONDS
+            );
+            if (!set_result) {
+                Logger::Warn() << "File list cache write failed: user_id=" << user_id;
+            }
         }
 
         co_return response;

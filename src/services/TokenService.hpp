@@ -45,9 +45,9 @@ namespace disk {
             [[nodiscard]]
             auto GetAuthCpuPoolActiveTaskCount() -> size_t;
 
-        } ///< namespace detail
-    } ///< namespace services
-} ///< namespace disk
+        } // namespace detail
+    } // namespace services
+} // namespace disk
 
 namespace disk::services {
 
@@ -58,8 +58,8 @@ namespace disk::services {
         uint64_t user_id;
         std::string username;
         std::string jti;
-        int role{0};
-        int status{1};
+        int role{ 0 };
+        int status{ 1 };
     };
 
     /**
@@ -131,19 +131,6 @@ namespace disk::services {
         [[nodiscard]]
         static constexpr auto GetRefreshTokenExpireSeconds() noexcept -> int {
             return 604800;
-        }
-
-        /**
-         * @brief 获取否定缓存条目最大存活时间（秒）
-         *
-         * 未撤销令牌（revoked=false）的本地缓存条目最多存活 5 秒，
-         * 确保撤销操作能在短时间内生效。
-         *
-         * @return int 最大存活时间（秒）
-         */
-        [[nodiscard]]
-        static constexpr auto GetNegativeCacheTtlSeconds() noexcept -> int {
-            return 5;
         }
 
         /**
@@ -222,10 +209,10 @@ namespace disk::services {
         /**
          * @brief 检查访问令牌是否被撤销
          * @param jti 令牌 JTI
-         * @return drogon::Task<bool> true 表示被撤销
+         * @return Result<bool> 成功时返回是否撤销，Redis 故障返回错误
          */
         [[nodiscard]]
-        auto IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<bool>;
+        auto IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<Result<bool>>;
 
         auto ClearRevocationCache() -> void;
 
@@ -238,7 +225,7 @@ namespace disk::services {
          * 正常运行时不调用此方法。
          *
          * @param jti 令牌 JTI
-         * @param is_revoked 是否已撤销
+         * @param is_revoked true 时写入正缓存；false 时移除已有条目
          * @param ttl_seconds 缓存条目存活时间（秒）
          */
         auto SetRevocationCacheEntryForTest(
@@ -339,13 +326,13 @@ namespace disk::services {
         /**
          * @brief 检查分享令牌是否已被撤销
          *
-         * 优先检查本地否定缓存（5秒 TTL），缓存未命中时回退到 Redis。
+         * 优先检查本地已撤销正缓存，缓存未命中时查询共享 Redis。
          *
          * @param token_hash 令牌哈希
-         * @return drogon::Task<bool> true 表示已撤销
+         * @return Result<bool> 成功时返回是否撤销，Redis 故障返回错误
          */
         [[nodiscard]]
-        auto IsShareTokenRevoked(const std::string& token_hash) -> drogon::Task<bool>;
+        auto IsShareTokenRevoked(const std::string& token_hash) -> drogon::Task<Result<bool>>;
 
         /**
          * @brief 测试用：直接向分享令牌撤销缓存插入条目
@@ -353,7 +340,7 @@ namespace disk::services {
          * 仅用于单元测试，绕过 Redis 直接设置本地缓存状态。
          *
          * @param token_hash 令牌哈希
-         * @param is_revoked 是否已撤销
+         * @param is_revoked true 时写入正缓存；false 时移除已有条目
          * @param ttl_seconds 缓存条目存活时间（秒）
          */
         auto SetShareRevocationCacheEntryForTest(
@@ -409,13 +396,11 @@ namespace disk::services {
 
         /// 访问令牌撤销缓存条目
         struct RevocationCacheEntry {
-            bool is_revoked;
             std::chrono::steady_clock::time_point expires_at;
         };
 
         /// 分享令牌撤销缓存条目
         struct ShareCacheEntry {
-            bool is_revoked;
             std::chrono::steady_clock::time_point expires_at;
         };
 
@@ -442,15 +427,21 @@ namespace disk::services {
             /// 按键查找。返回 nullptr 表示未找到或已过期。
             auto Find(const Key& key, std::chrono::steady_clock::time_point now) const -> const Entry* {
                 auto it = m_by_key.find(key);
-                if (it == m_by_key.end()) return nullptr;
-                if (it->second.entry.expires_at <= now) return nullptr;
+                if (it == m_by_key.end()) {
+                    return nullptr;
+                }
+                if (it->second.entry.expires_at <= now) {
+                    return nullptr;
+                }
                 return &it->second.entry;
             }
 
             /// 按键移除单条条目。返回 true 表示成功移除。
             auto Erase(const Key& key) -> bool {
                 auto it = m_by_key.find(key);
-                if (it == m_by_key.end()) return false;
+                if (it == m_by_key.end()) {
+                    return false;
+                }
                 m_by_expiry.erase(it->second.expiry_it);
                 m_by_key.erase(it);
                 return true;
@@ -506,4 +497,4 @@ namespace disk::services {
         std::chrono::steady_clock::time_point m_metrics_last_reset{ std::chrono::steady_clock::now() };
     };
 
-} ///< namespace disk::services
+} // namespace disk::services

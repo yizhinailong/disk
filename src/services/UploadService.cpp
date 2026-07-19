@@ -15,6 +15,7 @@
 #include <drogon/drogon.h>
 
 #include "models/UploadTasks.hpp"
+#include "services/FileListCache.hpp"
 #include "services/UploadLifecycleService.hpp"
 #include "services/UploadTaskRepository.hpp"
 #include "storage/IBlobStore.hpp"
@@ -22,7 +23,6 @@
 #include "storage/UploadStagingStorage.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
-#include "utils/RedisKeyPrefix.hpp"
 
 namespace disk::file {
 
@@ -79,7 +79,9 @@ namespace disk::file {
         for (const auto& upload_task_id : invalidation.upload_task_ids) {
             InvalidateUploadTaskCache(upload_task_id);
         }
-        co_await InvalidateFileListCache(user_id, invalidation.file_list_folder_ids);
+        if (!invalidation.file_list_folder_ids.empty()) {
+            co_await FileListCache::Invalidate(m_redis_service, user_id);
+        }
 
         InitUploadResponse response;
         response.upload_id = lifecycle_result->upload_id;
@@ -348,7 +350,9 @@ namespace disk::file {
         for (const auto& upload_task_id : invalidation.upload_task_ids) {
             InvalidateUploadTaskCache(upload_task_id);
         }
-        co_await InvalidateFileListCache(user_id, invalidation.file_list_folder_ids);
+        if (!invalidation.file_list_folder_ids.empty()) {
+            co_await FileListCache::Invalidate(m_redis_service, user_id);
+        }
 
         CompleteUploadResponse response{};
         if (lifecycle_result->file.has_value()) {
@@ -523,17 +527,6 @@ namespace disk::file {
                 it = m_upload_task_cache.erase(it);
             } else {
                 ++it;
-            }
-        }
-    }
-
-    auto UploadService::InvalidateFileListCache(uint64_t user_id, const std::vector<uint64_t>& folder_ids)
-        -> drogon::Task<void> {
-        for (const auto folder_id : folder_ids) {
-            const auto prefix = disk::redis::RedisKeyPrefix::BuildFileListCachePrefix(user_id, folder_id);
-            auto delete_result = co_await m_redis_service->DeleteByPrefix(prefix);
-            if (!delete_result) {
-                Logger::Warn() << "Failed to invalidate file list cache by prefix: " << prefix;
             }
         }
     }

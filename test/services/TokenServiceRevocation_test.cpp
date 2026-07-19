@@ -8,7 +8,7 @@
  * 回归保护 P0 优化对 TokenService 撤销逻辑的修改。
  * 覆盖场景：
  * (a) 登出后 access token 被撤销，后续请求应被拒绝
- * (b) 过期的本地缓存条目不保留旧的认证成功状态
+ * (b) 未撤销结果不进入本地缓存，过期正缓存可清理
  * (c) 被撤销令牌路径仍映射到 Code::TokenRevoked
  * (d) 成功认证仍暴露 user_id / username 请求属性
  *
@@ -125,7 +125,7 @@ namespace {
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
 
         m_service->SetRevocationCacheEntryForTest("jti-visible-test-2", false, 3600);
-        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 2u);
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
     }
 
     TEST_F(TokenServiceRevocationTest, RevokeAccessTokenSetsCacheToRevokedWithLongTtl) {
@@ -143,11 +143,11 @@ namespace {
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
     }
 
-    TEST_F(TokenServiceRevocationTest, RevocationOverwritesNegativeCacheEntry) {
-        const std::string jti = "jti-negative-cache-overwrite";
+    TEST_F(TokenServiceRevocationTest, RevocationCachesAfterNonRevokedResult) {
+        const std::string jti = "jti-positive-cache-after-miss";
 
-        m_service->SetRevocationCacheEntryForTest(jti, false, TokenService::GetNegativeCacheTtlSeconds());
-        ASSERT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
+        m_service->SetRevocationCacheEntryForTest(jti, false, 5);
+        ASSERT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
         EXPECT_FALSE(m_service->IsRevocationCacheEntryRevokedForTest(jti));
 
         m_service->SetRevocationCacheEntryForTest(jti, true, TokenService::GetAccessTokenExpireSeconds());
@@ -156,15 +156,13 @@ namespace {
         EXPECT_TRUE(m_service->IsRevocationCacheEntryRevokedForTest(jti));
     }
 
-    TEST_F(TokenServiceRevocationTest, NonRevokedTokenHasShortNegativeCacheTtl) {
-        /// 模拟 IsAccessTokenRevoked 查询 Redis 后缓存 revoked=false 的行为：
-        /// 否定缓存 TTL = 5s，确保撤销操作能在短时间内生效
+    TEST_F(TokenServiceRevocationTest, NonRevokedTokenIsNotCached) {
         const std::string jti = "jti-non-revoked";
 
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
-        m_service->SetRevocationCacheEntryForTest(jti, false, TokenService::GetNegativeCacheTtlSeconds());
+        m_service->SetRevocationCacheEntryForTest(jti, false, 5);
 
-        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
     }
 
     TEST_F(TokenServiceRevocationTest, FullRevocationFlowViaCache) {
@@ -217,7 +215,7 @@ namespace {
     TEST_F(TokenServiceRevocationTest, ExpiredEntryInsertedAndThenCleared) {
         /// 验证过期条目插入后确实存在，清除后确实消失
         m_service->SetRevocationCacheEntryForTest("jti-expired-a", true, -10);
-        m_service->SetRevocationCacheEntryForTest("jti-expired-b", false, -5);
+        m_service->SetRevocationCacheEntryForTest("jti-expired-b", true, -5);
         ASSERT_EQ(m_service->GetRevocationCacheSizeForTest(), 2u);
 
         m_service->ClearRevocationCache();
@@ -231,7 +229,7 @@ namespace {
         ASSERT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
 
         /// 插入另一条非过期条目
-        m_service->SetRevocationCacheEntryForTest("jti-fresh-entry-2", false, 5);
+        m_service->SetRevocationCacheEntryForTest("jti-fresh-entry-2", true, 5);
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 2u);
 
         /// 缓存大小不变 — 非过期条目不会被热路径擦除
@@ -242,7 +240,7 @@ namespace {
     TEST_F(TokenServiceRevocationTest, MixedExpiredAndFreshEntries) {
         /// 2 条过期 + 1 条有效
         m_service->SetRevocationCacheEntryForTest("jti-expired-a", true, -1);
-        m_service->SetRevocationCacheEntryForTest("jti-expired-b", false, -1);
+        m_service->SetRevocationCacheEntryForTest("jti-expired-b", true, -1);
         m_service->SetRevocationCacheEntryForTest("jti-valid", true, 7200);
         ASSERT_EQ(m_service->GetRevocationCacheSizeForTest(), 3u);
 
@@ -257,7 +255,7 @@ namespace {
 
     TEST_F(TokenServiceRevocationTest, PerEntryExpiryNoBulkSweep) {
         m_service->SetRevocationCacheEntryForTest("jti-expired-a", true, -1);
-        m_service->SetRevocationCacheEntryForTest("jti-expired-b", false, -1);
+        m_service->SetRevocationCacheEntryForTest("jti-expired-b", true, -1);
         m_service->SetRevocationCacheEntryForTest("jti-valid", true, 7200);
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 3u)
             << "Hot path does not perform bulk sweep";
@@ -343,7 +341,7 @@ namespace {
     }
 
     TEST_F(TokenServiceRevocationTest, OverwriteExistingCacheEntry) {
-        m_service->SetRevocationCacheEntryForTest("jti-overwrite", false, 3600);
+        m_service->SetRevocationCacheEntryForTest("jti-overwrite", true, 3600);
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
 
         m_service->SetRevocationCacheEntryForTest("jti-overwrite", true, 7200);
@@ -360,19 +358,13 @@ namespace {
         EXPECT_EQ(result.value().user_id, 7u);
     }
 
-    /// ================================================================================
-    /// 否定缓存 TTL 常量测试
-    /// ================================================================================
+    TEST_F(TokenServiceRevocationTest, NonRevokedResultRemovesPositiveCacheEntry) {
+        const std::string jti = "jti-positive-to-miss";
+        m_service->SetRevocationCacheEntryForTest(jti, true, 3600);
+        ASSERT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
 
-    TEST_F(TokenServiceRevocationTest, NegativeCacheTtlIsFiveSeconds) {
-        EXPECT_EQ(TokenService::GetNegativeCacheTtlSeconds(), 5);
-    }
-
-    TEST_F(TokenServiceRevocationTest, AccessTokenTtlExceedsNegativeCacheTtl) {
-        EXPECT_GT(
-            TokenService::GetAccessTokenExpireSeconds(),
-            TokenService::GetNegativeCacheTtlSeconds()
-        ) << "Positive cache entries should outlive negative cache entries";
+        m_service->SetRevocationCacheEntryForTest(jti, false, 5);
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
     }
 
     /// ================================================================================
@@ -398,9 +390,9 @@ namespace {
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u)
             << "VerifyAccessToken does not populate revocation cache";
 
-        m_service->SetRevocationCacheEntryForTest(jti, false, TokenService::GetNegativeCacheTtlSeconds());
-        /// Simulate IsAccessTokenRevoked → Redis miss → cache false (not revoked)
-        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
+        m_service->SetRevocationCacheEntryForTest(jti, false, 5);
+        /// Simulate IsAccessTokenRevoked -> Redis miss: no local entry is created.
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
     }
 
     TEST_F(TokenServiceRevocationTest, SimulatedFilterFlowAfterRevocation) {
@@ -444,17 +436,16 @@ namespace {
         /// Step 2: Cache is empty — no prior revocation check
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
 
-        /// Step 3: Simulate IsAccessTokenRevoked → not revoked
-        /// Cache false with short negative TTL
-        m_service->SetRevocationCacheEntryForTest(jti, false, TokenService::GetNegativeCacheTtlSeconds());
+        /// Step 3: Simulate IsAccessTokenRevoked -> not revoked.
+        m_service->SetRevocationCacheEntryForTest(jti, false, 5);
 
         /// Step 4: JwtAuthFilter would set request attributes and return nullptr
         /// attributes: user_id=100, username="valid_user"
-        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
     }
 
     /// ================================================================================
-    /// TTL contract tests — revoked vs non-revoked cache TTLs
+    /// TTL contract tests for revoked entries
     /// ================================================================================
 
     TEST_F(TokenServiceRevocationTest, RevokedEntryUsesAccessTokenTtl) {
@@ -463,10 +454,10 @@ namespace {
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
     }
 
-    TEST_F(TokenServiceRevocationTest, NonRevokedEntryUsesNegativeCacheTtl) {
+    TEST_F(TokenServiceRevocationTest, NonRevokedEntryIsNotStored) {
         const std::string jti = "jti-ttl-non-revoked";
-        m_service->SetRevocationCacheEntryForTest(jti, false, TokenService::GetNegativeCacheTtlSeconds());
-        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
+        m_service->SetRevocationCacheEntryForTest(jti, false, 5);
+        EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
     }
 
     TEST_F(TokenServiceRevocationTest, AccessTokenExpireSecondsIs7200) {
@@ -477,4 +468,4 @@ namespace {
         EXPECT_EQ(TokenService::GetRefreshTokenExpireSeconds(), 604800);
     }
 
-} ///< namespace
+} // namespace

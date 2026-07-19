@@ -23,7 +23,9 @@
 #include <gtest/gtest.h>
 #include <trantor/net/InetAddress.h>
 
+#include "services/FileListCache.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/RedisKeyPrefix.hpp"
 
 namespace {
 
@@ -116,7 +118,9 @@ namespace {
         auto set_result = drogon::sync_wait(m_service->Set(key, "hello-redis"));
         ASSERT_TRUE(set_result.has_value());
 
-        EXPECT_TRUE(drogon::sync_wait(m_service->Exists(key)));
+        auto exists_result = drogon::sync_wait(m_service->Exists(key));
+        ASSERT_TRUE(exists_result.has_value());
+        EXPECT_TRUE(exists_result.value());
 
         auto get_result = drogon::sync_wait(m_service->Get(key));
         ASSERT_TRUE(get_result.has_value());
@@ -125,7 +129,9 @@ namespace {
         auto delete_result = drogon::sync_wait(m_service->Delete(key));
         ASSERT_TRUE(delete_result.has_value());
 
-        EXPECT_FALSE(drogon::sync_wait(m_service->Exists(key)));
+        exists_result = drogon::sync_wait(m_service->Exists(key));
+        ASSERT_TRUE(exists_result.has_value());
+        EXPECT_FALSE(exists_result.value());
 
         auto missing_result = drogon::sync_wait(m_service->Get(key));
         ASSERT_FALSE(missing_result.has_value());
@@ -143,7 +149,9 @@ namespace {
 
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
-        EXPECT_FALSE(drogon::sync_wait(m_service->Exists(key)));
+        auto exists_result = drogon::sync_wait(m_service->Exists(key));
+        ASSERT_TRUE(exists_result.has_value());
+        EXPECT_FALSE(exists_result.value());
 
         auto get_result = drogon::sync_wait(m_service->Get(key));
         ASSERT_FALSE(get_result.has_value());
@@ -188,7 +196,9 @@ namespace {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        EXPECT_TRUE(drogon::sync_wait(m_service->Exists(key)));
+        auto exists_result = drogon::sync_wait(m_service->Exists(key));
+        ASSERT_TRUE(exists_result.has_value());
+        EXPECT_TRUE(exists_result.value());
     }
 
     TEST_F(RedisServiceRuntimeTest, IncrWithExpireSetsTtlOnlyOnFirstIncrement) {
@@ -255,28 +265,40 @@ namespace {
         EXPECT_LE(ttl, WINDOW_SECONDS);
     }
 
-    TEST_F(RedisServiceRuntimeTest, DeleteByPrefixRemovesOnlyMatchingKeys) {
-        const auto matching_key = TrackKey("file_list:42:7:all:name:asc:1:37");
-        const auto other_folder_key = TrackKey("file_list:42:8:all:name:asc:1:37");
-        const auto nested_matching_key = TrackKey("file_list:42:7:file:size:desc:2:50");
-        const auto prefix = m_key_prefix + ":file_list:42:7:";
+    TEST_F(RedisServiceRuntimeTest, FileListCacheVersionStartsAtZeroAndIncrements) {
+        const auto user_id = static_cast<uint64_t>(
+            std::chrono::steady_clock::now().time_since_epoch().count()
+        );
+        const auto version_key = disk::redis::RedisKeyPrefix::BuildFileListCacheVersionKey(user_id);
+        m_tracked_keys.push_back(version_key);
 
-        ASSERT_TRUE(drogon::sync_wait(m_service->Set(matching_key, "match-1")).has_value());
-        ASSERT_TRUE(drogon::sync_wait(m_service->Set(other_folder_key, "other")).has_value());
-        ASSERT_TRUE(drogon::sync_wait(m_service->Set(nested_matching_key, "match-2")).has_value());
+        auto initial_version = drogon::sync_wait(disk::file::FileListCache::GetVersion(m_service, user_id));
+        ASSERT_TRUE(initial_version.has_value());
+        EXPECT_EQ(initial_version.value(), 0);
 
-        auto delete_result = drogon::sync_wait(m_service->DeleteByPrefix(prefix, 10));
-        ASSERT_TRUE(delete_result.has_value());
-        EXPECT_EQ(delete_result.value(), 2);
-        EXPECT_FALSE(drogon::sync_wait(m_service->Exists(matching_key)));
-        EXPECT_FALSE(drogon::sync_wait(m_service->Exists(nested_matching_key)));
-        EXPECT_TRUE(drogon::sync_wait(m_service->Exists(other_folder_key)));
+        drogon::sync_wait(disk::file::FileListCache::Invalidate(m_service, user_id));
+        auto first_version = drogon::sync_wait(disk::file::FileListCache::GetVersion(m_service, user_id));
+        ASSERT_TRUE(first_version.has_value());
+        EXPECT_EQ(first_version.value(), 1);
+
+        drogon::sync_wait(disk::file::FileListCache::Invalidate(m_service, user_id));
+        auto second_version = drogon::sync_wait(disk::file::FileListCache::GetVersion(m_service, user_id));
+        ASSERT_TRUE(second_version.has_value());
+        EXPECT_EQ(second_version.value(), 2);
     }
 
-    TEST_F(RedisServiceRuntimeTest, DeleteByPrefixHandlesEmptyMatch) {
-        auto delete_result = drogon::sync_wait(m_service->DeleteByPrefix(m_key_prefix + ":missing:", 10));
-        ASSERT_TRUE(delete_result.has_value());
-        EXPECT_EQ(delete_result.value(), 0);
+    TEST_F(RedisServiceRuntimeTest, FileListCacheRejectsMalformedVersion) {
+        const auto user_id = static_cast<uint64_t>(
+                                 std::chrono::steady_clock::now().time_since_epoch().count()
+                             ) +
+                             1;
+        const auto version_key = disk::redis::RedisKeyPrefix::BuildFileListCacheVersionKey(user_id);
+        m_tracked_keys.push_back(version_key);
+        ASSERT_TRUE(drogon::sync_wait(m_service->Set(version_key, "not-a-version")).has_value());
+
+        auto version = drogon::sync_wait(disk::file::FileListCache::GetVersion(m_service, user_id));
+        ASSERT_FALSE(version.has_value());
+        EXPECT_EQ(version.error().code, Code::RedisOperationFailed);
     }
 
     TEST(RedisServiceTest, MethodSignatures) {

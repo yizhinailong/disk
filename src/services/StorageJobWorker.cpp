@@ -20,6 +20,7 @@
 
 #include "services/StorageJobContract.hpp"
 #include "services/StorageReconciliationService.hpp"
+#include "services/TransactionRunner.hpp"
 #include "services/TrashService.hpp"
 #include "services/UploadLifecycleService.hpp"
 #include "storage/IBlobStore.hpp"
@@ -317,7 +318,7 @@ namespace disk::jobs {
 
         std::shared_ptr<drogon::orm::Transaction> transaction;
         try {
-            transaction = co_await m_db_client->newTransactionCoro();
+            transaction = co_await disk::file::TransactionRunner::Begin(m_db_client);
             StorageJobRepository repository(m_db_client);
             const auto complete_transaction = [&]() -> drogon::Task<JobExecutionResult> {
                 co_await transaction->execSqlCoro(
@@ -333,7 +334,10 @@ namespace disk::jobs {
                     RollbackQuietly(transaction);
                     co_return RetryableFailure("blob_gc ownership changed before commit");
                 }
-                transaction.reset();
+                auto commit_result = co_await disk::file::TransactionRunner::Commit(transaction);
+                if (!commit_result) {
+                    co_return RetryableFailure("blob_gc transaction commit failed");
+                }
                 co_return JobExecutionResult{
                     .succeeded = true,
                     .outcome_persisted = true,

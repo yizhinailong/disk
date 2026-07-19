@@ -43,6 +43,7 @@ namespace disk::redis {
         static constexpr std::string_view API_RATE_LIMIT_PREFIX = "rate:api";
         static constexpr std::string_view UPLOAD_RATE_LIMIT_PREFIX = "rate:upload";
         static constexpr std::string_view FILE_LIST_CACHE_PREFIX = "file_list";
+        static constexpr std::string_view FILE_LIST_CACHE_VERSION_PREFIX = "file_list_version";
 
         /// ==================== 键构造方法 ====================
 
@@ -177,17 +178,19 @@ namespace disk::redis {
          * @brief Build file list cache key
          *
          * @param user_id User ID
+         * @param version Per-user cache generation
          * @param parent_id Parent folder ID
          * @param type Item type filter (all/file/folder)
          * @param sort_by Sort field name
          * @param sort_order Sort direction (asc/desc)
          * @param page Page number
          * @param page_size Page size
-         * @return std::string Redis key format: "file_list:{user_id}:{parent_id}:{type}:{sort_by}:{sort_order}:{page}:{page_size}"
+         * @return std::string Redis key format: "file_list:{user_id}:{version}:{parent_id}:{type}:{sort_by}:{sort_order}:{page}:{page_size}"
          */
         [[nodiscard]]
         static auto BuildFileListCacheKey(
             uint64_t user_id,
+            uint64_t version,
             uint64_t parent_id,
             const std::string& type,
             const std::string& sort_by,
@@ -197,6 +200,7 @@ namespace disk::redis {
         ) -> std::string {
             return std::string(FILE_LIST_CACHE_PREFIX) + ":" +
                    std::to_string(user_id) + ":" +
+                   std::to_string(version) + ":" +
                    std::to_string(parent_id) + ":" +
                    type + ":" +
                    sort_by + ":" +
@@ -206,20 +210,14 @@ namespace disk::redis {
         }
 
         /**
-         * @brief Build file list cache prefix key for pattern-based invalidation
+         * @brief Build per-user file list cache generation key
          *
          * @param user_id User ID
-         * @param parent_id Parent folder ID
-         * @return std::string Redis key prefix: "file_list:{user_id}:{parent_id}:"
+         * @return std::string Redis key format: "file_list_version:{user_id}"
          */
         [[nodiscard]]
-        static auto BuildFileListCachePrefix(
-            uint64_t user_id,
-            uint64_t parent_id
-        ) -> std::string {
-            return std::string(FILE_LIST_CACHE_PREFIX) + ":" +
-                   std::to_string(user_id) + ":" +
-                   std::to_string(parent_id) + ":";
+        static auto BuildFileListCacheVersionKey(uint64_t user_id) -> std::string {
+            return std::string(FILE_LIST_CACHE_VERSION_PREFIX) + ":" + std::to_string(user_id);
         }
 
         /**

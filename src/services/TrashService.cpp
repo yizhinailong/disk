@@ -25,11 +25,11 @@
 #include "models/Trash.hpp"
 #include "models/Users.hpp"
 #include "services/ContentService.hpp"
+#include "services/FileListCache.hpp"
 #include "services/QuotaService.hpp"
 #include "services/TransactionRunner.hpp"
 #include "services/TrashContentIdResolver.hpp"
 #include "utils/BatchUtils.hpp"
-#include "utils/RedisKeyPrefix.hpp"
 
 namespace disk::trash {
 
@@ -299,14 +299,6 @@ namespace disk::trash {
             ));
         }
 
-        std::vector<uint64_t> affected_folder_ids;
-        for (const auto& trash_item : trash_items) {
-            if (trash_item.original_folder_id != 0) {
-                affected_folder_ids.push_back(trash_item.original_folder_id);
-            }
-        }
-        affected_folder_ids = normalize_ids(std::move(affected_folder_ids));
-
         disk::file::TransactionRunner transaction_runner(m_db_client);
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
@@ -350,9 +342,7 @@ namespace disk::trash {
         result.removed_file_ids = std::move(file_ids_to_delete);
         result.removed_folder_ids = std::move(folder_ids_to_delete);
 
-        if (!affected_folder_ids.empty()) {
-            co_await InvalidateFileListCache(user_id, affected_folder_ids);
-        }
+        co_await disk::file::FileListCache::Invalidate(m_redis_service, user_id);
 
         co_return result;
     }
@@ -422,17 +412,6 @@ namespace disk::trash {
         }
 
         co_return stats;
-    }
-
-    auto TrashService::InvalidateFileListCache(uint64_t user_id, const std::vector<uint64_t>& folder_ids)
-        -> drogon::Task<void> {
-        for (const auto folder_id : folder_ids) {
-            const auto prefix = disk::redis::RedisKeyPrefix::BuildFileListCachePrefix(user_id, folder_id);
-            auto delete_result = co_await m_redis_service->DeleteByPrefix(prefix);
-            if (!delete_result) {
-                Logger::Warn() << "Failed to invalidate file list cache by prefix: " << prefix;
-            }
-        }
     }
 
     auto TrashService::CleanupExpiredTrashItems(
@@ -684,6 +663,10 @@ namespace disk::trash {
         Logger::Info() << "Batch restore completed: total=" << response.summary.total
                        << ", success=" << response.summary.success_count
                        << ", failure=" << response.summary.failure_count;
+
+        if (response.summary.success_count > 0) {
+            co_await disk::file::FileListCache::Invalidate(m_redis_service, user_id);
+        }
 
         co_return response;
     }
@@ -1370,7 +1353,7 @@ namespace disk::trash {
 
         std::shared_ptr<drogon::orm::Transaction> transaction;
         try {
-            transaction = co_await m_db_client->newTransactionCoro();
+            transaction = co_await disk::file::TransactionRunner::Begin(m_db_client);
 
             std::vector<uint64_t> trash_ids;
             trash_ids.reserve(trash_items.size());
@@ -1414,6 +1397,7 @@ namespace disk::trash {
             }
 
             if (trash_ids.empty()) {
+                transaction->rollback();
                 co_return result;
             }
 
@@ -1443,7 +1427,10 @@ namespace disk::trash {
             }
 
             result.deleted_count = static_cast<int>(trash_ids.size());
-            transaction.reset();
+            auto commit_result = co_await disk::file::TransactionRunner::Commit(transaction);
+            if (!commit_result) {
+                throw std::runtime_error("Trash permanent-delete transaction commit failed");
+            }
             co_return result;
         } catch (...) {
             if (transaction) {

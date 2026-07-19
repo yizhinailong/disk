@@ -103,10 +103,10 @@ namespace disk::services {
         /**
          * @brief 检查 Redis 键是否存在
          * @param key Redis 键
-         * @return bool true 表示存在，false 表示不存在
+         * @return Result<bool> 成功时返回是否存在，Redis 故障返回错误
          */
         [[nodiscard]]
-        auto Exists(const std::string& key) -> drogon::Task<bool>;
+        auto Exists(const std::string& key) -> drogon::Task<Result<bool>>;
 
         /**
          * @brief 设置 Redis 键的过期时间
@@ -152,19 +152,6 @@ namespace disk::services {
          */
         [[nodiscard]]
         auto MDelete(const std::vector<std::string>& keys) -> drogon::Task<Result<int>>;
-
-        /**
-         * @brief 按前缀批量删除键
-         *
-         * 使用 SCAN MATCH 逐批查找并删除，避免使用阻塞性的 KEYS 命令。
-         *
-         * @param prefix Redis 键前缀
-         * @param scan_count 每次 SCAN 的建议数量
-         * @return Result<int> 成功返回删除的键数量，失败返回错误
-         */
-        [[nodiscard]]
-        auto DeleteByPrefix(const std::string& prefix, int scan_count = 100)
-            -> drogon::Task<Result<int>>;
 
         /**
          * @brief 原子性递增 Redis 键值（递增 1）
@@ -232,4 +219,4 @@ namespace disk::services {
         drogon::nosql::RedisClientPtr m_redis_client;
     };
 
-} ///< namespace disk::services
+} // namespace disk::services

@@ -16,6 +16,7 @@
 
 #include <json/writer.h>
 
+#include "FileListCache.hpp"
 #include "FileServiceUtils.hpp"
 #include "TransactionRunner.hpp"
 #include "TrashService.hpp"
@@ -26,7 +27,6 @@
 #include "services/QuotaService.hpp"
 #include "services/TransactionRunner.hpp"
 #include "utils/BatchUtils.hpp"
-#include "utils/RedisKeyPrefix.hpp"
 
 namespace disk::file {
 
@@ -98,7 +98,7 @@ namespace disk::file {
             response.name = new_name;
             response.updated_at = updated_at.toDbStringLocal();
 
-            co_await InvalidateFileListCache(user_id, { static_cast<uint64_t>(folder_id) });
+            co_await FileListCache::Invalidate(m_redis_service, user_id);
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
@@ -379,8 +379,9 @@ namespace disk::file {
         Logger::Info() << "Move completed: moved_file_count=" << moved_file_count
                        << ", moved_folder_count=" << moved_folder_count;
 
-        /// Preserve existing target-folder-only file list cache invalidation after successful move.
-        co_await InvalidateFileListCache(user_id, { request.target_folder_id });
+        if (moved_file_count > 0 || moved_folder_count > 0) {
+            co_await FileListCache::Invalidate(m_redis_service, user_id);
+        }
 
         MoveResponse response;
         response.moved_file_count = moved_file_count;
@@ -511,7 +512,7 @@ namespace disk::file {
         auto return_release_error = [&](ErrorInfo error)
             -> drogon::Task<Result<CopyResponse>> {
             if (copied_file_count > 0 || copied_folder_count > 0 || !new_files.empty() || !new_folders.empty()) {
-                co_await InvalidateFileListCache(user_id, { request.target_folder_id });
+                co_await FileListCache::Invalidate(m_redis_service, user_id);
             }
             co_return std::unexpected(error);
         };
@@ -1076,7 +1077,9 @@ namespace disk::file {
                        << ", total_size=" << actual_copy_size
                        << ", released_size=" << released_copy_size;
 
-        co_await InvalidateFileListCache(user_id, { request.target_folder_id });
+        if (response.copied_count > 0) {
+            co_await FileListCache::Invalidate(m_redis_service, user_id);
+        }
 
         co_return response;
     }
@@ -1248,17 +1251,6 @@ namespace disk::file {
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Error() << "Failed to check filename: " << e.base().what();
             co_return false;
-        }
-    }
-
-    auto FileMutationService::InvalidateFileListCache(uint64_t user_id, const std::vector<uint64_t>& folder_ids)
-        -> drogon::Task<void> {
-        for (const auto folder_id : folder_ids) {
-            const auto prefix = disk::redis::RedisKeyPrefix::BuildFileListCachePrefix(user_id, folder_id);
-            auto delete_result = co_await m_redis_service->DeleteByPrefix(prefix);
-            if (!delete_result) {
-                Logger::Warn() << "Failed to invalidate file list cache by prefix: " << prefix;
-            }
         }
     }
 

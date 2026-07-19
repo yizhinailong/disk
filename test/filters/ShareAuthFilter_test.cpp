@@ -264,6 +264,7 @@ namespace {
 
         auto revoke_result = drogon::sync_wait(m_token_service->RevokeShareToken(token_result.value()));
         ASSERT_TRUE(revoke_result.has_value());
+        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
         TrackRevocationKey(token_result.value());
 
         auto request = BuildShareRequestWithToken(token_result.value());
@@ -292,6 +293,7 @@ namespace {
         auto request = BuildShareRequestWithToken(token_result.value());
         auto response = drogon::sync_wait(m_filter->doFilter(request));
         EXPECT_EQ(response, nullptr);
+        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 0u);
 
         ASSERT_TRUE(request->attributes()->find("share_code"));
         ASSERT_TRUE(request->attributes()->find("share_id"));
@@ -362,7 +364,7 @@ namespace {
         }
     }
 
-    TEST_F(ShareAuthFilterRuntimeTest, ValidTokenPopulatesShareRevocationCache) {
+    TEST_F(ShareAuthFilterRuntimeTest, ValidTokenDoesNotPopulateRevocationCache) {
         m_token_service->ClearShareRevocationCache();
         EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 0u);
 
@@ -378,10 +380,10 @@ namespace {
         auto response = drogon::sync_wait(m_filter->doFilter(request));
         EXPECT_EQ(response, nullptr);
 
-        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
+        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 0u);
     }
 
-    TEST_F(ShareAuthFilterRuntimeTest, RepeatedValidTokenUsesCacheNoGrowth) {
+    TEST_F(ShareAuthFilterRuntimeTest, RepeatedValidTokenChecksDoNotPopulateCache) {
         m_token_service->ClearShareRevocationCache();
 
         auto token_result = TokenService::GenerateShareToken(
@@ -395,12 +397,12 @@ namespace {
         auto request1 = BuildShareRequestWithToken(token_result.value());
         auto response1 = drogon::sync_wait(m_filter->doFilter(request1));
         EXPECT_EQ(response1, nullptr);
-        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
+        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 0u);
 
         auto request2 = BuildShareRequestWithToken(token_result.value());
         auto response2 = drogon::sync_wait(m_filter->doFilter(request2));
         EXPECT_EQ(response2, nullptr);
-        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
+        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 0u);
     }
 
 } // namespace

@@ -26,6 +26,7 @@ set(TEST_SOURCES
     services/UploadTaskRepository_test.cpp
     services/FileRepository_test.cpp
     services/FolderRepository_test.cpp
+    services/FileListCache_test.cpp
     services/FileMutationServiceMove_test.cpp
     services/FileServiceAtomicity_test.cpp
     services/FileServiceBatch_test.cpp
@@ -86,6 +87,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/services/FileRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FolderRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/FileListCache.cpp
     ${CMAKE_SOURCE_DIR}/src/services/HealthService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/MultipartUploadJournal.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ProcessRuntime.cpp
@@ -133,6 +135,7 @@ set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/src/services/FileRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FolderRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/FileListCache.cpp
     ${CMAKE_SOURCE_DIR}/src/services/MultipartUploadJournal.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/UploadLifecycleService.cpp

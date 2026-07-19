@@ -57,6 +57,8 @@ namespace disk::filters {
                     co_return disk::Response::Error(disk::error::Code::TokenExpired);
                 case disk::error::Code::TokenRevoked:
                     co_return disk::Response::Error(disk::error::Code::TokenRevoked);
+                case disk::error::Code::RedisOperationFailed:
+                    co_return disk::Response::Error(disk::error::Code::RedisOperationFailed);
                 case disk::error::Code::TokenMalformed:
                 default                               : co_return disk::Response::Error(disk::error::Code::TokenMalformed);
             }

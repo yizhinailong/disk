@@ -76,20 +76,22 @@ TEST(RedisKeyPrefix, BuildLoginRateLimitKeyIPv6WithPort) {
 }
 
 TEST(RedisKeyPrefix, BuildFileListCacheKeyIncludesPageSize) {
-    auto result = RedisKeyPrefix::BuildFileListCacheKey(42, 7, "all", "name", "asc", 3, 50);
-    EXPECT_EQ(result, "file_list:42:7:all:name:asc:3:50");
+    auto result = RedisKeyPrefix::BuildFileListCacheKey(42, 9, 7, "all", "name", "asc", 3, 50);
+    EXPECT_EQ(result, "file_list:42:9:7:all:name:asc:3:50");
 }
 
-TEST(RedisKeyPrefix, BuildFileListCacheKeySeparatesDifferentPageSizes) {
-    auto default_page = RedisKeyPrefix::BuildFileListCacheKey(42, 7, "all", "name", "asc", 1, 20);
-    auto custom_page = RedisKeyPrefix::BuildFileListCacheKey(42, 7, "all", "name", "asc", 1, 37);
+TEST(RedisKeyPrefix, BuildFileListCacheKeySeparatesVersionsAndPageSizes) {
+    auto default_page = RedisKeyPrefix::BuildFileListCacheKey(42, 9, 7, "all", "name", "asc", 1, 20);
+    auto custom_page = RedisKeyPrefix::BuildFileListCacheKey(42, 9, 7, "all", "name", "asc", 1, 37);
+    auto next_version = RedisKeyPrefix::BuildFileListCacheKey(42, 10, 7, "all", "name", "asc", 1, 20);
     EXPECT_NE(default_page, custom_page);
-    EXPECT_EQ(custom_page, "file_list:42:7:all:name:asc:1:37");
+    EXPECT_NE(default_page, next_version);
+    EXPECT_EQ(custom_page, "file_list:42:9:7:all:name:asc:1:37");
 }
 
-TEST(RedisKeyPrefix, BuildFileListCachePrefix) {
-    auto result = RedisKeyPrefix::BuildFileListCachePrefix(42, 7);
-    EXPECT_EQ(result, "file_list:42:7:");
+TEST(RedisKeyPrefix, BuildFileListCacheVersionKey) {
+    auto result = RedisKeyPrefix::BuildFileListCacheVersionKey(42);
+    EXPECT_EQ(result, "file_list_version:42");
 }
 
 /// ==================== Share Token Redis Key Tests ====================

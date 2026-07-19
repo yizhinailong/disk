@@ -22,16 +22,16 @@
 #include <trantor/utils/Date.h>
 
 #include "dtos/FileDto.hpp"
-#include "services/RedisService.hpp"
 #include "models/Files.hpp"
 #include "models/UploadTasks.hpp"
+#include "services/RedisService.hpp"
 #include "storage/UploadStagingStorage.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::storage {
     class IBlobStore;
     class IFileStorage;
-}
+} // namespace disk::storage
 
 namespace disk::file {
 
@@ -193,23 +193,13 @@ namespace disk::file {
         auto FindUploadStagingSession(const std::string& upload_id, uint64_t user_id) const
             -> drogon::Task<Result<storage::UploadStagingSession>>;
 
-        /**
-         * @brief Invalidate file list cache for specified user and folders
-         *
-         * @param user_id User ID
-         * @param folder_ids Folder IDs whose file list caches should be invalidated
-         * @return drogon::Task<void>
-         */
-        auto InvalidateFileListCache(uint64_t user_id, const std::vector<uint64_t>& folder_ids)
-            -> drogon::Task<void>;
-
-        drogon::orm::DbClientPtr m_db_client;                                      ///< 数据库客户端
-        storage::IFileStorage* m_storage{};                                        ///< 文件存储实例边界
-        storage::UploadStagingStorage* m_upload_staging_storage{};                 ///< 上传暂存存储接口
-        storage::IBlobStore* m_blob_store{};                                       ///< 最终内容 Blob 存储接口
-        std::shared_ptr<disk::services::RedisService> m_redis_service{disk::services::RedisService::GetInstance()};  ///< Redis 服务
-        std::unordered_map<std::string, UploadTaskCacheEntry> m_upload_task_cache; ///< 上传任务元数据缓存
-        std::shared_mutex m_upload_task_cache_mutex;                               ///< 上传任务缓存读写锁
+        drogon::orm::DbClientPtr m_db_client;                                                                         ///< 数据库客户端
+        storage::IFileStorage* m_storage{};                                                                           ///< 文件存储实例边界
+        storage::UploadStagingStorage* m_upload_staging_storage{};                                                    ///< 上传暂存存储接口
+        storage::IBlobStore* m_blob_store{};                                                                          ///< 最终内容 Blob 存储接口
+        std::shared_ptr<disk::services::RedisService> m_redis_service{ disk::services::RedisService::GetInstance() }; ///< Redis 服务
+        std::unordered_map<std::string, UploadTaskCacheEntry> m_upload_task_cache;                                    ///< 上传任务元数据缓存
+        std::shared_mutex m_upload_task_cache_mutex;                                                                  ///< 上传任务缓存读写锁
     };
 
-} ///< namespace disk::file
+} // namespace disk::file

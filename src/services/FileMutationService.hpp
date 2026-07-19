@@ -180,21 +180,11 @@ namespace disk::file {
             uint64_t user_id
         ) const -> drogon::Task<bool>;
 
-        /**
-         * @brief Invalidate file list cache for specified user and folders
-         *
-         * @param user_id User ID
-         * @param folder_ids Folder IDs whose file list caches should be invalidated
-         * @return drogon::Task<void>
-         */
-        auto InvalidateFileListCache(uint64_t user_id, const std::vector<uint64_t>& folder_ids)
-            -> drogon::Task<void>;
-
-        drogon::orm::DbClientPtr m_db_client;                                      ///< 数据库客户端
-        FileRepository m_file_repository;                                           ///< 文件持久化原语
-        disk::folder::FolderRepository m_folder_repository;                         ///< 文件夹持久化原语
-        storage::IFileStorage* m_storage{};                                          ///< 文件存储接口
-        std::shared_ptr<disk::services::RedisService> m_redis_service{disk::services::RedisService::GetInstance()};  ///< Redis 服务
+        drogon::orm::DbClientPtr m_db_client;                                                                         ///< 数据库客户端
+        FileRepository m_file_repository;                                                                             ///< 文件持久化原语
+        disk::folder::FolderRepository m_folder_repository;                                                           ///< 文件夹持久化原语
+        storage::IFileStorage* m_storage{};                                                                           ///< 文件存储接口
+        std::shared_ptr<disk::services::RedisService> m_redis_service{ disk::services::RedisService::GetInstance() }; ///< Redis 服务
     };
 
-} ///< namespace disk::file
+} // namespace disk::file

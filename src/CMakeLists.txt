@@ -108,6 +108,7 @@ set(Services_HEADERS
     services/AuthService.hpp
     services/CleanupService.hpp
     services/ContentService.hpp
+    services/FileListCache.hpp
     services/FileListQuery.hpp
     services/FileMutationService.hpp
     services/FileQueryService.hpp
@@ -146,6 +147,7 @@ set(Services_SOURCES
     services/AuthService.cpp
     services/CleanupService.cpp
     services/ContentService.cpp
+    services/FileListCache.cpp
     services/FileListQuery.cpp
     services/FileMutationService.cpp
     services/FileQueryService.cpp

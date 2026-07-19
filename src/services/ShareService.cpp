@@ -26,6 +26,8 @@
 #include "models/ShareFiles.hpp"
 #include "models/Shares.hpp"
 #include "services/ContentService.hpp"
+#include "services/FileListCache.hpp"
+#include "services/TransactionRunner.hpp"
 #include "utils/BatchUtils.hpp"
 #include "utils/HashUtil.hpp"
 #include "utils/RedisKeyPrefix.hpp"
@@ -172,7 +174,7 @@ namespace disk::share {
         Shares created_share;
         std::shared_ptr<drogon::orm::Transaction> transaction;
         try {
-            transaction = co_await m_db_client->newTransactionCoro();
+            transaction = co_await disk::file::TransactionRunner::Begin(m_db_client);
 
             /// 插入分享行
             CoroMapper<Shares> share_mapper(transaction);
@@ -243,7 +245,10 @@ namespace disk::share {
         }
 
         // Commit and release the transaction connection before the fail-open audit insert.
-        transaction.reset();
+        auto commit_result = co_await disk::file::TransactionRunner::Commit(transaction);
+        if (!commit_result) {
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to create share"));
+        }
 
         /// 7. 构建响应
         CreateShareResponse response;
@@ -1135,7 +1140,7 @@ namespace disk::share {
                 }
             }
 
-            transaction = co_await m_db_client->newTransactionCoro();
+            transaction = co_await disk::file::TransactionRunner::Begin(m_db_client);
             if (total_size > 0) {
                 auto quota_result = co_await transaction->execSqlCoro(
                     "UPDATE users SET storage_used = storage_used + $1 " "WHERE id = $2 AND storage_used + $3 <= storage_quota",
@@ -1149,118 +1154,23 @@ namespace disk::share {
                 }
             }
 
-            CoroMapper<Files> file_mapper(transaction);
-            CoroMapper<Folders> folder_mapper(transaction);
             disk::content::ContentService content_service(m_db_client);
             SaveShareItemsResponse response;
             uint64_t actual_size = 0;
             int saved_top_level_count = 0;
 
-            for (const auto& source_file : files_to_save) {
-                auto conflict_rows = co_await transaction->execSqlCoro(
-                    "SELECT id FROM files WHERE user_id = $1 AND folder_id = $2 AND name = $3 LIMIT 1",
-                    target_user_id,
-                    request.target_folder_id,
-                    source_file.getValueOfName()
-                );
-                if (!conflict_rows.empty()) {
-                    continue;
-                }
+            {
+                CoroMapper<Files> file_mapper(transaction);
+                CoroMapper<Folders> folder_mapper(transaction);
 
-                if (source_file.getContentId()) {
-                    auto increment_result = co_await content_service.IncrementRefCount(
-                        transaction,
-                        *source_file.getContentId()
+                for (const auto& source_file : files_to_save) {
+                    auto conflict_rows = co_await transaction->execSqlCoro(
+                        "SELECT id FROM files WHERE user_id = $1 AND folder_id = $2 AND name = $3 LIMIT 1",
+                        target_user_id,
+                        request.target_folder_id,
+                        source_file.getValueOfName()
                     );
-                    if (!increment_result) {
-                        throw std::runtime_error(increment_result.error().message);
-                    }
-                }
-
-                Files copied_file;
-                copied_file.setUserId(target_user_id);
-                if (source_file.getContentId()) {
-                    copied_file.setContentId(*source_file.getContentId());
-                }
-                copied_file.setFolderId(request.target_folder_id);
-                copied_file.setName(source_file.getValueOfName());
-                copied_file.setExtension(source_file.getValueOfExtension());
-                copied_file.setSize(source_file.getValueOfSize());
-                copied_file.setMimeType(source_file.getValueOfMimeType());
-                copied_file.setPath(BuildFilePath(target_path, source_file.getValueOfName()));
-                copied_file.setIsFavorite(0);
-                copied_file.setDownloadCount(0);
-                copied_file.setCreatedAt(trantor::Date::now());
-                copied_file.setUpdatedAt(trantor::Date::now());
-                co_await file_mapper.insert(copied_file);
-                ++response.saved_file_count;
-                ++saved_top_level_count;
-                actual_size += source_file.getValueOfSize();
-            }
-
-            for (const auto& plan : folder_plans) {
-                auto conflict_rows = co_await transaction->execSqlCoro(
-                    "SELECT id FROM folders WHERE user_id = $1 AND parent_id = $2 AND name = $3 LIMIT 1",
-                    target_user_id,
-                    request.target_folder_id,
-                    plan.root.getValueOfName()
-                );
-                if (!conflict_rows.empty()) {
-                    continue;
-                }
-
-                std::unordered_map<uint64_t, uint64_t> folder_id_map;
-                std::unordered_map<uint64_t, std::string> folder_path_map;
-                auto root_path = BuildFolderPath(target_path, plan.root.getValueOfName());
-                auto root_depth = target_depth + 1;
-
-                Folders root_folder;
-                root_folder.setUserId(target_user_id);
-                root_folder.setParentId(request.target_folder_id);
-                root_folder.setName(plan.root.getValueOfName());
-                root_folder.setPath(root_path);
-                root_folder.setDepth(root_depth);
-                root_folder.setItemCount(plan.root.getValueOfItemCount());
-                root_folder.setCreatedAt(trantor::Date::now());
-                root_folder.setUpdatedAt(trantor::Date::now());
-                auto inserted_root = co_await folder_mapper.insert(root_folder);
-                folder_id_map[plan.root.getValueOfId()] = inserted_root.getValueOfId();
-                folder_path_map[plan.root.getValueOfId()] = root_path;
-                ++response.saved_folder_count;
-                ++saved_top_level_count;
-
-                for (const auto& folder : plan.folders) {
-                    if (folder.getValueOfId() == plan.root.getValueOfId()) {
-                        continue;
-                    }
-                    auto parent_it = folder_id_map.find(folder.getValueOfParentId());
-                    auto parent_path_it = folder_path_map.find(folder.getValueOfParentId());
-                    if (parent_it == folder_id_map.end() || parent_path_it == folder_path_map.end()) {
-                        continue;
-                    }
-
-                    auto folder_path = BuildFolderPath(parent_path_it->second, folder.getValueOfName());
-                    auto depth_delta = folder.getValueOfDepth() > plan.root.getValueOfDepth() ? folder.getValueOfDepth() - plan.root.getValueOfDepth() : 1;
-
-                    Folders copied_folder;
-                    copied_folder.setUserId(target_user_id);
-                    copied_folder.setParentId(parent_it->second);
-                    copied_folder.setName(folder.getValueOfName());
-                    copied_folder.setPath(folder_path);
-                    copied_folder.setDepth(root_depth + depth_delta);
-                    copied_folder.setItemCount(folder.getValueOfItemCount());
-                    copied_folder.setCreatedAt(trantor::Date::now());
-                    copied_folder.setUpdatedAt(trantor::Date::now());
-                    auto inserted_folder = co_await folder_mapper.insert(copied_folder);
-                    folder_id_map[folder.getValueOfId()] = inserted_folder.getValueOfId();
-                    folder_path_map[folder.getValueOfId()] = folder_path;
-                    ++response.saved_folder_count;
-                }
-
-                for (const auto& source_file : plan.files) {
-                    auto folder_it = folder_id_map.find(source_file.getValueOfFolderId());
-                    auto path_it = folder_path_map.find(source_file.getValueOfFolderId());
-                    if (folder_it == folder_id_map.end() || path_it == folder_path_map.end()) {
+                    if (!conflict_rows.empty()) {
                         continue;
                     }
 
@@ -1279,19 +1189,117 @@ namespace disk::share {
                     if (source_file.getContentId()) {
                         copied_file.setContentId(*source_file.getContentId());
                     }
-                    copied_file.setFolderId(folder_it->second);
+                    copied_file.setFolderId(request.target_folder_id);
                     copied_file.setName(source_file.getValueOfName());
                     copied_file.setExtension(source_file.getValueOfExtension());
                     copied_file.setSize(source_file.getValueOfSize());
                     copied_file.setMimeType(source_file.getValueOfMimeType());
-                    copied_file.setPath(BuildFilePath(path_it->second, source_file.getValueOfName()));
+                    copied_file.setPath(BuildFilePath(target_path, source_file.getValueOfName()));
                     copied_file.setIsFavorite(0);
                     copied_file.setDownloadCount(0);
                     copied_file.setCreatedAt(trantor::Date::now());
                     copied_file.setUpdatedAt(trantor::Date::now());
                     co_await file_mapper.insert(copied_file);
                     ++response.saved_file_count;
+                    ++saved_top_level_count;
                     actual_size += source_file.getValueOfSize();
+                }
+
+                for (const auto& plan : folder_plans) {
+                    auto conflict_rows = co_await transaction->execSqlCoro(
+                        "SELECT id FROM folders WHERE user_id = $1 AND parent_id = $2 AND name = $3 LIMIT 1",
+                        target_user_id,
+                        request.target_folder_id,
+                        plan.root.getValueOfName()
+                    );
+                    if (!conflict_rows.empty()) {
+                        continue;
+                    }
+
+                    std::unordered_map<uint64_t, uint64_t> folder_id_map;
+                    std::unordered_map<uint64_t, std::string> folder_path_map;
+                    auto root_path = BuildFolderPath(target_path, plan.root.getValueOfName());
+                    auto root_depth = target_depth + 1;
+
+                    Folders root_folder;
+                    root_folder.setUserId(target_user_id);
+                    root_folder.setParentId(request.target_folder_id);
+                    root_folder.setName(plan.root.getValueOfName());
+                    root_folder.setPath(root_path);
+                    root_folder.setDepth(root_depth);
+                    root_folder.setItemCount(plan.root.getValueOfItemCount());
+                    root_folder.setCreatedAt(trantor::Date::now());
+                    root_folder.setUpdatedAt(trantor::Date::now());
+                    auto inserted_root = co_await folder_mapper.insert(root_folder);
+                    folder_id_map[plan.root.getValueOfId()] = inserted_root.getValueOfId();
+                    folder_path_map[plan.root.getValueOfId()] = root_path;
+                    ++response.saved_folder_count;
+                    ++saved_top_level_count;
+
+                    for (const auto& folder : plan.folders) {
+                        if (folder.getValueOfId() == plan.root.getValueOfId()) {
+                            continue;
+                        }
+                        auto parent_it = folder_id_map.find(folder.getValueOfParentId());
+                        auto parent_path_it = folder_path_map.find(folder.getValueOfParentId());
+                        if (parent_it == folder_id_map.end() || parent_path_it == folder_path_map.end()) {
+                            continue;
+                        }
+
+                        auto folder_path = BuildFolderPath(parent_path_it->second, folder.getValueOfName());
+                        auto depth_delta = folder.getValueOfDepth() > plan.root.getValueOfDepth() ? folder.getValueOfDepth() - plan.root.getValueOfDepth() : 1;
+
+                        Folders copied_folder;
+                        copied_folder.setUserId(target_user_id);
+                        copied_folder.setParentId(parent_it->second);
+                        copied_folder.setName(folder.getValueOfName());
+                        copied_folder.setPath(folder_path);
+                        copied_folder.setDepth(root_depth + depth_delta);
+                        copied_folder.setItemCount(folder.getValueOfItemCount());
+                        copied_folder.setCreatedAt(trantor::Date::now());
+                        copied_folder.setUpdatedAt(trantor::Date::now());
+                        auto inserted_folder = co_await folder_mapper.insert(copied_folder);
+                        folder_id_map[folder.getValueOfId()] = inserted_folder.getValueOfId();
+                        folder_path_map[folder.getValueOfId()] = folder_path;
+                        ++response.saved_folder_count;
+                    }
+
+                    for (const auto& source_file : plan.files) {
+                        auto folder_it = folder_id_map.find(source_file.getValueOfFolderId());
+                        auto path_it = folder_path_map.find(source_file.getValueOfFolderId());
+                        if (folder_it == folder_id_map.end() || path_it == folder_path_map.end()) {
+                            continue;
+                        }
+
+                        if (source_file.getContentId()) {
+                            auto increment_result = co_await content_service.IncrementRefCount(
+                                transaction,
+                                *source_file.getContentId()
+                            );
+                            if (!increment_result) {
+                                throw std::runtime_error(increment_result.error().message);
+                            }
+                        }
+
+                        Files copied_file;
+                        copied_file.setUserId(target_user_id);
+                        if (source_file.getContentId()) {
+                            copied_file.setContentId(*source_file.getContentId());
+                        }
+                        copied_file.setFolderId(folder_it->second);
+                        copied_file.setName(source_file.getValueOfName());
+                        copied_file.setExtension(source_file.getValueOfExtension());
+                        copied_file.setSize(source_file.getValueOfSize());
+                        copied_file.setMimeType(source_file.getValueOfMimeType());
+                        copied_file.setPath(BuildFilePath(path_it->second, source_file.getValueOfName()));
+                        copied_file.setIsFavorite(0);
+                        copied_file.setDownloadCount(0);
+                        copied_file.setCreatedAt(trantor::Date::now());
+                        copied_file.setUpdatedAt(trantor::Date::now());
+                        co_await file_mapper.insert(copied_file);
+                        ++response.saved_file_count;
+                        actual_size += source_file.getValueOfSize();
+                    }
                 }
             }
 
@@ -1315,6 +1323,16 @@ namespace disk::share {
                     reserved_size - consumed_size,
                     target_user_id
                 );
+            }
+
+            auto save_commit_result = co_await disk::file::TransactionRunner::Commit(transaction);
+            if (!save_commit_result) {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to save share items")
+                );
+            }
+            if (response.saved_count > 0) {
+                co_await disk::file::FileListCache::Invalidate(m_redis_service, target_user_id);
             }
 
             co_return response;

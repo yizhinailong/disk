@@ -9,6 +9,9 @@
 
 #pragma once
 
+#include <atomic>
+#include <coroutine>
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <utility>
@@ -19,6 +22,125 @@
 #include "utils/LogHelper.hpp"
 
 namespace disk::file {
+
+    namespace transaction_internal {
+
+        class BeginAwaiter final {
+        public:
+            explicit BeginAwaiter(drogon::orm::DbClientPtr db_client)
+                : m_db_client(std::move(db_client)) {
+            }
+
+            [[nodiscard]] auto await_ready() const noexcept -> bool {
+                return false;
+            }
+
+            auto await_suspend(std::coroutine_handle<> handle) -> bool {
+                m_db_client->newTransactionAsync(
+                    [this, handle](const std::shared_ptr<drogon::orm::Transaction>& transaction) {
+                        m_transaction = transaction;
+                        uint8_t expected = INITIALIZING;
+                        if (m_state.compare_exchange_strong(
+                                expected,
+                                COMPLETED,
+                                std::memory_order_acq_rel,
+                                std::memory_order_acquire
+                            )) {
+                            return;
+                        }
+                        if (expected == SUSPENDED) {
+                            handle.resume();
+                        }
+                    }
+                );
+
+                uint8_t expected = INITIALIZING;
+                if (m_state.compare_exchange_strong(
+                        expected,
+                        SUSPENDED,
+                        std::memory_order_acq_rel,
+                        std::memory_order_acquire
+                    )) {
+                    return true;
+                }
+                return false;
+            }
+
+            [[nodiscard]] auto await_resume() -> std::shared_ptr<drogon::orm::Transaction> {
+                if (!m_transaction) {
+                    throw drogon::orm::TimeoutError(
+                        "Timeout, no connection available for transaction"
+                    );
+                }
+                return std::move(m_transaction);
+            }
+
+        private:
+            static constexpr uint8_t INITIALIZING = 0;
+            static constexpr uint8_t SUSPENDED = 1;
+            static constexpr uint8_t COMPLETED = 2;
+
+            drogon::orm::DbClientPtr m_db_client;
+            std::shared_ptr<drogon::orm::Transaction> m_transaction;
+            std::atomic<uint8_t> m_state{ INITIALIZING };
+        };
+
+        class CommitAwaiter final {
+        public:
+            explicit CommitAwaiter(std::shared_ptr<drogon::orm::Transaction>& transaction)
+                : m_transaction(std::move(transaction)) {
+            }
+
+            [[nodiscard]] auto await_ready() const noexcept -> bool {
+                return false;
+            }
+
+            auto await_suspend(std::coroutine_handle<> handle) -> bool {
+                m_transaction->setCommitCallback([this, handle](bool succeeded) {
+                    m_succeeded = succeeded;
+                    uint8_t expected = INITIALIZING;
+                    if (m_state.compare_exchange_strong(
+                            expected,
+                            COMPLETED,
+                            std::memory_order_acq_rel,
+                            std::memory_order_acquire
+                        )) {
+                        return;
+                    }
+                    if (expected == SUSPENDED) {
+                        handle.resume();
+                    }
+                });
+
+                m_transaction.reset();
+
+                uint8_t expected = INITIALIZING;
+                if (m_state.compare_exchange_strong(
+                        expected,
+                        SUSPENDED,
+                        std::memory_order_acq_rel,
+                        std::memory_order_acquire
+                    )) {
+                    return true;
+                }
+                return false;
+            }
+
+            [[nodiscard]] auto await_resume() const noexcept -> bool {
+                return m_succeeded;
+            }
+
+        private:
+            static constexpr uint8_t INITIALIZING = 0;
+            static constexpr uint8_t SUSPENDED = 1;
+            static constexpr uint8_t COMPLETED = 2;
+
+            std::shared_ptr<drogon::orm::Transaction> m_transaction;
+            std::atomic<uint8_t> m_state{ INITIALIZING };
+            bool m_succeeded{ false };
+        };
+
+    } // namespace transaction_internal
 
     /**
      * @brief 数据库事务运行器
@@ -42,11 +164,20 @@ namespace disk::file {
         auto Run(Func&& func) const -> drogon::Task<Result<void>> {
             std::shared_ptr<drogon::orm::Transaction> transaction;
             try {
-                transaction = co_await m_db_client->newTransactionCoro();
-                auto result = co_await std::forward<Func>(func)(transaction);
+                transaction = co_await Begin(m_db_client);
+                auto transaction_client = std::static_pointer_cast<drogon::orm::DbClient>(transaction);
+                auto result = co_await std::forward<Func>(func)(transaction_client);
+                transaction_client.reset();
                 if (!result) {
                     rollbackQuietly(transaction);
                     co_return std::unexpected(result.error());
+                }
+
+                auto commit_result = co_await Commit(transaction);
+                if (!commit_result) {
+                    rollbackQuietly(transaction);
+                    Logger::Error() << "Database transaction commit failed";
+                    co_return std::unexpected(m_default_error);
                 }
                 co_return {};
             } catch (const drogon::orm::DrogonDbException& e) {
@@ -58,6 +189,42 @@ namespace disk::file {
                 Logger::Error() << "Database transaction failed: " << e.what();
                 co_return std::unexpected(m_default_error);
             }
+        }
+
+        [[nodiscard]]
+        static auto Begin(const drogon::orm::DbClientPtr& db_client)
+            -> transaction_internal::BeginAwaiter {
+            return transaction_internal::BeginAwaiter(db_client);
+        }
+
+        [[nodiscard]]
+        static auto Commit(std::shared_ptr<drogon::orm::Transaction>& transaction)
+            -> drogon::Task<Result<void>> {
+            if (!transaction) {
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::InternalError,
+                    "Database transaction is not available"
+                ));
+            }
+
+            if (transaction.use_count() != 1) {
+                Logger::Error() << "Database transaction has outstanding owners at commit: count="
+                                << transaction.use_count();
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::InternalError,
+                    "Database transaction cannot be committed"
+                ));
+            }
+
+            const auto committed = co_await transaction_internal::CommitAwaiter(transaction);
+            if (!committed) {
+                co_return std::unexpected(ErrorInfo(
+                    ErrorCode::InternalError,
+                    "Database transaction commit failed"
+                ));
+            }
+
+            co_return {};
         }
 
     private:

@@ -19,6 +19,7 @@
 #include "dtos/FolderDto.hpp"
 #include "models/Folders.hpp"
 #include "services/FolderRepository.hpp"
+#include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::folder {
@@ -156,8 +157,9 @@ namespace disk::folder {
         auto BuildTreeFromFlatList(std::vector<FolderNodeData>& nodes, uint64_t root_id) const
             -> FolderTreeNode;
 
-        drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
-        FolderRepository m_folder_repository; ///< 文件夹持久化原语
+        drogon::orm::DbClientPtr m_db_client;                                                                         ///< 数据库客户端
+        FolderRepository m_folder_repository;                                                                         ///< 文件夹持久化原语
+        std::shared_ptr<disk::services::RedisService> m_redis_service{ disk::services::RedisService::GetInstance() }; ///< Redis 服务
     };
 
-} ///< namespace disk::folder
+} // namespace disk::folder

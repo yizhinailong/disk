@@ -270,7 +270,7 @@ auto GetUser(int id) -> Result<User> {
 
 **POST** `/api/auth/logout`
 
-使当前令牌失效。登出成功响应返回前，服务端必须将该 access token 的本地撤销缓存覆盖为已撤销，即使同一 JTI 之前存在“未撤销”否定缓存，后续受保护请求也必须立即返回 `40111` / HTTP 401。
+使当前令牌失效。撤销状态成功写入共享 Redis 后，服务端才返回登出成功；各 API 实例不缓存“未撤销”结果，因此同一 JTI 的下一次受保护请求必须立即返回 `40111` / HTTP 401。Redis 撤销校验不可用时采用 fail closed，返回 `70002` / HTTP 500，且请求不得进入业务处理。
 
 #### 请求头
 
@@ -4041,6 +4041,8 @@ Share Token（通过 `/api/share/access` 获取）需要以下安全措施：
 
 1. `ShareAuthFilter` 验证 JWT 签名、issuer、`type`、过期时间、JTI、scope 结构/绑定以及可选的单 token Redis 黑名单。
 2. 通过 JWT 验证后，每个访客业务路径仍重新读取分享记录并检查 `shares.status`、`shares.expires_at`；下载元数据、内容下载和保存到网盘还必须检查数据库当前 `permission = 'download'`。
+
+各 API 实例只正缓存已撤销的 token hash，不缓存“未撤销”结果；缓存未命中必须查询共享 Redis。Redis 校验失败返回 `70002` / HTTP 500，且不得把错误降级为“未撤销”。
 
 取消分享采用分享记录状态撤销语义：取消操作把 `shares.status` 更新为 cancelled 后，所有已签发 token 在下一次访客操作的数据库状态检查中立即失效，不要求枚举 token，也不要求把每个 token hash 写入 Redis。Redis `share_token_blacklist:{token_hash}` 仅用于撤销某一个具体 token，不能替代业务路径的实时分享状态检查。
 

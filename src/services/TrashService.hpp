@@ -209,9 +209,6 @@ namespace disk::trash {
             const std::vector<uint64_t>& folder_ids
         ) const -> drogon::Task<ShareCleanupStats>;
 
-        auto InvalidateFileListCache(uint64_t user_id, const std::vector<uint64_t>& folder_ids)
-            -> drogon::Task<void>;
-
         [[nodiscard]]
         auto PermanentlyDeleteTrashItems(
             const std::vector<TrashLifecycleRecord>& trash_items,

@@ -69,14 +69,20 @@ namespace disk::filters {
 
         const auto& claims = verify_result.value();
 
-        if (co_await token_service->IsAccessTokenRevoked(claims.jti)) {
+        auto revocation_result = co_await token_service->IsAccessTokenRevoked(claims.jti);
+        if (!revocation_result) {
+            Logger::Error() << "Access token revocation check failed: user_id=" << claims.user_id;
+            co_return disk::Response::Error(revocation_result.error().code);
+        }
+
+        if (revocation_result.value()) {
             Logger::Warn() << "Token revoked: user_id=" << claims.user_id << ", jti=" << claims.jti;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             Logger::Info() << "[jwt_auth_filter] duration_us=" << duration_us
-                     << " outcome=failure user_id=" << claims.user_id;
+                           << " outcome=failure user_id=" << claims.user_id;
             co_return disk::Response::Error(disk::error::Code::TokenRevoked);
         }
 
@@ -89,9 +95,9 @@ namespace disk::filters {
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         Logger::Info() << "[jwt_auth_filter] duration_us=" << duration_us
-                 << " outcome=success user_id=" << claims.user_id;
+                       << " outcome=success user_id=" << claims.user_id;
 
         co_return nullptr;
     }
 
-} ///< namespace disk::filters
+} // namespace disk::filters

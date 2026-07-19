@@ -505,13 +505,13 @@ namespace {
         EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 0u);
     }
 
-    TEST_F(ShareRevocationCacheTest, SetCacheEntryIncreasesSize) {
+    TEST_F(ShareRevocationCacheTest, NonRevokedResultIsNotCached) {
         m_token_service->SetShareRevocationCacheEntryForTest("hash1", false, 5);
-        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
+        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 0u);
     }
 
     TEST_F(ShareRevocationCacheTest, ClearCacheEmptiesAllEntries) {
-        m_token_service->SetShareRevocationCacheEntryForTest("hash1", false, 5);
+        m_token_service->SetShareRevocationCacheEntryForTest("hash1", true, 5);
         m_token_service->SetShareRevocationCacheEntryForTest("hash2", true, 10);
         EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 2u);
 
@@ -519,22 +519,18 @@ namespace {
         EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 0u);
     }
 
-    TEST_F(ShareRevocationCacheTest, NegativeCacheTtlIs5Seconds) {
-        EXPECT_EQ(TokenService::GetNegativeCacheTtlSeconds(), 5);
-    }
-
-    TEST_F(ShareRevocationCacheTest, MultipleEntriesIndependentlyTracked) {
+    TEST_F(ShareRevocationCacheTest, OnlyRevokedEntriesAreTracked) {
         m_token_service->SetShareRevocationCacheEntryForTest("hash_not_revoked", false, 5);
         m_token_service->SetShareRevocationCacheEntryForTest("hash_revoked", true, 3600);
-        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 2u);
+        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
     }
 
-    TEST_F(ShareRevocationCacheTest, SameKeyOverwritesPreviousEntry) {
-        m_token_service->SetShareRevocationCacheEntryForTest("hash1", false, 5);
-        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
-
+    TEST_F(ShareRevocationCacheTest, NonRevokedResultRemovesExistingEntry) {
         m_token_service->SetShareRevocationCacheEntryForTest("hash1", true, 3600);
         EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
+
+        m_token_service->SetShareRevocationCacheEntryForTest("hash1", false, 5);
+        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 0u);
     }
 
     /// ================================================================================
@@ -587,4 +583,4 @@ namespace {
         EXPECT_EQ(TokenService::GetShareTokenExpireSeconds(), 3600);
     }
 
-} ///< namespace
+} // namespace
