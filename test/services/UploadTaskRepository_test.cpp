@@ -98,15 +98,35 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "UPDATE upload_tasks SET status = $1, finalized_at = NOW() WHERE id = $2 AND status = $3"));
             EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::Completed"));
 
-            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::MarkCancelledIfInProgress("));
+            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::MarkCancelledIfInProgressReturning("));
             EXPECT_TRUE(Contains(source, "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2 "));
-            EXPECT_TRUE(Contains(source, "WHERE id = $3 AND status = $4"));
+            EXPECT_TRUE(Contains(source, "WHERE id = $3 AND user_id = $4 AND status = $5 "));
             EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::Cancelled"));
 
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::MarkExpiredIfInProgressReturning("));
             EXPECT_TRUE(Contains(source, "WHERE id = $3 AND status = $4 AND expires_at < NOW() "));
             EXPECT_TRUE(Contains(source, "RETURNING id, temp_path, user_id, reserved_bytes"));
             EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::Expired"));
+        }
+
+        TEST(UploadTaskRepositoryCancellationContractTest, WinnerReleasesQuotaAndChunksInOneTransaction) {
+            const auto repository_source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
+            const auto lifecycle_source = ReadSourceFile("src/services/UploadLifecycleService.cpp");
+            const auto service_source = ReadSourceFile("src/services/UploadService.cpp");
+
+            EXPECT_TRUE(Contains(repository_source, "auto UploadTaskRepository::MarkCancelledIfInProgressReturning("));
+            EXPECT_TRUE(Contains(repository_source, "RETURNING id, temp_path, user_id, reserved_bytes, staging_backend"));
+
+            const auto transition = lifecycle_source.find("MarkCancelledIfInProgressReturning(");
+            const auto quota_release = lifecycle_source.find("ReleaseReservedStorageChecked(", transition);
+            const auto chunk_delete = lifecycle_source.find("DeleteChunks(transaction, upload_id)", quota_release);
+            ASSERT_NE(transition, std::string::npos);
+            ASSERT_NE(quota_release, std::string::npos);
+            ASSERT_NE(chunk_delete, std::string::npos);
+            EXPECT_LT(transition, quota_release);
+            EXPECT_LT(quota_release, chunk_delete);
+            EXPECT_TRUE(Contains(lifecycle_source, "DecideCancelRequest(current_task->getValueOfStatus())"));
+            EXPECT_TRUE(Contains(service_source, "DecideCancelRequest(task.getValueOfStatus())"));
         }
 
         TEST(UploadTaskRepositoryFinalizeLeaseContractTest, LeaseMutationsUseDatabaseTimeOwnerAndVersion) {

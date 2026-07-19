@@ -967,7 +967,7 @@ Authorization: Bearer <access_token>
 **DELETE** `/api/file/upload/{upload_id}`
 
 #### 实现状态
-**现有接口已实现；ADR-002 事务幂等与持久清理任务待实现**
+**状态 CAS、配额释放与分片元数据删除已在同一短事务中实现；持久化 staging cleanup 任务待 Worker 阶段接入**
 
 取消上传任务，清理临时数据。
 

@@ -23,13 +23,16 @@
 
 namespace disk::file {
 
-    struct ExpiredUploadTaskRecord {
+    struct UploadTaskCleanupRecord {
         std::string id;
         std::string temp_path;
         uint64_t user_id{ 0 };
         uint64_t reserved_bytes{ 0 };
         disk::storage::UploadStagingSession staging_session;
     };
+
+    using CancelledUploadTaskRecord = UploadTaskCleanupRecord;
+    using ExpiredUploadTaskRecord = UploadTaskCleanupRecord;
 
     enum class FinalizeClaimDisposition {
         Acquired,
@@ -147,10 +150,12 @@ namespace disk::file {
         ) const -> drogon::Task<bool>;
 
         [[nodiscard]]
-        auto MarkCancelledIfInProgress(
+        auto MarkCancelledIfInProgressReturning(
+            const drogon::orm::DbClientPtr& client,
             const std::string& upload_id,
+            uint64_t user_id,
             const std::string& fail_reason
-        ) const -> drogon::Task<bool>;
+        ) const -> drogon::Task<std::optional<CancelledUploadTaskRecord>>;
 
         [[nodiscard]]
         auto MarkExpiredIfInProgressBatch(

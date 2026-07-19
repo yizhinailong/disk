@@ -1113,34 +1113,73 @@ namespace disk::upload {
 
     auto UploadLifecycleService::CancelInProgressUpload(
         const std::string& upload_id,
-        uint64_t user_id,
-        uint64_t reserved_bytes,
-        const disk::storage::UploadStagingSession& staging_session
+        uint64_t user_id
     ) const -> drogon::Task<Result<void>> {
-        disk::quota::QuotaService quota_service(m_db_client);
-        co_await quota_service.ReleaseReservedStorage(m_db_client, user_id, reserved_bytes);
+        std::optional<disk::storage::UploadStagingSession> staging_session;
+        bool cancelled = false;
 
-        try {
-            disk::file::UploadTaskRepository upload_task_repository(m_db_client);
-            co_await upload_task_repository.MarkCancelledIfInProgress(upload_id, "用户取消");
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to set cancel terminal state: " << e.base().what();
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to cancel upload task")
+        disk::file::UploadTaskRepository upload_task_repository(m_db_client);
+        disk::file::TransactionRunner transaction_runner(m_db_client);
+        auto tx_result = co_await transaction_runner.Run(
+            [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                auto cancelled_record = co_await upload_task_repository.MarkCancelledIfInProgressReturning(
+                    transaction,
+                    upload_id,
+                    user_id,
+                    "用户取消"
+                );
+                if (!cancelled_record.has_value()) {
+                    co_return {};
+                }
+
+                disk::quota::QuotaService quota_service(m_db_client);
+                auto release_result = co_await quota_service.ReleaseReservedStorageChecked(
+                    transaction,
+                    user_id,
+                    cancelled_record->reserved_bytes
+                );
+                if (!release_result) {
+                    co_return std::unexpected(release_result.error());
+                }
+
+                co_await upload_task_repository.DeleteChunks(transaction, upload_id);
+                staging_session = cancelled_record->staging_session;
+                cancelled = true;
+                co_return {};
+            }
+        );
+        if (!tx_result) {
+            co_return std::unexpected(tx_result.error());
+        }
+
+        if (!cancelled) {
+            auto current_task = co_await upload_task_repository.FindByIdForUser(upload_id, user_id);
+            if (!current_task.has_value()) {
+                co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
+            }
+
+            switch (DecideCancelRequest(current_task->getValueOfStatus())) {
+                case CancelRequestAction::ReplayCancelled:
+                    co_return {};
+                case CancelRequestAction::RejectConflict:
+                    co_return std::unexpected(
+                        ErrorInfo(ErrorCode::ResourceConflict, "Upload task cannot be cancelled while finalizing or completed")
+                    );
+                case CancelRequestAction::RejectTerminal:
+                    co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
+                case CancelRequestAction::Cancel:
+                    co_return std::unexpected(
+                        ErrorInfo(ErrorCode::ResourceConflict, "Upload task state changed during cancellation")
+                    );
+            }
+        }
+
+        if (m_upload_staging_storage != nullptr && staging_session.has_value()) {
+            auto cleanup_result = co_await m_upload_staging_storage->CleanupSession(
+                staging_session.value()
             );
-        }
-
-        try {
-            disk::file::UploadTaskRepository upload_task_repository(m_db_client);
-            co_await upload_task_repository.DeleteChunks(upload_id);
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "Failed to cleanup upload_task_chunks: " << e.base().what();
-        }
-
-        if (m_upload_staging_storage != nullptr) {
-            auto cleanup_result = co_await m_upload_staging_storage->CleanupSession(staging_session);
             if (!cleanup_result) {
-                Logger::Warn() << "Failed to delete temp directory: upload_id=" << upload_id
+                Logger::Warn() << "Failed to delete upload staging session: upload_id=" << upload_id
                                << ", error=" << static_cast<int>(cleanup_result.error().code);
             }
         }

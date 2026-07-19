@@ -26,7 +26,6 @@ namespace disk::storage {
     class IBlobStore;
     class IFileStorage;
     class UploadStagingStorage;
-    struct UploadStagingSession;
 }
 
 namespace disk::upload {
@@ -155,12 +154,8 @@ namespace disk::upload {
             -> drogon::Task<Result<CompleteUploadOutcome>>;
 
         [[nodiscard]]
-        auto CancelInProgressUpload(
-            const std::string& upload_id,
-            uint64_t user_id,
-            uint64_t reserved_bytes,
-            const disk::storage::UploadStagingSession& staging_session
-        ) const -> drogon::Task<Result<void>>;
+        auto CancelInProgressUpload(const std::string& upload_id, uint64_t user_id) const
+            -> drogon::Task<Result<void>>;
 
         [[nodiscard]]
         auto ExpireInProgressUpload(const std::string& upload_id) const

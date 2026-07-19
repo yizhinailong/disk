@@ -378,16 +378,18 @@ namespace disk::file {
         }
         const auto task = task_result.value();
 
-        /// 2. Check idempotency: already in terminal state
-        if (!disk::upload::CanCancelOrExpire(task.getValueOfStatus())) {
-            Logger::Debug() << "Upload task already in terminal state: upload_id=" << upload_id
-                            << ", status=" << task.getValueOfStatus();
-            co_return {};
-        }
-
-        auto staging_session = co_await FindUploadStagingSession(upload_id, user_id);
-        if (!staging_session) {
-            co_return std::unexpected(staging_session.error());
+        /// 2. Apply the stable request semantics before attempting the transactional CAS.
+        switch (disk::upload::DecideCancelRequest(task.getValueOfStatus())) {
+            case disk::upload::CancelRequestAction::ReplayCancelled:
+                co_return {};
+            case disk::upload::CancelRequestAction::RejectConflict:
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ResourceConflict, "Upload task cannot be cancelled while finalizing or completed")
+                );
+            case disk::upload::CancelRequestAction::RejectTerminal:
+                co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
+            case disk::upload::CancelRequestAction::Cancel:
+                break;
         }
 
         disk::upload::UploadLifecycleService lifecycle_service(
@@ -396,12 +398,7 @@ namespace disk::file {
             m_upload_staging_storage,
             m_blob_store
         );
-        auto cancel_result = co_await lifecycle_service.CancelInProgressUpload(
-            upload_id,
-            user_id,
-            task.getValueOfReservedBytes(),
-            staging_session.value()
-        );
+        auto cancel_result = co_await lifecycle_service.CancelInProgressUpload(upload_id, user_id);
         if (!cancel_result) {
             co_return std::unexpected(cancel_result.error());
         }
