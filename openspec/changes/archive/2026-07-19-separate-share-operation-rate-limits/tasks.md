@@ -29,8 +29,8 @@
 
 ## 5. Verification and Closure
 
-- [ ] 5.1 Strictly validate this change and each affected OpenSpec capability before and after implementation
-- [ ] 5.2 Format all changed C++ files and pass the focused Share Auth, rate-limit, Redis key, configuration, Redis service, and ownership tests
-- [ ] 5.3 Pass the serial share-rate integration test, Linux debug build, and full self-contained backend CTest run from an initially stopped server
-- [ ] 5.4 Preserve the aggregate strict OpenSpec baseline and prove obsolete runtime identifiers and replayable credentials are absent from non-historical output
-- [ ] 5.5 Complete API section 9.4.5 only after evidence passes, archive this change with a dated evidence note, and remove the completed P0.4 checklist from `docs/TODO.md`
+- [x] 5.1 Strictly validate this change and each affected OpenSpec capability before and after implementation
+- [x] 5.2 Format all changed C++ files and pass the focused Share Auth, rate-limit, Redis key, configuration, Redis service, and ownership tests
+- [x] 5.3 Pass the serial share-rate integration test, Linux debug build, and full self-contained backend CTest run from an initially stopped server
+- [x] 5.4 Preserve the aggregate strict OpenSpec baseline and prove obsolete runtime identifiers and replayable credentials are absent from non-historical output
+- [x] 5.5 Complete API section 9.4.5 only after evidence passes, archive this change with a dated evidence note, and remove the completed P0.4 checklist from `docs/TODO.md`

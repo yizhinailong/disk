@@ -13,7 +13,8 @@ Primary sources inspected:
 - Share routes: `src/controllers/ShareController.hpp:43`
 - Admin routes: `src/controllers/AdminController.hpp:40`
 - JWT filter: `src/filters/JwtAuthFilter.cpp:24`
-- Rate-limit filters: `src/filters/UploadRateLimitFilter.cpp:29`, `src/filters/DownloadRateLimitFilter.cpp:26`, `src/filters/RegisterRateLimitFilter.cpp:26`, `src/filters/SharePublicRateLimitFilter.cpp:26`, `src/filters/AdminRateLimitFilter.cpp:26`, `src/filters/FolderRateLimitFilter.cpp:26`
+- Rate-limit filters: `src/filters/UploadRateLimitFilter.cpp`, `src/filters/DownloadRateLimitFilter.cpp`, `src/filters/RegisterRateLimitFilter.cpp`, `src/filters/ShareRateLimitFilter.cpp`, `src/filters/AdminRateLimitFilter.cpp`, `src/filters/FolderRateLimitFilter.cpp`
+- Share-token authentication: `src/filters/ShareAuthFilter.cpp`
 - Upload lifecycle: `src/services/UploadService.cpp:61`, `src/services/UploadService.cpp:368`, `src/services/UploadService.cpp:550`, `src/services/UploadService.cpp:983`
 - Cleanup lifecycle: `src/services/CleanupService.cpp:48`, `src/services/CleanupService.cpp:315`
 - File mutation lifecycle: `src/services/FileMutationService.cpp:413`, `src/services/FileMutationService.cpp:904`
@@ -31,7 +32,6 @@ GlobalFilters
     - disk::filters::RequestTraceFilter
     - disk::filters::JwtAuthFilter
     - disk::filters::RegisterRateLimitFilter
-    - disk::filters::SharePublicRateLimitFilter
   exempt: []
 ```
 
@@ -50,9 +50,10 @@ Representative route-level filters:
 | Auth public | `/api/auth/register`, `/api/auth/login`, `/api/auth/refresh` | none |
 | Auth logout | `/api/auth/logout` | none beyond global JWT |
 | Share owner | `/api/share`, `/api/share/{share_id}`, `/api/share/cancel` | none beyond global JWT |
-| Share public access | `/api/share/access/{share_id}` | none |
-| Share browse/download | `/api/share/browse/{share_id}`, `/api/share/download/{share_id}/{file_id}` | `ShareAuthFilter` |
-| Share save | `/api/share/save/{share_id}` | `ShareAuthFilter` in addition to global JWT |
+| Share public access | `/api/share/access/{share_id}` | `ShareAccessRateLimitFilter` |
+| Share browse | `/api/share/browse/{share_id}` | `ShareAuthFilter`, then `ShareOperationRateLimitFilter` |
+| Share download | `/api/share/download/{share_id}/{file_id}/info`, `/api/share/download/{share_id}/{file_id}` | `ShareAuthFilter`, then `ShareOperationRateLimitFilter` |
+| Share save | `/api/share/save/{share_id}` | `ShareAuthFilter`, then `ShareOperationRateLimitFilter`, in addition to global JWT |
 | Admin | `/api/admin/...` | `AdminAuthFilter`, `AdminRateLimitFilter` |
 
 Sources: `src/controllers/FileController.hpp:27`, `src/controllers/FolderController.hpp:23`, `src/controllers/AuthController.hpp:23`, `src/controllers/ShareController.hpp:43`, `src/controllers/AdminController.hpp:40`.
@@ -74,11 +75,12 @@ Rate-limit filters are path scoped internally:
 | `UploadRateLimitFilter` | user id + fixed window | route-level upload routes | logs error and returns `nullptr` (fail-open) |
 | `DownloadRateLimitFilter` | user id + fixed window | `path.starts_with("/api/file/download/")` | logs error and returns `nullptr` (fail-open) |
 | `RegisterRateLimitFilter` | client IP + fixed window | `path == "/api/auth/register"` | logs error and returns `nullptr` (fail-open) |
-| `SharePublicRateLimitFilter` | client IP + fixed window | public share paths via `IsSharePublicPath` | logs error and returns `nullptr` (fail-open) |
+| `ShareAccessRateLimitFilter` | normalized client IP + fixed window | route-owned `/api/share/access/{share_id}` | logs operation and normalized IP, then returns `nullptr` (fail-open) |
+| `ShareOperationRateLimitFilter` | verified Share Token JTI + fixed window | route-owned browse, download metadata/content, and save routes; browse and download use separate buckets | logs operation without key/token material, then returns `nullptr` (fail-open) |
 | `AdminRateLimitFilter` | user id + fixed window | `path.starts_with("/api/admin/")` | logs error and returns `nullptr` (fail-open) |
 | `FolderRateLimitFilter` | user id + fixed window | `path.starts_with("/api/folder/")` | logs error and returns `nullptr` (fail-open) |
 
-Sources: `src/filters/UploadRateLimitFilter.cpp:52`, `src/filters/DownloadRateLimitFilter.cpp:46`, `src/filters/RegisterRateLimitFilter.cpp:41`, `src/filters/SharePublicRateLimitFilter.cpp:39`, `src/filters/AdminRateLimitFilter.cpp:44`, `src/filters/FolderRateLimitFilter.cpp:44`.
+Sources: `src/filters/UploadRateLimitFilter.cpp`, `src/filters/DownloadRateLimitFilter.cpp`, `src/filters/RegisterRateLimitFilter.cpp`, `src/filters/ShareRateLimitFilter.cpp`, `src/filters/ShareAuthFilter.cpp`, `src/filters/AdminRateLimitFilter.cpp`, `src/filters/FolderRateLimitFilter.cpp`.
 
 Tests cover individual path predicates and constants for several filters, including download and admin filters. `FilterOwnership_test.cpp` additionally validates that JWT appears once, route declarations do not duplicate it, and `GlobalFilters` itself is configured exactly once.
 
@@ -355,8 +357,6 @@ Later refactors should preserve the following unless a separate proposal intenti
 
 ## Open Questions / Follow-ups
 
-- Should global JWT, route-level JWT, or both remain after filter cleanup?
-- Should Redis failures stay fail-open for every rate-limit family, or should sensitive endpoints fail closed?
 - Should `storage_used` mean physical unique bytes or logical per-user bytes?
 - Should instant upload increase `storage_used` if copy does?
 - Should copy accounting use a reservation-style model instead of incrementing `storage_used` before copy work completes?
@@ -372,18 +372,20 @@ Existing unit tests cover individual filters and path predicates, including:
 - `test/filters/AdminAuthFilter_test.cpp`
 - `test/filters/DownloadRateLimit_test.cpp`
 - `test/filters/RegisterRateLimit_test.cpp`
-- `test/filters/SharePublicRateLimit_test.cpp`
+- `test/filters/ShareAuthFilter_test.cpp`
+- `test/filters/ShareRateLimitFilter_test.cpp`
+- `test/filters/FilterOwnership_test.cpp`
 - `test/filters/AdminRateLimit_test.cpp`
 - `test/filters/FolderRateLimit_test.cpp`
 
-Validation performed for this discovery pass:
+Latest validation of the current filter behavior (2026-07-19):
 
 ```text
-cmake --preset linux-debug-clang
-cd build/linux-debug-clang
-ctest -R '.*(AdminAuthFilter|DownloadRateLimit|RegisterRateLimit|SharePublicRateLimit|AdminRateLimit|FolderRateLimit).*' --output-on-failure
+cmake --build --preset linux-debug-clang
+./build/linux-debug-clang/test/disk-test \
+  --gtest_filter='ConfigMgrShareRateLimitTest.*:RedisKeyPrefix.BuildShare*:ShareAuthFilterTest.*:ShareAuthFilterRuntimeTest.*:ShareRateLimitFilterTest.*:FilterOwnershipTest.*:RedisServiceRuntimeTest.IncrWithExpire*' \
+  --gtest_color=no
+ctest --preset linux-debug-clang --output-on-failure
 ```
 
-Result: 86/86 selected filter tests passed.
-
-A broader filter run including `ShareAuthFilterRuntimeTest.FilterMissingTokenReturnsTokenMissing` was stopped because that test hung during execution after 40/150 selected tests had passed. The passing subset validates path predicates and individual filter decisions relevant to this discovery note, while Drogon source inspection validates the global-pre-routing plus route-middleware chain.
+Result: the focused suite passed 55/55. The full backend run passed all 1,179 enabled non-gated tests; the two explicit S3 environment gates were skipped, for 1,181 total entries and zero failures. `ShareRateLimitIntegration` passed all ten evidence IDs in that serial run.
