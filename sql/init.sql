@@ -323,6 +323,37 @@ CREATE INDEX idx_storage_jobs_type_status ON storage_jobs (job_type, status);
 
 COMMENT ON TABLE storage_jobs IS '持久对象存储副作用与一致性对账任务';
 
+-- 存储一致性发现表
+CREATE TABLE storage_reconciliation_findings (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    finding_type VARCHAR(64) NOT NULL,
+    resource_id VARCHAR(128) NOT NULL,
+    resource_locator VARCHAR(1024) DEFAULT NULL,
+    severity SMALLINT NOT NULL,
+    resolution_strategy VARCHAR(32) NOT NULL,
+    details JSONB NOT NULL DEFAULT '{}'::jsonb,
+    occurrences INTEGER NOT NULL DEFAULT 1,
+    first_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TIMESTAMP DEFAULT NULL,
+    CONSTRAINT uk_storage_reconciliation_finding
+        UNIQUE (finding_type, resource_id),
+    CONSTRAINT ck_storage_reconciliation_severity
+        CHECK (severity BETWEEN 0 AND 2),
+    CONSTRAINT ck_storage_reconciliation_strategy
+        CHECK (resolution_strategy IN ('auto_gc', 'alert', 'manual')),
+    CONSTRAINT ck_storage_reconciliation_occurrences
+        CHECK (occurrences > 0)
+);
+
+CREATE INDEX idx_storage_reconciliation_unresolved
+    ON storage_reconciliation_findings (severity DESC, last_seen_at, id)
+    WHERE resolved_at IS NULL;
+
+COMMENT ON TABLE storage_reconciliation_findings IS '存储、引用与配额一致性发现';
+COMMENT ON COLUMN storage_reconciliation_findings.resource_id IS '数据库聚合ID或对象key的SHA-256摘要';
+COMMENT ON COLUMN storage_reconciliation_findings.resource_locator IS '不含凭据的对象key或数据库定位符';
+
 -- 回收站表
 CREATE TABLE trash (
     id BIGSERIAL PRIMARY KEY,
@@ -493,3 +524,5 @@ VALUES ('admin', 'admin@example.com', '$argon2id$v=19$m=65536,t=2,p=1$BjgpFYz8h/
 -- 全新安装与增量迁移使用同一版本账本
 INSERT INTO schema_migrations (version, checksum)
 VALUES ('V003_distributed_upload', 'b5c24669b65eb801c1f7b51f386dd426e40b5248cc28b76697d501e68836f227');
+INSERT INTO schema_migrations (version, checksum)
+VALUES ('V004_storage_reconciliation', '860bc7c1bca936e220aa4e9e53c5657674af592ff1ccf287c9828e73f612b4de');
