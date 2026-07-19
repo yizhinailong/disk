@@ -9,6 +9,7 @@
 
 #include "UploadTaskRepository.hpp"
 
+#include <stdexcept>
 #include <utility>
 
 #include <drogon/orm/Mapper.h>
@@ -17,6 +18,22 @@
 #include "utils/BatchUtils.hpp"
 
 namespace disk::file {
+
+    namespace {
+        constexpr size_t kMaxLeaseOwnerLength = 128;
+
+        auto ValidateLeaseArguments(
+            const std::string& lease_owner,
+            uint32_t lease_duration_seconds
+        ) -> void {
+            if (lease_owner.empty() || lease_owner.size() > kMaxLeaseOwnerLength) {
+                throw std::invalid_argument("Finalize lease owner must contain 1 to 128 characters");
+            }
+            if (lease_duration_seconds == 0) {
+                throw std::invalid_argument("Finalize lease duration must be positive");
+            }
+        }
+    } // namespace
 
     using drogon::orm::CompareOperator;
     using drogon::orm::CoroMapper;
@@ -110,6 +127,198 @@ namespace disk::file {
         );
 
         co_return UploadTasks(result[0], -1);
+    }
+
+    auto UploadTaskRepository::ClaimFinalizeLease(
+        const std::string& upload_id,
+        uint64_t user_id,
+        const std::string& lease_owner,
+        uint32_t lease_duration_seconds
+    ) const -> drogon::Task<FinalizeClaimResult> {
+        ValidateLeaseArguments(lease_owner, lease_duration_seconds);
+
+        auto claimed = co_await m_db_client->execSqlCoro(
+            "UPDATE upload_tasks AS task SET "
+            "status = $1, lease_owner = $2, "
+            "lease_expires_at = NOW() + ($3 * INTERVAL '1 second'), "
+            "state_version = state_version + 1, "
+            "finalize_attempts = finalize_attempts + 1, "
+            "last_error_code = NULL, last_error_at = NULL "
+            "WHERE task.id = $4 AND task.user_id = $5 AND ("
+            "  (task.status = $6 AND task.expires_at >= NOW() AND ("
+            "    SELECT COUNT(*) = task.total_chunks "
+            "       AND COALESCE(MAX(chunk.chunk_index), -1) = task.total_chunks - 1 "
+            "    FROM upload_task_chunks AS chunk WHERE chunk.task_id = task.id"
+            "  )) "
+            "  OR (task.status = $1 AND task.lease_expires_at <= NOW())"
+            ") "
+            "RETURNING state_version, finalize_attempts",
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Finalizing),
+            lease_owner,
+            lease_duration_seconds,
+            upload_id,
+            user_id,
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
+        );
+
+        if (!claimed.empty()) {
+            co_return FinalizeClaimResult{
+                .disposition = FinalizeClaimDisposition::Acquired,
+                .state_version = claimed[0]["state_version"].as<uint64_t>(),
+                .finalize_attempts = claimed[0]["finalize_attempts"].as<uint32_t>(),
+            };
+        }
+
+        auto current = co_await m_db_client->execSqlCoro(
+            "SELECT status, state_version, finalize_attempts, completed_file_id, "
+            "COALESCE(lease_expires_at <= NOW(), FALSE) AS lease_expired "
+            "FROM upload_tasks WHERE id = $1 AND user_id = $2",
+            upload_id,
+            user_id
+        );
+        if (current.empty()) {
+            co_return FinalizeClaimResult{ .disposition = FinalizeClaimDisposition::NotFound };
+        }
+
+        const auto& row = current[0];
+        const auto status = row["status"].as<int>();
+        const auto action = disk::upload::DecideFinalizeRequest(
+            status,
+            row["lease_expired"].as<bool>()
+        );
+
+        FinalizeClaimResult result{
+            .state_version = row["state_version"].as<uint64_t>(),
+            .finalize_attempts = row["finalize_attempts"].as<uint32_t>(),
+        };
+        if (!row["completed_file_id"].isNull()) {
+            result.completed_file_id = row["completed_file_id"].as<uint64_t>();
+        }
+
+        switch (action) {
+        case disk::upload::FinalizeRequestAction::ClaimLease:
+            result.disposition = FinalizeClaimDisposition::IncompleteChunks;
+            break;
+        case disk::upload::FinalizeRequestAction::TakeOverExpiredLease:
+        case disk::upload::FinalizeRequestAction::RetryLater:
+            result.disposition = FinalizeClaimDisposition::LeaseHeld;
+            break;
+        case disk::upload::FinalizeRequestAction::ReplayCompleted:
+            result.disposition = FinalizeClaimDisposition::CompletedReplay;
+            break;
+        case disk::upload::FinalizeRequestAction::RejectTerminal:
+            result.disposition = FinalizeClaimDisposition::Terminal;
+            break;
+        }
+
+        co_return result;
+    }
+
+    auto UploadTaskRepository::RenewFinalizeLease(
+        const std::string& upload_id,
+        uint64_t user_id,
+        const std::string& lease_owner,
+        uint64_t expected_state_version,
+        uint32_t lease_duration_seconds
+    ) const -> drogon::Task<std::optional<uint64_t>> {
+        ValidateLeaseArguments(lease_owner, lease_duration_seconds);
+
+        auto result = co_await m_db_client->execSqlCoro(
+            "UPDATE upload_tasks SET "
+            "lease_expires_at = NOW() + ($1 * INTERVAL '1 second'), "
+            "state_version = state_version + 1 "
+            "WHERE id = $2 AND user_id = $3 AND status = $4 "
+            "AND lease_owner = $5 AND state_version = $6 "
+            "AND lease_expires_at > NOW() "
+            "RETURNING state_version",
+            lease_duration_seconds,
+            upload_id,
+            user_id,
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Finalizing),
+            lease_owner,
+            expected_state_version
+        );
+        if (result.empty()) {
+            co_return std::nullopt;
+        }
+        co_return result[0]["state_version"].as<uint64_t>();
+    }
+
+    auto UploadTaskRepository::MarkCompletedIfLeaseOwned(
+        const drogon::orm::DbClientPtr& client,
+        const std::string& upload_id,
+        uint64_t user_id,
+        const std::string& lease_owner,
+        uint64_t expected_state_version,
+        uint64_t completed_file_id
+    ) const -> drogon::Task<bool> {
+        auto result = co_await client->execSqlCoro(
+            "UPDATE upload_tasks SET status = $1, completed_file_id = $2, "
+            "finalized_at = NOW(), lease_owner = NULL, lease_expires_at = NULL, "
+            "state_version = state_version + 1 "
+            "WHERE id = $3 AND user_id = $4 AND status = $5 "
+            "AND lease_owner = $6 AND state_version = $7 "
+            "AND lease_expires_at > NOW()",
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Completed),
+            completed_file_id,
+            upload_id,
+            user_id,
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Finalizing),
+            lease_owner,
+            expected_state_version
+        );
+        co_return result.affectedRows() > 0;
+    }
+
+    auto UploadTaskRepository::MarkFailedIfLeaseOwned(
+        const drogon::orm::DbClientPtr& client,
+        const std::string& upload_id,
+        uint64_t user_id,
+        const std::string& lease_owner,
+        uint64_t expected_state_version,
+        int error_code,
+        const std::string& fail_reason
+    ) const -> drogon::Task<bool> {
+        auto result = co_await client->execSqlCoro(
+            "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), "
+            "lease_owner = NULL, lease_expires_at = NULL, "
+            "state_version = state_version + 1, last_error_code = $2, "
+            "last_error_at = NOW(), fail_reason = $3 "
+            "WHERE id = $4 AND user_id = $5 AND status = $6 "
+            "AND lease_owner = $7 AND state_version = $8 "
+            "AND lease_expires_at > NOW()",
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Failed),
+            error_code,
+            fail_reason,
+            upload_id,
+            user_id,
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Finalizing),
+            lease_owner,
+            expected_state_version
+        );
+        co_return result.affectedRows() > 0;
+    }
+
+    auto UploadTaskRepository::RecordFinalizeErrorIfLeaseOwned(
+        const std::string& upload_id,
+        uint64_t user_id,
+        const std::string& lease_owner,
+        uint64_t expected_state_version,
+        int error_code
+    ) const -> drogon::Task<bool> {
+        auto result = co_await m_db_client->execSqlCoro(
+            "UPDATE upload_tasks SET last_error_code = $1, last_error_at = NOW() "
+            "WHERE id = $2 AND user_id = $3 AND status = $4 "
+            "AND lease_owner = $5 AND state_version = $6 "
+            "AND lease_expires_at > NOW()",
+            error_code,
+            upload_id,
+            user_id,
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Finalizing),
+            lease_owner,
+            expected_state_version
+        );
+        co_return result.affectedRows() > 0;
     }
 
     auto UploadTaskRepository::DeleteInProgressById(const std::string& upload_id) const

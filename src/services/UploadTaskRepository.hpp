@@ -29,6 +29,22 @@ namespace disk::file {
         uint64_t reserved_bytes{0};
     };
 
+    enum class FinalizeClaimDisposition {
+        Acquired,
+        IncompleteChunks,
+        LeaseHeld,
+        CompletedReplay,
+        Terminal,
+        NotFound,
+    };
+
+    struct FinalizeClaimResult {
+        FinalizeClaimDisposition disposition{ FinalizeClaimDisposition::NotFound };
+        uint64_t state_version{0};
+        uint32_t finalize_attempts{0};
+        std::optional<uint64_t> completed_file_id;
+    };
+
     /**
      * @brief 上传任务持久化原语
      */
@@ -55,6 +71,53 @@ namespace disk::file {
         [[nodiscard]]
         auto Create(drogon_model::disk::UploadTasks task) const
             -> drogon::Task<drogon_model::disk::UploadTasks>;
+
+        [[nodiscard]]
+        auto ClaimFinalizeLease(
+            const std::string& upload_id,
+            uint64_t user_id,
+            const std::string& lease_owner,
+            uint32_t lease_duration_seconds
+        ) const -> drogon::Task<FinalizeClaimResult>;
+
+        [[nodiscard]]
+        auto RenewFinalizeLease(
+            const std::string& upload_id,
+            uint64_t user_id,
+            const std::string& lease_owner,
+            uint64_t expected_state_version,
+            uint32_t lease_duration_seconds
+        ) const -> drogon::Task<std::optional<uint64_t>>;
+
+        [[nodiscard]]
+        auto MarkCompletedIfLeaseOwned(
+            const drogon::orm::DbClientPtr& client,
+            const std::string& upload_id,
+            uint64_t user_id,
+            const std::string& lease_owner,
+            uint64_t expected_state_version,
+            uint64_t completed_file_id
+        ) const -> drogon::Task<bool>;
+
+        [[nodiscard]]
+        auto MarkFailedIfLeaseOwned(
+            const drogon::orm::DbClientPtr& client,
+            const std::string& upload_id,
+            uint64_t user_id,
+            const std::string& lease_owner,
+            uint64_t expected_state_version,
+            int error_code,
+            const std::string& fail_reason
+        ) const -> drogon::Task<bool>;
+
+        [[nodiscard]]
+        auto RecordFinalizeErrorIfLeaseOwned(
+            const std::string& upload_id,
+            uint64_t user_id,
+            const std::string& lease_owner,
+            uint64_t expected_state_version,
+            int error_code
+        ) const -> drogon::Task<bool>;
 
         [[nodiscard]]
         auto DeleteInProgressById(const std::string& upload_id) const -> drogon::Task<bool>;

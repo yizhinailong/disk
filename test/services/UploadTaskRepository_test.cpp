@@ -67,6 +67,24 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::Expired"));
         }
 
+        TEST(UploadTaskRepositoryFinalizeLeaseContractTest, LeaseMutationsUseDatabaseTimeOwnerAndVersion) {
+            const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
+
+            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::ClaimFinalizeLease("));
+            EXPECT_TRUE(Contains(source, "task.expires_at >= NOW()"));
+            EXPECT_TRUE(Contains(source, "task.lease_expires_at <= NOW()"));
+            EXPECT_TRUE(Contains(source, "COUNT(*) = task.total_chunks"));
+            EXPECT_TRUE(Contains(source, "state_version = state_version + 1"));
+            EXPECT_TRUE(Contains(source, "finalize_attempts = finalize_attempts + 1"));
+
+            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::RenewFinalizeLease("));
+            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::MarkCompletedIfLeaseOwned("));
+            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::MarkFailedIfLeaseOwned("));
+            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::RecordFinalizeErrorIfLeaseOwned("));
+            EXPECT_TRUE(Contains(source, "AND lease_owner = $5 AND state_version = $6 "));
+            EXPECT_TRUE(Contains(source, "AND lease_expires_at > NOW()"));
+        }
+
         TEST(UploadTaskRepositoryChunkPrimitiveContractTest, ChunkPersistencePrimitivesKeepIdempotencySortingAndCoverage) {
             const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
 
