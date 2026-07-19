@@ -5,6 +5,8 @@
  * @copyright Copyright (c) 2026
  */
 
+#include "services/UploadTaskRepository.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -14,8 +16,6 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-
-#include "services/UploadTaskRepository.hpp"
 
 namespace disk::file {
     namespace {
@@ -110,11 +110,16 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "WITH eligible_task AS MATERIALIZED ("));
             EXPECT_TRUE(Contains(source, "AND status = $3 AND expires_at >= NOW() "));
             EXPECT_TRUE(Contains(source, "FOR UPDATE"));
-            EXPECT_TRUE(Contains(source, "(task_id, chunk_index, size_bytes, hash_md5, uploaded_at) "));
+            EXPECT_TRUE(Contains(source, "(task_id, chunk_index, size_bytes, hash_md5, object_key, etag, uploaded_at) "));
             EXPECT_TRUE(Contains(source, "ON CONFLICT (task_id, chunk_index) DO UPDATE SET "));
-            EXPECT_TRUE(Contains(source, "upload_task_chunks.hash_md5 = EXCLUDED.hash_md5"));
+            EXPECT_TRUE(Contains(source, "hash_md5 = COALESCE(upload_task_chunks.hash_md5, EXCLUDED.hash_md5)"));
+            EXPECT_TRUE(Contains(source, "object_key = COALESCE(upload_task_chunks.object_key, EXCLUDED.object_key)"));
             EXPECT_TRUE(Contains(source, "ChunkRecordDisposition::TaskRejected"));
             EXPECT_TRUE(Contains(source, "ChunkRecordDisposition::MetadataConflict"));
+
+            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::ListChunksForAssembly("));
+            EXPECT_TRUE(Contains(source, "SELECT chunk_index, size_bytes, hash_md5, object_key, etag "));
+            EXPECT_TRUE(Contains(source, "FROM upload_task_chunks WHERE task_id = $1 ORDER BY chunk_index"));
 
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::ListUploadedChunkIndices("));
             EXPECT_TRUE(Contains(source, "SELECT chunk_index FROM upload_task_chunks WHERE task_id = $1 ORDER BY chunk_index"));
@@ -156,10 +161,9 @@ namespace disk::file {
             static_assert(
                 std::is_same_v<
                     decltype(&UploadTaskRepository::MarkExpiredIfInProgressReturning),
-                    ExpectedSignature
-                >
+                    ExpectedSignature>
             );
         }
 
-    } ///< namespace
-} ///< namespace disk::file
+    } // namespace
+} // namespace disk::file

@@ -816,7 +816,7 @@ Authorization: Bearer <access_token>
 **POST** `/api/file/upload/chunk`
 
 #### 实现状态
-**现有接口与 PostgreSQL `InProgress` 条件记录已实现；ADR-002 不可变分片 key、共享 S3/MinIO 暂存和持久孤儿清理仍待实现**
+**现有接口、PostgreSQL `InProgress` 条件记录和不可变分片描述符已实现；共享 S3/MinIO 暂存和持久孤儿清理仍待实现**
 
 上传文件分片数据。
 

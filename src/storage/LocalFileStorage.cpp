@@ -12,15 +12,16 @@
 #include <utility>
 #include <vector>
 
+#include <drogon/utils/Utilities.h>
 #include <drogon/utils/coroutine.h>
 #include <sodium/crypto_hash_sha256.h>
 #include <trantor/net/EventLoop.h>
 #include <trantor/utils/ConcurrentTaskQueue.h>
-#include "utils/LogHelper.hpp"
 
 #include "storage/AssemblyWorkerPool.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::storage {
 
@@ -34,6 +35,22 @@ namespace disk::storage {
         constexpr size_t MAX_ASSEMBLY_IO_THREADS = 4;
         constexpr std::string_view LOCAL_FILE_IO_QUEUE_NAME = "local-file-storage";
         constexpr std::string_view LOCAL_FILE_ASSEMBLY_QUEUE_NAME = "local-file-assembly";
+
+        [[nodiscard]] auto IsSafeObjectComponent(std::string_view value) -> bool {
+            return !value.empty() && std::ranges::all_of(value, [](char character) {
+                return (character >= 'a' && character <= 'z') ||
+                       (character >= 'A' && character <= 'Z') ||
+                       (character >= '0' && character <= '9') ||
+                       character == '-' || character == '_';
+            });
+        }
+
+        [[nodiscard]] auto IsLowerHexMd5(std::string_view value) -> bool {
+            return value.size() == 32 && std::ranges::all_of(value, [](char character) {
+                       return (character >= '0' && character <= '9') ||
+                              (character >= 'a' && character <= 'f');
+                   });
+        }
 
         auto ResolveConfiguredAssemblyConcurrency(const disk::utils::ConfigMgr& config_mgr) -> size_t {
             const auto configured_count =
@@ -147,9 +164,7 @@ namespace disk::storage {
                     m_resume_loop->runAfter(m_timeout_seconds, [this]() {
                         bool expected = false;
                         if (m_completed.compare_exchange_strong(expected, true)) {
-                            this->setValue(std::unexpected(
-                                ErrorInfo(ErrorCode::InternalError, "Delete operation timed out")
-                            ));
+                            this->setValue(std::unexpected(ErrorInfo(ErrorCode::InternalError, "Delete operation timed out")));
                             Resume();
                         }
                     });
@@ -188,7 +203,7 @@ namespace disk::storage {
             );
         }
 
-    } ///< namespace
+    } // namespace
 
     using disk::utils::FileHashUtil;
 
@@ -206,7 +221,7 @@ namespace disk::storage {
         );
 
         Logger::Info() << "LocalFileStorage worker queues initialized: io_threads=" << worker_thread_count
-                 << ", assembly_threads=" << assembly_worker_thread_count;
+                       << ", assembly_threads=" << assembly_worker_thread_count;
     }
 
     auto LocalFileStorage::EnsureUploadTempDir(const std::string& upload_id)
@@ -234,24 +249,62 @@ namespace disk::storage {
     auto LocalFileStorage::WriteChunk(
         const std::string& upload_id,
         uint32_t chunk_index,
+        const std::string& md5_hash,
         std::string data
-    ) -> drogon::Task<Result<void>> {
-        const auto temp_dir = GetTempDirPath(upload_id);
-        const auto chunk_path = GetChunkFilePath(upload_id, chunk_index);
+    ) -> drogon::Task<Result<UploadStagingChunk>> {
+        if (!IsSafeObjectComponent(upload_id) || !IsLowerHexMd5(md5_hash)) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Invalid upload staging object identity")
+            );
+        }
+
+        const auto object_key = GetChunkObjectKey(upload_id, chunk_index, md5_hash);
+        const auto chunk_path = std::filesystem::path(m_config_mgr->GetTempUploadPath()) / object_key;
+        const auto chunk_dir = chunk_path.parent_path();
+        const auto writing_path = std::filesystem::path(
+            chunk_path.string() + ".writing-" + drogon::utils::getUuid()
+        );
+        const auto size_bytes = data.size();
 
         auto result = co_await RunBlockingFilesystemTask(
             m_worker_queue,
-            [temp_dir, chunk_path, chunk_data = std::move(data)]() -> Result<void> {
-                /// create_directories is idempotent, so just ensure the directory exists.
+            [chunk_dir, chunk_path, writing_path, md5_hash, chunk_data = std::move(data)]() -> Result<void> {
                 std::error_code ec;
-                std::filesystem::create_directories(temp_dir, ec);
+                std::filesystem::create_directories(chunk_dir, ec);
                 if (ec) {
                     return std::unexpected(
                         ErrorInfo(ErrorCode::InternalError, "Failed to create temp upload directory")
                     );
                 }
 
-                std::ofstream chunk_file(chunk_path, std::ios::binary);
+                const auto VerifyExistingObject = [&chunk_path, &chunk_data, &md5_hash]() -> Result<void> {
+                    std::error_code verify_ec;
+                    const auto existing_size = std::filesystem::file_size(chunk_path, verify_ec);
+                    if (verify_ec || existing_size != chunk_data.size()) {
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::ChunkVerifyFailed, "Staging chunk size mismatch")
+                        );
+                    }
+                    auto existing_hash = FileHashUtil::HashFileMd5(chunk_path);
+                    if (!existing_hash || existing_hash.value() != md5_hash) {
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::ChunkVerifyFailed, "Staging chunk hash mismatch")
+                        );
+                    }
+                    return {};
+                };
+
+                const auto chunk_exists = std::filesystem::exists(chunk_path, ec);
+                if (ec) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Failed to inspect staging chunk")
+                    );
+                }
+                if (chunk_exists) {
+                    return VerifyExistingObject();
+                }
+
+                std::ofstream chunk_file(writing_path, std::ios::binary | std::ios::trunc);
                 if (!chunk_file) {
                     return std::unexpected(
                         ErrorInfo(ErrorCode::InternalError, "Failed to open chunk file")
@@ -265,26 +318,75 @@ namespace disk::storage {
                 chunk_file.close();
 
                 if (!chunk_file) {
+                    std::filesystem::remove(writing_path, ec);
                     return std::unexpected(
                         ErrorInfo(ErrorCode::InternalError, "Failed to write chunk file")
                     );
                 }
 
-                return {};
+                std::filesystem::rename(writing_path, chunk_path, ec);
+                if (!ec) {
+                    return {};
+                }
+
+                ec.clear();
+                if (std::filesystem::exists(chunk_path, ec) && !ec) {
+                    auto verify_result = VerifyExistingObject();
+                    std::filesystem::remove(writing_path, ec);
+                    return verify_result;
+                }
+
+                std::filesystem::remove(writing_path, ec);
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to publish immutable staging chunk")
+                );
             }
         );
 
-        co_return result;
+        if (!result) {
+            co_return std::unexpected(result.error());
+        }
+        co_return UploadStagingChunk{ .chunk_index = chunk_index,
+                                      .size_bytes = size_bytes,
+                                      .md5_hash = md5_hash,
+                                      .object_key = object_key,
+                                      .etag = "" };
     }
 
-    auto LocalFileStorage::AssembleChunks(const std::string& upload_id, uint32_t chunk_count)
+    auto LocalFileStorage::AssembleChunks(
+        const std::string& upload_id,
+        uint32_t expected_chunk_count,
+        const std::vector<UploadStagingChunk>& chunks
+    )
         -> drogon::Task<Result<UploadStagingAssembly>> {
         auto start = std::chrono::steady_clock::now();
         auto& pool = AssemblyWorkerPool::GetInstance();
 
+        if (chunks.size() != expected_chunk_count) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ChunkVerifyFailed, "Upload chunk descriptor count mismatch")
+            );
+        }
+
+        std::vector<std::pair<UploadStagingChunk, std::filesystem::path>> resolved_chunks;
+        resolved_chunks.reserve(chunks.size());
+        for (size_t position = 0; position < chunks.size(); ++position) {
+            const auto& chunk = chunks[position];
+            if (chunk.chunk_index != position) {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ChunkVerifyFailed, "Upload chunk indices are not contiguous")
+                );
+            }
+            auto chunk_path = ResolveChunkFilePath(upload_id, chunk);
+            if (!chunk_path) {
+                co_return std::unexpected(chunk_path.error());
+            }
+            resolved_chunks.emplace_back(chunk, std::move(chunk_path.value()));
+        }
+
         Logger::Debug() << "[assemble_chunks] start active_count=" << pool.ActiveCount()
-                  << " max_concurrent=" << pool.MaxConcurrent()
-                  << " upload_id=" << upload_id;
+                        << " max_concurrent=" << pool.MaxConcurrent()
+                        << " upload_id=" << upload_id;
 
         auto slot_guard = pool.TryAcquireGuard(upload_id);
         if (!slot_guard.has_value()) {
@@ -293,17 +395,17 @@ namespace disk::storage {
 
             const auto* reason = upload_already_active ? "upload_already_active" : "pool_saturated";
             Logger::Warn() << "Assembly admission rejected: upload_id=" << upload_id
-                     << ", reason=" << reason
-                     << ", running=" << pool.ActiveCount()
-                     << ", max_concurrent=" << pool.MaxConcurrent();
+                           << ", reason=" << reason
+                           << ", running=" << pool.ActiveCount()
+                           << ", max_concurrent=" << pool.MaxConcurrent();
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             Logger::Info() << "[assemble_chunks] duration_us=" << duration_us
-                     << " outcome=failure reason=" << reason
-                     << " active_count=" << pool.ActiveCount()
-                     << " max_concurrent=" << pool.MaxConcurrent();
+                           << " outcome=failure reason=" << reason
+                           << " active_count=" << pool.ActiveCount()
+                           << " max_concurrent=" << pool.MaxConcurrent();
 
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::TooManyRequests, message)
@@ -311,16 +413,15 @@ namespace disk::storage {
         }
 
         Logger::Debug() << "Assembly started: upload_id=" << upload_id << ", running=" << pool.ActiveCount()
-                  << ", max_concurrent=" << pool.MaxConcurrent();
+                        << ", max_concurrent=" << pool.MaxConcurrent();
 
-        const auto temp_dir = GetTempDirPath(upload_id);
         const auto assembled_path = GetAssembleFilePath(upload_id);
         const auto assembled_parent = assembled_path.parent_path();
         const auto buffer_size = m_config_mgr->GetAssembleBufferSizeBytes();
 
         auto result = co_await RunBlockingFilesystemTask(
             m_assembly_worker_queue,
-            [temp_dir, assembled_path, assembled_parent, chunk_count, buffer_size]() -> Result<UploadStagingAssembly> {
+            [assembled_path, assembled_parent, resolved_chunks = std::move(resolved_chunks), buffer_size]() -> Result<UploadStagingAssembly> {
                 std::error_code ec;
                 std::filesystem::create_directories(assembled_parent, ec);
                 if (ec) {
@@ -343,16 +444,20 @@ namespace disk::storage {
                 crypto_hash_sha256_init(&sha256_state);
 
                 std::vector<char> buffer(buffer_size);
-                for (uint32_t index = 0; index < chunk_count; ++index) {
-                    const auto chunk_path = temp_dir / (std::to_string(index) + ".chunk");
+                uint64_t total_size_bytes = 0;
+                for (const auto& [chunk, chunk_path] : resolved_chunks) {
                     std::ifstream chunk_file(chunk_path, std::ios::binary);
                     if (!chunk_file) {
                         assembled_file.close();
                         std::filesystem::remove(assembled_path, ec);
                         return std::unexpected(
-                            ErrorInfo(ErrorCode::InternalError, "Failed to open chunk for assembling")
+                            ErrorInfo(ErrorCode::ChunkVerifyFailed, "Staging chunk object is missing")
                         );
                     }
+
+                    FileHashUtil::Md5Context chunk_md5_ctx{};
+                    FileHashUtil::Md5Init(chunk_md5_ctx);
+                    uint64_t chunk_size_bytes = 0;
 
                     while (chunk_file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()))) {
                         auto bytes_read = static_cast<size_t>(chunk_file.gcount());
@@ -360,7 +465,9 @@ namespace disk::storage {
                         const auto* sha256_bytes = std::bit_cast<const unsigned char*>(buffer.data());
                         assembled_file.write(buffer.data(), static_cast<std::streamsize>(bytes_read));
                         FileHashUtil::Md5Update(md5_ctx, md5_bytes, bytes_read);
+                        FileHashUtil::Md5Update(chunk_md5_ctx, md5_bytes, bytes_read);
                         crypto_hash_sha256_update(&sha256_state, sha256_bytes, bytes_read);
+                        chunk_size_bytes += bytes_read;
                     }
                     if (chunk_file.gcount() > 0) {
                         auto bytes_read = static_cast<size_t>(chunk_file.gcount());
@@ -368,7 +475,9 @@ namespace disk::storage {
                         const auto* sha256_bytes = std::bit_cast<const unsigned char*>(buffer.data());
                         assembled_file.write(buffer.data(), static_cast<std::streamsize>(bytes_read));
                         FileHashUtil::Md5Update(md5_ctx, md5_bytes, bytes_read);
+                        FileHashUtil::Md5Update(chunk_md5_ctx, md5_bytes, bytes_read);
                         crypto_hash_sha256_update(&sha256_state, sha256_bytes, bytes_read);
+                        chunk_size_bytes += bytes_read;
                     }
                     if (!chunk_file.eof()) {
                         assembled_file.close();
@@ -377,6 +486,22 @@ namespace disk::storage {
                             ErrorInfo(ErrorCode::InternalError, "Failed to read chunk for assembling")
                         );
                     }
+
+                    std::array<uint8_t, 16> chunk_md5_digest{};
+                    FileHashUtil::Md5Final(chunk_md5_ctx, chunk_md5_digest.data());
+                    const auto actual_chunk_md5 = FileHashUtil::BytesToHex(
+                        chunk_md5_digest.data(),
+                        chunk_md5_digest.size()
+                    );
+                    if ((chunk.size_bytes != 0 && chunk.size_bytes != chunk_size_bytes) ||
+                        (!chunk.md5_hash.empty() && chunk.md5_hash != actual_chunk_md5)) {
+                        assembled_file.close();
+                        std::filesystem::remove(assembled_path, ec);
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::ChunkVerifyFailed, "Staging chunk metadata mismatch")
+                        );
+                    }
+                    total_size_bytes += chunk_size_bytes;
                 }
 
                 assembled_file.close();
@@ -395,6 +520,7 @@ namespace disk::storage {
 
                 return UploadStagingAssembly{
                     .path = assembled_path,
+                    .size_bytes = total_size_bytes,
                     .md5_hash = FileHashUtil::BytesToHex(md5_digest.data(), md5_digest.size()),
                     .sha256_hash =
                         FileHashUtil::BytesToHex(sha256_digest.data(), sha256_digest.size())
@@ -407,24 +533,23 @@ namespace disk::storage {
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             Logger::Info() << "[assemble_chunks] duration_us=" << duration_us
-                     << " outcome=failure active_count=" << pool.ActiveCount()
-                     << " max_concurrent=" << pool.MaxConcurrent();
+                           << " outcome=failure active_count=" << pool.ActiveCount()
+                           << " max_concurrent=" << pool.MaxConcurrent();
             co_return result;
         }
 
         Logger::Debug() << "Assembly completed: upload_id=" << upload_id << ", running=" << pool.ActiveCount()
-                  << ", max_concurrent=" << pool.MaxConcurrent();
+                        << ", max_concurrent=" << pool.MaxConcurrent();
 
         auto end = std::chrono::steady_clock::now();
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         Logger::Debug() << "[assemble_chunks] duration_us=" << duration_us
-                  << " outcome=success active_count=" << pool.ActiveCount()
-                  << " max_concurrent=" << pool.MaxConcurrent();
+                        << " outcome=success active_count=" << pool.ActiveCount()
+                        << " max_concurrent=" << pool.MaxConcurrent();
 
         co_return result;
     }
-
 
     auto LocalFileStorage::DeletePath(const std::filesystem::path& target_path)
         -> drogon::Task<Result<void>> {
@@ -544,13 +669,46 @@ namespace disk::storage {
         return std::filesystem::path(m_config_mgr->GetTempUploadPath()) / upload_id;
     }
 
-    auto LocalFileStorage::GetChunkFilePath(const std::string& upload_id, uint32_t chunk_index) const
-        -> std::filesystem::path {
-        return GetTempDirPath(upload_id) / (std::to_string(chunk_index) + ".chunk");
+    auto LocalFileStorage::GetChunkObjectKey(
+        const std::string& upload_id,
+        uint32_t chunk_index,
+        const std::string& md5_hash
+    ) -> std::string {
+        return (std::filesystem::path(upload_id) / "chunks" /
+                (std::to_string(chunk_index) + "-" + md5_hash + ".part"))
+            .generic_string();
+    }
+
+    auto LocalFileStorage::ResolveChunkFilePath(
+        const std::string& upload_id,
+        const UploadStagingChunk& chunk
+    ) const -> Result<std::filesystem::path> {
+        if (!IsSafeObjectComponent(upload_id)) {
+            return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Invalid upload staging object identity")
+            );
+        }
+
+        if (chunk.object_key.empty()) {
+            return GetTempDirPath(upload_id) / (std::to_string(chunk.chunk_index) + ".chunk");
+        }
+        if (!IsLowerHexMd5(chunk.md5_hash)) {
+            return std::unexpected(
+                ErrorInfo(ErrorCode::ChunkVerifyFailed, "Invalid staging chunk hash metadata")
+            );
+        }
+
+        const auto expected_key = GetChunkObjectKey(upload_id, chunk.chunk_index, chunk.md5_hash);
+        if (chunk.object_key != expected_key) {
+            return std::unexpected(
+                ErrorInfo(ErrorCode::ChunkVerifyFailed, "Staging chunk object key mismatch")
+            );
+        }
+        return std::filesystem::path(m_config_mgr->GetTempUploadPath()) / expected_key;
     }
 
     auto LocalFileStorage::GetAssembleFilePath(const std::string& upload_id) const -> std::filesystem::path {
         return std::filesystem::path(m_config_mgr->GetTempUploadPath()) / (upload_id + ".tmp");
     }
 
-} ///< namespace disk::storage
+} // namespace disk::storage

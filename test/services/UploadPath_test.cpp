@@ -38,7 +38,7 @@
  *        │  std::move(chunk_payload) — ownership transfer — no copy
  *        │  File: src/services/FileService.cpp:947
  *        ▼
- *   LocalFileStorage::WriteChunk(upload_id, chunk_index, data)
+ *   LocalFileStorage::WriteChunk(upload_id, chunk_index, md5_hash, data)
  *     data is std::string (moved in)
  *        │
  *        │  Lambda capture: chunk_data = std::move(data) — no copy
@@ -107,6 +107,7 @@
 #include "../../src/storage/LocalFileStorage.hpp"
 #include "../../src/utils/ConfigMgr.hpp"
 #include "../../src/utils/FileHashUtil.hpp"
+#include "../storage/UploadStagingTestAdapter.hpp"
 
 /// LocalFileStorage.cpp implementation is provided by FileUploadConsistency_test.cpp
 /// in the same disk-test binary; do not include it again (ODR violation).
@@ -115,7 +116,7 @@ namespace disk::file {
     namespace {
 
         using disk::storage::LocalBlobStore;
-        using disk::storage::LocalFileStorage;
+        using disk::test_support::UploadStagingTestAdapter;
         using disk::utils::ConfigMgr;
         using disk::utils::FileHashUtil;
 
@@ -177,7 +178,7 @@ namespace disk::file {
                 std::filesystem::remove_all(m_root, ec);
 
                 LoadStorageConfig(m_storage_base, m_temp_base);
-                m_storage = std::make_unique<LocalFileStorage>();
+                m_storage = std::make_unique<UploadStagingTestAdapter>();
                 m_blob_store = std::make_unique<LocalBlobStore>();
             }
 
@@ -192,7 +193,7 @@ namespace disk::file {
 
             auto ChunkPath(const std::string& upload_id, uint32_t chunk_index) const
                 -> std::filesystem::path {
-                return m_temp_base / upload_id / (std::to_string(chunk_index) + ".chunk");
+                return m_storage->ChunkPath(m_temp_base, upload_id, chunk_index);
             }
 
             auto AssembledPath(const std::string& upload_id) const -> std::filesystem::path {
@@ -202,7 +203,7 @@ namespace disk::file {
             std::filesystem::path m_root;
             std::filesystem::path m_storage_base;
             std::filesystem::path m_temp_base;
-            std::unique_ptr<LocalFileStorage> m_storage;
+            std::unique_ptr<UploadStagingTestAdapter> m_storage;
             std::unique_ptr<LocalBlobStore> m_blob_store;
         };
 
@@ -218,7 +219,7 @@ namespace disk::file {
                 [] {
                     Json::Value json;
                     json["filename"] = "test_file.dat";
-                    json["file_size"] = 10485760;  ///< 10 MB
+                    json["file_size"] = 10485760; ///< 10 MB
                     json["file_hash"] = "d41d8cd98f00b204e9800998ecf8427e";
                     json["parent_id"] = 0;
                     return json;
@@ -332,20 +333,40 @@ namespace disk::file {
             EXPECT_EQ(on_disk, chunk_data);
         }
 
-        TEST_F(UploadPathTest, WriteChunkOverwritesExistingChunk) {
-            const std::string upload_id = "overwrite-test";
+        TEST_F(UploadPathTest, WriteChunkKeepsDifferentContentObjectsImmutable) {
+            const std::string upload_id = "immutable-key-test";
             const std::string first_data = MakePattern(2048, 0x11);
             const std::string second_data = MakePattern(1024, 0x22);
 
             ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
 
-            ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, first_data)).has_value());
-            ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, second_data)).has_value());
+            auto first_result = drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, first_data));
+            auto second_result = drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, second_data));
+            ASSERT_TRUE(first_result.has_value());
+            ASSERT_TRUE(second_result.has_value());
 
-            /// Second write should have overwritten the first
-            const auto on_disk = ReadBinaryFile(ChunkPath(upload_id, 0));
-            EXPECT_EQ(on_disk, second_data);
-            EXPECT_EQ(std::filesystem::file_size(ChunkPath(upload_id, 0)), static_cast<uintmax_t>(1024));
+            EXPECT_NE(first_result->object_key, second_result->object_key);
+            const auto first_path = m_temp_base / first_result->object_key;
+            const auto second_path = m_temp_base / second_result->object_key;
+            ASSERT_TRUE(std::filesystem::exists(first_path));
+            ASSERT_TRUE(std::filesystem::exists(second_path));
+            EXPECT_EQ(ReadBinaryFile(first_path), first_data);
+            EXPECT_EQ(ReadBinaryFile(second_path), second_data);
+        }
+
+        TEST_F(UploadPathTest, WriteChunkWithSameContentReusesImmutableObject) {
+            const std::string upload_id = "idempotent-key-test";
+            const std::string chunk_data = MakePattern(2048, 0x33);
+
+            auto first_result = drogon::sync_wait(m_storage->WriteChunk(upload_id, 1, chunk_data));
+            auto second_result = drogon::sync_wait(m_storage->WriteChunk(upload_id, 1, chunk_data));
+            ASSERT_TRUE(first_result.has_value());
+            ASSERT_TRUE(second_result.has_value());
+
+            EXPECT_EQ(first_result->object_key, second_result->object_key);
+            EXPECT_EQ(first_result->md5_hash, FileHashUtil::HashMd5(chunk_data));
+            EXPECT_EQ(first_result->size_bytes, chunk_data.size());
+            EXPECT_EQ(ReadBinaryFile(m_temp_base / first_result->object_key), chunk_data);
         }
 
         /// =====================================================================
@@ -364,7 +385,9 @@ namespace disk::file {
 
             for (uint32_t i = 0; i < chunks.size(); ++i) {
                 auto result = drogon::sync_wait(m_storage->WriteChunk(
-                    upload_id, i, chunks[i]
+                    upload_id,
+                    i,
+                    chunks[i]
                 ));
                 ASSERT_TRUE(result.has_value()) << "Failed to write chunk " << i;
             }
@@ -423,6 +446,7 @@ namespace disk::file {
 
             const auto& assembled = result.value();
             EXPECT_TRUE(std::filesystem::exists(assembled.path));
+            EXPECT_EQ(assembled.size_bytes, expected_content.size());
             EXPECT_EQ(std::filesystem::file_size(assembled.path), expected_content.size());
             EXPECT_EQ(ReadBinaryFile(assembled.path), expected_content);
         }
@@ -454,17 +478,56 @@ namespace disk::file {
             const std::string upload_id = "assemble-missing-test";
 
             ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
-            ASSERT_TRUE(drogon::sync_wait(
-                m_storage->WriteChunk(upload_id, 0, MakePattern(1024))
-            ).has_value());
+            ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, MakePattern(1024))).has_value());
             /// Chunk 1 is intentionally missing
 
             auto result = drogon::sync_wait(m_storage->AssembleChunks(upload_id, 2));
             ASSERT_FALSE(result.has_value());
-            EXPECT_EQ(result.error().code, ErrorCode::InternalError);
+            EXPECT_EQ(result.error().code, ErrorCode::ChunkVerifyFailed);
 
             /// Temp artifact must not be left behind
             EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
+        }
+
+        TEST_F(UploadPathTest, AssembleChunksRejectsTamperedDescriptorMetadata) {
+            const std::string upload_id = "assemble-descriptor-mismatch";
+            const std::string chunk_data = MakePattern(1024, 0x45);
+
+            ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, chunk_data)).has_value());
+            auto descriptors = m_storage->DescriptorsFor(upload_id);
+            ASSERT_EQ(descriptors.size(), 1U);
+            descriptors[0].size_bytes += 1;
+
+            auto result = drogon::sync_wait(m_storage->AssembleChunks(upload_id, 1, descriptors));
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::ChunkVerifyFailed);
+            EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
+        }
+
+        TEST_F(UploadPathTest, AssembleChunksSupportsLegacyLocalChunkRows) {
+            const std::string upload_id = "assemble-legacy-local";
+            const std::string chunk_data = MakePattern(1024, 0x56);
+            const auto legacy_path = m_temp_base / upload_id / "0.chunk";
+
+            std::error_code ec;
+            std::filesystem::create_directories(legacy_path.parent_path(), ec);
+            ASSERT_FALSE(ec);
+            std::ofstream output(legacy_path, std::ios::binary);
+            output.write(chunk_data.data(), static_cast<std::streamsize>(chunk_data.size()));
+            output.close();
+            ASSERT_TRUE(output);
+
+            const std::vector<disk::storage::UploadStagingChunk> legacy_descriptors = {
+                { .chunk_index = 0 }
+            };
+            auto result = drogon::sync_wait(
+                m_storage->AssembleChunks(upload_id, 1, legacy_descriptors)
+            );
+
+            ASSERT_TRUE(result.has_value());
+            EXPECT_EQ(result->size_bytes, chunk_data.size());
+            EXPECT_EQ(result->md5_hash, FileHashUtil::HashMd5(chunk_data));
+            EXPECT_EQ(ReadBinaryFile(result->path), chunk_data);
         }
 
         /// =====================================================================
@@ -474,7 +537,7 @@ namespace disk::file {
         TEST_F(UploadPathTest, HashMd5ComputesCorrectHash) {
             /// Verify that the hash computed in FileService (via HashMd5)
             /// matches what we'd compute independently
-            const std::string data = MakePattern(5 * 1024 * 1024, 0x77);  ///< 5 MB (default chunk size)
+            const std::string data = MakePattern(5 * 1024 * 1024, 0x77); ///< 5 MB (default chunk size)
             const auto hash = FileHashUtil::HashMd5(data);
 
             /// Hash must be 32-character lowercase hex
@@ -598,9 +661,7 @@ namespace disk::file {
             const auto expected_md5 = FileHashUtil::HashMd5(content);
 
             ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
-            ASSERT_TRUE(drogon::sync_wait(
-                m_storage->WriteChunk(upload_id, 0, content)
-            ).has_value());
+            ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, content)).has_value());
 
             auto assemble_result = drogon::sync_wait(m_storage->AssembleChunks(upload_id, 1));
             ASSERT_TRUE(assemble_result.has_value());
@@ -757,9 +818,7 @@ namespace disk::file {
             const std::string upload_id = "cleanup-test";
 
             ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
-            ASSERT_TRUE(drogon::sync_wait(
-                m_storage->WriteChunk(upload_id, 0, MakePattern(512))
-            ).has_value());
+            ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, MakePattern(512))).has_value());
 
             EXPECT_TRUE(std::filesystem::exists(m_temp_base / upload_id));
 
@@ -772,9 +831,7 @@ namespace disk::file {
             const std::string upload_id = "cleanup-repeat-test";
 
             ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
-            ASSERT_TRUE(drogon::sync_wait(
-                m_storage->WriteChunk(upload_id, 0, MakePattern(512))
-            ).has_value());
+            ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, MakePattern(512))).has_value());
             {
                 std::ofstream assembled(AssembledPath(upload_id), std::ios::binary);
                 assembled << "assembled-temp";
@@ -804,5 +861,5 @@ namespace disk::file {
             ASSERT_TRUE(result.has_value());
         }
 
-    } ///< namespace
-} ///< namespace disk::file
+    } // namespace
+} // namespace disk::file

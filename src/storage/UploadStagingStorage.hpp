@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include <drogon/orm/DbClient.h>
 
@@ -19,8 +20,17 @@
 
 namespace disk::storage {
 
+    struct UploadStagingChunk {
+        uint32_t chunk_index{ 0 };
+        uint64_t size_bytes{ 0 };
+        std::string md5_hash;
+        std::string object_key;
+        std::string etag;
+    };
+
     struct UploadStagingAssembly {
         std::filesystem::path path;
+        uint64_t size_bytes{ 0 };
         std::string md5_hash;
         std::string sha256_hash;
     };
@@ -51,24 +61,31 @@ namespace disk::storage {
          * @brief 写入上传分片到暂存目录
          * @param upload_id 上传会话 ID
          * @param chunk_index 分片索引
+         * @param md5_hash 已由服务端验证的分片 MD5
          * @param data 分片二进制数据
-         * @return 成功返回空，失败返回错误信息
+         * @return 成功返回不可变分片对象描述符，失败返回错误信息
          */
         [[nodiscard]]
         virtual auto WriteChunk(
             const std::string& upload_id,
             uint32_t chunk_index,
+            const std::string& md5_hash,
             std::string data
-        ) -> drogon::Task<Result<void>> = 0;
+        ) -> drogon::Task<Result<UploadStagingChunk>> = 0;
 
         /**
          * @brief 将 upload_id 对应的全部分片按序组装成暂存完整文件
          * @param upload_id 上传会话 ID
-         * @param chunk_count 分片总数
+         * @param expected_chunk_count 上传任务声明的分片总数
+         * @param chunks PostgreSQL 按索引返回的权威分片描述符
          * @return 成功返回暂存组装结果，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto AssembleChunks(const std::string& upload_id, uint32_t chunk_count)
+        virtual auto AssembleChunks(
+            const std::string& upload_id,
+            uint32_t expected_chunk_count,
+            const std::vector<UploadStagingChunk>& chunks
+        )
             -> drogon::Task<Result<UploadStagingAssembly>> = 0;
 
         /**
@@ -92,4 +109,4 @@ namespace disk::storage {
         virtual auto CleanupTemp(const std::string& upload_id) -> drogon::Task<Result<void>> = 0;
     };
 
-} ///< namespace disk::storage
+} // namespace disk::storage

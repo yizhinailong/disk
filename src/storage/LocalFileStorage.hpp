@@ -67,17 +67,26 @@ namespace disk::storage {
          * @return 成功返回空，失败返回错误信息
          */
         [[nodiscard]]
-        auto WriteChunk(const std::string& upload_id, uint32_t chunk_index, std::string data)
-            -> drogon::Task<Result<void>> override;
+        auto WriteChunk(
+            const std::string& upload_id,
+            uint32_t chunk_index,
+            const std::string& md5_hash,
+            std::string data
+        ) -> drogon::Task<Result<UploadStagingChunk>> override;
 
         /**
          * @brief 将上传会话对应的全部分片按序组装成临时完整文件
          * @param upload_id 上传会话 ID
-         * @param chunk_count 分片总数
+         * @param expected_chunk_count 上传任务声明的分片总数
+         * @param chunks PostgreSQL 按索引返回的权威分片描述符
          * @return 成功返回组装后的临时文件路径，失败返回错误信息
          */
         [[nodiscard]]
-        auto AssembleChunks(const std::string& upload_id, uint32_t chunk_count)
+        auto AssembleChunks(
+            const std::string& upload_id,
+            uint32_t expected_chunk_count,
+            const std::vector<UploadStagingChunk>& chunks
+        )
             -> drogon::Task<Result<UploadStagingAssembly>> override;
 
         /**
@@ -119,11 +128,21 @@ namespace disk::storage {
          * @brief 获取分片文件的完整路径
          * @param upload_id 上传会话 ID
          * @param chunk_index 分片索引
-         * @return 分片文件路径
+         * @param md5_hash 分片 MD5
+         * @return 分片对象 key
          */
         [[nodiscard]]
-        auto GetChunkFilePath(const std::string& upload_id, uint32_t chunk_index) const
-            -> std::filesystem::path;
+        static auto GetChunkObjectKey(
+            const std::string& upload_id,
+            uint32_t chunk_index,
+            const std::string& md5_hash
+        ) -> std::string;
+
+        [[nodiscard]]
+        auto ResolveChunkFilePath(
+            const std::string& upload_id,
+            const UploadStagingChunk& chunk
+        ) const -> Result<std::filesystem::path>;
 
         /**
          * @brief 获取组装文件的临时路径
@@ -138,4 +157,4 @@ namespace disk::storage {
         std::shared_ptr<trantor::ConcurrentTaskQueue> m_assembly_worker_queue{}; ///< 分片组装专用工作队列
     };
 
-} ///< namespace disk::storage
+} // namespace disk::storage

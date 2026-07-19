@@ -193,7 +193,8 @@ def test_happy_path_upload():
     persisted_chunk_metadata = int(
         scalar(
             "SELECT COUNT(*) FROM upload_task_chunks "
-            "WHERE task_id = %s AND size_bytes IS NOT NULL AND hash_md5 IS NOT NULL",
+            "WHERE task_id = %s AND size_bytes IS NOT NULL "
+            "AND hash_md5 IS NOT NULL AND object_key IS NOT NULL",
             (upload_id,),
         )
         or 0
@@ -204,7 +205,7 @@ def test_happy_path_upload():
             f"got {persisted_chunk_metadata}"
         )
         return
-    log_pass("Chunk metadata persistence - size and hash stored for both chunks")
+    log_pass("Chunk metadata persistence - size, hash, and object key stored for both chunks")
 
     # Simulate a different instance holding an active finalize lease.
     execute(

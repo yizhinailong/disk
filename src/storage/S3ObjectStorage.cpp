@@ -96,14 +96,28 @@ namespace disk::storage {
     auto S3ObjectStorage::WriteChunk(
         const std::string& upload_id,
         uint32_t chunk_index,
+        const std::string& md5_hash,
         std::string data
-    ) -> drogon::Task<Result<void>> {
-        co_return co_await m_local_staging.WriteChunk(upload_id, chunk_index, std::move(data));
+    ) -> drogon::Task<Result<UploadStagingChunk>> {
+        co_return co_await m_local_staging.WriteChunk(
+            upload_id,
+            chunk_index,
+            md5_hash,
+            std::move(data)
+        );
     }
 
-    auto S3ObjectStorage::AssembleChunks(const std::string& upload_id, uint32_t chunk_count)
+    auto S3ObjectStorage::AssembleChunks(
+        const std::string& upload_id,
+        uint32_t expected_chunk_count,
+        const std::vector<UploadStagingChunk>& chunks
+    )
         -> drogon::Task<Result<UploadStagingAssembly>> {
-        co_return co_await m_local_staging.AssembleChunks(upload_id, chunk_count);
+        co_return co_await m_local_staging.AssembleChunks(
+            upload_id,
+            expected_chunk_count,
+            chunks
+        );
     }
 
     auto S3ObjectStorage::DiscardAssembly(

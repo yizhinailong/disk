@@ -14,12 +14,12 @@
 
 #include <drogon/drogon.h>
 
-#include "services/UploadTaskRepository.hpp"
 #include "models/UploadTasks.hpp"
+#include "services/UploadLifecycleService.hpp"
+#include "services/UploadTaskRepository.hpp"
 #include "storage/IBlobStore.hpp"
 #include "storage/IFileStorage.hpp"
 #include "storage/UploadStagingStorage.hpp"
-#include "services/UploadLifecycleService.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
 #include "utils/RedisKeyPrefix.hpp"
@@ -51,8 +51,8 @@ namespace disk::file {
         -> drogon::Task<Result<InitUploadResponse>> {
 
         Logger::Debug() << "Starting initialize upload: filename=\"" << request.filename
-                  << "\", file_size=" << request.file_size << ", file_hash=" << request.file_hash
-                  << ", parent_id=" << request.parent_id << ", user_id=" << user_id;
+                        << "\", file_size=" << request.file_size << ", file_hash=" << request.file_hash
+                        << ", parent_id=" << request.parent_id << ", user_id=" << user_id;
 
         auto config = ConfigMgr::GetInstance();
         disk::upload::UploadLifecycleService lifecycle_service(
@@ -114,8 +114,8 @@ namespace disk::file {
         auto start = std::chrono::steady_clock::now();
 
         Logger::Debug() << "Starting upload chunk: upload_id=" << upload_id
-                  << ", chunk_index=" << chunk_index << ", chunk_hash=" << chunk_hash
-                  << ", data_size=" << chunk_data.size();
+                        << ", chunk_index=" << chunk_index << ", chunk_hash=" << chunk_hash
+                        << ", data_size=" << chunk_data.size();
 
         /// 1. 优先读取短 TTL 上传任务缓存，命中后避免重复查询数据库
         auto cached_task = TryGetUploadTaskCacheEntry(upload_id, user_id);
@@ -128,9 +128,9 @@ namespace disk::file {
                 auto duration_us =
                     std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
                 Logger::Info() << "[upload_chunk] duration_us=" << duration_us
-                         << " outcome=failure upload_id=" << upload_id
-                         << " chunk_index=" << chunk_index
-                         << " data_size=" << chunk_data.size();
+                               << " outcome=failure upload_id=" << upload_id
+                               << " chunk_index=" << chunk_index
+                               << " data_size=" << chunk_data.size();
 
                 co_return std::unexpected(task_result.error());
             }
@@ -160,9 +160,9 @@ namespace disk::file {
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             Logger::Info() << "[upload_chunk] duration_us=" << duration_us
-                     << " outcome=failure upload_id=" << upload_id
-                     << " chunk_index=" << chunk_index
-                     << " data_size=" << chunk_data.size();
+                           << " outcome=failure upload_id=" << upload_id
+                           << " chunk_index=" << chunk_index
+                           << " data_size=" << chunk_data.size();
 
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::UploadTaskNotFound, "Upload task expired")
@@ -181,42 +181,41 @@ namespace disk::file {
             const auto& acceptance_error = chunk_acceptance.error();
             if (acceptance_error.error.message == "Chunk index out of range") {
                 Logger::Warn() << "Chunk index out of range: chunk_index=" << chunk_index
-                         << ", total_chunks=" << task.total_chunks;
+                               << ", total_chunks=" << task.total_chunks;
             } else {
                 Logger::Warn() << "Unexpected chunk size: upload_id=" << upload_id
-                         << ", chunk_index=" << chunk_index
-                         << ", expected_size=" << acceptance_error.expected_size
-                         << ", actual_size=" << chunk_data.size()
-                         << ", file_size=" << task.file_size
-                         << ", chunk_size=" << task.chunk_size;
+                               << ", chunk_index=" << chunk_index
+                               << ", expected_size=" << acceptance_error.expected_size
+                               << ", actual_size=" << chunk_data.size()
+                               << ", file_size=" << task.file_size
+                               << ", chunk_size=" << task.chunk_size;
             }
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             Logger::Info() << "[upload_chunk] duration_us=" << duration_us
-                     << " outcome=failure upload_id=" << upload_id
-                     << " chunk_index=" << chunk_index
-                     << " data_size=" << chunk_data.size();
+                           << " outcome=failure upload_id=" << upload_id
+                           << " chunk_index=" << chunk_index
+                           << " data_size=" << chunk_data.size();
 
             co_return std::unexpected(acceptance_error.error);
         }
 
         /// 5. 将请求体复制到拥有所有权的缓冲区，只做一次哈希+落盘复用。
         std::string chunk_payload{ chunk_data };
-        const auto chunk_size_bytes = chunk_payload.size();
         auto actual_hash = FileHashUtil::HashMd5(chunk_payload);
         if (actual_hash != chunk_hash) {
             Logger::Warn() << "Chunk hash mismatch: expected=" << chunk_hash
-                     << ", actual=" << actual_hash;
+                           << ", actual=" << actual_hash;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             Logger::Info() << "[upload_chunk] duration_us=" << duration_us
-                     << " outcome=failure upload_id=" << upload_id
-                     << " chunk_index=" << chunk_index
-                     << " data_size=" << chunk_data.size();
+                           << " outcome=failure upload_id=" << upload_id
+                           << " chunk_index=" << chunk_index
+                           << " data_size=" << chunk_data.size();
 
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ChunkVerifyFailed, "Chunk hash mismatch")
@@ -234,20 +233,21 @@ namespace disk::file {
         auto write_result = co_await m_upload_staging_storage->WriteChunk(
             upload_id,
             chunk_index,
+            actual_hash,
             std::move(chunk_payload)
         );
         if (!write_result) {
             Logger::Error() << "Failed to write chunk file: upload_id=" << upload_id
-                      << ", chunk_index=" << chunk_index << ", error="
-                      << static_cast<int>(write_result.error().code);
+                            << ", chunk_index=" << chunk_index << ", error="
+                            << static_cast<int>(write_result.error().code);
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             Logger::Info() << "[upload_chunk] duration_us=" << duration_us
-                     << " outcome=failure upload_id=" << upload_id
-                     << " chunk_index=" << chunk_index
-                     << " data_size=" << chunk_data.size();
+                           << " outcome=failure upload_id=" << upload_id
+                           << " chunk_index=" << chunk_index
+                           << " data_size=" << chunk_data.size();
 
             co_return std::unexpected(write_result.error());
         }
@@ -259,8 +259,10 @@ namespace disk::file {
                 upload_id,
                 user_id,
                 chunk_index,
-                chunk_size_bytes,
-                actual_hash
+                write_result->size_bytes,
+                write_result->md5_hash,
+                write_result->object_key,
+                write_result->etag
             );
             if (record_disposition == ChunkRecordDisposition::TaskRejected) {
                 InvalidateUploadTaskCache(upload_id);
@@ -279,15 +281,15 @@ namespace disk::file {
             }
 
             Logger::Debug() << "Chunk upload successful: upload_id=" << upload_id
-                      << ", chunk_index=" << chunk_index;
+                            << ", chunk_index=" << chunk_index;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             Logger::Debug() << "[upload_chunk] duration_us=" << duration_us
-                      << " outcome=success upload_id=" << upload_id
-                      << " chunk_index=" << chunk_index
-                      << " data_size=" << chunk_data.size();
+                            << " outcome=success upload_id=" << upload_id
+                            << " chunk_index=" << chunk_index
+                            << " data_size=" << chunk_data.size();
 
             UploadChunkResponse response;
             response.chunk_index = chunk_index;
@@ -302,9 +304,9 @@ namespace disk::file {
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             Logger::Info() << "[upload_chunk] duration_us=" << duration_us
-                     << " outcome=failure upload_id=" << upload_id
-                     << " chunk_index=" << chunk_index
-                     << " data_size=" << chunk_data.size();
+                           << " outcome=failure upload_id=" << upload_id
+                           << " chunk_index=" << chunk_index
+                           << " data_size=" << chunk_data.size();
 
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to record chunk upload")
@@ -371,7 +373,7 @@ namespace disk::file {
         /// 2. Check idempotency: already in terminal state
         if (!disk::upload::CanCancelOrExpire(task.getValueOfStatus())) {
             Logger::Debug() << "Upload task already in terminal state: upload_id=" << upload_id
-                      << ", status=" << task.getValueOfStatus();
+                            << ", status=" << task.getValueOfStatus();
             co_return {};
         }
 
@@ -403,7 +405,7 @@ namespace disk::file {
         auto task = co_await upload_task_repository.FindByIdForUser(upload_id, user_id);
         if (!task.has_value()) {
             Logger::Warn() << "Upload task not found or not owned by user: upload_id=" << upload_id
-                     << ", request_user_id=" << user_id;
+                           << ", request_user_id=" << user_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
         }
 
@@ -471,7 +473,7 @@ namespace disk::file {
                 [this]() { EvictExpiredUploadTaskCacheEntries(); }
             );
             Logger::Debug() << "Upload task cache maintenance timer started (interval="
-                      << UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS << "s)";
+                            << UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS << "s)";
         }
     }
 
@@ -498,4 +500,4 @@ namespace disk::file {
         }
     }
 
-} ///< namespace disk::file
+} // namespace disk::file

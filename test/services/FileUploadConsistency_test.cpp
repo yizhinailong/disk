@@ -22,13 +22,13 @@
 #include "../../src/storage/LocalFileStorage.hpp"
 #include "../../src/utils/ConfigMgr.hpp"
 #include "../../src/utils/FileHashUtil.hpp"
-
+#include "../storage/UploadStagingTestAdapter.hpp"
 
 namespace disk::file {
     namespace {
 
         using disk::storage::LocalBlobStore;
-        using disk::storage::LocalFileStorage;
+        using disk::test_support::UploadStagingTestAdapter;
         using disk::utils::ConfigMgr;
         using disk::utils::FileHashUtil;
 
@@ -81,7 +81,7 @@ namespace disk::file {
                 std::filesystem::remove_all(m_root, ec);
 
                 LoadStorageConfig(m_storage_base, m_temp_base);
-                m_storage = std::make_unique<LocalFileStorage>();
+                m_storage = std::make_unique<UploadStagingTestAdapter>();
                 m_blob_store = std::make_unique<LocalBlobStore>();
             }
 
@@ -96,7 +96,7 @@ namespace disk::file {
 
             auto ChunkPath(const std::string& upload_id, uint32_t chunk_index) const
                 -> std::filesystem::path {
-                return m_temp_base / upload_id / (std::to_string(chunk_index) + ".chunk");
+                return m_storage->ChunkPath(m_temp_base, upload_id, chunk_index);
             }
 
             auto AssembledPath(const std::string& upload_id) const -> std::filesystem::path {
@@ -106,7 +106,7 @@ namespace disk::file {
             std::filesystem::path m_root;
             std::filesystem::path m_storage_base;
             std::filesystem::path m_temp_base;
-            std::unique_ptr<LocalFileStorage> m_storage;
+            std::unique_ptr<UploadStagingTestAdapter> m_storage;
             std::unique_ptr<LocalBlobStore> m_blob_store;
         };
 
@@ -279,6 +279,7 @@ namespace disk::file {
 
             const auto& assembled = assemble_result.value();
             ASSERT_TRUE(std::filesystem::exists(assembled.path));
+            EXPECT_EQ(assembled.size_bytes, expected_content.size());
             EXPECT_EQ(std::filesystem::file_size(assembled.path), static_cast<uintmax_t>(expected_content.size()));
             EXPECT_EQ(ReadBinaryFile(assembled.path), expected_content);
             EXPECT_EQ(assembled.md5_hash, FileHashUtil::HashMd5(expected_content));
@@ -293,7 +294,7 @@ namespace disk::file {
 
             auto assemble_result = drogon::sync_wait(m_storage->AssembleChunks(upload_id, 2));
             ASSERT_FALSE(assemble_result.has_value());
-            EXPECT_EQ(assemble_result.error().code, ErrorCode::InternalError);
+            EXPECT_EQ(assemble_result.error().code, ErrorCode::ChunkVerifyFailed);
             EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
         }
 
@@ -354,5 +355,5 @@ namespace disk::file {
             EXPECT_EQ(ReadBinaryFile(final_path), existing_content);
         }
 
-    } ///< namespace
-} ///< namespace disk::file
+    } // namespace
+} // namespace disk::file

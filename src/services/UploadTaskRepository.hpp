@@ -19,14 +19,15 @@
 
 #include "models/UploadTasks.hpp"
 #include "services/UploadLifecycleService.hpp"
+#include "storage/UploadStagingStorage.hpp"
 
 namespace disk::file {
 
     struct ExpiredUploadTaskRecord {
         std::string id;
         std::string temp_path;
-        uint64_t user_id{0};
-        uint64_t reserved_bytes{0};
+        uint64_t user_id{ 0 };
+        uint64_t reserved_bytes{ 0 };
     };
 
     enum class FinalizeClaimDisposition {
@@ -40,8 +41,8 @@ namespace disk::file {
 
     struct FinalizeClaimResult {
         FinalizeClaimDisposition disposition{ FinalizeClaimDisposition::NotFound };
-        uint64_t state_version{0};
-        uint32_t finalize_attempts{0};
+        uint64_t state_version{ 0 };
+        uint32_t finalize_attempts{ 0 };
         std::optional<uint64_t> completed_file_id;
     };
 
@@ -162,8 +163,14 @@ namespace disk::file {
             uint64_t user_id,
             uint32_t chunk_index,
             uint64_t size_bytes,
-            const std::string& hash_md5
+            const std::string& hash_md5,
+            const std::string& object_key,
+            const std::string& etag
         ) const -> drogon::Task<ChunkRecordDisposition>;
+
+        [[nodiscard]]
+        auto ListChunksForAssembly(const std::string& upload_id) const
+            -> drogon::Task<std::vector<disk::storage::UploadStagingChunk>>;
 
         [[nodiscard]]
         auto ListUploadedChunkIndices(const std::string& upload_id) const
@@ -188,4 +195,4 @@ namespace disk::file {
         drogon::orm::DbClientPtr m_db_client;
     };
 
-} ///< namespace disk::file
+} // namespace disk::file

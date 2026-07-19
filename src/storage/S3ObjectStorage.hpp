@@ -36,11 +36,19 @@ namespace disk::storage {
             -> drogon::Task<Result<void>> override;
 
         [[nodiscard]]
-        auto WriteChunk(const std::string& upload_id, uint32_t chunk_index, std::string data)
-            -> drogon::Task<Result<void>> override;
+        auto WriteChunk(
+            const std::string& upload_id,
+            uint32_t chunk_index,
+            const std::string& md5_hash,
+            std::string data
+        ) -> drogon::Task<Result<UploadStagingChunk>> override;
 
         [[nodiscard]]
-        auto AssembleChunks(const std::string& upload_id, uint32_t chunk_count)
+        auto AssembleChunks(
+            const std::string& upload_id,
+            uint32_t expected_chunk_count,
+            const std::vector<UploadStagingChunk>& chunks
+        )
             -> drogon::Task<Result<UploadStagingAssembly>> override;
 
         [[nodiscard]]
@@ -88,4 +96,4 @@ namespace disk::storage {
         std::shared_ptr<trantor::ConcurrentTaskQueue> m_worker_queue;
     };
 
-} ///< namespace disk::storage
+} // namespace disk::storage
