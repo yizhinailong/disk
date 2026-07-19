@@ -34,6 +34,7 @@ set(TEST_SOURCES
     services/ShareServiceQuery_test.cpp
     services/ShareAuditService_test.cpp
     services/StorageJobRepository_test.cpp
+    services/StorageJobWorker_test.cpp
     services/TokenService_test.cpp
     services/TokenServiceRevocation_test.cpp
     services/TrashService_test.cpp
@@ -82,6 +83,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/services/QuotaService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ShareAuditService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/StorageJobRepository.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/StorageJobWorker.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TrashQuery.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TrashService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/UploadLifecycleService.cpp
@@ -123,6 +125,7 @@ set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/src/services/TrashService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/QuotaService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/StorageJobRepository.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/StorageJobWorker.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ContentService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TokenService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/RedisService.cpp

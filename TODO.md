@@ -272,11 +272,11 @@ API Instance A  API Instance B ... N
 
 - [x] 使用 `FOR UPDATE SKIP LOCKED` 批量认领到期任务，并写入 `locked_by/locked_until`。
 - [ ] Worker 使用稳定且唯一的 instance ID，日志和指标均携带该 ID。
-- [ ] 长任务周期续租；续租和完成都必须校验当前 owner/version。
-- [ ] Worker 崩溃后，其他 Worker 可在租约到期后接管。
+- [x] 长任务周期续租；续租和完成都必须校验当前 owner/version。
+- [x] Worker 崩溃后，其他 Worker 可在租约到期后接管。
 - [ ] 任务 handler 按类型注册，至少覆盖 staging cleanup、multipart abort、Blob GC、过期上传和一致性对账。
-- [ ] 临时错误采用带抖动的指数退避，永久错误进入 dead-letter。
-- [ ] 限制单 Worker 并发和每类任务并发，避免对象存储或数据库被恢复任务压垮。
+- [x] 临时错误采用带抖动的指数退避，永久错误进入 dead-letter。
+- [x] 限制单 Worker 并发和每类任务并发，避免对象存储或数据库被恢复任务压垮。
 - [ ] 优雅关闭时停止认领、等待有界时间、停止续租并让未完成任务自然接管。
 
 ### 9.3 周期任务唯一触发
