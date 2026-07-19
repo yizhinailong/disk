@@ -239,7 +239,7 @@ COMMENT ON COLUMN upload_tasks.total_chunks IS '总分片数';
 COMMENT ON COLUMN upload_tasks.reserved_bytes IS '预占用字节数';
 COMMENT ON COLUMN upload_tasks.temp_path IS '临时存储路径';
 COMMENT ON COLUMN upload_tasks.staging_backend IS '暂存后端: local或s3，按任务固化';
-COMMENT ON COLUMN upload_tasks.staging_prefix IS '对象存储暂存前缀，不含凭据';
+COMMENT ON COLUMN upload_tasks.staging_prefix IS '按任务固化的暂存定位符，不含凭据';
 COMMENT ON COLUMN upload_tasks.status IS '状态: 0-进行中, 1-已完成, 2-已取消, 3-已过期, 4-完成中, 5-失败';
 COMMENT ON COLUMN upload_tasks.state_version IS '状态版本，用于租约CAS和诊断';
 COMMENT ON COLUMN upload_tasks.lease_owner IS '当前完成租约所有者实例ID';

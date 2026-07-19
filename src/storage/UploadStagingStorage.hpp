@@ -10,8 +10,9 @@
 #pragma once
 
 #include <cstdint>
-#include <filesystem>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <drogon/orm/DbClient.h>
@@ -23,6 +24,34 @@ namespace disk::storage {
     enum class UploadStagingBackend {
         Local,
         S3,
+    };
+
+    [[nodiscard]] constexpr auto ToStorageValue(UploadStagingBackend backend) noexcept
+        -> std::string_view {
+        switch (backend) {
+            case UploadStagingBackend::Local:
+                return "local";
+            case UploadStagingBackend::S3:
+                return "s3";
+        }
+        return "local";
+    }
+
+    [[nodiscard]] constexpr auto ParseUploadStagingBackend(std::string_view value) noexcept
+        -> std::optional<UploadStagingBackend> {
+        if (value == "local") {
+            return UploadStagingBackend::Local;
+        }
+        if (value == "s3") {
+            return UploadStagingBackend::S3;
+        }
+        return std::nullopt;
+    }
+
+    struct UploadStagingSession {
+        std::string upload_id;
+        UploadStagingBackend backend{ UploadStagingBackend::Local };
+        std::string prefix;
     };
 
     struct UploadStagingChunk {

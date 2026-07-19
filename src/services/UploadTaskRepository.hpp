@@ -76,8 +76,15 @@ namespace disk::file {
             -> drogon::Task<std::optional<std::string>>;
 
         [[nodiscard]]
-        auto Create(drogon_model::disk::UploadTasks task) const
+        auto Create(
+            drogon_model::disk::UploadTasks task,
+            const disk::storage::UploadStagingSession& staging_session
+        ) const
             -> drogon::Task<drogon_model::disk::UploadTasks>;
+
+        [[nodiscard]]
+        auto FindStagingSessionForUser(const std::string& upload_id, uint64_t user_id) const
+            -> drogon::Task<std::optional<disk::storage::UploadStagingSession>>;
 
         [[nodiscard]]
         auto ClaimFinalizeLease(

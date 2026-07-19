@@ -32,6 +32,7 @@
 #include "storage/IFileStorage.hpp"
 #include "storage/StorageMgr.hpp"
 #include "storage/UploadStagingStorage.hpp"
+#include "utils/ConfigMgr.hpp"
 
 namespace disk::upload {
 
@@ -488,6 +489,14 @@ namespace disk::upload {
         }
         auto total_chunks = static_cast<uint32_t>(total_chunks_u64);
         auto upload_id = drogon::utils::getUuid();
+        const auto config = disk::utils::ConfigMgr::GetInstance();
+        const auto staging_backend = config->GetUploadStagingBackend() == disk::utils::StorageBackend::S3 ? disk::storage::UploadStagingBackend::S3 : disk::storage::UploadStagingBackend::Local;
+        const auto staging_prefix = staging_backend == disk::storage::UploadStagingBackend::S3 ? config->GetS3StorageConfig().staging_prefix + "/" + upload_id : upload_id;
+        const disk::storage::UploadStagingSession staging_session{
+            .upload_id = upload_id,
+            .backend = staging_backend,
+            .prefix = staging_prefix,
+        };
 
         drogon_model::disk::UploadTasks task;
         task.setId(upload_id);
@@ -505,7 +514,7 @@ namespace disk::upload {
 
         bool create_task_failed = false;
         try {
-            task = co_await upload_task_repository.Create(std::move(task));
+            task = co_await upload_task_repository.Create(std::move(task), staging_session);
 
             Logger::Debug() << "Upload task created successfully: upload_id=" << task.getValueOfId()
                             << ", total_chunks=" << total_chunks;

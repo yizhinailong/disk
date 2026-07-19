@@ -105,9 +105,19 @@ namespace disk::file {
         co_return result[0]["id"].as<std::string>();
     }
 
-    auto UploadTaskRepository::Create(UploadTasks task) const -> drogon::Task<UploadTasks> {
+    auto UploadTaskRepository::Create(
+        UploadTasks task,
+        const disk::storage::UploadStagingSession& staging_session
+    ) const -> drogon::Task<UploadTasks> {
+        if (staging_session.upload_id != task.getValueOfId()) {
+            throw std::invalid_argument("Staging session upload ID must match upload task ID");
+        }
+        if (staging_session.prefix.empty()) {
+            throw std::invalid_argument("Staging session prefix must not be empty");
+        }
+
         auto result = co_await m_db_client->execSqlCoro(
-            "INSERT INTO upload_tasks (" "id, user_id, folder_id, filename, file_size, file_hash, chunk_size, total_chunks, " "reserved_bytes, temp_path, status, expires_at" ") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *",
+            "INSERT INTO upload_tasks (" "id, user_id, folder_id, filename, file_size, file_hash, chunk_size, total_chunks, " "reserved_bytes, temp_path, staging_backend, staging_prefix, status, expires_at" ") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *",
             task.getValueOfId(),
             task.getValueOfUserId(),
             task.getValueOfFolderId(),
@@ -118,11 +128,39 @@ namespace disk::file {
             task.getValueOfTotalChunks(),
             task.getValueOfReservedBytes(),
             task.getValueOfTempPath(),
+            std::string(disk::storage::ToStorageValue(staging_session.backend)),
+            staging_session.prefix,
             static_cast<int16_t>(task.getValueOfStatus()),
             task.getValueOfExpiresAt()
         );
 
         co_return UploadTasks(result[0], -1);
+    }
+
+    auto UploadTaskRepository::FindStagingSessionForUser(
+        const std::string& upload_id,
+        uint64_t user_id
+    ) const -> drogon::Task<std::optional<disk::storage::UploadStagingSession>> {
+        auto result = co_await m_db_client->execSqlCoro(
+            "SELECT id, staging_backend, COALESCE(staging_prefix, temp_path) AS staging_prefix " "FROM upload_tasks WHERE id = $1 AND user_id = $2",
+            upload_id,
+            user_id
+        );
+        if (result.empty()) {
+            co_return std::nullopt;
+        }
+
+        const auto backend_value = result[0]["staging_backend"].as<std::string>();
+        const auto backend = disk::storage::ParseUploadStagingBackend(backend_value);
+        if (!backend.has_value()) {
+            throw std::runtime_error("Upload task contains an unsupported staging backend");
+        }
+
+        co_return disk::storage::UploadStagingSession{
+            .upload_id = result[0]["id"].as<std::string>(),
+            .backend = backend.value(),
+            .prefix = result[0]["staging_prefix"].as<std::string>(),
+        };
     }
 
     auto UploadTaskRepository::ClaimFinalizeLease(

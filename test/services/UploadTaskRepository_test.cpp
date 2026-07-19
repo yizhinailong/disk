@@ -49,6 +49,41 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::InProgress"));
         }
 
+        TEST(UploadTaskRepositoryStagingContractTest, CreationPersistsImmutableSessionLocation) {
+            const auto repository_source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
+            const auto lifecycle_source = ReadSourceFile("src/services/UploadLifecycleService.cpp");
+
+            EXPECT_TRUE(Contains(repository_source, "staging_backend, staging_prefix, status, expires_at"));
+            EXPECT_TRUE(Contains(repository_source, "ToStorageValue(staging_session.backend)"));
+            EXPECT_TRUE(Contains(repository_source, "staging_session.prefix"));
+            EXPECT_TRUE(Contains(repository_source, "auto UploadTaskRepository::FindStagingSessionForUser("));
+            EXPECT_TRUE(Contains(repository_source, "COALESCE(staging_prefix, temp_path) AS staging_prefix"));
+
+            EXPECT_TRUE(Contains(lifecycle_source, "config->GetUploadStagingBackend()"));
+            EXPECT_TRUE(Contains(lifecycle_source, "config->GetS3StorageConfig().staging_prefix + \"/\" + upload_id"));
+            EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.Create(std::move(task), staging_session)"));
+        }
+
+        TEST(UploadTaskRepositoryStagingContractTest, BackendStorageValuesRoundTrip) {
+            EXPECT_EQ(
+                disk::storage::ToStorageValue(disk::storage::UploadStagingBackend::Local),
+                "local"
+            );
+            EXPECT_EQ(
+                disk::storage::ToStorageValue(disk::storage::UploadStagingBackend::S3),
+                "s3"
+            );
+            EXPECT_EQ(
+                disk::storage::ParseUploadStagingBackend("local"),
+                disk::storage::UploadStagingBackend::Local
+            );
+            EXPECT_EQ(
+                disk::storage::ParseUploadStagingBackend("s3"),
+                disk::storage::UploadStagingBackend::S3
+            );
+            EXPECT_FALSE(disk::storage::ParseUploadStagingBackend("filesystem").has_value());
+        }
+
         TEST(UploadTaskRepositoryStatusTransitionContractTest, TerminalTransitionsAreGuardedByInProgressStatus) {
             const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
 
