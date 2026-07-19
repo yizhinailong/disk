@@ -13,6 +13,8 @@
  * that will eliminate the redundant JWT decode in JwtAuthFilter.
  */
 
+#include "filters/JwtAuthFilter.hpp"
+
 #include <chrono>
 #include <string>
 
@@ -29,6 +31,13 @@ namespace {
     using disk::services::TokenService;
 
     constexpr const char* TEST_JWT_SECRET = "test_secret_key_for_share_token_32b";
+
+    TEST(JwtAuthFilterPathTest, ExemptsAllHealthProbePathsExactly) {
+        EXPECT_TRUE(disk::filters::JwtAuthFilter::IsPublicPath("/api/health"));
+        EXPECT_TRUE(disk::filters::JwtAuthFilter::IsPublicPath("/api/health/live"));
+        EXPECT_TRUE(disk::filters::JwtAuthFilter::IsPublicPath("/api/health/ready"));
+        EXPECT_FALSE(disk::filters::JwtAuthFilter::IsPublicPath("/api/health/ready/extra"));
+    }
 
     /// ================================================================================
     /// Helper: Build a valid access token with custom claims
@@ -559,4 +568,4 @@ namespace {
         EXPECT_EQ(result.error().code, Code::TokenMalformed);
     }
 
-} ///< namespace
+} // namespace

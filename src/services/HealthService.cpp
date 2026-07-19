@@ -1,141 +1,309 @@
 /**
  * @file HealthService.cpp
- * @author LiuFeng (liufeng.code@outlook.com)
- * @brief 健康检查服务
- *
- * @copyright Copyright (c) 2026
- *
+ * @brief 角色感知的 liveness/readiness 服务实现
  */
 
-#include "HealthService.hpp"
+#include "services/HealthService.hpp"
 
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
+#include <utility>
 
-#include <drogon/orm/CoroMapper.h>
-#include <drogon/utils/coroutine.h>
+#include "storage/IBlobStore.hpp"
+#include "storage/UploadStagingStorage.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::health {
+    namespace {
+        [[nodiscard]] auto ElapsedMilliseconds(
+            std::chrono::steady_clock::time_point start
+        ) noexcept -> int64_t {
+            return std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - start
+            )
+                .count();
+        }
+
+        [[nodiscard]] auto HealthyStatus(
+            std::chrono::steady_clock::time_point start
+        ) -> ComponentStatus {
+            return ComponentStatus{
+                .status = "healthy",
+                .latency_ms = ElapsedMilliseconds(start),
+            };
+        }
+
+        [[nodiscard]] auto UnhealthyStatus(
+            std::chrono::steady_clock::time_point start
+        ) -> ComponentStatus {
+            return ComponentStatus{
+                .status = "unhealthy",
+                .latency_ms = ElapsedMilliseconds(start),
+            };
+        }
+
+        auto CheckDatabase(drogon::orm::DbClientPtr db_client)
+            -> drogon::Task<ComponentStatus> {
+            const auto start = std::chrono::steady_clock::now();
+            if (db_client == nullptr) {
+                co_return UnhealthyStatus(start);
+            }
+            try {
+                static_cast<void>(co_await db_client->execSqlCoro("SELECT 1"));
+                co_return HealthyStatus(start);
+            } catch (const std::exception&) {
+                co_return UnhealthyStatus(start);
+            }
+        }
+
+        auto CheckRedis(drogon::nosql::RedisClientPtr redis_client)
+            -> drogon::Task<ComponentStatus> {
+            const auto start = std::chrono::steady_clock::now();
+            if (redis_client == nullptr) {
+                co_return UnhealthyStatus(start);
+            }
+            try {
+                const auto result = co_await redis_client->execCommandCoro("PING");
+                co_return !result.isNil() && result.asString() == "PONG" ? HealthyStatus(start) : UnhealthyStatus(start);
+            } catch (const std::exception&) {
+                co_return UnhealthyStatus(start);
+            }
+        }
+
+        auto CheckStagingStorage(disk::storage::UploadStagingStorage* storage)
+            -> drogon::Task<ComponentStatus> {
+            const auto start = std::chrono::steady_clock::now();
+            if (storage == nullptr) {
+                co_return UnhealthyStatus(start);
+            }
+            try {
+                auto result = co_await storage->ListStagingObjects({}, 1);
+                co_return result.has_value() ? HealthyStatus(start) : UnhealthyStatus(start);
+            } catch (const std::exception&) {
+                co_return UnhealthyStatus(start);
+            }
+        }
+
+        auto CheckFinalStorage(disk::storage::IBlobStore* storage)
+            -> drogon::Task<ComponentStatus> {
+            const auto start = std::chrono::steady_clock::now();
+            if (storage == nullptr) {
+                co_return UnhealthyStatus(start);
+            }
+            try {
+                auto result = co_await storage->ListFinalObjects({}, 1);
+                co_return result.has_value() ? HealthyStatus(start) : UnhealthyStatus(start);
+            } catch (const std::exception&) {
+                co_return UnhealthyStatus(start);
+            }
+        }
+
+        auto CheckStorageJobs(drogon::orm::DbClientPtr db_client)
+            -> drogon::Task<ComponentStatus> {
+            const auto start = std::chrono::steady_clock::now();
+            if (db_client == nullptr) {
+                co_return UnhealthyStatus(start);
+            }
+            try {
+                static_cast<void>(co_await db_client->execSqlCoro(
+                    "SELECT 1 FROM storage_jobs LIMIT 1"
+                ));
+                co_return HealthyStatus(start);
+            } catch (const std::exception&) {
+                co_return UnhealthyStatus(start);
+            }
+        }
+
+        [[nodiscard]] auto RuntimeFailureMessage(
+            const disk::runtime::ProcessRuntimeState& state
+        ) -> std::string {
+            if (!state.IsInitialized()) {
+                return "Process initialization is incomplete";
+            }
+            if (state.IsDraining()) {
+                return "Process is draining";
+            }
+            return "Worker is not accepting storage jobs";
+        }
+    } // namespace
+
+    auto ComponentStatus::ToJson() const -> Json::Value {
+        Json::Value json(Json::objectValue);
+        json["status"] = status;
+        if (!message.empty()) {
+            json["message"] = message;
+        }
+        json["latency_ms"] = static_cast<Json::Int64>(latency_ms);
+        return json;
+    }
+
+    auto HealthResult::ToJson() const -> Json::Value {
+        Json::Value json(Json::objectValue);
+        json["overall_status"] = overall_status;
+        json["role"] = role;
+        json["instance_id"] = instance_id;
+        json["initialized"] = initialized;
+        json["draining"] = draining;
+        json["version"] = version;
+        json["uptime"] = static_cast<Json::Int64>(uptime);
+        json["total_check_ms"] = static_cast<Json::Int64>(total_check_ms);
+        json["timestamp"] = timestamp;
+
+        Json::Value components_json(Json::objectValue);
+        for (const auto& [name, status] : components) {
+            components_json[name] = status.ToJson();
+        }
+        json["components"] = std::move(components_json);
+        return json;
+    }
 
     HealthService::HealthService(
         drogon::orm::DbClientPtr db_client,
-        drogon::nosql::RedisClientPtr redis_client
-    )
-        : m_db_client(std::move(db_client)),
-          m_redis_client(std::move(redis_client)),
-          m_start_time(std::chrono::steady_clock::now()) {
-        Logger::Debug() << "HealthService initialization completed";
+        drogon::nosql::RedisClientPtr redis_client,
+        disk::storage::UploadStagingStorage* staging_storage,
+        disk::storage::IBlobStore* blob_store,
+        std::shared_ptr<disk::runtime::ProcessRuntimeState> runtime_state
+    ) : HealthService(std::move(runtime_state), HealthCheckCallbacks{
+                                                    .database = [db_client]() { return CheckDatabase(db_client); },
+                                                    .redis = [redis_client]() { return CheckRedis(redis_client); },
+                                                    .staging_storage = [staging_storage]() { return CheckStagingStorage(staging_storage); },
+                                                    .final_storage = [blob_store]() { return CheckFinalStorage(blob_store); },
+                                                    .storage_jobs = [db_client]() { return CheckStorageJobs(db_client); },
+                                                }) {
     }
 
-    auto HealthService::Check() -> drogon::Task<HealthResult> {
-        HealthResult result;
-        result.version = "1.0.0";
-        result.timestamp = GetTimestamp();
+    HealthService::HealthService(
+        std::shared_ptr<disk::runtime::ProcessRuntimeState> runtime_state,
+        HealthCheckCallbacks checks
+    ) : m_runtime_state(std::move(runtime_state)),
+        m_checks(std::move(checks)),
+        m_start_time(std::chrono::steady_clock::now()) {
+        if (m_runtime_state == nullptr) {
+            throw std::invalid_argument("Health service runtime state is required");
+        }
+    }
 
-        /// 计算运行时间
-        auto now = std::chrono::steady_clock::now();
-        auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - m_start_time);
-        result.uptime = uptime.count();
+    auto HealthService::CheckLiveness() const -> HealthResult {
+        auto result = BuildBaseResult();
+        result.overall_status = "healthy";
+        result.components["runtime"] = ComponentStatus{
+            .status = "healthy",
+        };
+        return result;
+    }
 
-        /// 并行检查各组件：通过 co_future 启动 Redis 检查为独立异步任务，
-        /// 同时 co_await 数据库检查，两者在不同连接上交错执行
-        auto check_start = std::chrono::steady_clock::now();
-        auto redis_future = drogon::co_future(CheckRedis());
-        auto db_status = co_await CheckDatabase();
-        auto redis_status = redis_future.get();
-        auto check_end = std::chrono::steady_clock::now();
-        result.total_check_ms =
-            std::chrono::duration_cast<std::chrono::milliseconds>(check_end - check_start).count();
+    auto HealthService::CheckReadiness() const -> drogon::Task<HealthResult> {
+        auto result = BuildBaseResult();
+        const auto check_start = std::chrono::steady_clock::now();
 
-        result.components["database"] = db_status;
-        result.components["redis"] = redis_status;
+        if (!m_runtime_state->IsReady()) {
+            result.overall_status = "unhealthy";
+            result.components["runtime"] = ComponentStatus{
+                .status = "unhealthy",
+                .message = RuntimeFailureMessage(*m_runtime_state),
+            };
+            co_return result;
+        }
+        result.components["runtime"] = ComponentStatus{ .status = "healthy" };
 
-        /// 计算整体状态
-        bool all_healthy = true;
-        bool any_unhealthy = false;
+        result.components["database"] = co_await RunComponentCheck(
+            "database",
+            "Database check failed",
+            m_checks.database
+        );
+        result.components["staging_storage"] = co_await RunComponentCheck(
+            "staging_storage",
+            "Staging storage check failed",
+            m_checks.staging_storage
+        );
+        result.components["final_storage"] = co_await RunComponentCheck(
+            "final_storage",
+            "Final storage check failed",
+            m_checks.final_storage
+        );
 
+        const auto role = m_runtime_state->Role();
+        if (disk::utils::IncludesApi(role)) {
+            result.components["redis"] = co_await RunComponentCheck(
+                "redis",
+                "Redis check failed",
+                m_checks.redis
+            );
+        }
+        if (disk::utils::IncludesWorker(role)) {
+            result.components["storage_jobs"] = co_await RunComponentCheck(
+                "storage_jobs",
+                "Storage job queue check failed",
+                m_checks.storage_jobs
+            );
+        }
+
+        result.overall_status = "healthy";
         for (const auto& [name, status] : result.components) {
-            if (status.status == "unhealthy") {
-                any_unhealthy = true;
-                all_healthy = false;
-            } else if (status.status != "healthy") {
-                all_healthy = false;
+            static_cast<void>(name);
+            if (status.status != "healthy") {
+                result.overall_status = "unhealthy";
+                break;
             }
         }
-
-        if (all_healthy) {
-            result.overall_status = "healthy";
-        } else if (any_unhealthy) {
-            result.overall_status = "unhealthy";
-        } else {
-            result.overall_status = "degraded";
-        }
-
+        result.total_check_ms = ElapsedMilliseconds(check_start);
         co_return result;
     }
 
-    auto HealthService::CheckDatabase() -> drogon::Task<ComponentStatus> {
-        ComponentStatus status;
-        status.status = "healthy";
-
-        auto start = std::chrono::steady_clock::now();
-
-        try {
-            /// 执行简单查询测试连接
-            auto result = co_await m_db_client->execSqlCoro("SELECT 1");
-            auto end = std::chrono::steady_clock::now();
-            status.latency_ms =
-                std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-        } catch (const drogon::orm::DrogonDbException& e) {
-            status.status = "unhealthy";
-            status.message = e.base().what();
-            status.latency_ms = 0;
-        }
-
-        co_return status;
+    auto HealthService::BuildBaseResult() const -> HealthResult {
+        const auto now = std::chrono::steady_clock::now();
+        return HealthResult{
+            .role = std::string(disk::utils::ProcessRoleName(m_runtime_state->Role())),
+            .instance_id = m_runtime_state->InstanceId(),
+            .initialized = m_runtime_state->IsInitialized(),
+            .draining = m_runtime_state->IsDraining(),
+            .version = "1.0.0",
+            .uptime = std::chrono::duration_cast<std::chrono::seconds>(now - m_start_time).count(),
+            .timestamp = GetTimestamp(),
+        };
     }
 
-    auto HealthService::CheckRedis() -> drogon::Task<ComponentStatus> {
+    auto HealthService::RunComponentCheck(
+        std::string component,
+        std::string failure_message,
+        const ComponentCheck& check
+    ) const -> drogon::Task<ComponentStatus> {
         ComponentStatus status;
-        status.status = "healthy";
-
-        if (!m_redis_client) {
-            status.status = "unhealthy";
-            status.message = "Redis client not configured";
-            co_return status;
-        }
-
-        auto start = std::chrono::steady_clock::now();
-
         try {
-            auto result = co_await m_redis_client->execCommandCoro("ping");
-            auto end = std::chrono::steady_clock::now();
-            status.latency_ms =
-                std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-
-            if (!result.isNil() && result.asString() != "PONG") {
-                status.status = "degraded";
-                status.message = "Unexpected PING response";
+            if (!check) {
+                throw std::runtime_error("Component check is not configured");
             }
-        } catch (const drogon::nosql::RedisException& e) {
+            status = co_await check();
+        } catch (const std::exception&) {
             status.status = "unhealthy";
-            status.message = e.what();
             status.latency_ms = 0;
         }
 
+        if (status.status != "healthy") {
+            Logger::Warn() << "Health dependency check failed: component=" << component;
+            status.status = "unhealthy";
+            status.message = std::move(failure_message);
+        } else {
+            status.message.clear();
+        }
         co_return status;
     }
 
     auto HealthService::GetTimestamp() -> std::string {
-        auto now = std::chrono::system_clock::now();
-        auto time_t = std::chrono::system_clock::to_time_t(now);
-        std::tm tm{};
-        gmtime_r(&time_t, &tm);
+        const auto now = std::chrono::system_clock::now();
+        const auto timestamp = std::chrono::system_clock::to_time_t(now);
+        std::tm utc{};
+#ifdef _WIN32
+        gmtime_s(&utc, &timestamp);
+#else
+        gmtime_r(&timestamp, &utc);
+#endif
 
-        std::ostringstream ss;
-        ss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
-        return ss.str();
+        std::ostringstream stream;
+        stream << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ");
+        return stream.str();
     }
 
-} ///< namespace disk::health
+} // namespace disk::health

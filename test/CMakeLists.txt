@@ -11,6 +11,7 @@ set(TEST_SOURCES
     utils/RedisKeyPrefix_test.cpp
     utils/Response_test.cpp
     services/HashUtil_test.cpp
+    services/HealthService_test.cpp
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp
     services/ModelDialect_test.cpp
@@ -85,6 +86,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/services/FileRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FolderRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/HealthService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/MultipartUploadJournal.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ProcessRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp

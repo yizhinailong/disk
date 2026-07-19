@@ -1,43 +1,58 @@
 /**
  * @file HealthController.cpp
- * @author LiuFeng (liufeng.code@outlook.com)
- * @brief 健康检查控制器
- *
- * @copyright Copyright (c) 2026
- *
+ * @brief liveness/readiness 控制器实现
  */
 
-#include "HealthController.hpp"
+#include "controllers/HealthController.hpp"
 
+#include <utility>
+
+#include "services/ProcessRuntime.hpp"
+#include "storage/BlobStoreMgr.hpp"
+#include "storage/StorageMgr.hpp"
+#include "utils/LogHelper.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::health {
 
-    HealthController::HealthController()
-        : m_health_service(
-              std::make_unique<HealthService>(
-                  drogon::app().getDbClient(),
-                  drogon::app().getRedisClient()
-              )
-          ) {
+    HealthController::HealthController() {
+        const auto runtime_state = disk::runtime::ProcessRuntimeMgr::GetInstance();
+        drogon::nosql::RedisClientPtr redis_client;
+        if (disk::utils::IncludesApi(runtime_state->Role())) {
+            redis_client = drogon::app().getRedisClient();
+        }
+        m_health_service = std::make_unique<HealthService>(
+            drogon::app().getDbClient(),
+            std::move(redis_client),
+            disk::storage::StorageMgr::GetUploadStagingStorage(),
+            disk::storage::BlobStoreMgr::GetBlobStore(),
+            std::move(runtime_state)
+        );
     }
 
     auto HealthController::Check(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
-        Logger::Debug() << "Received health check request: " << request->getPeerAddr().toIpPort();
-
-        auto health_result = co_await m_health_service->Check();
-
-        auto data = health_result.ToJson();
-
-        if (health_result.overall_status == "healthy") {
-            co_return Response::Success(data);
-        }
-
-        /// degraded 或 unhealthy 状态返回 503
-        auto response = Response::Success(data);
-        response->setStatusCode(drogon::k503ServiceUnavailable);
-        co_return response;
+        co_return co_await Ready(std::move(request));
     }
 
-} ///< namespace disk::health
+    auto HealthController::Live(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+        Logger::Debug() << "Received liveness request: " << request->getPeerAddr().toIpPort();
+        co_return ToResponse(m_health_service->CheckLiveness());
+    }
+
+    auto HealthController::Ready(drogon::HttpRequestPtr request)
+        -> drogon::Task<drogon::HttpResponsePtr> {
+        Logger::Debug() << "Received readiness request: " << request->getPeerAddr().toIpPort();
+        co_return ToResponse(co_await m_health_service->CheckReadiness());
+    }
+
+    auto HealthController::ToResponse(const HealthResult& result) -> drogon::HttpResponsePtr {
+        auto response = Response::Success(result.ToJson());
+        if (result.overall_status != "healthy") {
+            response->setStatusCode(drogon::k503ServiceUnavailable);
+        }
+        return response;
+    }
+
+} // namespace disk::health

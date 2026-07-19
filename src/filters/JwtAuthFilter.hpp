@@ -21,6 +21,7 @@ namespace disk::filters {
         static auto IsPublicPath(const std::string& path) -> bool {
             return path == "/api/auth/register" || path == "/api/auth/login" ||
                    path == "/api/auth/refresh" || path == "/api/health" ||
+                   path == "/api/health/live" || path == "/api/health/ready" ||
                    path.rfind("/api/share/access/", 0) == 0 ||
                    path.rfind("/api/share/browse/", 0) == 0 ||
                    path.rfind("/api/share/download/", 0) == 0;
@@ -35,4 +36,4 @@ namespace disk::filters {
         auto doFilter(const drogon::HttpRequestPtr& request)
             -> drogon::Task<drogon::HttpResponsePtr> override;
     };
-} ///< namespace disk::filters
+} // namespace disk::filters

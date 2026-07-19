@@ -263,10 +263,10 @@ API Instance A  API Instance B ... N
 
 ### 9.1 进程角色
 
-- [ ] 增加明确配置，如 `DISK_PROCESS_ROLE=api|worker|all`，默认值和安全模式行为写入部署文档。
-- [ ] API 角色不注册集群级清理任务；Worker 角色不监听公开业务端口，或只暴露内部健康/指标端口。
-- [ ] 本地开发 `all` 模式明确标记为单进程便利模式，不用于多副本生产部署。
-- [ ] 将 `ScheduledTasks` 的领域清理职责迁移到 Worker；令牌本地缓存驱逐等纯进程维护仍留在所属进程。
+- [x] 增加明确配置，如 `DISK_PROCESS_ROLE=api|worker|all`，默认值和安全模式行为写入部署文档。
+- [x] API 角色不注册集群级清理任务；Worker 角色不监听公开业务端口，或只暴露内部健康/指标端口。
+- [x] 本地开发 `all` 模式明确标记为单进程便利模式，不用于多副本生产部署。
+- [x] 将 `ScheduledTasks` 的领域清理职责迁移到 Worker；令牌本地缓存驱逐等纯进程维护仍留在所属进程。
 
 ### 9.2 任务认领与执行
 
@@ -274,16 +274,16 @@ API Instance A  API Instance B ... N
 - [ ] Worker 使用稳定且唯一的 instance ID，日志和指标均携带该 ID。
 - [x] 长任务周期续租；续租和完成都必须校验当前 owner/version。
 - [x] Worker 崩溃后，其他 Worker 可在租约到期后接管。
-- [ ] 任务 handler 按类型注册，至少覆盖 staging cleanup、multipart abort、Blob GC、过期上传和一致性对账。
+- [x] 任务 handler 按类型注册，至少覆盖 staging cleanup、multipart abort、Blob GC、过期上传和一致性对账。
 - [x] 临时错误采用带抖动的指数退避，永久错误进入 dead-letter。
 - [x] 限制单 Worker 并发和每类任务并发，避免对象存储或数据库被恢复任务压垮。
-- [ ] 优雅关闭时停止认领、等待有界时间、停止续租并让未完成任务自然接管。
+- [x] 优雅关闭时停止认领、等待有界时间、停止续租并让未完成任务自然接管。
 
 ### 9.3 周期任务唯一触发
 
 - [x] 周期扫描使用 PostgreSQL advisory lock、周期任务唯一行或等价机制，确保一个周期只产生一次逻辑扫描。
-- [ ] 扫描本身必须分页、有上限且可继续，避免一小时任务重叠。
-- [ ] 即使多个 Worker 同时触发，任务去重键仍能阻止重复副作用。
+- [x] 扫描本身必须分页、有上限且可继续，避免一小时任务重叠。
+- [x] 即使多个 Worker 同时触发，任务去重键仍能阻止重复副作用。
 - [ ] 记录每轮扫描开始、结束、耗时、候选数、成功数、失败数和下一游标。
 
 ### 9.4 Phase 4 验收
@@ -353,11 +353,11 @@ API Instance A  API Instance B ... N
 
 - [ ] 负载均衡器采用无粘性路由并传递可信的客户端 IP/请求 ID 信息。
 - [ ] 明确上传请求体大小、超时、流式转发和重试规则；代理不得自动重放非幂等请求。
-- [ ] API/Worker 支持 SIGTERM 优雅关闭和有界 drain。
+- [x] API/Worker 支持 SIGTERM 优雅关闭和有界 drain。
 - [ ] 数据库迁移、API、Worker 按兼容顺序滚动发布。
 - [ ] 配置最小副本、反亲和/故障域、资源 requests/limits 和扩缩容指标。
-- [ ] 保留现有 `/api/health` 兼容行为，新增或明确 liveness/readiness 端点。
-- [ ] readiness 覆盖当前角色必需的 PostgreSQL、Redis、S3 和初始化状态；liveness 不因短暂外部依赖故障反复重启进程。
+- [x] 保留现有 `/api/health` 兼容行为，新增或明确 liveness/readiness 端点。
+- [x] readiness 覆盖当前角色必需的 PostgreSQL、Redis、S3 和初始化状态；liveness 不因短暂外部依赖故障反复重启进程。
 
 ### 11.6 Phase 6 验收
 
@@ -509,7 +509,7 @@ API Instance A  API Instance B ... N
 - [ ] 删除生产路径对 sticky session 和本地上传暂存的依赖。
 - [ ] 删除被数据库租约替代的跨请求 `AssemblyWorkerPool` 单飞职责；仅保留仍有明确局部价值的并发控制。
 - [ ] 删除过渡 feature flag、旧 schema 字段、旧配置和旧迁移分支。
-- [ ] 删除已被 Worker 替代的 API 集群级定时任务注册。
+- [x] 删除已被 Worker 替代的 API 集群级定时任务注册。
 - [ ] 更新所有架构图、部署样例、运维手册、错误码表和测试数量。
 - [ ] 运行 clang-format、完整构建、完整测试、多实例测试和压力测试。
 - [ ] 完成安全审查：S3 key 注入、SSRF/endpoint 配置、凭据泄漏、跨用户 upload ID、重放与限流。

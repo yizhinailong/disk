@@ -3616,7 +3616,7 @@ If-Range: "d41d8cd98f00b204e9800998ecf8427e"
 **GET** `/api/health`（兼容别名，语义与 `/api/health/ready` 完全相同）
 
 #### 实现状态
-**⏳ ADR-002 重构中**
+**✅ 已实现**
 
 三个端点均无需认证。liveness 只证明进程事件循环仍可响应，不访问 PostgreSQL、Redis
 或对象存储；进程进入 drain 后、真正退出前仍返回 200。readiness 判断当前角色能否接受新工作：
