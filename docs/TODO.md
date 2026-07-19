@@ -187,7 +187,7 @@ Additional contract rules:
   scope checks.
 - [x] Update filter ownership tests to prove each limiter has one owner, the old
   global filter is absent, and Redis failures remain fail-open.
-- [ ] Add and register a serial integration test such as
+- [x] Add and register a serial integration test such as
   `test/integration/test_share_rate_limit.py` in `test/CMakeLists.txt`.
 - [x] Update existing share-password integration cleanup so it removes only the
   new access keys it owns and cannot hide browse/download counter leakage.
@@ -216,7 +216,7 @@ rather than hard-coded test assumptions where practical:
   diff for unrelated formatting churn.
 - [ ] Run focused GoogleTest/CTest coverage for Share Auth, share rate limiting,
   Redis key prefixes, configuration, and filter ownership.
-- [ ] Run the new share-rate integration scenario through CTest from the same serial
+- [x] Run the new share-rate integration scenario through CTest from the same serial
   harness used by the backend suite.
 - [ ] Run `cmake --build --preset linux-debug-clang` successfully.
 - [ ] From an initially stopped backend, run the full backend CTest suite and require

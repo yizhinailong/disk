@@ -251,6 +251,58 @@ def redis_ttl(
     return int(reply[1:].split("\r\n", 1)[0])
 
 
+def redis_keys(
+    pattern: str,
+    host: str = "127.0.0.1",
+    port: int = 6379,
+) -> list[str]:
+    """Return sorted Redis keys matching a test-owned pattern."""
+    host = os.environ.get("REDIS_HOST", host)
+    port = int(os.environ.get("REDIS_PORT", str(port)))
+
+    reply = _redis_command(["KEYS", pattern], host, port)
+    if not reply.startswith("*"):
+        raise RuntimeError(f"Unexpected Redis reply: {reply.strip()}")
+
+    keys: list[str] = []
+    lines = reply.split("\r\n")
+    index = 1
+    while index < len(lines):
+        if not lines[index].startswith("$"):
+            index += 1
+            continue
+
+        length = int(lines[index][1:])
+        key = lines[index + 1] if index + 1 < len(lines) else ""
+        if len(key.encode()) == length:
+            keys.append(key)
+        index += 2
+
+    return sorted(keys)
+
+
+def redis_set_value(
+    key: str,
+    value: str,
+    ttl_seconds: int,
+    host: str = "127.0.0.1",
+    port: int = 6379,
+) -> None:
+    """Set a Redis string with a positive TTL for fault/auth test setup."""
+    if ttl_seconds <= 0:
+        raise ValueError("ttl_seconds must be positive")
+
+    host = os.environ.get("REDIS_HOST", host)
+    port = int(os.environ.get("REDIS_PORT", str(port)))
+    reply = _redis_command(
+        ["SET", key, value, "EX", str(ttl_seconds)],
+        host,
+        port,
+    )
+    if not reply.startswith("+OK"):
+        raise RuntimeError(f"Unexpected Redis reply: {reply.strip()}")
+
+
 def redis_delete_pattern(
     pattern: str,
     host: str = "127.0.0.1",
@@ -260,21 +312,7 @@ def redis_delete_pattern(
     host = os.environ.get("REDIS_HOST", host)
     port = int(os.environ.get("REDIS_PORT", str(port)))
 
-    reply = _redis_command(["KEYS", pattern], host, port)
-
-    keys: list[str] = []
-    if reply.startswith("*"):
-        lines = reply.split("\r\n")
-        i = 1
-        while i < len(lines):
-            if lines[i].startswith("$"):
-                length = int(lines[i][1:])
-                key = lines[i + 1] if i + 1 < len(lines) else ""
-                if len(key.encode()) == length:
-                    keys.append(key)
-                i += 2
-            else:
-                i += 1
+    keys = redis_keys(pattern, host, port)
 
     if keys:
         _redis_command(["DEL"] + keys, host, port)

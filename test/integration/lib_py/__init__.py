@@ -27,6 +27,8 @@ from .http import (
     fetch,
     header_value,
     redis_get_value,
+    redis_keys,
+    redis_set_value,
     redis_ttl,
     redis_delete_pattern,
     redis_delete_key,

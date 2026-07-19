@@ -22,10 +22,10 @@
 
 ## 4. Serial Integration Evidence
 
-- [ ] 4.1 Add `test/integration/test_share_rate_limit.py` through the shared lifecycle helpers and register it as a serial CTest
+- [x] 4.1 Add `test/integration/test_share_rate_limit.py` through the shared lifecycle helpers and register it as a serial CTest
 - [x] 4.2 Narrow share-password integration cleanup to its owned access/password keys so it cannot mask browse or download leakage
-- [ ] 4.3 Execute and save evidence for `SHARE-RATE-ACCESS-001`, `SHARE-RATE-BROWSE-001`, `SHARE-RATE-DOWNLOAD-001`, `SHARE-RATE-RANGE-001`, and `SHARE-RATE-ISOLATION-001`
-- [ ] 4.4 Execute and save evidence for `SHARE-RATE-AUTH-001`, `SHARE-RATE-CONFIG-001`, `SHARE-RATE-RESPONSE-001`, `SHARE-RATE-REDIS-001`, and `SHARE-RATE-SECRETS-001`
+- [x] 4.3 Execute and save evidence for `SHARE-RATE-ACCESS-001`, `SHARE-RATE-BROWSE-001`, `SHARE-RATE-DOWNLOAD-001`, `SHARE-RATE-RANGE-001`, and `SHARE-RATE-ISOLATION-001`
+- [x] 4.4 Execute and save evidence for `SHARE-RATE-AUTH-001`, `SHARE-RATE-CONFIG-001`, `SHARE-RATE-RESPONSE-001`, `SHARE-RATE-REDIS-001`, and `SHARE-RATE-SECRETS-001`
 
 ## 5. Verification and Closure
 
