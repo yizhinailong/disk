@@ -8,6 +8,7 @@
 #include "storage/IBlobStore.hpp"
 #include "storage/IFileStorage.hpp"
 #include "storage/LocalFileStorage.hpp"
+#include "storage/MultipartUploadRecovery.hpp"
 #include "storage/S3Client.hpp"
 #include "storage/UploadStagingStorage.hpp"
 #include "utils/ConfigMgr.hpp"
@@ -18,7 +19,10 @@ namespace trantor {
 
 namespace disk::storage {
 
-    class S3ObjectStorage final : public IFileStorage, public IBlobStore, public UploadStagingStorage {
+    class S3ObjectStorage final : public IFileStorage,
+                                  public IBlobStore,
+                                  public UploadStagingStorage,
+                                  public IMultipartUploadCleaner {
     public:
         S3ObjectStorage(
             std::shared_ptr<disk::utils::ConfigMgr> config_mgr,
@@ -90,10 +94,17 @@ namespace disk::storage {
         [[nodiscard]]
         auto GetFileSize(const std::filesystem::path& storage_path) -> drogon::Task<Result<uint64_t>> override;
 
+        [[nodiscard]]
+        auto AbortMultipartUpload(const MultipartUploadDescriptor& descriptor)
+            -> drogon::Task<Result<void>> override;
+
+        auto SetMultipartUploadJournal(std::shared_ptr<IMultipartUploadJournal> journal) -> void;
+
     private:
         std::shared_ptr<disk::utils::ConfigMgr> m_config_mgr;
         disk::utils::S3StorageConfig m_s3_config;
         std::shared_ptr<IS3Client> m_s3_client;
+        std::shared_ptr<IMultipartUploadJournal> m_multipart_upload_journal;
         LocalFileStorage m_local_staging;
         std::shared_ptr<trantor::ConcurrentTaskQueue> m_worker_queue;
     };

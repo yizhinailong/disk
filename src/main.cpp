@@ -4,9 +4,11 @@
 
 #include "application/ApplicationContext.hpp"
 #include "services/CleanupService.hpp"
+#include "services/MultipartUploadJournal.hpp"
 #include "services/ScheduledTasks.hpp"
 #include "services/TokenService.hpp"
 #include "storage/BlobStoreMgr.hpp"
+#include "storage/S3ObjectStorage.hpp"
 #include "storage/StorageFactory.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/ConfigMgr.hpp"
@@ -76,8 +78,23 @@ auto main() -> int {
 
     /// 注册启动后服务组合与定时清理任务
     drogon::app().registerBeginningAdvice([]() {
+        auto db_client = drogon::app().getDbClient();
+        if (auto* s3_storage = dynamic_cast<disk::storage::S3ObjectStorage*>(
+                disk::storage::StorageMgr::GetStorage()
+            );
+            s3_storage != nullptr) {
+            s3_storage->SetMultipartUploadJournal(
+                std::make_shared<disk::jobs::PostgresMultipartUploadJournal>(
+                    db_client,
+                    disk::utils::ConfigMgr::GetInstance()->GetInstanceId(),
+                    disk::utils::ConfigMgr::GetInstance()->GetUploadFinalizeLeaseSeconds()
+                )
+            );
+            disk::utils::Logger::Info() << "S3 multipart recovery journal initialized";
+        }
+
         disk::application::ApplicationContext::Initialize(
-            drogon::app().getDbClient(),
+            db_client,
             drogon::app().getRedisClient(),
             disk::storage::StorageMgr::GetStorage(),
             disk::storage::BlobStoreMgr::GetBlobStore(),

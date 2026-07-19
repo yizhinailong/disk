@@ -71,12 +71,14 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/storage/BlobStoreMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/LocalBlobStore.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/LocalFileStorage.cpp
+    ${CMAKE_SOURCE_DIR}/src/storage/MultipartUploadRecovery.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/S3ObjectStorage.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/S3Client.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/StorageFactory.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FolderRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/MultipartUploadJournal.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ContentService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/QuotaService.cpp
@@ -117,6 +119,7 @@ set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/src/services/FileRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FolderRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/FileServiceUtils.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/MultipartUploadJournal.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/UploadLifecycleService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/UploadTaskRepository.cpp
@@ -254,6 +257,19 @@ add_test(
 )
 set_tests_properties(
     BlobGcProtocolIntegration
+    PROPERTIES
+    LABELS "backend-integration;database-state-machine"
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME MultipartRecoveryIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_multipart_recovery.py"
+)
+set_tests_properties(
+    MultipartRecoveryIntegration
     PROPERTIES
     LABELS "backend-integration;database-state-machine"
     RUN_SERIAL TRUE

@@ -19,6 +19,7 @@
 #include <drogon/drogon.h>
 
 #include "storage/IBlobStore.hpp"
+#include "storage/MultipartUploadRecovery.hpp"
 #include "storage/UploadStagingStorage.hpp"
 #include "utils/LogHelper.hpp"
 
@@ -79,6 +80,37 @@ namespace disk::jobs {
             };
         }
 
+        [[nodiscard]] auto ParseMultipartUpload(const StorageJob& job)
+            -> std::expected<disk::storage::MultipartUploadDescriptor, std::string> {
+            if (!job.payload.isObject()) {
+                return std::unexpected("multipart_abort payload must be a JSON object");
+            }
+            for (const auto* field : { "backend", "key", "upload_id" }) {
+                if (!job.payload.isMember(field) || !job.payload[field].isString() ||
+                    job.payload[field].asString().empty()) {
+                    return std::unexpected(
+                        std::string("multipart_abort payload requires non-empty string field: ") + field
+                    );
+                }
+            }
+            if (job.payload["backend"].asString() != "s3") {
+                return std::unexpected("multipart_abort payload contains an unsupported backend");
+            }
+
+            disk::storage::MultipartUploadDescriptor descriptor{
+                .key = job.payload["key"].asString(),
+                .upload_id = job.payload["upload_id"].asString(),
+            };
+            const auto recovery_id = disk::storage::BuildMultipartUploadRecoveryId(descriptor);
+            if (job.aggregate_id != recovery_id) {
+                return std::unexpected("multipart_abort aggregate_id does not match payload");
+            }
+            if (job.dedupe_key != disk::storage::BuildMultipartUploadRecoveryDedupeKey(descriptor)) {
+                return std::unexpected("multipart_abort dedupe_key does not match payload");
+            }
+            return descriptor;
+        }
+
         struct BlobGcCandidate {
             uint64_t content_id{ 0 };
             std::filesystem::path storage_path;
@@ -134,10 +166,12 @@ namespace disk::jobs {
         disk::storage::UploadStagingStorage* staging_storage,
         disk::storage::IBlobStore* blob_store,
         std::string instance_id,
-        StorageJobWorkerOptions options
+        StorageJobWorkerOptions options,
+        disk::storage::IMultipartUploadCleaner* multipart_upload_cleaner
     ) : m_db_client(std::move(db_client)),
         m_staging_storage(staging_storage),
         m_blob_store(blob_store),
+        m_multipart_upload_cleaner(multipart_upload_cleaner),
         m_instance_id(std::move(instance_id)),
         m_options(options) {
         if (m_instance_id.empty() || m_instance_id.size() > 128) {
@@ -208,6 +242,31 @@ namespace disk::jobs {
         }
         if (job.job_type == kBlobGcJobType) {
             co_return co_await ExecuteBlobGc(job);
+        }
+        if (job.job_type == kMultipartAbortJobType) {
+            auto descriptor = ParseMultipartUpload(job);
+            if (!descriptor) {
+                co_return PermanentFailure(descriptor.error());
+            }
+            if (m_multipart_upload_cleaner == nullptr) {
+                co_return RetryableFailure("Multipart upload cleaner is not configured");
+            }
+
+            auto abort_result = co_await m_multipart_upload_cleaner->AbortMultipartUpload(
+                descriptor.value()
+            );
+            if (abort_result) {
+                co_return JobExecutionResult{ .succeeded = true };
+            }
+            const auto& error = abort_result.error();
+            const auto retryable =
+                error.code != ErrorCode::InvalidParameter &&
+                error.code != ErrorCode::ValidationFailed;
+            co_return JobExecutionResult{
+                .succeeded = false,
+                .retryable = retryable,
+                .error = error.message.empty() ? "multipart_abort failed" : error.message,
+            };
         }
 
         co_return PermanentFailure("Unsupported storage job type: " + job.job_type);

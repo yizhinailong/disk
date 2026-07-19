@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "storage/MultipartUploadRecovery.hpp"
 #include "storage/UploadStagingStorage.hpp"
 
 namespace disk::jobs {
@@ -56,6 +57,23 @@ namespace disk::jobs {
             std::optional<ErrorInfo> cleanup_error;
         };
 
+        class RecordingMultipartUploadCleaner final
+            : public disk::storage::IMultipartUploadCleaner {
+        public:
+            auto AbortMultipartUpload(
+                const disk::storage::MultipartUploadDescriptor& descriptor
+            ) -> drogon::Task<Result<void>> override {
+                aborted.push_back(descriptor);
+                if (error.has_value()) {
+                    co_return std::unexpected(error.value());
+                }
+                co_return {};
+            }
+
+            std::vector<disk::storage::MultipartUploadDescriptor> aborted;
+            std::optional<ErrorInfo> error;
+        };
+
         [[nodiscard]] auto MakeCleanupJob() -> StorageJob {
             Json::Value payload(Json::objectValue);
             payload["upload_id"] = "upload-123";
@@ -83,6 +101,28 @@ namespace disk::jobs {
                 .job_type = std::string(kBlobGcJobType),
                 .aggregate_id = "91",
                 .dedupe_key = "blob-gc:91",
+                .payload = std::move(payload),
+                .status = StorageJobStatus::Running,
+                .attempts = 1,
+                .max_attempts = 8,
+                .locked_by = "worker-1",
+            };
+        }
+
+        [[nodiscard]] auto MakeMultipartAbortJob() -> StorageJob {
+            const disk::storage::MultipartUploadDescriptor descriptor{
+                .key = "staging/upload-123/assembled/7.bin",
+                .upload_id = "remote-upload-id",
+            };
+            Json::Value payload(Json::objectValue);
+            payload["backend"] = "s3";
+            payload["key"] = descriptor.key;
+            payload["upload_id"] = descriptor.upload_id;
+            return StorageJob{
+                .id = 44,
+                .job_type = std::string(kMultipartAbortJobType),
+                .aggregate_id = disk::storage::BuildMultipartUploadRecoveryId(descriptor),
+                .dedupe_key = disk::storage::BuildMultipartUploadRecoveryDedupeKey(descriptor),
                 .payload = std::move(payload),
                 .status = StorageJobStatus::Running,
                 .attempts = 1,
@@ -164,6 +204,46 @@ namespace disk::jobs {
             EXPECT_FALSE(result.succeeded);
             EXPECT_TRUE(result.retryable);
             EXPECT_EQ(result.error, "Blob GC database is not configured");
+        }
+
+        TEST(StorageJobWorkerHandlerTest, AbortsValidatedMultipartUpload) {
+            RecordingMultipartUploadCleaner cleaner;
+            StorageJobWorker worker(nullptr, nullptr, nullptr, "worker-1", {}, &cleaner);
+
+            auto result = drogon::sync_wait(worker.ExecuteJob(MakeMultipartAbortJob()));
+
+            EXPECT_TRUE(result.succeeded);
+            ASSERT_EQ(cleaner.aborted.size(), 1U);
+            EXPECT_EQ(cleaner.aborted[0].key, "staging/upload-123/assembled/7.bin");
+            EXPECT_EQ(cleaner.aborted[0].upload_id, "remote-upload-id");
+        }
+
+        TEST(StorageJobWorkerHandlerTest, RejectsMultipartDigestMismatchBeforeStorageAccess) {
+            RecordingMultipartUploadCleaner cleaner;
+            StorageJobWorker worker(nullptr, nullptr, nullptr, "worker-1", {}, &cleaner);
+            auto job = MakeMultipartAbortJob();
+            job.aggregate_id = std::string(64, '0');
+
+            auto result = drogon::sync_wait(worker.ExecuteJob(job));
+
+            EXPECT_FALSE(result.succeeded);
+            EXPECT_FALSE(result.retryable);
+            EXPECT_TRUE(cleaner.aborted.empty());
+        }
+
+        TEST(StorageJobWorkerHandlerTest, ClassifiesMultipartAbortErrors) {
+            RecordingMultipartUploadCleaner cleaner;
+            StorageJobWorker worker(nullptr, nullptr, nullptr, "worker-1", {}, &cleaner);
+
+            cleaner.error = ErrorInfo(ErrorCode::InternalError, "temporary outage");
+            auto retryable = drogon::sync_wait(worker.ExecuteJob(MakeMultipartAbortJob()));
+            EXPECT_FALSE(retryable.succeeded);
+            EXPECT_TRUE(retryable.retryable);
+
+            cleaner.error = ErrorInfo(ErrorCode::ValidationFailed, "unsafe key");
+            auto permanent = drogon::sync_wait(worker.ExecuteJob(MakeMultipartAbortJob()));
+            EXPECT_FALSE(permanent.succeeded);
+            EXPECT_FALSE(permanent.retryable);
         }
 
         TEST(StorageJobWorkerRetryTest, AppliesBoundedStableJitter) {

@@ -181,6 +181,7 @@ namespace {
             int part_number,
             std::string data
         ) -> Result<std::string> override {
+            ++upload_part_calls;
             auto upload = multipart_uploads.find(upload_id);
             if (upload == multipart_uploads.end() || upload->second.key != key) {
                 return std::unexpected(ErrorInfo(ErrorCode::InternalError, "fake multipart not found"));
@@ -265,6 +266,11 @@ namespace {
             -> Result<void> override {
             ++abort_multipart_calls;
             aborted_upload_ids.push_back(upload_id);
+            if (abort_multipart_failure) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "fake multipart abort failure")
+                );
+            }
             multipart_uploads.erase(upload_id);
             return {};
         }
@@ -308,8 +314,10 @@ namespace {
         int create_multipart_calls{ 0 };
         int complete_multipart_calls{ 0 };
         int abort_multipart_calls{ 0 };
+        int upload_part_calls{ 0 };
         int upload_part_failure_number{ 0 };
         bool complete_multipart_failure{ false };
+        bool abort_multipart_failure{ false };
         std::optional<std::string> concurrent_final_content;
         std::optional<std::string> list_outside_prefix_key;
         std::vector<size_t> delete_batch_sizes;
@@ -319,6 +327,51 @@ namespace {
         std::vector<CopiedRange> copied_ranges;
         std::map<std::string, MultipartUpload> multipart_uploads;
         ErrorInfo delete_error{ ErrorCode::InternalError, "fake delete failure" };
+    };
+
+    class RecordingMultipartUploadJournal final
+        : public disk::storage::IMultipartUploadJournal {
+    public:
+        auto Track(const disk::storage::MultipartUploadDescriptor& descriptor)
+            -> Result<void> override {
+            tracked.push_back(descriptor);
+            if (track_error.has_value()) {
+                return std::unexpected(track_error.value());
+            }
+            return {};
+        }
+
+        auto Renew(const disk::storage::MultipartUploadDescriptor& descriptor)
+            -> Result<void> override {
+            renewed.push_back(descriptor);
+            if (renew_error.has_value()) {
+                return std::unexpected(renew_error.value());
+            }
+            return {};
+        }
+
+        auto Resolve(const disk::storage::MultipartUploadDescriptor& descriptor)
+            -> Result<void> override {
+            resolved.push_back(descriptor);
+            return {};
+        }
+
+        auto ReleaseForRetry(
+            const disk::storage::MultipartUploadDescriptor& descriptor,
+            const std::string& error
+        ) -> Result<void> override {
+            released_for_retry.push_back(descriptor);
+            retry_errors.push_back(error);
+            return {};
+        }
+
+        std::optional<ErrorInfo> track_error;
+        std::optional<ErrorInfo> renew_error;
+        std::vector<disk::storage::MultipartUploadDescriptor> tracked;
+        std::vector<disk::storage::MultipartUploadDescriptor> renewed;
+        std::vector<disk::storage::MultipartUploadDescriptor> resolved;
+        std::vector<disk::storage::MultipartUploadDescriptor> released_for_retry;
+        std::vector<std::string> retry_errors;
     };
 
     auto LoadS3StorageConfig(const std::filesystem::path& temp_upload_path) -> void {
@@ -350,6 +403,8 @@ namespace {
                 disk::utils::ConfigMgr::GetInstance(),
                 client
             );
+            journal = std::make_shared<RecordingMultipartUploadJournal>();
+            storage->SetMultipartUploadJournal(journal);
         }
 
         void TearDown() override {
@@ -400,6 +455,7 @@ namespace {
 
         std::filesystem::path root;
         std::shared_ptr<FakeS3Client> client;
+        std::shared_ptr<RecordingMultipartUploadJournal> journal;
         std::unique_ptr<disk::storage::S3ObjectStorage> storage;
     };
 
@@ -525,6 +581,96 @@ TEST_F(S3ObjectStorageTest, S3AssemblyStreamsChunksToVersionedMultipartObject) {
     EXPECT_EQ(client->abort_multipart_calls, 0);
     EXPECT_EQ(client->uploaded_part_sizes, std::vector<size_t>{ expected_data.size() });
     EXPECT_EQ(client->completed_part_numbers, std::vector<int>{ 1 });
+    ASSERT_EQ(journal->tracked.size(), 1U);
+    EXPECT_EQ(journal->tracked[0].key, result->locator);
+    EXPECT_EQ(journal->renewed.size(), 2U);
+    EXPECT_EQ(journal->resolved.size(), 1U);
+    EXPECT_TRUE(journal->released_for_retry.empty());
+}
+
+TEST_F(S3ObjectStorageTest, MultipartJournalFailurePreventsPartUploadAndAborts) {
+    const auto session = S3Session();
+    const auto chunk = WriteS3Chunk(session, 0, "journal-failure");
+    journal->track_error = ErrorInfo(ErrorCode::InternalError, "database unavailable");
+
+    auto result = drogon::sync_wait(storage->AssembleChunks(
+        session,
+        30,
+        1,
+        std::vector{ chunk }
+    ));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::InternalError);
+    EXPECT_EQ(client->upload_part_calls, 0);
+    EXPECT_EQ(client->abort_multipart_calls, 1);
+    EXPECT_TRUE(client->multipart_uploads.empty());
+    EXPECT_EQ(journal->tracked.size(), 1U);
+    EXPECT_TRUE(journal->resolved.empty());
+}
+
+TEST_F(S3ObjectStorageTest, MultipartCreationRequiresRecoveryJournal) {
+    const auto session = S3Session();
+    const auto chunk = WriteS3Chunk(session, 0, "journal-required");
+    disk::storage::S3ObjectStorage storage_without_journal(
+        disk::utils::ConfigMgr::GetInstance(),
+        client
+    );
+
+    auto result = drogon::sync_wait(storage_without_journal.AssembleChunks(
+        session,
+        33,
+        1,
+        std::vector{ chunk }
+    ));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::InternalError);
+    EXPECT_EQ(client->create_multipart_calls, 0);
+    EXPECT_TRUE(client->multipart_uploads.empty());
+}
+
+TEST_F(S3ObjectStorageTest, MultipartAbortFailureReleasesTrackedTaskForRetry) {
+    const auto session = S3Session();
+    const auto chunk = WriteS3Chunk(session, 0, "abort-failure");
+    client->upload_part_failure_number = 1;
+    client->abort_multipart_failure = true;
+
+    auto result = drogon::sync_wait(storage->AssembleChunks(
+        session,
+        31,
+        1,
+        std::vector{ chunk }
+    ));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(client->abort_multipart_calls, 1);
+    EXPECT_EQ(journal->tracked.size(), 1U);
+    EXPECT_TRUE(journal->resolved.empty());
+    ASSERT_EQ(journal->released_for_retry.size(), 1U);
+    EXPECT_EQ(journal->released_for_retry[0], journal->tracked[0]);
+    ASSERT_EQ(journal->retry_errors.size(), 1U);
+    EXPECT_EQ(journal->retry_errors[0], "fake multipart abort failure");
+    EXPECT_EQ(client->multipart_uploads.size(), 1U);
+}
+
+TEST_F(S3ObjectStorageTest, MultipartLeaseLossStopsBeforePartAndAborts) {
+    const auto session = S3Session();
+    const auto chunk = WriteS3Chunk(session, 0, "lease-loss");
+    journal->renew_error = ErrorInfo(ErrorCode::ResourceConflict, "lease lost");
+
+    auto result = drogon::sync_wait(storage->AssembleChunks(
+        session,
+        32,
+        1,
+        std::vector{ chunk }
+    ));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::ResourceConflict);
+    EXPECT_EQ(client->upload_part_calls, 0);
+    EXPECT_EQ(client->abort_multipart_calls, 1);
+    EXPECT_EQ(journal->resolved.size(), 1U);
 }
 
 TEST_F(S3ObjectStorageTest, S3AssemblyUsesFiveMiBNonFinalParts) {
@@ -839,6 +985,10 @@ TEST_F(S3ObjectStorageTest, S3AssemblyPromotionUsesMultipartServerSideCopy) {
                                             .length = 17,
                                         }));
     EXPECT_EQ(client->abort_multipart_calls, 0);
+    ASSERT_EQ(journal->tracked.size(), 1U);
+    EXPECT_EQ(journal->tracked[0].key, final_key);
+    EXPECT_EQ(journal->resolved.size(), 1U);
+    EXPECT_TRUE(journal->released_for_retry.empty());
 }
 
 TEST_F(S3ObjectStorageTest, S3AssemblyPromotionAbortsWhenCopyPartFails) {

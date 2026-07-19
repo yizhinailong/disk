@@ -116,6 +116,7 @@ set(Services_HEADERS
     services/FolderRepository.hpp
     services/FolderService.hpp
     services/HealthService.hpp
+    services/MultipartUploadJournal.hpp
     services/OperationLogService.hpp
     services/QuotaService.hpp
     services/RedisService.hpp
@@ -149,6 +150,7 @@ set(Services_SOURCES
     services/FolderRepository.cpp
     services/FolderService.cpp
     services/HealthService.cpp
+    services/MultipartUploadJournal.cpp
     services/OperationLogService.cpp
     services/QuotaService.cpp
     services/RedisService.cpp
@@ -177,6 +179,7 @@ set(Storage_HEADERS
     storage/IFileStorage.hpp
     storage/LocalBlobStore.hpp
     storage/LocalFileStorage.hpp
+    storage/MultipartUploadRecovery.hpp
     storage/S3Client.hpp
     storage/S3ObjectStorage.hpp
     storage/StorageFactory.hpp
@@ -187,6 +190,7 @@ set(Storage_SOURCES
     storage/BlobStoreMgr.cpp
     storage/LocalBlobStore.cpp
     storage/LocalFileStorage.cpp
+    storage/MultipartUploadRecovery.cpp
     storage/S3Client.cpp
     storage/S3ObjectStorage.cpp
     storage/StorageFactory.cpp

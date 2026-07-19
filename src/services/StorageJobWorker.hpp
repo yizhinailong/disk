@@ -19,6 +19,7 @@
 
 namespace disk::storage {
     class IBlobStore;
+    class IMultipartUploadCleaner;
     class UploadStagingStorage;
 } // namespace disk::storage
 
@@ -53,7 +54,8 @@ namespace disk::jobs {
             disk::storage::UploadStagingStorage* staging_storage,
             disk::storage::IBlobStore* blob_store,
             std::string instance_id,
-            StorageJobWorkerOptions options = {}
+            StorageJobWorkerOptions options = {},
+            disk::storage::IMultipartUploadCleaner* multipart_upload_cleaner = nullptr
         );
 
         [[nodiscard]]
@@ -87,6 +89,7 @@ namespace disk::jobs {
         drogon::orm::DbClientPtr m_db_client;
         disk::storage::UploadStagingStorage* m_staging_storage{};
         disk::storage::IBlobStore* m_blob_store{};
+        disk::storage::IMultipartUploadCleaner* m_multipart_upload_cleaner{};
         std::string m_instance_id;
         StorageJobWorkerOptions m_options;
     };

@@ -230,37 +230,128 @@ namespace disk::storage {
             );
         }
 
+        [[nodiscard]] auto ValidateMultipartAbortDescriptor(
+            const MultipartUploadDescriptor& descriptor,
+            const disk::utils::S3StorageConfig& config
+        ) -> Result<void> {
+            const auto staging_prefix = config.staging_prefix + "/";
+            const auto final_prefix = config.object_prefix + "/";
+            if (descriptor.upload_id.empty() || descriptor.upload_id.size() > 4096 ||
+                !IsSafeObjectPrefix(descriptor.key) ||
+                (!descriptor.key.starts_with(staging_prefix) &&
+                 !descriptor.key.starts_with(final_prefix))) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid S3 multipart abort descriptor")
+                );
+            }
+            return {};
+        }
+
         class MultipartAbortGuard final {
         public:
             MultipartAbortGuard(
                 std::shared_ptr<IS3Client> client,
-                std::string key,
-                std::string upload_id
+                std::shared_ptr<IMultipartUploadJournal> journal,
+                MultipartUploadDescriptor descriptor
             ) : m_client(std::move(client)),
-                m_key(std::move(key)),
-                m_upload_id(std::move(upload_id)) {}
+                m_journal(std::move(journal)),
+                m_descriptor(std::move(descriptor)) {}
 
             ~MultipartAbortGuard() {
                 if (!m_active) {
                     return;
                 }
-                auto abort_result = m_client->AbortMultipartUpload(m_key, m_upload_id);
-                if (!abort_result) {
-                    Logger::Warn() << "Failed to abort S3 multipart upload: key=" << m_key
+                try {
+                    auto abort_result = m_client->AbortMultipartUpload(
+                        m_descriptor.key,
+                        m_descriptor.upload_id
+                    );
+                    if (abort_result) {
+                        ResolveTracked("resolve aborted");
+                        return;
+                    }
+
+                    Logger::Warn() << "Failed to abort S3 multipart upload: key="
+                                   << m_descriptor.key
                                    << ", error=" << abort_result.error().message;
+                    if (m_tracked && m_journal != nullptr) {
+                        auto release_result = m_journal->ReleaseForRetry(
+                            m_descriptor,
+                            abort_result.error().message
+                        );
+                        LogJournalFailure("release", release_result);
+                    }
+                } catch (const std::exception& error) {
+                    Logger::Warn() << "S3 multipart abort cleanup threw: key="
+                                   << m_descriptor.key << ", error=" << error.what();
                 }
             }
 
             MultipartAbortGuard(const MultipartAbortGuard&) = delete;
             auto operator=(const MultipartAbortGuard&) -> MultipartAbortGuard& = delete;
 
-            auto Release() noexcept -> void { m_active = false; }
+            [[nodiscard]] auto Track() -> Result<void> {
+                if (m_journal == nullptr) {
+                    return {};
+                }
+                try {
+                    auto result = m_journal->Track(m_descriptor);
+                    m_tracked = result.has_value();
+                    return result;
+                } catch (const std::exception&) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Failed to track multipart recovery task")
+                    );
+                }
+            }
+
+            [[nodiscard]] auto Renew() -> Result<void> {
+                if (!m_tracked || m_journal == nullptr) {
+                    return {};
+                }
+                try {
+                    return m_journal->Renew(m_descriptor);
+                } catch (const std::exception&) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "Failed to renew multipart recovery task")
+                    );
+                }
+            }
+
+            auto Release() noexcept -> void {
+                m_active = false;
+                ResolveTracked("resolve completed");
+            }
 
         private:
+            auto ResolveTracked(std::string_view action) noexcept -> void {
+                if (!m_tracked || m_journal == nullptr) {
+                    return;
+                }
+                try {
+                    auto result = m_journal->Resolve(m_descriptor);
+                    LogJournalFailure(action, result);
+                } catch (const std::exception& error) {
+                    Logger::Warn() << "Failed to " << action
+                                   << " multipart recovery task: key=" << m_descriptor.key
+                                   << ", error=" << error.what();
+                }
+            }
+
+            auto LogJournalFailure(std::string_view action, const Result<void>& result) const
+                -> void {
+                if (!result) {
+                    Logger::Warn() << "Failed to " << action
+                                   << " multipart recovery task: key=" << m_descriptor.key
+                                   << ", error=" << result.error().message;
+                }
+            }
+
             std::shared_ptr<IS3Client> m_client;
-            std::string m_key;
-            std::string m_upload_id;
+            std::shared_ptr<IMultipartUploadJournal> m_journal;
+            MultipartUploadDescriptor m_descriptor;
             bool m_active{ true };
+            bool m_tracked{ false };
         };
 
         [[nodiscard]] auto VerifyS3ChunkObject(
@@ -343,17 +434,34 @@ namespace disk::storage {
 
         [[nodiscard]] auto AssembleS3ChunksBlocking(
             const std::shared_ptr<IS3Client>& client,
+            const std::shared_ptr<IMultipartUploadJournal>& journal,
             const UploadStagingSession& session,
             uint64_t state_version,
             const std::vector<UploadStagingChunk>& chunks,
             size_t read_buffer_size
         ) -> Result<UploadStagingAssembly> {
+            if (journal == nullptr) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "S3 multipart recovery journal is not configured")
+                );
+            }
             const auto assembly_key = BuildS3AssemblyKey(session, state_version);
             auto create_result = client->CreateMultipartUpload(assembly_key);
             if (!create_result) {
                 return std::unexpected(create_result.error());
             }
-            MultipartAbortGuard abort_guard(client, assembly_key, create_result.value());
+            MultipartAbortGuard abort_guard(
+                client,
+                journal,
+                MultipartUploadDescriptor{
+                    .key = assembly_key,
+                    .upload_id = create_result.value(),
+                }
+            );
+            auto track_result = abort_guard.Track();
+            if (!track_result) {
+                return std::unexpected(track_result.error());
+            }
 
             disk::utils::FileHashUtil::Md5Context full_md5_context{};
             disk::utils::FileHashUtil::Md5Init(full_md5_context);
@@ -375,6 +483,11 @@ namespace disk::storage {
                     return std::unexpected(
                         ErrorInfo(ErrorCode::ValidationFailed, "S3 staging multipart exceeds 10000 parts")
                     );
+                }
+
+                auto renew_result = abort_guard.Renew();
+                if (!renew_result) {
+                    return std::unexpected(renew_result.error());
                 }
 
                 auto upload_result = client->UploadPart(
@@ -502,6 +615,10 @@ namespace disk::storage {
                 );
             }
 
+            auto renew_result = abort_guard.Renew();
+            if (!renew_result) {
+                return std::unexpected(renew_result.error());
+            }
             auto complete_result = client->CompleteMultipartUpload(
                 assembly_key,
                 create_result.value(),
@@ -606,6 +723,18 @@ namespace disk::storage {
         }
         Logger::Info() << "S3ObjectStorage initialized: bucket=" << m_s3_config.bucket
                        << ", prefix=" << m_s3_config.object_prefix;
+    }
+
+    auto S3ObjectStorage::SetMultipartUploadJournal(
+        std::shared_ptr<IMultipartUploadJournal> journal
+    ) -> void {
+        if (journal == nullptr) {
+            throw std::invalid_argument("S3 multipart upload journal cannot be null");
+        }
+        if (m_multipart_upload_journal != nullptr && m_multipart_upload_journal != journal) {
+            throw std::logic_error("S3 multipart upload journal is already configured");
+        }
+        m_multipart_upload_journal = std::move(journal);
     }
 
     auto S3ObjectStorage::EnsureUploadSession(const UploadStagingSession& session)
@@ -746,11 +875,13 @@ namespace disk::storage {
             m_config_mgr->GetAssembleBufferSizeBytes()
         );
         auto client = m_s3_client;
+        auto journal = m_multipart_upload_journal;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, session, state_version, chunks, read_buffer_size]() {
+            [client, journal, session, state_version, chunks, read_buffer_size]() {
                 return AssembleS3ChunksBlocking(
                     client,
+                    journal,
                     session,
                     state_version,
                     chunks,
@@ -871,10 +1002,11 @@ namespace disk::storage {
         const auto key = object_key.generic_string();
         const auto expected_size = assembly.size_bytes;
         auto client = m_s3_client;
+        auto journal = m_multipart_upload_journal;
 
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, key, source_key, local_source_path, object_key, expected_size, backend = assembly.backend]()
+            [client, journal, key, source_key, local_source_path, object_key, expected_size, backend = assembly.backend]()
                 -> Result<BlobPromoteResult> {
                 auto head_result = client->HeadObject(key);
                 if (!head_result) {
@@ -944,17 +1076,37 @@ namespace disk::storage {
                         ErrorInfo(ErrorCode::ValidationFailed, "S3 final copy exceeds multipart part limit")
                     );
                 }
+                if (journal == nullptr) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::InternalError, "S3 multipart recovery journal is not configured")
+                    );
+                }
 
                 auto create_result = client->CreateMultipartUpload(key);
                 if (!create_result) {
                     return std::unexpected(create_result.error());
                 }
-                MultipartAbortGuard abort_guard(client, key, create_result.value());
+                MultipartAbortGuard abort_guard(
+                    client,
+                    journal,
+                    MultipartUploadDescriptor{
+                        .key = key,
+                        .upload_id = create_result.value(),
+                    }
+                );
+                auto track_result = abort_guard.Track();
+                if (!track_result) {
+                    return std::unexpected(track_result.error());
+                }
 
                 std::vector<S3CompletedPart> completed_parts;
                 completed_parts.reserve(static_cast<size_t>(part_count));
                 uint64_t offset = 0;
                 for (uint64_t part_index = 0; part_index < part_count; ++part_index) {
+                    auto renew_result = abort_guard.Renew();
+                    if (!renew_result) {
+                        return std::unexpected(renew_result.error());
+                    }
                     const auto length = std::min(
                         S3_MULTIPART_PART_SIZE_BYTES,
                         expected_size - offset
@@ -978,6 +1130,10 @@ namespace disk::storage {
                     offset += length;
                 }
 
+                auto renew_result = abort_guard.Renew();
+                if (!renew_result) {
+                    return std::unexpected(renew_result.error());
+                }
                 auto complete_result = client->CompleteMultipartUpload(
                     key,
                     create_result.value(),
@@ -1121,6 +1277,24 @@ namespace disk::storage {
                     return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "S3 object not found"));
                 }
                 return head_result->size;
+            }
+        );
+        co_return result;
+    }
+
+    auto S3ObjectStorage::AbortMultipartUpload(
+        const MultipartUploadDescriptor& descriptor
+    ) -> drogon::Task<Result<void>> {
+        auto validation = ValidateMultipartAbortDescriptor(descriptor, m_s3_config);
+        if (!validation) {
+            co_return std::unexpected(validation.error());
+        }
+
+        auto client = m_s3_client;
+        auto result = co_await RunBlockingS3Task(
+            m_worker_queue,
+            [client, descriptor]() {
+                return client->AbortMultipartUpload(descriptor.key, descriptor.upload_id);
             }
         );
         co_return result;
