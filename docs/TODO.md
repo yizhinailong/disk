@@ -18,7 +18,7 @@
   [`docs/archive/2026-07-18-ctest-self-contained.md`](archive/2026-07-18-ctest-self-contained.md).
 - The backend implementation-marker audit is archived at
   [`docs/archive/2026-07-18-backend-implementation-marker-audit.md`](archive/2026-07-18-backend-implementation-marker-audit.md).
-- `openspec validate --all --strict --no-interactive` currently validates 22 of 24
+- `openspec validate --all --strict --no-interactive` currently validates 23 of 25
   items. The only accepted aggregate failures are the deferred `TBD.` Purpose text
   in `web-client-experience` and `desktop-client-experience`. No additional failure
   is an acceptable backend baseline.
@@ -128,18 +128,18 @@ Additional contract rules:
 
 #### 1. Specification and authority documents
 
-- [ ] Create an OpenSpec change named `separate-share-operation-rate-limits` before
+- [x] Create an OpenSpec change named `separate-share-operation-rate-limits` before
   changing runtime behavior.
-- [ ] Add the complete operation-specific contract and scenarios to `sharing`,
+- [x] Add the complete operation-specific contract and scenarios to `sharing`,
   including access, browse, download metadata/content, Range/retry counting,
   save-to-drive, authentication precedence, bucket isolation, and safe JTI keying.
-- [ ] Update `request-filter-application` so the access limiter and authenticated
+- [x] Update `request-filter-application` so the access limiter and authenticated
   share-operation limiter ownership/order are normative and each request is counted
   exactly once.
-- [ ] Update `runtime-configuration` from one public-share family to the three
+- [x] Update `runtime-configuration` from one public-share family to the three
   access, browse, and download configuration families, including defaults and
   invalid-value fallback behavior.
-- [ ] Update `validation-and-performance` with operation-specific share rate-limit
+- [x] Update `validation-and-performance` with operation-specific share rate-limit
   validation rather than the legacy single share-access case.
 - [ ] Update API section 9.4.3 with the exact table above and keep the section 9.4.5
   checklist item unchecked until executable evidence exists.
