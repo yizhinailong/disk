@@ -123,6 +123,7 @@ set(Services_HEADERS
     services/SearchQuery.hpp
     services/ShareAuditService.hpp
     services/ShareService.hpp
+    services/StorageJobRepository.hpp
     services/SystemService.hpp
     services/TokenService.hpp
     services/TrashQuery.hpp
@@ -154,6 +155,7 @@ set(Services_SOURCES
     services/SearchQuery.cpp
     services/ShareAuditService.cpp
     services/ShareService.cpp
+    services/StorageJobRepository.cpp
     services/SystemService.cpp
     services/TokenService.cpp
     services/TrashQuery.cpp

@@ -270,7 +270,7 @@ API Instance A  API Instance B ... N
 
 ### 9.2 任务认领与执行
 
-- [ ] 使用 `FOR UPDATE SKIP LOCKED` 批量认领到期任务，并写入 `locked_by/locked_until`。
+- [x] 使用 `FOR UPDATE SKIP LOCKED` 批量认领到期任务，并写入 `locked_by/locked_until`。
 - [ ] Worker 使用稳定且唯一的 instance ID，日志和指标均携带该 ID。
 - [ ] 长任务周期续租；续租和完成都必须校验当前 owner/version。
 - [ ] Worker 崩溃后，其他 Worker 可在租约到期后接管。
