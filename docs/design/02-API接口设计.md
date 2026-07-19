@@ -3609,24 +3609,45 @@ If-Range: "d41d8cd98f00b204e9800998ecf8427e"
 
 ### 8.1 健康检查
 
-**GET** `/api/health`
+**GET** `/api/health/live`
+
+**GET** `/api/health/ready`
+
+**GET** `/api/health`（兼容别名，语义与 `/api/health/ready` 完全相同）
 
 #### 实现状态
-**✅ 已实现**
+**⏳ ADR-002 重构中**
 
-系统健康检查（无需认证）。检查数据库和 Redis 连接状态。
+三个端点均无需认证。liveness 只证明进程事件循环仍可响应，不访问 PostgreSQL、Redis
+或对象存储；进程进入 drain 后、真正退出前仍返回 200。readiness 判断当前角色能否接受新工作：
+
+- 所有角色必须完成启动初始化、未进入 drain，并能访问 PostgreSQL、staging 与 final 存储；
+- `api` 还必须通过 Redis PING；
+- `worker` 还必须读取 `storage_jobs`，且任务认领运行时仍接受新任务；
+- `all` 同时满足 `api` 与 `worker` 的全部条件。
+
+对象存储探针执行每个前缀最多一项的有界只读 inventory 请求，不创建或删除探针对象；写权限由
+启动校验及部署验收测试证明。依赖失败只返回固定消息，禁止回显异常文本、连接地址、用户名、
+bucket、对象 key 或凭据。
 
 #### 响应字段
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | overall_status | string | 整体状态：`healthy` / `degraded` / `unhealthy` |
+| role | string | 当前进程角色：`api` / `worker` / `all` |
+| instance_id | string | 当前进程实例 ID |
+| initialized | boolean | 当前角色的启动初始化是否完成 |
+| draining | boolean | 是否正在优雅退出 |
 | version | string | 系统版本 |
 | uptime | integer | 运行时间（秒） |
 | timestamp | string | ISO 8601 时间戳 |
 | components | object | 各组件状态 |
 | components.database | object | 数据库状态 |
 | components.redis | object | Redis 状态 |
+| components.staging_storage | object | 上传暂存存储状态（readiness） |
+| components.final_storage | object | 最终 Blob 存储状态（readiness） |
+| components.storage_jobs | object | 持久任务表状态（worker/all readiness） |
 | components.*.status | string | 组件状态：`healthy` / `unhealthy` |
 | components.*.message | string | 错误信息（可选） |
 | components.*.latency_ms | integer | 响应延迟（毫秒） |
@@ -3635,10 +3656,10 @@ If-Range: "d41d8cd98f00b204e9800998ecf8427e"
 
 | 状态码 | 说明 |
 |--------|------|
-| 200 | 系统健康 |
-| 503 | 系统不健康或降级 |
+| 200 | liveness 可响应，或 readiness 全部条件满足 |
+| 503 | readiness 尚未初始化、正在 drain 或任一必需依赖不健康 |
 
-#### 成功响应示例（200）
+#### readiness 成功响应示例（200，api）
 
 ```json
 {
@@ -3646,6 +3667,10 @@ If-Range: "d41d8cd98f00b204e9800998ecf8427e"
   "message": "success",
   "data": {
     "overall_status": "healthy",
+    "role": "api",
+    "instance_id": "disk-api-1",
+    "initialized": true,
+    "draining": false,
     "version": "1.0.0",
     "uptime": 86400,
     "timestamp": "2026-02-18T12:30:00Z",
@@ -3657,13 +3682,21 @@ If-Range: "d41d8cd98f00b204e9800998ecf8427e"
       "redis": {
         "status": "healthy",
         "latency_ms": 2
+      },
+      "staging_storage": {
+        "status": "healthy",
+        "latency_ms": 8
+      },
+      "final_storage": {
+        "status": "healthy",
+        "latency_ms": 7
       }
     }
   }
 }
 ```
 
-#### 不健康响应示例（503）
+#### readiness 不健康响应示例（503）
 
 ```json
 {
@@ -3671,16 +3704,29 @@ If-Range: "d41d8cd98f00b204e9800998ecf8427e"
   "message": "success",
   "data": {
     "overall_status": "unhealthy",
+    "role": "worker",
+    "instance_id": "disk-worker-2",
+    "initialized": true,
+    "draining": false,
     "version": "1.0.0",
     "uptime": 86400,
     "timestamp": "2026-02-18T12:30:00Z",
     "components": {
       "database": {
         "status": "unhealthy",
-        "message": "Connection refused",
+        "message": "Database check failed",
         "latency_ms": 0
       },
-      "redis": {
+      "storage_jobs": {
+        "status": "unhealthy",
+        "message": "Storage job queue check failed",
+        "latency_ms": 0
+      },
+      "staging_storage": {
+        "status": "healthy",
+        "latency_ms": 2
+      },
+      "final_storage": {
         "status": "healthy",
         "latency_ms": 2
       }
