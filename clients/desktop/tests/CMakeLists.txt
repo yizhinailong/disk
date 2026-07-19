@@ -102,6 +102,49 @@ if(WIN32)
     )
 endif()
 
+# ─── Real-backend integration tests ───────────────────────────────────────────
+
+qt_add_executable(desktop-visitor-resume-integration
+    integration/test_visitor_resume.cpp
+
+    ${DESKTOP_SRC_DIR}/models/DownloadTaskModel.cpp
+    ${DESKTOP_SRC_DIR}/models/UploadTaskModel.cpp
+    ${DESKTOP_SRC_DIR}/network/NetworkClient.cpp
+    ${DESKTOP_SRC_DIR}/network/RequestFactory.cpp
+    ${DESKTOP_SRC_DIR}/network/ErrorAdapter.cpp
+    ${DESKTOP_SRC_DIR}/managers/TransferManager.cpp
+)
+
+target_include_directories(desktop-visitor-resume-integration PRIVATE
+    ${DESKTOP_SRC_DIR}
+)
+
+target_link_libraries(desktop-visitor-resume-integration PRIVATE
+    Qt6::Concurrent
+    Qt6::Core
+    Qt6::Network
+    Qt6::Test
+)
+
+desktop_add_advisory_warnings(desktop-visitor-resume-integration)
+
+add_test(
+    NAME    desktop-visitor-resume-integration
+    COMMAND desktop-visitor-resume-integration
+)
+
+set_tests_properties(desktop-visitor-resume-integration PROPERTIES
+    LABELS "desktop-integration;environment-gated"
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+)
+
+if(WIN32)
+    set_tests_properties(desktop-visitor-resume-integration PROPERTIES
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${QT_BIN_DIR}"
+    )
+endif()
+
 # ─── Quick tests (QML with Qt Quick Test) ─────────────────────────────────────
 
 qt_add_executable(desktop-quick-tests
