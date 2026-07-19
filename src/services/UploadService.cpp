@@ -144,7 +144,15 @@ namespace disk::file {
                 );
             }
 
-            auto cache_entry = BuildUploadTaskCacheEntry(task_result.value());
+            auto staging_session_result = co_await FindUploadStagingSession(upload_id, user_id);
+            if (!staging_session_result) {
+                co_return std::unexpected(staging_session_result.error());
+            }
+
+            auto cache_entry = BuildUploadTaskCacheEntry(
+                task_result.value(),
+                std::move(staging_session_result.value())
+            );
             CacheUploadTaskEntry(upload_id, cache_entry);
             cached_task = std::move(cache_entry);
         }
@@ -231,7 +239,7 @@ namespace disk::file {
         }
 
         auto write_result = co_await m_upload_staging_storage->WriteChunk(
-            upload_id,
+            task.staging_session,
             chunk_index,
             actual_hash,
             std::move(chunk_payload)
@@ -377,6 +385,11 @@ namespace disk::file {
             co_return {};
         }
 
+        auto staging_session = co_await FindUploadStagingSession(upload_id, user_id);
+        if (!staging_session) {
+            co_return std::unexpected(staging_session.error());
+        }
+
         disk::upload::UploadLifecycleService lifecycle_service(
             m_db_client,
             m_storage,
@@ -386,7 +399,8 @@ namespace disk::file {
         auto cancel_result = co_await lifecycle_service.CancelInProgressUpload(
             upload_id,
             user_id,
-            task.getValueOfReservedBytes()
+            task.getValueOfReservedBytes(),
+            staging_session.value()
         );
         if (!cancel_result) {
             co_return std::unexpected(cancel_result.error());
@@ -412,12 +426,39 @@ namespace disk::file {
         co_return task.value();
     }
 
-    auto UploadService::BuildUploadTaskCacheEntry(const UploadTasks& task) -> UploadTaskCacheEntry {
+    auto UploadService::FindUploadStagingSession(
+        const std::string& upload_id,
+        uint64_t user_id
+    ) const -> drogon::Task<Result<storage::UploadStagingSession>> {
+        try {
+            UploadTaskRepository upload_task_repository(m_db_client);
+            auto session = co_await upload_task_repository.FindStagingSessionForUser(
+                upload_id,
+                user_id
+            );
+            if (!session.has_value()) {
+                co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
+            }
+            co_return std::move(session.value());
+        } catch (const std::exception& e) {
+            Logger::Error() << "Failed to load upload staging session: upload_id=" << upload_id
+                            << ", error=" << e.what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to load upload staging session")
+            );
+        }
+    }
+
+    auto UploadService::BuildUploadTaskCacheEntry(
+        const UploadTasks& task,
+        storage::UploadStagingSession staging_session
+    ) -> UploadTaskCacheEntry {
         return UploadTaskCacheEntry{ .user_id = static_cast<uint64_t>(task.getValueOfUserId()),
                                      .file_size = static_cast<uint64_t>(task.getValueOfFileSize()),
                                      .chunk_size = static_cast<uint32_t>(task.getValueOfChunkSize()),
                                      .total_chunks = static_cast<uint32_t>(task.getValueOfTotalChunks()),
                                      .expires_at = task.getValueOfExpiresAt(),
+                                     .staging_session = std::move(staging_session),
                                      .cache_expires_at = std::chrono::steady_clock::now() + UPLOAD_TASK_CACHE_TTL };
     }
 

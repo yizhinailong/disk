@@ -84,17 +84,17 @@ namespace disk::storage {
         virtual ~UploadStagingStorage() = default;
 
         /**
-         * @brief 确保上传会话的临时目录已创建
-         * @param upload_id 上传会话 ID
+         * @brief 确保上传会话已准备好
+         * @param session 持久化上传会话描述符
          * @return 成功返回空，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto EnsureUploadTempDir(const std::string& upload_id)
+        virtual auto EnsureUploadSession(const UploadStagingSession& session)
             -> drogon::Task<Result<void>> = 0;
 
         /**
          * @brief 写入上传分片到暂存目录
-         * @param upload_id 上传会话 ID
+         * @param session 持久化上传会话描述符
          * @param chunk_index 分片索引
          * @param md5_hash 已由服务端验证的分片 MD5
          * @param data 分片二进制数据
@@ -102,22 +102,24 @@ namespace disk::storage {
          */
         [[nodiscard]]
         virtual auto WriteChunk(
-            const std::string& upload_id,
+            const UploadStagingSession& session,
             uint32_t chunk_index,
             const std::string& md5_hash,
             std::string data
         ) -> drogon::Task<Result<UploadStagingChunk>> = 0;
 
         /**
-         * @brief 将 upload_id 对应的全部分片按序组装成暂存完整文件
-         * @param upload_id 上传会话 ID
+         * @brief 将会话对应的全部分片按序组装成暂存完整文件
+         * @param session 持久化上传会话描述符
+         * @param state_version 完成租约状态版本
          * @param expected_chunk_count 上传任务声明的分片总数
          * @param chunks PostgreSQL 按索引返回的权威分片描述符
          * @return 成功返回暂存组装结果，失败返回错误信息
          */
         [[nodiscard]]
         virtual auto AssembleChunks(
-            const std::string& upload_id,
+            const UploadStagingSession& session,
+            uint64_t state_version,
             uint32_t expected_chunk_count,
             const std::vector<UploadStagingChunk>& chunks
         )
@@ -125,23 +127,24 @@ namespace disk::storage {
 
         /**
          * @brief 丢弃指定上传会话的组装暂存工件
-         * @param upload_id 上传会话 ID
+         * @param session 持久化上传会话描述符
          * @param assembly 组装暂存工件描述
          * @return 成功返回空，失败返回错误信息
          */
         [[nodiscard]]
         virtual auto DiscardAssembly(
-            const std::string& upload_id,
+            const UploadStagingSession& session,
             const UploadStagingAssembly& assembly
         ) -> drogon::Task<Result<void>> = 0;
 
         /**
-         * @brief 清理上传会话对应的暂存目录及组装工件
-         * @param upload_id 上传会话 ID
+         * @brief 清理上传会话对应的暂存工件
+         * @param session 持久化上传会话描述符
          * @return 成功返回空，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto CleanupTemp(const std::string& upload_id) -> drogon::Task<Result<void>> = 0;
+        virtual auto CleanupSession(const UploadStagingSession& session)
+            -> drogon::Task<Result<void>> = 0;
     };
 
 } // namespace disk::storage

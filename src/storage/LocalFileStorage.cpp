@@ -52,6 +52,17 @@ namespace disk::storage {
                    });
         }
 
+        [[nodiscard]] auto ValidateLocalSession(const UploadStagingSession& session)
+            -> Result<void> {
+            if (session.backend != UploadStagingBackend::Local ||
+                !IsSafeObjectComponent(session.upload_id) || session.prefix.empty()) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid local upload staging session")
+                );
+            }
+            return {};
+        }
+
         auto ResolveConfiguredAssemblyConcurrency(const disk::utils::ConfigMgr& config_mgr) -> size_t {
             const auto configured_count =
                 static_cast<size_t>(config_mgr.GetAssemblyMaxConcurrent());
@@ -224,8 +235,13 @@ namespace disk::storage {
                        << ", assembly_threads=" << assembly_worker_thread_count;
     }
 
-    auto LocalFileStorage::EnsureUploadTempDir(const std::string& upload_id)
+    auto LocalFileStorage::EnsureUploadSession(const UploadStagingSession& session)
         -> drogon::Task<Result<void>> {
+        auto validation = ValidateLocalSession(session);
+        if (!validation) {
+            co_return std::unexpected(validation.error());
+        }
+        const auto& upload_id = session.upload_id;
         const auto temp_dir = GetTempDirPath(upload_id);
 
         auto result = co_await RunBlockingFilesystemTask(
@@ -247,16 +263,18 @@ namespace disk::storage {
     }
 
     auto LocalFileStorage::WriteChunk(
-        const std::string& upload_id,
+        const UploadStagingSession& session,
         uint32_t chunk_index,
         const std::string& md5_hash,
         std::string data
     ) -> drogon::Task<Result<UploadStagingChunk>> {
-        if (!IsSafeObjectComponent(upload_id) || !IsLowerHexMd5(md5_hash)) {
+        auto validation = ValidateLocalSession(session);
+        if (!validation || !IsLowerHexMd5(md5_hash)) {
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ValidationFailed, "Invalid upload staging object identity")
             );
         }
+        const auto& upload_id = session.upload_id;
 
         const auto object_key = GetChunkObjectKey(upload_id, chunk_index, md5_hash);
         const auto chunk_path = std::filesystem::path(m_config_mgr->GetTempUploadPath()) / object_key;
@@ -354,11 +372,18 @@ namespace disk::storage {
     }
 
     auto LocalFileStorage::AssembleChunks(
-        const std::string& upload_id,
+        const UploadStagingSession& session,
+        uint64_t state_version,
         uint32_t expected_chunk_count,
         const std::vector<UploadStagingChunk>& chunks
     )
         -> drogon::Task<Result<UploadStagingAssembly>> {
+        auto validation = ValidateLocalSession(session);
+        if (!validation) {
+            co_return std::unexpected(validation.error());
+        }
+        const auto& upload_id = session.upload_id;
+        (void)state_version;
         auto start = std::chrono::steady_clock::now();
         auto& pool = AssemblyWorkerPool::GetInstance();
 
@@ -595,9 +620,14 @@ namespace disk::storage {
     }
 
     auto LocalFileStorage::DiscardAssembly(
-        const std::string& upload_id,
+        const UploadStagingSession& session,
         const UploadStagingAssembly& assembly
     ) -> drogon::Task<Result<void>> {
+        auto validation = ValidateLocalSession(session);
+        if (!validation) {
+            co_return std::unexpected(validation.error());
+        }
+        const auto& upload_id = session.upload_id;
         const auto expected_path = GetAssembleFilePath(upload_id);
         if (assembly.backend != UploadStagingBackend::Local || assembly.locator.empty()) {
             co_return std::unexpected(
@@ -642,7 +672,13 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto LocalFileStorage::CleanupTemp(const std::string& upload_id) -> drogon::Task<Result<void>> {
+    auto LocalFileStorage::CleanupSession(const UploadStagingSession& session)
+        -> drogon::Task<Result<void>> {
+        auto validation = ValidateLocalSession(session);
+        if (!validation) {
+            co_return std::unexpected(validation.error());
+        }
+        const auto& upload_id = session.upload_id;
         const auto temp_dir = GetTempDirPath(upload_id);
         const auto assembled_file = GetAssembleFilePath(upload_id);
 

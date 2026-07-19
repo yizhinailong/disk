@@ -25,12 +25,12 @@
 #include "services/RedisService.hpp"
 #include "models/Files.hpp"
 #include "models/UploadTasks.hpp"
+#include "storage/UploadStagingStorage.hpp"
 #include "utils/ErrorCode.hpp"
 
 namespace disk::storage {
     class IBlobStore;
     class IFileStorage;
-    class UploadStagingStorage;
 }
 
 namespace disk::file {
@@ -156,6 +156,7 @@ namespace disk::file {
             uint32_t chunk_size = 0;
             uint32_t total_chunks = 0;
             trantor::Date expires_at;
+            storage::UploadStagingSession staging_session;
             std::chrono::steady_clock::time_point cache_expires_at;
         };
 
@@ -165,7 +166,10 @@ namespace disk::file {
         /// ── 原有私有方法（使用 m_db_client） ──
 
         [[nodiscard]]
-        static auto BuildUploadTaskCacheEntry(const drogon_model::disk::UploadTasks& task)
+        static auto BuildUploadTaskCacheEntry(
+            const drogon_model::disk::UploadTasks& task,
+            storage::UploadStagingSession staging_session
+        )
             -> UploadTaskCacheEntry;
 
         [[nodiscard]]
@@ -184,6 +188,10 @@ namespace disk::file {
         [[nodiscard]]
         auto FindUploadTask(const std::string& upload_id, uint64_t user_id) const
             -> drogon::Task<Result<drogon_model::disk::UploadTasks>>;
+
+        [[nodiscard]]
+        auto FindUploadStagingSession(const std::string& upload_id, uint64_t user_id) const
+            -> drogon::Task<Result<storage::UploadStagingSession>>;
 
         /**
          * @brief Invalidate file list cache for specified user and folders

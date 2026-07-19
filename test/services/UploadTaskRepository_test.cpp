@@ -62,6 +62,13 @@ namespace disk::file {
             EXPECT_TRUE(Contains(lifecycle_source, "config->GetUploadStagingBackend()"));
             EXPECT_TRUE(Contains(lifecycle_source, "config->GetS3StorageConfig().staging_prefix + \"/\" + upload_id"));
             EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.Create(std::move(task), staging_session)"));
+            EXPECT_TRUE(Contains(lifecycle_source, "FindStagingSessionForUser("));
+            EXPECT_TRUE(Contains(lifecycle_source, "CleanupSession(staging_session.value())"));
+            EXPECT_TRUE(Contains(lifecycle_source, "staging_session.value(),\n            state_version"));
+
+            const auto service_source = ReadSourceFile("src/services/UploadService.cpp");
+            EXPECT_TRUE(Contains(service_source, "task.staging_session"));
+            EXPECT_TRUE(Contains(service_source, "FindUploadStagingSession(upload_id, user_id)"));
         }
 
         TEST(UploadTaskRepositoryStagingContractTest, BackendStorageValuesRoundTrip) {
@@ -181,7 +188,7 @@ namespace disk::file {
             EXPECT_FALSE(Contains(lifecycle_source, "UPDATE upload_tasks SET status"));
             EXPECT_TRUE(Contains(lifecycle_source, "quota_service.ReleaseReservedStorageChecked("));
             EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.DeleteChunks(transaction, upload_id)"));
-            EXPECT_TRUE(Contains(lifecycle_source, "CleanupTemp(upload_id)"));
+            EXPECT_TRUE(Contains(lifecycle_source, "CleanupSession(staging_session.value())"));
         }
 
         TEST(UploadTaskRepositoryExpirationBoundaryTest, ReturningExpirationPrimitiveKeepsExpectedSignature) {

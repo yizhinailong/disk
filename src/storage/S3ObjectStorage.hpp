@@ -32,12 +32,12 @@ namespace disk::storage {
         auto operator=(S3ObjectStorage&&) -> S3ObjectStorage& = delete;
 
         [[nodiscard]]
-        auto EnsureUploadTempDir(const std::string& upload_id)
+        auto EnsureUploadSession(const UploadStagingSession& session)
             -> drogon::Task<Result<void>> override;
 
         [[nodiscard]]
         auto WriteChunk(
-            const std::string& upload_id,
+            const UploadStagingSession& session,
             uint32_t chunk_index,
             const std::string& md5_hash,
             std::string data
@@ -45,18 +45,23 @@ namespace disk::storage {
 
         [[nodiscard]]
         auto AssembleChunks(
-            const std::string& upload_id,
+            const UploadStagingSession& session,
+            uint64_t state_version,
             uint32_t expected_chunk_count,
             const std::vector<UploadStagingChunk>& chunks
         )
             -> drogon::Task<Result<UploadStagingAssembly>> override;
 
         [[nodiscard]]
-        auto DiscardAssembly(const std::string& upload_id, const UploadStagingAssembly& assembly)
+        auto DiscardAssembly(
+            const UploadStagingSession& session,
+            const UploadStagingAssembly& assembly
+        )
             -> drogon::Task<Result<void>> override;
 
         [[nodiscard]]
-        auto CleanupTemp(const std::string& upload_id) -> drogon::Task<Result<void>> override;
+        auto CleanupSession(const UploadStagingSession& session)
+            -> drogon::Task<Result<void>> override;
 
         [[nodiscard]]
         auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& hash)

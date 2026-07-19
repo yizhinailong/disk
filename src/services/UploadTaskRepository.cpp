@@ -397,7 +397,7 @@ namespace disk::file {
         const std::string& fail_reason
     ) const -> drogon::Task<std::optional<ExpiredUploadTaskRecord>> {
         auto result = co_await client->execSqlCoro(
-            "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2 " "WHERE id = $3 AND status = $4 AND expires_at < NOW() " "RETURNING id, temp_path, user_id, reserved_bytes",
+            "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2 " "WHERE id = $3 AND status = $4 AND expires_at < NOW() " "RETURNING id, temp_path, user_id, reserved_bytes, staging_backend, " "COALESCE(staging_prefix, temp_path) AS staging_prefix",
             disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Expired),
             fail_reason,
             upload_id,
@@ -409,11 +409,23 @@ namespace disk::file {
         }
 
         const auto& row = result[0];
+        const auto backend = disk::storage::ParseUploadStagingBackend(
+            row["staging_backend"].as<std::string>()
+        );
+        if (!backend.has_value()) {
+            throw std::runtime_error("Upload task contains an unsupported staging backend");
+        }
+        const disk::storage::UploadStagingSession staging_session{
+            .upload_id = row["id"].as<std::string>(),
+            .backend = backend.value(),
+            .prefix = row["staging_prefix"].as<std::string>(),
+        };
         co_return ExpiredUploadTaskRecord{
             .id = row["id"].as<std::string>(),
             .temp_path = row["temp_path"].as<std::string>(),
             .user_id = row["user_id"].as<uint64_t>(),
             .reserved_bytes = row["reserved_bytes"].as<uint64_t>(),
+            .staging_session = staging_session,
         };
     }
 
@@ -517,7 +529,7 @@ namespace disk::file {
     auto UploadTaskRepository::FindExpiredInProgressBatch(size_t limit) const
         -> drogon::Task<std::vector<ExpiredUploadTaskRecord>> {
         auto result = co_await m_db_client->execSqlCoro(
-            "SELECT id, temp_path, user_id, reserved_bytes FROM upload_tasks " "WHERE status = $1 AND expires_at < NOW() " "LIMIT $2",
+            "SELECT id, temp_path, user_id, reserved_bytes, staging_backend, " "COALESCE(staging_prefix, temp_path) AS staging_prefix FROM upload_tasks " "WHERE status = $1 AND expires_at < NOW() " "LIMIT $2",
             disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress),
             static_cast<int64_t>(limit)
         );
@@ -525,11 +537,23 @@ namespace disk::file {
         std::vector<ExpiredUploadTaskRecord> records;
         records.reserve(result.size());
         for (const auto& row : result) {
+            const auto backend = disk::storage::ParseUploadStagingBackend(
+                row["staging_backend"].as<std::string>()
+            );
+            if (!backend.has_value()) {
+                throw std::runtime_error("Upload task contains an unsupported staging backend");
+            }
+            const disk::storage::UploadStagingSession staging_session{
+                .upload_id = row["id"].as<std::string>(),
+                .backend = backend.value(),
+                .prefix = row["staging_prefix"].as<std::string>(),
+            };
             records.push_back(ExpiredUploadTaskRecord{
                 .id = row["id"].as<std::string>(),
                 .temp_path = row["temp_path"].as<std::string>(),
                 .user_id = row["user_id"].as<uint64_t>(),
                 .reserved_bytes = row["reserved_bytes"].as<uint64_t>(),
+                .staging_session = staging_session,
             });
         }
 

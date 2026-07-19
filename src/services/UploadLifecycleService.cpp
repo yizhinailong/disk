@@ -520,7 +520,9 @@ namespace disk::upload {
                             << ", total_chunks=" << total_chunks;
 
             if (m_upload_staging_storage != nullptr) {
-                auto ensure_result = co_await m_upload_staging_storage->EnsureUploadTempDir(task.getValueOfId());
+                auto ensure_result = co_await m_upload_staging_storage->EnsureUploadSession(
+                    staging_session
+                );
                 if (!ensure_result) {
                     Logger::Warn() << "Failed to ensure upload temp directory: upload_id="
                                    << task.getValueOfId();
@@ -641,6 +643,28 @@ namespace disk::upload {
         auto upload_task = std::move(task.value());
         auto state_version = claim_result.state_version;
 
+        std::optional<disk::storage::UploadStagingSession> staging_session;
+        try {
+            staging_session = co_await upload_task_repository.FindStagingSessionForUser(
+                command.upload_id,
+                command.user_id
+            );
+        } catch (const std::exception& e) {
+            Logger::Error() << "Failed to load staging session: upload_id=" << command.upload_id
+                            << ", error=" << e.what();
+        }
+        if (!staging_session.has_value()) {
+            co_await RecordFinalizeErrorBestEffort(
+                upload_task_repository,
+                command,
+                state_version,
+                ErrorCode::InternalError
+            );
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to load upload staging session")
+            );
+        }
+
         std::vector<disk::storage::UploadStagingChunk> chunks;
         bool chunk_descriptor_load_failed = false;
         try {
@@ -677,7 +701,8 @@ namespace disk::upload {
 
         auto assemble_start = std::chrono::steady_clock::now();
         auto assemble_result = co_await m_upload_staging_storage->AssembleChunks(
-            command.upload_id,
+            staging_session.value(),
+            state_version,
             upload_task.getValueOfTotalChunks(),
             chunks
         );
@@ -717,7 +742,7 @@ namespace disk::upload {
         );
         if (!renew_after_assembly) {
             auto cleanup_result = co_await m_upload_staging_storage->DiscardAssembly(
-                command.upload_id,
+                staging_session.value(),
                 assembled
             );
             if (!cleanup_result) {
@@ -736,7 +761,7 @@ namespace disk::upload {
                             << ", expected_md5=" << upload_task.getValueOfFileHash()
                             << ", actual_md5=" << final_hash;
             auto delete_result = co_await m_upload_staging_storage->DiscardAssembly(
-                command.upload_id,
+                staging_session.value(),
                 assembled
             );
             if (!delete_result) {
@@ -799,7 +824,7 @@ namespace disk::upload {
         if (lookup_result.filename_exists) {
             Logger::Warn() << "File with same name already exists: " << upload_task.getValueOfFilename();
             auto delete_result = co_await m_upload_staging_storage->DiscardAssembly(
-                command.upload_id,
+                staging_session.value(),
                 assembled
             );
             if (!delete_result) {
@@ -838,7 +863,7 @@ namespace disk::upload {
 
         if (finalize_storage_decision.type == FinalizeStorageDecisionType::ReuseExistingContent) {
             auto delete_result = co_await m_upload_staging_storage->DiscardAssembly(
-                command.upload_id,
+                staging_session.value(),
                 assembled
             );
             if (!delete_result) {
@@ -851,7 +876,7 @@ namespace disk::upload {
             if (m_blob_store == nullptr) {
                 Logger::Error() << "Blob store is not configured";
                 auto cleanup_result = co_await m_upload_staging_storage->DiscardAssembly(
-                    command.upload_id,
+                    staging_session.value(),
                     assembled
                 );
                 if (!cleanup_result) {
@@ -874,7 +899,7 @@ namespace disk::upload {
                 Logger::Error() << "Failed to move file to final storage: error="
                                 << static_cast<int>(promote_result.error().code);
                 auto cleanup_result = co_await m_upload_staging_storage->DiscardAssembly(
-                    command.upload_id,
+                    staging_session.value(),
                     assembled
                 );
                 if (!cleanup_result) {
@@ -1055,7 +1080,9 @@ namespace disk::upload {
         Logger::Debug() << "Files record created successfully: file_id=" << file.getValueOfId();
 
         auto temp_cleanup_start = std::chrono::steady_clock::now();
-        auto cleanup_result = co_await m_upload_staging_storage->CleanupTemp(command.upload_id);
+        auto cleanup_result = co_await m_upload_staging_storage->CleanupSession(
+            staging_session.value()
+        );
         Logger::Debug() << "[stage_timer] temp_cleanup duration_ms="
                         << std::chrono::duration_cast<std::chrono::milliseconds>(
                                std::chrono::steady_clock::now() - temp_cleanup_start
@@ -1087,7 +1114,8 @@ namespace disk::upload {
     auto UploadLifecycleService::CancelInProgressUpload(
         const std::string& upload_id,
         uint64_t user_id,
-        uint64_t reserved_bytes
+        uint64_t reserved_bytes,
+        const disk::storage::UploadStagingSession& staging_session
     ) const -> drogon::Task<Result<void>> {
         disk::quota::QuotaService quota_service(m_db_client);
         co_await quota_service.ReleaseReservedStorage(m_db_client, user_id, reserved_bytes);
@@ -1110,7 +1138,7 @@ namespace disk::upload {
         }
 
         if (m_upload_staging_storage != nullptr) {
-            auto cleanup_result = co_await m_upload_staging_storage->CleanupTemp(upload_id);
+            auto cleanup_result = co_await m_upload_staging_storage->CleanupSession(staging_session);
             if (!cleanup_result) {
                 Logger::Warn() << "Failed to delete temp directory: upload_id=" << upload_id
                                << ", error=" << static_cast<int>(cleanup_result.error().code);
@@ -1126,6 +1154,7 @@ namespace disk::upload {
         std::string temp_path;
         uint64_t user_id = 0;
         uint64_t reserved_bytes = 0;
+        std::optional<disk::storage::UploadStagingSession> staging_session;
 
         disk::file::UploadTaskRepository upload_task_repository(m_db_client);
         disk::file::TransactionRunner transaction_runner(m_db_client);
@@ -1144,6 +1173,7 @@ namespace disk::upload {
                 user_id = expired_record->user_id;
                 reserved_bytes = expired_record->reserved_bytes;
                 temp_path = expired_record->temp_path;
+                staging_session = expired_record->staging_session;
 
                 disk::quota::QuotaService quota_service(m_db_client);
                 auto release_result = co_await quota_service.ReleaseReservedStorageChecked(
@@ -1171,8 +1201,8 @@ namespace disk::upload {
         }
 
         auto* storage = m_upload_staging_storage != nullptr ? m_upload_staging_storage : disk::storage::StorageMgr::GetUploadStagingStorage();
-        if (storage != nullptr) {
-            auto cleanup_result = co_await storage->CleanupTemp(upload_id);
+        if (storage != nullptr && staging_session.has_value()) {
+            auto cleanup_result = co_await storage->CleanupSession(staging_session.value());
             if (!cleanup_result.has_value()) {
                 Logger::Warn() << "Failed to cleanup temp file for expired upload task: task_id="
                                << upload_id << ", temp_path=" << temp_path

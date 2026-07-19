@@ -15,9 +15,12 @@ namespace disk::test_support {
 
     class UploadStagingTestAdapter final : public disk::storage::LocalFileStorage {
     public:
-        using LocalFileStorage::AssembleChunks;
         using LocalFileStorage::LocalFileStorage;
-        using LocalFileStorage::WriteChunk;
+
+        [[nodiscard]]
+        auto EnsureUploadTempDir(const std::string& upload_id) -> drogon::Task<Result<void>> {
+            co_return co_await LocalFileStorage::EnsureUploadSession(LocalSession(upload_id));
+        }
 
         [[nodiscard]]
         auto WriteChunk(
@@ -27,7 +30,27 @@ namespace disk::test_support {
         ) -> drogon::Task<Result<disk::storage::UploadStagingChunk>> {
             const auto md5_hash = disk::utils::FileHashUtil::HashMd5(data);
             auto result = co_await LocalFileStorage::WriteChunk(
-                upload_id,
+                LocalSession(upload_id),
+                chunk_index,
+                md5_hash,
+                std::move(data)
+            );
+            if (result) {
+                std::scoped_lock lock(m_mutex);
+                m_chunks[upload_id][chunk_index] = result.value();
+            }
+            co_return result;
+        }
+
+        [[nodiscard]]
+        auto WriteChunk(
+            const std::string& upload_id,
+            uint32_t chunk_index,
+            const std::string& md5_hash,
+            std::string data
+        ) -> drogon::Task<Result<disk::storage::UploadStagingChunk>> {
+            auto result = co_await LocalFileStorage::WriteChunk(
+                LocalSession(upload_id),
                 chunk_index,
                 md5_hash,
                 std::move(data)
@@ -43,10 +66,41 @@ namespace disk::test_support {
         auto AssembleChunks(const std::string& upload_id, uint32_t expected_chunk_count)
             -> drogon::Task<Result<disk::storage::UploadStagingAssembly>> {
             co_return co_await LocalFileStorage::AssembleChunks(
-                upload_id,
+                LocalSession(upload_id),
+                1,
                 expected_chunk_count,
                 DescriptorsFor(upload_id)
             );
+        }
+
+        [[nodiscard]]
+        auto AssembleChunks(
+            const std::string& upload_id,
+            uint32_t expected_chunk_count,
+            const std::vector<disk::storage::UploadStagingChunk>& chunks
+        ) -> drogon::Task<Result<disk::storage::UploadStagingAssembly>> {
+            co_return co_await LocalFileStorage::AssembleChunks(
+                LocalSession(upload_id),
+                1,
+                expected_chunk_count,
+                chunks
+            );
+        }
+
+        [[nodiscard]]
+        auto DiscardAssembly(
+            const std::string& upload_id,
+            const disk::storage::UploadStagingAssembly& assembly
+        ) -> drogon::Task<Result<void>> {
+            co_return co_await LocalFileStorage::DiscardAssembly(
+                LocalSession(upload_id),
+                assembly
+            );
+        }
+
+        [[nodiscard]]
+        auto CleanupTemp(const std::string& upload_id) -> drogon::Task<Result<void>> {
+            co_return co_await LocalFileStorage::CleanupSession(LocalSession(upload_id));
         }
 
         [[nodiscard]]
@@ -85,6 +139,16 @@ namespace disk::test_support {
         }
 
     private:
+        [[nodiscard]]
+        static auto LocalSession(const std::string& upload_id)
+            -> disk::storage::UploadStagingSession {
+            return disk::storage::UploadStagingSession{
+                .upload_id = upload_id,
+                .backend = disk::storage::UploadStagingBackend::Local,
+                .prefix = upload_id,
+            };
+        }
+
         mutable std::mutex m_mutex;
         std::unordered_map<
             std::string,

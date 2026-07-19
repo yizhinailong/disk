@@ -88,47 +88,73 @@ namespace disk::storage {
                        << ", prefix=" << m_s3_config.object_prefix;
     }
 
-    auto S3ObjectStorage::EnsureUploadTempDir(const std::string& upload_id)
+    auto S3ObjectStorage::EnsureUploadSession(const UploadStagingSession& session)
         -> drogon::Task<Result<void>> {
-        co_return co_await m_local_staging.EnsureUploadTempDir(upload_id);
+        if (session.backend == UploadStagingBackend::Local) {
+            co_return co_await m_local_staging.EnsureUploadSession(session);
+        }
+        co_return {};
     }
 
     auto S3ObjectStorage::WriteChunk(
-        const std::string& upload_id,
+        const UploadStagingSession& session,
         uint32_t chunk_index,
         const std::string& md5_hash,
         std::string data
     ) -> drogon::Task<Result<UploadStagingChunk>> {
-        co_return co_await m_local_staging.WriteChunk(
-            upload_id,
-            chunk_index,
-            md5_hash,
-            std::move(data)
+        if (session.backend == UploadStagingBackend::Local) {
+            co_return co_await m_local_staging.WriteChunk(
+                session,
+                chunk_index,
+                md5_hash,
+                std::move(data)
+            );
+        }
+        co_return std::unexpected(
+            ErrorInfo(ErrorCode::InternalError, "S3 upload staging is not available")
         );
     }
 
     auto S3ObjectStorage::AssembleChunks(
-        const std::string& upload_id,
+        const UploadStagingSession& session,
+        uint64_t state_version,
         uint32_t expected_chunk_count,
         const std::vector<UploadStagingChunk>& chunks
     )
         -> drogon::Task<Result<UploadStagingAssembly>> {
-        co_return co_await m_local_staging.AssembleChunks(
-            upload_id,
-            expected_chunk_count,
-            chunks
+        if (session.backend == UploadStagingBackend::Local) {
+            co_return co_await m_local_staging.AssembleChunks(
+                session,
+                state_version,
+                expected_chunk_count,
+                chunks
+            );
+        }
+        co_return std::unexpected(
+            ErrorInfo(ErrorCode::InternalError, "S3 upload staging is not available")
         );
     }
 
     auto S3ObjectStorage::DiscardAssembly(
-        const std::string& upload_id,
+        const UploadStagingSession& session,
         const UploadStagingAssembly& assembly
     ) -> drogon::Task<Result<void>> {
-        co_return co_await m_local_staging.DiscardAssembly(upload_id, assembly);
+        if (session.backend == UploadStagingBackend::Local) {
+            co_return co_await m_local_staging.DiscardAssembly(session, assembly);
+        }
+        co_return std::unexpected(
+            ErrorInfo(ErrorCode::InternalError, "S3 upload staging is not available")
+        );
     }
 
-    auto S3ObjectStorage::CleanupTemp(const std::string& upload_id) -> drogon::Task<Result<void>> {
-        co_return co_await m_local_staging.CleanupTemp(upload_id);
+    auto S3ObjectStorage::CleanupSession(const UploadStagingSession& session)
+        -> drogon::Task<Result<void>> {
+        if (session.backend == UploadStagingBackend::Local) {
+            co_return co_await m_local_staging.CleanupSession(session);
+        }
+        co_return std::unexpected(
+            ErrorInfo(ErrorCode::InternalError, "S3 upload staging is not available")
+        );
     }
 
     auto S3ObjectStorage::PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& hash)
