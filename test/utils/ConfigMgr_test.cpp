@@ -82,12 +82,14 @@ namespace {
             secure_guard.Unset();
             mysql_guard.Unset();
             redis_guard.Unset();
+            instance_guard.Unset();
         }
 
         EnvVarGuard jwt_guard{ "JWT_SECRET" };
         EnvVarGuard secure_guard{ "DISK_SECURE_MODE" };
         EnvVarGuard mysql_guard{ "DATABASE_PASSWORD" };
         EnvVarGuard redis_guard{ "REDIS_PASSWORD" };
+        EnvVarGuard instance_guard{ "DISK_INSTANCE_ID" };
     };
 
     /// ================================================================================
@@ -310,6 +312,98 @@ namespace {
         cfg["custom_config"]["disk"]["assemble_buffer_size_bytes"] = 1048576;
         drogon::app().loadConfigJson(cfg);
         ConfigMgr::GetInstance()->LoadConfig();
+    }
+
+    class ConfigMgrDistributedTest : public ::testing::Test {
+    protected:
+        void SetUp() override { instance_guard.Unset(); }
+
+        void TearDown() override {
+            instance_guard.Unset();
+            RestoreAssemblyDefaults();
+        }
+
+        static auto LoadDiskConfig(const Json::Value& disk_config) -> ConfigMgr* {
+            Json::Value cfg;
+            cfg["custom_config"]["disk"] = disk_config;
+            drogon::app().loadConfigJson(cfg);
+            const auto config = ConfigMgr::GetInstance();
+            config->LoadConfig();
+            return config.get();
+        }
+
+        EnvVarGuard instance_guard{ "DISK_INSTANCE_ID" };
+    };
+
+    TEST_F(ConfigMgrDistributedTest, GeneratedInstanceIdIsStableAcrossReloads) {
+        const auto* config = LoadDiskConfig(Json::Value(Json::objectValue));
+        const auto first_instance_id = config->GetInstanceId();
+
+        config = LoadDiskConfig(Json::Value(Json::objectValue));
+
+        EXPECT_EQ(config->GetInstanceId(), first_instance_id);
+        EXPECT_EQ(first_instance_id.rfind("disk-", 0), 0);
+        EXPECT_EQ(config->GetUploadFinalizeLeaseSeconds(), 120);
+    }
+
+    TEST_F(ConfigMgrDistributedTest, LoadsExplicitInstanceIdAndLeaseDuration) {
+        Json::Value disk_config;
+        disk_config["instance_id"] = "disk-api_1:blue.example";
+        disk_config["upload_finalize_lease_seconds"] = 300;
+
+        const auto* config = LoadDiskConfig(disk_config);
+
+        EXPECT_EQ(config->GetInstanceId(), "disk-api_1:blue.example");
+        EXPECT_EQ(config->GetUploadFinalizeLeaseSeconds(), 300);
+    }
+
+    TEST_F(ConfigMgrDistributedTest, EnvironmentInstanceIdOverridesJson) {
+        instance_guard.Set("disk-api-env-2");
+        Json::Value disk_config;
+        disk_config["instance_id"] = "disk-api-json-1";
+
+        EXPECT_EQ(LoadDiskConfig(disk_config)->GetInstanceId(), "disk-api-env-2");
+    }
+
+    TEST_F(ConfigMgrDistributedTest, AcceptsFinalizeLeaseDurationBoundaries) {
+        Json::Value disk_config;
+        disk_config["upload_finalize_lease_seconds"] = 30;
+        EXPECT_EQ(LoadDiskConfig(disk_config)->GetUploadFinalizeLeaseSeconds(), 30);
+
+        disk_config["upload_finalize_lease_seconds"] = 3600;
+        EXPECT_EQ(LoadDiskConfig(disk_config)->GetUploadFinalizeLeaseSeconds(), 3600);
+    }
+
+    TEST_F(ConfigMgrDistributedTest, RejectsInvalidInstanceIds) {
+        Json::Value disk_config;
+        disk_config["instance_id"] = "";
+        EXPECT_THROW((void)LoadDiskConfig(disk_config), std::runtime_error);
+
+        disk_config["instance_id"] = "disk api\n1";
+        EXPECT_THROW((void)LoadDiskConfig(disk_config), std::runtime_error);
+
+        disk_config["instance_id"] = std::string(129, 'a');
+        EXPECT_THROW((void)LoadDiskConfig(disk_config), std::runtime_error);
+    }
+
+    TEST_F(ConfigMgrDistributedTest, RejectsInvalidEnvironmentInstanceId) {
+        instance_guard.Set("disk api 1");
+        EXPECT_THROW(
+            (void)LoadDiskConfig(Json::Value(Json::objectValue)),
+            std::runtime_error
+        );
+    }
+
+    TEST_F(ConfigMgrDistributedTest, RejectsInvalidFinalizeLeaseDuration) {
+        Json::Value disk_config;
+        disk_config["upload_finalize_lease_seconds"] = 29;
+        EXPECT_THROW((void)LoadDiskConfig(disk_config), std::runtime_error);
+
+        disk_config["upload_finalize_lease_seconds"] = 3601;
+        EXPECT_THROW((void)LoadDiskConfig(disk_config), std::runtime_error);
+
+        disk_config["upload_finalize_lease_seconds"] = "120";
+        EXPECT_THROW((void)LoadDiskConfig(disk_config), std::runtime_error);
     }
 
     class ConfigMgrShareRateLimitTest : public ::testing::Test {

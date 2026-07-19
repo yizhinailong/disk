@@ -37,12 +37,44 @@ namespace disk::utils {
             }
             return prefix.empty() ? "objects" : prefix;
         }
+
+        auto IsValidInstanceId(const std::string& instance_id) -> bool {
+            constexpr size_t MAX_INSTANCE_ID_LENGTH = 128;
+            if (instance_id.empty() || instance_id.size() > MAX_INSTANCE_ID_LENGTH) {
+                return false;
+            }
+
+            for (const auto character : instance_id) {
+                const auto is_ascii_letter =
+                    (character >= 'A' && character <= 'Z') ||
+                    (character >= 'a' && character <= 'z');
+                const auto is_ascii_digit = character >= '0' && character <= '9';
+                if (!is_ascii_letter && !is_ascii_digit &&
+                    character != '.' && character != '_' && character != ':' && character != '-') {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        auto ValidateInstanceId(const std::string& instance_id, const char* source) -> void {
+            if (!IsValidInstanceId(instance_id)) {
+                throw std::runtime_error(
+                    std::string("Invalid instance_id from ") + source +
+                    ": expected 1-128 characters from [A-Za-z0-9._:-]"
+                );
+            }
+        }
     } // namespace
 
-    ConfigMgr::ConfigMgr() = default;
+    ConfigMgr::ConfigMgr()
+        : m_generated_instance_id("disk-" + drogon::utils::getUuid()),
+          m_instance_id(m_generated_instance_id) {}
 
     auto ConfigMgr::LoadConfig() -> void {
         const auto& custom_config = drogon::app().getCustomConfig();
+        m_instance_id = m_generated_instance_id;
+        m_upload_finalize_lease_seconds = DEFAULT_UPLOAD_FINALIZE_LEASE_SECONDS;
         m_storage_backend = StorageBackend::Local;
         m_s3_storage_config = S3StorageConfig{};
         m_share_access_rate_limit_per_minute = DEFAULT_SHARE_ACCESS_RATE_LIMIT_PER_MINUTE;
@@ -54,6 +86,25 @@ namespace disk::utils {
 
         if (custom_config.isMember("disk")) {
             const auto& app_config = custom_config["disk"];
+
+            if (app_config.isMember("instance_id")) {
+                if (!app_config["instance_id"].isString()) {
+                    throw std::runtime_error("Invalid instance_id from custom_config.disk: expected string");
+                }
+                m_instance_id = app_config["instance_id"].asString();
+                ValidateInstanceId(m_instance_id, "custom_config.disk");
+            }
+
+            if (app_config.isMember("upload_finalize_lease_seconds")) {
+                const auto& lease_seconds = app_config["upload_finalize_lease_seconds"];
+                if ((!lease_seconds.isInt() && !lease_seconds.isUInt()) ||
+                    lease_seconds.asInt64() < 30 || lease_seconds.asInt64() > 3600) {
+                    throw std::runtime_error(
+                        "Invalid upload_finalize_lease_seconds: expected integer in range 30-3600"
+                    );
+                }
+                m_upload_finalize_lease_seconds = static_cast<uint32_t>(lease_seconds.asUInt());
+            }
 
             /// 从配置读取 storage_base_path
             if (app_config.isMember("storage_base_path")) {
@@ -216,6 +267,13 @@ namespace disk::utils {
             Logger::Warn() << "'disk' section not found in custom config, using default values";
         }
 
+        if (const auto* instance_id = std::getenv("DISK_INSTANCE_ID"); instance_id != nullptr) {
+            ValidateInstanceId(instance_id, "DISK_INSTANCE_ID");
+            m_instance_id = instance_id;
+        }
+        Logger::Info() << "Using distributed instance_id: " << m_instance_id
+                       << ", upload_finalize_lease_seconds: " << m_upload_finalize_lease_seconds;
+
         /// 读取数据库和 Redis 连接池大小
         {
             std::ifstream ifs("config.json");
@@ -263,6 +321,14 @@ namespace disk::utils {
 
     auto ConfigMgr::GetRefreshTokenExpireSeconds() const -> int {
         return m_refresh_token_expire_seconds;
+    }
+
+    auto ConfigMgr::GetInstanceId() const noexcept -> std::string {
+        return m_instance_id;
+    }
+
+    auto ConfigMgr::GetUploadFinalizeLeaseSeconds() const noexcept -> uint32_t {
+        return m_upload_finalize_lease_seconds;
     }
 
     /// ==================== 存储配置 ====================

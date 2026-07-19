@@ -18,6 +18,7 @@
       "chunk_size": 5242880,
       "max_file_size": 10737418240,
       "upload_task_expiry_seconds": 86400,
+      "upload_finalize_lease_seconds": 120,
       "upload_rate_limit_per_minute": 240,
       "upload_rate_limit_window_seconds": 60,
       "download_rate_limit_per_minute": 60,

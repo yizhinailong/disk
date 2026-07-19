@@ -106,6 +106,12 @@ namespace disk::utils {
         [[nodiscard]]
         auto GetRefreshTokenExpireSeconds() const -> int;
 
+        [[nodiscard]]
+        auto GetInstanceId() const noexcept -> std::string;
+
+        [[nodiscard]]
+        auto GetUploadFinalizeLeaseSeconds() const noexcept -> uint32_t;
+
         /// ==================== 存储配置 ====================
 
         /**
@@ -266,10 +272,16 @@ namespace disk::utils {
         static constexpr int DEFAULT_SHARE_BROWSE_RATE_LIMIT_WINDOW_SECONDS = 60;
         static constexpr int DEFAULT_SHARE_DOWNLOAD_RATE_LIMIT_PER_MINUTE = 10;
         static constexpr int DEFAULT_SHARE_DOWNLOAD_RATE_LIMIT_WINDOW_SECONDS = 60;
+        static constexpr uint32_t DEFAULT_UPLOAD_FINALIZE_LEASE_SECONDS = 120;
 
         /// JWT 配置
         int m_access_token_expire_seconds{ 7200 };
         int m_refresh_token_expire_seconds{ 604800 };
+
+        /// 分布式进程配置
+        std::string m_generated_instance_id;
+        std::string m_instance_id;
+        uint32_t m_upload_finalize_lease_seconds{ DEFAULT_UPLOAD_FINALIZE_LEASE_SECONDS };
 
         /// 存储配置
         std::string m_storage_base_path{ "build/uploaded" };
