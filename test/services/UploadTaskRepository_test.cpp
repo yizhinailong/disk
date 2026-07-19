@@ -106,9 +106,15 @@ namespace disk::file {
         TEST(UploadTaskRepositoryChunkPrimitiveContractTest, ChunkPersistencePrimitivesKeepIdempotencySortingAndCoverage) {
             const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
 
-            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::RecordChunkUploadedIfAbsent("));
-            EXPECT_TRUE(Contains(source, "INSERT INTO upload_task_chunks (task_id, chunk_index, uploaded_at) "));
-            EXPECT_TRUE(Contains(source, "ON CONFLICT DO NOTHING"));
+            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::RecordChunkIfInProgress("));
+            EXPECT_TRUE(Contains(source, "WITH eligible_task AS MATERIALIZED ("));
+            EXPECT_TRUE(Contains(source, "AND status = $3 AND expires_at >= NOW() "));
+            EXPECT_TRUE(Contains(source, "FOR UPDATE"));
+            EXPECT_TRUE(Contains(source, "(task_id, chunk_index, size_bytes, hash_md5, uploaded_at) "));
+            EXPECT_TRUE(Contains(source, "ON CONFLICT (task_id, chunk_index) DO UPDATE SET "));
+            EXPECT_TRUE(Contains(source, "upload_task_chunks.hash_md5 = EXCLUDED.hash_md5"));
+            EXPECT_TRUE(Contains(source, "ChunkRecordDisposition::TaskRejected"));
+            EXPECT_TRUE(Contains(source, "ChunkRecordDisposition::MetadataConflict"));
 
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::ListUploadedChunkIndices("));
             EXPECT_TRUE(Contains(source, "SELECT chunk_index FROM upload_task_chunks WHERE task_id = $1 ORDER BY chunk_index"));

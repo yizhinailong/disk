@@ -135,6 +135,15 @@ namespace disk::file {
                 co_return std::unexpected(task_result.error());
             }
 
+            if (task_result->getValueOfStatus() !=
+                disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)) {
+                Logger::Warn() << "Upload task no longer accepts chunks: upload_id=" << upload_id
+                               << ", status=" << task_result->getValueOfStatus();
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ResourceConflict, "Upload task no longer accepts chunks")
+                );
+            }
+
             auto cache_entry = BuildUploadTaskCacheEntry(task_result.value());
             CacheUploadTaskEntry(upload_id, cache_entry);
             cached_task = std::move(cache_entry);
@@ -195,6 +204,7 @@ namespace disk::file {
 
         /// 5. 将请求体复制到拥有所有权的缓冲区，只做一次哈希+落盘复用。
         std::string chunk_payload{ chunk_data };
+        const auto chunk_size_bytes = chunk_payload.size();
         auto actual_hash = FileHashUtil::HashMd5(chunk_payload);
         if (actual_hash != chunk_hash) {
             Logger::Warn() << "Chunk hash mismatch: expected=" << chunk_hash
@@ -242,10 +252,31 @@ namespace disk::file {
             co_return std::unexpected(write_result.error());
         }
 
-        /// 7. 记录已上传分片（幂等：ON CONFLICT DO NOTHING 允许重复上传同一分片）
+        /// 7. 仅在数据库任务仍为 InProgress 时记录分片；缓存不能授予写权限。
         try {
             UploadTaskRepository upload_task_repository(m_db_client);
-            co_await upload_task_repository.RecordChunkUploadedIfAbsent(upload_id, chunk_index);
+            const auto record_disposition = co_await upload_task_repository.RecordChunkIfInProgress(
+                upload_id,
+                user_id,
+                chunk_index,
+                chunk_size_bytes,
+                actual_hash
+            );
+            if (record_disposition == ChunkRecordDisposition::TaskRejected) {
+                InvalidateUploadTaskCache(upload_id);
+                Logger::Warn() << "Late chunk rejected by upload task state: upload_id=" << upload_id
+                               << ", chunk_index=" << chunk_index;
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ResourceConflict, "Upload task no longer accepts chunks")
+                );
+            }
+            if (record_disposition == ChunkRecordDisposition::MetadataConflict) {
+                Logger::Warn() << "Chunk metadata conflicts with existing upload progress: upload_id="
+                               << upload_id << ", chunk_index=" << chunk_index;
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ResourceConflict, "Chunk index already contains different content")
+                );
+            }
 
             Logger::Debug() << "Chunk upload successful: upload_id=" << upload_id
                       << ", chunk_index=" << chunk_index;
@@ -385,10 +416,6 @@ namespace disk::file {
                                      .chunk_size = static_cast<uint32_t>(task.getValueOfChunkSize()),
                                      .total_chunks = static_cast<uint32_t>(task.getValueOfTotalChunks()),
                                      .expires_at = task.getValueOfExpiresAt(),
-                                     .status = task.getValueOfStatus(),
-                                     .file_hash = task.getValueOfFileHash(),
-                                     .filename = task.getValueOfFilename(),
-                                     .parent_id = static_cast<uint64_t>(task.getValueOfFolderId()),
                                      .cache_expires_at = std::chrono::steady_clock::now() + UPLOAD_TASK_CACHE_TTL };
     }
 

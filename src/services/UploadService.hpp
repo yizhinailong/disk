@@ -156,10 +156,6 @@ namespace disk::file {
             uint32_t chunk_size = 0;
             uint32_t total_chunks = 0;
             trantor::Date expires_at;
-            int status = 0;
-            std::string file_hash;
-            std::string filename;
-            uint64_t parent_id = 0;
             std::chrono::steady_clock::time_point cache_expires_at;
         };
 

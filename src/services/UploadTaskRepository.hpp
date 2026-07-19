@@ -45,6 +45,12 @@ namespace disk::file {
         std::optional<uint64_t> completed_file_id;
     };
 
+    enum class ChunkRecordDisposition {
+        Accepted,
+        TaskRejected,
+        MetadataConflict,
+    };
+
     /**
      * @brief 上传任务持久化原语
      */
@@ -151,8 +157,13 @@ namespace disk::file {
         ) const -> drogon::Task<std::optional<ExpiredUploadTaskRecord>>;
 
         [[nodiscard]]
-        auto RecordChunkUploadedIfAbsent(const std::string& upload_id, uint32_t chunk_index) const
-            -> drogon::Task<bool>;
+        auto RecordChunkIfInProgress(
+            const std::string& upload_id,
+            uint64_t user_id,
+            uint32_t chunk_index,
+            uint64_t size_bytes,
+            const std::string& hash_md5
+        ) const -> drogon::Task<ChunkRecordDisposition>;
 
         [[nodiscard]]
         auto ListUploadedChunkIndices(const std::string& upload_id) const

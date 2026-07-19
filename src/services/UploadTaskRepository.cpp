@@ -423,17 +423,47 @@ namespace disk::file {
         };
     }
 
-    auto UploadTaskRepository::RecordChunkUploadedIfAbsent(
+    auto UploadTaskRepository::RecordChunkIfInProgress(
         const std::string& upload_id,
-        uint32_t chunk_index
-    ) const -> drogon::Task<bool> {
+        uint64_t user_id,
+        uint32_t chunk_index,
+        uint64_t size_bytes,
+        const std::string& hash_md5
+    ) const -> drogon::Task<ChunkRecordDisposition> {
         auto result = co_await m_db_client->execSqlCoro(
-            "INSERT INTO upload_task_chunks (task_id, chunk_index, uploaded_at) "
-            "VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING",
+            "WITH eligible_task AS MATERIALIZED ("
+            "  SELECT id FROM upload_tasks "
+            "  WHERE id = $1 AND user_id = $2 AND status = $3 AND expires_at >= NOW() "
+            "  FOR UPDATE"
+            "), persisted_chunk AS ("
+            "  INSERT INTO upload_task_chunks "
+            "    (task_id, chunk_index, size_bytes, hash_md5, uploaded_at) "
+            "  SELECT id, $4, $5, $6, NOW() FROM eligible_task "
+            "  ON CONFLICT (task_id, chunk_index) DO UPDATE SET "
+            "    size_bytes = COALESCE(upload_task_chunks.size_bytes, EXCLUDED.size_bytes), "
+            "    hash_md5 = COALESCE(upload_task_chunks.hash_md5, EXCLUDED.hash_md5) "
+            "  WHERE (upload_task_chunks.size_bytes IS NULL "
+            "         OR upload_task_chunks.size_bytes = EXCLUDED.size_bytes) "
+            "    AND (upload_task_chunks.hash_md5 IS NULL "
+            "         OR upload_task_chunks.hash_md5 = EXCLUDED.hash_md5) "
+            "  RETURNING 1"
+            ") "
+            "SELECT EXISTS(SELECT 1 FROM eligible_task) AS task_eligible, "
+            "       EXISTS(SELECT 1 FROM persisted_chunk) AS chunk_compatible",
             upload_id,
-            chunk_index
+            user_id,
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress),
+            static_cast<int32_t>(chunk_index),
+            static_cast<int64_t>(size_bytes),
+            hash_md5
         );
-        co_return result.affectedRows() > 0;
+        if (result.empty() || !result[0]["task_eligible"].as<bool>()) {
+            co_return ChunkRecordDisposition::TaskRejected;
+        }
+        if (!result[0]["chunk_compatible"].as<bool>()) {
+            co_return ChunkRecordDisposition::MetadataConflict;
+        }
+        co_return ChunkRecordDisposition::Accepted;
     }
 
     auto UploadTaskRepository::ListUploadedChunkIndices(const std::string& upload_id) const

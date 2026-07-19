@@ -37,6 +37,7 @@ from lib_py import (
     execute,
     json_field,
     fetch,
+    scalar,
     unique_name,
 )
 
@@ -189,6 +190,22 @@ def test_happy_path_upload():
     log_pass("Upload Chunk 1 (happy path)")
     save_evidence("upload-chunk-1.json", resp.text)
 
+    persisted_chunk_metadata = int(
+        scalar(
+            "SELECT COUNT(*) FROM upload_task_chunks "
+            "WHERE task_id = %s AND size_bytes IS NOT NULL AND hash_md5 IS NOT NULL",
+            (upload_id,),
+        )
+        or 0
+    )
+    if persisted_chunk_metadata != 2:
+        log_fail(
+            "Chunk metadata persistence - expected size/hash metadata for both chunks, "
+            f"got {persisted_chunk_metadata}"
+        )
+        return
+    log_pass("Chunk metadata persistence - size and hash stored for both chunks")
+
     # Simulate a different instance holding an active finalize lease.
     execute(
         "UPDATE upload_tasks SET status = 4, lease_owner = %s, "
@@ -197,6 +214,38 @@ def test_happy_path_upload():
         "WHERE id = %s AND status = 0",
         ("integration-old-owner", upload_id),
     )
+
+    chunk_rows_before_late_write = int(
+        scalar("SELECT COUNT(*) FROM upload_task_chunks WHERE task_id = %s", (upload_id,)) or 0
+    )
+    late_chunk_resp = fetch(
+        f"/api/file/upload/chunk?upload_id={upload_id}&chunk_index=1&chunk_hash={chunk_1_hash}",
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "Content-Type": "application/octet-stream",
+        },
+        data=chunk_1_data,
+    )
+    late_chunk_code = json_field(late_chunk_resp.text, "code")
+    chunk_rows_after_late_write = int(
+        scalar("SELECT COUNT(*) FROM upload_task_chunks WHERE task_id = %s", (upload_id,)) or 0
+    )
+    if late_chunk_resp.status_code != 409 or late_chunk_code != "10004":
+        log_fail(
+            "Late Chunk Active Lease - expected HTTP 409 / code 10004, "
+            f"got HTTP {late_chunk_resp.status_code} / code {late_chunk_code}"
+        )
+        print(late_chunk_resp.text)
+        return
+    if chunk_rows_after_late_write != chunk_rows_before_late_write:
+        log_fail(
+            "Late Chunk Active Lease - terminal-state request changed authoritative progress"
+        )
+        return
+    log_pass("Late Chunk Active Lease - stale cache could not change authoritative progress")
+    save_evidence("upload-chunk-active-lease.json", late_chunk_resp.text)
+
     conflict_resp = fetch(
         "/api/file/upload/complete",
         method="POST",
