@@ -36,6 +36,7 @@ set(TEST_SOURCES
     services/StorageJobContract_test.cpp
     services/StorageJobRepository_test.cpp
     services/StorageJobWorker_test.cpp
+    services/StorageWorkerRuntime_test.cpp
     services/StorageReconciliationService_test.cpp
     services/TokenService_test.cpp
     services/TokenServiceRevocation_test.cpp
@@ -90,6 +91,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/services/StorageJobContract.cpp
     ${CMAKE_SOURCE_DIR}/src/services/StorageJobRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/services/StorageJobWorker.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/StorageWorkerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/services/StorageReconciliationService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TrashQuery.cpp
     ${CMAKE_SOURCE_DIR}/src/services/TrashService.cpp

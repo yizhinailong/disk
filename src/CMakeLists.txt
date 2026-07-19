@@ -127,6 +127,7 @@ set(Services_HEADERS
     services/StorageJobContract.hpp
     services/StorageJobRepository.hpp
     services/StorageJobWorker.hpp
+    services/StorageWorkerRuntime.hpp
     services/StorageReconciliationService.hpp
     services/SystemService.hpp
     services/TokenService.hpp
@@ -163,6 +164,7 @@ set(Services_SOURCES
     services/StorageJobContract.cpp
     services/StorageJobRepository.cpp
     services/StorageJobWorker.cpp
+    services/StorageWorkerRuntime.cpp
     services/StorageReconciliationService.cpp
     services/SystemService.cpp
     services/TokenService.cpp
