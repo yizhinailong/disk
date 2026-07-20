@@ -12,8 +12,13 @@
 
 #include "services/StorageJobRepository.hpp"
 #include "services/StorageReconciliationService.hpp"
+#include "storage/UploadStagingStorage.hpp"
 
 namespace disk::jobs {
+
+    [[nodiscard]]
+    auto BuildStagingCleanupJob(const disk::storage::UploadStagingSession& session)
+        -> NewStorageJob;
 
     struct ExpireUploadsPageRequest {
         std::string scan_id;

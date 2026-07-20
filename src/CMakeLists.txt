@@ -22,6 +22,7 @@ set(Controllers_HEADERS
     controllers/ShareController.hpp
     controllers/SystemController.hpp
     controllers/StorageJobAdminController.hpp
+    controllers/StorageRecoveryAdminController.hpp
     controllers/TrashController.hpp
     controllers/UploadDiagnosticController.hpp
     controllers/UserController.hpp
@@ -38,6 +39,7 @@ set(Controllers_SOURCES
     controllers/ShareController.cpp
     controllers/SystemController.cpp
     controllers/StorageJobAdminController.cpp
+    controllers/StorageRecoveryAdminController.cpp
     controllers/TrashController.cpp
     controllers/UploadDiagnosticController.cpp
     controllers/UserController.cpp
@@ -50,6 +52,7 @@ set(Dtos_HEADERS
     dtos/FolderDto.hpp
     dtos/ShareDto.hpp
     dtos/StorageJobAdminDto.hpp
+    dtos/StorageRecoveryAdminDto.hpp
     dtos/TrashDto.hpp
     dtos/UploadDiagnosticDto.hpp
     dtos/UserDto.hpp
@@ -143,6 +146,7 @@ set(Services_HEADERS
     services/StorageJobWorker.hpp
     services/StorageWorkerRuntime.hpp
     services/StorageReconciliationService.hpp
+    services/StorageRecoveryAdminService.hpp
     services/SystemService.hpp
     services/TokenService.hpp
     services/TrashQuery.hpp
@@ -187,6 +191,7 @@ set(Services_SOURCES
     services/StorageJobWorker.cpp
     services/StorageWorkerRuntime.cpp
     services/StorageReconciliationService.cpp
+    services/StorageRecoveryAdminService.cpp
     services/SystemService.cpp
     services/TokenService.cpp
     services/TrashQuery.cpp

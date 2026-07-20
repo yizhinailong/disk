@@ -70,6 +70,7 @@ set(TEST_SOURCES
     dtos/FolderDto_test.cpp
     dtos/ShareDto_test.cpp
     dtos/StorageJobAdminDto_test.cpp
+    dtos/StorageRecoveryAdminDto_test.cpp
     dtos/TrashDto_test.cpp
     dtos/UploadDiagnosticDto_test.cpp
     dtos/UserDto_test.cpp

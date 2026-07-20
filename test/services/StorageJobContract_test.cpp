@@ -22,6 +22,24 @@ namespace disk::jobs {
             };
         }
 
+        TEST(StorageJobContractTest, BuildsCanonicalStagingCleanupJob) {
+            const disk::storage::UploadStagingSession session{
+                .upload_id = "upload-123",
+                .backend = disk::storage::UploadStagingBackend::S3,
+                .prefix = "staging/upload-123",
+            };
+
+            const auto job = BuildStagingCleanupJob(session);
+
+            EXPECT_EQ(job.job_type, kStagingCleanupJobType);
+            EXPECT_EQ(job.aggregate_id, session.upload_id);
+            EXPECT_EQ(job.dedupe_key, "staging-cleanup:upload-123");
+            EXPECT_EQ(job.payload["upload_id"].asString(), session.upload_id);
+            EXPECT_EQ(job.payload["backend"].asString(), "s3");
+            EXPECT_EQ(job.payload["prefix"].asString(), session.prefix);
+            EXPECT_EQ(job.payload.size(), 3U);
+        }
+
         TEST(StorageJobContractTest, RoundTripsExpireUploadsPage) {
             const ExpireUploadsPageRequest request{
                 .scan_id = "2026-07-19T12:00Z",

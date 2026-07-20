@@ -37,6 +37,21 @@ namespace disk::jobs {
         }
     } // namespace
 
+    auto BuildStagingCleanupJob(const disk::storage::UploadStagingSession& session)
+        -> NewStorageJob {
+        Json::Value payload(Json::objectValue);
+        payload["upload_id"] = session.upload_id;
+        payload["backend"] = std::string(disk::storage::ToStorageValue(session.backend));
+        payload["prefix"] = session.prefix;
+
+        return NewStorageJob{
+            .job_type = std::string(kStagingCleanupJobType),
+            .aggregate_id = session.upload_id,
+            .dedupe_key = "staging-cleanup:" + session.upload_id,
+            .payload = std::move(payload),
+        };
+    }
+
     auto BuildReconciliationCursorDigest(
         const disk::reconciliation::ReconciliationPageRequest& request
     ) -> std::string {

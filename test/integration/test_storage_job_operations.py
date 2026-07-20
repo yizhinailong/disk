@@ -4,7 +4,7 @@
 # dependencies = ["httpx", "psycopg[binary]"]
 # ///
 
-"""Exercise audited dead-letter operations and internal Prometheus metrics."""
+"""Exercise audited storage operations and internal Prometheus metrics."""
 
 from __future__ import annotations
 
@@ -38,6 +38,8 @@ JOB_ID: int | None = None
 DIAGNOSTIC_UPLOAD_ID: str | None = None
 DIAGNOSTIC_SCAN_ID: str | None = None
 DIAGNOSTIC_JOB_IDS: list[int] = []
+RECOVERY_SCAN_IDS: list[str] = []
+RECOVERY_JOB_IDS: list[int] = []
 
 
 def require(condition: bool, message: str) -> None:
@@ -47,6 +49,7 @@ def require(condition: bool, message: str) -> None:
 
 def cleanup_fixture() -> None:
     global JOB_ID, DIAGNOSTIC_UPLOAD_ID, DIAGNOSTIC_SCAN_ID, DIAGNOSTIC_JOB_IDS
+    global RECOVERY_SCAN_IDS, RECOVERY_JOB_IDS
     if DIAGNOSTIC_UPLOAD_ID is not None:
         with db_connection() as connection:
             task = connection.execute(
@@ -58,11 +61,36 @@ def cleanup_fixture() -> None:
                 "WHERE finding_type = 'upload_staging_mismatch' AND resource_id = %s",
                 (DIAGNOSTIC_UPLOAD_ID,),
             )
-            if DIAGNOSTIC_JOB_IDS:
+            connection.execute(
+                "DELETE FROM operation_logs "
+                "WHERE action IN ('admin.upload.lease_release', "
+                "'admin.upload.cleanup_rebuild') "
+                "AND target_type = 'upload' AND target_name = %s",
+                (DIAGNOSTIC_UPLOAD_ID,),
+            )
+            if RECOVERY_SCAN_IDS:
+                connection.execute(
+                    "DELETE FROM operation_logs "
+                    "WHERE action = 'admin.storage.reconcile' "
+                    "AND target_type = 'reconciliation' AND target_name = ANY(%s)",
+                    (RECOVERY_SCAN_IDS,),
+                )
+                connection.execute(
+                    "DELETE FROM storage_jobs "
+                    "WHERE job_type = 'storage_reconcile' AND aggregate_id = ANY(%s)",
+                    (RECOVERY_SCAN_IDS,),
+                )
+            all_job_ids = DIAGNOSTIC_JOB_IDS + RECOVERY_JOB_IDS
+            if all_job_ids:
                 connection.execute(
                     "DELETE FROM storage_jobs WHERE id = ANY(%s)",
-                    (DIAGNOSTIC_JOB_IDS,),
+                    (all_job_ids,),
                 )
+            connection.execute(
+                "DELETE FROM storage_jobs "
+                "WHERE job_type = 'staging_cleanup' AND aggregate_id = %s",
+                (DIAGNOSTIC_UPLOAD_ID,),
+            )
             connection.execute(
                 "DELETE FROM upload_tasks WHERE id = %s",
                 (DIAGNOSTIC_UPLOAD_ID,),
@@ -77,6 +105,8 @@ def cleanup_fixture() -> None:
         DIAGNOSTIC_UPLOAD_ID = None
         DIAGNOSTIC_SCAN_ID = None
         DIAGNOSTIC_JOB_IDS = []
+        RECOVERY_SCAN_IDS = []
+        RECOVERY_JOB_IDS = []
 
     if JOB_ID is not None:
         execute(
@@ -113,6 +143,16 @@ def response_json(response) -> dict:
         return json.loads(response.text)
     except json.JSONDecodeError as error:
         raise AssertionError(f"response is not JSON: {response.text}") from error
+
+
+def audit_count(action: str, target_name: str) -> int:
+    return int(
+        scalar(
+            "SELECT COUNT(*) FROM operation_logs "
+            "WHERE action = %s AND target_name = %s",
+            (action, target_name),
+        )
+    )
 
 
 def test_metrics() -> None:
@@ -492,6 +532,508 @@ def test_upload_diagnostics(token: str) -> None:
     log_pass("Upload diagnostics expose task, lease, chunk HEAD, and jobs without writes")
 
 
+def test_upload_lease_release(token: str) -> int:
+    upload_id = DIAGNOSTIC_UPLOAD_ID
+    require(upload_id is not None, "lease recovery fixture is missing")
+    headers = {"Authorization": f"Bearer {token}"}
+    path = f"/api/admin/uploads/{upload_id}/lease/release"
+    before = query_one(
+        """
+        SELECT status, state_version, lease_owner, lease_expires_at, updated_at
+        FROM upload_tasks WHERE id = %s
+        """,
+        (upload_id,),
+    )
+    require(before is not None, "lease recovery upload disappeared")
+    original_version = int(before["state_version"])
+    original_owner = str(before["lease_owner"])
+
+    unauthenticated = fetch(path, method="POST", json_body={})
+    require(unauthenticated.status_code == 401, "lease release is not admin protected")
+
+    dry_run = fetch(
+        path,
+        method="POST",
+        headers=headers,
+        json_body={
+            "expected_state_version": original_version,
+            "expected_lease_owner": original_owner,
+        },
+    )
+    require(dry_run.status_code == 200, f"lease dry-run failed: {dry_run.text}")
+    dry_data = response_json(dry_run)["data"]
+    require(dry_data["dry_run"] is True, "lease dry-run flag drifted")
+    require(dry_data["eligible"] is True, "live matching lease was not eligible")
+    require(dry_data["released"] is False, "lease dry-run reported a mutation")
+    require(
+        query_one(
+            "SELECT status, state_version, lease_owner, lease_expires_at, updated_at "
+            "FROM upload_tasks WHERE id = %s",
+            (upload_id,),
+        )
+        == before,
+        "lease dry-run changed the upload task",
+    )
+    require(
+        audit_count("admin.upload.lease_release", upload_id) == 0,
+        "lease dry-run wrote an audit record",
+    )
+
+    stale_owner = fetch(
+        path,
+        method="POST",
+        headers=headers,
+        json_body={
+            "dry_run": False,
+            "confirm_upload_id": upload_id,
+            "expected_state_version": original_version,
+            "expected_lease_owner": "terminated-owner-with-stale-observation",
+            "reason": "release stale owner",
+        },
+    )
+    require(stale_owner.status_code == 409, "owner mismatch did not return HTTP 409")
+    require(
+        scalar(
+            "SELECT state_version FROM upload_tasks WHERE id = %s",
+            (upload_id,),
+        )
+        == original_version,
+        "owner mismatch changed the upload task",
+    )
+    require(
+        audit_count("admin.upload.lease_release", upload_id) == 0,
+        "owner mismatch wrote an audit record",
+    )
+
+    released = fetch(
+        path,
+        method="POST",
+        headers=headers,
+        json_body={
+            "dry_run": False,
+            "confirm_upload_id": upload_id,
+            "expected_state_version": original_version,
+            "expected_lease_owner": original_owner,
+            "reason": "  owning instance terminated  ",
+        },
+    )
+    require(released.status_code == 200, f"lease release failed: {released.text}")
+    released_data = response_json(released)["data"]
+    released_version = original_version + 1
+    require(released_data["released"] is True, "lease release did not report mutation")
+    require(released_data["status"] == "finalizing", "lease release reopened the upload")
+    require(released_data["state_version"] == released_version, "lease version did not advance")
+    require(released_data["lease_owner"] == original_owner, "lease owner was not retained")
+    require(released_data["lease_expired"] is True, "released lease is not expired")
+
+    current = query_one(
+        """
+        SELECT status, state_version, lease_owner,
+               lease_expires_at <= NOW() AS lease_expired
+        FROM upload_tasks WHERE id = %s
+        """,
+        (upload_id,),
+    )
+    require(current is not None, "released upload disappeared")
+    require(current["status"] == 4, "lease release changed Finalizing status")
+    require(current["state_version"] == released_version, "database version did not advance")
+    require(current["lease_owner"] == original_owner, "database owner was cleared")
+    require(current["lease_expired"] is True, "database lease deadline is still live")
+    require(
+        scalar(
+            """
+            SELECT COUNT(*) FROM upload_tasks
+            WHERE id = %s AND status = 4 AND lease_owner = %s
+              AND state_version = %s AND lease_expires_at > NOW()
+            """,
+            (upload_id, original_owner, original_version),
+        )
+        == 0,
+        "the old owner can still satisfy the final commit fence",
+    )
+
+    audit = query_one(
+        """
+        SELECT user_id, target_id, target_name, details
+        FROM operation_logs
+        WHERE action = 'admin.upload.lease_release' AND target_name = %s
+        """,
+        (upload_id,),
+    )
+    require(audit is not None and audit["user_id"] is not None, "lease audit lacks operator")
+    require(audit["target_id"] is None, "string upload ID was written to numeric target_id")
+    require(audit["target_name"] == upload_id, "lease audit target drifted")
+    require(audit["details"]["reason"] == "owning instance terminated", "lease reason drifted")
+    require(
+        audit["details"]["previous_state_version"] == original_version
+        and audit["details"]["new_state_version"] == released_version,
+        "lease audit lost CAS versions",
+    )
+
+    repeated = fetch(
+        path,
+        method="POST",
+        headers=headers,
+        json_body={
+            "dry_run": False,
+            "confirm_upload_id": upload_id,
+            "expected_state_version": released_version,
+            "expected_lease_owner": original_owner,
+            "reason": "repeat an already released lease",
+        },
+    )
+    require(repeated.status_code == 409, "expired lease accepted a repeated release")
+
+    require(
+        audit_count("admin.upload.lease_release", upload_id) == 1,
+        "lease release wrote an unexpected number of audit records",
+    )
+    log_pass("Lease release enforces dry-run, owner/version CAS, fencing, and atomic audit")
+    return released_version
+
+
+def test_upload_cleanup_rebuild(token: str, released_version: int) -> None:
+    global RECOVERY_JOB_IDS
+    upload_id = DIAGNOSTIC_UPLOAD_ID
+    require(upload_id is not None, "cleanup recovery fixture is missing")
+    headers = {"Authorization": f"Bearer {token}"}
+    path = f"/api/admin/uploads/{upload_id}/cleanup/rebuild"
+
+    with db_connection() as connection:
+        terminal = connection.execute(
+            """
+            UPDATE upload_tasks
+            SET status = 5,
+                state_version = state_version + 1,
+                lease_owner = NULL,
+                lease_expires_at = NULL,
+                finalized_at = NOW(),
+                fail_reason = 'integration recovery fixture',
+                updated_at = NOW()
+            WHERE id = %s AND status = 4 AND state_version = %s
+            RETURNING state_version, staging_backend,
+                      COALESCE(staging_prefix, temp_path) AS staging_prefix
+            """,
+            (upload_id, released_version),
+        ).fetchone()
+    require(terminal is not None, "failed to make cleanup fixture terminal")
+    terminal_version = int(terminal["state_version"])
+    execute(
+        "DELETE FROM storage_jobs WHERE dedupe_key = %s",
+        (f"staging-cleanup:{upload_id}",),
+    )
+
+    dry_run = fetch(
+        path,
+        method="POST",
+        headers=headers,
+        json_body={"expected_state_version": terminal_version},
+    )
+    require(dry_run.status_code == 200, f"cleanup dry-run failed: {dry_run.text}")
+    dry_data = response_json(dry_run)["data"]
+    require(dry_data["eligible"] is True, "missing terminal cleanup was not eligible")
+    require(dry_data["planned_action"] == "create", "missing cleanup plan did not select create")
+    require(dry_data["rebuilt"] is False, "cleanup dry-run reported mutation")
+    require(
+        scalar(
+            "SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s",
+            (f"staging-cleanup:{upload_id}",),
+        )
+        == 0,
+        "cleanup dry-run created a job",
+    )
+    require(
+        audit_count("admin.upload.cleanup_rebuild", upload_id) == 0,
+        "cleanup dry-run wrote an audit record",
+    )
+
+    created = fetch(
+        path,
+        method="POST",
+        headers=headers,
+        json_body={
+            "dry_run": False,
+            "confirm_upload_id": upload_id,
+            "expected_state_version": terminal_version,
+            "reason": "  terminal upload retained staging  ",
+        },
+    )
+    require(created.status_code == 200, f"cleanup rebuild failed: {created.text}")
+    created_data = response_json(created)["data"]
+    require(created_data["rebuilt"] is True, "cleanup creation did not report mutation")
+    require(created_data["planned_action"] == "create", "cleanup creation action drifted")
+    require(created_data["job_status"] == "pending", "new cleanup is not pending")
+    cleanup_job_id = int(created_data["job_id"])
+    RECOVERY_JOB_IDS.append(cleanup_job_id)
+
+    cleanup_job = query_one(
+        """
+        SELECT job_type, aggregate_id, dedupe_key, payload, status
+        FROM storage_jobs WHERE id = %s
+        """,
+        (cleanup_job_id,),
+    )
+    require(cleanup_job is not None, "rebuilt cleanup job disappeared")
+    require(cleanup_job["job_type"] == "staging_cleanup", "cleanup job type drifted")
+    require(cleanup_job["aggregate_id"] == upload_id, "cleanup aggregate drifted")
+    require(cleanup_job["dedupe_key"] == f"staging-cleanup:{upload_id}", "cleanup dedupe drifted")
+    require(
+        cleanup_job["payload"]
+        == {
+            "upload_id": upload_id,
+            "backend": terminal["staging_backend"],
+            "prefix": terminal["staging_prefix"],
+        },
+        "cleanup payload was not derived from the persisted staging session",
+    )
+    require(cleanup_job["status"] == 0, "new cleanup database status is not Pending")
+
+    first_audit = query_one(
+        """
+        SELECT user_id, details FROM operation_logs
+        WHERE action = 'admin.upload.cleanup_rebuild' AND target_name = %s
+        ORDER BY id LIMIT 1
+        """,
+        (upload_id,),
+    )
+    require(first_audit is not None and first_audit["user_id"] is not None, "cleanup audit missing")
+    require(first_audit["details"]["planned_action"] == "create", "cleanup audit action drifted")
+    require(
+        first_audit["details"]["reason"] == "terminal upload retained staging",
+        "cleanup audit reason drifted",
+    )
+
+    execute(
+        """
+        UPDATE storage_jobs
+        SET status = 3, attempts = 2, last_error = 'old cleanup result',
+            completed_at = NOW(), updated_at = NOW()
+        WHERE id = %s
+        """,
+        (cleanup_job_id,),
+    )
+    rearmed = fetch(
+        path,
+        method="POST",
+        headers=headers,
+        json_body={
+            "dry_run": False,
+            "confirm_upload_id": upload_id,
+            "expected_state_version": terminal_version,
+            "reason": "cleanup object still present",
+        },
+    )
+    require(rearmed.status_code == 200, f"cleanup rearm failed: {rearmed.text}")
+    rearmed_data = response_json(rearmed)["data"]
+    require(rearmed_data["job_id"] == cleanup_job_id, "cleanup rearm replaced job history")
+    require(rearmed_data["job_status"] == "pending", "rearmed cleanup is not pending")
+    rearmed_job = query_one(
+        """
+        SELECT status, attempts, locked_by, locked_until, last_error, completed_at
+        FROM storage_jobs WHERE id = %s
+        """,
+        (cleanup_job_id,),
+    )
+    require(rearmed_job is not None, "rearmed cleanup disappeared")
+    require(rearmed_job["status"] == 0 and rearmed_job["attempts"] == 0, "rearm did not reset state")
+    require(
+        all(
+            rearmed_job[field] is None
+            for field in ("locked_by", "locked_until", "last_error", "completed_at")
+        ),
+        "rearm retained lease, error, or completion state",
+    )
+    require(
+        audit_count("admin.upload.cleanup_rebuild", upload_id) == 2,
+        "cleanup create and rearm did not each write one audit",
+    )
+
+    execute(
+        """
+        UPDATE storage_jobs
+        SET status = 4, attempts = max_attempts,
+            last_error = 'dependency still unavailable', completed_at = NOW(), updated_at = NOW()
+        WHERE id = %s
+        """,
+        (cleanup_job_id,),
+    )
+    dead_letter_dry_run = fetch(
+        path,
+        method="POST",
+        headers=headers,
+        json_body={"expected_state_version": terminal_version},
+    )
+    require(dead_letter_dry_run.status_code == 200, "DeadLetter cleanup dry-run failed")
+    dead_letter_data = response_json(dead_letter_dry_run)["data"]
+    require(dead_letter_data["eligible"] is False, "DeadLetter cleanup was rebuildable")
+    require(dead_letter_data["planned_action"] == "none", "DeadLetter cleanup selected an action")
+    require(dead_letter_data["job_status"] == "dead_letter", "DeadLetter status drifted")
+
+    dead_letter_rebuild = fetch(
+        path,
+        method="POST",
+        headers=headers,
+        json_body={
+            "dry_run": False,
+            "confirm_upload_id": upload_id,
+            "expected_state_version": terminal_version,
+            "reason": "incorrect recovery command",
+        },
+    )
+    require(dead_letter_rebuild.status_code == 409, "DeadLetter cleanup rebuild did not conflict")
+    require(
+        audit_count("admin.upload.cleanup_rebuild", upload_id) == 2,
+        "rejected DeadLetter cleanup rebuild wrote an audit",
+    )
+    log_pass("Cleanup rebuild creates canonical jobs, rearms Succeeded, and rejects DeadLetter")
+
+
+def test_storage_reconciliation_enqueue(token: str) -> None:
+    global RECOVERY_SCAN_IDS, RECOVERY_JOB_IDS
+    headers = {"Authorization": f"Bearer {token}"}
+    scan_id = f"ops-{uuid.uuid4().hex}"
+    RECOVERY_SCAN_IDS.append(scan_id)
+    path = f"/api/admin/storage-reconciliation/{scan_id}/enqueue"
+
+    unauthenticated = fetch(path, method="POST", json_body={"scope": "contents"})
+    require(unauthenticated.status_code == 401, "reconciliation enqueue is not admin protected")
+    invalid_scope = fetch(
+        path,
+        method="POST",
+        headers=headers,
+        json_body={"scope": "all"},
+    )
+    require(invalid_scope.status_code == 400, "reconciliation accepted an arbitrary scope")
+    custom_cursor = fetch(
+        path,
+        method="POST",
+        headers=headers,
+        json_body={"scope": "staging", "continuation_token": "operator-controlled"},
+    )
+    require(custom_cursor.status_code == 400, "reconciliation accepted a custom cursor")
+    scope_limits = {
+        "contents": 500,
+        "users": 500,
+        "staging": 1000,
+        "final": 1000,
+    }
+    jobs_by_scope: dict[str, int] = {}
+    for scope, page_size in scope_limits.items():
+        dry_run = fetch(
+            path,
+            method="POST",
+            headers=headers,
+            json_body={"scope": scope},
+        )
+        require(dry_run.status_code == 200, f"{scope} reconciliation dry-run failed: {dry_run.text}")
+        dry_data = response_json(dry_run)["data"]
+        require(dry_data["eligible"] is True, f"new {scope} scan was not eligible")
+        require(dry_data["enqueued"] is False, f"{scope} dry-run reported enqueue")
+        require(dry_data["page_size"] == page_size, f"{scope} page size drifted")
+        require(dry_data["job_id"] is None, f"{scope} dry-run returned a job ID")
+        require(
+            scalar(
+                "SELECT COUNT(*) FROM storage_jobs "
+                "WHERE job_type = 'storage_reconcile' AND aggregate_id = %s",
+                (scan_id,),
+            )
+            == len(jobs_by_scope),
+            f"{scope} dry-run created a job",
+        )
+
+        enqueued = fetch(
+            path,
+            method="POST",
+            headers=headers,
+            json_body={
+                "scope": scope,
+                "dry_run": False,
+                "confirm_scan_id": scan_id,
+                "reason": f"  verify {scope} after storage incident  ",
+            },
+        )
+        require(enqueued.status_code == 200, f"{scope} reconciliation enqueue failed: {enqueued.text}")
+        enqueued_data = response_json(enqueued)["data"]
+        require(enqueued_data["enqueued"] is True, f"{scope} enqueue did not report mutation")
+        require(enqueued_data["job_status"] == "pending", f"{scope} job is not Pending")
+        job_id = int(enqueued_data["job_id"])
+        jobs_by_scope[scope] = job_id
+        RECOVERY_JOB_IDS.append(job_id)
+
+        job = query_one(
+            """
+            SELECT aggregate_id, dedupe_key, payload, status
+            FROM storage_jobs WHERE id = %s
+            """,
+            (job_id,),
+        )
+        require(job is not None, f"{scope} reconciliation job disappeared")
+        require(job["aggregate_id"] == scan_id, f"{scope} aggregate ID drifted")
+        require(job["dedupe_key"] == enqueued_data["dedupe_key"], f"{scope} dedupe key drifted")
+        require(
+            job["payload"]
+            == {
+                "scan_id": scan_id,
+                "scope": scope,
+                "after_id": 0,
+                "continuation_token": "",
+                "limit": page_size,
+            },
+            f"{scope} first-page payload drifted",
+        )
+        require(job["status"] == 0, f"{scope} database status is not Pending")
+
+        audit = query_one(
+            """
+            SELECT user_id, details FROM operation_logs
+            WHERE action = 'admin.storage.reconcile'
+              AND target_type = 'reconciliation'
+              AND target_name = %s
+              AND details->>'scope' = %s
+            """,
+            (scan_id, scope),
+        )
+        require(audit is not None and audit["user_id"] is not None, f"{scope} audit is missing")
+        require(audit["details"]["job_id"] == job_id, f"{scope} audit job ID drifted")
+        require(audit["details"]["page_size"] == page_size, f"{scope} audit page size drifted")
+        require(
+            audit["details"]["reason"] == f"verify {scope} after storage incident",
+            f"{scope} audit reason was not normalized",
+        )
+
+    duplicate = fetch(
+        path,
+        method="POST",
+        headers=headers,
+        json_body={
+            "scope": "staging",
+            "dry_run": False,
+            "confirm_scan_id": scan_id,
+            "reason": "do not reset existing history",
+        },
+    )
+    require(duplicate.status_code == 409, "duplicate scan scope did not return HTTP 409")
+    require(
+        audit_count("admin.storage.reconcile", scan_id) == len(scope_limits),
+        "duplicate scan scope wrote an extra audit",
+    )
+    require(
+        scalar(
+            "SELECT status FROM storage_jobs WHERE id = %s",
+            (jobs_by_scope["staging"],),
+        )
+        == 0,
+        "duplicate scan scope reset existing history",
+    )
+    log_pass("All fixed reconciliation scopes enqueue bounded first pages with atomic audits")
+
+
+def test_recovery_commands(token: str) -> None:
+    released_version = test_upload_lease_release(token)
+    test_upload_cleanup_rebuild(token, released_version)
+    test_storage_reconciliation_enqueue(token)
+
+
 def main() -> int:
     os.environ["DISK_PROCESS_ROLE"] = "api"
     os.environ["DISK_INSTANCE_ID"] = "ops-api"
@@ -502,6 +1044,7 @@ def main() -> int:
         test_metrics()
         test_dead_letter_operations(token)
         test_upload_diagnostics(token)
+        test_recovery_commands(token)
         return 0
     finally:
         cleanup_fixture()

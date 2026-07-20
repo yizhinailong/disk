@@ -140,6 +140,7 @@ TEST(FilterOwnershipTest, RouteDeclarationsDoNotDeclareJwtAuthFilter) {
         "OperationLogController.hpp",
         "ShareController.hpp",
         "StorageJobAdminController.hpp",
+        "StorageRecoveryAdminController.hpp",
         "SystemController.hpp",
         "TrashController.hpp",
         "UploadDiagnosticController.hpp",
@@ -165,6 +166,27 @@ TEST(FilterOwnershipTest, UploadDiagnosticsUseAdminAuthBeforeAdminRateLimit) {
     ));
     EXPECT_EQ(CountOccurrences(controller, "\"disk::filters::AdminAuthFilter\""), 1U);
     EXPECT_EQ(CountOccurrences(controller, "\"disk::filters::AdminRateLimitFilter\""), 1U);
+}
+
+TEST(FilterOwnershipTest, StorageRecoveryCommandsUseAdminAuthBeforeAdminRateLimit) {
+    const auto controller = ControllerText("StorageRecoveryAdminController.hpp");
+
+    EXPECT_TRUE(ContainsAllInOrder(
+        controller,
+        {
+            "StorageRecoveryAdminController::ReleaseUploadLease",
+            "\"disk::filters::AdminAuthFilter\"",
+            "\"disk::filters::AdminRateLimitFilter\"",
+            "StorageRecoveryAdminController::RebuildUploadCleanup",
+            "\"disk::filters::AdminAuthFilter\"",
+            "\"disk::filters::AdminRateLimitFilter\"",
+            "StorageRecoveryAdminController::EnqueueReconciliation",
+            "\"disk::filters::AdminAuthFilter\"",
+            "\"disk::filters::AdminRateLimitFilter\"",
+        }
+    ));
+    EXPECT_EQ(CountOccurrences(controller, "\"disk::filters::AdminAuthFilter\""), 3U);
+    EXPECT_EQ(CountOccurrences(controller, "\"disk::filters::AdminRateLimitFilter\""), 3U);
 }
 
 TEST(FilterOwnershipTest, AuthenticatedRateLimitersRemainRouteOwnedExactlyOnce) {

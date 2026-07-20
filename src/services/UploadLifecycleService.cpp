@@ -305,21 +305,6 @@ namespace disk::upload {
             co_return drogon_model::disk::Files(result[0], -1);
         }
 
-        [[nodiscard]] auto BuildStagingCleanupJob(
-            const disk::storage::UploadStagingSession& session
-        ) -> disk::jobs::NewStorageJob {
-            Json::Value payload(Json::objectValue);
-            payload["upload_id"] = session.upload_id;
-            payload["backend"] = std::string(disk::storage::ToStorageValue(session.backend));
-            payload["prefix"] = session.prefix;
-
-            return disk::jobs::NewStorageJob{
-                .job_type = std::string(disk::jobs::kStagingCleanupJobType),
-                .aggregate_id = session.upload_id,
-                .dedupe_key = "staging-cleanup:" + session.upload_id,
-                .payload = std::move(payload),
-            };
-        }
     } // namespace
 
     UploadLifecycleService::UploadLifecycleService(
@@ -1185,7 +1170,7 @@ namespace disk::upload {
 
                 co_await storage_job_repository.Enqueue(
                     transaction,
-                    BuildStagingCleanupJob(staging_session.value())
+                    disk::jobs::BuildStagingCleanupJob(staging_session.value())
                 );
                 co_await upload_task_repository.DeleteChunks(transaction, command.upload_id);
 
@@ -1285,7 +1270,7 @@ namespace disk::upload {
 
                 co_await storage_job_repository.Enqueue(
                     transaction,
-                    BuildStagingCleanupJob(cancelled_record->staging_session)
+                    disk::jobs::BuildStagingCleanupJob(cancelled_record->staging_session)
                 );
                 co_await upload_task_repository.DeleteChunks(transaction, upload_id);
                 cancelled = true;
@@ -1356,7 +1341,7 @@ namespace disk::upload {
 
                 co_await storage_job_repository.Enqueue(
                     transaction,
-                    BuildStagingCleanupJob(expired_record->staging_session)
+                    disk::jobs::BuildStagingCleanupJob(expired_record->staging_session)
                 );
                 co_await upload_task_repository.DeleteChunks(transaction, upload_id);
 

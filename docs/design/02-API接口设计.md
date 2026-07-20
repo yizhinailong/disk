@@ -4257,6 +4257,61 @@ local 只比较大小；S3 在 DB 大小与 ETag 均完整时一并比较，元�
 响应不包含凭据、令牌、签名 URL、对象正文或底层异常文本。`object_key`和租约 owner
 只在该管理员响应中返回，不写入指标标签或通用请求日志。
 
+#### 解除上传完成租约
+
+**POST** `/api/admin/uploads/{upload_id}/lease/release`
+
+```json
+{
+  "dry_run": true,
+  "confirm_upload_id": "0198f5f4-95ae-7c74-aea4-6f6e1c12e4bb",
+  "expected_state_version": 7,
+  "expected_lease_owner": "api-a:complete:0198f5f4",
+  "reason": "owning instance has been terminated"
+}
+```
+
+- `dry_run` 默认为 `true`，只返回当前 `Finalizing` 状态、owner、数据库租约截止、版本和 `eligible`，不写审计；只有尚未自然到期的匹配租约才具备解除资格。
+- 真正执行必须显式传 `dry_run=false`，且 `confirm_upload_id` 与路径完全相同；`expected_state_version` 和 `expected_lease_owner` 必须与当前行完全相同，`reason` 去除首尾空白后为 1-256 个字符。
+- 条件更新只命中 `Finalizing + expected owner + expected version + lease_expires_at > NOW()`，将 `lease_expires_at` 写为 PostgreSQL `NOW()` 并递增 `state_version`。状态仍为 `Finalizing`，owner 保留用于诊断；旧 owner 因版本和截止时间双重门禁不能续租或提交，后续 complete 仍通过既有过期接管 CAS 恢复。已经自然到期或已解除的租约直接由正常 complete 接管，重复解除返回 HTTP 409。
+- 响应包含 `upload_id/dry_run/eligible/released/status/state_version/lease_owner/lease_expires_at/lease_expired`。实际更新与 `admin.upload.lease_release` 审计同事务提交；条件竞争失败返回 HTTP 409。
+
+#### 重建上传清理任务
+
+**POST** `/api/admin/uploads/{upload_id}/cleanup/rebuild`
+
+```json
+{
+  "dry_run": true,
+  "confirm_upload_id": "0198f5f4-95ae-7c74-aea4-6f6e1c12e4bb",
+  "expected_state_version": 8,
+  "reason": "staging objects remain after terminal upload"
+}
+```
+
+该命令只读取上传任务中固化的 `staging_backend/staging_prefix`，不接受调用方提供对象 key、前缀或任意 payload。只有 `Completed/Cancelled/Expired/Failed` 终态可执行：不存在 `staging-cleanup:{upload_id}` 时计划 `create`；同一任务已 `Succeeded` 时计划 `rearm_succeeded`；`Pending/Running/Retry` 说明已有恢复责任方，`DeadLetter` 必须使用精确任务 ID 重放，两者均 `eligible=false`。
+
+实际执行要求 `dry_run=false`、匹配路径的 `confirm_upload_id`、精确 `expected_state_version` 和 1-256 字符原因。任务创建/重置与 `admin.upload.cleanup_rebuild` 审计同事务提交；响应包含 `planned_action/rebuilt` 及可选的 `job_id/job_status`。该接口不直接删除对象。
+
+#### 发起存储对账
+
+**POST** `/api/admin/storage-reconciliation/{scan_id}/enqueue`
+
+```json
+{
+  "scope": "staging",
+  "dry_run": true,
+  "confirm_scan_id": "ops-20260720-staging-01",
+  "reason": "verify staging after storage incident"
+}
+```
+
+`scan_id` 限 1-64 个 `[A-Za-z0-9._:-]` 字符；`scope` 必须是 `contents/users/staging/final` 之一。命令只创建该 scope 的首个有界分页 `storage_reconcile` 任务：数据库 scope 页大小固定 500，对象 scope 固定 1000，后续页仍由 Worker 的既有任务合同产生。
+
+dry-run 返回派生的稳定去重键和是否可入队，不写库。实际执行要求 `dry_run=false`、完全匹配的 `confirm_scan_id` 和 1-256 字符原因；相同 `scan_id + scope` 的首任务已存在时返回 HTTP 409，不重置历史任务。入队与 `admin.storage.reconcile` 审计同事务提交。接口不接受游标、页码、SQL 或自定义任务 payload。
+
+以上三个写命令都必须经过 `AdminAuthFilter` 后再进入管理员限流。dry-run、校验失败、状态不合格和并发冲突均不得写 `operation_logs`；只有实际状态/任务变化与审计同时成功才返回成功。
+
 ### 10.0.1 内部指标接口
 
 **GET** `/metrics`

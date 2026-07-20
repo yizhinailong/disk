@@ -52,6 +52,7 @@ namespace disk::file {
         TEST(UploadTaskRepositoryStagingContractTest, CreationPersistsImmutableSessionLocation) {
             const auto repository_source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
             const auto lifecycle_source = ReadSourceFile("src/services/UploadLifecycleService.cpp");
+            const auto job_contract_source = ReadSourceFile("src/services/StorageJobContract.cpp");
 
             EXPECT_TRUE(Contains(repository_source, "staging_backend, staging_prefix, status, expires_at"));
             EXPECT_TRUE(Contains(repository_source, "ToStorageValue(staging_session.backend)"));
@@ -64,9 +65,9 @@ namespace disk::file {
             EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.Create(std::move(task), staging_session)"));
             EXPECT_TRUE(Contains(lifecycle_source, "FindStagingSessionForUser("));
             EXPECT_TRUE(Contains(lifecycle_source, "BuildStagingCleanupJob("));
-            EXPECT_TRUE(Contains(lifecycle_source, "payload[\"backend\"]"));
-            EXPECT_TRUE(Contains(lifecycle_source, "payload[\"prefix\"]"));
-            EXPECT_TRUE(Contains(lifecycle_source, "\"staging-cleanup:\" + session.upload_id"));
+            EXPECT_TRUE(Contains(job_contract_source, "payload[\"backend\"]"));
+            EXPECT_TRUE(Contains(job_contract_source, "payload[\"prefix\"]"));
+            EXPECT_TRUE(Contains(job_contract_source, "\"staging-cleanup:\" + session.upload_id"));
             EXPECT_TRUE(Contains(lifecycle_source, "staging_session.value(),\n            state_version"));
 
             const auto service_source = ReadSourceFile("src/services/UploadService.cpp");
