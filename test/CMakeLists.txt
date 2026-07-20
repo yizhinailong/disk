@@ -326,6 +326,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME BackupRestoreReconciliationIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_backup_restore_reconciliation.py"
+)
+set_tests_properties(
+    BackupRestoreReconciliationIntegration
+    PROPERTIES
+    LABELS "backend-integration;database-migration;backup-restore;object-storage"
+    RUN_SERIAL TRUE
+    TIMEOUT 180
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME UploadStateMachineIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_upload_state_machine.py"
 )

@@ -166,6 +166,11 @@ namespace disk::reconciliation {
         auto ResolveFinding(std::string_view finding_type, std::string_view resource_id) const
             -> drogon::Task<void>;
 
+        auto ResolveStaleObjectFindings(
+            std::string_view finding_type,
+            const ReconciliationPageRequest& request
+        ) const -> drogon::Task<void>;
+
         drogon::orm::DbClientPtr m_db_client;
         disk::storage::UploadStagingStorage* m_staging_storage{};
         disk::storage::IBlobStore* m_blob_store{};

@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "services/StorageJobContract.hpp"
 #include "services/StorageJobRepository.hpp"
 #include "storage/IBlobStore.hpp"
 #include "storage/UploadStagingStorage.hpp"
@@ -190,6 +191,27 @@ namespace disk::reconciliation {
             "UPDATE storage_reconciliation_findings SET " "  resolved_at = COALESCE(resolved_at, NOW()), last_seen_at = NOW() " "WHERE finding_type = $1 AND resource_id = $2 AND resolved_at IS NULL",
             std::string(finding_type),
             std::string(resource_id)
+        );
+    }
+
+    auto StorageReconciliationService::ResolveStaleObjectFindings(
+        std::string_view finding_type,
+        const ReconciliationPageRequest& request
+    ) const -> drogon::Task<void> {
+        auto first_request = request;
+        first_request.after_id = 0;
+        first_request.continuation_token.clear();
+        auto first_job = disk::jobs::BuildStorageReconcileJob(first_request);
+        if (!first_job) {
+            throw std::logic_error("Failed to rebuild first reconciliation job");
+        }
+        co_await m_db_client->execSqlCoro(
+            "WITH scan_start AS (" "  SELECT created_at AS started_at FROM storage_jobs " "  WHERE dedupe_key = $1 AND job_type = $2 AND aggregate_id = $3 " "    AND payload ->> 'scope' = $4" ") " "UPDATE storage_reconciliation_findings AS finding SET " "  resolved_at = COALESCE(finding.resolved_at, NOW()), last_seen_at = NOW() " "FROM scan_start WHERE finding.finding_type = $5 " "  AND finding.resolved_at IS NULL " "  AND finding.last_seen_at < scan_start.started_at",
+            first_job->dedupe_key,
+            std::string(disk::jobs::kStorageReconcileJobType),
+            request.scan_id,
+            std::string(ToStorageValue(request.scope)),
+            std::string(finding_type)
         );
     }
 
@@ -482,6 +504,9 @@ namespace disk::reconciliation {
                 .details = std::move(details),
             });
             ++page.findings_recorded;
+        }
+        if (!page.has_more) {
+            co_await ResolveStaleObjectFindings(finding_type, request);
         }
         co_return page;
     }
