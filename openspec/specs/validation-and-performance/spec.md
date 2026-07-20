@@ -77,6 +77,10 @@ The validation documentation SHALL define performance objectives and pressure-te
 - **WHEN** a pressure test is run against a documented endpoint
 - **THEN** the test SHALL record request count, concurrency, duration or thread settings, QPS or throughput, average latency, and error rate
 
+#### Scenario: Distributed baseline comparison executed
+- **WHEN** the post-refactor API scaling, storage workload, S3 assembly, process-failure, and Worker-backlog results are compared with their recorded baselines
+- **THEN** the comparison SHALL reject missing or mismatched scenarios, parameters, required host fields, dependency implementations, dirty or inconsistent current commits or server binaries, or failed source acceptance; otherwise it SHALL preserve source hashes, commits, host load, directional metric deltas, and material observations in schema-versioned evidence
+
 #### Scenario: Tool limitation disclosed
 - **WHEN** `drogon_ctl press` is used for pressure testing
 - **THEN** the documentation SHALL disclose limitations such as lack of percentile latency, single-step request shape, static request bodies, or empty-database bias where applicable
