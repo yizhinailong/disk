@@ -162,25 +162,7 @@ namespace disk::file {
 
         const auto& task = cached_task.value();
 
-        /// 2. 验证任务未过期
-        if (disk::upload::IsExpired(task.expires_at, trantor::Date::now())) {
-            Logger::Warn() << "Upload task expired: " << upload_id;
-            InvalidateUploadTaskCache(upload_id);
-
-            auto end = std::chrono::steady_clock::now();
-            auto duration_us =
-                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[upload_chunk] duration_us=" << duration_us
-                           << " outcome=failure upload_id=" << upload_id
-                           << " chunk_index=" << chunk_index
-                           << " data_size=" << chunk_data.size();
-
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::UploadTaskNotFound, "Upload task expired")
-            );
-        }
-
-        /// 3. 验证分片索引和大小符合任务几何信息
+        /// 2. 验证分片索引和大小符合任务几何信息
         auto chunk_acceptance = disk::upload::ValidateChunkAcceptance(
             chunk_index,
             chunk_data.size(),
@@ -422,7 +404,7 @@ namespace disk::file {
     auto UploadService::FindUploadTask(const std::string& upload_id, uint64_t user_id) const
         -> drogon::Task<Result<UploadTasks>> {
         UploadTaskRepository upload_task_repository(m_db_client);
-        auto task = co_await upload_task_repository.FindByIdForUser(upload_id, user_id);
+        auto task = co_await upload_task_repository.FindUnexpiredByIdForUser(upload_id, user_id);
         if (!task.has_value()) {
             Logger::Warn() << "Upload task not found or not owned by user: upload_id=" << upload_id
                            << ", request_user_id=" << user_id;
@@ -463,7 +445,6 @@ namespace disk::file {
                                      .file_size = static_cast<uint64_t>(task.getValueOfFileSize()),
                                      .chunk_size = static_cast<uint32_t>(task.getValueOfChunkSize()),
                                      .total_chunks = static_cast<uint32_t>(task.getValueOfTotalChunks()),
-                                     .expires_at = task.getValueOfExpiresAt(),
                                      .staging_session = std::move(staging_session),
                                      .cache_expires_at = std::chrono::steady_clock::now() + UPLOAD_TASK_CACHE_TTL };
     }

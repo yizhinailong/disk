@@ -363,10 +363,6 @@ namespace disk::upload {
         Logger::Debug() << "UploadLifecycleService initialization completed";
     }
 
-    auto IsExpired(const trantor::Date& expires_at, const trantor::Date& now) -> bool {
-        return expires_at < now;
-    }
-
     auto DecideInitFlow(
         bool has_existing_content,
         std::string_view existing_task_id
@@ -591,16 +587,16 @@ namespace disk::upload {
                 const auto& task = existing_task.value();
                 const auto& task_id = task.getValueOfId();
 
-                if (IsExpired(task.getValueOfExpiresAt(), trantor::Date::now())) {
+                auto expire_result = co_await ExpireInProgressUpload(task_id);
+                if (!expire_result) {
+                    Logger::Error() << "Failed to inspect existing upload expiry during init: upload_id="
+                                    << task_id << ", error=" << expire_result.error().message;
+                    co_return std::unexpected(expire_result.error());
+                }
+
+                if (*expire_result) {
                     Logger::Info() << "Expired upload task found, expiring through lifecycle: upload_id=" << task_id;
                     pending_invalidation.upload_task_ids.push_back(task_id);
-
-                    auto expire_result = co_await ExpireInProgressUpload(task_id);
-                    if (!expire_result) {
-                        Logger::Error() << "Failed to expire existing upload task during init: upload_id="
-                                        << task_id << ", error=" << expire_result.error().message;
-                        co_return std::unexpected(expire_result.error());
-                    }
                 } else {
                     Logger::Debug() << "Resume upload check successful: upload_id=" << task_id;
                     auto uploaded_chunks = co_await upload_task_repository.ListUploadedChunkIndices(task_id);
@@ -671,11 +667,14 @@ namespace disk::upload {
         task.setReservedBytes(command.file_size);
         task.setTempPath(upload_id);
         task.setStatus(ToStorageValue(UploadTaskStatus::InProgress));
-        task.setExpiresAt(trantor::Date::now().after(command.expiry_seconds));
 
         bool create_task_failed = false;
         try {
-            task = co_await upload_task_repository.Create(std::move(task), staging_session);
+            task = co_await upload_task_repository.Create(
+                std::move(task),
+                staging_session,
+                static_cast<uint32_t>(command.expiry_seconds)
+            );
 
             Logger::Debug() << "Upload task created successfully: upload_id=" << task.getValueOfId()
                             << ", total_chunks=" << total_chunks;

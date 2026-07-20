@@ -72,6 +72,10 @@ namespace disk::file {
             -> drogon::Task<std::optional<drogon_model::disk::UploadTasks>>;
 
         [[nodiscard]]
+        auto FindUnexpiredByIdForUser(const std::string& upload_id, uint64_t user_id) const
+            -> drogon::Task<std::optional<drogon_model::disk::UploadTasks>>;
+
+        [[nodiscard]]
         auto FindInProgressByUserAndHash(uint64_t user_id, const std::string& file_hash) const
             -> drogon::Task<std::optional<drogon_model::disk::UploadTasks>>;
 
@@ -82,7 +86,8 @@ namespace disk::file {
         [[nodiscard]]
         auto Create(
             drogon_model::disk::UploadTasks task,
-            const disk::storage::UploadStagingSession& staging_session
+            const disk::storage::UploadStagingSession& staging_session,
+            uint32_t expiry_seconds
         ) const
             -> drogon::Task<drogon_model::disk::UploadTasks>;
 

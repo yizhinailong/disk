@@ -866,6 +866,7 @@ Content-Type: application/octet-stream
 - 服务端在对象写入前校验任务和分片几何信息，写入后仅在任务仍为 `InProgress` 时记录分片。
 - 如果完成、取消或过期在分片写入期间获胜，迟到请求返回 `409 + 10004`，不得改变终态；已产生的孤儿对象由清理任务回收。
 - `uploaded_chunks` 和完成覆盖判断只以 PostgreSQL `upload_task_chunks` 为准，不以对象列表或进程内缓存为准。
+- `expires_at` 在创建任务时由 PostgreSQL `NOW() + TTL` 生成；分片、取消、断点续传和过期转换均以数据库 `NOW()` 判断，不得用 API 进程本地时区解析 `TIMESTAMP` 后授予或拒绝写权限。
 
 #### 响应示例
 

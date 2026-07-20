@@ -17,7 +17,6 @@
 #include <string_view>
 #include <vector>
 
-#include <trantor/utils/Date.h>
 #include <drogon/orm/DbClient.h>
 
 #include "services/UploadStateMachine.hpp"
@@ -125,8 +124,6 @@ namespace disk::upload {
         std::optional<LifecycleFileItem> file;
         UploadCacheInvalidation invalidation;
     };
-
-    [[nodiscard]] auto IsExpired(const trantor::Date& expires_at, const trantor::Date& now) -> bool;
 
     [[nodiscard]] auto DecideInitFlow(
         bool has_existing_content,

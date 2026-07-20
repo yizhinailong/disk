@@ -91,6 +91,21 @@ namespace disk::file {
         }
     }
 
+    auto UploadTaskRepository::FindUnexpiredByIdForUser(
+        const std::string& upload_id,
+        uint64_t user_id
+    ) const -> drogon::Task<std::optional<UploadTasks>> {
+        auto result = co_await m_db_client->execSqlCoro(
+            "SELECT * FROM upload_tasks " "WHERE id = $1 AND user_id = $2 AND expires_at >= NOW()",
+            upload_id,
+            user_id
+        );
+        if (result.empty()) {
+            co_return std::nullopt;
+        }
+        co_return UploadTasks(result[0], -1);
+    }
+
     auto UploadTaskRepository::FindInProgressByUserAndHash(
         uint64_t user_id,
         const std::string& file_hash
@@ -131,7 +146,8 @@ namespace disk::file {
 
     auto UploadTaskRepository::Create(
         UploadTasks task,
-        const disk::storage::UploadStagingSession& staging_session
+        const disk::storage::UploadStagingSession& staging_session,
+        uint32_t expiry_seconds
     ) const -> drogon::Task<UploadTasks> {
         if (staging_session.upload_id != task.getValueOfId()) {
             throw std::invalid_argument("Staging session upload ID must match upload task ID");
@@ -141,7 +157,7 @@ namespace disk::file {
         }
 
         auto result = co_await m_db_client->execSqlCoro(
-            "INSERT INTO upload_tasks (" "id, user_id, folder_id, filename, file_size, file_hash, chunk_size, total_chunks, " "reserved_bytes, temp_path, staging_backend, staging_prefix, status, expires_at" ") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *",
+            "INSERT INTO upload_tasks (" "id, user_id, folder_id, filename, file_size, file_hash, chunk_size, total_chunks, " "reserved_bytes, temp_path, staging_backend, staging_prefix, status, expires_at" ") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, " "NOW() + ($14::integer * INTERVAL '1 second')) RETURNING *",
             task.getValueOfId(),
             task.getValueOfUserId(),
             task.getValueOfFolderId(),
@@ -155,7 +171,7 @@ namespace disk::file {
             std::string(disk::storage::ToStorageValue(staging_session.backend)),
             staging_session.prefix,
             static_cast<int16_t>(task.getValueOfStatus()),
-            task.getValueOfExpiresAt()
+            static_cast<int32_t>(expiry_seconds)
         );
 
         co_return UploadTasks(result[0], -1);

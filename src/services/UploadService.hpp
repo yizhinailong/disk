@@ -19,7 +19,6 @@
 #include <vector>
 
 #include <drogon/orm/DbClient.h>
-#include <trantor/utils/Date.h>
 
 #include "dtos/FileDto.hpp"
 #include "models/Files.hpp"
@@ -155,7 +154,6 @@ namespace disk::file {
             uint64_t file_size = 0;
             uint32_t chunk_size = 0;
             uint32_t total_chunks = 0;
-            trantor::Date expires_at;
             storage::UploadStagingSession staging_session;
             std::chrono::steady_clock::time_point cache_expires_at;
         };

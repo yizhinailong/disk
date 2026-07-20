@@ -62,7 +62,8 @@ namespace disk::file {
 
             EXPECT_TRUE(Contains(lifecycle_source, "config->GetUploadStagingBackend()"));
             EXPECT_TRUE(Contains(lifecycle_source, "config->GetS3StorageConfig().staging_prefix + \"/\" + upload_id"));
-            EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.Create(std::move(task), staging_session)"));
+            EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.Create("));
+            EXPECT_TRUE(Contains(lifecycle_source, "command.expiry_seconds"));
             EXPECT_TRUE(Contains(lifecycle_source, "FindStagingSessionForUser("));
             EXPECT_TRUE(Contains(lifecycle_source, "BuildStagingCleanupJob("));
             EXPECT_TRUE(Contains(job_contract_source, "payload[\"backend\"]"));
@@ -221,6 +222,16 @@ namespace disk::file {
         TEST(UploadTaskRepositoryExpirationBoundaryTest, LifecycleDelegatesExpirationSqlToRepository) {
             const auto repository_source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
             const auto lifecycle_source = ReadSourceFile("src/services/UploadLifecycleService.cpp");
+            const auto service_source = ReadSourceFile("src/services/UploadService.cpp");
+
+            EXPECT_TRUE(Contains(repository_source, "auto UploadTaskRepository::FindUnexpiredByIdForUser("));
+            EXPECT_TRUE(Contains(repository_source, "WHERE id = $1 AND user_id = $2 AND expires_at >= NOW()"));
+            EXPECT_TRUE(Contains(repository_source, "NOW() + ($14::integer * INTERVAL '1 second')"));
+            EXPECT_TRUE(Contains(service_source, "upload_task_repository.FindUnexpiredByIdForUser("));
+            EXPECT_FALSE(Contains(service_source, "IsExpired(task.expires_at"));
+            EXPECT_FALSE(Contains(lifecycle_source, "task.setExpiresAt("));
+            EXPECT_TRUE(Contains(lifecycle_source, "auto expire_result = co_await ExpireInProgressUpload(task_id)"));
+            EXPECT_TRUE(Contains(lifecycle_source, "if (*expire_result)"));
 
             EXPECT_TRUE(Contains(repository_source, "auto UploadTaskRepository::MarkExpiredIfInProgressReturning("));
             EXPECT_TRUE(Contains(repository_source, "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2 "));
