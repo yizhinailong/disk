@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "strategy": "maintenance_window",
+  "source_backend": "local",
+  "target_backend": "s3",
+  "window": {
+    "maximum_duration_minutes": 120,
+    "extension_allowed": false,
+    "target_change_requires_utc_bounds": true
+  },
+  "owners": {
+    "required_roles": [
+      "migration_owner",
+      "database_owner",
+      "rollback_owner"
+    ]
+  },
+  "ordered_gates": [
+    "close_ingress",
+    "stop_all_api",
+    "stop_all_workers",
+    "stop_scheduled_maintenance_and_blob_gc",
+    "verify_no_active_completion_transaction",
+    "backup_postgresql",
+    "backup_local_blobs",
+    "generate_and_review_manifest",
+    "copy_dry_run",
+    "copy_execute_and_verify_checkpoint",
+    "cutover_dry_run",
+    "cutover_execute_atomic",
+    "configure_all_processes_for_s3",
+    "start_all_s3_api_behind_closed_ingress",
+    "download_and_range_probe",
+    "full_reconciliation",
+    "start_all_s3_workers",
+    "open_ingress"
+  ],
+  "stop_conditions": [
+    "approved_window_expired",
+    "writer_freeze_unverified",
+    "backup_incomplete",
+    "manifest_invalid_or_changed",
+    "copy_or_checkpoint_verification_failed",
+    "database_lock_unavailable",
+    "database_snapshot_drift",
+    "process_storage_configuration_mismatch",
+    "download_or_range_probe_failed",
+    "full_reconciliation_failed"
+  ],
+  "expiry_actions": {
+    "before_cutover": "stop_and_resume_in_new_approved_window",
+    "after_cutover_before_traffic": "rollback_database_before_open_ingress",
+    "retain_local_sources_until_reconciliation": true
+  },
+  "forbidden_modes": [
+    "online_partial_database_cutover",
+    "online_dual_write",
+    "unbounded_dual_read"
+  ]
+}

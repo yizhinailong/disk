@@ -105,6 +105,25 @@ The final Blob copy command SHALL default to a non-writing dry run and SHALL ver
 - **WHEN** a source or existing target differs in size, MD5, or SHA-256 from its manifest record
 - **THEN** the object SHALL fail independently before a conflicting target is overwritten or a verification checkpoint is committed
 
+### Requirement: Bounded final Blob maintenance-window strategy
+Because the current schema has no per-content final-storage backend, local-to-S3 final Blob migration SHALL use a stopped-writer maintenance window with a hard maximum duration and no extension. The reviewed policy SHALL require named migration, database, and rollback owners; an ordered freeze, backup, manifest, copy, atomic cutover, probe, reconciliation, and traffic-open sequence; and explicit stop conditions. It SHALL forbid online partial database cutover, online dual write, and unbounded dual read.
+
+#### Scenario: A maintenance window is approved
+- **WHEN** operators prepare a target-environment final Blob migration
+- **THEN** they SHALL record UTC start and end times within the reviewed maximum duration, assign all required owners, validate the reviewed policy, stop ingress, every API and Worker, scheduled maintenance, and Blob GC before inventory, and keep ingress closed until the traffic-open gate
+
+#### Scenario: The window expires before database cutover
+- **WHEN** the approved window expires while copy or verification is incomplete and database locators still reference local Blobs
+- **THEN** operators SHALL stop without opening traffic, retain the manifest, verified targets, checkpoint, database backup, and local sources, and resume from the checkpoint only in a newly approved window
+
+#### Scenario: The window expires or validation fails after database cutover
+- **WHEN** database locators were atomically switched but the S3 application configuration, download and Range probes, or full reconciliation have not all passed before expiry
+- **THEN** operators SHALL keep traffic closed and restore all original locators from the same manifest before any local source is removed
+
+#### Scenario: An unbounded migration mode is proposed
+- **WHEN** a plan enables online partial cutover, dual write, an extension of the maintenance window, or dual read without a deadline
+- **THEN** the policy gate SHALL reject the plan before migration execution
+
 ### Requirement: Service management and hardening
 Deployment documentation SHALL define service installation, systemd or Windows service configuration, filesystem permissions, sandboxing/hardening settings, restart behavior, and routine service operations.
 

@@ -635,7 +635,26 @@ manifest 阶段在移除 S3 凭据的环境中运行，证明 DB 与源 Blob 快
 `211b21a25a76897f3f02ee406f48f4f67f84b8de030e7723aff2523b7b2e4383`。目标环境仍须对已评审 manifest 先执行
 dry-run，根据维护窗口和 S3 容量确定实际批次/限速，保存 checkpoint 并在切换前完成自身全量校验。
 
-- [ ] 选择维护窗口切换，或设计有截止日期的 per-content backend/双读迁移；禁止无边界长期双写。
+- [x] 选择维护窗口切换，或设计有截止日期的 per-content backend/双读迁移；禁止无边界长期双写。
+
+2026-07-21 已在候选应用基线 `cdae48f` 上固定存量 final Blob 迁移策略：不增加 per-content
+backend，选择最长 120 分钟且不得延期的停写维护窗口。`deploy/final-blob-maintenance-window.json`
+以 18 个有序门禁固定关闭入口、停 API/Worker/定时任务/Blob GC、备份、manifest、复制与 checkpoint
+验证、原子 cutover、S3 配置、下载/Range 探针、全量对账和开放流量的顺序；要求迁移、数据库、
+回滚三类负责人和 10 类停止条件，明确禁止在线部分切库、在线双写与无截止日期双读。窗口在 cutover
+前超时时保留 checkpoint 并只能在新审批窗口续传；cutover 后、开流量前超时或验证失败时，必须保持入口关闭并
+恢复同一 manifest 中的全部原路径。
+
+`scripts/check-final-blob-cutover-plan.py` 对受评审策略执行严格 schema/字段/顺序检查，以 `0600`
+原子写入确定性去敏证据。合同测试证明策略改为 per-content、允许延期、取消双写禁令、乱序/缺失门禁、
+缺回滚负责人、缺超时停止条件、切库后继续开流量、不保留 local 源、非法 JSON 或混入 endpoint 都会非零拒绝，
+且证据不泄漏 endpoint 值。聚焦 CTest 1/1 通过（1.06 秒）；完整 CTest 共 1385 项：1379 通过、
+6 项常规环境门控跳过、0 失败，总耗时 376.26 秒；OpenSpec 严格校验 24/24 通过。去敏证据为
+`.sisyphus/evidence/final-blob-cutover-plan.json`，SHA-256 为
+`33d2954eb82f902c502526c5e5b3d9ee60cb4ad36b03d8c2a5227916040febb2`；其中策略文件 SHA-256 为
+`125da5f9d380fd564364c5a26b21a24947c22fd6c8626b43a6179396012a8458`。该证据不是生产变更批准；目标环境仍须在变更单中
+填写实际 UTC 起止时间和三类值班人，在窗口前重跑门禁并保存自身审批/执行证据。
+
 - [ ] 所有对象复制并验证后再切换数据库读取位置。
 - [ ] 完成全量对账和备份后，才安排旧本地 Blob 回收。
 

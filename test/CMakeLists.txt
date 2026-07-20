@@ -404,6 +404,18 @@ set_tests_properties(
 )
 
 add_test(
+    NAME FinalBlobCutoverPlanContract
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_final_blob_cutover_plan.py"
+)
+set_tests_properties(
+    FinalBlobCutoverPlanContract
+    PROPERTIES
+    LABELS "backend-integration;database-migration;deployment;distributed"
+    TIMEOUT 30
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME BackupRestoreReconciliationIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_backup_restore_reconciliation.py"
 )
