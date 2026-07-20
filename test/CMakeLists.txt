@@ -313,6 +313,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME FinalBlobMigrationIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_final_blob_migration.py"
+)
+set_tests_properties(
+    FinalBlobMigrationIntegration
+    PROPERTIES
+    LABELS "backend-integration;database-migration;object-storage"
+    RUN_SERIAL TRUE
+    TIMEOUT 300
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME UploadStateMachineIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_upload_state_machine.py"
 )
