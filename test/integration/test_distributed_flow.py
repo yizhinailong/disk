@@ -178,6 +178,31 @@ def main() -> int:
 
         return wait_until(probe, 60, f"{instance_id or role} readiness")
 
+    def container_fingerprint(service: str) -> str:
+        container_ids = [
+            line.strip()
+            for line in compose("ps", "-q", service).stdout.splitlines()
+            if line.strip()
+        ]
+        require(len(container_ids) == 1, f"expected one container for {service}")
+        inspection = subprocess.run(
+            [
+                "docker",
+                "inspect",
+                "--format",
+                "{{.Id}}|{{.State.StartedAt}}|{{.RestartCount}}",
+                container_ids[0],
+            ],
+            cwd=root,
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        fingerprint = inspection.stdout.strip()
+        require(bool(fingerprint), f"container fingerprint is missing for {service}")
+        return fingerprint
+
     run_id = uuid.uuid4().hex[:12]
     username = f"dist_{run_id}"
     email = f"dist_{run_id}@test.example.com"
@@ -190,6 +215,7 @@ def main() -> int:
     file_sha256 = hashlib.sha256(content).hexdigest()
     object_key = f"objects/sha256/{file_sha256[:2]}/{file_sha256}.bin"
     access_token = ""
+    refresh_token = ""
     user_id = 0
     file_id = 0
     race_upload_ids: list[str] = []
@@ -197,17 +223,147 @@ def main() -> int:
     race_object_keys: list[str] = []
     worker_a_stopped = False
     api_a_stopped = False
+    postgres_stopped = False
     redis_stopped = False
+    minio_stopped = False
     evidence: dict[str, Any] = {"run_id": run_id, "checks": []}
 
     def passed(name: str) -> None:
         evidence["checks"].append(name)
         print(f"PASS: {name}")
 
+    def assert_sensitive_values_absent(response: Any, label: str) -> None:
+        forbidden_values = (
+            values["DISK_JWT_SECRET"],
+            values["DISK_DATABASE_PASSWORD"],
+            values["DISK_REDIS_PASSWORD"],
+            values["DISK_MINIO_ROOT_PASSWORD"],
+            values.get("DISK_MINIO_ROOT_USER", "disk-local"),
+            "http://minio:9000",
+            minio_url,
+            object_key,
+            access_token,
+            refresh_token,
+        )
+        serialized_response = response.text + json.dumps(dict(response.headers), sort_keys=True)
+        for forbidden in forbidden_values:
+            if len(forbidden) >= 8:
+                require(forbidden not in serialized_response, f"{label} leaked a sensitive value")
+
+    def wait_dependency_unready(
+        base_url: str,
+        instance_id: str,
+        unhealthy_components: set[str],
+        label: str,
+    ) -> dict[str, Any]:
+        expected_components = {
+            "runtime",
+            "database",
+            "redis",
+            "staging_storage",
+            "final_storage",
+        }
+
+        def probe() -> tuple[Any, Any, dict[str, Any], dict[str, Any]] | None:
+            with httpx.Client(base_url=base_url, timeout=30) as client:
+                live_response = client.get("/api/health/live")
+                ready_response = client.get("/api/health/ready")
+            if live_response.status_code != 200 or ready_response.status_code != 503:
+                return None
+            live_payload = response_json(live_response, f"{label} liveness")
+            ready_payload = response_json(ready_response, f"{label} readiness")
+            live_data = live_payload.get("data", {})
+            ready_data = ready_payload.get("data", {})
+            if (
+                str(live_payload["code"]) != "0"
+                or live_data.get("overall_status") != "healthy"
+                or live_data.get("role") != "api"
+                or live_data.get("instance_id") != instance_id
+                or str(ready_payload["code"]) != "0"
+                or ready_data.get("overall_status") != "unhealthy"
+                or ready_data.get("role") != "api"
+                or ready_data.get("instance_id") != instance_id
+            ):
+                return None
+            components = ready_data.get("components", {})
+            if not isinstance(components, dict) or set(components) != expected_components:
+                return None
+            for component in expected_components:
+                expected_status = "unhealthy" if component in unhealthy_components else "healthy"
+                component_data = components.get(component, {})
+                if not isinstance(component_data, dict) or component_data.get("status") != expected_status:
+                    return None
+            return live_response, ready_response, live_data, ready_data
+
+        live_response, ready_response, live_data, ready_data = wait_until(
+            probe,
+            90,
+            f"{label} dependency-specific readiness",
+            interval=0.5,
+        )
+        assert_sensitive_values_absent(live_response, f"{label} liveness")
+        assert_sensitive_values_absent(ready_response, f"{label} readiness")
+        expected_health_fields = {
+            "overall_status",
+            "role",
+            "instance_id",
+            "initialized",
+            "draining",
+            "version",
+            "uptime",
+            "total_check_ms",
+            "timestamp",
+            "components",
+        }
+        for response, health_data, probe_name in (
+            (live_response, live_data, "liveness"),
+            (ready_response, ready_data, "readiness"),
+        ):
+            require(
+                set(response.json()) == {"code", "message", "data"},
+                f"{label} {probe_name} exposed an unexpected envelope field",
+            )
+            require(
+                set(health_data) == expected_health_fields,
+                f"{label} {probe_name} exposed an unexpected health field",
+            )
+        require(
+            set(live_data["components"]) == {"runtime"},
+            f"{label} liveness exposed an external dependency component",
+        )
+        require(
+            live_data["components"]["runtime"] == {"status": "healthy", "latency_ms": 0},
+            f"{label} liveness runtime component changed shape",
+        )
+        failure_messages = {
+            "database": "Database check failed",
+            "redis": "Redis check failed",
+            "staging_storage": "Staging storage check failed",
+            "final_storage": "Final storage check failed",
+        }
+        for component, component_data in ready_data["components"].items():
+            expected_fields = {"status", "latency_ms"}
+            if component in unhealthy_components:
+                expected_fields.add("message")
+            require(
+                set(component_data) == expected_fields,
+                f"{label} readiness exposed an unexpected component field",
+            )
+            if component in unhealthy_components:
+                require(
+                    component_data["message"] == failure_messages[component],
+                    f"{label} readiness exposed an unexpected dependency message",
+                )
+        return ready_data
+
     try:
         wait_ready(api_a_url, "api", "disk-api-a")
         wait_ready(api_b_url, "api", "disk-api-b")
         wait_ready(load_balancer_url, "api")
+        api_fingerprints_before = {
+            service: container_fingerprint(service) for service in ("api-a", "api-b")
+        }
+        evidence["api_process_fingerprints_before_dependency_faults"] = api_fingerprints_before
         passed("two API instances and the load balancer are ready")
 
         with httpx.Client(timeout=120) as http:
@@ -641,8 +797,42 @@ def main() -> int:
             worker_a_stopped = False
             passed("worker B takes over an expired worker A lease")
 
-            compose("stop", "redis")
+            postgres_stopped = True
+            compose("stop", "postgres")
+            for base_url, instance_id in (
+                (api_a_url, "disk-api-a"),
+                (api_b_url, "disk-api-b"),
+            ):
+                wait_dependency_unready(
+                    base_url,
+                    instance_id,
+                    {"database"},
+                    f"PostgreSQL outage on {instance_id}",
+                )
+            compose("start", "postgres")
+            wait_ready(api_a_url, "api", "disk-api-a")
+            wait_ready(api_b_url, "api", "disk-api-b")
+            postgres_stopped = False
+            recovered_profile = http.get(f"{api_a_url}/api/user/profile", headers=auth)
+            recovered_payload = response_json(recovered_profile, "profile after PostgreSQL recovery")
+            require(
+                recovered_profile.status_code == 200 and str(recovered_payload["code"]) == "0",
+                "database-backed profile did not recover with PostgreSQL",
+            )
+            passed("PostgreSQL outage preserves liveness and the existing pools reconnect")
+
             redis_stopped = True
+            compose("stop", "redis")
+            for base_url, instance_id in (
+                (api_a_url, "disk-api-a"),
+                (api_b_url, "disk-api-b"),
+            ):
+                wait_dependency_unready(
+                    base_url,
+                    instance_id,
+                    {"redis"},
+                    f"Redis outage on {instance_id}",
+                )
 
             def redis_failure_closed() -> bool:
                 try:
@@ -653,12 +843,63 @@ def main() -> int:
 
             wait_until(redis_failure_closed, 20, "Redis fail-closed authentication", interval=0.5)
             compose("start", "redis")
-            redis_stopped = False
             wait_ready(api_a_url, "api", "disk-api-a")
             wait_ready(api_b_url, "api", "disk-api-b")
+            redis_stopped = False
             recovered_profile = http.get(f"{api_b_url}/api/user/profile", headers=auth)
-            require(str(response_json(recovered_profile, "profile after Redis recovery")["code"]) == "0", "authentication did not recover with Redis")
+            require(
+                recovered_profile.status_code == 200
+                and str(response_json(recovered_profile, "profile after Redis recovery")["code"]) == "0",
+                "authentication did not recover with Redis",
+            )
             passed("Redis outage fails closed and recovery reconnects")
+
+            minio_stopped = True
+            compose("stop", "minio")
+            for base_url, instance_id in (
+                (api_a_url, "disk-api-a"),
+                (api_b_url, "disk-api-b"),
+            ):
+                wait_dependency_unready(
+                    base_url,
+                    instance_id,
+                    {"staging_storage", "final_storage"},
+                    f"MinIO outage on {instance_id}",
+                )
+            unavailable_download = http.get(
+                f"{api_b_url}/api/file/download/{file_id}",
+                headers=auth,
+                timeout=60,
+            )
+            unavailable_payload = response_json(unavailable_download, "download during MinIO outage")
+            require(
+                unavailable_download.status_code == 500 and str(unavailable_payload["code"]) == "50011",
+                "MinIO outage did not return the controlled file-read error",
+            )
+            assert_sensitive_values_absent(unavailable_download, "download during MinIO outage")
+            compose("start", "minio")
+            wait_ready(api_a_url, "api", "disk-api-a")
+            wait_ready(api_b_url, "api", "disk-api-b")
+            minio_stopped = False
+            recovered_download = http.get(
+                f"{api_b_url}/api/file/download/{file_id}",
+                headers=auth,
+                timeout=120,
+            )
+            require(recovered_download.status_code == 200, "download did not recover with MinIO")
+            require(recovered_download.content == content, "download after MinIO recovery changed content")
+            require(object_exists(object_key), "S3 client did not reconnect after MinIO recovery")
+            passed("MinIO outage preserves liveness and the existing S3 clients reconnect")
+
+            api_fingerprints_after = {
+                service: container_fingerprint(service) for service in ("api-a", "api-b")
+            }
+            require(
+                api_fingerprints_after == api_fingerprints_before,
+                "an API process restarted while an external dependency was unavailable",
+            )
+            evidence["api_process_fingerprints_after_dependency_recovery"] = api_fingerprints_after
+            passed("all dependency recoveries complete without restarting either API process")
 
             compose("stop", "api-a")
             api_a_stopped = True
@@ -736,7 +977,9 @@ def main() -> int:
         return 1
     finally:
         for stopped, service in (
+            (postgres_stopped, "postgres"),
             (redis_stopped, "redis"),
+            (minio_stopped, "minio"),
             (api_a_stopped, "api-a"),
             (worker_a_stopped, "worker-a"),
         ):

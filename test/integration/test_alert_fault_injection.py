@@ -298,6 +298,7 @@ def main() -> int:
                     stdout=log_handle,
                     stderr=subprocess.STDOUT,
                 )
+                process_id = process.pid
 
                 with httpx.Client(
                     base_url=f"http://127.0.0.1:{disk_port}", timeout=10
@@ -401,6 +402,36 @@ def main() -> int:
                     require(
                         transient_errors >= baseline_transient_errors + 5,
                         "five injected S3 503 responses cross the transient alert threshold",
+                    )
+
+                    liveness = client.get("/api/health/live")
+                    require(
+                        liveness.status_code == 200
+                        and liveness.json().get("data", {}).get("overall_status") == "healthy",
+                        "S3 503 responses do not fail process liveness",
+                    )
+                    require(
+                        "fixture-secret-key" not in readiness.text
+                        and f"http://127.0.0.1:{s3_port}" not in readiness.text,
+                        "S3 failure readiness response does not expose credentials or endpoint",
+                    )
+
+                    state.set_mode("healthy")
+                    recovered = False
+                    deadline = time.monotonic() + 10
+                    while time.monotonic() < deadline:
+                        readiness = client.get("/api/health/ready")
+                        if (
+                            readiness.status_code == 200
+                            and readiness.json().get("data", {}).get("overall_status") == "healthy"
+                        ):
+                            recovered = True
+                            break
+                        time.sleep(0.2)
+                    require(recovered, "readiness recovers after the S3 503 fault is removed")
+                    require(
+                        process.poll() is None and process.pid == process_id,
+                        "S3 recovery uses the original Disk API process",
                     )
 
                     state.set_mode("permanent")
