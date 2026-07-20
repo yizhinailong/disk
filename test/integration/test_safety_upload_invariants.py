@@ -23,6 +23,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
@@ -164,6 +165,36 @@ def peer_api_instance() -> Iterator[tuple[str, str]]:
                         process.wait(timeout=5)
 
 
+@contextmanager
+def reject_chunk_metadata_insert(upload_id: str) -> Iterator[None]:
+    """Reject one upload's chunk metadata after its immutable object is written."""
+    normalized_upload_id = str(uuid.UUID(upload_id))
+    trigger_name = "safety_chunk_insert_fail"
+    function_name = "fail_safety_chunk_insert"
+    execute(f"DROP TRIGGER IF EXISTS {trigger_name} ON upload_task_chunks")
+    execute(f"DROP FUNCTION IF EXISTS {function_name}()")
+
+    try:
+        execute(
+            f"""
+            CREATE FUNCTION {function_name}() RETURNS trigger AS $$
+            BEGIN
+                RAISE EXCEPTION 'intentional safety chunk metadata failure';
+            END;
+            $$ LANGUAGE plpgsql
+            """
+        )
+        execute(
+            f"CREATE TRIGGER {trigger_name} BEFORE INSERT ON upload_task_chunks "
+            f"FOR EACH ROW WHEN (NEW.task_id = '{normalized_upload_id}') "
+            f"EXECUTE FUNCTION {function_name}()"
+        )
+        yield
+    finally:
+        execute(f"DROP TRIGGER IF EXISTS {trigger_name} ON upload_task_chunks")
+        execute(f"DROP FUNCTION IF EXISTS {function_name}()")
+
+
 def auth_headers(token: str, content_type: str = "application/json") -> dict[str, str]:
     """Return authorization headers for a test request."""
     return {"Authorization": f"Bearer {token}", "Content-Type": content_type}
@@ -220,15 +251,21 @@ def init_upload(filename: str, payload: bytes) -> tuple[str, str]:
     return upload_id, file_hash
 
 
-def upload_single_chunk(upload_id: str, payload: bytes) -> None:
-    """Upload a single chunk with the payload's MD5 hash."""
+def upload_single_chunk_raw(upload_id: str, payload: bytes, evidence_suffix: str = "chunk"):
+    """Upload a single chunk and return its response without asserting success."""
     resp = fetch(
         f"/api/file/upload/chunk?upload_id={upload_id}&chunk_index=0&chunk_hash={md5_bytes(payload)}",
         method="POST",
         headers=auth_headers(TOKEN, "application/octet-stream"),
         data=payload,
     )
-    save_evidence(f"{EVIDENCE_PREFIX}-{upload_id}-chunk.json", resp.text)
+    save_evidence(f"{EVIDENCE_PREFIX}-{upload_id}-{evidence_suffix}.json", resp.text)
+    return resp
+
+
+def upload_single_chunk(upload_id: str, payload: bytes) -> None:
+    """Upload a single chunk with the payload's MD5 hash."""
+    resp = upload_single_chunk_raw(upload_id, payload)
     if resp.status_code != 200 or json_field(resp.text, "data.uploaded") != "true":
         log_fail(f"{upload_id}: chunk upload failed")
         print(resp.text)
@@ -416,6 +453,225 @@ def test_successful_chunked_upload_invariants() -> None:
         "final blob path exists after success",
         local_blob_path(str(content_row["storage_path"])).exists(),
         True,
+    )
+
+
+def test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants() -> None:
+    """Verify retry reuse and session cleanup after chunk metadata persistence fails."""
+    log_section("Chunk Object Write / Metadata Failure Recovery")
+
+    def fail_after_object_write(upload_id: str, payload: bytes, scenario: str) -> Path:
+        quota_before_failure = user_quota()
+        with reject_chunk_metadata_insert(upload_id):
+            response = upload_single_chunk_raw(
+                upload_id,
+                payload,
+                f"{scenario}-chunk-db-failure",
+            )
+
+        assert_equal(f"{scenario} metadata failure returns HTTP 500", response.status_code, 500)
+        assert_equal(
+            f"{scenario} metadata failure returns a business error",
+            json_field(response.text, "code") != "0",
+            True,
+        )
+        chunk_path = (
+            upload_temp_dir(upload_id)
+            / "chunks"
+            / f"0-{md5_bytes(payload)}.part"
+        )
+        if not chunk_path.is_file():
+            log_fail(f"{scenario} immutable chunk object exists after metadata failure")
+            print_summary()
+        log_pass(f"{scenario} immutable chunk object exists after metadata failure")
+        assert_equal(f"{scenario} immutable chunk bytes match", chunk_path.read_bytes(), payload)
+        assert_chunk_row_count(upload_id, 0)
+        assert_upload_task(upload_id, 0)
+
+        quota_after_failure = user_quota()
+        assert_equal(
+            f"{scenario} metadata failure preserves reserved storage",
+            quota_after_failure["storage_reserved"],
+            quota_before_failure["storage_reserved"],
+        )
+        assert_equal(
+            f"{scenario} metadata failure preserves used storage",
+            quota_after_failure["storage_used"],
+            quota_before_failure["storage_used"],
+        )
+        return chunk_path
+
+    retry_payload = f"safety-chunk-db-retry-{unique_name()}".encode()
+    retry_filename = f"safety_chunk_db_retry_{unique_name()}.bin"
+    retry_quota_before = user_quota()
+    retry_upload_id, retry_md5 = init_upload(retry_filename, retry_payload)
+    retry_quota_after_init = user_quota()
+    assert_numeric_delta(
+        "retry fixture reserves storage once",
+        retry_quota_before["storage_reserved"],
+        retry_quota_after_init["storage_reserved"],
+        len(retry_payload),
+    )
+    retry_chunk_path = fail_after_object_write(
+        retry_upload_id,
+        retry_payload,
+        "retry",
+    )
+    original_stat = retry_chunk_path.stat()
+    time.sleep(0.01)
+    upload_single_chunk(retry_upload_id, retry_payload)
+    reused_stat = retry_chunk_path.stat()
+    assert_equal("retry reuses the immutable chunk inode", reused_stat.st_ino, original_stat.st_ino)
+    assert_equal(
+        "retry does not rewrite the immutable chunk object",
+        reused_stat.st_mtime_ns,
+        original_stat.st_mtime_ns,
+    )
+    assert_chunk_row_count(retry_upload_id, 1)
+
+    retry_file_id = int(complete_upload(retry_upload_id))
+    assert_upload_task(retry_upload_id, 1)
+    assert_chunk_row_count(retry_upload_id, 0)
+    retry_quota_after_complete = user_quota()
+    assert_equal(
+        "retry completion releases reserved storage once",
+        retry_quota_after_complete["storage_reserved"],
+        retry_quota_before["storage_reserved"],
+    )
+    assert_numeric_delta(
+        "retry completion increases used storage once",
+        retry_quota_before["storage_used"],
+        retry_quota_after_complete["storage_used"],
+        len(retry_payload),
+    )
+
+    retry_file_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND name = %s",
+            (USER_ID, retry_filename),
+        )
+        or 0
+    )
+    assert_equal("retry completion creates one file row", retry_file_count, 1)
+    retry_file = query_one(
+        "SELECT file.id, content.ref_count FROM files AS file "
+        "JOIN file_contents AS content ON content.id = file.content_id "
+        "WHERE file.user_id = %s AND file.name = %s",
+        (USER_ID, retry_filename),
+    )
+    if retry_file is None:
+        log_fail("retry completion creates its file/content reference")
+        print_summary()
+    log_pass("retry completion creates its file/content reference")
+    assert_equal("retry completion returns the persisted file", int(retry_file["id"]), retry_file_id)
+    assert_equal("retry completion increments ref_count once", int(retry_file["ref_count"]), 1)
+    retry_content_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s AND hash_sha256 = %s",
+            (retry_md5, sha256_bytes(retry_payload)),
+        )
+        or 0
+    )
+    assert_equal("retry completion creates one content row", retry_content_count, 1)
+    retry_cleanup_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s",
+            (f"staging-cleanup:{retry_upload_id}",),
+        )
+        or 0
+    )
+    assert_equal("retry completion creates one cleanup job", retry_cleanup_count, 1)
+    assert_storage_job_succeeded(
+        "retry completion cleanup converges",
+        f"staging-cleanup:{retry_upload_id}",
+    )
+    assert_path_absent("retry completion removes the staging session", upload_temp_dir(retry_upload_id))
+    assert_path_exists(
+        "retry completion preserves one final blob",
+        final_blob_path(sha256_bytes(retry_payload)),
+    )
+
+    orphan_payload = f"safety-chunk-db-orphan-{unique_name()}".encode()
+    orphan_filename = f"safety_chunk_db_orphan_{unique_name()}.bin"
+    orphan_quota_before = user_quota()
+    orphan_upload_id, orphan_md5 = init_upload(orphan_filename, orphan_payload)
+    orphan_quota_after_init = user_quota()
+    assert_numeric_delta(
+        "orphan fixture reserves storage once",
+        orphan_quota_before["storage_reserved"],
+        orphan_quota_after_init["storage_reserved"],
+        len(orphan_payload),
+    )
+    orphan_chunk_path = fail_after_object_write(
+        orphan_upload_id,
+        orphan_payload,
+        "orphan",
+    )
+    cancel_upload(orphan_upload_id)
+    assert_upload_task(orphan_upload_id, 2)
+    assert_chunk_row_count(orphan_upload_id, 0)
+
+    orphan_quota_after_cancel = user_quota()
+    assert_equal(
+        "orphan cancellation releases reserved storage once",
+        orphan_quota_after_cancel["storage_reserved"],
+        orphan_quota_before["storage_reserved"],
+    )
+    assert_equal(
+        "orphan cancellation preserves used storage",
+        orphan_quota_after_cancel["storage_used"],
+        orphan_quota_before["storage_used"],
+    )
+    assert_db_row_absent(
+        "orphan cancellation creates no file row",
+        "SELECT id FROM files WHERE user_id = %s AND name = %s",
+        (USER_ID, orphan_filename),
+    )
+    orphan_content_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s AND hash_sha256 = %s",
+            (orphan_md5, sha256_bytes(orphan_payload)),
+        )
+        or 0
+    )
+    assert_equal("orphan cancellation creates no content row", orphan_content_count, 0)
+    orphan_cleanup_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s",
+            (f"staging-cleanup:{orphan_upload_id}",),
+        )
+        or 0
+    )
+    assert_equal("orphan cancellation creates one cleanup job", orphan_cleanup_count, 1)
+    assert_storage_job_succeeded(
+        "orphan cancellation cleanup converges",
+        f"staging-cleanup:{orphan_upload_id}",
+    )
+    assert_path_absent("orphan cleanup removes the unregistered chunk", orphan_chunk_path)
+    assert_path_absent("orphan cleanup removes the staging session", upload_temp_dir(orphan_upload_id))
+    assert_path_absent(
+        "orphan cancellation creates no final blob",
+        final_blob_path(sha256_bytes(orphan_payload)),
+    )
+
+    save_evidence(
+        f"{EVIDENCE_PREFIX}-chunk-metadata-failure-recovery.json",
+        json.dumps(
+            {
+                "retry": {
+                    "upload_id": retry_upload_id,
+                    "status": "completed",
+                    "file_id": retry_file_id,
+                },
+                "orphan": {
+                    "upload_id": orphan_upload_id,
+                    "status": "cancelled",
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
     )
 
 
@@ -1426,6 +1682,7 @@ def main() -> None:
 
     test_successful_chunked_upload_invariants()
     test_hundred_concurrent_complete_invariants()
+    test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()
     test_db_failure_after_blob_promotion_retains_created_blob()
     test_db_failure_after_promotion_preserves_preexisting_blob()
     test_missing_staging_object_records_reconciliation()
