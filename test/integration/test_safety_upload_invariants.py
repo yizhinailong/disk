@@ -18,7 +18,9 @@ import json
 import os
 import shutil
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -208,18 +210,47 @@ def run_expired_cleanup() -> dict[str, int]:
     }
 
 
-def cancel_upload(upload_id: str) -> None:
-    """Cancel an upload task."""
+def cancel_upload_raw(upload_id: str):
+    """Call cancel upload and return the raw response."""
     resp = fetch(
         f"/api/file/upload/{upload_id}",
         method="DELETE",
         headers={"Authorization": f"Bearer {TOKEN}"},
     )
     save_evidence(f"{EVIDENCE_PREFIX}-{upload_id}-cancel.json", resp.text)
+    return resp
+
+
+def cancel_upload(upload_id: str) -> None:
+    """Cancel an upload task."""
+    resp = cancel_upload_raw(upload_id)
     if resp.status_code != 200 or json_field(resp.text, "code") != "0":
         log_fail(f"{upload_id}: cancel upload failed")
         print(resp.text)
         print_summary()
+
+
+def race_complete_cancel_expire(upload_id: str):
+    """Start the three terminal contenders from one synchronization point."""
+    barrier = threading.Barrier(3)
+
+    def complete():
+        barrier.wait(timeout=10)
+        return complete_upload_raw(upload_id, f"terminal-race-complete-{unique_name()}")
+
+    def cancel():
+        barrier.wait(timeout=10)
+        return cancel_upload_raw(upload_id)
+
+    def expire() -> dict[str, int]:
+        barrier.wait(timeout=10)
+        return run_expired_cleanup()
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        complete_future = executor.submit(complete)
+        cancel_future = executor.submit(cancel)
+        expire_future = executor.submit(expire)
+        return complete_future.result(), cancel_future.result(), expire_future.result()
 
 
 def assert_upload_task(upload_id: str, expected_status: int) -> dict[str, object]:
@@ -713,6 +744,139 @@ def test_missing_staging_object_records_reconciliation() -> None:
             cleanup_failed_finalize_fixture(upload_id, final_blob_path(sha256_bytes(payload)))
 
 
+def test_complete_cancel_expire_race_invariants() -> None:
+    """Verify concurrent terminal contenders settle quota and metadata exactly once."""
+    log_section("Complete/Cancel/Expire Race Invariants")
+    run_expired_cleanup()
+
+    for expired in (False, True):
+        scenario = "expired" if expired else "active"
+        payload = f"safety-terminal-race-{scenario}-{unique_name()}".encode()
+        filename = f"safety_terminal_race_{scenario}_{unique_name()}.bin"
+        quota_before = user_quota()
+        upload_id, file_hash = init_upload(filename, payload)
+        upload_single_chunk(upload_id, payload)
+        quota_after_init = user_quota()
+        assert_numeric_delta(
+            f"{scenario} race init reserves storage",
+            quota_before["storage_reserved"],
+            quota_after_init["storage_reserved"],
+            len(payload),
+        )
+
+        if expired:
+            affected = execute(
+                "UPDATE upload_tasks SET expires_at = NOW() - INTERVAL '1 second' "
+                "WHERE id = %s AND user_id = %s AND status = 0",
+                (upload_id, USER_ID),
+            )
+            assert_equal("expired race fixture crosses the database deadline", affected, 1)
+
+        complete_response, cancel_response, cleanup_counts = race_complete_cancel_expire(upload_id)
+        task = query_one(
+            "SELECT status, completed_file_id, lease_owner, lease_expires_at "
+            "FROM upload_tasks WHERE id = %s AND user_id = %s",
+            (upload_id, USER_ID),
+        )
+        if task is None:
+            log_fail(f"{scenario} terminal race preserves its upload task")
+            print_summary()
+
+        status = int(task["status"])
+        allowed_statuses = {2, 3} if expired else {1, 2}
+        if status not in allowed_statuses:
+            log_fail(f"{scenario} terminal race reached illegal status {status}")
+            print_summary()
+        log_pass(f"{scenario} terminal race reaches one legal terminal state")
+
+        quota_after_race = user_quota()
+        assert_equal(
+            f"{scenario} terminal race releases reserved storage exactly once",
+            quota_after_race["storage_reserved"],
+            quota_before["storage_reserved"],
+        )
+        assert_chunk_row_count(upload_id, 0)
+        cleanup_job_count = int(
+            scalar(
+                "SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s",
+                (f"staging-cleanup:{upload_id}",),
+            )
+            or 0
+        )
+        assert_equal(f"{scenario} terminal race creates one cleanup job", cleanup_job_count, 1)
+
+        file_row = query_one(
+            "SELECT file.id, content.ref_count "
+            "FROM files AS file JOIN file_contents AS content ON content.id = file.content_id "
+            "WHERE file.user_id = %s AND file.name = %s",
+            (USER_ID, filename),
+        )
+        content_count = int(
+            scalar("SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s", (file_hash,)) or 0
+        )
+        complete_code = json_field(complete_response.text, "code")
+        cancel_code = json_field(cancel_response.text, "code")
+
+        if status == 1:
+            if file_row is None:
+                log_fail("completed race creates one logical file")
+                print_summary()
+            log_pass("completed race creates one logical file")
+            assert_equal("completed race records the winning file", int(task["completed_file_id"]), int(file_row["id"]))
+            assert_equal("completed race creates one content row", content_count, 1)
+            assert_equal("completed race increments content reference once", int(file_row["ref_count"]), 1)
+            assert_numeric_delta(
+                "completed race converts reserved storage to used once",
+                quota_before["storage_used"],
+                quota_after_race["storage_used"],
+                len(payload),
+            )
+            assert_equal("completed race returns the winning complete response", complete_code, "0")
+            assert_equal("completed race rejects cancellation", cancel_code == "0", False)
+        else:
+            assert_equal(f"{scenario} non-completed race creates no file", file_row, None)
+            assert_equal(f"{scenario} non-completed race creates no content row", content_count, 0)
+            assert_equal(
+                f"{scenario} non-completed race preserves used storage",
+                quota_after_race["storage_used"],
+                quota_before["storage_used"],
+            )
+            assert_equal(f"{scenario} non-completed race rejects completion", complete_code == "0", False)
+            if status == 2:
+                assert_equal(f"{scenario} cancelled race returns success", cancel_code, "0")
+            else:
+                assert_equal("expired winner rejects cancellation", cancel_code == "0", False)
+
+        assert_equal(f"{scenario} terminal race clears lease owner", task["lease_owner"], None)
+        assert_equal(f"{scenario} terminal race clears lease deadline", task["lease_expires_at"], None)
+        assert_storage_job_succeeded(
+            f"{scenario} terminal race cleanup converges",
+            f"staging-cleanup:{upload_id}",
+        )
+        save_evidence(
+            f"{EVIDENCE_PREFIX}-{upload_id}-terminal-race.json",
+            json.dumps(
+                {
+                    "scenario": scenario,
+                    "upload_id": upload_id,
+                    "status": status,
+                    "complete_code": complete_code,
+                    "cancel_code": cancel_code,
+                    "expired_upload_tasks_cleaned": cleanup_counts[
+                        "expired_upload_tasks_cleaned"
+                    ],
+                    "storage_used_before": quota_before["storage_used"],
+                    "storage_used_after": quota_after_race["storage_used"],
+                    "storage_reserved_before": quota_before["storage_reserved"],
+                    "storage_reserved_after": quota_after_race["storage_reserved"],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+        )
+
+
 def test_cancel_upload_invariants() -> None:
     """Verify cancel releases reservations and removes temp artifacts."""
     log_section("Canceled Upload Invariants")
@@ -949,6 +1113,7 @@ def main() -> None:
     test_db_failure_after_blob_promotion_retains_created_blob()
     test_db_failure_after_promotion_preserves_preexisting_blob()
     test_missing_staging_object_records_reconciliation()
+    test_complete_cancel_expire_race_invariants()
     test_cancel_upload_invariants()
     test_expired_upload_cleanup_invariants()
     test_init_upload_expires_existing_task_invariants()

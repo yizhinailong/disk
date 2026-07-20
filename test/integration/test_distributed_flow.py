@@ -19,6 +19,7 @@ import json
 import os
 import shutil
 import subprocess
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -191,6 +192,9 @@ def main() -> int:
     access_token = ""
     user_id = 0
     file_id = 0
+    race_upload_ids: list[str] = []
+    race_file_ids: list[int] = []
+    race_object_keys: list[str] = []
     worker_a_stopped = False
     api_a_stopped = False
     redis_stopped = False
@@ -323,6 +327,259 @@ def main() -> int:
             wait_until(lambda: object_exists(object_key), 30, "final S3 object")
             passed("concurrent complete converges to one file and one final object")
 
+            admin_login = http.post(
+                f"{api_a_url}/api/auth/login",
+                json={
+                    "account": "admin",
+                    "password": os.environ.get(
+                        "DISK_DISTRIBUTED_ADMIN_PASSWORD",
+                        "Admin123",
+                    ),
+                },
+            )
+            admin_login_payload = response_json(admin_login, "admin login for expiration race")
+            require(
+                admin_login.status_code == 200 and str(admin_login_payload["code"]) == "0",
+                "admin login for expiration race failed",
+            )
+            admin_auth = {
+                "Authorization": f"Bearer {admin_login_payload['data']['access_token']}"
+            }
+
+            def run_terminal_race(expired: bool) -> None:
+                scenario = "expired" if expired else "active"
+                race_id = uuid.uuid4().hex[:12]
+                race_filename = f"distributed_race_{scenario}_{run_id}_{race_id}.bin"
+                race_content = f"distributed-terminal-race:{scenario}:{run_id}:{race_id}".encode()
+                race_md5 = hashlib.md5(race_content).hexdigest()
+                race_sha256 = hashlib.sha256(race_content).hexdigest()
+                race_object_key = f"objects/sha256/{race_sha256[:2]}/{race_sha256}.bin"
+                quota_before = query_one(
+                    "SELECT storage_used, storage_reserved FROM users WHERE id = %s",
+                    (user_id,),
+                )
+                require(quota_before is not None, f"{scenario} race quota baseline is missing")
+
+                race_init = http.post(
+                    f"{api_a_url}/api/file/upload/init",
+                    headers=auth,
+                    json={
+                        "filename": race_filename,
+                        "file_size": len(race_content),
+                        "file_hash": race_md5,
+                        "parent_id": 0,
+                    },
+                )
+                race_init_payload = response_json(race_init, f"{scenario} race init")
+                require(str(race_init_payload["code"]) == "0", f"{scenario} race init failed")
+                require(
+                    not race_init_payload["data"].get("instant_upload", False),
+                    f"{scenario} race unexpectedly deduplicated",
+                )
+                race_upload_id = str(race_init_payload["data"]["upload_id"])
+                race_upload_ids.append(race_upload_id)
+
+                race_chunk = http.post(
+                    f"{api_b_url}/api/file/upload/chunk",
+                    params={
+                        "upload_id": race_upload_id,
+                        "chunk_index": 0,
+                        "chunk_hash": race_md5,
+                    },
+                    headers={**auth, "Content-Type": "application/octet-stream"},
+                    content=race_content,
+                )
+                require(
+                    str(response_json(race_chunk, f"{scenario} race chunk")["code"]) == "0",
+                    f"{scenario} race chunk failed",
+                )
+                quota_after_init = query_one(
+                    "SELECT storage_used, storage_reserved FROM users WHERE id = %s",
+                    (user_id,),
+                )
+                require(quota_after_init is not None, f"{scenario} race init quota is missing")
+                require(
+                    int(quota_after_init["storage_reserved"])
+                    == int(quota_before["storage_reserved"]) + len(race_content),
+                    f"{scenario} race did not reserve exactly one payload",
+                )
+
+                if expired:
+                    require(
+                        execute(
+                            "UPDATE upload_tasks SET expires_at = NOW() - INTERVAL '1 second' "
+                            "WHERE id = %s AND user_id = %s AND status = 0",
+                            (race_upload_id, user_id),
+                        )
+                        == 1,
+                        "expired race fixture did not cross the PostgreSQL deadline",
+                    )
+
+                barrier = threading.Barrier(3)
+
+                def race_complete() -> Any:
+                    barrier.wait(timeout=10)
+                    return httpx.post(
+                        f"{api_a_url}/api/file/upload/complete",
+                        headers=auth,
+                        json={"upload_id": race_upload_id},
+                        timeout=180,
+                    )
+
+                def race_cancel() -> Any:
+                    barrier.wait(timeout=10)
+                    return httpx.request(
+                        "DELETE",
+                        f"{api_b_url}/api/file/upload/{race_upload_id}",
+                        headers=auth,
+                        timeout=180,
+                    )
+
+                def race_expire() -> Any:
+                    barrier.wait(timeout=10)
+                    return httpx.post(
+                        f"{api_a_url}/api/admin/maintenance/cleanup/expired",
+                        headers=admin_auth,
+                        timeout=180,
+                    )
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+                    complete_future = pool.submit(race_complete)
+                    cancel_future = pool.submit(race_cancel)
+                    expire_future = pool.submit(race_expire)
+                    complete_response = complete_future.result()
+                    cancel_response = cancel_future.result()
+                    expire_response = expire_future.result()
+
+                require(
+                    complete_response.headers.get("X-Disk-Instance-Id") == "disk-api-a",
+                    f"{scenario} race complete did not execute on API A",
+                )
+                require(
+                    cancel_response.headers.get("X-Disk-Instance-Id") == "disk-api-b",
+                    f"{scenario} race cancel did not execute on API B",
+                )
+                require(
+                    expire_response.headers.get("X-Disk-Instance-Id") == "disk-api-a",
+                    f"{scenario} race expiration did not execute on API A",
+                )
+                complete_payload = response_json(complete_response, f"{scenario} race complete")
+                cancel_payload = response_json(cancel_response, f"{scenario} race cancel")
+                expire_payload = response_json(expire_response, f"{scenario} race expiration")
+                require(str(expire_payload["code"]) == "0", f"{scenario} race expiration scan failed")
+
+                task = query_one(
+                    "SELECT status, completed_file_id, lease_owner, lease_expires_at "
+                    "FROM upload_tasks WHERE id = %s AND user_id = %s",
+                    (race_upload_id, user_id),
+                )
+                require(task is not None, f"{scenario} race upload task is missing")
+                status = int(task["status"])
+                allowed_statuses = {2, 3} if expired else {1, 2}
+                require(status in allowed_statuses, f"{scenario} race reached illegal status {status}")
+                require(
+                    task["lease_owner"] is None and task["lease_expires_at"] is None,
+                    f"{scenario} race terminal state retained a lease",
+                )
+
+                quota_after_race = query_one(
+                    "SELECT storage_used, storage_reserved FROM users WHERE id = %s",
+                    (user_id,),
+                )
+                require(quota_after_race is not None, f"{scenario} race final quota is missing")
+                require(
+                    int(quota_after_race["storage_reserved"])
+                    == int(quota_before["storage_reserved"]),
+                    f"{scenario} race did not release reserved quota exactly once",
+                )
+                chunk_count = query_one(
+                    "SELECT COUNT(*) AS count FROM upload_task_chunks WHERE task_id = %s",
+                    (race_upload_id,),
+                )
+                require(
+                    chunk_count is not None and int(chunk_count["count"]) == 0,
+                    f"{scenario} race retained chunk metadata",
+                )
+                cleanup_jobs = query_one(
+                    "SELECT COUNT(*) AS count FROM storage_jobs WHERE dedupe_key = %s",
+                    (f"staging-cleanup:{race_upload_id}",),
+                )
+                require(
+                    cleanup_jobs is not None and int(cleanup_jobs["count"]) == 1,
+                    f"{scenario} race did not create exactly one cleanup job",
+                )
+
+                file_row = query_one(
+                    "SELECT file.id, content.ref_count "
+                    "FROM files AS file "
+                    "JOIN file_contents AS content ON content.id = file.content_id "
+                    "WHERE file.user_id = %s AND file.name = %s",
+                    (user_id, race_filename),
+                )
+                content_count = query_one(
+                    "SELECT COUNT(*) AS count FROM file_contents "
+                    "WHERE hash_md5 = %s AND hash_sha256 = %s",
+                    (race_md5, race_sha256),
+                )
+                require(content_count is not None, f"{scenario} race content count is missing")
+
+                if status == 1:
+                    require(file_row is not None, "completed race did not create its file")
+                    require(
+                        int(task["completed_file_id"]) == int(file_row["id"]),
+                        "completed race task points at a different file",
+                    )
+                    require(int(content_count["count"]) == 1, "completed race content row is not unique")
+                    require(int(file_row["ref_count"]) == 1, "completed race reference count is not one")
+                    require(
+                        int(quota_after_race["storage_used"])
+                        == int(quota_before["storage_used"]) + len(race_content),
+                        "completed race did not convert quota exactly once",
+                    )
+                    require(str(complete_payload["code"]) == "0", "completed race response was not successful")
+                    require(str(cancel_payload["code"]) != "0", "completed race accepted cancellation")
+                    wait_until(lambda: object_exists(race_object_key), 30, f"{scenario} race final object")
+                    race_file_ids.append(int(file_row["id"]))
+                    race_object_keys.append(race_object_key)
+                else:
+                    require(file_row is None, f"{scenario} non-completed race created a file")
+                    require(int(content_count["count"]) == 0, f"{scenario} non-completed race created content")
+                    require(
+                        int(quota_after_race["storage_used"])
+                        == int(quota_before["storage_used"]),
+                        f"{scenario} non-completed race changed used quota",
+                    )
+                    require(str(complete_payload["code"]) != "0", f"{scenario} loser completed")
+                    if status == 2:
+                        require(str(cancel_payload["code"]) == "0", f"{scenario} cancel winner failed")
+                    else:
+                        require(str(cancel_payload["code"]) != "0", "expired winner accepted cancellation")
+
+                def cleanup_succeeded() -> bool:
+                    row = query_one(
+                        "SELECT status FROM storage_jobs WHERE dedupe_key = %s",
+                        (f"staging-cleanup:{race_upload_id}",),
+                    )
+                    return row is not None and int(row["status"]) == 3
+
+                wait_until(cleanup_succeeded, 45, f"{scenario} race cleanup", interval=0.5)
+                evidence.setdefault("terminal_races", []).append(
+                    {
+                        "scenario": scenario,
+                        "upload_id": race_upload_id,
+                        "status": status,
+                        "complete_instance": complete_response.headers.get("X-Disk-Instance-Id"),
+                        "cancel_instance": cancel_response.headers.get("X-Disk-Instance-Id"),
+                        "expire_instance": expire_response.headers.get("X-Disk-Instance-Id"),
+                        "complete_code": str(complete_payload["code"]),
+                        "cancel_code": str(cancel_payload["code"]),
+                    }
+                )
+                passed(f"{scenario} complete/cancel/expire race preserves one terminal and quota")
+
+            run_terminal_race(expired=False)
+            run_terminal_race(expired=True)
+
             refreshed_list = http.get(
                 f"{api_a_url}/api/file/list",
                 params={"parent_id": 0, "page_size": 100, "sort_by": "created_at", "sort_order": "desc", "type": "file"},
@@ -414,31 +671,46 @@ def main() -> int:
             wait_ready(api_a_url, "api", "disk-api-a")
             passed("load balancer continues serving after one API stops")
 
+            file_ids_to_delete = [file_id, *race_file_ids]
             soft_delete = http.request(
                 "DELETE",
                 f"{api_b_url}/api/file",
                 headers=auth,
-                json={"file_ids": [file_id], "folder_ids": []},
+                json={"file_ids": file_ids_to_delete, "folder_ids": []},
             )
             require(str(response_json(soft_delete, "soft delete")["code"]) == "0", "soft delete failed")
 
-            def trash_id() -> int | None:
+            def trash_id(candidate_file_id: int) -> int | None:
                 row = query_one(
                     "SELECT id FROM trash WHERE user_id = %s AND item_type = 'file' AND item_id = %s",
-                    (user_id, file_id),
+                    (user_id, candidate_file_id),
                 )
                 return int(row["id"]) if row is not None else None
 
-            deleted_trash_id = wait_until(trash_id, 10, "trash row")
+            deleted_trash_ids = [
+                wait_until(
+                    lambda candidate_file_id=candidate_file_id: trash_id(candidate_file_id),
+                    10,
+                    f"trash row for file {candidate_file_id}",
+                )
+                for candidate_file_id in file_ids_to_delete
+            ]
             permanent = http.request(
                 "DELETE",
                 f"{api_b_url}/api/trash",
                 headers=auth,
-                json={"trash_ids": [deleted_trash_id]},
+                json={"trash_ids": deleted_trash_ids},
             )
             require(str(response_json(permanent, "permanent delete")["code"]) == "0", "permanent delete failed")
-            wait_until(lambda: not object_exists(object_key), 45, "blob GC", interval=0.5)
+            for deleted_object_key in (object_key, *race_object_keys):
+                wait_until(
+                    lambda deleted_object_key=deleted_object_key: not object_exists(deleted_object_key),
+                    45,
+                    f"blob GC for {deleted_object_key}",
+                    interval=0.5,
+                )
             file_id = 0
+            race_file_ids.clear()
 
             logout = http.post(f"{api_a_url}/api/auth/logout", headers=auth)
             require(str(response_json(logout, "logout on API A")["code"]) == "0", "logout on API A failed")
@@ -447,6 +719,8 @@ def main() -> int:
             require(revoked.status_code == 401 and str(revoked_payload["code"]) == "40111", "API B did not immediately reject API A logout")
             passed("access-token logout is immediately visible on another API")
 
+        for race_upload_id in race_upload_ids:
+            execute("DELETE FROM storage_jobs WHERE aggregate_id = %s", (race_upload_id,))
         execute("DELETE FROM users WHERE id = %s", (user_id,))
         user_id = 0
         evidence["status"] = "passed"
