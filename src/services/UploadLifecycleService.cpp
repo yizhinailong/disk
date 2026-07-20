@@ -11,10 +11,13 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -40,6 +43,26 @@
 namespace disk::upload {
 
     namespace {
+        auto PauseAfterFinalizeClaimForFaultInjection(
+            const CompleteUploadCommand& command
+        ) -> void {
+            if (disk::utils::ConfigMgr::GetInstance()->IsSecureMode()) {
+                return;
+            }
+
+            const auto* enabled = std::getenv("DISK_TEST_FAULT_INJECTION");
+            const auto* target_upload_id = std::getenv(
+                "DISK_TEST_PAUSE_AFTER_FINALIZE_CLAIM_UPLOAD_ID"
+            );
+            if (enabled == nullptr || std::string_view(enabled) != "1" || target_upload_id == nullptr || command.upload_id != target_upload_id) {
+                return;
+            }
+
+            Logger::Warn() << "Test fault injection paused upload after finalize claim: upload_id="
+                           << command.upload_id << ", lease_owner=" << command.lease_owner;
+            std::this_thread::sleep_for(std::chrono::minutes(5));
+        }
+
         class UploadCompleteStageTimer final {
         public:
             explicit UploadCompleteStageTimer(disk::metrics::UploadCompleteStage stage)
@@ -756,6 +779,8 @@ namespace disk::upload {
             case disk::file::FinalizeClaimDisposition::NotFound:
                 co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
         }
+
+        PauseAfterFinalizeClaimForFaultInjection(command);
 
         UploadCompleteStageTimer load_timer(
             disk::metrics::UploadCompleteStage::LoadMetadata

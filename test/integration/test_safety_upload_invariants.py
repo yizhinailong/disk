@@ -82,7 +82,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 @contextmanager
-def peer_api_instance() -> Iterator[tuple[str, str]]:
+def peer_api_instance(
+    *,
+    purpose: str = "peer",
+    upload_finalize_lease_seconds: int | None = None,
+    pause_after_claim_upload_id: str | None = None,
+) -> Iterator[tuple[str, str, subprocess.Popen[bytes]]]:
     """Run a second API process that shares the primary instance's dependencies."""
     server_bin = Path(
         os.environ.get("SERVER_BIN", REPO_ROOT / "build/linux-debug-clang/src/disk")
@@ -94,25 +99,29 @@ def peer_api_instance() -> Iterator[tuple[str, str]]:
         probe.bind(("127.0.0.1", 0))
         peer_port = int(probe.getsockname()[1])
 
-    instance_id = f"safety-upload-peer-{os.getpid()}"
+    instance_id = f"safety-upload-{purpose}-{os.getpid()}"
     peer_url = f"http://127.0.0.1:{peer_port}"
-    peer_log_path = EVIDENCE_ROOT / "safety-upload-peer.log"
+    peer_log_path = EVIDENCE_ROOT / f"safety-upload-{purpose}.log"
     EVIDENCE_ROOT.mkdir(parents=True, exist_ok=True)
     source_config_path = Path(os.environ.get("DISK_CONFIG_FILE", REPO_ROOT / "config.json"))
     if not source_config_path.is_absolute():
         source_config_path = REPO_ROOT / source_config_path
 
-    with tempfile.TemporaryDirectory(prefix="disk-upload-peer-") as temp_dir_raw:
+    with tempfile.TemporaryDirectory(prefix=f"disk-upload-{purpose}-") as temp_dir_raw:
         temp_dir = Path(temp_dir_raw)
         config = json.loads(source_config_path.read_text(encoding="utf-8"))
         config["listeners"] = [{"address": "127.0.0.1", "port": peer_port}]
         disk_config = config["custom_config"]["disk"]
         disk_config["process_role"] = "api"
         disk_config["instance_id"] = instance_id
+        if upload_finalize_lease_seconds is not None:
+            disk_config["upload_finalize_lease_seconds"] = upload_finalize_lease_seconds
         config_path = temp_dir / "config.json"
         config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
         peer_env = os.environ.copy()
+        peer_env.pop("DISK_TEST_FAULT_INJECTION", None)
+        peer_env.pop("DISK_TEST_PAUSE_AFTER_FINALIZE_CLAIM_UPLOAD_ID", None)
         peer_env.update(
             {
                 "JWT_SECRET": peer_env.get(
@@ -126,6 +135,15 @@ def peer_api_instance() -> Iterator[tuple[str, str]]:
                 "DISK_INSTANCE_ID": instance_id,
             }
         )
+        if pause_after_claim_upload_id is not None:
+            peer_env.update(
+                {
+                    "DISK_TEST_FAULT_INJECTION": "1",
+                    "DISK_TEST_PAUSE_AFTER_FINALIZE_CLAIM_UPLOAD_ID": str(
+                        uuid.UUID(pause_after_claim_upload_id)
+                    ),
+                }
+            )
 
         with peer_log_path.open("wb") as log_handle:
             process = subprocess.Popen(
@@ -149,7 +167,7 @@ def peer_api_instance() -> Iterator[tuple[str, str]]:
                             and json_field(ready.text, "code") == "0"
                             and json_field(ready.text, "data.instance_id") == instance_id
                         ):
-                            yield peer_url, instance_id
+                            yield peer_url, instance_id, process
                             return
                     except Exception:  # noqa: BLE001 - readiness is expected to fail during startup
                         pass
@@ -680,7 +698,7 @@ def test_hundred_concurrent_complete_invariants() -> None:
     log_section("100 Concurrent Complete Requests Across API Instances")
 
     try:
-        with peer_api_instance() as (peer_url, peer_instance_id):
+        with peer_api_instance() as (peer_url, peer_instance_id, _):
             redis_delete_pattern(f"rate:upload:{USER_ID}:*")
             primary_ready = fetch(f"{BASE_URL}/api/health/ready")
             primary_instance_id = json_field(primary_ready.text, "data.instance_id")
@@ -897,6 +915,384 @@ def test_hundred_concurrent_complete_invariants() -> None:
         print_summary()
     finally:
         redis_delete_pattern(f"rate:upload:{USER_ID}:*")
+
+
+def test_finalize_claim_process_death_takeover_invariants() -> None:
+    """Kill a real API after its committed claim and verify lease-based takeover."""
+    log_section("Finalize Claim Process Death And Lease Takeover")
+    redis_delete_pattern(f"rate:upload:{USER_ID}:*")
+
+    payload = f"safety-finalize-claim-death-{unique_name()}".encode()
+    filename = f"safety_finalize_claim_death_{unique_name()}.bin"
+    payload_md5 = md5_bytes(payload)
+    payload_sha256 = sha256_bytes(payload)
+    quota_before = user_quota()
+
+    upload_id, file_hash = init_upload(filename, payload)
+    assembled_path = upload_temp_dir(upload_id).parent / f"{upload_id}.tmp"
+    blob_path = final_blob_path(payload_sha256)
+    assert_equal("claim-death fixture MD5 matches init contract", file_hash, payload_md5)
+    assert_path_absent("claim-death fixture starts without an assembled object", assembled_path)
+    assert_path_absent("claim-death fixture starts without a final blob", blob_path)
+
+    upload_single_chunk(upload_id, payload)
+    assert_chunk_row_count(upload_id, 1)
+    quota_after_init = user_quota()
+    assert_numeric_delta(
+        "claim-death fixture reserves storage once",
+        quota_before["storage_reserved"],
+        quota_after_init["storage_reserved"],
+        len(payload),
+    )
+
+    primary_ready = fetch(f"{BASE_URL}/api/health/ready")
+    primary_instance_id = json_field(primary_ready.text, "data.instance_id")
+    if primary_ready.status_code != 200 or not primary_instance_id:
+        log_fail("claim-death fixture resolves the primary API instance")
+        print_summary()
+    log_pass("claim-death fixture resolves the primary API instance")
+
+    killed_pid = 0
+    killed_instance_id = ""
+    killed_state_version = 0
+    killed_lease_expires_at = None
+    dropped_request_error = ""
+
+    try:
+        with peer_api_instance(
+            purpose="claim-crash",
+            upload_finalize_lease_seconds=30,
+            pause_after_claim_upload_id=upload_id,
+        ) as (crash_url, crash_instance_id, crash_process):
+            assert_equal(
+                "claim-death fixture uses two distinct API instances",
+                crash_instance_id != primary_instance_id,
+                True,
+            )
+            killed_pid = crash_process.pid
+            killed_instance_id = crash_instance_id
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                complete_future = executor.submit(
+                    fetch,
+                    f"{crash_url}/api/file/upload/complete",
+                    method="POST",
+                    headers={
+                        **auth_headers(TOKEN),
+                        "X-Request-Id": f"claim-death-{upload_id}",
+                    },
+                    json_body={"upload_id": upload_id},
+                    timeout=120,
+                )
+
+                claimed_task = None
+                claim_deadline = time.monotonic() + 10
+                while time.monotonic() < claim_deadline:
+                    candidate = query_one(
+                        "SELECT status, lease_owner, lease_expires_at, state_version, "
+                        "finalize_attempts, lease_expires_at > NOW() AS lease_live "
+                        "FROM upload_tasks WHERE id = %s AND user_id = %s",
+                        (upload_id, USER_ID),
+                    )
+                    if (
+                        candidate is not None
+                        and int(candidate["status"]) == 4
+                        and candidate["lease_owner"] == crash_instance_id
+                        and bool(candidate["lease_live"])
+                    ):
+                        claimed_task = candidate
+                        break
+                    time.sleep(0.05)
+
+                if claimed_task is None:
+                    log_fail("crash API commits its Finalizing claim before assembly")
+                    print_summary()
+                log_pass("crash API commits its Finalizing claim before assembly")
+                killed_state_version = int(claimed_task["state_version"])
+                killed_lease_expires_at = claimed_task["lease_expires_at"]
+                assert_equal(
+                    "first Finalizing claim increments finalize_attempts once",
+                    int(claimed_task["finalize_attempts"]),
+                    1,
+                )
+
+                quota_after_claim = user_quota()
+                assert_equal(
+                    "claim pause preserves reserved storage",
+                    quota_after_claim["storage_reserved"],
+                    quota_after_init["storage_reserved"],
+                )
+                assert_equal(
+                    "claim pause preserves used storage",
+                    quota_after_claim["storage_used"],
+                    quota_after_init["storage_used"],
+                )
+                assert_chunk_row_count(upload_id, 1)
+                assert_path_absent("claim pause creates no assembled object", assembled_path)
+                assert_path_absent("claim pause creates no final blob", blob_path)
+                assert_db_row_absent(
+                    "claim pause creates no logical file",
+                    "SELECT id FROM files WHERE user_id = %s AND name = %s",
+                    (USER_ID, filename),
+                )
+                assert_db_row_absent(
+                    "claim pause creates no content row",
+                    "SELECT id FROM file_contents WHERE hash_md5 = %s AND hash_sha256 = %s",
+                    (payload_md5, payload_sha256),
+                )
+
+                assert_equal("crash API is alive at the injected pause", crash_process.poll(), None)
+                crash_process.kill()
+                crash_process.wait(timeout=5)
+                assert_equal(
+                    "crash API is terminated by a non-zero signal exit",
+                    crash_process.returncode != 0,
+                    True,
+                )
+
+                try:
+                    crash_response = complete_future.result(timeout=10)
+                except Exception as error:  # noqa: BLE001 - process death intentionally breaks HTTP
+                    dropped_request_error = type(error).__name__
+                    log_pass("killed API does not return a successful complete response")
+                else:
+                    log_fail(
+                        "killed API unexpectedly returned a complete response: "
+                        f"HTTP {crash_response.status_code}, body={crash_response.text}"
+                    )
+                    print_summary()
+    except Exception as error:
+        log_fail(f"claim-death process fixture failed: {error}")
+        print_summary()
+
+    task_after_kill = query_one(
+        "SELECT status, lease_owner, lease_expires_at, state_version, finalize_attempts, "
+        "lease_expires_at > NOW() AS lease_live "
+        "FROM upload_tasks WHERE id = %s AND user_id = %s",
+        (upload_id, USER_ID),
+    )
+    if task_after_kill is None:
+        log_fail("claim-death task remains durable after the API process dies")
+        print_summary()
+    log_pass("claim-death task remains durable after the API process dies")
+    assert_equal("killed claim remains Finalizing", int(task_after_kill["status"]), 4)
+    assert_equal("killed claim retains its owner", task_after_kill["lease_owner"], killed_instance_id)
+    assert_equal(
+        "process death does not mutate the claim version",
+        int(task_after_kill["state_version"]),
+        killed_state_version,
+    )
+    assert_equal(
+        "process death does not add a finalize attempt",
+        int(task_after_kill["finalize_attempts"]),
+        1,
+    )
+    assert_equal("killed claim lease is still live", bool(task_after_kill["lease_live"]), True)
+    assert_path_absent("process death leaves no assembled object", assembled_path)
+    assert_path_absent("process death leaves no final blob", blob_path)
+
+    conflict_response = complete_upload_raw(
+        upload_id,
+        f"claim-death-live-lease-{upload_id}",
+    )
+    assert_equal("live lease rejects takeover with HTTP 409", conflict_response.status_code, 409)
+    assert_equal(
+        "live lease rejects takeover with UploadStateConflict",
+        json_field(conflict_response.text, "code"),
+        "10004",
+    )
+
+    task_after_conflict = query_one(
+        "SELECT status, lease_owner, state_version, finalize_attempts, "
+        "lease_expires_at > NOW() AS lease_live "
+        "FROM upload_tasks WHERE id = %s AND user_id = %s",
+        (upload_id, USER_ID),
+    )
+    if task_after_conflict is None:
+        log_fail("live-lease conflict preserves the upload task")
+        print_summary()
+    assert_equal("live-lease conflict preserves Finalizing", int(task_after_conflict["status"]), 4)
+    assert_equal(
+        "live-lease conflict preserves the killed owner",
+        task_after_conflict["lease_owner"],
+        killed_instance_id,
+    )
+    assert_equal(
+        "live-lease conflict preserves the claim version",
+        int(task_after_conflict["state_version"]),
+        killed_state_version,
+    )
+    assert_equal(
+        "live-lease conflict does not add an attempt",
+        int(task_after_conflict["finalize_attempts"]),
+        1,
+    )
+    assert_equal("live-lease conflict occurs before expiry", bool(task_after_conflict["lease_live"]), True)
+
+    expired_task = None
+    expiry_deadline = time.monotonic() + 40
+    while time.monotonic() < expiry_deadline:
+        candidate = query_one(
+            "SELECT status, lease_owner, state_version, finalize_attempts, "
+            "lease_expires_at <= NOW() AS lease_expired "
+            "FROM upload_tasks WHERE id = %s AND user_id = %s",
+            (upload_id, USER_ID),
+        )
+        if candidate is not None and bool(candidate["lease_expired"]):
+            expired_task = candidate
+            break
+        time.sleep(0.1)
+
+    if expired_task is None:
+        log_fail("killed claim expires according to PostgreSQL time")
+        print_summary()
+    log_pass("killed claim expires according to PostgreSQL time without a DB rewrite")
+    assert_equal("expired claim remains Finalizing before takeover", int(expired_task["status"]), 4)
+    assert_equal("expired claim retains the killed owner", expired_task["lease_owner"], killed_instance_id)
+    assert_equal(
+        "natural expiry preserves the claim version",
+        int(expired_task["state_version"]),
+        killed_state_version,
+    )
+    assert_equal(
+        "natural expiry preserves one finalize attempt",
+        int(expired_task["finalize_attempts"]),
+        1,
+    )
+
+    takeover_response = complete_upload_raw(
+        upload_id,
+        f"claim-death-takeover-{upload_id}",
+    )
+    takeover_file_id = json_field(takeover_response.text, "data.file.id")
+    if (
+        takeover_response.status_code != 200
+        or json_field(takeover_response.text, "code") != "0"
+        or not takeover_file_id
+    ):
+        log_fail("primary API completes the upload after natural lease expiry")
+        print(takeover_response.text)
+        print_summary()
+    log_pass("primary API completes the upload after natural lease expiry")
+    assert_equal(
+        "takeover response comes from the primary API",
+        header_value(takeover_response.headers, "X-Disk-Instance-Id"),
+        primary_instance_id,
+    )
+    completed_file_id = int(takeover_file_id)
+
+    completed_task = query_one(
+        "SELECT status, completed_file_id, lease_owner, lease_expires_at, "
+        "state_version, finalize_attempts "
+        "FROM upload_tasks WHERE id = %s AND user_id = %s",
+        (upload_id, USER_ID),
+    )
+    if completed_task is None:
+        log_fail("takeover preserves the completed upload task")
+        print_summary()
+    assert_equal("takeover reaches Completed", int(completed_task["status"]), 1)
+    assert_equal(
+        "takeover records the returned file ID",
+        int(completed_task["completed_file_id"]),
+        completed_file_id,
+    )
+    assert_equal("takeover clears lease_owner", completed_task["lease_owner"], None)
+    assert_equal("takeover clears lease_expires_at", completed_task["lease_expires_at"], None)
+    assert_equal(
+        "takeover advances the killed claim version",
+        int(completed_task["state_version"]) > killed_state_version,
+        True,
+    )
+    assert_equal(
+        "claim and takeover produce exactly two finalize attempts",
+        int(completed_task["finalize_attempts"]),
+        2,
+    )
+
+    assert_chunk_row_count(upload_id, 0)
+    completed_quota = user_quota()
+    assert_equal(
+        "takeover releases reserved storage once",
+        completed_quota["storage_reserved"],
+        quota_before["storage_reserved"],
+    )
+    assert_numeric_delta(
+        "takeover increases used storage once",
+        quota_before["storage_used"],
+        completed_quota["storage_used"],
+        len(payload),
+    )
+
+    file_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND name = %s",
+            (USER_ID, filename),
+        )
+        or 0
+    )
+    assert_equal("claim death and takeover create one file row", file_count, 1)
+    file_row = query_one(
+        "SELECT file.id, content.ref_count, content.hash_md5, content.hash_sha256 "
+        "FROM files AS file JOIN file_contents AS content ON content.id = file.content_id "
+        "WHERE file.id = %s AND file.user_id = %s",
+        (completed_file_id, USER_ID),
+    )
+    if file_row is None:
+        log_fail("claim death and takeover create one file/content reference")
+        print_summary()
+    assert_equal("takeover returns the persisted file", int(file_row["id"]), completed_file_id)
+    assert_equal("takeover increments content ref_count once", int(file_row["ref_count"]), 1)
+    assert_equal("takeover content MD5 matches", file_row["hash_md5"], payload_md5)
+    assert_equal("takeover content SHA-256 matches", file_row["hash_sha256"], payload_sha256)
+    content_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s AND hash_sha256 = %s",
+            (payload_md5, payload_sha256),
+        )
+        or 0
+    )
+    assert_equal("claim death and takeover create one content row", content_count, 1)
+
+    cleanup_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s",
+            (f"staging-cleanup:{upload_id}",),
+        )
+        or 0
+    )
+    assert_equal("claim death and takeover create one cleanup job", cleanup_count, 1)
+    assert_storage_job_succeeded(
+        "claim-death takeover cleanup converges",
+        f"staging-cleanup:{upload_id}",
+    )
+    assert_path_absent("takeover removes the staging session", upload_temp_dir(upload_id))
+    assert_path_absent("takeover leaves no assembled object", assembled_path)
+    assert_path_exists("takeover preserves one final blob", blob_path)
+
+    save_evidence(
+        f"{EVIDENCE_PREFIX}-{upload_id}-claim-death-takeover.json",
+        json.dumps(
+            {
+                "upload_id": upload_id,
+                "killed_pid": killed_pid,
+                "killed_instance_id": killed_instance_id,
+                "killed_state_version": killed_state_version,
+                "killed_lease_expires_at": killed_lease_expires_at.isoformat()
+                if killed_lease_expires_at is not None
+                else None,
+                "dropped_request_error": dropped_request_error,
+                "live_lease_conflict_code": json_field(conflict_response.text, "code"),
+                "takeover_instance_id": primary_instance_id,
+                "final_state_version": int(completed_task["state_version"]),
+                "finalize_attempts": int(completed_task["finalize_attempts"]),
+                "completed_file_id": completed_file_id,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+    )
+    redis_delete_pattern(f"rate:upload:{USER_ID}:*")
 
 
 def assert_failed_finalize_recoverable(upload_id: str, filename: str, file_hash: str, quota_before_complete: dict[str, int]) -> None:
@@ -1683,6 +2079,7 @@ def main() -> None:
     test_successful_chunked_upload_invariants()
     test_hundred_concurrent_complete_invariants()
     test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()
+    test_finalize_claim_process_death_takeover_invariants()
     test_db_failure_after_blob_promotion_retains_created_blob()
     test_db_failure_after_promotion_preserves_preexisting_blob()
     test_missing_staging_object_records_reconciliation()
