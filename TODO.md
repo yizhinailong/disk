@@ -486,8 +486,8 @@ API Instance A  API Instance B ... N
 
 2026-07-20 已完成候选应用基线 `d5c7d24` 的仓库级 10% 隔离灰度：两个 API
 分别以 local/S3 为新任务默认值，9 个 baseline 和 1 个 canary 任务均为 6 MiB/6 分片，
-精确固化描述符并全部完成。baseline 成功率 100%、完成均值 250.565 ms、P99 286.412 ms；
-canary 跨实例完成且成功率 100%，完成耗时 425.640 ms，S3 成功调用 92 次且
+精确固化描述符并全部完成。baseline 成功率 100%、完成均值 249.394 ms、P99 267.136 ms；
+canary 跨实例完成且成功率 100%，完成耗时 425.911 ms，S3 成功调用 86 次且
 可操作错误为 0，过期租约、接管、死信和未解决 finding 均为 0，10/10 cleanup 收敛。
 完整 CTest 为 1371 通过、6 项环境门控跳过、0 失败；结构化证据为
 `.sisyphus/evidence/staging-canary-summary.json`。目标预发布/生产环境仍须使用真实端点和部署身份复测。
@@ -502,7 +502,19 @@ canary 跨实例完成且成功率 100%，完成耗时 425.640 ms，S3 成功调
 结构化证据为 `.sisyphus/evidence/staging-rollout-expansion-summary.json`。目标环境仍须按
 部署指南执行含 25% 阶段的完整观测窗口。
 
-- [ ] 旧 local 任务通过原节点完成、自然过期或维护窗口取消；禁止假装它们可被任意节点恢复。
+- [x] 旧 local 任务通过原节点完成、自然过期或维护窗口取消；禁止假装它们可被任意节点恢复。
+
+2026-07-20 已在候选应用基线 `465461d` 上完成旧 local 暂存排空门禁。固定 V002
+在原卷创建三个进行中任务；迁移后，原卷/错误卷 current API 对同一分片分别只读诊断为
+`present`/`missing`，且任务、分片、租约、配额和 job 快照不变。随后仅由挂载原卷的
+current API/唯一 Worker 将任务分别收敛为 Completed、Cancelled、Expired，3/3 cleanup
+成功，local 非终态、未完成 cleanup、reserved、原卷暂存文件和错误节点文件均为 0。
+`LocalStagingMigrationIntegration` 通过（完整套件内 4.40 秒）；完整 CTest 为 1372 通过、
+6 项环境门控跳过、0 失败，总耗时 357.71 秒。结构化证据为
+`.sisyphus/evidence/local-staging-drain-summary.json`，SHA-256 为
+`8ee371a2b9311c5b225557d5194c21b9348f1238dfdfbe410b088b7cf9534a09`。目标环境仍须按节点生成
+真实归属清单并保存逐卷扫描结果，仓库门禁不代替生产排空。
+
 - [ ] 旧任务归零后禁用生产 local staging 创建路径。
 
 ### 14.3 多实例与 Worker 切换

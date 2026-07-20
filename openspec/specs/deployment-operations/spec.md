@@ -114,6 +114,21 @@ The compatibility release immediately after the expand migration SHALL default n
 - **WHEN** a request or Worker loads a legacy local task or a task with a persisted S3 descriptor
 - **THEN** it SHALL use that task's persisted compatible locator and SHALL NOT reinterpret it using the current process default
 
+### Requirement: Legacy local staging drain
+The rollout SHALL treat legacy local staging as original-volume-affine state because its persisted descriptor does not identify a physical node or volume. Operators SHALL inventory the actual volume owner, preserve request affinity, and allow each task to complete, expire naturally, or be cancelled in a maintenance window through a compatible API and the single migration Worker mounted to that volume. Database terminal counts and a read-only scan of every inventoried volume SHALL both reach zero before affinity is removed.
+
+#### Scenario: A local task is inspected from different nodes
+- **WHEN** the same legacy local task is diagnosed through an API mounted to its original volume and an API mounted to another empty volume
+- **THEN** the original-volume API SHALL report the staged chunk present, the other API SHALL report it missing, and both diagnostics SHALL leave task, chunk, lease, quota, and job state unchanged
+
+#### Scenario: Legacy local staging is drained
+- **WHEN** the migration window processes inventoried local tasks through their original volumes
+- **THEN** representative tasks SHALL converge through completion, cancellation, and natural expiration, their cleanup jobs SHALL succeed on the original-volume Worker, reserved quota and chunk metadata SHALL be released, and unrelated volumes SHALL remain untouched
+
+#### Scenario: A local task has no proven volume owner
+- **WHEN** a database row is missing its staged artifacts, appears on multiple volumes, or cannot be mapped to exactly one original volume
+- **THEN** operators SHALL freeze and reconcile it rather than claim that another arbitrary API or Worker can recover or clean it
+
 ### Requirement: Worker observation rollout
 The rollout SHALL support deploying a Worker with job claiming disabled after the expand migration and compatibility release. The observation Worker SHALL validate its required dependencies and query real queue metrics without claiming, renewing, completing, or seeding persistent jobs. Enabling execution SHALL require an explicit configuration change and process restart.
 
