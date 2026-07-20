@@ -620,7 +620,21 @@ manifest 阶段在移除 S3 凭据的环境中运行，证明 DB 与源 Blob 快
 `6b0f8b4c6480c6bfae42ff82b7bb54968b722aebc7e494433af1d32f73e3b734`。该证据不是现网 inventory；目标环境仍须在
 停写与 PostgreSQL/local Blob 备份完成后生成自身全量 manifest、记录其 SHA-256 并完成人工评审。
 
-- [ ] 迁移工具支持 checkpoint、限速、重复执行、单对象校验和 dry-run。
+- [x] 迁移工具支持 checkpoint、限速、重复执行、单对象校验和 dry-run。
+
+2026-07-21 已在候选应用基线 `9211c88` 上完成 final Blob 可恢复复制仓库门禁。三对象 dry-run
+完整检查源和目标但 PUT/checkpoint/DB 变化均为 0；单对象执行批次以 0.01 MiB/s 聚合预算处理
+3807 字节对象，上传加完整 GET 计费 7614 字节，预期有界墙钟下限 0.726 秒且实测通过，
+仅提交一条 `0600` checkpoint。真实 `SIGKILL` 发生在第二对象 PUT 期间，checkpoint 只含首个已完整验证对象；
+恢复后重验 1 个、补传 2 个。checkpoint 绑定 manifest SHA-256/bucket/object prefix，篡改绑定在 PUT 前拒绝；
+恢复后全量重放重验 3 个目标且新 PUT 为 0。损坏源、冲突目标和同大小目标哈希损坏均非零拒绝。
+
+`FinalBlobMigrationIntegration` 聚焦 CTest 1/1 通过（9.33 秒）；完整 CTest 共 1384 项：
+1378 通过、6 项常规环境门控跳过、0 失败，总耗时 372.70 秒；OpenSpec 严格校验 24/24 通过。
+去敏证据为 `.sisyphus/evidence/final-blob-copy-summary.json`，SHA-256 为
+`211b21a25a76897f3f02ee406f48f4f67f84b8de030e7723aff2523b7b2e4383`。目标环境仍须对已评审 manifest 先执行
+dry-run，根据维护窗口和 S3 容量确定实际批次/限速，保存 checkpoint 并在切换前完成自身全量校验。
+
 - [ ] 选择维护窗口切换，或设计有截止日期的 per-content backend/双读迁移；禁止无边界长期双写。
 - [ ] 所有对象复制并验证后再切换数据库读取位置。
 - [ ] 完成全量对账和备份后，才安排旧本地 Blob 回收。

@@ -38,6 +38,7 @@ from lib_py.db import database_config
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATOR = REPO_ROOT / "scripts" / "migrate-final-blobs.py"
 EVIDENCE_PATH = REPO_ROOT / ".sisyphus/evidence/final-blob-manifest-summary.json"
+COPY_EVIDENCE_PATH = REPO_ROOT / ".sisyphus/evidence/final-blob-copy-summary.json"
 
 
 class TestFailure(RuntimeError):
@@ -68,6 +69,12 @@ class ObjectState:
     def request_count(self) -> int:
         with self.lock:
             return sum(self.requests.values())
+
+    def reset_observations(self) -> None:
+        with self.lock:
+            self.requests.clear()
+            self.puts.clear()
+            self.total_puts = 0
 
     def get(self, key: str) -> bytes | None:
         with self.lock:
@@ -598,8 +605,14 @@ def checkpoint_ids(checkpoint_path: Path) -> list[int]:
         ]
 
 
+def checkpoint_metadata(checkpoint_path: Path) -> dict[str, str]:
+    with sqlite3.connect(checkpoint_path) as connection:
+        return dict(connection.execute("SELECT key, value FROM checkpoint_meta"))
+
+
 def main() -> int:
     EVIDENCE_PATH.unlink(missing_ok=True)
+    COPY_EVIDENCE_PATH.unlink(missing_ok=True)
     suffix = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
     database_name = f"disk_final_blob_migration_{suffix}"
     server_state = ObjectState()
@@ -824,6 +837,62 @@ def main() -> int:
                 "copy dry-run leaves DB paths unchanged",
             )
 
+            first = records[0]
+            throttle_checkpoint_path = temp_root / "throttled-copy.sqlite3"
+            throttle_mib_per_second = 0.01
+            charged_transfer_bytes = int(first["size"]) * 2
+            minimum_throttle_seconds = charged_transfer_bytes / (
+                throttle_mib_per_second * 1024 * 1024
+            )
+            throttle_started = time.monotonic()
+            throttled_copy = run_command(
+                [
+                    "copy",
+                    "--manifest",
+                    str(manifest_path),
+                    "--checkpoint",
+                    str(throttle_checkpoint_path),
+                    "--max-objects",
+                    "1",
+                    "--rate-limit-mib-per-second",
+                    str(throttle_mib_per_second),
+                    "--execute",
+                ],
+                env,
+            )
+            throttle_elapsed = time.monotonic() - throttle_started
+            throttle_summary = parse_summary(throttled_copy)
+            require(
+                throttle_summary["processed"] == 1
+                and throttle_summary["uploaded"] == 1
+                and throttle_summary["remaining"] == 2,
+                "bounded copy processes exactly one absent target",
+            )
+            require(
+                throttle_elapsed >= minimum_throttle_seconds * 0.9,
+                "copy rate limit charges both upload and complete target GET bytes",
+            )
+            require(
+                checkpoint_ids(throttle_checkpoint_path) == [101],
+                "bounded copy checkpoints its one completely verified target",
+            )
+            require(
+                stat.S_IMODE(throttle_checkpoint_path.stat().st_mode) == 0o600,
+                "copy checkpoint is created with mode 0600",
+            )
+            require(
+                server_state.get(first_key) == first["payload"],
+                "bounded copy preserves the target bytes",
+            )
+            server_state.remove(first_key)
+            throttle_checkpoint_path.unlink()
+            server_state.reset_observations()
+            require(
+                server_state.get(first_key) is None
+                and not throttle_checkpoint_path.exists(),
+                "rate-limit probe is removed before interruption recovery",
+            )
+
             server_state.block_on_put = 2
             interrupted = subprocess.Popen(
                 [str(MIGRATOR), *copy_args, "--execute"],
@@ -870,6 +939,18 @@ def main() -> int:
                 checkpoint_ids(checkpoint_path) == [101, 102, 103],
                 "resume completes checkpoint",
             )
+            expected_checkpoint_metadata = {
+                "checkpoint_version": "1",
+                "manifest_sha256": hashlib.sha256(
+                    manifest_path.read_bytes()
+                ).hexdigest(),
+                "bucket": "disk-migration-fixture",
+                "object_prefix": object_prefix,
+            }
+            require(
+                checkpoint_metadata(checkpoint_path) == expected_checkpoint_metadata,
+                "checkpoint binds the exact manifest digest and S3 destination",
+            )
             for record in records:
                 key = target_keys[int(record["content_id"])]
                 require(
@@ -889,6 +970,31 @@ def main() -> int:
             )
 
             puts_after_resume = server_state.total_puts
+            with sqlite3.connect(checkpoint_path) as connection:
+                connection.execute(
+                    "UPDATE checkpoint_meta SET value = 'wrong-bucket' "
+                    "WHERE key = 'bucket'"
+                )
+            mismatched_checkpoint = run_command(
+                [*copy_args, "--execute"], env, check=False
+            )
+            require(
+                mismatched_checkpoint.returncode != 0,
+                "copy rejects a checkpoint bound to another destination",
+            )
+            require(
+                server_state.total_puts == puts_after_resume,
+                "checkpoint binding mismatch is rejected before any PUT",
+            )
+            with sqlite3.connect(checkpoint_path) as connection:
+                connection.execute(
+                    "UPDATE checkpoint_meta SET value = ? WHERE key = 'bucket'",
+                    (expected_checkpoint_metadata["bucket"],),
+                )
+            require(
+                checkpoint_metadata(checkpoint_path) == expected_checkpoint_metadata,
+                "fixture restores the valid checkpoint binding",
+            )
             replay = run_command([*copy_args, "--execute"], env)
             replay_summary = parse_summary(replay)
             require(
@@ -1057,6 +1163,67 @@ def main() -> int:
                 )
             EVIDENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
             EVIDENCE_PATH.write_text(serialized, encoding="utf-8")
+
+            copy_evidence = {
+                "schema_version": 1,
+                "scenario": "resumable_verified_final_blob_copy",
+                "dry_run": {
+                    "objects_inspected": int(dry_summary["processed"]),
+                    "objects_would_upload": int(dry_summary["would_upload"]),
+                    "put_requests": 0,
+                    "checkpoint_created": False,
+                    "database_unchanged": True,
+                },
+                "rate_limit": {
+                    "configured_mib_per_second": throttle_mib_per_second,
+                    "max_objects": 1,
+                    "charged_transfer_bytes": charged_transfer_bytes,
+                    "minimum_expected_seconds": round(minimum_throttle_seconds, 3),
+                    "observed_minimum_satisfied": (
+                        throttle_elapsed >= minimum_throttle_seconds * 0.9
+                    ),
+                    "uploaded": int(throttle_summary["uploaded"]),
+                    "verified_checkpoint_records": 1,
+                },
+                "verification": {
+                    "size_md5_sha256": True,
+                    "source_corruption_rejected_before_put": True,
+                    "conflicting_target_preserved": True,
+                    "target_corruption_rejected_before_cutover": True,
+                },
+                "checkpoint": {
+                    "mode": "0600",
+                    "bound_to_manifest_and_destination": True,
+                    "binding_mismatch_rejected_before_put": True,
+                    "verified_after_process_kill": 1,
+                    "verified_after_resume": len(checkpoint_ids(checkpoint_path)),
+                },
+                "resume": {
+                    "uploaded": int(resumed_summary["uploaded"]),
+                    "reused": int(resumed_summary["reused"]),
+                    "all_target_bytes_match": True,
+                },
+                "replay": {
+                    "uploaded": int(replay_summary["uploaded"]),
+                    "reused": int(replay_summary["reused"]),
+                    "additional_puts": server_state.total_puts - puts_after_resume,
+                },
+                "acceptance": {"passed": True},
+            }
+            copy_serialized = json.dumps(copy_evidence, indent=2, sort_keys=True) + "\n"
+            for sensitive in (
+                endpoint,
+                database_name,
+                object_prefix,
+                str(temp_root),
+                "fixture-access-key",
+                "fixture-secret-key",
+            ):
+                require(
+                    sensitive not in copy_serialized,
+                    "copy evidence contains no locator or credential",
+                )
+            COPY_EVIDENCE_PATH.write_text(copy_serialized, encoding="utf-8")
     finally:
         server.shutdown()
         server.server_close()

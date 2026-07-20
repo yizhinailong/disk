@@ -82,6 +82,29 @@ Before copying any legacy local final Blob to object storage, the migration tool
 - **WHEN** a later source row is missing, invalid, outside the trusted root, or inconsistent with the database snapshot
 - **THEN** the command SHALL fail without changing PostgreSQL or any source Blob and SHALL leave neither a final partial manifest nor a temporary manifest artifact
 
+### Requirement: Resumable and verified final Blob copy
+The final Blob copy command SHALL default to a non-writing dry run and SHALL verify each local source and each existing or newly uploaded target by size, MD5, and SHA-256. Execution SHALL commit a durable, exclusively locked per-object checkpoint only after a complete target GET passes, and SHALL bind that checkpoint to the exact manifest SHA-256, bucket, and object prefix. A positive transfer-rate setting SHALL apply one aggregate byte budget to S3 upload callbacks and complete target GET verification; zero SHALL disable the limit and a negative setting SHALL be rejected.
+
+#### Scenario: A bounded rate-limited copy batch runs
+- **WHEN** an operator executes a one-object batch with a positive transfer budget against an absent target
+- **THEN** exactly one object SHALL be uploaded and completely downloaded for verification, exactly one checkpoint record SHALL commit, and elapsed time SHALL NOT be less than the charged upload-plus-GET bytes divided by the configured budget
+
+#### Scenario: Copy runs as a dry run
+- **WHEN** the copy command is invoked without its execution flag
+- **THEN** it SHALL still validate local sources and inspect targets, but SHALL perform no PUT, create no checkpoint, and change no database locator
+
+#### Scenario: Copy is interrupted during an object
+- **WHEN** the process is killed after a target PUT begins but before its complete verification and checkpoint commit
+- **THEN** the checkpoint SHALL contain only earlier completely verified objects and a subsequent execution SHALL revalidate those objects and process the interrupted and remaining objects
+
+#### Scenario: A completed copy is replayed
+- **WHEN** the same manifest and checkpoint are executed again after all targets were verified
+- **THEN** every target SHALL be completely revalidated, no target SHALL be uploaded again, and the checkpoint binding SHALL remain valid
+
+#### Scenario: A source or target is corrupt
+- **WHEN** a source or existing target differs in size, MD5, or SHA-256 from its manifest record
+- **THEN** the object SHALL fail independently before a conflicting target is overwritten or a verification checkpoint is committed
+
 ### Requirement: Service management and hardening
 Deployment documentation SHALL define service installation, systemd or Windows service configuration, filesystem permissions, sandboxing/hardening settings, restart behavior, and routine service operations.
 
