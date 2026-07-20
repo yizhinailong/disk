@@ -83,6 +83,11 @@ def main() -> int:
             == "${DISK_UPLOAD_STAGING_BACKEND:-s3}",
             f"{name} staging rollout override is missing",
         )
+        require(
+            environment["DISK_UPLOAD_TASK_CREATION_ENABLED"]
+            == "${DISK_UPLOAD_TASK_CREATION_ENABLED:-true}",
+            f"{name} upload creation cutoff override is missing",
+        )
 
     env_example = set(
         (root / "deploy/distributed.env.example").read_text(encoding="utf-8").splitlines()
@@ -90,6 +95,10 @@ def main() -> int:
     require(
         "DISK_UPLOAD_STAGING_BACKEND=s3" in env_example,
         "distributed env template must persist the final S3 staging default",
+    )
+    require(
+        "DISK_UPLOAD_TASK_CREATION_ENABLED=true" in env_example,
+        "distributed env template must expose the rollback creation cutoff",
     )
 
     require(

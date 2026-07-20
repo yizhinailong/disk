@@ -70,7 +70,9 @@ namespace disk::file {
                                              .user_id = user_id,
                                              .max_file_size = config->GetMaxFileSize(),
                                              .chunk_size = config->GetChunkSize(),
-                                             .expiry_seconds = config->GetUploadTaskExpirySeconds() }
+                                             .expiry_seconds = config->GetUploadTaskExpirySeconds(),
+                                             .upload_task_creation_enabled =
+                                                 config->GetUploadTaskCreationEnabled() }
         );
         if (!lifecycle_result) {
             co_return std::unexpected(lifecycle_result.error());

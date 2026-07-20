@@ -188,6 +188,7 @@ namespace disk::utils {
         m_auth_cpu_pool_threads = DEFAULT_AUTH_CPU_POOL_THREADS;
         m_storage_backend = StorageBackend::Local;
         m_upload_staging_backend = StorageBackend::Local;
+        m_upload_task_creation_enabled = true;
         m_s3_storage_config = S3StorageConfig{};
         m_share_access_rate_limit_per_minute = DEFAULT_SHARE_ACCESS_RATE_LIMIT_PER_MINUTE;
         m_share_access_rate_limit_window_seconds = DEFAULT_SHARE_ACCESS_RATE_LIMIT_WINDOW_SECONDS;
@@ -345,6 +346,16 @@ namespace disk::utils {
                 throw std::runtime_error(
                     "upload_staging_backend=s3 requires storage_backend=s3"
                 );
+            }
+
+            if (app_config.isMember("upload_task_creation_enabled")) {
+                if (!app_config["upload_task_creation_enabled"].isBool()) {
+                    throw std::runtime_error(
+                        "Invalid upload_task_creation_enabled: expected boolean"
+                    );
+                }
+                m_upload_task_creation_enabled =
+                    app_config["upload_task_creation_enabled"].asBool();
             }
 
             if (app_config.isMember("s3")) {
@@ -669,6 +680,10 @@ namespace disk::utils {
 
     auto ConfigMgr::GetUploadStagingBackend() const noexcept -> StorageBackend {
         return m_upload_staging_backend;
+    }
+
+    auto ConfigMgr::GetUploadTaskCreationEnabled() const noexcept -> bool {
+        return m_upload_task_creation_enabled;
     }
 
     auto ConfigMgr::GetS3StorageConfig() const noexcept -> S3StorageConfig {

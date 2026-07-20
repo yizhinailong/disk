@@ -203,6 +203,9 @@ namespace disk::utils {
         ApplyString("DISK_UPLOAD_STAGING_BACKEND", [&config](std::string value) {
             DiskConfig(config)["upload_staging_backend"] = std::move(value);
         });
+        ApplyBoolean("DISK_UPLOAD_TASK_CREATION_ENABLED", [&config](bool value) {
+            DiskConfig(config)["upload_task_creation_enabled"] = value;
+        });
 
         ApplyString("DISK_S3_BUCKET", [&config](std::string value) {
             DiskConfig(config)["s3"]["bucket"] = std::move(value);

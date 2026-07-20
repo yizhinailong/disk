@@ -68,6 +68,22 @@ TEST(Response, InternalErrorUsesStableEnvelope) {
     EXPECT_TRUE((*json)["data"].isNull()) << "Data should be null for error response";
 }
 
+TEST(Response, UploadTaskCreationDisabledUsesServiceUnavailableEnvelope) {
+    auto response = Response::Error(ErrorInfo(ErrorCode::UploadTaskCreationDisabled));
+
+    ASSERT_NE(response, nullptr);
+    EXPECT_EQ(response->getStatusCode(), drogon::k503ServiceUnavailable);
+
+    auto json = response->getJsonObject();
+    ASSERT_NE(json, nullptr);
+    EXPECT_EQ((*json)["code"].asInt(), 50012);
+    EXPECT_EQ(
+        (*json)["message"].asString(),
+        "New upload task creation is temporarily disabled"
+    );
+    EXPECT_TRUE((*json)["data"].isNull());
+}
+
 TEST(Response, CustomDomainErrorEnvelopePreservesMessageAndStatus) {
     const auto error = ErrorInfo(ErrorCode::ValidationFailed, "domain validation failed");
 

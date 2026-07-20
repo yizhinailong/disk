@@ -614,6 +614,11 @@ namespace disk::upload {
             }
         }
 
+        if (!command.upload_task_creation_enabled) {
+            Logger::Warn() << "New upload task creation is disabled: user_id=" << command.user_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskCreationDisabled));
+        }
+
         disk::quota::QuotaService quota_service(m_db_client);
         auto quota_result = co_await quota_service.ReserveUploadStorage(
             m_db_client,

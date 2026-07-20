@@ -26,7 +26,7 @@ namespace disk::storage {
     class IBlobStore;
     class IFileStorage;
     class UploadStagingStorage;
-}
+} // namespace disk::storage
 
 namespace disk::upload {
 
@@ -83,39 +83,40 @@ namespace disk::upload {
     }
 
     struct LifecycleFileItem {
-        uint64_t id{0};
+        uint64_t id{ 0 };
         std::string name;
-        uint64_t size{0};
+        uint64_t size{ 0 };
         std::string hash;
         std::string mime_type;
-        uint64_t parent_id{0};
+        uint64_t parent_id{ 0 };
         std::string created_at;
     };
 
     struct InitUploadCommand {
         std::string filename;
-        uint64_t file_size{0};
+        uint64_t file_size{ 0 };
         std::string file_hash;
-        uint64_t parent_id{0};
-        uint64_t user_id{0};
-        uint64_t max_file_size{0};
-        uint64_t chunk_size{0};
-        int64_t expiry_seconds{0};
+        uint64_t parent_id{ 0 };
+        uint64_t user_id{ 0 };
+        uint64_t max_file_size{ 0 };
+        uint64_t chunk_size{ 0 };
+        int64_t expiry_seconds{ 0 };
+        bool upload_task_creation_enabled{ true };
     };
 
     struct InitUploadOutcome {
         std::string upload_id;
-        uint32_t chunk_size{0};
-        uint32_t total_chunks{0};
+        uint32_t chunk_size{ 0 };
+        uint32_t total_chunks{ 0 };
         std::vector<uint32_t> uploaded_chunks;
-        bool instant_upload{false};
+        bool instant_upload{ false };
         std::optional<LifecycleFileItem> file;
         UploadCacheInvalidation invalidation;
     };
 
     struct CompleteUploadCommand {
         std::string upload_id;
-        uint64_t user_id{0};
+        uint64_t user_id{ 0 };
         std::string lease_owner;
         uint32_t lease_duration_seconds{ 0 };
     };

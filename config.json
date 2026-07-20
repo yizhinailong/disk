@@ -15,6 +15,7 @@
       "process_role": "all",
       "storage_backend": "local",
       "upload_staging_backend": "local",
+      "upload_task_creation_enabled": true,
       "storage_base_path": "build/uploaded",
       "temp_upload_path": "build/temp_uploads",
       "chunk_size": 5242880,

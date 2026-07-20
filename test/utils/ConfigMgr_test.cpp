@@ -464,6 +464,7 @@ namespace {
         EXPECT_EQ(config->GetWorkerLeaseDurationSeconds(), 120);
         EXPECT_EQ(config->GetWorkerDrainTimeoutSeconds(), 30);
         EXPECT_EQ(config->GetAuthCpuPoolThreads(), 4);
+        EXPECT_TRUE(config->GetUploadTaskCreationEnabled());
     }
 
     TEST_F(ConfigMgrDistributedTest, LoadsProcessRoleAndWorkerSettings) {
@@ -476,6 +477,7 @@ namespace {
         disk_config["worker_lease_duration_seconds"] = 300;
         disk_config["worker_drain_timeout_seconds"] = 45;
         disk_config["auth_cpu_pool_threads"] = 8;
+        disk_config["upload_task_creation_enabled"] = false;
 
         const auto* config = LoadDiskConfig(disk_config);
 
@@ -489,6 +491,7 @@ namespace {
         EXPECT_EQ(config->GetWorkerLeaseDurationSeconds(), 300);
         EXPECT_EQ(config->GetWorkerDrainTimeoutSeconds(), 45);
         EXPECT_EQ(config->GetAuthCpuPoolThreads(), 8);
+        EXPECT_FALSE(config->GetUploadTaskCreationEnabled());
     }
 
     TEST_F(ConfigMgrDistributedTest, EnvironmentProcessRoleOverridesJson) {
@@ -531,6 +534,7 @@ namespace {
         expect_invalid("worker_drain_timeout_seconds", 301);
         expect_invalid("worker_claim_batch_size", "20");
         expect_invalid("worker_claiming_enabled", "false");
+        expect_invalid("upload_task_creation_enabled", "false");
     }
 
     TEST_F(ConfigMgrDistributedTest, RejectsInvalidAuthCpuPoolThreadCounts) {
@@ -788,6 +792,7 @@ namespace {
             ConfigMgr::GetInstance()->GetUploadStagingBackend(),
             disk::utils::StorageBackend::Local
         );
+        EXPECT_TRUE(ConfigMgr::GetInstance()->GetUploadTaskCreationEnabled());
         const auto s3 = ConfigMgr::GetInstance()->GetS3StorageConfig();
         EXPECT_EQ(s3.max_connections, 16U);
         EXPECT_EQ(s3.io_threads, 4U);

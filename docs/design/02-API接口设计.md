@@ -113,6 +113,7 @@
 | 50009 | `ChunkVerifyFailed` | 400 | 分片校验失败 |
 | 50010 | `FolderAlreadyExists` | 409 | 同名文件夹已存在 |
 | 50011 | `FileReadError` | 500 | 文件读取失败 |
+| 50012 | `UploadTaskCreationDisabled` | 503 | 新上传任务创建已临时关闭 |
 
 #### 分享错误码
 
@@ -772,6 +773,8 @@ Authorization: Bearer <access_token>
 > - 如果 `storage_used + storage_reserved + file_size > storage_quota`，返回 `400 + 50004 StorageQuotaExceeded`
 > - 秒传（文件哈希已存在）不经过预占用流程，直接创建 `files` 记录
 > - 取消上传或超时后，预占用的空间通过 `storage_reserved` 释放
+>
+> **回滚截止语义**：当启动期配置 `upload_task_creation_enabled=false` 时，本接口仍先解析秒传和同用户同 hash 的断点续传。秒传继续创建文件引用，断点续传继续返回原 `upload_id` 与分片进度；只有需要创建新任务的请求返回 `503 + 50012 UploadTaskCreationDisabled`。拒绝发生在配额预留和任务 INSERT 之前，不会回退为 local staging，也不会改写既有任务的 backend/prefix。已有任务的分片、完成和取消接口不受该开关影响，但必须路由到理解其 schema 和 staging 描述符的兼容版本。
 
 #### 错误响应矩阵
 
@@ -784,6 +787,7 @@ Authorization: Bearer <access_token>
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
 | 404 | 50005 | `FileNotFound` | 文件不存在 | 指定的 file_id 不存在或不属于当前用户 |
 | 416 | 10002 | `ValidationFailed` | 请求范围无效 | Range 范围超出文件大小 |
+| 503 | 50012 | `UploadTaskCreationDisabled` | New upload task creation is temporarily disabled | 回滚截止已关闭，且本次初始化需要创建新的非秒传任务 |
 
 **40106 TokenMissing 响应示例**：
 

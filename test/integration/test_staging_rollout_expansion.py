@@ -10,7 +10,7 @@
 # ]
 # ///
 
-"""Exercise 10% -> 50% -> 100% S3 staging rollout expansion."""
+"""Exercise S3 staging expansion and the compatible rollback creation cutoff."""
 
 from __future__ import annotations
 
@@ -219,6 +219,25 @@ def stage_counts(database_name: str, tasks: list[RolloutTask]) -> dict[str, int]
     }
 
 
+def creation_snapshot(database_name: str, novel_hash: str) -> dict[str, int]:
+    with connect(database_name) as connection:
+        row = connection.execute(
+            "SELECT (SELECT COUNT(*) FROM upload_tasks) AS upload_task_count, "
+            "(SELECT COUNT(*) FROM upload_tasks WHERE file_hash = %s) AS novel_hash_tasks, "
+            "storage_used, storage_reserved, xmin::text::bigint AS user_xmin "
+            "FROM users WHERE username = 'admin'",
+            (novel_hash,),
+        ).fetchone()
+    require(row is not None, "upload creation snapshot returned no row")
+    return {
+        "upload_task_count": int(row["upload_task_count"]),
+        "novel_hash_tasks": int(row["novel_hash_tasks"]),
+        "storage_used": int(row["storage_used"]),
+        "storage_reserved": int(row["storage_reserved"]),
+        "user_xmin": int(row["user_xmin"]),
+    }
+
+
 def main() -> int:
     suffix = uuid.uuid4().hex[:12]
     database_name = f"disk_staging_expansion_{suffix}"
@@ -393,6 +412,128 @@ def main() -> int:
                 all_tasks = first_twenty + stage_100
                 require_unchanged(database_name, all_tasks, "100 percent stage")
 
+                api_expanded.stop()
+                api_expanded = None
+                api_canary.stop()
+                api_canary = None
+
+                api_canary = ManagedServer(
+                    name=f"rollback-cutoff-canary-api-{suffix}",
+                    binary=binary,
+                    run_directory=root / "rollback-cutoff-canary-api-run",
+                    config=process_config(
+                        database_name,
+                        canary_port,
+                        f"rollback-cutoff-canary-api-{suffix}",
+                        "api",
+                        root / "unused-cutoff-canary-final",
+                        canary_local,
+                        endpoint,
+                        bucket,
+                        object_prefix,
+                        staging_prefix,
+                        "s3",
+                        False,
+                    ),
+                    database_name=database_name,
+                    port=canary_port,
+                    readiness_path="/api/health/ready",
+                    role="api",
+                    environment_overrides=process_environment(
+                        endpoint,
+                        bucket,
+                        "s3",
+                        False,
+                    ),
+                )
+                api_expanded = ManagedServer(
+                    name=f"rollback-cutoff-expanded-api-{suffix}",
+                    binary=binary,
+                    run_directory=root / "rollback-cutoff-expanded-api-run",
+                    config=process_config(
+                        database_name,
+                        baseline_port,
+                        f"rollback-cutoff-expanded-api-{suffix}",
+                        "api",
+                        root / "unused-cutoff-expanded-final",
+                        baseline_local,
+                        endpoint,
+                        bucket,
+                        object_prefix,
+                        staging_prefix,
+                        "s3",
+                        False,
+                    ),
+                    database_name=database_name,
+                    port=baseline_port,
+                    readiness_path="/api/health/ready",
+                    role="api",
+                    environment_overrides=process_environment(
+                        endpoint,
+                        bucket,
+                        "s3",
+                        False,
+                    ),
+                )
+
+                novel_payload = os.urandom(UPLOAD_SIZE)
+                novel_hash = md5(novel_payload)
+                creation_before = creation_snapshot(database_name, novel_hash)
+                rejected = client.post(
+                    api_canary.base_url + "/api/file/upload/init",
+                    headers=headers,
+                    json={
+                        "filename": f"rollback_rejected_{suffix}.bin",
+                        "file_size": len(novel_payload),
+                        "file_hash": novel_hash,
+                        "parent_id": 0,
+                    },
+                )
+                try:
+                    rejected_body = rejected.json()
+                except ValueError as error:
+                    raise AssertionError(
+                        "rollback cutoff returned a non-JSON response"
+                    ) from error
+                require(rejected.status_code == 503, "rollback cutoff did not return HTTP 503")
+                require(rejected_body.get("code") == 50012, "rollback cutoff returned wrong code")
+                require(
+                    rejected_body.get("message")
+                    == "New upload task creation is temporarily disabled",
+                    "rollback cutoff returned an unstable message",
+                )
+                creation_after_rejection = creation_snapshot(database_name, novel_hash)
+                require(
+                    creation_after_rejection == creation_before,
+                    "rejected upload creation changed task or quota state",
+                )
+
+                resume = client.post(
+                    api_expanded.base_url + "/api/file/upload/init",
+                    headers=headers,
+                    json={
+                        "filename": f"rollback_resume_{suffix}.bin",
+                        "file_size": len(s3_guard.payload),
+                        "file_hash": md5(s3_guard.payload),
+                        "parent_id": 0,
+                    },
+                )
+                resume_data = success_data(resume, "resume S3 guard through rollback cutoff")
+                require(
+                    resume_data.get("upload_id") == s3_guard.upload_id,
+                    "rollback cutoff did not return the existing S3 upload",
+                )
+                require(
+                    resume_data.get("uploaded_chunks") == [0],
+                    "rollback cutoff lost persisted S3 chunk progress",
+                )
+                creation_after_resume = creation_snapshot(database_name, novel_hash)
+                require(
+                    creation_after_resume == creation_before,
+                    "resuming through rollback cutoff changed task or quota counts",
+                )
+                require_unchanged(database_name, all_tasks, "rollback cutoff restart and probes")
+
                 for chunk_index in range(1, UPLOAD_SIZE // CHUNK_SIZE):
                     send_chunk(
                         client,
@@ -417,6 +558,43 @@ def main() -> int:
                     headers,
                     s3_guard.upload_id,
                     "complete pre-expansion S3 guard",
+                )
+
+                instant_before = creation_snapshot(database_name, novel_hash)
+                instant = client.post(
+                    api_canary.base_url + "/api/file/upload/init",
+                    headers=headers,
+                    json={
+                        "filename": f"rollback_instant_{suffix}.bin",
+                        "file_size": len(s3_guard.payload),
+                        "file_hash": md5(s3_guard.payload),
+                        "parent_id": 0,
+                    },
+                )
+                instant_data = success_data(instant, "instant upload through rollback cutoff")
+                require(
+                    instant_data.get("instant_upload") is True,
+                    "rollback cutoff blocked the task-free instant upload path",
+                )
+                instant_file = instant_data.get("file")
+                require(isinstance(instant_file, dict), "instant upload omitted file data")
+                instant_file_id = instant_file.get("id")
+                require(isinstance(instant_file_id, int), "instant upload omitted file ID")
+                instant_after = creation_snapshot(database_name, novel_hash)
+                require(
+                    instant_after["upload_task_count"]
+                    == instant_before["upload_task_count"],
+                    "instant upload through rollback cutoff created an upload task",
+                )
+                require(
+                    instant_after["storage_reserved"]
+                    == instant_before["storage_reserved"],
+                    "instant upload through rollback cutoff changed reserved quota",
+                )
+                require(
+                    instant_after["storage_used"]
+                    == instant_before["storage_used"] + UPLOAD_SIZE,
+                    "instant upload through rollback cutoff did not consume logical quota",
                 )
 
                 guard_ids = {local_guard.upload_id, s3_guard.upload_id}
@@ -525,7 +703,7 @@ def main() -> int:
             )
             require(
                 quota is not None
-                and int(quota["storage_used"]) == 2 * UPLOAD_SIZE
+                and int(quota["storage_used"]) == 3 * UPLOAD_SIZE
                 and int(quota["storage_reserved"]) == 0,
                 "rollout quota reconciliation changed",
             )
@@ -559,8 +737,8 @@ def main() -> int:
             EVIDENCE_PATH.write_text(
                 json.dumps(
                     {
-                        "schema_version": 1,
-                        "scenario": "s3_staging_progressive_expansion",
+                        "schema_version": 2,
+                        "scenario": "s3_staging_expansion_and_rollback_cutoff",
                         "stages": [
                             {
                                 "target_s3_percent": int(percent),
@@ -570,8 +748,25 @@ def main() -> int:
                         ],
                         "descriptor_invariance": {
                             "sessions_checked": len(all_tasks),
-                            "checkpoints": 5,
+                            "checkpoints": 6,
                             "mutations": 0,
+                        },
+                        "rollback_cutoff": {
+                            "compatible_api_instances": 2,
+                            "upload_task_creation_enabled": False,
+                            "staging_backend": "s3",
+                            "novel_init_http_status": rejected.status_code,
+                            "novel_init_code": rejected_body["code"],
+                            "creation_before": creation_before,
+                            "creation_after_rejection": creation_after_rejection,
+                            "creation_after_resume": creation_after_resume,
+                            "resumed_upload_id": resume_data["upload_id"],
+                            "resumed_uploaded_chunks": resume_data["uploaded_chunks"],
+                            "instant_upload_file_id": instant_file_id,
+                            "instant_before": instant_before,
+                            "instant_after": instant_after,
+                            "old_release_routed": False,
+                            "descriptor_mutations": 0,
                         },
                         "guards": {
                             "local": {
@@ -614,8 +809,8 @@ def main() -> int:
             api_canary = None
 
         print(
-            "PASS: 10% -> 50% -> 100% S3 staging expansion preserved all "
-            "persisted descriptors and drained compatible local/S3 tasks"
+            "PASS: S3 staging expansion and rollback cutoff rejected new tasks "
+            "while compatible APIs drained persisted local/S3 tasks"
         )
         return 0
     except BaseException:

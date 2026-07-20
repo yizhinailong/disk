@@ -107,6 +107,7 @@ def process_config(
     object_prefix: str,
     staging_prefix: str,
     staging_backend: str,
+    upload_task_creation_enabled: bool = True,
 ) -> dict[str, Any]:
     config = server_config(
         database_name,
@@ -122,6 +123,7 @@ def process_config(
         {
             "storage_backend": "s3",
             "upload_staging_backend": staging_backend,
+            "upload_task_creation_enabled": upload_task_creation_enabled,
             "chunk_size": CHUNK_SIZE,
             "max_file_size": UPLOAD_SIZE * 2,
             "worker_poll_interval_ms": 100,
@@ -152,10 +154,14 @@ def process_environment(
     endpoint: str,
     bucket: str,
     staging_backend: str,
+    upload_task_creation_enabled: bool = True,
 ) -> dict[str, str]:
     return {
         "DISK_STORAGE_BACKEND": "s3",
         "DISK_UPLOAD_STAGING_BACKEND": staging_backend,
+        "DISK_UPLOAD_TASK_CREATION_ENABLED": (
+            "true" if upload_task_creation_enabled else "false"
+        ),
         "DISK_WORKER_CLAIMING_ENABLED": "true",
         "DISK_S3_ENDPOINT": endpoint,
         "DISK_S3_BUCKET": bucket,

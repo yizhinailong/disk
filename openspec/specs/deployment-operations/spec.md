@@ -323,6 +323,25 @@ After incompatible old application versions have exited and the Worker observati
 - **WHEN** a new task persists the wrong backend or prefix, an S3 task creates node-local staging data, required S3 operations fail, or an existing task descriptor changes
 - **THEN** the rollout SHALL stop and MAY restore local staging for subsequently created tasks, but SHALL keep a compatible release available to finish or explicitly cancel already-created S3 tasks
 
+### Requirement: Upload task creation rollback cutoff
+Before an application rollback removes S3 staging or new upload-state support, operators SHALL close the startup upload-task creation cutoff on every compatible API instance and verify that novel non-instant initialization is rejected without task or quota mutation. Closing the cutoff SHALL NOT rewrite a task descriptor, migrate staging state, stop existing lifecycle requests, or make an incompatible old binary safe. Upload lifecycle traffic for every persisted S3 task or new-schema state SHALL remain isolated to compatible handlers until the task is terminal or explicitly frozen under the documented recovery procedure.
+
+#### Scenario: The rollback cutoff is closed
+- **WHEN** all compatible API instances restart with `upload_task_creation_enabled=false`
+- **THEN** a novel non-instant initialization SHALL fail with HTTP 503 and code `50012`, while resumable initialization and the chunk, complete, and cancel operations for existing tasks SHALL remain available through compatible instances
+
+#### Scenario: A persisted S3 task exists during rollback
+- **WHEN** an upload task has `staging_backend=s3`, a persisted S3 prefix, `Finalizing`, or another state unknown to the old release
+- **THEN** load-balancer and Worker routing SHALL exclude the old release from that task's lifecycle and SHALL NOT rewrite the task to local staging or a legacy state
+
+#### Scenario: An old release ignores the new cutoff setting
+- **WHEN** an old binary that predates `upload_task_creation_enabled` is considered for rollback
+- **THEN** operators SHALL keep it outside upload initialization and lifecycle pools until the compatible task population has reached the documented terminal or frozen condition; presence of the environment variable SHALL NOT count as enforcement
+
+#### Scenario: The cutoff rollout is incomplete
+- **WHEN** any routed compatible API can still create a novel upload task, a rejected request changes `storage_reserved` or task count, or an existing task cannot resume through a compatible handler
+- **THEN** rollback SHALL stop before any compatible handler is removed
+
 ### Requirement: Contract migration observation gate
 The data-to-contract gate SHALL begin only after incompatible processes have exited, production APIs create only S3 staging sessions, and legacy local non-terminal tasks, incomplete local cleanup jobs, and inventoried original-volume artifacts have reached zero. The observation SHALL span the configured upload expiry TTL and a distinct successful hourly expiration scan after that TTL, then complete a fresh four-scope reconciliation. Passing evidence SHALL authorize only review of a later contract migration and SHALL NOT execute destructive DDL or remove compatibility code.
 

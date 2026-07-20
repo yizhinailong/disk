@@ -17,6 +17,21 @@ The system SHALL initialize file uploads by validating the target folder, filena
 - **WHEN** the upload metadata is invalid, target folder is inaccessible, or storage is insufficient
 - **THEN** the system SHALL reject initialization without creating an active upload task
 
+### Requirement: Upload Task Creation Cutoff
+The system SHALL provide a startup-controlled rollback cutoff for creating upload tasks. When the cutoff is closed, upload initialization SHALL still resolve resumable and instant-upload outcomes before deciding whether a new task is required, and SHALL reject only the new-task outcome before reserving storage or inserting task state.
+
+#### Scenario: A novel non-instant upload reaches a closed cutoff
+- **WHEN** an authenticated initialization request would require a new upload task while upload-task creation is disabled
+- **THEN** the system SHALL return HTTP 503 with `UploadTaskCreationDisabled` code `50012` and SHALL NOT reserve quota, create an upload task, or fall back to another staging backend
+
+#### Scenario: An existing upload is resumed while the cutoff is closed
+- **WHEN** initialization matches an existing resumable upload task while upload-task creation is disabled
+- **THEN** the system SHALL return that task and its persisted chunk progress without changing its staging backend or prefix
+
+#### Scenario: Existing content is uploaded instantly while the cutoff is closed
+- **WHEN** initialization can create a file through the existing instant-upload path without creating an upload task
+- **THEN** the system SHALL preserve the instant-upload behavior and logical quota accounting
+
 ### Requirement: Upload Storage Reservation
 The system SHALL reserve user storage during upload initialization and SHALL release or convert that reservation during upload cancellation, expiry, or completion.
 

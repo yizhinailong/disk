@@ -45,6 +45,21 @@ The system SHALL initialize file storage from configured storage paths and uploa
 - **WHEN** the backend starts successfully
 - **THEN** the system SHALL initialize the active file storage implementation using configured storage and temporary upload paths
 
+### Requirement: Upload Task Creation Configuration
+The system SHALL expose `upload_task_creation_enabled` as a strict startup boolean, defaulting to enabled, with `DISK_UPLOAD_TASK_CREATION_ENABLED` as its environment override. The effective value SHALL remain fixed for the process lifetime and SHALL control only whether upload initialization may persist a new task; it SHALL NOT select a staging backend or reinterpret existing task descriptors.
+
+#### Scenario: Upload task creation is disabled at startup
+- **WHEN** configuration or its environment override sets upload-task creation to false
+- **THEN** the process SHALL retain existing-task and instant-upload handling while rejecting initialization that requires a new task
+
+#### Scenario: Upload task creation setting is invalid
+- **WHEN** the JSON setting is not boolean or the environment override is not one of the accepted boolean spellings
+- **THEN** startup SHALL fail rather than silently enabling task creation
+
+#### Scenario: Operators change the creation setting
+- **WHEN** operators need to open or close the upload-task creation cutoff
+- **THEN** they SHALL restart or replace every compatible API instance and verify the effective rollout instead of treating the setting as a live runtime switch
+
 ### Requirement: Background Task Registration
 The system SHALL register cluster maintenance tasks only in a Worker-capable process whose startup configuration enables job claiming. Process-local maintenance MAY remain attached to the process that owns it.
 

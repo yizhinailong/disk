@@ -15,6 +15,7 @@
       "process_role": "api",
       "storage_backend": "s3",
       "upload_staging_backend": "s3",
+      "upload_task_creation_enabled": true,
       "storage_base_path": "/var/lib/disk/blobs",
       "temp_upload_path": "/var/lib/disk/temp",
       "chunk_size": 5242880,

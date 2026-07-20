@@ -699,7 +699,22 @@ manifest/checkpoint 归档之后准入；恢复集必须持续保留，最早回
 
 ### 14.5 回滚
 
-- [ ] feature flag 可以停止创建新 S3 staging 任务，但不能把已创建的新任务交给不理解新 schema 的旧版本。
+- [x] feature flag 可以停止创建新 S3 staging 任务，但不能把已创建的新任务交给不理解新 schema 的旧版本。
+
+2026-07-21 已在候选应用基线 `99388b7` 上完成新任务创建截止门禁：
+`upload_task_creation_enabled` / `DISK_UPLOAD_TASK_CREATION_ENABLED` 是启动期严格布尔开关；
+false 只在秒传和 resume 解析之后、配额预留与新任务插入之前返回 `503/50012`。
+门禁证明全新 init 拒绝前后任务数、新 hash 任务数、已用/预留配额与
+`users.xmin` 不变；已存 S3 任务返回原 `upload_id` 和分片 `[0]`，local/S3 哨兵
+均可完成，秒传仍可用，30/30 cleanup 收敛。6 个描述符检查点的变更数为 0。
+
+旧二进制不理解该开关，所以运维合同明确要求其不得进入 S3/`Finalizing` 的 init、
+chunk、complete、cancel 或 Worker 路由；仓库门禁只使用兼容当前版本，不伪造旧版本运行证据。
+完整 CTest 共 1386 项：1380 通过、6 项环境门控跳过、0 失败，总耗时 380.90 秒；
+OpenSpec 严格校验 24/24 通过。结构化证据为
+`.sisyphus/evidence/staging-rollout-expansion-summary.json`（SHA-256
+`3df62342dfa5af3e6305d1593ac6642231688cf9bcd80c21e4a4ecf62692ec0e`）。
+
 - [ ] 回滚应用前先停止新上传并处理/冻结新状态任务，避免旧版本误读 `Finalizing`。
 - [ ] expand schema 默认保留；数据库 contract 迁移不得作为紧急回滚步骤。
 - [ ] Worker 可停止认领，已持有任务依靠租约到期恢复。

@@ -238,6 +238,9 @@ namespace disk::utils {
         auto GetUploadStagingBackend() const noexcept -> StorageBackend;
 
         [[nodiscard]]
+        auto GetUploadTaskCreationEnabled() const noexcept -> bool;
+
+        [[nodiscard]]
         auto GetS3StorageConfig() const noexcept -> S3StorageConfig;
 
         /**
@@ -389,6 +392,7 @@ namespace disk::utils {
         uint32_t m_file_io_threads{ 0 };
         StorageBackend m_storage_backend{ StorageBackend::Local };
         StorageBackend m_upload_staging_backend{ StorageBackend::Local };
+        bool m_upload_task_creation_enabled{ true };
         S3StorageConfig m_s3_storage_config{};
 
         int64_t m_db_pool_size{ 0 };

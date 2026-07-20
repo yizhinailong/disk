@@ -65,6 +65,7 @@ namespace {
             "DISK_WORKER_CLAIMING_ENABLED",
             "DISK_STORAGE_BACKEND",
             "DISK_UPLOAD_STAGING_BACKEND",
+            "DISK_UPLOAD_TASK_CREATION_ENABLED",
             "DISK_S3_BUCKET",
             "DISK_S3_REGION",
             "DISK_S3_ENDPOINT",
@@ -114,6 +115,7 @@ namespace {
         EnvironmentScope::Set("DISK_WORKER_CLAIMING_ENABLED", "false");
         EnvironmentScope::Set("DISK_STORAGE_BACKEND", "s3");
         EnvironmentScope::Set("DISK_UPLOAD_STAGING_BACKEND", "s3");
+        EnvironmentScope::Set("DISK_UPLOAD_TASK_CREATION_ENABLED", "false");
         EnvironmentScope::Set("DISK_S3_BUCKET", "disk-test");
         EnvironmentScope::Set("DISK_S3_REGION", "us-west-2");
         EnvironmentScope::Set("DISK_S3_ENDPOINT", "https://minio:9000");
@@ -153,6 +155,7 @@ namespace {
         EXPECT_FALSE(disk["worker_claiming_enabled"].asBool());
         EXPECT_EQ(disk["storage_backend"].asString(), "s3");
         EXPECT_EQ(disk["upload_staging_backend"].asString(), "s3");
+        EXPECT_FALSE(disk["upload_task_creation_enabled"].asBool());
         EXPECT_EQ(disk["s3"]["bucket"].asString(), "disk-test");
         EXPECT_EQ(disk["s3"]["region"].asString(), "us-west-2");
         EXPECT_EQ(disk["s3"]["endpoint"].asString(), "https://minio:9000");
@@ -223,6 +226,13 @@ namespace {
         );
 
         EnvironmentScope::Set("DISK_WORKER_CLAIMING_ENABLED", "true");
+        EnvironmentScope::Set("DISK_UPLOAD_TASK_CREATION_ENABLED", "disabled");
+        EXPECT_THROW(
+            disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config),
+            std::runtime_error
+        );
+
+        EnvironmentScope::Set("DISK_UPLOAD_TASK_CREATION_ENABLED", "true");
         EnvironmentScope::Set("DATABASE_HOST", "");
         EXPECT_THROW(
             disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config),
