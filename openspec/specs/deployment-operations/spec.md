@@ -103,6 +103,17 @@ Distributed deployment artifacts SHALL provision distinct staging and final key 
 - **WHEN** the application identity accesses the sample bucket
 - **THEN** required list, object, copy-compatible, delete, and multipart operations under `objects/*` and `staging/*` SHALL succeed while access outside those namespaces and bucket administration SHALL be denied
 
+### Requirement: Transitional upload release
+The compatibility release immediately after the expand migration SHALL default newly created upload sessions to local staging while retaining support for both persisted local and S3 staging descriptors. Existing tasks SHALL always select storage from their persisted backend and prefix rather than the process's current default. The final distributed S3 configuration SHALL NOT be enabled during this compatibility step.
+
+#### Scenario: Compatibility release starts without a staging override
+- **WHEN** the compatibility release starts from the standard repository configuration
+- **THEN** new upload sessions SHALL persist the local backend and an immutable local session locator
+
+#### Scenario: Compatibility release handles an existing task
+- **WHEN** a request or Worker loads a legacy local task or a task with a persisted S3 descriptor
+- **THEN** it SHALL use that task's persisted compatible locator and SHALL NOT reinterpret it using the current process default
+
 ### Requirement: Upgrade and rollback operations
 Deployment documentation SHALL define upgrade preparation, backup, test-environment verification, build/deploy steps, database migration application, health validation, and rollback to a previous application/database state.
 
