@@ -39,6 +39,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATOR = REPO_ROOT / "scripts" / "migrate-final-blobs.py"
 EVIDENCE_PATH = REPO_ROOT / ".sisyphus/evidence/final-blob-manifest-summary.json"
 COPY_EVIDENCE_PATH = REPO_ROOT / ".sisyphus/evidence/final-blob-copy-summary.json"
+CUTOVER_EVIDENCE_PATH = REPO_ROOT / ".sisyphus/evidence/final-blob-cutover-summary.json"
 
 
 class TestFailure(RuntimeError):
@@ -69,6 +70,10 @@ class ObjectState:
     def request_count(self) -> int:
         with self.lock:
             return sum(self.requests.values())
+
+    def method_request_count(self, method: str) -> int:
+        with self.lock:
+            return self.requests[method]
 
     def reset_observations(self) -> None:
         with self.lock:
@@ -837,6 +842,26 @@ def main() -> int:
                 "copy dry-run leaves DB paths unchanged",
             )
 
+            requests_before_missing_checkpoint = server_state.request_count()
+            missing_checkpoint_cutover = run_command(
+                [*cutover_args, "--execute"], env, check=False
+            )
+            require(
+                missing_checkpoint_cutover.returncode != 0,
+                "cutover rejects a missing checkpoint",
+            )
+            missing_checkpoint_s3_requests = (
+                server_state.request_count() - requests_before_missing_checkpoint
+            )
+            require(
+                missing_checkpoint_s3_requests == 0,
+                "missing checkpoint is rejected before S3 verification",
+            )
+            require(
+                current_locators(database_name) == source_locators,
+                "missing checkpoint cutover leaves every DB path unchanged",
+            )
+
             first = records[0]
             throttle_checkpoint_path = temp_root / "throttled-copy.sqlite3"
             throttle_mib_per_second = 0.01
@@ -915,13 +940,35 @@ def main() -> int:
                 interrupted.returncode == -signal.SIGKILL,
                 "migration process is killed mid-object",
             )
+            partial_checkpoint_records = len(checkpoint_ids(checkpoint_path))
             require(
-                checkpoint_ids(checkpoint_path) == [101],
+                partial_checkpoint_records == 1
+                and checkpoint_ids(checkpoint_path) == [101],
                 "checkpoint commits only the first verified object",
             )
             require(
                 current_locators(database_name) == source_locators,
                 "interrupted copy never changes DB paths",
+            )
+
+            partial_cutover_gets_before = server_state.method_request_count("GET")
+            partial_checkpoint_cutover = run_command(
+                [*cutover_args, "--execute"], env, check=False
+            )
+            partial_cutover_target_gets = (
+                server_state.method_request_count("GET") - partial_cutover_gets_before
+            )
+            require(
+                partial_checkpoint_cutover.returncode != 0,
+                "cutover rejects a partial checkpoint",
+            )
+            require(
+                partial_cutover_target_gets == 1,
+                "cutover revalidates the recorded target then stops at the first missing record",
+            )
+            require(
+                current_locators(database_name) == source_locators,
+                "partial checkpoint cutover leaves every DB path unchanged",
             )
 
             server_state.block_on_put = None
@@ -1010,6 +1057,7 @@ def main() -> int:
                 "copy replay issues zero PUT requests",
             )
 
+            puts_before_cutover = server_state.total_puts
             second_key = target_keys[102]
             server_state.set(second_key, b"X" * int(second["size"]))
             corrupt_cutover = run_command(cutover_args, env, check=False)
@@ -1024,8 +1072,9 @@ def main() -> int:
             server_state.set(second_key, second["payload"])
 
             dry_cutover = run_command(cutover_args, env)
+            dry_cutover_summary = parse_summary(dry_cutover)
             require(
-                parse_summary(dry_cutover)["database_state_before"] == "source",
+                dry_cutover_summary["database_state_before"] == "source",
                 "cutover dry-run sees source state",
             )
             require(
@@ -1054,8 +1103,16 @@ def main() -> int:
                     (source_locators[103],),
                 )
 
+            atomic_cutover_gets_before = server_state.method_request_count("GET")
             applied = run_command([*cutover_args, "--execute"], env)
             applied_summary = parse_summary(applied)
+            atomic_cutover_target_gets = (
+                server_state.method_request_count("GET") - atomic_cutover_gets_before
+            )
+            require(
+                atomic_cutover_target_gets == len(records),
+                "cutover completely revalidates every target before switching paths",
+            )
             require(
                 applied_summary["rows_changed"] == 3,
                 "cutover atomically changes every locator",
@@ -1093,8 +1150,9 @@ def main() -> int:
                 "rollback dry-run changes no path",
             )
             rolled_back = run_command([*rollback_args, "--execute"], env)
+            rolled_back_summary = parse_summary(rolled_back)
             require(
-                parse_summary(rolled_back)["rows_changed"] == 3,
+                rolled_back_summary["rows_changed"] == 3,
                 "rollback restores all source locators",
             )
             require(
@@ -1103,8 +1161,9 @@ def main() -> int:
             )
 
             final_cutover = run_command([*cutover_args, "--execute"], env)
+            final_cutover_summary = parse_summary(final_cutover)
             require(
-                parse_summary(final_cutover)["rows_changed"] == 3,
+                final_cutover_summary["rows_changed"] == 3,
                 "cutover remains reusable after rollback",
             )
             require(
@@ -1224,6 +1283,59 @@ def main() -> int:
                     "copy evidence contains no locator or credential",
                 )
             COPY_EVIDENCE_PATH.write_text(copy_serialized, encoding="utf-8")
+
+            cutover_evidence = {
+                "schema_version": 1,
+                "scenario": "verified_atomic_final_blob_cutover",
+                "preconditions": {
+                    "manifest_objects": len(records),
+                    "missing_checkpoint_rejected": True,
+                    "missing_checkpoint_s3_requests": missing_checkpoint_s3_requests,
+                    "partial_checkpoint_records": partial_checkpoint_records,
+                    "partial_checkpoint_rejected": True,
+                    "partial_cutover_complete_target_gets": partial_cutover_target_gets,
+                    "stale_target_corruption_rejected": True,
+                    "rejected_cutovers_preserved_all_source_locators": True,
+                },
+                "verification": {
+                    "checkpoint_required_for_every_object": True,
+                    "target_size_md5_sha256_revalidated": True,
+                    "complete_target_gets_before_atomic_switch": atomic_cutover_target_gets,
+                    "cutover_put_requests": server_state.total_puts
+                    - puts_before_cutover,
+                },
+                "database": {
+                    "dry_run_state_before": dry_cutover_summary[
+                        "database_state_before"
+                    ],
+                    "dry_run_rows_changed": int(dry_cutover_summary["rows_changed"]),
+                    "drift_rejected_without_partial_update": True,
+                    "atomic_rows_changed": int(applied_summary["rows_changed"]),
+                    "all_locators_are_target_after_commit": True,
+                    "replay_rows_changed": int(repeated_summary["rows_changed"]),
+                    "rollback_rows_changed": int(rolled_back_summary["rows_changed"]),
+                    "final_cutover_rows_changed": int(
+                        final_cutover_summary["rows_changed"]
+                    ),
+                },
+                "acceptance": {"passed": True},
+            }
+            cutover_serialized = (
+                json.dumps(cutover_evidence, indent=2, sort_keys=True) + "\n"
+            )
+            for sensitive in (
+                endpoint,
+                database_name,
+                object_prefix,
+                str(temp_root),
+                "fixture-access-key",
+                "fixture-secret-key",
+            ):
+                require(
+                    sensitive not in cutover_serialized,
+                    "cutover evidence contains no locator or credential",
+                )
+            CUTOVER_EVIDENCE_PATH.write_text(cutover_serialized, encoding="utf-8")
     finally:
         server.shutdown()
         server.server_close()

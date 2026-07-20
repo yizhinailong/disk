@@ -655,7 +655,27 @@ backend，选择最长 120 分钟且不得延期的停写维护窗口。`deploy/
 `125da5f9d380fd564364c5a26b21a24947c22fd6c8626b43a6179396012a8458`。该证据不是生产变更批准；目标环境仍须在变更单中
 填写实际 UTC 起止时间和三类值班人，在窗口前重跑门禁并保存自身审批/执行证据。
 
-- [ ] 所有对象复制并验证后再切换数据库读取位置。
+- [x] 所有对象复制并验证后再切换数据库读取位置。
+
+2026-07-21 已在候选应用基线 `8f6fc8d` 上完成 final Blob 全量验证后原子 cutover 仓库门禁。
+cutover 以只读方式打开与 manifest SHA-256、bucket 和 object prefix 精确绑定的 checkpoint，先要求
+每个 manifest 对象存在完整验证记录，再逐个完整 GET 目标并重算大小、MD5 与 SHA-256；只有全部通过才进入
+PostgreSQL `SERIALIZABLE` + advisory lock + `ACCESS EXCLUSIVE NOWAIT` 事务。事务以 manifest 临时表对比
+`file_contents` 完整集合，只接受全部 source 或全部 target 状态；前者一次更新全部路径，后者幂等更新 0 行，
+新增、删除、元数据漂移或混合路径均整体拒绝。cutover 本身 PUT 为 0，不在切库阶段补传或修复对象。
+
+`FinalBlobMigrationIntegration` 以三对象证明：无 checkpoint 时切换在 S3 请求前拒绝；进程于第二对象 PUT
+期间被 `SIGKILL` 后 checkpoint 仅有 1/3，cutover 只重验已记录的一个目标就在缺失记录处停止；
+全量复制后将目标替换为同大小错误字节仍被双哈希拒绝。三类失败均保持全部 source locator 不变。
+成功执行在切换前完整 GET 3/3 且 PUT 0，单事务更新 3 行后数据库全部指向规范 S3 key；重放更新 0 行。
+
+聚焦 CTest 1/1 通过（10.33 秒）；完整 CTest 共 1385 项：1379 通过、6 项常规环境门控跳过、0 失败，
+总耗时 378.53 秒；OpenSpec 严格校验 24/24 通过。去敏证据为
+`.sisyphus/evidence/final-blob-cutover-summary.json`，SHA-256 为
+`de3e61792ca549605df50a34aaeed714769a50677d1075568489337377041d81`。原 manifest/copy 证据哈希保持不变。
+该 fixture 证明工具安全属性，不代表现网已完成复制或切换；目标环境必须在停写窗口使用自身 manifest/checkpoint
+先运行 cutover dry-run，保存全量目标重验与 DB 快照证据，再经双人审批执行一次原子切换。
+
 - [ ] 完成全量对账和备份后，才安排旧本地 Blob 回收。
 
 ### 14.5 回滚

@@ -105,6 +105,25 @@ The final Blob copy command SHALL default to a non-writing dry run and SHALL ver
 - **WHEN** a source or existing target differs in size, MD5, or SHA-256 from its manifest record
 - **THEN** the object SHALL fail independently before a conflicting target is overwritten or a verification checkpoint is committed
 
+### Requirement: Verified and atomic final Blob database cutover
+The final Blob cutover command SHALL open the checkpoint read-only, require one exact bound verification record for every manifest object, and completely re-read every target to verify size, MD5, and SHA-256 before it may enter the database path-switch transaction. The transaction SHALL lock `file_contents` with `ACCESS EXCLUSIVE NOWAIT`, classify the complete database set against the manifest, and change every source locator to its canonical target key atomically. Cutover SHALL NOT upload or repair an object.
+
+#### Scenario: The checkpoint is absent or incomplete
+- **WHEN** cutover is requested before copy has committed a verification record for every manifest object
+- **THEN** cutover SHALL fail before changing any database locator even if some target objects already exist
+
+#### Scenario: A verified target changes before cutover
+- **WHEN** an object recorded in the checkpoint is missing or no longer matches its manifest size, MD5, or SHA-256 during cutover revalidation
+- **THEN** cutover SHALL fail without trusting the stale checkpoint and every database locator SHALL remain unchanged
+
+#### Scenario: The database snapshot drifts
+- **WHEN** the locked `file_contents` set has an added, removed, metadata-changed, or mixed source/target row relative to the manifest
+- **THEN** the path-switch transaction SHALL fail without changing any preceding matching row
+
+#### Scenario: Every object and database row passes
+- **WHEN** all checkpoint records and complete target reads pass and the locked database set is wholly at the manifest source state
+- **THEN** one transaction SHALL change exactly every manifest locator to its canonical target key, while a replay against the wholly target state SHALL change zero rows
+
 ### Requirement: Bounded final Blob maintenance-window strategy
 Because the current schema has no per-content final-storage backend, local-to-S3 final Blob migration SHALL use a stopped-writer maintenance window with a hard maximum duration and no extension. The reviewed policy SHALL require named migration, database, and rollback owners; an ordered freeze, backup, manifest, copy, atomic cutover, probe, reconciliation, and traffic-open sequence; and explicit stop conditions. It SHALL forbid online partial database cutover, online dual write, and unbounded dual read.
 
