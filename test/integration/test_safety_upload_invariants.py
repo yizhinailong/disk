@@ -17,10 +17,15 @@ import atexit
 import json
 import os
 import shutil
+import socket
+import subprocess
 import sys
+import tempfile
 import threading
 import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -55,6 +60,7 @@ from lib_py import (  # noqa: E402
     md5_bytes,
     print_summary,
     query_one,
+    redis_delete_pattern,
     save_evidence,
     scalar,
     sha256_bytes,
@@ -71,6 +77,91 @@ EVIDENCE_PREFIX = "safety-upload"
 
 TOKEN = ""
 USER_ID = 0
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+@contextmanager
+def peer_api_instance() -> Iterator[tuple[str, str]]:
+    """Run a second API process that shares the primary instance's dependencies."""
+    server_bin = Path(
+        os.environ.get("SERVER_BIN", REPO_ROOT / "build/linux-debug-clang/src/disk")
+    ).resolve()
+    if not server_bin.is_file() or not os.access(server_bin, os.X_OK):
+        raise RuntimeError(f"peer API binary is unavailable: {server_bin}")
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        peer_port = int(probe.getsockname()[1])
+
+    instance_id = f"safety-upload-peer-{os.getpid()}"
+    peer_url = f"http://127.0.0.1:{peer_port}"
+    peer_log_path = EVIDENCE_ROOT / "safety-upload-peer.log"
+    EVIDENCE_ROOT.mkdir(parents=True, exist_ok=True)
+    source_config_path = Path(os.environ.get("DISK_CONFIG_FILE", REPO_ROOT / "config.json"))
+    if not source_config_path.is_absolute():
+        source_config_path = REPO_ROOT / source_config_path
+
+    with tempfile.TemporaryDirectory(prefix="disk-upload-peer-") as temp_dir_raw:
+        temp_dir = Path(temp_dir_raw)
+        config = json.loads(source_config_path.read_text(encoding="utf-8"))
+        config["listeners"] = [{"address": "127.0.0.1", "port": peer_port}]
+        disk_config = config["custom_config"]["disk"]
+        disk_config["process_role"] = "api"
+        disk_config["instance_id"] = instance_id
+        config_path = temp_dir / "config.json"
+        config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+
+        peer_env = os.environ.copy()
+        peer_env.update(
+            {
+                "JWT_SECRET": peer_env.get(
+                    "JWT_SECRET",
+                    "dev-only-jwt-secret-key-change-in-production-2024",
+                ),
+                "DISK_CONFIG_FILE": str(config_path),
+                "DISK_LISTEN_ADDRESS": "127.0.0.1",
+                "DISK_LISTEN_PORT": str(peer_port),
+                "DISK_PROCESS_ROLE": "api",
+                "DISK_INSTANCE_ID": instance_id,
+            }
+        )
+
+        with peer_log_path.open("wb") as log_handle:
+            process = subprocess.Popen(
+                [str(server_bin)],
+                cwd=REPO_ROOT,
+                env=peer_env,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+            )
+            try:
+                deadline = time.monotonic() + 30
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        raise RuntimeError(
+                            f"peer API exited with code {process.returncode}; see {peer_log_path}"
+                        )
+                    try:
+                        ready = fetch(f"{peer_url}/api/health/ready", timeout=2)
+                        if (
+                            ready.status_code == 200
+                            and json_field(ready.text, "code") == "0"
+                            and json_field(ready.text, "data.instance_id") == instance_id
+                        ):
+                            yield peer_url, instance_id
+                            return
+                    except Exception:  # noqa: BLE001 - readiness is expected to fail during startup
+                        pass
+                    time.sleep(0.1)
+                raise RuntimeError(f"peer API did not become ready; see {peer_log_path}")
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=5)
 
 
 def auth_headers(token: str, content_type: str = "application/json") -> dict[str, str]:
@@ -326,6 +417,230 @@ def test_successful_chunked_upload_invariants() -> None:
         local_blob_path(str(content_row["storage_path"])).exists(),
         True,
     )
+
+
+def test_hundred_concurrent_complete_invariants() -> None:
+    """Verify 100 complete calls across two processes settle all effects once."""
+    log_section("100 Concurrent Complete Requests Across API Instances")
+
+    try:
+        with peer_api_instance() as (peer_url, peer_instance_id):
+            redis_delete_pattern(f"rate:upload:{USER_ID}:*")
+            primary_ready = fetch(f"{BASE_URL}/api/health/ready")
+            primary_instance_id = json_field(primary_ready.text, "data.instance_id")
+            if primary_ready.status_code != 200 or not primary_instance_id:
+                log_fail("primary API readiness exposes an instance ID")
+                print_summary()
+            log_pass("primary API readiness exposes an instance ID")
+            assert_equal(
+                "concurrent complete uses two distinct API instances",
+                primary_instance_id != peer_instance_id,
+                True,
+            )
+
+            payload = f"safety-hundred-complete-{unique_name()}".encode()
+            filename = f"safety_hundred_complete_{unique_name()}.bin"
+            quota_before = user_quota()
+            upload_id, file_hash = init_upload(filename, payload)
+            upload_single_chunk(upload_id, payload)
+            quota_after_init = user_quota()
+            assert_numeric_delta(
+                "100 complete fixture reserves storage once",
+                quota_before["storage_reserved"],
+                quota_after_init["storage_reserved"],
+                len(payload),
+            )
+
+            request_count = 100
+            barrier = threading.Barrier(request_count)
+
+            def invoke_complete(index: int):
+                target_url = BASE_URL if index % 2 == 0 else peer_url
+                expected_instance = primary_instance_id if index % 2 == 0 else peer_instance_id
+                barrier.wait(timeout=30)
+                response = fetch(
+                    f"{target_url}/api/file/upload/complete",
+                    method="POST",
+                    headers={
+                        **auth_headers(TOKEN),
+                        "X-Request-Id": f"hundred-complete-{os.getpid()}-{index}",
+                    },
+                    json_body={"upload_id": upload_id},
+                    timeout=180,
+                )
+                return index, target_url, expected_instance, response
+
+            with ThreadPoolExecutor(max_workers=request_count) as executor:
+                results = list(executor.map(invoke_complete, range(request_count)))
+
+            instance_mismatches: list[int] = []
+            unexpected_results: list[dict[str, object]] = []
+            completed_ids: list[int] = []
+            conflicts: list[tuple[int, str]] = []
+            for index, target_url, expected_instance, response in results:
+                response_instance = header_value(response.headers, "X-Disk-Instance-Id")
+                if response_instance != expected_instance:
+                    instance_mismatches.append(index)
+
+                code = json_field(response.text, "code")
+                response_file_id = json_field(response.text, "data.file.id")
+                if response.status_code == 200 and code == "0" and response_file_id:
+                    completed_ids.append(int(response_file_id))
+                elif response.status_code == 409 and code == "10004":
+                    conflicts.append((index, target_url))
+                else:
+                    unexpected_results.append(
+                        {
+                            "index": index,
+                            "http_status": response.status_code,
+                            "code": code,
+                        }
+                    )
+
+            if instance_mismatches:
+                log_fail(
+                    f"100 complete requests stayed on their selected instances: {instance_mismatches}"
+                )
+                print_summary()
+            log_pass("100 complete requests stayed on their selected instances")
+
+            if unexpected_results:
+                log_fail(f"100 complete initial responses follow the retry contract: {unexpected_results}")
+                print_summary()
+            log_pass("100 complete initial responses are success or documented conflict")
+
+            if not completed_ids:
+                log_fail("100 concurrent complete requests produce a winner")
+                print_summary()
+            log_pass("100 concurrent complete requests produce a winner")
+
+            replay_failures: list[dict[str, object]] = []
+            for index, target_url in conflicts:
+                replay = fetch(
+                    f"{target_url}/api/file/upload/complete",
+                    method="POST",
+                    headers=auth_headers(TOKEN),
+                    json_body={"upload_id": upload_id},
+                    timeout=30,
+                )
+                replay_id = json_field(replay.text, "data.file.id")
+                if replay.status_code == 200 and json_field(replay.text, "code") == "0" and replay_id:
+                    completed_ids.append(int(replay_id))
+                else:
+                    replay_failures.append(
+                        {
+                            "index": index,
+                            "http_status": replay.status_code,
+                            "code": json_field(replay.text, "code"),
+                        }
+                    )
+
+            if replay_failures:
+                log_fail(f"conflicting complete requests converge on replay: {replay_failures}")
+                print_summary()
+            log_pass("conflicting complete requests converge on replay")
+            assert_equal("all 100 complete calls return a file after replay", len(completed_ids), request_count)
+            assert_equal("all 100 complete calls return one file ID", len(set(completed_ids)), 1)
+            completed_file_id = completed_ids[0]
+
+            task = query_one(
+                "SELECT status, completed_file_id FROM upload_tasks "
+                "WHERE id = %s AND user_id = %s",
+                (upload_id, USER_ID),
+            )
+            if task is None:
+                log_fail("100 complete fixture preserves its upload task")
+                print_summary()
+            assert_equal("100 complete fixture reaches Completed", int(task["status"]), 1)
+            assert_equal(
+                "100 complete fixture records the converged file ID",
+                int(task["completed_file_id"]),
+                completed_file_id,
+            )
+
+            file_count = int(
+                scalar(
+                    "SELECT COUNT(*) FROM files WHERE user_id = %s AND name = %s",
+                    (USER_ID, filename),
+                )
+                or 0
+            )
+            assert_equal("100 complete calls create one file row", file_count, 1)
+            file_row = query_one(
+                "SELECT file.id, content.ref_count FROM files AS file "
+                "JOIN file_contents AS content ON content.id = file.content_id "
+                "WHERE file.id = %s AND file.user_id = %s",
+                (completed_file_id, USER_ID),
+            )
+            if file_row is None:
+                log_fail("100 complete calls create the converged file/content row")
+                print_summary()
+            assert_equal(
+                "100 complete calls return the persisted file",
+                int(file_row["id"]),
+                completed_file_id,
+            )
+            content_count = int(
+                scalar(
+                    "SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s AND hash_sha256 = %s",
+                    (file_hash, sha256_bytes(payload)),
+                )
+                or 0
+            )
+            assert_equal("100 complete calls create one content row", content_count, 1)
+            assert_equal("100 complete calls increment ref_count once", int(file_row["ref_count"]), 1)
+
+            quota_after_complete = user_quota()
+            assert_equal(
+                "100 complete calls release reserved storage once",
+                quota_after_complete["storage_reserved"],
+                quota_before["storage_reserved"],
+            )
+            assert_numeric_delta(
+                "100 complete calls increase used storage once",
+                quota_before["storage_used"],
+                quota_after_complete["storage_used"],
+                len(payload),
+            )
+            assert_chunk_row_count(upload_id, 0)
+            cleanup_job_count = int(
+                scalar(
+                    "SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s",
+                    (f"staging-cleanup:{upload_id}",),
+                )
+                or 0
+            )
+            assert_equal("100 complete calls create one cleanup job", cleanup_job_count, 1)
+            assert_storage_job_succeeded(
+                "100 complete cleanup converges",
+                f"staging-cleanup:{upload_id}",
+            )
+            assert_path_exists(
+                "100 complete calls preserve one final blob",
+                final_blob_path(sha256_bytes(payload)),
+            )
+            save_evidence(
+                f"{EVIDENCE_PREFIX}-{upload_id}-hundred-complete.json",
+                json.dumps(
+                    {
+                        "upload_id": upload_id,
+                        "primary_instance_id": primary_instance_id,
+                        "peer_instance_id": peer_instance_id,
+                        "request_count": request_count,
+                        "initial_success_count": request_count - len(conflicts),
+                        "initial_conflict_count": len(conflicts),
+                        "completed_file_id": completed_file_id,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+            )
+    except Exception as error:
+        log_fail(f"100 complete dual-process fixture failed: {error}")
+        print_summary()
+    finally:
+        redis_delete_pattern(f"rate:upload:{USER_ID}:*")
 
 
 def assert_failed_finalize_recoverable(upload_id: str, filename: str, file_hash: str, quota_before_complete: dict[str, int]) -> None:
@@ -1110,6 +1425,7 @@ def main() -> None:
     log_info(f"Using user_id={USER_ID}, chunk_size={configured_chunk_size()}, base_url={BASE_URL}")
 
     test_successful_chunked_upload_invariants()
+    test_hundred_concurrent_complete_invariants()
     test_db_failure_after_blob_promotion_retains_created_blob()
     test_db_failure_after_promotion_preserves_preexisting_blob()
     test_missing_staging_object_records_reconciliation()
