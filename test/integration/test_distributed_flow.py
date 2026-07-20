@@ -343,6 +343,8 @@ def main(
             "instance_id",
             "initialized",
             "draining",
+            "worker_claiming_enabled",
+            "worker_accepting",
             "version",
             "uptime",
             "total_check_ms",
@@ -360,6 +362,11 @@ def main(
             require(
                 set(health_data) == expected_health_fields,
                 f"{label} {probe_name} exposed an unexpected health field",
+            )
+            require(
+                health_data["worker_claiming_enabled"] is False
+                and health_data["worker_accepting"] is False,
+                f"{label} {probe_name} reported API Worker activity",
             )
         require(
             set(live_data["components"]) == {"runtime"},

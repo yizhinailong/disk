@@ -313,6 +313,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME StagingCanaryIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_staging_canary.py"
+)
+set_tests_properties(
+    StagingCanaryIntegration
+    PROPERTIES
+    LABELS "backend-integration;distributed;s3;rolling-upgrade;observability"
+    RUN_SERIAL TRUE
+    TIMEOUT 180
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME LocalStagingMigrationIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_local_staging_migration.py"
 )

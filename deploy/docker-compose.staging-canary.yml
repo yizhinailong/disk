@@ -1,0 +1,7 @@
+services:
+  api-a:
+    environment:
+      DISK_UPLOAD_STAGING_BACKEND: s3
+  api-b:
+    environment:
+      DISK_UPLOAD_STAGING_BACKEND: local

@@ -41,6 +41,24 @@ def main() -> int:
     }
     require(set(services) == expected_services, "distributed Compose service set drifted")
 
+    canary_override = yaml.safe_load(
+        (root / "deploy/docker-compose.staging-canary.yml").read_text(encoding="utf-8")
+    )
+    require(
+        canary_override
+        == {
+            "services": {
+                "api-a": {
+                    "environment": {"DISK_UPLOAD_STAGING_BACKEND": "s3"}
+                },
+                "api-b": {
+                    "environment": {"DISK_UPLOAD_STAGING_BACKEND": "local"}
+                },
+            }
+        },
+        "staging canary override must change only the two API defaults",
+    )
+
     app_names = ("api-a", "api-b", "worker-a", "worker-b")
     images = {services[name]["image"] for name in app_names}
     require(images == {"disk-distributed:local"}, "application replicas must use one image")

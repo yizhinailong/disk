@@ -140,6 +140,14 @@ After incompatible old application versions have exited and the Worker observati
 - **WHEN** the staging setting is changed and API processes are restarted or redeployed
 - **THEN** only sessions created after that process startup SHALL use the new default, while every existing local or S3 session SHALL retain its persisted backend and prefix
 
+#### Scenario: A small S3 staging cohort is enabled
+- **WHEN** a controlled deployment routes selected upload initialization requests to an S3-default API while baseline APIs still default to local staging
+- **THEN** only the selected new sessions SHALL persist S3 staging, subsequent requests MAY use any compatible API and SHALL follow the persisted descriptor, and the cohort route SHALL NOT trust a client-controlled opt-in header
+
+#### Scenario: The S3 staging cohort is observed
+- **WHEN** the canary cohort handles uploads
+- **THEN** operators SHALL compare completion success and latency, S3 dependency outcomes, expired leases and takeovers, dead-letter jobs, metric snapshot health, and unresolved reconciliation findings against the baseline before increasing the cohort
+
 #### Scenario: S3 staging activation fails its gate
 - **WHEN** a new task persists the wrong backend or prefix, an S3 task creates node-local staging data, required S3 operations fail, or an existing task descriptor changes
 - **THEN** the rollout SHALL stop and MAY restore local staging for subsequently created tasks, but SHALL keep a compatible release available to finish or explicitly cancel already-created S3 tasks

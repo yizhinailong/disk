@@ -522,6 +522,7 @@ class ManagedServer:
         port: int,
         readiness_path: str,
         role: str = "api",
+        environment_overrides: dict[str, str] | None = None,
     ) -> None:
         self.name = name
         self.base_url = f"http://127.0.0.1:{port}"
@@ -538,16 +539,19 @@ class ManagedServer:
         )
         self.log_handle = self.log_path.open("wb")
         try:
+            environment = server_environment(
+                self.config_path,
+                database_name,
+                port,
+                name,
+                role=role,
+            )
+            if environment_overrides is not None:
+                environment.update(environment_overrides)
             self.process = subprocess.Popen(
                 [str(binary)],
                 cwd=run_directory,
-                env=server_environment(
-                    self.config_path,
-                    database_name,
-                    port,
-                    name,
-                    role=role,
-                ),
+                env=environment,
                 stdout=self.log_handle,
                 stderr=subprocess.STDOUT,
             )
