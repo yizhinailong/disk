@@ -87,8 +87,20 @@ def peer_api_instance(
     purpose: str = "peer",
     upload_finalize_lease_seconds: int | None = None,
     pause_after_claim_upload_id: str | None = None,
+    pause_after_assembly_upload_id: str | None = None,
 ) -> Iterator[tuple[str, str, subprocess.Popen[bytes]]]:
     """Run a second API process that shares the primary instance's dependencies."""
+    pause_targets = [
+        upload_id
+        for upload_id in (
+            pause_after_claim_upload_id,
+            pause_after_assembly_upload_id,
+        )
+        if upload_id is not None
+    ]
+    if len(pause_targets) > 1:
+        raise ValueError("peer API accepts only one upload fault pause stage")
+
     server_bin = Path(
         os.environ.get("SERVER_BIN", REPO_ROOT / "build/linux-debug-clang/src/disk")
     ).resolve()
@@ -122,6 +134,7 @@ def peer_api_instance(
         peer_env = os.environ.copy()
         peer_env.pop("DISK_TEST_FAULT_INJECTION", None)
         peer_env.pop("DISK_TEST_PAUSE_AFTER_FINALIZE_CLAIM_UPLOAD_ID", None)
+        peer_env.pop("DISK_TEST_PAUSE_AFTER_ASSEMBLY_UPLOAD_ID", None)
         peer_env.update(
             {
                 "JWT_SECRET": peer_env.get(
@@ -141,6 +154,15 @@ def peer_api_instance(
                     "DISK_TEST_FAULT_INJECTION": "1",
                     "DISK_TEST_PAUSE_AFTER_FINALIZE_CLAIM_UPLOAD_ID": str(
                         uuid.UUID(pause_after_claim_upload_id)
+                    ),
+                }
+            )
+        if pause_after_assembly_upload_id is not None:
+            peer_env.update(
+                {
+                    "DISK_TEST_FAULT_INJECTION": "1",
+                    "DISK_TEST_PAUSE_AFTER_ASSEMBLY_UPLOAD_ID": str(
+                        uuid.UUID(pause_after_assembly_upload_id)
                     ),
                 }
             )
@@ -1295,6 +1317,420 @@ def test_finalize_claim_process_death_takeover_invariants() -> None:
     redis_delete_pattern(f"rate:upload:{USER_ID}:*")
 
 
+def test_assembled_object_process_death_takeover_invariants() -> None:
+    """Kill an API after assembly and verify a new owner safely rebuilds it."""
+    log_section("Assembled Object Process Death And Lease Takeover")
+    redis_delete_pattern(f"rate:upload:{USER_ID}:*")
+
+    payload = f"safety-assembled-death-{unique_name()}".encode()
+    filename = f"safety_assembled_death_{unique_name()}.bin"
+    payload_md5 = md5_bytes(payload)
+    payload_sha256 = sha256_bytes(payload)
+    quota_before = user_quota()
+
+    upload_id, file_hash = init_upload(filename, payload)
+    assembled_path = upload_temp_dir(upload_id).parent / f"{upload_id}.tmp"
+    blob_path = final_blob_path(payload_sha256)
+    assert_equal("assembly-death fixture MD5 matches init contract", file_hash, payload_md5)
+    assert_path_absent("assembly-death fixture starts without an assembled object", assembled_path)
+    assert_path_absent("assembly-death fixture starts without a final blob", blob_path)
+
+    upload_single_chunk(upload_id, payload)
+    assert_chunk_row_count(upload_id, 1)
+    quota_after_init = user_quota()
+    assert_numeric_delta(
+        "assembly-death fixture reserves storage once",
+        quota_before["storage_reserved"],
+        quota_after_init["storage_reserved"],
+        len(payload),
+    )
+
+    primary_ready = fetch(f"{BASE_URL}/api/health/ready")
+    primary_instance_id = json_field(primary_ready.text, "data.instance_id")
+    if primary_ready.status_code != 200 or not primary_instance_id:
+        log_fail("assembly-death fixture resolves the primary API instance")
+        print_summary()
+    log_pass("assembly-death fixture resolves the primary API instance")
+
+    killed_pid = 0
+    killed_instance_id = ""
+    killed_state_version = 0
+    killed_lease_expires_at = None
+    assembled_inode = 0
+    assembled_mtime_ns = 0
+    dropped_request_error = ""
+    crash_log_path = EVIDENCE_ROOT / "safety-upload-assembly-crash.log"
+
+    try:
+        with peer_api_instance(
+            purpose="assembly-crash",
+            upload_finalize_lease_seconds=30,
+            pause_after_assembly_upload_id=upload_id,
+        ) as (crash_url, crash_instance_id, crash_process):
+            assert_equal(
+                "assembly-death fixture uses two distinct API instances",
+                crash_instance_id != primary_instance_id,
+                True,
+            )
+            killed_pid = crash_process.pid
+            killed_instance_id = crash_instance_id
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                complete_future = executor.submit(
+                    fetch,
+                    f"{crash_url}/api/file/upload/complete",
+                    method="POST",
+                    headers={
+                        **auth_headers(TOKEN),
+                        "X-Request-Id": f"assembly-death-{upload_id}",
+                    },
+                    json_body={"upload_id": upload_id},
+                    timeout=120,
+                )
+
+                paused_task = None
+                pause_marker = (
+                    "Test fault injection paused upload after assembly: "
+                    f"upload_id={upload_id}"
+                )
+                pause_deadline = time.monotonic() + 10
+                while time.monotonic() < pause_deadline:
+                    candidate = query_one(
+                        "SELECT status, lease_owner, lease_expires_at, state_version, "
+                        "finalize_attempts, lease_expires_at > NOW() AS lease_live "
+                        "FROM upload_tasks WHERE id = %s AND user_id = %s",
+                        (upload_id, USER_ID),
+                    )
+                    log_text = (
+                        crash_log_path.read_text(encoding="utf-8", errors="replace")
+                        if crash_log_path.is_file()
+                        else ""
+                    )
+                    if (
+                        pause_marker in log_text
+                        and candidate is not None
+                        and int(candidate["status"]) == 4
+                        and candidate["lease_owner"] == crash_instance_id
+                        and bool(candidate["lease_live"])
+                        and assembled_path.is_file()
+                        and assembled_path.stat().st_size == len(payload)
+                    ):
+                        paused_task = candidate
+                        break
+                    time.sleep(0.05)
+
+                if paused_task is None:
+                    log_fail("crash API pauses after a complete assembled object is durable")
+                    print_summary()
+                log_pass("crash API pauses after a complete assembled object is durable")
+                killed_state_version = int(paused_task["state_version"])
+                killed_lease_expires_at = paused_task["lease_expires_at"]
+                assembled_stat = assembled_path.stat()
+                assembled_inode = assembled_stat.st_ino
+                assembled_mtime_ns = assembled_stat.st_mtime_ns
+                assert_equal(
+                    "assembly pause retains one finalize attempt",
+                    int(paused_task["finalize_attempts"]),
+                    1,
+                )
+                assert_equal("assembled object contains the complete payload", assembled_path.read_bytes(), payload)
+
+                quota_after_assembly = user_quota()
+                assert_equal(
+                    "assembly pause preserves reserved storage",
+                    quota_after_assembly["storage_reserved"],
+                    quota_after_init["storage_reserved"],
+                )
+                assert_equal(
+                    "assembly pause preserves used storage",
+                    quota_after_assembly["storage_used"],
+                    quota_after_init["storage_used"],
+                )
+                assert_chunk_row_count(upload_id, 1)
+                assert_path_absent("assembly pause creates no final blob", blob_path)
+                assert_db_row_absent(
+                    "assembly pause creates no logical file",
+                    "SELECT id FROM files WHERE user_id = %s AND name = %s",
+                    (USER_ID, filename),
+                )
+                assert_db_row_absent(
+                    "assembly pause creates no content row",
+                    "SELECT id FROM file_contents WHERE hash_md5 = %s AND hash_sha256 = %s",
+                    (payload_md5, payload_sha256),
+                )
+
+                assert_equal("assembly owner is alive at the injected pause", crash_process.poll(), None)
+                crash_process.kill()
+                crash_process.wait(timeout=5)
+                assert_equal(
+                    "assembly owner is terminated by a non-zero signal exit",
+                    crash_process.returncode != 0,
+                    True,
+                )
+
+                try:
+                    crash_response = complete_future.result(timeout=10)
+                except Exception as error:  # noqa: BLE001 - process death intentionally breaks HTTP
+                    dropped_request_error = type(error).__name__
+                    log_pass("killed assembly owner returns no successful complete response")
+                else:
+                    log_fail(
+                        "killed assembly owner unexpectedly returned a response: "
+                        f"HTTP {crash_response.status_code}, body={crash_response.text}"
+                    )
+                    print_summary()
+    except Exception as error:
+        log_fail(f"assembly-death process fixture failed: {error}")
+        print_summary()
+
+    task_after_kill = query_one(
+        "SELECT status, lease_owner, lease_expires_at, state_version, finalize_attempts, "
+        "lease_expires_at > NOW() AS lease_live "
+        "FROM upload_tasks WHERE id = %s AND user_id = %s",
+        (upload_id, USER_ID),
+    )
+    if task_after_kill is None:
+        log_fail("assembly-death task remains durable after the API process dies")
+        print_summary()
+    log_pass("assembly-death task remains durable after the API process dies")
+    assert_equal("killed assembly task remains Finalizing", int(task_after_kill["status"]), 4)
+    assert_equal(
+        "killed assembly task retains its owner",
+        task_after_kill["lease_owner"],
+        killed_instance_id,
+    )
+    assert_equal(
+        "assembly owner death preserves the claim version",
+        int(task_after_kill["state_version"]),
+        killed_state_version,
+    )
+    assert_equal(
+        "assembly owner death preserves one finalize attempt",
+        int(task_after_kill["finalize_attempts"]),
+        1,
+    )
+    assert_equal("killed assembly lease is still live", bool(task_after_kill["lease_live"]), True)
+    assert_path_exists("process death preserves the assembled object", assembled_path)
+    assert_equal("preserved assembled object retains its inode", assembled_path.stat().st_ino, assembled_inode)
+    assert_equal(
+        "preserved assembled object is not rewritten before takeover",
+        assembled_path.stat().st_mtime_ns,
+        assembled_mtime_ns,
+    )
+    assert_equal("preserved assembled bytes remain complete", assembled_path.read_bytes(), payload)
+    assert_path_absent("assembly owner death leaves no final blob", blob_path)
+
+    conflict_response = complete_upload_raw(
+        upload_id,
+        f"assembly-death-live-lease-{upload_id}",
+    )
+    assert_equal("live assembly lease rejects takeover with HTTP 409", conflict_response.status_code, 409)
+    assert_equal(
+        "live assembly lease rejects takeover with UploadStateConflict",
+        json_field(conflict_response.text, "code"),
+        "10004",
+    )
+    task_after_conflict = query_one(
+        "SELECT status, lease_owner, state_version, finalize_attempts, "
+        "lease_expires_at > NOW() AS lease_live "
+        "FROM upload_tasks WHERE id = %s AND user_id = %s",
+        (upload_id, USER_ID),
+    )
+    if task_after_conflict is None:
+        log_fail("live assembly lease conflict preserves the task")
+        print_summary()
+    assert_equal("live assembly conflict preserves Finalizing", int(task_after_conflict["status"]), 4)
+    assert_equal(
+        "live assembly conflict preserves the killed owner",
+        task_after_conflict["lease_owner"],
+        killed_instance_id,
+    )
+    assert_equal(
+        "live assembly conflict preserves the claim version",
+        int(task_after_conflict["state_version"]),
+        killed_state_version,
+    )
+    assert_equal(
+        "live assembly conflict does not add an attempt",
+        int(task_after_conflict["finalize_attempts"]),
+        1,
+    )
+    assert_equal(
+        "live assembly conflict occurs before lease expiry",
+        bool(task_after_conflict["lease_live"]),
+        True,
+    )
+    assert_equal("live-lease conflict leaves assembled bytes unchanged", assembled_path.read_bytes(), payload)
+
+    expired_task = None
+    expiry_deadline = time.monotonic() + 40
+    while time.monotonic() < expiry_deadline:
+        candidate = query_one(
+            "SELECT status, lease_owner, state_version, finalize_attempts, "
+            "lease_expires_at <= NOW() AS lease_expired "
+            "FROM upload_tasks WHERE id = %s AND user_id = %s",
+            (upload_id, USER_ID),
+        )
+        if candidate is not None and bool(candidate["lease_expired"]):
+            expired_task = candidate
+            break
+        time.sleep(0.1)
+
+    if expired_task is None:
+        log_fail("killed assembly lease expires according to PostgreSQL time")
+        print_summary()
+    log_pass("killed assembly lease expires according to PostgreSQL time without a DB rewrite")
+    assert_equal("expired assembly task remains Finalizing", int(expired_task["status"]), 4)
+    assert_equal("expired assembly task retains the killed owner", expired_task["lease_owner"], killed_instance_id)
+    assert_equal(
+        "natural assembly lease expiry preserves the claim version",
+        int(expired_task["state_version"]),
+        killed_state_version,
+    )
+    assert_equal(
+        "natural assembly lease expiry preserves one attempt",
+        int(expired_task["finalize_attempts"]),
+        1,
+    )
+
+    takeover_response = complete_upload_raw(
+        upload_id,
+        f"assembly-death-takeover-{upload_id}",
+    )
+    takeover_file_id = json_field(takeover_response.text, "data.file.id")
+    if (
+        takeover_response.status_code != 200
+        or json_field(takeover_response.text, "code") != "0"
+        or not takeover_file_id
+    ):
+        log_fail("primary API safely rebuilds and completes after assembly owner death")
+        print(takeover_response.text)
+        print_summary()
+    log_pass("primary API safely rebuilds and completes after assembly owner death")
+    assert_equal(
+        "assembly takeover response comes from the primary API",
+        header_value(takeover_response.headers, "X-Disk-Instance-Id"),
+        primary_instance_id,
+    )
+    completed_file_id = int(takeover_file_id)
+
+    completed_task = query_one(
+        "SELECT status, completed_file_id, lease_owner, lease_expires_at, "
+        "state_version, finalize_attempts "
+        "FROM upload_tasks WHERE id = %s AND user_id = %s",
+        (upload_id, USER_ID),
+    )
+    if completed_task is None:
+        log_fail("assembly takeover preserves the completed task")
+        print_summary()
+    assert_equal("assembly takeover reaches Completed", int(completed_task["status"]), 1)
+    assert_equal(
+        "assembly takeover records the returned file ID",
+        int(completed_task["completed_file_id"]),
+        completed_file_id,
+    )
+    assert_equal("assembly takeover clears lease_owner", completed_task["lease_owner"], None)
+    assert_equal("assembly takeover clears lease_expires_at", completed_task["lease_expires_at"], None)
+    assert_equal(
+        "assembly takeover advances the killed state version",
+        int(completed_task["state_version"]) > killed_state_version,
+        True,
+    )
+    assert_equal(
+        "assembly owner and takeover produce exactly two finalize attempts",
+        int(completed_task["finalize_attempts"]),
+        2,
+    )
+
+    assert_chunk_row_count(upload_id, 0)
+    completed_quota = user_quota()
+    assert_equal(
+        "assembly takeover releases reserved storage once",
+        completed_quota["storage_reserved"],
+        quota_before["storage_reserved"],
+    )
+    assert_numeric_delta(
+        "assembly takeover increases used storage once",
+        quota_before["storage_used"],
+        completed_quota["storage_used"],
+        len(payload),
+    )
+
+    file_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND name = %s",
+            (USER_ID, filename),
+        )
+        or 0
+    )
+    assert_equal("assembly death and takeover create one file row", file_count, 1)
+    file_row = query_one(
+        "SELECT file.id, content.ref_count, content.hash_md5, content.hash_sha256 "
+        "FROM files AS file JOIN file_contents AS content ON content.id = file.content_id "
+        "WHERE file.id = %s AND file.user_id = %s",
+        (completed_file_id, USER_ID),
+    )
+    if file_row is None:
+        log_fail("assembly death and takeover create one file/content reference")
+        print_summary()
+    assert_equal("assembly takeover returns the persisted file", int(file_row["id"]), completed_file_id)
+    assert_equal("assembly takeover increments ref_count once", int(file_row["ref_count"]), 1)
+    assert_equal("assembly takeover content MD5 matches", file_row["hash_md5"], payload_md5)
+    assert_equal("assembly takeover content SHA-256 matches", file_row["hash_sha256"], payload_sha256)
+    content_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s AND hash_sha256 = %s",
+            (payload_md5, payload_sha256),
+        )
+        or 0
+    )
+    assert_equal("assembly death and takeover create one content row", content_count, 1)
+
+    cleanup_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s",
+            (f"staging-cleanup:{upload_id}",),
+        )
+        or 0
+    )
+    assert_equal("assembly death and takeover create one cleanup job", cleanup_count, 1)
+    assert_storage_job_succeeded(
+        "assembly-death takeover cleanup converges",
+        f"staging-cleanup:{upload_id}",
+    )
+    assert_path_absent("assembly takeover removes the staging session", upload_temp_dir(upload_id))
+    assert_path_absent("assembly takeover removes the rebuilt assembled object", assembled_path)
+    assert_path_exists("assembly takeover preserves one final blob", blob_path)
+    assert_equal("assembly takeover final blob contains the payload", blob_path.read_bytes(), payload)
+
+    save_evidence(
+        f"{EVIDENCE_PREFIX}-{upload_id}-assembly-death-takeover.json",
+        json.dumps(
+            {
+                "upload_id": upload_id,
+                "killed_pid": killed_pid,
+                "killed_instance_id": killed_instance_id,
+                "killed_state_version": killed_state_version,
+                "killed_lease_expires_at": killed_lease_expires_at.isoformat()
+                if killed_lease_expires_at is not None
+                else None,
+                "assembled_inode_before_kill": assembled_inode,
+                "assembled_mtime_ns_before_kill": assembled_mtime_ns,
+                "dropped_request_error": dropped_request_error,
+                "live_lease_conflict_code": json_field(conflict_response.text, "code"),
+                "takeover_instance_id": primary_instance_id,
+                "final_state_version": int(completed_task["state_version"]),
+                "finalize_attempts": int(completed_task["finalize_attempts"]),
+                "completed_file_id": completed_file_id,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+    )
+    redis_delete_pattern(f"rate:upload:{USER_ID}:*")
+
+
 def assert_failed_finalize_recoverable(upload_id: str, filename: str, file_hash: str, quota_before_complete: dict[str, int]) -> None:
     """Assert failed finalization retains a leased task for retry or takeover."""
     assert_db_row_absent(
@@ -2080,6 +2516,7 @@ def main() -> None:
     test_hundred_concurrent_complete_invariants()
     test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()
     test_finalize_claim_process_death_takeover_invariants()
+    test_assembled_object_process_death_takeover_invariants()
     test_db_failure_after_blob_promotion_retains_created_blob()
     test_db_failure_after_promotion_preserves_preexisting_blob()
     test_missing_staging_object_records_reconciliation()

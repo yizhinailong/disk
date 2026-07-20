@@ -43,23 +43,24 @@
 namespace disk::upload {
 
     namespace {
-        auto PauseAfterFinalizeClaimForFaultInjection(
-            const CompleteUploadCommand& command
+        auto PauseUploadForFaultInjection(
+            const CompleteUploadCommand& command,
+            const char* target_env_name,
+            const char* stage
         ) -> void {
             if (disk::utils::ConfigMgr::GetInstance()->IsSecureMode()) {
                 return;
             }
 
             const auto* enabled = std::getenv("DISK_TEST_FAULT_INJECTION");
-            const auto* target_upload_id = std::getenv(
-                "DISK_TEST_PAUSE_AFTER_FINALIZE_CLAIM_UPLOAD_ID"
-            );
+            const auto* target_upload_id = std::getenv(target_env_name);
             if (enabled == nullptr || std::string_view(enabled) != "1" || target_upload_id == nullptr || command.upload_id != target_upload_id) {
                 return;
             }
 
-            Logger::Warn() << "Test fault injection paused upload after finalize claim: upload_id="
-                           << command.upload_id << ", lease_owner=" << command.lease_owner;
+            Logger::Warn() << "Test fault injection paused upload " << stage
+                           << ": upload_id=" << command.upload_id
+                           << ", lease_owner=" << command.lease_owner;
             std::this_thread::sleep_for(std::chrono::minutes(5));
         }
 
@@ -780,7 +781,11 @@ namespace disk::upload {
                 co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
         }
 
-        PauseAfterFinalizeClaimForFaultInjection(command);
+        PauseUploadForFaultInjection(
+            command,
+            "DISK_TEST_PAUSE_AFTER_FINALIZE_CLAIM_UPLOAD_ID",
+            "after finalize claim"
+        );
 
         UploadCompleteStageTimer load_timer(
             disk::metrics::UploadCompleteStage::LoadMetadata
@@ -900,6 +905,11 @@ namespace disk::upload {
             }
             co_return std::unexpected(assemble_result.error());
         }
+        PauseUploadForFaultInjection(
+            command,
+            "DISK_TEST_PAUSE_AFTER_ASSEMBLY_UPLOAD_ID",
+            "after assembly"
+        );
         const auto& assembled = assemble_result.value();
         const auto& final_hash = assembled.md5_hash;
         const auto& precomputed_sha256 = assembled.sha256_hash;
