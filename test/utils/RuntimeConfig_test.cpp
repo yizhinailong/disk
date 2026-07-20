@@ -72,6 +72,8 @@ namespace {
             "DISK_S3_VERIFY_SSL",
             "DISK_S3_OBJECT_PREFIX",
             "DISK_S3_STAGING_PREFIX",
+            "DISK_S3_MAX_CONNECTIONS",
+            "DISK_S3_IO_THREADS",
             "DISK_S3_CONNECT_TIMEOUT_MS",
             "DISK_S3_REQUEST_TIMEOUT_MS",
             "DISK_S3_MAX_RETRIES",
@@ -118,6 +120,8 @@ namespace {
         EnvironmentScope::Set("DISK_S3_VERIFY_SSL", "0");
         EnvironmentScope::Set("DISK_S3_OBJECT_PREFIX", "final");
         EnvironmentScope::Set("DISK_S3_STAGING_PREFIX", "incoming");
+        EnvironmentScope::Set("DISK_S3_MAX_CONNECTIONS", "32");
+        EnvironmentScope::Set("DISK_S3_IO_THREADS", "8");
         EnvironmentScope::Set("DISK_S3_CONNECT_TIMEOUT_MS", "1234");
         EnvironmentScope::Set("DISK_S3_REQUEST_TIMEOUT_MS", "5678");
         EnvironmentScope::Set("DISK_S3_MAX_RETRIES", "5");
@@ -153,6 +157,8 @@ namespace {
         EXPECT_FALSE(disk["s3"]["verify_ssl"].asBool());
         EXPECT_EQ(disk["s3"]["object_prefix"].asString(), "final");
         EXPECT_EQ(disk["s3"]["staging_prefix"].asString(), "incoming");
+        EXPECT_EQ(disk["s3"]["max_connections"].asInt(), 32);
+        EXPECT_EQ(disk["s3"]["io_threads"].asInt(), 8);
         EXPECT_EQ(disk["s3"]["connect_timeout_ms"].asInt(), 1234);
         EXPECT_EQ(disk["s3"]["request_timeout_ms"].asInt(), 5678);
         EXPECT_EQ(disk["s3"]["max_retries"].asInt(), 5);
@@ -176,6 +182,17 @@ namespace {
     TEST(RuntimeConfigTest, RejectsOutOfRangeS3RetryBudget) {
         EnvironmentScope environment(RuntimeEnvironmentNames());
         EnvironmentScope::Set("DISK_S3_MAX_RETRIES", "11");
+        auto config = BaseConfig();
+
+        EXPECT_THROW(
+            disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config),
+            std::runtime_error
+        );
+    }
+
+    TEST(RuntimeConfigTest, RejectsOutOfRangeS3Capacity) {
+        EnvironmentScope environment(RuntimeEnvironmentNames());
+        EnvironmentScope::Set("DISK_S3_MAX_CONNECTIONS", "257");
         auto config = BaseConfig();
 
         EXPECT_THROW(

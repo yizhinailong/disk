@@ -348,6 +348,25 @@ namespace disk::utils {
                     "staging",
                     "s3.staging_prefix"
                 );
+                m_s3_storage_config.max_connections = ReadBoundedUInt(
+                    s3_config,
+                    "max_connections",
+                    m_s3_storage_config.max_connections,
+                    1,
+                    256
+                );
+                m_s3_storage_config.io_threads = ReadBoundedUInt(
+                    s3_config,
+                    "io_threads",
+                    m_s3_storage_config.io_threads,
+                    1,
+                    64
+                );
+                if (m_s3_storage_config.io_threads > m_s3_storage_config.max_connections) {
+                    throw std::runtime_error(
+                        "Invalid s3.io_threads: expected value no greater than s3.max_connections"
+                    );
+                }
                 m_s3_storage_config.connect_timeout_ms = static_cast<int>(ReadBoundedUInt(
                     s3_config,
                     "connect_timeout_ms",

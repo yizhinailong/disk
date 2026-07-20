@@ -228,6 +228,7 @@ namespace disk::storage {
             client_config.region = storage_config.region;
             client_config.scheme = storage_config.use_ssl ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
             client_config.verifySSL = storage_config.verify_ssl;
+            client_config.maxConnections = storage_config.max_connections;
             client_config.connectTimeoutMs = storage_config.connect_timeout_ms;
             client_config.requestTimeoutMs = storage_config.request_timeout_ms;
             client_config.retryStrategy = std::make_shared<DiskS3RetryStrategy>(

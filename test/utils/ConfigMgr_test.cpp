@@ -747,6 +747,9 @@ namespace {
             ConfigMgr::GetInstance()->GetUploadStagingBackend(),
             disk::utils::StorageBackend::Local
         );
+        const auto s3 = ConfigMgr::GetInstance()->GetS3StorageConfig();
+        EXPECT_EQ(s3.max_connections, 16U);
+        EXPECT_EQ(s3.io_threads, 4U);
         RestoreAssemblyDefaults();
     }
 
@@ -763,6 +766,8 @@ namespace {
         disk["s3"]["verify_ssl"] = false;
         disk["s3"]["object_prefix"] = "/uploads/objects/";
         disk["s3"]["staging_prefix"] = "/uploads/staging/";
+        disk["s3"]["max_connections"] = 32;
+        disk["s3"]["io_threads"] = 8;
         disk["s3"]["connect_timeout_ms"] = 1234;
         disk["s3"]["request_timeout_ms"] = 5678;
         disk["s3"]["max_retries"] = 5;
@@ -785,6 +790,8 @@ namespace {
         EXPECT_FALSE(s3.verify_ssl);
         EXPECT_EQ(s3.object_prefix, "uploads/objects");
         EXPECT_EQ(s3.staging_prefix, "uploads/staging");
+        EXPECT_EQ(s3.max_connections, 32U);
+        EXPECT_EQ(s3.io_threads, 8U);
         EXPECT_EQ(s3.connect_timeout_ms, 1234);
         EXPECT_EQ(s3.request_timeout_ms, 5678);
         EXPECT_EQ(s3.max_retries, 5);
@@ -793,7 +800,7 @@ namespace {
         RestoreAssemblyDefaults();
     }
 
-    TEST_F(ConfigMgrJwtTest, LoadConfigRejectsInvalidS3TimeoutAndRetrySettings) {
+    TEST_F(ConfigMgrJwtTest, LoadConfigValidatesS3RuntimeLimits) {
         const auto expect_invalid = [](const char* field, const Json::Value& value) {
             Json::Value cfg;
             cfg["custom_config"]["disk"]["s3"][field] = value;
@@ -801,12 +808,37 @@ namespace {
             EXPECT_THROW({ ConfigMgr::GetInstance()->LoadConfig(); }, std::runtime_error);
         };
 
+        const auto expect_valid_capacity = [](int max_connections, int io_threads) {
+            Json::Value cfg;
+            auto& s3 = cfg["custom_config"]["disk"]["s3"];
+            s3["max_connections"] = max_connections;
+            s3["io_threads"] = io_threads;
+            drogon::app().loadConfigJson(cfg);
+            ASSERT_NO_THROW({ ConfigMgr::GetInstance()->LoadConfig(); });
+            const auto loaded = ConfigMgr::GetInstance()->GetS3StorageConfig();
+            EXPECT_EQ(loaded.max_connections, static_cast<uint32_t>(max_connections));
+            EXPECT_EQ(loaded.io_threads, static_cast<uint32_t>(io_threads));
+        };
+
+        expect_valid_capacity(1, 1);
+        expect_valid_capacity(256, 64);
+        expect_invalid("max_connections", 0);
+        expect_invalid("max_connections", 257);
+        expect_invalid("io_threads", 0);
+        expect_invalid("io_threads", 65);
+        expect_invalid("io_threads", "4");
         expect_invalid("connect_timeout_ms", 99);
         expect_invalid("request_timeout_ms", 999);
         expect_invalid("max_retries", -1);
         expect_invalid("max_retries", 11);
         expect_invalid("retry_base_delay_ms", 0);
         expect_invalid("retry_base_delay_ms", "100");
+
+        Json::Value cfg;
+        cfg["custom_config"]["disk"]["s3"]["max_connections"] = 3;
+        cfg["custom_config"]["disk"]["s3"]["io_threads"] = 4;
+        drogon::app().loadConfigJson(cfg);
+        EXPECT_THROW({ ConfigMgr::GetInstance()->LoadConfig(); }, std::runtime_error);
 
         RestoreAssemblyDefaults();
     }

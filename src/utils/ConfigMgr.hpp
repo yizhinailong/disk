@@ -59,6 +59,8 @@ namespace disk::utils {
         bool verify_ssl{ true };
         std::string object_prefix{ "objects" };
         std::string staging_prefix{ "staging" };
+        uint32_t max_connections{ 16 };
+        uint32_t io_threads{ 4 };
         int connect_timeout_ms{ 3000 };
         int request_timeout_ms{ 300000 };
         int max_retries{ 3 };

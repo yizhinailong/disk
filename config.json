@@ -54,6 +54,8 @@
         "verify_ssl": true,
         "object_prefix": "objects",
         "staging_prefix": "staging",
+        "max_connections": 16,
+        "io_threads": 4,
         "connect_timeout_ms": 3000,
         "request_timeout_ms": 300000,
         "max_retries": 3,

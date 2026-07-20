@@ -28,7 +28,6 @@
 namespace disk::storage {
 
     namespace {
-        constexpr size_t DEFAULT_S3_STORAGE_THREADS = 4;
         constexpr int S3_DELETE_MAX_ATTEMPTS = 3;
         constexpr uint32_t S3_LIST_PAGE_SIZE = 1000;
         constexpr uint64_t S3_MULTIPART_PART_SIZE_BYTES = 5ULL * 1024 * 1024;
@@ -773,12 +772,14 @@ namespace disk::storage {
         m_s3_config(m_config_mgr->GetS3StorageConfig()),
         m_s3_client(std::move(s3_client)),
         m_local_staging(m_config_mgr),
-        m_worker_queue(std::make_shared<trantor::ConcurrentTaskQueue>(DEFAULT_S3_STORAGE_THREADS, std::string(S3_STORAGE_QUEUE_NAME))) {
+        m_worker_queue(std::make_shared<trantor::ConcurrentTaskQueue>(m_s3_config.io_threads, std::string(S3_STORAGE_QUEUE_NAME))) {
         if (m_s3_client == nullptr) {
             throw std::runtime_error("S3ObjectStorage requires an S3 client");
         }
         Logger::Info() << "S3ObjectStorage initialized: bucket=" << m_s3_config.bucket
-                       << ", prefix=" << m_s3_config.object_prefix;
+                       << ", prefix=" << m_s3_config.object_prefix
+                       << ", max_connections=" << m_s3_config.max_connections
+                       << ", io_threads=" << m_s3_config.io_threads;
     }
 
     auto S3ObjectStorage::SetMultipartUploadJournal(

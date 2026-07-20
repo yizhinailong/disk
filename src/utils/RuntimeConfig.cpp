@@ -225,6 +225,12 @@ namespace disk::utils {
         ApplyString("DISK_S3_STAGING_PREFIX", [&config](std::string value) {
             DiskConfig(config)["s3"]["staging_prefix"] = std::move(value);
         });
+        ApplyInteger("DISK_S3_MAX_CONNECTIONS", 1, 256, [&config](Json::Int64 value) {
+            DiskConfig(config)["s3"]["max_connections"] = value;
+        });
+        ApplyInteger("DISK_S3_IO_THREADS", 1, 64, [&config](Json::Int64 value) {
+            DiskConfig(config)["s3"]["io_threads"] = value;
+        });
         ApplyInteger("DISK_S3_CONNECT_TIMEOUT_MS", 100, 60000, [&config](Json::Int64 value) {
             DiskConfig(config)["s3"]["connect_timeout_ms"] = value;
         });
