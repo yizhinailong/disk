@@ -274,6 +274,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME FullSchemaUpgradeIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_full_schema_upgrade.py"
+)
+set_tests_properties(
+    FullSchemaUpgradeIntegration
+    PROPERTIES
+    LABELS "backend-integration;database-migration"
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME UploadStateMachineIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_upload_state_machine.py"
 )
