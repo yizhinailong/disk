@@ -55,7 +55,7 @@ The system SHALL expose Worker claiming configuration and current acceptance sta
 
 #### Scenario: Claiming Worker drains
 - **WHEN** a claiming Worker begins graceful shutdown
-- **THEN** the configured claiming gauge SHALL remain one while the current acceptance gauge becomes zero and readiness fails
+- **THEN** health SHALL report `draining=true`, the configured claiming gauge SHALL remain one while the current acceptance gauge becomes zero, readiness SHALL fail, and logs SHALL distinguish completed drain from deadline expiry
 
 ### Requirement: Rollback Drain Visibility
 Public health output SHALL expose the startup-frozen upload-task creation value and the current count of accepted in-flight business requests without counting health or metrics probes. These fields SHALL be observational and SHALL NOT make readiness unhealthy solely because creation is disabled.

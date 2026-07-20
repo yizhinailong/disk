@@ -77,6 +77,11 @@ def main() -> int:
         environment = services[name]["environment"]
         require(environment["DISK_PROCESS_ROLE"] == role, f"{name} role drifted")
         require(environment["DISK_INSTANCE_ID"] == instance_id, f"{name} instance ID drifted")
+        require(
+            services[name]["stop_grace_period"]
+            == "${DISK_STOP_GRACE_PERIOD:-40s}",
+            f"{name} termination grace no longer protects application drain",
+        )
         require(environment["DISK_STORAGE_BACKEND"] == "s3", f"{name} final storage is not S3")
         require(
             environment["DISK_UPLOAD_STAGING_BACKEND"]
@@ -99,6 +104,10 @@ def main() -> int:
     require(
         "DISK_UPLOAD_TASK_CREATION_ENABLED=true" in env_example,
         "distributed env template must expose the rollback creation cutoff",
+    )
+    require(
+        "DISK_STOP_GRACE_PERIOD=40s" in env_example,
+        "distributed env template must expose the termination grace",
     )
 
     require(
@@ -135,6 +144,10 @@ def main() -> int:
     require(
         disk_config["worker_claiming_enabled"] is True,
         "final distributed profile must enable Worker claiming",
+    )
+    require(
+        disk_config["worker_drain_timeout_seconds"] == 30,
+        "Worker drain timeout drifted beyond the reviewed Compose grace",
     )
     require(disk_config["worker_concurrency"] == 1, "Worker concurrency drifted")
     require(disk_config["s3"]["max_connections"] == 16, "S3 connection pool drifted")

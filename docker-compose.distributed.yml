@@ -44,6 +44,7 @@ x-disk-service: &disk-service
     context: .
     dockerfile: Dockerfile
   restart: unless-stopped
+  stop_grace_period: ${DISK_STOP_GRACE_PERIOD:-40s}
   init: true
   environment:
     <<: *disk-environment

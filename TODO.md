@@ -748,7 +748,23 @@ OpenSpec 严格校验 24/24 通过。结构化证据为
 `dfbb9ff82c1073ac499751ae424c9f0da13ba3bcd36ee053b9c28256630c2691`）。该隔离库门禁未执行生产
 contract DDL；未来 contract 必须使用新的 DDL、恢复演练、负责人、目标环境证据和独立审批。
 
-- [ ] Worker 可停止认领，已持有任务依靠租约到期恢复。
+- [x] Worker 可停止认领，已持有任务依靠租约到期恢复。
+
+2026-07-21 已在候选应用基线 `2db29eb` 上完成 Worker 逐台回滚与自然租约接管门禁。分布式
+Compose 为所有应用实例固定 `stop_grace_period=${DISK_STOP_GRACE_PERIOD:-40s}`，严格覆盖生产配置的
+30 秒应用 drain；拓扑合同同时防止两者漂移。`WorkerDrainTakeoverIntegration` 使用唯一临时 PostgreSQL、
+两个真实 Worker 和外部行锁阻塞 A 已认领的 Blob GC：SIGTERM 后 A 的 readiness 为 503，报告
+`draining=true`、认领能力仍启用但接受值为 0，且没有开始新任务或新 seed cycle；测试专用 2 秒 drain
+截止点后 A 以 0 退出，目标行仍为 A 持有的 `Running/attempts=1` 且原租约有效，手工任务更新为 0。
+B 先以 attempts=1 完成信号后创建的独立哨兵，只在目标的持久租约到期后以 attempts=2 正常接管并完成，
+最终内容行和 Blob 均为 0。
+
+聚焦 CTest 32/32 通过（63.66 秒）；完整 CTest 共 1391 项：1385 通过、6 项环境门控跳过、0 失败，
+总耗时 416.23 秒；OpenSpec 严格校验 24/24 通过。`0600` 结构化证据为
+`.sisyphus/evidence/worker-drain-takeover-summary.json`（SHA-256
+`9e4a6f9d587e1557f13876d2bbe8711931cb0881b84a1e2d2111910bc44c0fe9`）。该本机隔离演练证明应用、
+数据库与 Compose 合同，不替代目标编排器逐台终止、实际宽限时间和目标数据库只读快照证据。
+
 - [ ] S3/DB 已成功但响应失败的任务通过幂等 complete 恢复，不手工删除对象。
 - [ ] 每个灰度阶段都有明确停止条件、回滚负责人、操作命令和数据校验查询。
 

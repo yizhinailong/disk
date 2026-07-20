@@ -507,6 +507,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME WorkerDrainTakeoverIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_worker_drain_takeover.py"
+)
+set_tests_properties(
+    WorkerDrainTakeoverIntegration
+    PROPERTIES
+    LABELS "backend-integration;database-state-machine;deployment;process-death;rolling-upgrade"
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME MultipartRecoveryIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_multipart_recovery.py"
 )

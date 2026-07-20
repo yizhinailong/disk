@@ -292,6 +292,21 @@ The rollout SHALL support deploying a Worker with job claiming disabled after th
 - **WHEN** an API-only process reports effective Worker claiming, logs periodic seeder startup or seed-cycle activity, or an API scale event creates or mutates a periodic job
 - **THEN** the rollout SHALL stop before additional API or Worker replicas are enabled
 
+### Requirement: Worker rollback drains before lease takeover
+The rollout SHALL retire claiming Workers one at a time while at least one compatible successor is ready. A termination signal SHALL stop new claim polls and periodic seeding before process exit, and the orchestrator termination grace SHALL exceed the configured application drain timeout. A job that cannot finish within that timeout SHALL retain its persisted `Running` owner and `locked_until`; operators SHALL NOT clear, shorten, or otherwise rewrite the lease to accelerate rollback.
+
+#### Scenario: A claiming Worker is retired
+- **WHEN** a Worker receives `SIGTERM` while a compatible successor remains ready
+- **THEN** the retiring process SHALL report `draining=true`, configured claiming enabled, current acceptance disabled, and failed readiness before exiting, and it SHALL NOT start another storage job or seed cycle after the drain boundary
+
+#### Scenario: Held work exceeds the drain timeout
+- **WHEN** an in-flight handler is still blocked when the bounded drain timeout expires
+- **THEN** the process SHALL exit, its last persisted lease SHALL remain live until PostgreSQL time reaches `locked_until`, and the successor SHALL claim it only after that deadline with an incremented attempt and lease-takeover outcome
+
+#### Scenario: Worker rollback violates the lease boundary
+- **WHEN** the orchestrator kills the process before its application drain timeout, a retiring instance starts new work after drain, a successor claims a live lease, or an operator mutates owner/deadline fields
+- **THEN** the rollback SHALL stop and SHALL NOT retire another Worker until the deployment and persisted task state are reconciled
+
 ### Requirement: S3 staging activation gate
 After incompatible old application versions have exited and the Worker observation gate has passed, the distributed deployment SHALL expose an explicit startup setting that selects S3 staging for newly created upload sessions. Creating a session SHALL atomically persist its selected backend and exact prefix, and later requests or Workers SHALL continue to use that persisted descriptor independently of the process's current default.
 
