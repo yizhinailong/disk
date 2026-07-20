@@ -493,6 +493,12 @@ add_disk_gated_integration_test(
     "SKIP: DISK_S3_APP_INTEGRATION is not 1"
 )
 add_disk_gated_integration_test(
+    S3ProvisioningIntegration
+    test_s3_provisioning.py
+    180
+    "SKIP: DISK_S3_PROVISIONING_INTEGRATION is not 1"
+)
+add_disk_gated_integration_test(
     DistributedFlowIntegration
     test_distributed_flow.py
     900

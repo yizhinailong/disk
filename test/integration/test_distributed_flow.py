@@ -101,6 +101,8 @@ def main(
         "DISK_DATABASE_PASSWORD",
         "DISK_REDIS_PASSWORD",
         "DISK_MINIO_ROOT_PASSWORD",
+        "DISK_S3_ACCESS_KEY",
+        "DISK_S3_SECRET_KEY",
     ):
         value = values.get(key, "")
         require(value and not value.startswith("replace-"), f"{key} still contains a placeholder")
@@ -164,8 +166,8 @@ def main(
     s3 = boto3.client(
         "s3",
         endpoint_url=minio_url,
-        aws_access_key_id=values.get("DISK_MINIO_ROOT_USER", "disk-local"),
-        aws_secret_access_key=values["DISK_MINIO_ROOT_PASSWORD"],
+        aws_access_key_id=values["DISK_S3_ACCESS_KEY"],
+        aws_secret_access_key=values["DISK_S3_SECRET_KEY"],
         region_name="us-east-1",
         config=Config(s3={"addressing_style": "path"}),
     )
@@ -269,6 +271,8 @@ def main(
             values["DISK_REDIS_PASSWORD"],
             values["DISK_MINIO_ROOT_PASSWORD"],
             values.get("DISK_MINIO_ROOT_USER", "disk-local"),
+            values["DISK_S3_ACCESS_KEY"],
+            values["DISK_S3_SECRET_KEY"],
             "http://minio:9000",
             minio_url,
             object_key,

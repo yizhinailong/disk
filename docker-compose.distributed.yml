@@ -33,8 +33,8 @@ x-disk-environment: &disk-environment
   DISK_S3_REQUEST_TIMEOUT_MS: ${DISK_S3_REQUEST_TIMEOUT_MS:-300000}
   DISK_S3_MAX_RETRIES: ${DISK_S3_MAX_RETRIES:-3}
   DISK_S3_RETRY_BASE_DELAY_MS: ${DISK_S3_RETRY_BASE_DELAY_MS:-100}
-  DISK_S3_ACCESS_KEY: ${DISK_MINIO_ROOT_USER:-disk-local}
-  DISK_S3_SECRET_KEY: ${DISK_MINIO_ROOT_PASSWORD:?set DISK_MINIO_ROOT_PASSWORD}
+  DISK_S3_ACCESS_KEY: ${DISK_S3_ACCESS_KEY:?set DISK_S3_ACCESS_KEY}
+  DISK_S3_SECRET_KEY: ${DISK_S3_SECRET_KEY:?set DISK_S3_SECRET_KEY}
   TZ: UTC
 
 x-disk-service: &disk-service
@@ -115,6 +115,8 @@ services:
     environment:
       MINIO_ROOT_USER: ${DISK_MINIO_ROOT_USER:-disk-local}
       MINIO_ROOT_PASSWORD: ${DISK_MINIO_ROOT_PASSWORD:?set DISK_MINIO_ROOT_PASSWORD}
+      MINIO_API_STALE_UPLOADS_EXPIRY: 168h
+      MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL: 6h
     ports:
       - "127.0.0.1:${DISK_MINIO_PORT:-19000}:9000"
       - "127.0.0.1:${DISK_MINIO_CONSOLE_PORT:-19001}:9001"
@@ -137,16 +139,14 @@ services:
     environment:
       MINIO_ROOT_USER: ${DISK_MINIO_ROOT_USER:-disk-local}
       MINIO_ROOT_PASSWORD: ${DISK_MINIO_ROOT_PASSWORD:?set DISK_MINIO_ROOT_PASSWORD}
-    entrypoint:
-      - /bin/sh
-      - -ec
-      - |
-        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
-        mc mb --ignore-existing local/disk
-        mc ilm rule import local/disk /config/lifecycle.json
-        mc ilm rule export local/disk
+      DISK_S3_BUCKET: disk
+      DISK_S3_ACCESS_KEY: ${DISK_S3_ACCESS_KEY:?set DISK_S3_ACCESS_KEY}
+      DISK_S3_SECRET_KEY: ${DISK_S3_SECRET_KEY:?set DISK_S3_SECRET_KEY}
+    entrypoint: ["/bin/sh", "/config/provision.sh"]
     volumes:
       - ./deploy/minio/lifecycle.json:/config/lifecycle.json:ro
+      - ./deploy/minio/app-policy.json:/config/app-policy.json:ro
+      - ./deploy/minio/provision.sh:/config/provision.sh:ro
     networks:
       - disk-backend
 

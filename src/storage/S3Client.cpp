@@ -25,8 +25,8 @@
 #include <aws/s3/model/Delete.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
 #include <aws/s3/model/DeleteObjectsRequest.h>
+#include <aws/s3/model/GetBucketLocationRequest.h>
 #include <aws/s3/model/GetObjectRequest.h>
-#include <aws/s3/model/HeadBucketRequest.h>
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
 #include <aws/s3/model/ObjectIdentifier.h>
@@ -329,17 +329,17 @@ namespace disk::storage {
     AwsS3Client::~AwsS3Client() = default;
 
     auto AwsS3Client::ValidateBucketAccessible() -> Result<void> {
-        Aws::S3::Model::HeadBucketRequest request;
+        Aws::S3::Model::GetBucketLocationRequest request;
         request.SetBucket(m_impl->storage_config.bucket);
 
         disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
-        auto outcome = m_impl->client->HeadBucket(request);
+        auto outcome = m_impl->client->GetBucketLocation(request);
         if (!outcome.IsSuccess()) {
             timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::InternalError,
-                "S3 HeadBucket"
+                "S3 GetBucketLocation"
             ));
         }
 

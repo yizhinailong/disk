@@ -193,7 +193,7 @@ TEST_F(StorageFactoryTest, MapsBucketValidationFailureToStableInitializationErro
     auto config_mgr = LoadStorageConfig("s3", root);
     auto client = std::make_shared<FakeS3Client>();
     client->validate_result = std::unexpected(
-        ErrorInfo(ErrorCode::InternalError, "S3 HeadBucket failed: access denied")
+        ErrorInfo(ErrorCode::InternalError, "S3 GetBucketLocation failed: access denied")
     );
 
     try {
@@ -206,7 +206,7 @@ TEST_F(StorageFactoryTest, MapsBucketValidationFailureToStableInitializationErro
     } catch (const std::runtime_error& e) {
         EXPECT_EQ(
             std::string(e.what()),
-            "Failed to initialize S3 storage backend: S3 HeadBucket failed: access denied"
+            "Failed to initialize S3 storage backend: S3 GetBucketLocation failed: access denied"
         );
     }
 

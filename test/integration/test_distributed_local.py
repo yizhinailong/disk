@@ -632,6 +632,8 @@ class LocalTopology:
             "DISK_REDIS_PASSWORD": REDIS_PASSWORD,
             "DISK_MINIO_ROOT_USER": MINIO_USER,
             "DISK_MINIO_ROOT_PASSWORD": MINIO_PASSWORD,
+            "DISK_S3_ACCESS_KEY": MINIO_USER,
+            "DISK_S3_SECRET_KEY": MINIO_PASSWORD,
             "DISK_POSTGRES_PORT": str(self.postgres_port),
             "DISK_REDIS_PORT": str(self.redis_port),
             "DISK_MINIO_PORT": str(self.minio_port),

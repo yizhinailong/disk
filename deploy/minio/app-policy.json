@@ -1,0 +1,50 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BucketMetadata",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketLocation"
+      ],
+      "Resource": [
+        "arn:aws:s3:::disk"
+      ]
+    },
+    {
+      "Sid": "ListApplicationPrefixes",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::disk"
+      ],
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "objects",
+            "objects/*",
+            "staging",
+            "staging/*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ApplicationObjects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:AbortMultipartUpload",
+        "s3:ListMultipartUploadParts"
+      ],
+      "Resource": [
+        "arn:aws:s3:::disk/objects/*",
+        "arn:aws:s3:::disk/staging/*"
+      ]
+    }
+  ]
+}
