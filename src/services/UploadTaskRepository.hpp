@@ -108,6 +108,16 @@ namespace disk::file {
         ) const -> drogon::Task<std::optional<uint64_t>>;
 
         [[nodiscard]]
+        auto RenewFinalizeLease(
+            const drogon::orm::DbClientPtr& client,
+            const std::string& upload_id,
+            uint64_t user_id,
+            const std::string& lease_owner,
+            uint64_t expected_state_version,
+            uint32_t lease_duration_seconds
+        ) const -> drogon::Task<std::optional<uint64_t>>;
+
+        [[nodiscard]]
         auto MarkCompletedIfLeaseOwned(
             const drogon::orm::DbClientPtr& client,
             const std::string& upload_id,

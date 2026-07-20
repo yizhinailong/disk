@@ -429,7 +429,7 @@ API Instance A  API Instance B ... N
 - [x] 最终事务提交后、HTTP 响应前杀死实例。
 - [x] Blob 删除成功后、任务标记成功前杀死 Worker。
 - [x] PostgreSQL/Redis/S3 分别短暂不可用后恢复。
-- [ ] 租约续租超时、网络分区和旧 owner 恢复后尝试提交。
+- [x] 租约续租超时、网络分区和旧 owner 恢复后尝试提交。
 
 ### 13.4 数据与迁移测试
 

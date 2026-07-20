@@ -160,15 +160,24 @@ namespace disk::file {
             const auto claim = source.find("upload_task_repository.ClaimFinalizeLease(");
             const auto assemble = source.find("m_upload_staging_storage->AssembleChunks(");
             const auto first_renew = source.find("RenewFinalizeLease(", assemble);
+            const auto transaction_start = source.find("transaction_runner.Run(", first_renew);
+            const auto transaction_renew = source.find("RenewFinalizeLease(", transaction_start);
+            const auto content_write = source.find("content_service.AcquireReference(", transaction_start);
             const auto guarded_commit = source.find("upload_task_repository.MarkCompletedIfLeaseOwned(");
 
             ASSERT_NE(claim, std::string::npos);
             ASSERT_NE(assemble, std::string::npos);
             ASSERT_NE(first_renew, std::string::npos);
+            ASSERT_NE(transaction_start, std::string::npos);
+            ASSERT_NE(transaction_renew, std::string::npos);
+            ASSERT_NE(content_write, std::string::npos);
             ASSERT_NE(guarded_commit, std::string::npos);
             EXPECT_LT(claim, assemble);
             EXPECT_LT(assemble, first_renew);
-            EXPECT_LT(first_renew, guarded_commit);
+            EXPECT_LT(first_renew, transaction_start);
+            EXPECT_LT(transaction_start, transaction_renew);
+            EXPECT_LT(transaction_renew, content_write);
+            EXPECT_LT(content_write, guarded_commit);
             const auto cleanup_enqueue = source.find("storage_job_repository.Enqueue(", guarded_commit);
             const auto chunk_delete = source.find("DeleteChunks(transaction, command.upload_id)", cleanup_enqueue);
             ASSERT_NE(cleanup_enqueue, std::string::npos);

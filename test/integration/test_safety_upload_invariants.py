@@ -46,6 +46,7 @@ from lib_py import (  # noqa: E402
     ensure_server,
     cleanup,
     configured_chunk_size,
+    database_config,
     do_login,
     execute,
     fetch,
@@ -83,6 +84,151 @@ USER_ID = 0
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+class PartitionableTcpProxy:
+    """Relay TCP traffic and hold both directions while a test partition is active."""
+
+    def __init__(self, target_host: str, target_port: int) -> None:
+        self._target = (target_host, target_port)
+        self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._listener.bind(("127.0.0.1", 0))
+        self._listener.listen()
+        self._listener.settimeout(0.1)
+        self.port = int(self._listener.getsockname()[1])
+        self._stop = threading.Event()
+        self._partitioned = threading.Event()
+        self._client_data_blocked = threading.Event()
+        self._lock = threading.Lock()
+        self._sockets: set[socket.socket] = set()
+        self._relay_threads: list[threading.Thread] = []
+        self._blocked_client_bytes = 0
+        self._accept_thread = threading.Thread(
+            target=self._accept_connections,
+            name="safety-postgres-proxy-accept",
+            daemon=True,
+        )
+
+    def __enter__(self) -> PartitionableTcpProxy:
+        self._accept_thread.start()
+        return self
+
+    def __exit__(self, _exc_type, _exc, _traceback) -> None:
+        self.close()
+
+    @property
+    def blocked_client_bytes(self) -> int:
+        with self._lock:
+            return self._blocked_client_bytes
+
+    def partition(self) -> None:
+        """Hold subsequent traffic without closing established connections."""
+        with self._lock:
+            self._blocked_client_bytes = 0
+        self._client_data_blocked.clear()
+        self._partitioned.set()
+
+    def heal(self) -> None:
+        """Release held traffic over the original TCP connections."""
+        self._partitioned.clear()
+
+    def wait_for_blocked_client_data(self, timeout: float) -> bool:
+        """Return whether an API-to-PostgreSQL payload reached the partition."""
+        return self._client_data_blocked.wait(timeout)
+
+    def close(self) -> None:
+        """Stop accepting and relay threads."""
+        self._stop.set()
+        self._partitioned.clear()
+        try:
+            self._listener.close()
+        except OSError:
+            pass
+        with self._lock:
+            sockets = list(self._sockets)
+        for connection in sockets:
+            try:
+                connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            connection.close()
+        if self._accept_thread.is_alive():
+            self._accept_thread.join(timeout=2)
+        for relay_thread in self._relay_threads:
+            relay_thread.join(timeout=0.2)
+
+    def _accept_connections(self) -> None:
+        while not self._stop.is_set():
+            try:
+                client, _address = self._listener.accept()
+            except TimeoutError:
+                continue
+            except OSError:
+                break
+
+            try:
+                upstream = socket.create_connection(self._target, timeout=5)
+            except OSError:
+                client.close()
+                continue
+
+            client.settimeout(0.1)
+            upstream.settimeout(0.1)
+            with self._lock:
+                self._sockets.update((client, upstream))
+            for source, destination, client_to_server in (
+                (client, upstream, True),
+                (upstream, client, False),
+            ):
+                relay_thread = threading.Thread(
+                    target=self._relay,
+                    args=(source, destination, client_to_server),
+                    name="safety-postgres-proxy-relay",
+                    daemon=True,
+                )
+                self._relay_threads.append(relay_thread)
+                relay_thread.start()
+
+    def _relay(
+        self,
+        source: socket.socket,
+        destination: socket.socket,
+        client_to_server: bool,
+    ) -> None:
+        try:
+            while not self._stop.is_set():
+                try:
+                    data = source.recv(65536)
+                except TimeoutError:
+                    continue
+                except OSError:
+                    break
+                if not data:
+                    break
+
+                if self._partitioned.is_set():
+                    if client_to_server:
+                        with self._lock:
+                            self._blocked_client_bytes += len(data)
+                        self._client_data_blocked.set()
+                    while self._partitioned.is_set() and not self._stop.wait(0.01):
+                        pass
+                if self._stop.is_set():
+                    break
+                destination.sendall(data)
+        except OSError:
+            pass
+        finally:
+            for connection in (source, destination):
+                try:
+                    connection.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                connection.close()
+            with self._lock:
+                self._sockets.discard(source)
+                self._sockets.discard(destination)
+
+
 @contextmanager
 def peer_api_instance(
     *,
@@ -91,6 +237,10 @@ def peer_api_instance(
     pause_after_claim_upload_id: str | None = None,
     pause_after_assembly_upload_id: str | None = None,
     pause_after_finalize_commit_upload_id: str | None = None,
+    pause_before_finalize_transaction_upload_id: str | None = None,
+    finalize_transaction_release_file: Path | None = None,
+    database_host: str | None = None,
+    database_port: int | None = None,
 ) -> Iterator[tuple[str, str, subprocess.Popen[bytes]]]:
     """Run a second API process that shares the primary instance's dependencies."""
     pause_targets = [
@@ -99,11 +249,16 @@ def peer_api_instance(
             pause_after_claim_upload_id,
             pause_after_assembly_upload_id,
             pause_after_finalize_commit_upload_id,
+            pause_before_finalize_transaction_upload_id,
         )
         if upload_id is not None
     ]
     if len(pause_targets) > 1:
         raise ValueError("peer API accepts only one upload fault pause stage")
+    if (database_host is None) != (database_port is None):
+        raise ValueError("peer API database host and port must be overridden together")
+    if pause_before_finalize_transaction_upload_id is not None and finalize_transaction_release_file is None:
+        raise ValueError("finalize transaction pause requires a release file")
 
     server_bin = Path(
         os.environ.get("SERVER_BIN", REPO_ROOT / "build/linux-debug-clang/src/disk")
@@ -132,6 +287,10 @@ def peer_api_instance(
         disk_config["instance_id"] = instance_id
         if upload_finalize_lease_seconds is not None:
             disk_config["upload_finalize_lease_seconds"] = upload_finalize_lease_seconds
+        if database_host is not None and database_port is not None:
+            config["db_clients"][0]["host"] = database_host
+            config["db_clients"][0]["port"] = database_port
+            config["db_clients"][0]["connection_number"] = 4
         config_path = temp_dir / "config.json"
         config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
@@ -140,6 +299,8 @@ def peer_api_instance(
         peer_env.pop("DISK_TEST_PAUSE_AFTER_FINALIZE_CLAIM_UPLOAD_ID", None)
         peer_env.pop("DISK_TEST_PAUSE_AFTER_ASSEMBLY_UPLOAD_ID", None)
         peer_env.pop("DISK_TEST_PAUSE_AFTER_FINALIZE_COMMIT_UPLOAD_ID", None)
+        peer_env.pop("DISK_TEST_PAUSE_BEFORE_FINALIZE_TRANSACTION_UPLOAD_ID", None)
+        peer_env.pop("DISK_TEST_FINALIZE_TRANSACTION_RELEASE_FILE", None)
         peer_env.update(
             {
                 "JWT_SECRET": peer_env.get(
@@ -178,6 +339,27 @@ def peer_api_instance(
                     "DISK_TEST_PAUSE_AFTER_FINALIZE_COMMIT_UPLOAD_ID": str(
                         uuid.UUID(pause_after_finalize_commit_upload_id)
                     ),
+                }
+            )
+        if pause_before_finalize_transaction_upload_id is not None:
+            assert finalize_transaction_release_file is not None
+            peer_env.update(
+                {
+                    "DISK_TEST_FAULT_INJECTION": "1",
+                    "DISK_TEST_PAUSE_BEFORE_FINALIZE_TRANSACTION_UPLOAD_ID": str(
+                        uuid.UUID(pause_before_finalize_transaction_upload_id)
+                    ),
+                    "DISK_TEST_FINALIZE_TRANSACTION_RELEASE_FILE": str(
+                        finalize_transaction_release_file
+                    ),
+                }
+            )
+        if database_host is not None and database_port is not None:
+            peer_env.update(
+                {
+                    "DATABASE_HOST": database_host,
+                    "DATABASE_PORT": str(database_port),
+                    "DATABASE_POOL_SIZE": "4",
                 }
             )
 
@@ -1780,6 +1962,466 @@ def test_assembled_object_process_death_takeover_invariants() -> None:
     redis_delete_pattern(f"rate:upload:{USER_ID}:*")
 
 
+def test_finalize_renewal_network_partition_fencing_invariants() -> None:
+    """Delay an owner's transaction renewal past takeover and reject its recovery."""
+    log_section("Finalize Renewal Network Partition And Stale Owner Fencing")
+    redis_delete_pattern(f"rate:upload:{USER_ID}:*")
+
+    payload = f"safety-finalize-renewal-partition-{unique_name()}".encode()
+    payload_md5 = md5_bytes(payload)
+    payload_sha256 = sha256_bytes(payload)
+    filename = f"safety_finalize_renewal_partition_{unique_name()}.bin"
+    blob_path = final_blob_path(payload_sha256)
+    quota_before = user_quota()
+
+    upload_id, file_hash = init_upload(filename, payload)
+    assert_equal("renewal-partition fixture MD5 matches", file_hash, payload_md5)
+    upload_single_chunk(upload_id, payload)
+    quota_after_init = user_quota()
+    assert_numeric_delta(
+        "renewal-partition fixture reserves storage once",
+        quota_before["storage_reserved"],
+        quota_after_init["storage_reserved"],
+        len(payload),
+    )
+
+    primary_ready = fetch(f"{BASE_URL}/api/health/ready")
+    primary_instance_id = json_field(primary_ready.text, "data.instance_id")
+    if primary_ready.status_code != 200 or not primary_instance_id:
+        log_fail("renewal-partition fixture resolves the primary API instance")
+        print_summary()
+    log_pass("renewal-partition fixture resolves the primary API instance")
+
+    postgres = database_config()
+    partitioned_instance_id = ""
+    partitioned_pid = 0
+    partitioned_version = 0
+    partitioned_lease_expires_at = None
+    blocked_client_bytes = 0
+    takeover_file_id = 0
+    takeover_state_version = 0
+    takeover_finalized_at = None
+    stale_response_status = 0
+    stale_response_code = ""
+    peer_log_path = EVIDENCE_ROOT / "safety-upload-lease-partition.log"
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="disk-upload-lease-partition-") as fault_dir_raw:
+            release_file = Path(fault_dir_raw) / "release-finalize-transaction"
+            with PartitionableTcpProxy(
+                str(postgres["host"]),
+                int(postgres["port"]),
+            ) as database_proxy:
+                with peer_api_instance(
+                    purpose="lease-partition",
+                    upload_finalize_lease_seconds=30,
+                    pause_before_finalize_transaction_upload_id=upload_id,
+                    finalize_transaction_release_file=release_file,
+                    database_host="127.0.0.1",
+                    database_port=database_proxy.port,
+                ) as (partitioned_url, peer_instance_id, peer_process):
+                    partitioned_instance_id = peer_instance_id
+                    partitioned_pid = peer_process.pid
+                    assert_equal(
+                        "renewal partition uses two distinct API instances",
+                        peer_instance_id != primary_instance_id,
+                        True,
+                    )
+
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        stale_future = executor.submit(
+                            fetch,
+                            f"{partitioned_url}/api/file/upload/complete",
+                            method="POST",
+                            headers={
+                                **auth_headers(TOKEN),
+                                "X-Request-Id": f"lease-partition-stale-{upload_id}",
+                            },
+                            json_body={"upload_id": upload_id},
+                            timeout=120,
+                        )
+
+                        try:
+                            paused_task = None
+                            pause_marker = (
+                                "Test fault injection paused upload before finalize transaction renewal: "
+                                f"upload_id={upload_id}"
+                            )
+                            pause_deadline = time.monotonic() + 15
+                            while time.monotonic() < pause_deadline:
+                                candidate = query_one(
+                                    "SELECT status, lease_owner, lease_expires_at, state_version, "
+                                    "finalize_attempts, lease_expires_at > NOW() AS lease_live "
+                                    "FROM upload_tasks WHERE id = %s AND user_id = %s",
+                                    (upload_id, USER_ID),
+                                )
+                                log_text = (
+                                    peer_log_path.read_text(encoding="utf-8", errors="replace")
+                                    if peer_log_path.is_file()
+                                    else ""
+                                )
+                                if (
+                                    pause_marker in log_text
+                                    and candidate is not None
+                                    and int(candidate["status"]) == 4
+                                    and candidate["lease_owner"] == peer_instance_id
+                                    and bool(candidate["lease_live"])
+                                    and blob_path.is_file()
+                                ):
+                                    paused_task = candidate
+                                    break
+                                time.sleep(0.05)
+
+                            if paused_task is None:
+                                log_fail(
+                                    "partitioned API pauses after promotion and before its transaction renewal"
+                                )
+                                print_summary()
+                            log_pass(
+                                "partitioned API pauses after promotion and before its transaction renewal"
+                            )
+                            partitioned_version = int(paused_task["state_version"])
+                            partitioned_lease_expires_at = paused_task["lease_expires_at"]
+                            assert_equal(
+                                "partitioned owner has one finalize attempt before takeover",
+                                int(paused_task["finalize_attempts"]),
+                                1,
+                            )
+                            assert_equal(
+                                "partition pause retains reserved storage",
+                                user_quota()["storage_reserved"],
+                                quota_after_init["storage_reserved"],
+                            )
+                            assert_chunk_row_count(upload_id, 1)
+                            assert_db_row_absent(
+                                "partition pause creates no logical file",
+                                "SELECT id FROM files WHERE user_id = %s AND name = %s",
+                                (USER_ID, filename),
+                            )
+                            assert_db_row_absent(
+                                "partition pause creates no content row",
+                                "SELECT id FROM file_contents WHERE hash_md5 = %s AND hash_sha256 = %s",
+                                (payload_md5, payload_sha256),
+                            )
+                            assert_path_exists("partition pause has promoted the final blob", blob_path)
+                            assert_equal(
+                                "partitioned API is alive before the network fault",
+                                peer_process.poll(),
+                                None,
+                            )
+
+                            database_proxy.partition()
+                            release_file.touch()
+                            if not database_proxy.wait_for_blocked_client_data(timeout=10):
+                                log_fail(
+                                    "TCP partition observes the old owner's transaction renewal traffic"
+                                )
+                                print_summary()
+                            log_pass(
+                                "TCP partition observes the old owner's transaction renewal traffic"
+                            )
+                            blocked_client_bytes = database_proxy.blocked_client_bytes
+                            assert_equal(
+                                "partition holds at least one client payload byte",
+                                blocked_client_bytes > 0,
+                                True,
+                            )
+                            assert_equal(
+                                "partitioned API stays alive with renewal traffic blocked",
+                                peer_process.poll(),
+                                None,
+                            )
+
+                            live_conflict = complete_upload_raw(
+                                upload_id,
+                                f"lease-partition-live-{upload_id}",
+                            )
+                            assert_equal(
+                                "live partitioned lease rejects early takeover with HTTP 409",
+                                live_conflict.status_code,
+                                409,
+                            )
+                            assert_equal(
+                                "live partitioned lease returns ResourceConflict",
+                                json_field(live_conflict.text, "code"),
+                                "10004",
+                            )
+
+                            expired_task = None
+                            expiry_deadline = time.monotonic() + 40
+                            while time.monotonic() < expiry_deadline:
+                                candidate = query_one(
+                                    "SELECT status, lease_owner, state_version, finalize_attempts, "
+                                    "lease_expires_at <= NOW() AS lease_expired "
+                                    "FROM upload_tasks WHERE id = %s AND user_id = %s",
+                                    (upload_id, USER_ID),
+                                )
+                                if candidate is not None and bool(candidate["lease_expired"]):
+                                    expired_task = candidate
+                                    break
+                                time.sleep(0.1)
+
+                            if expired_task is None:
+                                log_fail(
+                                    "partitioned renewal lease expires according to PostgreSQL time"
+                                )
+                                print_summary()
+                            log_pass(
+                                "partitioned renewal lease expires according to PostgreSQL time without a rewrite"
+                            )
+                            assert_equal(
+                                "network partition preserves the old owner until takeover",
+                                expired_task["lease_owner"],
+                                peer_instance_id,
+                            )
+                            assert_equal(
+                                "network partition does not advance the old generation",
+                                int(expired_task["state_version"]),
+                                partitioned_version,
+                            )
+                            assert_equal(
+                                "network partition does not add a finalize attempt",
+                                int(expired_task["finalize_attempts"]),
+                                1,
+                            )
+
+                            takeover_response = complete_upload_raw(
+                                upload_id,
+                                f"lease-partition-takeover-{upload_id}",
+                            )
+                            takeover_file_id_raw = json_field(
+                                takeover_response.text,
+                                "data.file.id",
+                            )
+                            if (
+                                takeover_response.status_code != 200
+                                or json_field(takeover_response.text, "code") != "0"
+                                or not takeover_file_id_raw
+                            ):
+                                log_fail(
+                                    "direct API takes over and completes during the old owner's partition"
+                                )
+                                print(takeover_response.text)
+                                print_summary()
+                            log_pass(
+                                "direct API takes over and completes during the old owner's partition"
+                            )
+                            takeover_file_id = int(takeover_file_id_raw)
+                            assert_equal(
+                                "takeover response comes from the direct primary API",
+                                header_value(
+                                    takeover_response.headers,
+                                    "X-Disk-Instance-Id",
+                                ),
+                                primary_instance_id,
+                            )
+
+                            completed_before_heal = query_one(
+                                "SELECT status, completed_file_id, lease_owner, lease_expires_at, "
+                                "state_version, finalize_attempts, finalized_at "
+                                "FROM upload_tasks WHERE id = %s AND user_id = %s",
+                                (upload_id, USER_ID),
+                            )
+                            if completed_before_heal is None:
+                                log_fail("takeover result is durable before healing the partition")
+                                print_summary()
+                            log_pass("takeover result is durable before healing the partition")
+                            assert_equal(
+                                "takeover stores Completed status",
+                                int(completed_before_heal["status"]),
+                                1,
+                            )
+                            assert_equal(
+                                "takeover stores its completed_file_id",
+                                int(completed_before_heal["completed_file_id"]),
+                                takeover_file_id,
+                            )
+                            assert_equal(
+                                "takeover records exactly two finalize attempts",
+                                int(completed_before_heal["finalize_attempts"]),
+                                2,
+                            )
+                            takeover_state_version = int(
+                                completed_before_heal["state_version"]
+                            )
+                            takeover_finalized_at = completed_before_heal["finalized_at"]
+
+                            database_proxy.heal()
+                            stale_response = stale_future.result(timeout=30)
+                            stale_response_status = stale_response.status_code
+                            stale_response_code = json_field(stale_response.text, "code")
+                            assert_equal(
+                                "recovered old owner returns HTTP 409",
+                                stale_response_status,
+                                409,
+                            )
+                            assert_equal(
+                                "recovered old owner returns ResourceConflict",
+                                stale_response_code,
+                                "10004",
+                            )
+                            assert_equal(
+                                "stale response identifies the partitioned API instance",
+                                header_value(stale_response.headers, "X-Disk-Instance-Id"),
+                                peer_instance_id,
+                            )
+
+                            recovered_ready = fetch(
+                                f"{partitioned_url}/api/health/ready",
+                                timeout=10,
+                            )
+                            assert_equal(
+                                "old owner becomes ready after the partition heals",
+                                recovered_ready.status_code,
+                                200,
+                            )
+                            assert_equal(
+                                "old owner keeps the same instance identity after recovery",
+                                json_field(recovered_ready.text, "data.instance_id"),
+                                peer_instance_id,
+                            )
+                            assert_equal(
+                                "old owner process is not restarted by the partition",
+                                peer_process.pid,
+                                partitioned_pid,
+                            )
+                            assert_equal(
+                                "old owner process remains alive after recovery",
+                                peer_process.poll(),
+                                None,
+                            )
+                        finally:
+                            database_proxy.heal()
+    except Exception as error:
+        log_fail(f"renewal network partition fixture failed: {error}")
+        print_summary()
+
+    completed_after_recovery = query_one(
+        "SELECT status, completed_file_id, lease_owner, lease_expires_at, state_version, "
+        "finalize_attempts, finalized_at FROM upload_tasks "
+        "WHERE id = %s AND user_id = %s",
+        (upload_id, USER_ID),
+    )
+    if completed_after_recovery is None:
+        log_fail("completed upload remains after stale owner recovery")
+        print_summary()
+    assert_equal(
+        "stale owner preserves Completed status",
+        int(completed_after_recovery["status"]),
+        1,
+    )
+    assert_equal(
+        "stale owner cannot replace takeover completed_file_id",
+        int(completed_after_recovery["completed_file_id"]),
+        takeover_file_id,
+    )
+    assert_equal(
+        "stale owner cannot advance takeover state_version",
+        int(completed_after_recovery["state_version"]),
+        takeover_state_version,
+    )
+    assert_equal(
+        "stale owner cannot add another finalize attempt",
+        int(completed_after_recovery["finalize_attempts"]),
+        2,
+    )
+    assert_equal(
+        "stale owner cannot replace takeover finalized_at",
+        completed_after_recovery["finalized_at"],
+        takeover_finalized_at,
+    )
+    assert_equal("stale owner leaves lease_owner cleared", completed_after_recovery["lease_owner"], None)
+    assert_equal(
+        "stale owner leaves lease_expires_at cleared",
+        completed_after_recovery["lease_expires_at"],
+        None,
+    )
+
+    file_rows = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND name = %s",
+            (USER_ID, filename),
+        )
+        or 0
+    )
+    assert_equal("partition recovery creates one logical file", file_rows, 1)
+    file_row = query_one(
+        "SELECT file.id, content.ref_count, content.hash_md5, content.hash_sha256 "
+        "FROM files AS file JOIN file_contents AS content ON content.id = file.content_id "
+        "WHERE file.id = %s AND file.user_id = %s",
+        (takeover_file_id, USER_ID),
+    )
+    if file_row is None:
+        log_fail("partition takeover keeps one file/content reference")
+        print_summary()
+    assert_equal("partition takeover file id remains authoritative", int(file_row["id"]), takeover_file_id)
+    assert_equal("partition recovery increments content ref_count once", int(file_row["ref_count"]), 1)
+    assert_equal("partition recovery content MD5 matches", file_row["hash_md5"], payload_md5)
+    assert_equal("partition recovery content SHA-256 matches", file_row["hash_sha256"], payload_sha256)
+    content_rows = int(
+        scalar(
+            "SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s AND hash_sha256 = %s",
+            (payload_md5, payload_sha256),
+        )
+        or 0
+    )
+    assert_equal("partition recovery creates one content row", content_rows, 1)
+
+    completed_quota = user_quota()
+    assert_equal(
+        "partition recovery releases reserved storage once",
+        completed_quota["storage_reserved"],
+        quota_before["storage_reserved"],
+    )
+    assert_numeric_delta(
+        "partition recovery increases used storage once",
+        quota_before["storage_used"],
+        completed_quota["storage_used"],
+        len(payload),
+    )
+    assert_chunk_row_count(upload_id, 0)
+    cleanup_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s",
+            (f"staging-cleanup:{upload_id}",),
+        )
+        or 0
+    )
+    assert_equal("partition recovery creates one cleanup job", cleanup_count, 1)
+    assert_storage_job_succeeded(
+        "partition recovery staging cleanup converges",
+        f"staging-cleanup:{upload_id}",
+    )
+    assert_path_absent("partition recovery removes the staging session", upload_temp_dir(upload_id))
+    assert_path_exists("partition recovery preserves the final blob", blob_path)
+    assert_equal("partition recovery final blob contains the payload", blob_path.read_bytes(), payload)
+
+    save_evidence(
+        f"{EVIDENCE_PREFIX}-{upload_id}-renewal-network-partition.json",
+        json.dumps(
+            {
+                "upload_id": upload_id,
+                "partitioned_instance_id": partitioned_instance_id,
+                "partitioned_pid": partitioned_pid,
+                "partitioned_state_version": partitioned_version,
+                "partitioned_lease_expires_at": partitioned_lease_expires_at.isoformat()
+                if partitioned_lease_expires_at is not None
+                else None,
+                "blocked_client_bytes": blocked_client_bytes,
+                "takeover_instance_id": primary_instance_id,
+                "takeover_file_id": takeover_file_id,
+                "takeover_state_version": takeover_state_version,
+                "stale_response_status": stale_response_status,
+                "stale_response_code": stale_response_code,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+    )
+    redis_delete_pattern(f"rate:upload:{USER_ID}:*")
+
+
 def test_final_transaction_process_death_replay_invariants() -> None:
     """Kill an API after its final commit and verify replay heals the lost response."""
     log_section("Final Transaction Commit Process Death Replay Invariants")
@@ -2971,6 +3613,7 @@ def main() -> None:
     test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()
     test_finalize_claim_process_death_takeover_invariants()
     test_assembled_object_process_death_takeover_invariants()
+    test_finalize_renewal_network_partition_fencing_invariants()
     test_final_transaction_process_death_replay_invariants()
     test_db_failure_after_blob_promotion_retains_created_blob()
     test_db_failure_after_promotion_preserves_preexisting_blob()

@@ -263,9 +263,27 @@ namespace disk::file {
         uint64_t expected_state_version,
         uint32_t lease_duration_seconds
     ) const -> drogon::Task<std::optional<uint64_t>> {
+        co_return co_await RenewFinalizeLease(
+            m_db_client,
+            upload_id,
+            user_id,
+            lease_owner,
+            expected_state_version,
+            lease_duration_seconds
+        );
+    }
+
+    auto UploadTaskRepository::RenewFinalizeLease(
+        const drogon::orm::DbClientPtr& client,
+        const std::string& upload_id,
+        uint64_t user_id,
+        const std::string& lease_owner,
+        uint64_t expected_state_version,
+        uint32_t lease_duration_seconds
+    ) const -> drogon::Task<std::optional<uint64_t>> {
         ValidateLeaseArguments(lease_owner, lease_duration_seconds);
 
-        auto result = co_await m_db_client->execSqlCoro(
+        auto result = co_await client->execSqlCoro(
             "UPDATE upload_tasks SET " "lease_expires_at = NOW() + ($1::integer * INTERVAL '1 second'), " "state_version = state_version + 1 " "WHERE id = $2 AND user_id = $3 AND status = $4 " "AND lease_owner = $5 AND state_version = $6 " "AND lease_expires_at > NOW() " "RETURNING state_version",
             static_cast<int32_t>(lease_duration_seconds),
             upload_id,

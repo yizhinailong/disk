@@ -46,7 +46,8 @@ namespace disk::upload {
         auto PauseUploadForFaultInjection(
             const CompleteUploadCommand& command,
             const char* target_env_name,
-            const char* stage
+            const char* stage,
+            const char* release_file_env_name = nullptr
         ) -> void {
             if (disk::utils::ConfigMgr::GetInstance()->IsSecureMode()) {
                 return;
@@ -61,6 +62,23 @@ namespace disk::upload {
             Logger::Warn() << "Test fault injection paused upload " << stage
                            << ": upload_id=" << command.upload_id
                            << ", lease_owner=" << command.lease_owner;
+            if (release_file_env_name != nullptr) {
+                const auto* release_file = std::getenv(release_file_env_name);
+                if (release_file != nullptr && !std::string_view(release_file).empty()) {
+                    const auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(5);
+                    std::error_code error;
+                    while (std::chrono::steady_clock::now() < deadline) {
+                        if (std::filesystem::exists(release_file, error)) {
+                            Logger::Warn() << "Test fault injection released upload " << stage
+                                           << ": upload_id=" << command.upload_id
+                                           << ", lease_owner=" << command.lease_owner;
+                            return;
+                        }
+                        error.clear();
+                        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    }
+                }
+            }
             std::this_thread::sleep_for(std::chrono::minutes(5));
         }
 
@@ -156,11 +174,13 @@ namespace disk::upload {
 
         auto RenewFinalizeLease(
             const disk::file::UploadTaskRepository& repository,
+            const drogon::orm::DbClientPtr& client,
             const CompleteUploadCommand& command,
             uint64_t state_version
         ) -> drogon::Task<Result<uint64_t>> {
             try {
                 auto renewed_version = co_await repository.RenewFinalizeLease(
+                    client,
                     command.upload_id,
                     command.user_id,
                     command.lease_owner,
@@ -917,6 +937,7 @@ namespace disk::upload {
 
         auto renew_after_assembly = co_await RenewFinalizeLease(
             upload_task_repository,
+            m_db_client,
             command,
             state_version
         );
@@ -1112,6 +1133,7 @@ namespace disk::upload {
 
         auto renew_before_transaction = co_await RenewFinalizeLease(
             upload_task_repository,
+            m_db_client,
             command,
             state_version
         );
@@ -1127,6 +1149,24 @@ namespace disk::upload {
         disk::jobs::StorageJobRepository storage_job_repository(m_db_client);
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                PauseUploadForFaultInjection(
+                    command,
+                    "DISK_TEST_PAUSE_BEFORE_FINALIZE_TRANSACTION_UPLOAD_ID",
+                    "before finalize transaction renewal",
+                    "DISK_TEST_FINALIZE_TRANSACTION_RELEASE_FILE"
+                );
+
+                auto transaction_renew = co_await RenewFinalizeLease(
+                    upload_task_repository,
+                    transaction,
+                    command,
+                    state_version
+                );
+                if (!transaction_renew) {
+                    co_return std::unexpected(transaction_renew.error());
+                }
+                const auto transaction_state_version = transaction_renew.value();
+
                 disk::content::ContentService content_service(m_db_client);
 
                 auto content_result = co_await content_service.AcquireReference(
@@ -1194,7 +1234,7 @@ namespace disk::upload {
                     command.upload_id,
                     command.user_id,
                     command.lease_owner,
-                    state_version,
+                    transaction_state_version,
                     file.getValueOfId()
                 );
                 if (!finalize_success) {
