@@ -129,6 +129,21 @@ The rollout SHALL support deploying a Worker with job claiming disabled after th
 - **WHEN** the observation gate has passed and the rollout advances to task execution
 - **THEN** the operator SHALL explicitly set job claiming enabled and restart or redeploy the Worker rather than treating the startup setting as a live pause control
 
+### Requirement: S3 staging activation gate
+After incompatible old application versions have exited and the Worker observation gate has passed, the distributed deployment SHALL expose an explicit startup setting that selects S3 staging for newly created upload sessions. Creating a session SHALL atomically persist its selected backend and exact prefix, and later requests or Workers SHALL continue to use that persisted descriptor independently of the process's current default.
+
+#### Scenario: S3 staging is enabled for new sessions
+- **WHEN** a current API process starts with S3 final storage and the upload staging setting explicitly set to S3
+- **THEN** each newly initialized non-instant upload SHALL persist `staging_backend=s3` and the configured staging prefix followed by its upload ID before any chunk is accepted
+
+#### Scenario: The startup setting changes
+- **WHEN** the staging setting is changed and API processes are restarted or redeployed
+- **THEN** only sessions created after that process startup SHALL use the new default, while every existing local or S3 session SHALL retain its persisted backend and prefix
+
+#### Scenario: S3 staging activation fails its gate
+- **WHEN** a new task persists the wrong backend or prefix, an S3 task creates node-local staging data, required S3 operations fail, or an existing task descriptor changes
+- **THEN** the rollout SHALL stop and MAY restore local staging for subsequently created tasks, but SHALL keep a compatible release available to finish or explicitly cancel already-created S3 tasks
+
 ### Requirement: Upgrade and rollback operations
 Deployment documentation SHALL define upgrade preparation, backup, test-environment verification, build/deploy steps, database migration application, health validation, and rollback to a previous application/database state.
 

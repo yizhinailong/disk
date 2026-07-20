@@ -61,9 +61,18 @@ def main() -> int:
         require(environment["DISK_INSTANCE_ID"] == instance_id, f"{name} instance ID drifted")
         require(environment["DISK_STORAGE_BACKEND"] == "s3", f"{name} final storage is not S3")
         require(
-            environment["DISK_UPLOAD_STAGING_BACKEND"] == "s3",
-            f"{name} staging storage is not S3",
+            environment["DISK_UPLOAD_STAGING_BACKEND"]
+            == "${DISK_UPLOAD_STAGING_BACKEND:-s3}",
+            f"{name} staging rollout override is missing",
         )
+
+    env_example = set(
+        (root / "deploy/distributed.env.example").read_text(encoding="utf-8").splitlines()
+    )
+    require(
+        "DISK_UPLOAD_STAGING_BACKEND=s3" in env_example,
+        "distributed env template must persist the final S3 staging default",
+    )
 
     require(
         services["postgres"]["ports"][0].startswith("127.0.0.1:"),

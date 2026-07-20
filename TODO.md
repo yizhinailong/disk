@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-20）：`cmake --preset linux-debug-clang`、构建均通过；完整 CTest 共 1376 项，1370 通过、6 项按既有环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），无失败；`WorkerObservationModeIntegration` 已实际运行通过，OpenSpec 严格校验 24/24 通过。
+> 最近验证（2026-07-20）：`cmake --preset linux-debug-clang`、构建均通过；完整 CTest 共 1376 项，1370 通过、6 项按既有环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），无失败；`WorkerObservationModeIntegration` 和隔离 S3 staging 新任务门禁已实际运行通过，OpenSpec 严格校验 24/24 通过。
 
 ## 1. 目标与范围
 
@@ -474,7 +474,14 @@ API Instance A  API Instance B ... N
 
 ### 14.2 上传暂存切换
 
-- [ ] 为新任务启用 S3 staging feature flag，并在 `upload_tasks.staging_backend` 固化选择。
+- [x] 为新任务启用 S3 staging feature flag，并在 `upload_tasks.staging_backend` 固化选择。
+
+2026-07-20 已将分布式 Compose 的 `DISK_UPLOAD_STAGING_BACKEND` 暴露为可覆盖的启动期开关，
+最终拓扑默认 `s3`。候选提交 `ff2ea6b` 的本机隔离门禁使用唯一临时 PostgreSQL 数据库
+和 Moto 5.2.2，4.443 秒内完成 1 次 6 MiB/6 分片 S3-native 上传；对账显示 1/1 任务固化
+`staging_backend=s3`，完成组装、final 提升和 Worker 清理，API/Worker 本地暂存均为 0。
+目标预发布/生产环境仍必须按部署指南 4.5.2 使用真实端点和部署身份重复该门禁。
+
 - [ ] 小比例用户/实例灰度，监控成功率、完成耗时、对象错误、租约和对账差异。
 - [ ] 逐步扩大流量，不修改已创建任务的 staging backend。
 - [ ] 旧 local 任务通过原节点完成、自然过期或维护窗口取消；禁止假装它们可被任意节点恢复。
