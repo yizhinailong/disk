@@ -62,6 +62,8 @@ from lib_py import (  # noqa: E402
     print_summary,
     query_one,
     redis_delete_pattern,
+    redis_get_value,
+    redis_ttl,
     save_evidence,
     scalar,
     sha256_bytes,
@@ -88,6 +90,7 @@ def peer_api_instance(
     upload_finalize_lease_seconds: int | None = None,
     pause_after_claim_upload_id: str | None = None,
     pause_after_assembly_upload_id: str | None = None,
+    pause_after_finalize_commit_upload_id: str | None = None,
 ) -> Iterator[tuple[str, str, subprocess.Popen[bytes]]]:
     """Run a second API process that shares the primary instance's dependencies."""
     pause_targets = [
@@ -95,6 +98,7 @@ def peer_api_instance(
         for upload_id in (
             pause_after_claim_upload_id,
             pause_after_assembly_upload_id,
+            pause_after_finalize_commit_upload_id,
         )
         if upload_id is not None
     ]
@@ -135,6 +139,7 @@ def peer_api_instance(
         peer_env.pop("DISK_TEST_FAULT_INJECTION", None)
         peer_env.pop("DISK_TEST_PAUSE_AFTER_FINALIZE_CLAIM_UPLOAD_ID", None)
         peer_env.pop("DISK_TEST_PAUSE_AFTER_ASSEMBLY_UPLOAD_ID", None)
+        peer_env.pop("DISK_TEST_PAUSE_AFTER_FINALIZE_COMMIT_UPLOAD_ID", None)
         peer_env.update(
             {
                 "JWT_SECRET": peer_env.get(
@@ -163,6 +168,15 @@ def peer_api_instance(
                     "DISK_TEST_FAULT_INJECTION": "1",
                     "DISK_TEST_PAUSE_AFTER_ASSEMBLY_UPLOAD_ID": str(
                         uuid.UUID(pause_after_assembly_upload_id)
+                    ),
+                }
+            )
+        if pause_after_finalize_commit_upload_id is not None:
+            peer_env.update(
+                {
+                    "DISK_TEST_FAULT_INJECTION": "1",
+                    "DISK_TEST_PAUSE_AFTER_FINALIZE_COMMIT_UPLOAD_ID": str(
+                        uuid.UUID(pause_after_finalize_commit_upload_id)
                     ),
                 }
             )
@@ -336,6 +350,41 @@ def complete_upload_raw(upload_id: str, request_id: str | None = None):
     )
     save_evidence(f"{EVIDENCE_PREFIX}-{upload_id}-complete.json", resp.text)
     return resp
+
+
+def root_file_names(base_url: str = BASE_URL) -> list[str]:
+    """Read the cached root-file listing and return its visible names."""
+    query = urlencode(
+        {
+            "parent_id": 0,
+            "page": 1,
+            "page_size": 100,
+            "sort_by": "created_at",
+            "sort_order": "desc",
+            "type": "file",
+        }
+    )
+    response = fetch(
+        f"{base_url}/api/file/list?{query}",
+        headers=auth_headers(TOKEN),
+    )
+    try:
+        payload = json.loads(response.text)
+    except json.JSONDecodeError:
+        log_fail("root file list returns valid JSON")
+        print(response.text)
+        print_summary()
+
+    if response.status_code != 200 or str(payload.get("code")) != "0":
+        log_fail("root file list request succeeds")
+        print(response.text)
+        print_summary()
+
+    items = payload.get("data", {}).get("items", [])
+    if not isinstance(items, list):
+        log_fail("root file list response contains an items array")
+        print_summary()
+    return [str(item.get("name", "")) for item in items if isinstance(item, dict)]
 
 
 def wait_for_request_log(request_id: str, instance_id: str, status: int) -> str:
@@ -1731,6 +1780,411 @@ def test_assembled_object_process_death_takeover_invariants() -> None:
     redis_delete_pattern(f"rate:upload:{USER_ID}:*")
 
 
+def test_final_transaction_process_death_replay_invariants() -> None:
+    """Kill an API after its final commit and verify replay heals the lost response."""
+    log_section("Final Transaction Commit Process Death Replay Invariants")
+    redis_delete_pattern(f"rate:upload:{USER_ID}:*")
+
+    payload = f"safety-finalize-commit-death-{unique_name()}".encode()
+    payload_md5 = md5_bytes(payload)
+    payload_sha256 = sha256_bytes(payload)
+    filename = f"safety_finalize_commit_death_{unique_name()}.bin"
+    blob_path = final_blob_path(payload_sha256)
+    quota_before = user_quota()
+
+    upload_id, file_hash = init_upload(filename, payload)
+    assert_equal("finalize-commit fixture MD5 matches", file_hash, payload_md5)
+    upload_single_chunk(upload_id, payload)
+    quota_after_init = user_quota()
+    assert_numeric_delta(
+        "finalize-commit fixture reserves storage once",
+        quota_before["storage_reserved"],
+        quota_after_init["storage_reserved"],
+        len(payload),
+    )
+
+    primary_ready = fetch(f"{BASE_URL}/api/health/ready")
+    primary_instance_id = json_field(primary_ready.text, "data.instance_id")
+    if primary_ready.status_code != 200 or not primary_instance_id:
+        log_fail("finalize-commit fixture resolves the primary API instance")
+        print_summary()
+    log_pass("finalize-commit fixture resolves the primary API instance")
+
+    names_before_commit = root_file_names()
+    assert_equal("primed file list excludes the pending upload", filename in names_before_commit, False)
+    version_key = f"file_list_version:{USER_ID}"
+    version_before_commit = int(redis_get_value(version_key) or "0")
+    cache_key = (
+        f"file_list:{USER_ID}:{version_before_commit}:0:file:created_at:desc:1:100"
+    )
+    assert_equal(
+        "finalize-commit fixture primes the current file-list cache entry",
+        redis_ttl(cache_key) > 0,
+        True,
+    )
+
+    killed_pid = 0
+    killed_instance_id = ""
+    dropped_request_error = ""
+    committed_file_id = 0
+    committed_state_version = 0
+    committed_finalized_at = None
+    crash_log_path = EVIDENCE_ROOT / "safety-upload-finalize-commit-crash.log"
+
+    try:
+        with peer_api_instance(
+            purpose="finalize-commit-crash",
+            pause_after_finalize_commit_upload_id=upload_id,
+        ) as (crash_url, crash_instance_id, crash_process):
+            assert_equal(
+                "finalize-commit fixture uses two distinct API instances",
+                crash_instance_id != primary_instance_id,
+                True,
+            )
+            killed_pid = crash_process.pid
+            killed_instance_id = crash_instance_id
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                complete_future = executor.submit(
+                    fetch,
+                    f"{crash_url}/api/file/upload/complete",
+                    method="POST",
+                    headers={
+                        **auth_headers(TOKEN),
+                        "X-Request-Id": f"finalize-commit-death-{upload_id}",
+                    },
+                    json_body={"upload_id": upload_id},
+                    timeout=120,
+                )
+
+                paused_task = None
+                pause_marker = (
+                    "Test fault injection paused upload after finalize commit: "
+                    f"upload_id={upload_id}"
+                )
+                pause_deadline = time.monotonic() + 10
+                while time.monotonic() < pause_deadline:
+                    candidate = query_one(
+                        "SELECT status, completed_file_id, lease_owner, lease_expires_at, "
+                        "state_version, finalize_attempts, finalized_at "
+                        "FROM upload_tasks WHERE id = %s AND user_id = %s",
+                        (upload_id, USER_ID),
+                    )
+                    log_text = (
+                        crash_log_path.read_text(encoding="utf-8", errors="replace")
+                        if crash_log_path.is_file()
+                        else ""
+                    )
+                    if (
+                        pause_marker in log_text
+                        and candidate is not None
+                        and int(candidate["status"]) == 1
+                        and candidate["completed_file_id"] is not None
+                    ):
+                        paused_task = candidate
+                        break
+                    time.sleep(0.05)
+
+                if paused_task is None:
+                    log_fail("crash API pauses after the final transaction is durable")
+                    print_summary()
+                log_pass("crash API pauses after the final transaction is durable")
+                committed_file_id = int(paused_task["completed_file_id"])
+                committed_state_version = int(paused_task["state_version"])
+                committed_finalized_at = paused_task["finalized_at"]
+
+                assert_equal("committed upload reaches Completed", int(paused_task["status"]), 1)
+                assert_equal("committed upload clears lease_owner", paused_task["lease_owner"], None)
+                assert_equal(
+                    "committed upload clears lease_expires_at",
+                    paused_task["lease_expires_at"],
+                    None,
+                )
+                assert_equal(
+                    "committed upload retains one finalize attempt",
+                    int(paused_task["finalize_attempts"]),
+                    1,
+                )
+                assert_equal(
+                    "committed upload records finalized_at",
+                    committed_finalized_at is not None,
+                    True,
+                )
+                assert_chunk_row_count(upload_id, 0)
+
+                quota_after_commit = user_quota()
+                assert_equal(
+                    "final transaction releases reserved storage once",
+                    quota_after_commit["storage_reserved"],
+                    quota_before["storage_reserved"],
+                )
+                assert_numeric_delta(
+                    "final transaction increases used storage once",
+                    quota_before["storage_used"],
+                    quota_after_commit["storage_used"],
+                    len(payload),
+                )
+
+                committed_file = query_one(
+                    "SELECT file.id, file.content_id, content.ref_count, content.hash_md5, "
+                    "content.hash_sha256, content.storage_path "
+                    "FROM files AS file "
+                    "JOIN file_contents AS content ON content.id = file.content_id "
+                    "WHERE file.id = %s AND file.user_id = %s AND file.name = %s",
+                    (committed_file_id, USER_ID, filename),
+                )
+                if committed_file is None:
+                    log_fail("final transaction creates the committed file/content reference")
+                    print_summary()
+                log_pass("final transaction creates the committed file/content reference")
+                assert_equal("committed content ref_count is one", int(committed_file["ref_count"]), 1)
+                assert_equal("committed content MD5 matches", committed_file["hash_md5"], payload_md5)
+                assert_equal(
+                    "committed content SHA-256 matches",
+                    committed_file["hash_sha256"],
+                    payload_sha256,
+                )
+                assert_equal(
+                    "final transaction creates one matching file row",
+                    int(
+                        scalar(
+                            "SELECT COUNT(*) FROM files WHERE user_id = %s AND name = %s",
+                            (USER_ID, filename),
+                        )
+                        or 0
+                    ),
+                    1,
+                )
+                assert_equal(
+                    "final transaction creates one matching content row",
+                    int(
+                        scalar(
+                            "SELECT COUNT(*) FROM file_contents "
+                            "WHERE hash_md5 = %s AND hash_sha256 = %s",
+                            (payload_md5, payload_sha256),
+                        )
+                        or 0
+                    ),
+                    1,
+                )
+                assert_equal(
+                    "final transaction creates one staging cleanup job",
+                    int(
+                        scalar(
+                            "SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s",
+                            (f"staging-cleanup:{upload_id}",),
+                        )
+                        or 0
+                    ),
+                    1,
+                )
+                assert_path_exists("final transaction preserves the final blob", blob_path)
+                assert_equal("final transaction stores the exact payload", blob_path.read_bytes(), payload)
+
+                version_after_commit = int(redis_get_value(version_key) or "0")
+                assert_equal(
+                    "pause occurs before the first file-list generation bump",
+                    version_after_commit,
+                    version_before_commit,
+                )
+                stale_names = root_file_names()
+                assert_equal(
+                    "the primed list remains stale before replay",
+                    filename in stale_names,
+                    False,
+                )
+                assert_equal(
+                    "reading the stale list does not change its generation",
+                    int(redis_get_value(version_key) or "0"),
+                    version_before_commit,
+                )
+
+                assert_equal("finalize-commit owner is alive at the injected pause", crash_process.poll(), None)
+                crash_process.kill()
+                crash_process.wait(timeout=5)
+                assert_equal(
+                    "finalize-commit owner is terminated by a non-zero signal exit",
+                    crash_process.returncode != 0,
+                    True,
+                )
+
+                try:
+                    crash_response = complete_future.result(timeout=10)
+                except Exception as error:  # noqa: BLE001 - process death intentionally breaks HTTP
+                    dropped_request_error = type(error).__name__
+                    log_pass("killed finalize-commit owner returns no successful complete response")
+                else:
+                    log_fail(
+                        "killed finalize-commit owner unexpectedly returned a response: "
+                        f"HTTP {crash_response.status_code}, body={crash_response.text}"
+                    )
+                    print_summary()
+    except Exception as error:
+        log_fail(f"finalize-commit process fixture failed: {error}")
+        print_summary()
+
+    task_after_kill = query_one(
+        "SELECT status, completed_file_id, lease_owner, lease_expires_at, state_version, "
+        "finalize_attempts, finalized_at FROM upload_tasks WHERE id = %s AND user_id = %s",
+        (upload_id, USER_ID),
+    )
+    if task_after_kill is None:
+        log_fail("finalize-commit task remains durable after the API process dies")
+        print_summary()
+    log_pass("finalize-commit task remains durable after the API process dies")
+    assert_equal("process death preserves Completed", int(task_after_kill["status"]), 1)
+    assert_equal(
+        "process death preserves completed_file_id",
+        int(task_after_kill["completed_file_id"]),
+        committed_file_id,
+    )
+    assert_equal("process death preserves the completed version", int(task_after_kill["state_version"]), committed_state_version)
+    assert_equal("process death preserves finalized_at", task_after_kill["finalized_at"], committed_finalized_at)
+    assert_equal("process death preserves one finalize attempt", int(task_after_kill["finalize_attempts"]), 1)
+    assert_equal("completed task remains lease-free", task_after_kill["lease_owner"], None)
+    assert_equal("completed task retains no lease expiry", task_after_kill["lease_expires_at"], None)
+
+    replay_response = complete_upload_raw(
+        upload_id,
+        f"finalize-commit-replay-{upload_id}",
+    )
+    replay_file_id = json_field(replay_response.text, "data.file.id")
+    if (
+        replay_response.status_code != 200
+        or json_field(replay_response.text, "code") != "0"
+        or not replay_file_id
+    ):
+        log_fail("primary API replays the committed upload after response loss")
+        print(replay_response.text)
+        print_summary()
+    log_pass("primary API replays the committed upload after response loss")
+    assert_equal(
+        "replay response comes from the primary API",
+        header_value(replay_response.headers, "X-Disk-Instance-Id"),
+        primary_instance_id,
+    )
+    assert_equal("replay returns the committed file ID", int(replay_file_id), committed_file_id)
+
+    version_after_replay = int(redis_get_value(version_key) or "0")
+    assert_equal(
+        "completed replay advances the shared file-list generation",
+        version_after_replay,
+        version_before_commit + 1,
+    )
+    refreshed_names = root_file_names()
+    assert_equal("file list exposes the committed file after replay", filename in refreshed_names, True)
+
+    replayed_task = query_one(
+        "SELECT status, completed_file_id, lease_owner, lease_expires_at, state_version, "
+        "finalize_attempts, finalized_at FROM upload_tasks WHERE id = %s AND user_id = %s",
+        (upload_id, USER_ID),
+    )
+    if replayed_task is None:
+        log_fail("completed replay preserves the upload task")
+        print_summary()
+    assert_equal("replay keeps the task Completed", int(replayed_task["status"]), 1)
+    assert_equal("replay keeps completed_file_id", int(replayed_task["completed_file_id"]), committed_file_id)
+    assert_equal("replay does not advance state_version", int(replayed_task["state_version"]), committed_state_version)
+    assert_equal("replay does not add a finalize attempt", int(replayed_task["finalize_attempts"]), 1)
+    assert_equal("replay preserves finalized_at", replayed_task["finalized_at"], committed_finalized_at)
+
+    quota_after_replay = user_quota()
+    assert_equal(
+        "replay leaves reserved storage unchanged",
+        quota_after_replay["storage_reserved"],
+        quota_before["storage_reserved"],
+    )
+    assert_numeric_delta(
+        "replay leaves used storage settled once",
+        quota_before["storage_used"],
+        quota_after_replay["storage_used"],
+        len(payload),
+    )
+    assert_chunk_row_count(upload_id, 0)
+    assert_equal(
+        "response-loss replay leaves one file row",
+        int(
+            scalar(
+                "SELECT COUNT(*) FROM files WHERE user_id = %s AND name = %s",
+                (USER_ID, filename),
+            )
+            or 0
+        ),
+        1,
+    )
+    replayed_content = query_one(
+        "SELECT content.ref_count, content.hash_md5, content.hash_sha256 "
+        "FROM files AS file JOIN file_contents AS content ON content.id = file.content_id "
+        "WHERE file.id = %s AND file.user_id = %s",
+        (committed_file_id, USER_ID),
+    )
+    if replayed_content is None:
+        log_fail("response-loss replay preserves the file/content reference")
+        print_summary()
+    assert_equal("response-loss replay leaves ref_count at one", int(replayed_content["ref_count"]), 1)
+    assert_equal("response-loss replay preserves content MD5", replayed_content["hash_md5"], payload_md5)
+    assert_equal(
+        "response-loss replay preserves content SHA-256",
+        replayed_content["hash_sha256"],
+        payload_sha256,
+    )
+    assert_equal(
+        "response-loss replay leaves one content row",
+        int(
+            scalar(
+                "SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s AND hash_sha256 = %s",
+                (payload_md5, payload_sha256),
+            )
+            or 0
+        ),
+        1,
+    )
+    assert_equal(
+        "response-loss replay leaves one cleanup job",
+        int(
+            scalar(
+                "SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s",
+                (f"staging-cleanup:{upload_id}",),
+            )
+            or 0
+        ),
+        1,
+    )
+    assert_storage_job_succeeded(
+        "finalize-commit response-loss cleanup converges",
+        f"staging-cleanup:{upload_id}",
+    )
+    assert_path_absent("response-loss cleanup removes the staging session", upload_temp_dir(upload_id))
+    assert_path_absent(
+        "response-loss cleanup removes the assembled object",
+        upload_temp_dir(upload_id).parent / f"{upload_id}.tmp",
+    )
+    assert_path_exists("response-loss replay preserves the final blob", blob_path)
+    assert_equal("response-loss replay preserves exact blob bytes", blob_path.read_bytes(), payload)
+
+    save_evidence(
+        f"{EVIDENCE_PREFIX}-{upload_id}-finalize-commit-replay.json",
+        json.dumps(
+            {
+                "upload_id": upload_id,
+                "killed_pid": killed_pid,
+                "killed_instance_id": killed_instance_id,
+                "dropped_request_error": dropped_request_error,
+                "completed_file_id": committed_file_id,
+                "state_version": committed_state_version,
+                "finalize_attempts": int(replayed_task["finalize_attempts"]),
+                "file_list_version_before_commit": version_before_commit,
+                "file_list_version_after_replay": version_after_replay,
+                "replay_instance_id": primary_instance_id,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+    )
+    redis_delete_pattern(f"rate:upload:{USER_ID}:*")
+
+
 def assert_failed_finalize_recoverable(upload_id: str, filename: str, file_hash: str, quota_before_complete: dict[str, int]) -> None:
     """Assert failed finalization retains a leased task for retry or takeover."""
     assert_db_row_absent(
@@ -2517,6 +2971,7 @@ def main() -> None:
     test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()
     test_finalize_claim_process_death_takeover_invariants()
     test_assembled_object_process_death_takeover_invariants()
+    test_final_transaction_process_death_replay_invariants()
     test_db_failure_after_blob_promotion_retains_created_blob()
     test_db_failure_after_promotion_preserves_preexisting_blob()
     test_missing_staging_object_records_reconciliation()

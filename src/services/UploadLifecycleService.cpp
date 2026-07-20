@@ -766,6 +766,7 @@ namespace disk::upload {
                     CompleteUploadOutcome outcome;
                     outcome.file = std::move(completed_file.value());
                     outcome.invalidation.upload_task_ids.push_back(command.upload_id);
+                    outcome.invalidation.file_list_folder_ids.push_back(outcome.file->parent_id);
                     co_return outcome;
                 } catch (const std::exception& e) {
                     load_timer.Stop();
@@ -1252,6 +1253,12 @@ namespace disk::upload {
             );
             co_return std::unexpected(tx_result.error());
         }
+
+        PauseUploadForFaultInjection(
+            command,
+            "DISK_TEST_PAUSE_AFTER_FINALIZE_COMMIT_UPLOAD_ID",
+            "after finalize commit"
+        );
 
         Logger::Debug() << "Files record created successfully: file_id=" << file.getValueOfId();
 
