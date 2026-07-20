@@ -70,7 +70,7 @@
       "dbname": "disk",
       "user": "disk",
       "passwd": "",
-      "num_connection_number": 8,
+      "connection_number": 8,
       "timeout": 30.0,
       "auto_batch": false
     }

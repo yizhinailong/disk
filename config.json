@@ -72,7 +72,7 @@
       "dbname": "disk",
       "user": "postgres",
       "passwd": "postgresql",
-      "num_connection_number": 25
+      "connection_number": 25
     }
   ],
   "redis_clients": [

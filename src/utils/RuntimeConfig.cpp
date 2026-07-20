@@ -169,7 +169,7 @@ namespace disk::utils {
             FirstObject(config, "db_clients")["passwd"] = std::move(value);
         });
         ApplyInteger("DATABASE_POOL_SIZE", 1, 1024, [&config](Json::Int64 value) {
-            FirstObject(config, "db_clients")["num_connection_number"] = value;
+            FirstObject(config, "db_clients")["connection_number"] = value;
         });
 
         ApplyString("REDIS_HOST", [&config](std::string value) {

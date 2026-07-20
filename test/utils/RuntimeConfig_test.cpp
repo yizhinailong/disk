@@ -137,7 +137,8 @@ namespace {
         EXPECT_EQ(config["db_clients"][0]["dbname"].asString(), "disk_cluster");
         EXPECT_EQ(config["db_clients"][0]["user"].asString(), "disk_app");
         EXPECT_EQ(config["db_clients"][0]["passwd"].asString(), "db-test-password");
-        EXPECT_EQ(config["db_clients"][0]["num_connection_number"].asInt(), 16);
+        EXPECT_EQ(config["db_clients"][0]["connection_number"].asInt(), 16);
+        EXPECT_FALSE(config["db_clients"][0].isMember("num_connection_number"));
         EXPECT_EQ(config["redis_clients"][0]["host"].asString(), "redis");
         EXPECT_EQ(config["redis_clients"][0]["port"].asInt(), 6380);
         EXPECT_EQ(config["redis_clients"][0]["db"].asInt(), 3);

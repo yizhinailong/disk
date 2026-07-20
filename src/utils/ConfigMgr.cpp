@@ -525,7 +525,7 @@ namespace disk::utils {
                     if (root.isMember("db_clients") && root["db_clients"].isArray() &&
                         !root["db_clients"].empty()) {
                         m_db_pool_size =
-                            root["db_clients"][0].get("num_connection_number", 0).asInt64();
+                            root["db_clients"][0].get("connection_number", 0).asInt64();
                     }
                     if (root.isMember("redis_clients") && root["redis_clients"].isArray() &&
                         !root["redis_clients"].empty()) {
