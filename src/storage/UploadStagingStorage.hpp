@@ -63,6 +63,12 @@ namespace disk::storage {
         std::string etag;
     };
 
+    struct UploadStagingObjectHead {
+        bool exists{ false };
+        std::optional<uint64_t> size_bytes;
+        std::optional<std::string> etag;
+    };
+
     struct UploadStagingAssembly {
         UploadStagingBackend backend{ UploadStagingBackend::Local };
         std::string locator;
@@ -108,6 +114,24 @@ namespace disk::storage {
             const std::string& md5_hash,
             std::string data
         ) -> drogon::Task<Result<UploadStagingChunk>> = 0;
+
+        /**
+         * @brief 读取权威分片描述符指向的对象元数据
+         * @param session 持久化上传会话描述符
+         * @param chunk PostgreSQL 中的权威分片描述符
+         * @return 存在性、大小和可用的 ETag，不读取对象正文
+         */
+        [[nodiscard]]
+        virtual auto HeadChunkObject(
+            const UploadStagingSession& session,
+            const UploadStagingChunk& chunk
+        ) -> drogon::Task<Result<UploadStagingObjectHead>> {
+            static_cast<void>(session);
+            static_cast<void>(chunk);
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Staging object HEAD is not supported")
+            );
+        }
 
         /**
          * @brief 将会话对应的全部分片按序组装成暂存完整文件

@@ -139,8 +139,10 @@ TEST(FilterOwnershipTest, RouteDeclarationsDoNotDeclareJwtAuthFilter) {
         "FolderController.hpp",
         "OperationLogController.hpp",
         "ShareController.hpp",
+        "StorageJobAdminController.hpp",
         "SystemController.hpp",
         "TrashController.hpp",
+        "UploadDiagnosticController.hpp",
         "UserController.hpp",
     };
 
@@ -148,6 +150,21 @@ TEST(FilterOwnershipTest, RouteDeclarationsDoNotDeclareJwtAuthFilter) {
         EXPECT_EQ(CountOccurrences(ControllerText(controller), "disk::filters::JwtAuthFilter"), 0U)
             << controller;
     }
+}
+
+TEST(FilterOwnershipTest, UploadDiagnosticsUseAdminAuthBeforeAdminRateLimit) {
+    const auto controller = ControllerText("UploadDiagnosticController.hpp");
+
+    EXPECT_TRUE(ContainsAllInOrder(
+        controller,
+        {
+            "UploadDiagnosticController::Get",
+            "\"disk::filters::AdminAuthFilter\"",
+            "\"disk::filters::AdminRateLimitFilter\"",
+        }
+    ));
+    EXPECT_EQ(CountOccurrences(controller, "\"disk::filters::AdminAuthFilter\""), 1U);
+    EXPECT_EQ(CountOccurrences(controller, "\"disk::filters::AdminRateLimitFilter\""), 1U);
 }
 
 TEST(FilterOwnershipTest, AuthenticatedRateLimitersRemainRouteOwnedExactlyOnce) {

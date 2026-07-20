@@ -48,6 +48,12 @@ namespace disk::storage {
         ) -> drogon::Task<Result<UploadStagingChunk>> override;
 
         [[nodiscard]]
+        auto HeadChunkObject(
+            const UploadStagingSession& session,
+            const UploadStagingChunk& chunk
+        ) -> drogon::Task<Result<UploadStagingObjectHead>> override;
+
+        [[nodiscard]]
         auto AssembleChunks(
             const UploadStagingSession& session,
             uint64_t state_version,

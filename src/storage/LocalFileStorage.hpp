@@ -74,6 +74,12 @@ namespace disk::storage {
             std::string data
         ) -> drogon::Task<Result<UploadStagingChunk>> override;
 
+        [[nodiscard]]
+        auto HeadChunkObject(
+            const UploadStagingSession& session,
+            const UploadStagingChunk& chunk
+        ) -> drogon::Task<Result<UploadStagingObjectHead>> override;
+
         /**
          * @brief 将上传会话对应的全部分片按序组装成临时完整文件
          * @param upload_id 上传会话 ID

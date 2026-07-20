@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "services/StorageReconciliationService.hpp"
 #include "services/TransactionRunner.hpp"
 #include "utils/LogHelper.hpp"
 
@@ -38,7 +39,8 @@ namespace disk::jobs {
         }
 
         template <typename Row>
-        [[nodiscard]] auto ToStorageJobItem(const Row& row) -> disk::admin::StorageJobItem {
+        [[nodiscard]] auto ToStorageJobItem(const Row& row, bool include_payload = true)
+            -> disk::admin::StorageJobItem {
             const auto status = ParseStorageJobStatus(row["status"].template as<int16_t>());
             if (!status.has_value()) {
                 throw std::runtime_error("Storage job has an invalid status");
@@ -48,7 +50,9 @@ namespace disk::jobs {
                 .job_type = row["job_type"].template as<std::string>(),
                 .aggregate_id = row["aggregate_id"].template as<std::string>(),
                 .dedupe_key = row["dedupe_key"].template as<std::string>(),
-                .payload = ParsePayload(row["payload_json"].template as<std::string>()),
+                .payload = include_payload ?
+                               ParsePayload(row["payload_json"].template as<std::string>()) :
+                               Json::Value(Json::objectValue),
                 .status = status.value(),
                 .attempts = row["attempts"].template as<uint32_t>(),
                 .max_attempts = row["max_attempts"].template as<uint32_t>(),
@@ -211,6 +215,71 @@ namespace disk::jobs {
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get storage job"
+            ));
+        }
+    }
+
+    auto StorageJobAdminService::ListRelatedToUpload(
+        const std::string& upload_id,
+        const std::string& staging_prefix,
+        int page,
+        int page_size
+    ) const -> drogon::Task<Result<disk::admin::StorageJobListResponse>> {
+        try {
+            constexpr std::string_view relation =
+                "((job_type = $1 AND aggregate_id = $2) " "OR ($4 <> '' AND job_type = $3 AND " "((payload ->> 'key') = $4 OR " "LEFT(payload ->> 'key', CHAR_LENGTH($4) + 1) = $4 || '/')) " "OR (job_type = $5 AND aggregate_id IN " "(SELECT details ->> 'scan_id' FROM storage_reconciliation_findings " "WHERE finding_type = $6 AND resource_id = $2 AND details ? 'scan_id')))";
+            const auto offset = static_cast<int64_t>(page - 1) * page_size;
+            const auto cleanup_type = std::string(kStagingCleanupJobType);
+            const auto multipart_abort_type = std::string(kMultipartAbortJobType);
+            const auto reconciliation_type = std::string(kStorageReconcileJobType);
+            const auto finding_type =
+                std::string(disk::reconciliation::kUploadStagingMismatchFindingType);
+
+            auto count = co_await m_db_client->execSqlCoro(
+                std::string("SELECT COUNT(*) AS total FROM storage_jobs WHERE ") +
+                    std::string(relation),
+                cleanup_type,
+                upload_id,
+                multipart_abort_type,
+                staging_prefix,
+                reconciliation_type,
+                finding_type
+            );
+            auto rows = co_await m_db_client->execSqlCoro(
+                std::string("SELECT ") + std::string(kJobProjection) +
+                    " FROM storage_jobs WHERE " + std::string(relation) +
+                    " ORDER BY updated_at DESC, id DESC LIMIT $7 OFFSET $8",
+                cleanup_type,
+                upload_id,
+                multipart_abort_type,
+                staging_prefix,
+                reconciliation_type,
+                finding_type,
+                static_cast<int64_t>(page_size),
+                offset
+            );
+
+            disk::admin::StorageJobListResponse response{
+                .page = page,
+                .page_size = page_size,
+            };
+            response.total = count.empty() ? 0 : count[0]["total"].as<uint64_t>();
+            response.total_pages = response.total == 0 ? 0 :
+                                                         (response.total + page_size - 1) /
+                                                             static_cast<uint64_t>(page_size);
+            response.items.reserve(rows.size());
+            for (const auto& row : rows) {
+                auto item = ToStorageJobItem(row, false);
+                item.last_error.reset();
+                response.items.push_back(std::move(item));
+            }
+            co_return response;
+        } catch (const std::exception& error) {
+            Logger::Error() << "Related upload storage job list failed: upload_id=" << upload_id
+                            << ", error=" << error.what();
+            co_return std::unexpected(ErrorInfo(
+                ErrorCode::InternalError,
+                "Failed to list related storage jobs"
             ));
         }
     }

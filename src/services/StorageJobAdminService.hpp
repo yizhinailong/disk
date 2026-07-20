@@ -34,6 +34,14 @@ namespace disk::jobs {
             -> drogon::Task<Result<disk::admin::StorageJobItem>>;
 
         [[nodiscard]]
+        auto ListRelatedToUpload(
+            const std::string& upload_id,
+            const std::string& staging_prefix,
+            int page,
+            int page_size
+        ) const -> drogon::Task<Result<disk::admin::StorageJobListResponse>>;
+
+        [[nodiscard]]
         auto Replay(
             uint64_t job_id,
             const disk::admin::StorageJobReplayRequest& request,

@@ -26,6 +26,24 @@ namespace disk::upload {
         }
     }
 
+    auto UploadTaskStatusName(UploadTaskStatus status) noexcept -> std::string_view {
+        switch (status) {
+            case UploadTaskStatus::InProgress:
+                return "in_progress";
+            case UploadTaskStatus::Completed:
+                return "completed";
+            case UploadTaskStatus::Cancelled:
+                return "cancelled";
+            case UploadTaskStatus::Expired:
+                return "expired";
+            case UploadTaskStatus::Finalizing:
+                return "finalizing";
+            case UploadTaskStatus::Failed:
+                return "failed";
+        }
+        return "unknown";
+    }
+
     auto IsTerminalStatus(UploadTaskStatus status) -> bool {
         switch (status) {
             case UploadTaskStatus::Completed:

@@ -222,6 +222,23 @@ namespace disk::storage {
             return {};
         }
 
+        [[nodiscard]] auto ValidateS3ChunkIdentity(
+            const UploadStagingSession& session,
+            const UploadStagingChunk& chunk
+        ) -> Result<void> {
+            if (!IsLowerHex(chunk.md5_hash, 32) ||
+                chunk.object_key != BuildS3ChunkKey(
+                                        session,
+                                        chunk.chunk_index,
+                                        chunk.md5_hash
+                                    )) {
+                return std::unexpected(
+                    ErrorInfo(ErrorCode::ChunkVerifyFailed, "Invalid S3 staging chunk identity")
+                );
+            }
+            return {};
+        }
+
         [[nodiscard]] auto ResolveS3ReadBufferSize(uint32_t configured_size) -> size_t {
             return std::clamp(
                 static_cast<size_t>(configured_size),
@@ -888,6 +905,44 @@ namespace disk::storage {
                     );
                 }
                 return chunk;
+            }
+        );
+        co_return result;
+    }
+
+    auto S3ObjectStorage::HeadChunkObject(
+        const UploadStagingSession& session,
+        const UploadStagingChunk& chunk
+    ) -> drogon::Task<Result<UploadStagingObjectHead>> {
+        if (session.backend == UploadStagingBackend::Local) {
+            co_return co_await m_local_staging.HeadChunkObject(session, chunk);
+        }
+        auto session_validation = ValidateS3Session(session, m_s3_config.staging_prefix);
+        if (!session_validation) {
+            co_return std::unexpected(session_validation.error());
+        }
+        auto chunk_validation = ValidateS3ChunkIdentity(session, chunk);
+        if (!chunk_validation) {
+            co_return std::unexpected(chunk_validation.error());
+        }
+
+        auto client = m_s3_client;
+        auto result = co_await RunBlockingS3Task(
+            m_worker_queue,
+            [client, key = chunk.object_key]() -> Result<UploadStagingObjectHead> {
+                auto head = client->HeadObject(key);
+                if (!head) {
+                    return std::unexpected(head.error());
+                }
+                if (!head->exists) {
+                    return UploadStagingObjectHead{};
+                }
+                return UploadStagingObjectHead{
+                    .exists = true,
+                    .size_bytes = head->size,
+                    .etag = head->etag.empty() ? std::nullopt :
+                                                 std::optional<std::string>(head->etag),
+                };
             }
         );
         co_return result;

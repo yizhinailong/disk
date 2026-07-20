@@ -23,6 +23,7 @@ set(Controllers_HEADERS
     controllers/SystemController.hpp
     controllers/StorageJobAdminController.hpp
     controllers/TrashController.hpp
+    controllers/UploadDiagnosticController.hpp
     controllers/UserController.hpp
 )
 set(Controllers_SOURCES
@@ -38,6 +39,7 @@ set(Controllers_SOURCES
     controllers/SystemController.cpp
     controllers/StorageJobAdminController.cpp
     controllers/TrashController.cpp
+    controllers/UploadDiagnosticController.cpp
     controllers/UserController.cpp
 )
 
@@ -49,6 +51,7 @@ set(Dtos_HEADERS
     dtos/ShareDto.hpp
     dtos/StorageJobAdminDto.hpp
     dtos/TrashDto.hpp
+    dtos/UploadDiagnosticDto.hpp
     dtos/UserDto.hpp
 )
 
@@ -145,6 +148,7 @@ set(Services_HEADERS
     services/TrashQuery.hpp
     services/TrashService.hpp
     services/TransactionRunner.hpp
+    services/UploadDiagnosticService.hpp
     services/UploadLifecycleService.hpp
     services/UploadStateMachine.hpp
     services/UploadService.hpp
@@ -187,6 +191,7 @@ set(Services_SOURCES
     services/TokenService.cpp
     services/TrashQuery.cpp
     services/TrashService.cpp
+    services/UploadDiagnosticService.cpp
     services/UploadLifecycleService.cpp
     services/UploadStateMachine.cpp
     services/UploadService.cpp

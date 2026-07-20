@@ -258,6 +258,34 @@ namespace disk::file {
             EXPECT_EQ(ReadBinaryFile(chunk_path), chunk_data);
         }
 
+        TEST_F(LocalFileStorageUploadConsistencyTest, HeadChunkObjectReportsPresentAndMissingExactDescriptor) {
+            const std::string upload_id = "head-chunk-object";
+            const std::string chunk_data = "diagnostic-payload";
+            const disk::storage::UploadStagingSession session{
+                .upload_id = upload_id,
+                .backend = disk::storage::UploadStagingBackend::Local,
+                .prefix = upload_id,
+            };
+
+            ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
+            auto written = drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, chunk_data));
+            ASSERT_TRUE(written.has_value());
+
+            auto present = drogon::sync_wait(m_storage->HeadChunkObject(session, written.value()));
+            ASSERT_TRUE(present.has_value());
+            EXPECT_TRUE(present->exists);
+            EXPECT_EQ(present->size_bytes, chunk_data.size());
+            EXPECT_FALSE(present->etag.has_value());
+
+            std::error_code error;
+            ASSERT_TRUE(std::filesystem::remove(ChunkPath(upload_id, 0), error));
+            ASSERT_FALSE(error);
+            auto missing = drogon::sync_wait(m_storage->HeadChunkObject(session, written.value()));
+            ASSERT_TRUE(missing.has_value());
+            EXPECT_FALSE(missing->exists);
+            EXPECT_FALSE(missing->size_bytes.has_value());
+        }
+
         TEST_F(LocalFileStorageUploadConsistencyTest, AssembleChunksProducesExpectedHashesAndMergedBytes) {
             const std::string upload_id = "assemble-success";
             const std::vector<std::string> chunks = {

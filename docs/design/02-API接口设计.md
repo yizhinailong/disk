@@ -4212,6 +4212,51 @@ created_at  TIMESTAMP        -- 操作时间
 - 只有 `DeadLetter -> Pending` 合法；原子重置 `attempts/available_at/lease/last_error/completed_at`。
 - 状态变化与 `operation_logs` 中的 `admin.storage_job.replay` 审计必须在同一 PostgreSQL 事务提交。并发重放只有一个成功，其他请求返回 HTTP 409 / `10004 ResourceConflict`。
 
+#### 上传会话诊断
+
+**GET** `/api/admin/uploads/{upload_id}/diagnostics`
+
+该端点只读，必须经过 `AdminAuthFilter` 和管理员限流。`upload_id` 限 1-64 个
+`[A-Za-z0-9._:-]` 字符；任务不存在返回 HTTP 404 / `10003 ResourceNotFound`。查询参数：
+
+| 参数 | 默认 | 范围 | 语义 |
+|---|---:|---:|---|
+| `chunk_page` | 1 | >= 1 | 分片页码 |
+| `chunk_page_size` | 20 | 1-100 | 本次读取并 HEAD 的最大分片数 |
+| `job_page` | 1 | >= 1 | 关联存储任务页码 |
+| `job_page_size` | 20 | 1-100 | 关联存储任务页大小 |
+
+`data.task` 返回上传状态、`state_version`、预留字节、staging 后端/前缀、完成尝试与最后错误码；
+`lease` 在无租约时为 `null`，否则包含 `owner/expires_at/expired`。`data.chunks[]` 返回
+PostgreSQL 中的 `chunk_index/size_bytes/hash_md5/object_key/etag/uploaded_at`，以及针对该权威描述符执行的
+`object_head`：
+
+```json
+{
+  "status": "present",
+  "size_bytes": 5242880,
+  "etag": "\"example-etag\"",
+  "matches_record": true,
+  "error_code": null
+}
+```
+
+`object_head.status` 只有 `present/missing/error`。`missing` 时 `matches_record=false`；存储调用失败或 DB
+描述符不能安全定位对象时为 `error`，只返回稳定业务 `error_code`，其他 HEAD 和数据库诊断仍正常返回。
+local 只比较大小；S3 在 DB 大小与 ETag 均完整时一并比较，元数据不完整时
+`matches_record=null`。诊断不读取对象正文，也不修复、重试或续租。
+
+`data.related_jobs` 使用任务列表的 `items/pagination` 形状且不返回 payload，关联范围仅包含：
+
+- `aggregate_id` 为该 `upload_id` 的 `staging_cleanup`；
+- S3 multipart key 位于该会话 staging 前缀精确边界内的 `multipart_abort`；
+- `upload_staging_mismatch` finding 中稳定 `scan_id` 指向的 `storage_reconcile`。
+
+关联任务的 `last_error` 固定为 `null`；需要查看任务错误与合同 payload 时，再使用精确任务 ID 调用任务详情接口。
+
+响应不包含凭据、令牌、签名 URL、对象正文或底层异常文本。`object_key`和租约 owner
+只在该管理员响应中返回，不写入指标标签或通用请求日志。
+
 ### 10.0.1 内部指标接口
 
 **GET** `/metrics`

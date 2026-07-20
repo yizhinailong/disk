@@ -71,6 +71,7 @@ set(TEST_SOURCES
     dtos/ShareDto_test.cpp
     dtos/StorageJobAdminDto_test.cpp
     dtos/TrashDto_test.cpp
+    dtos/UploadDiagnosticDto_test.cpp
     dtos/UserDto_test.cpp
     storage/AssemblyWorkerPool_test.cpp
     storage/AssemblyPerf_test.cpp

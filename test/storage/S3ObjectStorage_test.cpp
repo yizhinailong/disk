@@ -599,6 +599,40 @@ TEST_F(S3ObjectStorageTest, S3ChunkWriteRejectsUnverifiedHashBeforePut) {
     EXPECT_TRUE(client->objects.empty());
 }
 
+TEST_F(S3ObjectStorageTest, HeadChunkObjectReportsPresentAndMissingExactDescriptor) {
+    const auto session = S3Session();
+    const std::string data = "diagnostic-head";
+    const auto chunk = WriteS3Chunk(session, 0, data);
+    const auto head_calls_before = client->head_calls;
+
+    auto present = drogon::sync_wait(storage->HeadChunkObject(session, chunk));
+    ASSERT_TRUE(present.has_value());
+    EXPECT_TRUE(present->exists);
+    EXPECT_EQ(present->size_bytes, data.size());
+    EXPECT_EQ(present->etag, FakeS3Client::EtagFor(data));
+    EXPECT_EQ(client->head_calls, head_calls_before + 1);
+
+    client->objects.erase(chunk.object_key);
+    auto missing = drogon::sync_wait(storage->HeadChunkObject(session, chunk));
+    ASSERT_TRUE(missing.has_value());
+    EXPECT_FALSE(missing->exists);
+    EXPECT_FALSE(missing->size_bytes.has_value());
+    EXPECT_EQ(client->head_calls, head_calls_before + 2);
+}
+
+TEST_F(S3ObjectStorageTest, HeadChunkObjectRejectsCrossSessionKeyBeforeS3Call) {
+    const auto session = S3Session();
+    auto chunk = WriteS3Chunk(session, 0, "diagnostic-head");
+    chunk.object_key = "staging/another-upload/chunks/0-" + chunk.md5_hash + ".part";
+    const auto head_calls_before = client->head_calls;
+
+    auto result = drogon::sync_wait(storage->HeadChunkObject(session, chunk));
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::ChunkVerifyFailed);
+    EXPECT_EQ(client->head_calls, head_calls_before);
+}
+
 TEST_F(S3ObjectStorageTest, S3AssemblyStreamsChunksToVersionedMultipartObject) {
     const auto session = S3Session();
     const std::string first_data = "first-";

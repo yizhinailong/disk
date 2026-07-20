@@ -38,6 +38,15 @@ namespace disk::upload {
             EXPECT_FALSE(UploadTaskStatusFromStorage(6).has_value());
         }
 
+        TEST(UploadStateMachineTest, StatusNamesAreStableForDiagnostics) {
+            EXPECT_EQ(UploadTaskStatusName(UploadTaskStatus::InProgress), "in_progress");
+            EXPECT_EQ(UploadTaskStatusName(UploadTaskStatus::Completed), "completed");
+            EXPECT_EQ(UploadTaskStatusName(UploadTaskStatus::Cancelled), "cancelled");
+            EXPECT_EQ(UploadTaskStatusName(UploadTaskStatus::Expired), "expired");
+            EXPECT_EQ(UploadTaskStatusName(UploadTaskStatus::Finalizing), "finalizing");
+            EXPECT_EQ(UploadTaskStatusName(UploadTaskStatus::Failed), "failed");
+        }
+
         TEST(UploadStateMachineTest, TerminalStatusesAreStable) {
             EXPECT_FALSE(IsTerminalStatus(UploadTaskStatus::InProgress));
             EXPECT_FALSE(IsTerminalStatus(UploadTaskStatus::Finalizing));

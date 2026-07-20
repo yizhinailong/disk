@@ -383,6 +383,48 @@ namespace disk::storage {
                                       .etag = "" };
     }
 
+    auto LocalFileStorage::HeadChunkObject(
+        const UploadStagingSession& session,
+        const UploadStagingChunk& chunk
+    ) -> drogon::Task<Result<UploadStagingObjectHead>> {
+        auto validation = ValidateLocalSession(session);
+        if (!validation) {
+            co_return std::unexpected(validation.error());
+        }
+        auto resolved_path = ResolveChunkFilePath(session.upload_id, chunk);
+        if (!resolved_path) {
+            co_return std::unexpected(resolved_path.error());
+        }
+
+        auto result = co_await RunBlockingFilesystemTask(
+            m_worker_queue,
+            [path = std::move(resolved_path.value())]() -> Result<UploadStagingObjectHead> {
+                std::error_code error;
+                const auto exists = std::filesystem::exists(path, error);
+                if (error) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::FileReadError, "Failed to inspect staging chunk")
+                    );
+                }
+                if (!exists) {
+                    return UploadStagingObjectHead{};
+                }
+
+                const auto size_bytes = std::filesystem::file_size(path, error);
+                if (error) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::FileReadError, "Failed to inspect staging chunk size")
+                    );
+                }
+                return UploadStagingObjectHead{
+                    .exists = true,
+                    .size_bytes = static_cast<uint64_t>(size_bytes),
+                };
+            }
+        );
+        co_return result;
+    }
+
     auto LocalFileStorage::AssembleChunks(
         const UploadStagingSession& session,
         uint64_t state_version,
