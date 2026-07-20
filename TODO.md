@@ -453,7 +453,7 @@ API Instance A  API Instance B ... N
 - [x] `cmake --preset linux-debug-clang`
 - [x] `cmake --build --preset linux-debug-clang`
 - [x] `ctest --preset linux-debug-clang -V`
-- [ ] 新增并运行多实例集成测试入口。
+- [x] 新增并运行多实例集成测试入口。
 - [ ] 新增并运行 S3/MinIO 环境门控测试。
 - [ ] 运行更新后的压力测试并保存基线对比证据。
 

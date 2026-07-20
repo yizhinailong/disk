@@ -22,6 +22,21 @@ The validation documentation SHALL enumerate backend test coverage for DTO valid
 - **WHEN** a developer needs to run backend tests
 - **THEN** the documentation SHALL provide CMake/CTest or executable-level commands for full and focused test execution
 
+### Requirement: Distributed multi-instance integration validation
+The backend test suite SHALL provide serial, environment-gated CTest entries for the authoritative Compose topology and for an equivalent local-process runner when Docker is unavailable. Both entries SHALL execute the same distributed-flow assertions against two API processes, two Worker processes, one shared PostgreSQL database, one password-protected persistent Redis-compatible service, one shared MinIO service, and a non-sticky load-balancing endpoint.
+
+#### Scenario: Compose distributed flow is selected
+- **WHEN** `DISK_DISTRIBUTED_INTEGRATION=1` selects the Compose entry
+- **THEN** the test SHALL execute the complete cross-instance and dependency-failure flow against `docker-compose.distributed.yml`
+
+#### Scenario: Local-process distributed flow is selected
+- **WHEN** Docker is unavailable and `DISK_DISTRIBUTED_LOCAL_INTEGRATION=1` selects the local entry with an executable `DISK_MINIO_BIN`
+- **THEN** the runner SHALL start isolated real dependencies and four application processes, execute the unchanged distributed-flow assertions, preserve evidence, and tear down its temporary topology
+
+#### Scenario: Distributed flow gate is not selected
+- **WHEN** either distributed entry is invoked without its required environment gate
+- **THEN** it SHALL report an environment-gated skip that SHALL NOT count as distributed acceptance evidence
+
 ### Requirement: System functional validation
 The system test plan SHALL define functional test cases for authentication, user profile and storage, file upload/download, file and folder management, trash lifecycle, sharing, and system/admin interfaces.
 

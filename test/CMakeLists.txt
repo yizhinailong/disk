@@ -498,3 +498,9 @@ add_disk_gated_integration_test(
     900
     "SKIP: DISK_DISTRIBUTED_INTEGRATION is not 1"
 )
+add_disk_gated_integration_test(
+    DistributedLocalFlowIntegration
+    test_distributed_local.py
+    900
+    "SKIP: DISK_DISTRIBUTED_LOCAL_INTEGRATION is not 1"
+)

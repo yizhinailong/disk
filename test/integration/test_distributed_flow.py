@@ -23,7 +23,15 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
+
+
+class TopologyControl(Protocol):
+    runner_name: str
+
+    def run(self, *arguments: str) -> subprocess.CompletedProcess[str]: ...
+
+    def fingerprint(self, service: str) -> str: ...
 
 
 def require(condition: bool, message: str) -> None:
@@ -61,11 +69,14 @@ def wait_until(
     raise AssertionError(f"timed out waiting for {label}{suffix}")
 
 
-def main() -> int:
-    if os.environ.get("DISK_DISTRIBUTED_INTEGRATION") != "1":
-        print("SKIP: DISK_DISTRIBUTED_INTEGRATION is not 1; skipping distributed flow")
+def main(
+    topology: TopologyControl | None = None,
+    gate_name: str = "DISK_DISTRIBUTED_INTEGRATION",
+) -> int:
+    if os.environ.get(gate_name) != "1":
+        print(f"SKIP: {gate_name} is not 1; skipping distributed flow")
         return 0
-    if shutil.which("docker") is None:
+    if topology is None and shutil.which("docker") is None:
         print("FAIL: Docker CLI is required when DISK_DISTRIBUTED_INTEGRATION=1")
         return 1
 
@@ -99,16 +110,22 @@ def main() -> int:
     load_balancer_url = f"http://127.0.0.1:{values.get('DISK_LB_PORT', '18080')}"
     postgres_port = int(values.get("DISK_POSTGRES_PORT", "15432"))
     minio_url = f"http://127.0.0.1:{values.get('DISK_MINIO_PORT', '19000')}"
-    compose_base = [
-        "docker",
-        "compose",
-        "--env-file",
-        str(env_file),
-        "-f",
-        str(compose_file),
-    ]
+    compose_base = (
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            str(env_file),
+            "-f",
+            str(compose_file),
+        ]
+        if topology is None
+        else []
+    )
 
     def compose(*arguments: str) -> subprocess.CompletedProcess[str]:
+        if topology is not None:
+            return topology.run(*arguments)
         return subprocess.run(
             [*compose_base, *arguments],
             cwd=root,
@@ -123,8 +140,8 @@ def main() -> int:
     db_parameters = {
         "host": "127.0.0.1",
         "port": postgres_port,
-        "dbname": "disk",
-        "user": "disk",
+        "dbname": values.get("DISK_DATABASE_NAME", "disk"),
+        "user": values.get("DISK_DATABASE_USER", "disk"),
         "password": values["DISK_DATABASE_PASSWORD"],
         "row_factory": dict_row,
     }
@@ -179,6 +196,10 @@ def main() -> int:
         return wait_until(probe, 60, f"{instance_id or role} readiness")
 
     def container_fingerprint(service: str) -> str:
+        if topology is not None:
+            fingerprint = topology.fingerprint(service)
+            require(bool(fingerprint), f"process fingerprint is missing for {service}")
+            return fingerprint
         container_ids = [
             line.strip()
             for line in compose("ps", "-q", service).stdout.splitlines()
@@ -226,7 +247,16 @@ def main() -> int:
     postgres_stopped = False
     redis_stopped = False
     minio_stopped = False
-    evidence: dict[str, Any] = {"run_id": run_id, "checks": []}
+    evidence_path = root / ".sisyphus/evidence/distributed-flow-summary.json"
+    evidence: dict[str, Any] = {
+        "run_id": run_id,
+        "runner": topology.runner_name if topology is not None else "compose",
+        "checks": [],
+    }
+
+    def write_evidence() -> None:
+        evidence_path.parent.mkdir(parents=True, exist_ok=True)
+        evidence_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
 
     def passed(name: str) -> None:
         evidence["checks"].append(name)
@@ -458,7 +488,7 @@ def main() -> int:
                     timeout=180,
                 )
                 payload = response_json(response, "concurrent complete")
-                result_file = payload.get("data", {}).get("file", {})
+                result_file = (payload.get("data") or {}).get("file", {})
                 return str(payload["code"]), int(result_file["id"]) if result_file.get("id") else None
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
@@ -965,14 +995,13 @@ def main() -> int:
         execute("DELETE FROM users WHERE id = %s", (user_id,))
         user_id = 0
         evidence["status"] = "passed"
-        evidence_path = root / ".sisyphus/evidence/distributed-flow-summary.json"
-        evidence_path.parent.mkdir(parents=True, exist_ok=True)
-        evidence_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+        write_evidence()
         print(f"PASS: distributed flow completed ({len(evidence['checks'])} checks)")
         return 0
     except Exception as error:  # noqa: BLE001 - print a credential-free summary
         evidence["status"] = "failed"
         evidence["error"] = str(error)
+        write_evidence()
         print(f"FAIL: {error}")
         return 1
     finally:
