@@ -1,11 +1,15 @@
 #include "services/StorageJobWorker.hpp"
 
+#include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <spdlog/sinks/ostream_sink.h>
+#include <spdlog/spdlog.h>
 
 #include "services/StorageJobContract.hpp"
 #include "storage/MultipartUploadRecovery.hpp"
@@ -13,6 +17,35 @@
 
 namespace disk::jobs {
     namespace {
+        class ScopedLogCapture {
+        public:
+            ScopedLogCapture()
+                : m_previous_logger(spdlog::default_logger()),
+                  m_sink(std::make_shared<spdlog::sinks::ostream_sink_mt>(m_output)),
+                  m_logger(std::make_shared<spdlog::logger>("storage-job-worker-test", m_sink)) {
+                m_logger->set_pattern("%v");
+                spdlog::set_default_logger(m_logger);
+            }
+
+            ~ScopedLogCapture() {
+                spdlog::set_default_logger(m_previous_logger);
+            }
+
+            ScopedLogCapture(const ScopedLogCapture&) = delete;
+            auto operator=(const ScopedLogCapture&) -> ScopedLogCapture& = delete;
+
+            [[nodiscard]] auto Text() -> std::string {
+                m_logger->flush();
+                return m_output.str();
+            }
+
+        private:
+            std::ostringstream m_output;
+            std::shared_ptr<spdlog::logger> m_previous_logger;
+            std::shared_ptr<spdlog::sinks::ostream_sink_mt> m_sink;
+            std::shared_ptr<spdlog::logger> m_logger;
+        };
+
         TEST(StorageJobWorkerOptionsTest, ClaimBatchDoesNotExceedConcurrency) {
             EXPECT_EQ(EffectiveWorkerClaimBatchSize(20, 1), 1U);
             EXPECT_EQ(EffectiveWorkerClaimBatchSize(20, 4), 4U);
@@ -320,6 +353,42 @@ namespace disk::jobs {
             EXPECT_FALSE(result.succeeded);
             EXPECT_TRUE(result.retryable);
             EXPECT_EQ(result.error, "Storage reconciliation database is not configured");
+        }
+
+        TEST(StorageJobWorkerHandlerTest, LogsFailedScanLifecycleWithoutOpaqueCursor) {
+            const disk::reconciliation::ReconciliationPageRequest request{
+                .scan_id = "scan-log",
+                .scope = disk::reconciliation::ReconciliationScope::Staging,
+                .continuation_token = "opaque-sensitive-cursor",
+                .limit = 100,
+            };
+            const auto cursor_digest = BuildReconciliationCursorDigest(request);
+            auto built = BuildStorageReconcileJob(request);
+            ASSERT_TRUE(built.has_value());
+
+            ScopedLogCapture capture;
+            StorageJobWorker worker(nullptr, nullptr, nullptr, "worker-log");
+            auto result = drogon::sync_wait(
+                worker.ExecuteJob(MakePersistedJob(std::move(built.value())))
+            );
+            const auto logs = capture.Text();
+
+            EXPECT_FALSE(result.succeeded);
+            EXPECT_NE(logs.find("Periodic scan page started:"), std::string::npos);
+            EXPECT_NE(logs.find("Periodic scan page finished:"), std::string::npos);
+            EXPECT_NE(logs.find("instance_id=worker-log"), std::string::npos);
+            EXPECT_NE(logs.find("job_type=storage_reconcile"), std::string::npos);
+            EXPECT_NE(logs.find("scan_id=scan-log"), std::string::npos);
+            EXPECT_NE(logs.find("scope=staging"), std::string::npos);
+            EXPECT_NE(logs.find("cursor_kind=continuation_digest"), std::string::npos);
+            EXPECT_NE(logs.find("current_cursor=" + cursor_digest), std::string::npos);
+            EXPECT_NE(logs.find("outcome=failure"), std::string::npos);
+            EXPECT_NE(logs.find("duration_ms="), std::string::npos);
+            EXPECT_NE(logs.find("candidates=0"), std::string::npos);
+            EXPECT_NE(logs.find("succeeded=0"), std::string::npos);
+            EXPECT_NE(logs.find("failed=1"), std::string::npos);
+            EXPECT_NE(logs.find("next_cursor=" + cursor_digest), std::string::npos);
+            EXPECT_EQ(logs.find(request.continuation_token), std::string::npos);
         }
 
         TEST(StorageJobWorkerHandlerTest, RejectsTamperedPeriodicTaskBeforeDatabaseAccess) {

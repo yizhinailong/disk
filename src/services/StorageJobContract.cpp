@@ -23,15 +23,6 @@ namespace disk::jobs {
                    });
         }
 
-        [[nodiscard]] auto BuildReconciliationCursorDigest(
-            const disk::reconciliation::ReconciliationPageRequest& request
-        ) -> std::string {
-            return disk::utils::FileHashUtil::HashSha256(
-                std::string(disk::reconciliation::ToStorageValue(request.scope)) + "\n" +
-                std::to_string(request.after_id) + "\n" + request.continuation_token
-            );
-        }
-
         [[nodiscard]] auto ValidateObjectShape(
             const Json::Value& payload,
             Json::ArrayIndex expected_fields,
@@ -45,6 +36,15 @@ namespace disk::jobs {
             return {};
         }
     } // namespace
+
+    auto BuildReconciliationCursorDigest(
+        const disk::reconciliation::ReconciliationPageRequest& request
+    ) -> std::string {
+        return disk::utils::FileHashUtil::HashSha256(
+            std::string(disk::reconciliation::ToStorageValue(request.scope)) + "\n" +
+            std::to_string(request.after_id) + "\n" + request.continuation_token
+        );
+    }
 
     auto ValidateExpireUploadsPageRequest(const ExpireUploadsPageRequest& request)
         -> std::expected<void, std::string> {

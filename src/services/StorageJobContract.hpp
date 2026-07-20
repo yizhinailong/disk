@@ -52,6 +52,11 @@ namespace disk::jobs {
         -> std::expected<ExpireTrashPageRequest, std::string>;
 
     [[nodiscard]]
+    auto BuildReconciliationCursorDigest(
+        const disk::reconciliation::ReconciliationPageRequest& request
+    ) -> std::string;
+
+    [[nodiscard]]
     auto BuildStorageReconcileJob(
         const disk::reconciliation::ReconciliationPageRequest& request
     ) -> std::expected<NewStorageJob, std::string>;

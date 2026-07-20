@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 #include <drogon/drogon.h>
@@ -37,6 +38,134 @@ namespace disk::jobs {
             std::atomic_bool renewal_inflight{ false };
             std::atomic_bool ownership_lost{ false };
         };
+
+        struct PeriodicScanPageProgress {
+            size_t candidates{ 0 };
+            size_t succeeded{ 0 };
+            size_t failed{ 0 };
+            size_t findings_recorded{ 0 };
+            size_t repairs_enqueued{ 0 };
+            std::string next_cursor{ "end" };
+            bool continuation_enqueued{ false };
+        };
+
+        class PeriodicScanPageLogGuard {
+        public:
+            PeriodicScanPageLogGuard(
+                std::string instance_id,
+                std::string job_type,
+                std::string scan_id,
+                std::string scope,
+                std::string cursor_kind,
+                std::string current_cursor
+            ) : m_instance_id(std::move(instance_id)),
+                m_job_type(std::move(job_type)),
+                m_scan_id(std::move(scan_id)),
+                m_scope(std::move(scope)),
+                m_cursor_kind(std::move(cursor_kind)),
+                m_current_cursor(std::move(current_cursor)),
+                m_started_at(std::chrono::steady_clock::now()) {
+                m_progress.next_cursor = m_current_cursor;
+                try {
+                    Logger::Info() << "Periodic scan page started: instance_id=" << m_instance_id
+                                   << ", job_type=" << m_job_type
+                                   << ", scan_id=" << m_scan_id
+                                   << ", scope=" << m_scope
+                                   << ", cursor_kind=" << m_cursor_kind
+                                   << ", current_cursor=" << m_current_cursor;
+                } catch (...) {
+                    // Observability must not change the durable job outcome.
+                }
+            }
+
+            ~PeriodicScanPageLogGuard() {
+                if (m_finished) {
+                    return;
+                }
+                m_progress.failed = std::max<size_t>(1, m_progress.failed);
+                Emit(false);
+            }
+
+            PeriodicScanPageLogGuard(const PeriodicScanPageLogGuard&) = delete;
+            auto operator=(const PeriodicScanPageLogGuard&)
+                -> PeriodicScanPageLogGuard& = delete;
+
+            auto UpdateProgress(PeriodicScanPageProgress progress) -> void {
+                m_progress = std::move(progress);
+            }
+
+            auto Complete(PeriodicScanPageProgress progress) -> void {
+                m_progress = std::move(progress);
+                m_finished = true;
+                Emit(true);
+            }
+
+        private:
+            [[nodiscard]] auto DurationMilliseconds() const -> int64_t {
+                return std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::steady_clock::now() - m_started_at
+                )
+                    .count();
+            }
+
+            auto AppendFields(disk::utils::LogStream& log, std::string_view outcome) const
+                -> void {
+                const auto handled = std::min(
+                    m_progress.candidates,
+                    m_progress.succeeded + m_progress.failed
+                );
+                const auto skipped = m_progress.candidates - handled;
+                log << "Periodic scan page finished: instance_id=" << m_instance_id
+                    << ", job_type=" << m_job_type
+                    << ", scan_id=" << m_scan_id
+                    << ", scope=" << m_scope
+                    << ", cursor_kind=" << m_cursor_kind
+                    << ", current_cursor=" << m_current_cursor
+                    << ", outcome=" << outcome
+                    << ", duration_ms=" << DurationMilliseconds()
+                    << ", candidates=" << m_progress.candidates
+                    << ", succeeded=" << m_progress.succeeded
+                    << ", failed=" << m_progress.failed
+                    << ", skipped=" << skipped
+                    << ", findings_recorded=" << m_progress.findings_recorded
+                    << ", repairs_enqueued=" << m_progress.repairs_enqueued
+                    << ", next_cursor=" << m_progress.next_cursor
+                    << ", continuation_enqueued=" << m_progress.continuation_enqueued;
+            }
+
+            auto Emit(bool succeeded) const noexcept -> void {
+                try {
+                    if (succeeded) {
+                        auto log = Logger::Info();
+                        AppendFields(log, "success");
+                    } else {
+                        auto log = Logger::Warn();
+                        AppendFields(log, "failure");
+                    }
+                } catch (...) {
+                    // The worker still persists the handler outcome when logging fails.
+                }
+            }
+
+            std::string m_instance_id;
+            std::string m_job_type;
+            std::string m_scan_id;
+            std::string m_scope;
+            std::string m_cursor_kind;
+            std::string m_current_cursor;
+            std::chrono::steady_clock::time_point m_started_at;
+            PeriodicScanPageProgress m_progress;
+            bool m_finished{ false };
+        };
+
+        [[nodiscard]] auto ReconciliationCursorForLog(
+            const disk::reconciliation::ReconciliationPageRequest& request
+        ) -> std::string {
+            const auto is_database_scope =
+                request.scope == disk::reconciliation::ReconciliationScope::Contents ||
+                request.scope == disk::reconciliation::ReconciliationScope::Users;
+            return is_database_scope ? std::to_string(request.after_id) : BuildReconciliationCursorDigest(request);
+        }
 
         [[nodiscard]] auto PermanentFailure(std::string error) -> JobExecutionResult {
             return JobExecutionResult{
@@ -409,6 +538,14 @@ namespace disk::jobs {
         if (!request) {
             co_return PermanentFailure(request.error());
         }
+        PeriodicScanPageLogGuard scan_log(
+            m_instance_id,
+            std::string(kExpireUploadsJobType),
+            request->scan_id,
+            "uploads",
+            "page",
+            std::to_string(request->page)
+        );
         if (m_db_client == nullptr) {
             co_return RetryableFailure("Upload expiration database is not configured");
         }
@@ -432,27 +569,28 @@ namespace disk::jobs {
             };
         }
 
-        bool continuation_enqueued = false;
+        PeriodicScanPageProgress progress{
+            .candidates = expiration->candidates,
+            .succeeded = expiration->expired,
+        };
+        scan_log.UpdateProgress(progress);
         if (disk::upload::ShouldContinueExpirationScan(
                 expiration->candidates,
                 request->limit
             )) {
             auto next_request = request.value();
             ++next_request.page;
+            progress.next_cursor = std::to_string(next_request.page);
+            scan_log.UpdateProgress(progress);
             auto next_job = BuildExpireUploadsJob(next_request);
             if (!next_job) {
                 co_return PermanentFailure(next_job.error());
             }
             StorageJobRepository repository(m_db_client);
-            continuation_enqueued = co_await repository.Enqueue(next_job.value());
+            progress.continuation_enqueued = co_await repository.Enqueue(next_job.value());
         }
 
-        Logger::Info() << "Storage job page completed: instance_id=" << m_instance_id
-                       << ", job_type=" << kExpireUploadsJobType
-                       << ", scan_id=" << request->scan_id << ", page=" << request->page
-                       << ", candidates=" << expiration->candidates
-                       << ", expired=" << expiration->expired
-                       << ", continuation_enqueued=" << continuation_enqueued;
+        scan_log.Complete(std::move(progress));
         co_return JobExecutionResult{ .succeeded = true };
     }
 
@@ -462,6 +600,14 @@ namespace disk::jobs {
         if (!request) {
             co_return PermanentFailure(request.error());
         }
+        PeriodicScanPageLogGuard scan_log(
+            m_instance_id,
+            std::string(kExpireTrashJobType),
+            request->scan_id,
+            "trash",
+            "after_id",
+            std::to_string(request->after_id)
+        );
         if (m_db_client == nullptr) {
             co_return RetryableFailure("Trash expiration database is not configured");
         }
@@ -483,8 +629,14 @@ namespace disk::jobs {
             };
         }
 
-        bool continuation_enqueued = false;
+        PeriodicScanPageProgress progress{
+            .candidates = page->candidates,
+            .succeeded = page->deleted,
+        };
+        scan_log.UpdateProgress(progress);
         if (page->has_more) {
+            progress.next_cursor = std::to_string(page->next_after_id);
+            scan_log.UpdateProgress(progress);
             if (page->next_after_id <= request->after_id) {
                 co_return PermanentFailure("expire_trash continuation cursor did not advance");
             }
@@ -495,17 +647,10 @@ namespace disk::jobs {
                 co_return PermanentFailure(next_job.error());
             }
             StorageJobRepository repository(m_db_client);
-            continuation_enqueued = co_await repository.Enqueue(next_job.value());
+            progress.continuation_enqueued = co_await repository.Enqueue(next_job.value());
         }
 
-        Logger::Info() << "Storage job page completed: instance_id=" << m_instance_id
-                       << ", job_type=" << kExpireTrashJobType
-                       << ", scan_id=" << request->scan_id
-                       << ", after_id=" << request->after_id
-                       << ", candidates=" << page->candidates
-                       << ", deleted=" << page->deleted
-                       << ", next_after_id=" << page->next_after_id
-                       << ", continuation_enqueued=" << continuation_enqueued;
+        scan_log.Complete(std::move(progress));
         co_return JobExecutionResult{ .succeeded = true };
     }
 
@@ -515,6 +660,17 @@ namespace disk::jobs {
         if (!request) {
             co_return PermanentFailure(request.error());
         }
+        const auto is_database_scope =
+            request->scope == disk::reconciliation::ReconciliationScope::Contents ||
+            request->scope == disk::reconciliation::ReconciliationScope::Users;
+        PeriodicScanPageLogGuard scan_log(
+            m_instance_id,
+            std::string(kStorageReconcileJobType),
+            request->scan_id,
+            std::string(disk::reconciliation::ToStorageValue(request->scope)),
+            is_database_scope ? "after_id" : "continuation_digest",
+            ReconciliationCursorForLog(request.value())
+        );
         if (m_db_client == nullptr) {
             co_return RetryableFailure("Storage reconciliation database is not configured");
         }
@@ -537,15 +693,20 @@ namespace disk::jobs {
             };
         }
 
-        const auto is_database_scope =
-            request->scope == disk::reconciliation::ReconciliationScope::Contents ||
-            request->scope == disk::reconciliation::ReconciliationScope::Users;
+        PeriodicScanPageProgress progress{
+            .candidates = page->inspected,
+            .succeeded = page->inspected,
+            .findings_recorded = page->findings_recorded,
+            .repairs_enqueued = page->repairs_enqueued,
+        };
+        scan_log.UpdateProgress(progress);
         bool cursor_advanced = !page->has_more;
-        bool continuation_enqueued = false;
         if (page->has_more) {
             auto next_request = request.value();
             next_request.after_id = page->next_after_id;
             next_request.continuation_token = page->next_continuation_token;
+            progress.next_cursor = ReconciliationCursorForLog(next_request);
+            scan_log.UpdateProgress(progress);
             cursor_advanced = is_database_scope ? next_request.after_id > request->after_id : !next_request.continuation_token.empty() && next_request.continuation_token != request->continuation_token;
             if (!cursor_advanced) {
                 co_return PermanentFailure("storage_reconcile continuation cursor did not advance");
@@ -556,22 +717,10 @@ namespace disk::jobs {
                 co_return PermanentFailure(next_job.error());
             }
             StorageJobRepository repository(m_db_client);
-            continuation_enqueued = co_await repository.Enqueue(next_job.value());
+            progress.continuation_enqueued = co_await repository.Enqueue(next_job.value());
         }
 
-        Logger::Info() << "Storage job page completed: instance_id=" << m_instance_id
-                       << ", job_type=" << kStorageReconcileJobType
-                       << ", scan_id=" << request->scan_id
-                       << ", scope=" << disk::reconciliation::ToStorageValue(request->scope)
-                       << ", inspected=" << page->inspected
-                       << ", findings=" << page->findings_recorded
-                       << ", repairs_enqueued=" << page->repairs_enqueued
-                       << ", has_more=" << page->has_more
-                       << ", cursor_kind=" << (is_database_scope ? "id" : "continuation")
-                       << ", next_after_id="
-                       << (is_database_scope ? page->next_after_id : 0)
-                       << ", cursor_advanced=" << cursor_advanced
-                       << ", continuation_enqueued=" << continuation_enqueued;
+        scan_log.Complete(std::move(progress));
         co_return JobExecutionResult{ .succeeded = true };
     }
 

@@ -145,6 +145,10 @@ namespace disk::jobs {
             auto built = BuildStorageReconcileJob(request);
             ASSERT_TRUE(built.has_value());
             EXPECT_EQ(
+                BuildReconciliationCursorDigest(request),
+                "43cb960ae320b159d0f87662c563a9734a2284bcb4ff2016cb2f57c25d0aac82"
+            );
+            EXPECT_EQ(
                 built->dedupe_key,
                 "periodic:storage-reconcile:scan-2:contents:" "43cb960ae320b159d0f87662c563a9734a2284bcb4ff2016cb2f57c25d0aac82"
             );
