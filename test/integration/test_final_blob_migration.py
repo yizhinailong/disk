@@ -13,10 +13,12 @@ import json
 import os
 import signal
 import sqlite3
+import stat
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import uuid
 from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -35,6 +37,7 @@ from lib_py.db import database_config
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATOR = REPO_ROOT / "scripts" / "migrate-final-blobs.py"
+EVIDENCE_PATH = REPO_ROOT / ".sisyphus/evidence/final-blob-manifest-summary.json"
 
 
 class TestFailure(RuntimeError):
@@ -51,11 +54,20 @@ class ObjectState:
     def __init__(self) -> None:
         self.objects: dict[str, bytes] = {}
         self.puts: Counter[str] = Counter()
+        self.requests: Counter[str] = Counter()
         self.total_puts = 0
         self.block_on_put: int | None = None
         self.blocked = threading.Event()
         self.release = threading.Event()
         self.lock = threading.Lock()
+
+    def record_request(self, method: str) -> None:
+        with self.lock:
+            self.requests[method] += 1
+
+    def request_count(self) -> int:
+        with self.lock:
+            return sum(self.requests.values())
 
     def get(self, key: str) -> bytes | None:
         with self.lock:
@@ -153,6 +165,7 @@ class ObjectHandler(BaseHTTPRequestHandler):
         self.send_payload(status_code, payload)
 
     def do_HEAD(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        self.server.state.record_request("HEAD")
         payload = self.server.state.get(self.object_key())
         if payload is None:
             self.send_s3_error(404, "NoSuchKey")
@@ -164,6 +177,7 @@ class ObjectHandler(BaseHTTPRequestHandler):
         )
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        self.server.state.record_request("GET")
         payload = self.server.state.get(self.object_key())
         if payload is None:
             self.send_s3_error(404, "NoSuchKey")
@@ -175,6 +189,7 @@ class ObjectHandler(BaseHTTPRequestHandler):
         )
 
     def do_PUT(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        self.server.state.record_request("PUT")
         key = self.object_key()
         payload = self.read_body()
         if not self.server.state.receive_put(key, payload):
@@ -240,6 +255,26 @@ def database_env(database_name: str, endpoint: str) -> dict[str, str]:
     return env
 
 
+def read_only_manifest_env(env: dict[str, str]) -> dict[str, str]:
+    manifest_env = env.copy()
+    manifest_env["PGOPTIONS"] = "-c default_transaction_read_only=on"
+    manifest_env["AWS_EC2_METADATA_DISABLED"] = "true"
+    for name in (
+        "DISK_S3_ACCESS_KEY",
+        "DISK_S3_SECRET_KEY",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_SECURITY_TOKEN",
+        "AWS_PROFILE",
+        "AWS_DEFAULT_PROFILE",
+        "AWS_SHARED_CREDENTIALS_FILE",
+        "AWS_CONFIG_FILE",
+    ):
+        manifest_env.pop(name, None)
+    return manifest_env
+
+
 def run_command(
     arguments: list[str],
     env: dict[str, str],
@@ -278,6 +313,124 @@ def current_locators(database_name: str) -> dict[int, str]:
             "SELECT id, storage_path FROM file_contents ORDER BY id"
         ).fetchall()
     return {int(row["id"]): str(row["storage_path"]) for row in rows}
+
+
+def content_snapshot(database_name: str) -> tuple[tuple[Any, ...], ...]:
+    with connect(database_name) as connection:
+        rows = connection.execute(
+            "SELECT id, hash_md5, hash_sha256, size, storage_path, mime_type, "
+            "ref_count, created_at::text AS created_at FROM file_contents ORDER BY id"
+        ).fetchall()
+    return tuple(
+        (
+            int(row["id"]),
+            str(row["hash_md5"]).strip(),
+            str(row["hash_sha256"]).strip(),
+            int(row["size"]),
+            str(row["storage_path"]),
+            row["mime_type"],
+            int(row["ref_count"]),
+            str(row["created_at"]),
+        )
+        for row in rows
+    )
+
+
+def source_snapshot(
+    records: list[dict[str, Any]],
+) -> dict[int, tuple[bytes, int, int, int]]:
+    snapshot: dict[int, tuple[bytes, int, int, int]] = {}
+    for record in records:
+        source_path = record["source_path"]
+        payload = source_path.read_bytes()
+        status = source_path.stat()
+        snapshot[int(record["content_id"])] = (
+            payload,
+            status.st_size,
+            stat.S_IMODE(status.st_mode),
+            status.st_mtime_ns,
+        )
+    return snapshot
+
+
+def manifest_arguments(
+    manifest_path: Path,
+    local_root: Path,
+    path_base: Path,
+    object_prefix: str,
+) -> list[str]:
+    return [
+        "manifest",
+        "--manifest",
+        str(manifest_path),
+        "--local-root",
+        str(local_root),
+        "--path-base",
+        str(path_base),
+        "--bucket",
+        "disk-migration-fixture",
+        "--object-prefix",
+        object_prefix,
+    ]
+
+
+def wait_for_manifest_count_lock(database_name: str, timeout: float = 10.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with connect(database_name) as connection:
+            blocked = connection.execute(
+                "SELECT EXISTS ("
+                "SELECT 1 FROM pg_stat_activity "
+                "WHERE datname = %s AND pid <> pg_backend_pid() "
+                "AND query LIKE '%%SELECT COUNT(*) AS count FROM file_contents%%' "
+                "AND wait_event_type = 'Lock') AS blocked",
+                (database_name,),
+            ).fetchone()
+        if blocked is not None and bool(blocked["blocked"]):
+            return
+        time.sleep(0.02)
+    raise TestFailure("manifest process did not block on the fixture table lock")
+
+
+def run_manifest_publish_race(
+    arguments: list[str],
+    env: dict[str, str],
+    database_name: str,
+    target_path: Path,
+    sentinel: bytes,
+) -> subprocess.CompletedProcess[str]:
+    config = database_config()
+    config["dbname"] = database_name
+    blocker = psycopg.connect(**config)
+    process: subprocess.Popen[str] | None = None
+    try:
+        blocker.execute("LOCK TABLE file_contents IN ACCESS EXCLUSIVE MODE")
+        process = subprocess.Popen(
+            [str(MIGRATOR), *arguments],
+            cwd=REPO_ROOT,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        wait_for_manifest_count_lock(database_name)
+        target_path.write_bytes(sentinel)
+        blocker.rollback()
+        stdout, stderr = process.communicate(timeout=30)
+        return subprocess.CompletedProcess(
+            process.args,
+            process.returncode,
+            stdout,
+            stderr,
+        )
+    finally:
+        try:
+            blocker.rollback()
+        finally:
+            blocker.close()
+        if process is not None and process.poll() is None:
+            process.kill()
+            process.communicate(timeout=10)
 
 
 def write_source(path: Path, payload: bytes) -> tuple[str, str]:
@@ -350,7 +503,7 @@ def setup_database(
                     record["sha256"],
                     record["size"],
                     record["source_locator"],
-                    record["content_id"] - 99,
+                    0 if record["content_id"] == 103 else record["content_id"] - 99,
                 ),
             )
     require(
@@ -371,6 +524,20 @@ def verify_manifest(
         "manifest contains one header and every content row",
     )
     header = json.loads(lines[0])
+    require(
+        set(header)
+        == {
+            "kind",
+            "version",
+            "generated_at",
+            "local_root",
+            "path_base",
+            "bucket",
+            "object_prefix",
+            "object_count",
+        },
+        "manifest header has the exact versioned fields",
+    )
     require(header["kind"] == "disk-final-blob-manifest", "manifest kind is stable")
     require(header["version"] == 1, "manifest version is stable")
     require(
@@ -382,6 +549,19 @@ def verify_manifest(
     target_keys: dict[int, str] = {}
     for expected, line in zip(records, lines[1:], strict=True):
         item = json.loads(line)
+        require(
+            set(item)
+            == {
+                "content_id",
+                "source_locator",
+                "source_relative_path",
+                "size",
+                "md5",
+                "sha256",
+                "target_key",
+            },
+            "manifest content row has the exact versioned fields",
+        )
         target_key = (
             f"{object_prefix}/sha256/{expected['sha256'][:2]}/{expected['sha256']}.bin"
         )
@@ -392,6 +572,11 @@ def verify_manifest(
         require(
             item["source_locator"] == expected["source_locator"],
             "manifest keeps DB locator",
+        )
+        require(
+            item["source_relative_path"]
+            == expected["source_path"].relative_to(local_root).as_posix(),
+            "manifest keeps the normalized local-root-relative source path",
         )
         require(item["size"] == expected["size"], "manifest keeps content size")
         require(item["md5"] == expected["md5"], "manifest keeps content MD5")
@@ -414,6 +599,7 @@ def checkpoint_ids(checkpoint_path: Path) -> list[int]:
 
 
 def main() -> int:
+    EVIDENCE_PATH.unlink(missing_ok=True)
     suffix = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
     database_name = f"disk_final_blob_migration_{suffix}"
     server_state = ObjectState()
@@ -438,23 +624,22 @@ def main() -> int:
                 database_name, path_base, local_root
             )
             env = database_env(database_name, endpoint)
-
-            manifest_result = run_command(
-                [
-                    "manifest",
-                    "--manifest",
-                    str(manifest_path),
-                    "--local-root",
-                    str(local_root),
-                    "--path-base",
-                    str(path_base),
-                    "--bucket",
-                    "disk-migration-fixture",
-                    "--object-prefix",
-                    object_prefix,
-                ],
-                env,
+            manifest_env = read_only_manifest_env(env)
+            manifest_args = manifest_arguments(
+                manifest_path, local_root, path_base, object_prefix
             )
+            database_before_manifest = content_snapshot(database_name)
+            sources_before_manifest = source_snapshot(records)
+            require(
+                database_before_manifest[-1][6] == 0,
+                "manifest fixture includes a zero-reference content row",
+            )
+            require(
+                server_state.request_count() == 0,
+                "manifest fixture starts with zero S3 requests",
+            )
+
+            manifest_result = run_command(manifest_args, manifest_env)
             require(
                 parse_summary(manifest_result)["objects"] == 3,
                 "manifest command reports all objects",
@@ -462,6 +647,121 @@ def main() -> int:
             target_keys = verify_manifest(
                 manifest_path, records, local_root, object_prefix
             )
+            require(
+                stat.S_IMODE(manifest_path.stat().st_mode) == 0o600,
+                "manifest is published with mode 0600",
+            )
+            require(
+                content_snapshot(database_name) == database_before_manifest,
+                "manifest leaves the complete content snapshot unchanged",
+            )
+            require(
+                source_snapshot(records) == sources_before_manifest,
+                "manifest leaves every source Blob byte and metadata unchanged",
+            )
+            require(
+                server_state.request_count() == 0,
+                "manifest performs no S3 request without S3 credentials",
+            )
+            require(
+                not checkpoint_path.exists(),
+                "manifest does not create a migration checkpoint",
+            )
+
+            published_manifest = (
+                manifest_path.read_bytes(),
+                stat.S_IMODE(manifest_path.stat().st_mode),
+                manifest_path.stat().st_mtime_ns,
+            )
+            existing_output = run_command(manifest_args, manifest_env, check=False)
+            require(
+                existing_output.returncode != 0,
+                "manifest refuses an existing output path",
+            )
+            require(
+                (
+                    manifest_path.read_bytes(),
+                    stat.S_IMODE(manifest_path.stat().st_mode),
+                    manifest_path.stat().st_mtime_ns,
+                )
+                == published_manifest,
+                "existing manifest remains byte-for-byte and metadata unchanged",
+            )
+
+            race_manifest_path = temp_root / "concurrent-final-blobs.jsonl"
+            race_sentinel = b"operator-owned-manifest-evidence\n"
+            race_result = run_manifest_publish_race(
+                manifest_arguments(
+                    race_manifest_path, local_root, path_base, object_prefix
+                ),
+                manifest_env,
+                database_name,
+                race_manifest_path,
+                race_sentinel,
+            )
+            require(
+                race_result.returncode != 0,
+                "manifest refuses a target created after its preflight check",
+            )
+            require(
+                race_manifest_path.read_bytes() == race_sentinel,
+                "concurrently published operator evidence is never overwritten",
+            )
+            require(
+                not list(temp_root.glob(f".{race_manifest_path.name}.*")),
+                "publication conflict removes its temporary manifest",
+            )
+
+            failed_manifest_path = temp_root / "failed-final-blobs.jsonl"
+            with connect(database_name) as connection:
+                connection.execute(
+                    "UPDATE file_contents SET size = size + 1 WHERE id = 103"
+                )
+            invalid_database_snapshot = content_snapshot(database_name)
+            failed_manifest = run_command(
+                manifest_arguments(
+                    failed_manifest_path, local_root, path_base, object_prefix
+                ),
+                manifest_env,
+                check=False,
+            )
+            require(
+                failed_manifest.returncode != 0,
+                "manifest rejects a later source-size mismatch",
+            )
+            require(
+                not failed_manifest_path.exists(),
+                "failed manifest generation publishes no final partial file",
+            )
+            require(
+                not list(temp_root.glob(f".{failed_manifest_path.name}.*")),
+                "failed manifest generation removes its temporary file",
+            )
+            require(
+                content_snapshot(database_name) == invalid_database_snapshot,
+                "failed manifest leaves its database snapshot unchanged",
+            )
+            require(
+                source_snapshot(records) == sources_before_manifest,
+                "failed manifest leaves every source Blob unchanged",
+            )
+            require(
+                server_state.request_count() == 0 and not checkpoint_path.exists(),
+                "all manifest failure paths avoid S3 and checkpoint side effects",
+            )
+            with connect(database_name) as connection:
+                connection.execute(
+                    "UPDATE file_contents SET size = size - 1 WHERE id = 103"
+                )
+            require(
+                content_snapshot(database_name) == database_before_manifest,
+                "fixture restores the original database snapshot",
+            )
+            require(
+                manifest_path.read_bytes() == published_manifest[0],
+                "failed alternate output leaves the accepted manifest unchanged",
+            )
+            manifest_s3_requests = server_state.request_count()
 
             copy_args = [
                 "copy",
@@ -710,6 +1010,53 @@ def main() -> int:
                     record["source_path"].read_bytes() == record["payload"],
                     "migration retains local rollback source",
                 )
+
+            evidence = {
+                "schema_version": 1,
+                "scenario": "read_only_final_blob_manifest",
+                "manifest": {
+                    "objects": len(records),
+                    "content_fields": [
+                        "content_id",
+                        "source_locator",
+                        "source_relative_path",
+                        "size",
+                        "md5",
+                        "sha256",
+                        "target_key",
+                    ],
+                    "strict_content_id_order": True,
+                    "mode": "0600",
+                    "atomic_no_replace_publish": True,
+                    "existing_output_preserved": True,
+                    "concurrent_output_preserved": True,
+                    "failure_artifacts": 0,
+                },
+                "read_only": {
+                    "database_session_read_only": True,
+                    "database_unchanged": True,
+                    "source_objects_unchanged": True,
+                    "s3_credentials_required": False,
+                    "s3_requests": manifest_s3_requests,
+                    "checkpoint_created": False,
+                },
+                "acceptance": {"passed": True},
+            }
+            serialized = json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+            for sensitive in (
+                endpoint,
+                database_name,
+                object_prefix,
+                str(temp_root),
+                "fixture-access-key",
+                "fixture-secret-key",
+            ):
+                require(
+                    sensitive not in serialized,
+                    "manifest evidence contains no locator or credential",
+                )
+            EVIDENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            EVIDENCE_PATH.write_text(serialized, encoding="utf-8")
     finally:
         server.shutdown()
         server.server_close()

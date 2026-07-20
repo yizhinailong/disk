@@ -67,6 +67,21 @@ Deployment documentation SHALL define safe forward migration, reconciliation che
 - **WHEN** post-change reconciliation SQL reports missing data, inconsistent reference counts, or unexpected values
 - **THEN** the procedure SHALL require rollback or backup restoration before continuing the application release
 
+### Requirement: Read-only final Blob migration manifest
+Before copying any legacy local final Blob to object storage, the migration tool SHALL create a complete content-ID-ordered inventory from one PostgreSQL repeatable-read, read-only snapshot. Each record SHALL preserve the database locator and SHALL include the normalized local-root-relative source path, size, MD5, SHA-256, and canonical target key. Manifest generation SHALL require neither S3 access nor S3 credentials and SHALL NOT modify PostgreSQL, source Blobs, object storage, or a migration checkpoint.
+
+#### Scenario: A final Blob inventory is generated
+- **WHEN** an operator runs only the manifest command against a stopped-writer local final store
+- **THEN** every `file_contents` row, including a zero-reference row awaiting garbage collection, SHALL appear once in content ID order, every required field and canonical target key SHALL match the snapshot, and the manifest SHALL be published with mode `0600`
+
+#### Scenario: The manifest target already exists
+- **WHEN** the requested final path exists before generation or appears concurrently with publication
+- **THEN** the command SHALL fail without replacing or changing that file and without creating an S3 request or checkpoint
+
+#### Scenario: Manifest validation fails after temporary output begins
+- **WHEN** a later source row is missing, invalid, outside the trusted root, or inconsistent with the database snapshot
+- **THEN** the command SHALL fail without changing PostgreSQL or any source Blob and SHALL leave neither a final partial manifest nor a temporary manifest artifact
+
 ### Requirement: Service management and hardening
 Deployment documentation SHALL define service installation, systemd or Windows service configuration, filesystem permissions, sandboxing/hardening settings, restart behavior, and routine service operations.
 

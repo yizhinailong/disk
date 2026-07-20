@@ -605,7 +605,21 @@ API/Worker seeder 数为 0/1，且证据不含凭据、endpoint、upload ID 或�
 
 ### 14.4 存量 final Blob 迁移（仅现网使用 local 时）
 
-- [ ] 先生成只读迁移清单：content ID、旧路径、大小、MD5、SHA-256、目标 key。
+- [x] 先生成只读迁移清单：content ID、旧路径、大小、MD5、SHA-256、目标 key。
+
+2026-07-21 已在候选应用基线 `14e2473` 上完成只读 final Blob manifest 仓库门禁。清单从
+PostgreSQL `REPEATABLE READ READ ONLY` 完整快照生成，包含 `ref_count=0` 行并按 content ID 排序；
+每行精确包含 content ID、原 locator、local-root 相对路径、大小、MD5、SHA-256 和规范目标 key。
+manifest 阶段在移除 S3 凭据的环境中运行，证明 DB 与源 Blob 快照不变、S3 请求为 0、
+不创建 checkpoint；输出以 `0600` 权限落盘，并使用原子不覆盖发布保护启动前已有或生成期间并发出现的同名证据。
+末行校验故障和发布冲突均非零退出且临时/最终半成品为 0。
+
+`FinalBlobMigrationIntegration` 聚焦 CTest 1/1 通过（7.80 秒）；完整 CTest 共 1384 项：
+1378 通过、6 项常规环境门控跳过、0 失败，总耗时 371.91 秒；OpenSpec 严格校验 24/24 通过。
+去敏证据为 `.sisyphus/evidence/final-blob-manifest-summary.json`，SHA-256 为
+`6b0f8b4c6480c6bfae42ff82b7bb54968b722aebc7e494433af1d32f73e3b734`。该证据不是现网 inventory；目标环境仍须在
+停写与 PostgreSQL/local Blob 备份完成后生成自身全量 manifest、记录其 SHA-256 并完成人工评审。
+
 - [ ] 迁移工具支持 checkpoint、限速、重复执行、单对象校验和 dry-run。
 - [ ] 选择维护窗口切换，或设计有截止日期的 per-content backend/双读迁移；禁止无边界长期双写。
 - [ ] 所有对象复制并验证后再切换数据库读取位置。

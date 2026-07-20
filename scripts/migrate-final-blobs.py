@@ -508,7 +508,15 @@ def generate_manifest(args: argparse.Namespace) -> int:
                 output.flush()
                 os.fsync(output.fileno())
 
-        os.replace(temporary_path, manifest_path)
+        try:
+            os.link(temporary_path, manifest_path)
+        except FileExistsError as exc:
+            raise MigrationError(f"manifest already exists: {manifest_path}") from exc
+        except OSError as exc:
+            raise MigrationError(
+                f"failed to publish manifest: {manifest_path}"
+            ) from exc
+        temporary_path.unlink()
         temporary_path = None
         directory_fd = os.open(manifest_path.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
