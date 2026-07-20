@@ -359,6 +359,8 @@ def server_config(
     instance_id: str,
     storage_root: Path,
     staging_root: Path,
+    *,
+    role: str = "api",
 ) -> dict[str, Any]:
     database = database_config()
     redis = redis_config()
@@ -371,7 +373,7 @@ def server_config(
         },
         "custom_config": {
             "disk": {
-                "process_role": "api",
+                "process_role": role,
                 "instance_id": instance_id,
                 "storage_backend": "local",
                 "upload_staging_backend": "local",
@@ -469,6 +471,8 @@ def server_environment(
     database_name: str,
     port: int,
     instance_id: str,
+    *,
+    role: str = "api",
 ) -> dict[str, str]:
     database = database_config()
     redis = redis_config()
@@ -480,7 +484,7 @@ def server_environment(
             "DISK_CONFIG_FILE": str(config_path),
             "DISK_LISTEN_ADDRESS": "127.0.0.1",
             "DISK_LISTEN_PORT": str(port),
-            "DISK_PROCESS_ROLE": "api",
+            "DISK_PROCESS_ROLE": role,
             "DISK_INSTANCE_ID": instance_id,
             "DISK_STORAGE_BACKEND": "local",
             "DISK_UPLOAD_STAGING_BACKEND": "local",
@@ -517,6 +521,7 @@ class ManagedServer:
         database_name: str,
         port: int,
         readiness_path: str,
+        role: str = "api",
     ) -> None:
         self.name = name
         self.base_url = f"http://127.0.0.1:{port}"
@@ -541,6 +546,7 @@ class ManagedServer:
                     database_name,
                     port,
                     name,
+                    role=role,
                 ),
                 stdout=self.log_handle,
                 stderr=subprocess.STDOUT,

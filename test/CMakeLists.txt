@@ -300,6 +300,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME LocalStagingMigrationIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_local_staging_migration.py"
+)
+set_tests_properties(
+    LocalStagingMigrationIntegration
+    PROPERTIES
+    LABELS "backend-integration;database-migration;rolling-upgrade"
+    RUN_SERIAL TRUE
+    TIMEOUT 600
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME UploadStateMachineIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_upload_state_machine.py"
 )
