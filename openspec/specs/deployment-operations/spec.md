@@ -342,6 +342,25 @@ Before an application rollback removes S3 staging or new upload-state support, o
 - **WHEN** any routed compatible API can still create a novel upload task, a rejected request changes `storage_reserved` or task count, or an existing task cannot resume through a compatible handler
 - **THEN** rollback SHALL stop before any compatible handler is removed
 
+### Requirement: Upload lifecycle rollback drain or freeze
+After the new-task cutoff is closed and before an incompatible application release is admitted, operators SHALL close the public upload lifecycle ingress and obtain an auditable read-only snapshot that classifies active upload tasks as drained or frozen. The gateway SHALL reject every upload initialization, chunk, completion, and cancellation path with HTTP 503 and code `50013`; each declared compatible API SHALL report task creation disabled and zero in-flight business requests. The procedure SHALL NOT reverse `Finalizing`, clear or extend a lease, rewrite a staging descriptor, or claim that a full old-application rollback is safe.
+
+#### Scenario: Active upload tasks are drained
+- **WHEN** the frozen ingress is verified and the repeatable-read snapshot reports zero `InProgress` and zero `Finalizing` tasks
+- **THEN** the upload task population MAY be recorded as drained while ingress remains closed, but this result SHALL NOT by itself admit an old release to other new-schema or new-blob routes
+
+#### Scenario: Active upload tasks are frozen
+- **WHEN** the frozen ingress is verified but the snapshot still contains `InProgress` or `Finalizing` tasks
+- **THEN** the evidence SHALL digest their persisted identity, state, backend, prefix, version, owner, and lease deadline, SHALL require compatible handlers for later recovery, and SHALL keep the old release excluded from upload lifecycle routing
+
+#### Scenario: A finalization lease remains during freeze
+- **WHEN** a `Finalizing` task has an active or expired lease after compatible API in-flight requests reach zero
+- **THEN** the procedure SHALL leave the row and lease unchanged so database time can expire it and a later compatible completion request can use the normal takeover CAS
+
+#### Scenario: Upload ingress is reopened
+- **WHEN** operators intend to leave freeze mode
+- **THEN** they SHALL first restore and directly verify a compatible API pool and SHALL provide explicit unfreeze approval before applying the open gateway fragment
+
 ### Requirement: Contract migration observation gate
 The data-to-contract gate SHALL begin only after incompatible processes have exited, production APIs create only S3 staging sessions, and legacy local non-terminal tasks, incomplete local cleanup jobs, and inventoried original-volume artifacts have reached zero. The observation SHALL span the configured upload expiry TTL and a distinct successful hourly expiration scan after that TTL, then complete a fresh four-scope reconciliation. Passing evidence SHALL authorize only review of a later contract migration and SHALL NOT execute destructive DDL or remove compatibility code.
 

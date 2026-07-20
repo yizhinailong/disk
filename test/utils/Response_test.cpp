@@ -84,6 +84,22 @@ TEST(Response, UploadTaskCreationDisabledUsesServiceUnavailableEnvelope) {
     EXPECT_TRUE((*json)["data"].isNull());
 }
 
+TEST(Response, UploadLifecycleFrozenUsesServiceUnavailableEnvelope) {
+    auto response = Response::Error(ErrorInfo(ErrorCode::UploadLifecycleFrozen));
+
+    ASSERT_NE(response, nullptr);
+    EXPECT_EQ(response->getStatusCode(), drogon::k503ServiceUnavailable);
+
+    auto json = response->getJsonObject();
+    ASSERT_NE(json, nullptr);
+    EXPECT_EQ((*json)["code"].asInt(), 50013);
+    EXPECT_EQ(
+        (*json)["message"].asString(),
+        "Upload lifecycle is temporarily frozen for rollback"
+    );
+    EXPECT_TRUE((*json)["data"].isNull());
+}
+
 TEST(Response, CustomDomainErrorEnvelopePreservesMessageAndStatus) {
     const auto error = ErrorInfo(ErrorCode::ValidationFailed, "domain validation failed");
 

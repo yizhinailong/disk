@@ -21,12 +21,17 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_PATH = REPO_ROOT / "docker-compose.distributed.yml"
 FALLBACK_COMPOSE_PATH = REPO_ROOT / "deploy/docker-compose.api-a-only.yml"
+UPLOAD_FREEZE_COMPOSE_PATH = REPO_ROOT / "deploy/docker-compose.upload-frozen.yml"
 NGINX_PATH = REPO_ROOT / "deploy/nginx/disk.conf"
 DUAL_UPSTREAM_PATH = REPO_ROOT / "deploy/nginx/upstreams/api-a-b.inc"
 FALLBACK_UPSTREAM_PATH = REPO_ROOT / "deploy/nginx/upstreams/api-a-only.inc"
+OPEN_UPLOAD_PATH = REPO_ROOT / "deploy/nginx/upload-mode/open.inc"
+FROZEN_UPLOAD_PATH = REPO_ROOT / "deploy/nginx/upload-mode/frozen.inc"
 SWITCH_SCRIPT = REPO_ROOT / "scripts/switch-api-pool.sh"
+UPLOAD_SWITCH_SCRIPT = REPO_ROOT / "scripts/switch-upload-ingress.sh"
 EVIDENCE_PATH = REPO_ROOT / ".sisyphus/evidence/api-pool-rollout-summary.json"
 UPSTREAM_TARGET = "/etc/nginx/conf.d/disk-api-upstreams.inc"
+UPLOAD_MODE_TARGET = "/etc/nginx/conf.d/disk-upload-mode.inc"
 
 
 def require(condition: bool, message: str) -> None:
@@ -89,6 +94,35 @@ def run_switch(
     )
 
 
+def run_upload_switch(
+    mode: str,
+    env_file: Path,
+    fake_bin: Path,
+    log_path: Path,
+    *,
+    approved: bool = False,
+    fail_config: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "PATH": f"{fake_bin}:{environment.get('PATH', '')}",
+            "DISK_DISTRIBUTED_ENV_FILE": str(env_file),
+            "DISK_UPLOAD_UNFREEZE_APPROVED": "true" if approved else "false",
+            "FAKE_DOCKER_LOG": str(log_path),
+            "FAKE_DOCKER_FAIL_CONFIG": "1" if fail_config else "0",
+        }
+    )
+    return subprocess.run(
+        ["bash", str(UPLOAD_SWITCH_SCRIPT), mode],
+        cwd=REPO_ROOT,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
 def docker_calls(log_path: Path) -> list[str]:
     if not log_path.exists():
         return []
@@ -111,6 +145,25 @@ def require_switch_pair(calls: list[str], *, fallback: bool) -> None:
     require(
         apply_call.endswith("up -d --no-deps --force-recreate load-balancer"),
         "only the load balancer may be recreated after validation",
+    )
+
+
+def require_upload_switch_pair(calls: list[str], *, frozen: bool) -> None:
+    require(len(calls) == 2, f"upload switch must make exactly two Docker calls: {calls}")
+    config_call, apply_call = calls
+    base_argument = f"-f {COMPOSE_PATH}"
+    freeze_argument = f"-f {UPLOAD_FREEZE_COMPOSE_PATH}"
+    for call in calls:
+        require(call.startswith("compose --env-file "), f"unexpected Docker call: {call}")
+        require(base_argument in call, "upload switch omitted the base Compose file")
+        require(
+            (freeze_argument in call) is frozen,
+            "upload switch selected the wrong ingress overlay",
+        )
+    require(config_call.endswith("config --quiet"), "upload Compose validation must run first")
+    require(
+        apply_call.endswith("up -d --no-deps --force-recreate load-balancer"),
+        "upload switch may only recreate the load balancer",
     )
 
 
@@ -143,6 +196,10 @@ def main() -> int:
         "Nginx must load the selected upstream fragment",
     )
     require(
+        f"include {UPLOAD_MODE_TARGET};" in nginx,
+        "Nginx must load the selected upload-mode fragment",
+    )
+    require(
         not any(line.startswith("server api-") for line in nginx),
         "API members must not remain hard-coded in the main Nginx config",
     )
@@ -164,6 +221,48 @@ def main() -> int:
     require(
         base_mounts.get(UPSTREAM_TARGET) == "./deploy/nginx/upstreams/api-a-b.inc",
         "base Compose must mount the dual API pool",
+    )
+    require(
+        base_mounts.get(UPLOAD_MODE_TARGET) == "./deploy/nginx/upload-mode/open.inc",
+        "base Compose must mount the reviewed open upload mode",
+    )
+    require(active_lines(OPEN_UPLOAD_PATH) == [], "open upload mode must not add a location")
+
+    frozen_lines = active_lines(FROZEN_UPLOAD_PATH)
+    frozen_return = (
+        "return 503 "
+        "'{\"code\":50013,\"message\":\"Upload lifecycle is temporarily "
+        "frozen for rollback\",\"data\":null}';"
+    )
+    require(
+        "location = /api/file/upload {" in frozen_lines
+        and "location ^~ /api/file/upload/ {" in frozen_lines,
+        "frozen upload mode must cover the root and every lifecycle subpath",
+    )
+    require(
+        frozen_lines.count(frozen_return) == 2,
+        "frozen upload mode must return the stable 503/50013 envelope",
+    )
+    require(
+        frozen_lines.count("add_header Retry-After 30 always;") == 2
+        and frozen_lines.count('add_header Cache-Control "no-store" always;') == 2,
+        "frozen upload mode must provide retry and no-cache guidance",
+    )
+
+    freeze_compose = load_yaml(UPLOAD_FREEZE_COMPOSE_PATH)
+    require(set(freeze_compose) == {"services"}, "freeze overlay may only override services")
+    freeze_services = freeze_compose["services"]
+    require(
+        isinstance(freeze_services, dict) and set(freeze_services) == {"load-balancer"},
+        "freeze overlay may only override the load balancer",
+    )
+    freeze_service = freeze_services["load-balancer"]
+    require(isinstance(freeze_service, dict), "freeze load balancer must be a mapping")
+    require(set(freeze_service) == {"volumes"}, "freeze overlay may only replace a volume")
+    require(
+        short_mounts(freeze_service["volumes"], "freeze load balancer")
+        == {UPLOAD_MODE_TARGET: "./deploy/nginx/upload-mode/frozen.inc"},
+        "freeze overlay must replace only the upload-mode target",
     )
 
     fallback_compose = load_yaml(FALLBACK_COMPOSE_PATH)
@@ -237,6 +336,38 @@ def main() -> int:
         require(invalid_result.returncode == 64, "invalid pool mode must be rejected")
         require(not docker_calls(invalid_log), "invalid pool mode must not invoke Docker")
 
+        freeze_log = temp_root / "upload-freeze.log"
+        freeze_result = run_upload_switch("freeze", env_file, fake_bin, freeze_log)
+        require(freeze_result.returncode == 0, f"upload freeze failed: {freeze_result.stderr}")
+        require_upload_switch_pair(docker_calls(freeze_log), frozen=True)
+
+        unapproved_log = temp_root / "upload-open-unapproved.log"
+        unapproved = run_upload_switch("open", env_file, fake_bin, unapproved_log)
+        require(unapproved.returncode == 77, "unapproved upload reopening was accepted")
+        require(not docker_calls(unapproved_log), "unapproved reopening invoked Docker")
+
+        open_log = temp_root / "upload-open.log"
+        opened = run_upload_switch("open", env_file, fake_bin, open_log, approved=True)
+        require(opened.returncode == 0, f"approved upload opening failed: {opened.stderr}")
+        require_upload_switch_pair(docker_calls(open_log), frozen=False)
+
+        freeze_validation_log = temp_root / "upload-freeze-validation-failure.log"
+        freeze_validation = run_upload_switch(
+            "freeze",
+            env_file,
+            fake_bin,
+            freeze_validation_log,
+            fail_config=True,
+        )
+        require(
+            freeze_validation.returncode == 23,
+            "upload freeze validation failure status was not preserved",
+        )
+        require(
+            len(docker_calls(freeze_validation_log)) == 1,
+            "invalid upload configuration reached the apply command",
+        )
+
     evidence = {
         "schema_version": 1,
         "scenario": "reversible_dual_api_admission",
@@ -251,6 +382,12 @@ def main() -> int:
             "apply_target": "load-balancer",
             "config_failure_blocks_apply": True,
             "validation_precedes_apply": True,
+        },
+        "upload_ingress_freeze": {
+            "error_code": 50013,
+            "open_requires_explicit_approval": True,
+            "paths": ["/api/file/upload", "/api/file/upload/**"],
+            "switch_apply_target": "load-balancer",
         },
         "target_environment_validation_required": [
             "direct api-b readiness and instance header",

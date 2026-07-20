@@ -146,6 +146,9 @@ namespace disk::health {
         json["draining"] = draining;
         json["worker_claiming_enabled"] = worker_claiming_enabled;
         json["worker_accepting"] = worker_accepting;
+        json["upload_task_creation_enabled"] = upload_task_creation_enabled;
+        json["business_requests_inflight"] =
+            static_cast<Json::UInt64>(business_requests_inflight);
         json["version"] = version;
         json["uptime"] = static_cast<Json::Int64>(uptime);
         json["total_check_ms"] = static_cast<Json::Int64>(total_check_ms);
@@ -261,6 +264,9 @@ namespace disk::health {
             .draining = m_runtime_state->IsDraining(),
             .worker_claiming_enabled = m_runtime_state->IsWorkerClaimingEnabled(),
             .worker_accepting = m_runtime_state->IsWorkerAccepting(),
+            .upload_task_creation_enabled =
+                m_runtime_state->IsUploadTaskCreationEnabled(),
+            .business_requests_inflight = m_runtime_state->BusinessRequestsInflight(),
             .version = "1.0.0",
             .uptime = std::chrono::duration_cast<std::chrono::seconds>(now - m_start_time).count(),
             .timestamp = GetTimestamp(),

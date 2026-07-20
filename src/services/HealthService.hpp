@@ -43,6 +43,8 @@ namespace disk::health {
         bool draining{ false };
         bool worker_claiming_enabled{ false };
         bool worker_accepting{ false };
+        bool upload_task_creation_enabled{ true };
+        uint64_t business_requests_inflight{ 0 };
         std::string version;
         int64_t uptime{ 0 };
         std::string timestamp;

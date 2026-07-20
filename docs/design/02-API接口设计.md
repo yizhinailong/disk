@@ -114,6 +114,7 @@
 | 50010 | `FolderAlreadyExists` | 409 | 同名文件夹已存在 |
 | 50011 | `FileReadError` | 500 | 文件读取失败 |
 | 50012 | `UploadTaskCreationDisabled` | 503 | 新上传任务创建已临时关闭 |
+| 50013 | `UploadLifecycleFrozen` | 503 | 上传生命周期已为回滚临时冻结 |
 
 #### 分享错误码
 
@@ -775,6 +776,8 @@ Authorization: Bearer <access_token>
 > - 取消上传或超时后，预占用的空间通过 `storage_reserved` 释放
 >
 > **回滚截止语义**：当启动期配置 `upload_task_creation_enabled=false` 时，本接口仍先解析秒传和同用户同 hash 的断点续传。秒传继续创建文件引用，断点续传继续返回原 `upload_id` 与分片进度；只有需要创建新任务的请求返回 `503 + 50012 UploadTaskCreationDisabled`。拒绝发生在配额预留和任务 INSERT 之前，不会回退为 local staging，也不会改写既有任务的 backend/prefix。已有任务的分片、完成和取消接口不受该开关影响，但必须路由到理解其 schema 和 staging 描述符的兼容版本。
+>
+> **回滚冻结语义**：运维人员将上传入口切换到 freeze 模式后，受信网关必须在鉴权和业务路由之前拦截全部 `/api/file/upload/**` 请求，稳定返回 `503 + 50013 UploadLifecycleFrozen`、`Retry-After` 和 `Cache-Control: no-store`。该返回表示 init/chunk/complete/cancel 均被冻结，不等价于只停止创建新任务的 50012。冻结不改写任务状态或租约；恢复必须先让兼容版本重新承接上传路由。
 
 #### 错误响应矩阵
 
@@ -3661,6 +3664,8 @@ bucket、对象 key 或凭据。
 | draining | boolean | 是否正在优雅退出 |
 | worker_claiming_enabled | boolean | 当前进程是否具备 Worker 角色且启动配置允许认领；API 固定为 false，观察 Worker 为 false |
 | worker_accepting | boolean | Worker 认领运行时当前是否接受新任务；观察、API 和 drain 状态为 false |
+| upload_task_creation_enabled | boolean | 当前进程启动时冻结的新上传任务创建开关；回滚截止后必须为 false |
+| business_requests_inflight | integer | 当前已接受但尚未完成的业务请求数；健康与指标路径不计入 |
 | version | string | 系统版本 |
 | uptime | integer | 运行时间（秒） |
 | timestamp | string | ISO 8601 时间戳 |
@@ -3695,6 +3700,8 @@ bucket、对象 key 或凭据。
     "draining": false,
     "worker_claiming_enabled": false,
     "worker_accepting": false,
+    "upload_task_creation_enabled": false,
+    "business_requests_inflight": 0,
     "version": "1.0.0",
     "uptime": 86400,
     "timestamp": "2026-02-18T12:30:00Z",
@@ -3734,6 +3741,8 @@ bucket、对象 key 或凭据。
     "draining": false,
     "worker_claiming_enabled": true,
     "worker_accepting": true,
+    "upload_task_creation_enabled": true,
+    "business_requests_inflight": 0,
     "version": "1.0.0",
     "uptime": 86400,
     "timestamp": "2026-02-18T12:30:00Z",

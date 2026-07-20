@@ -30,7 +30,8 @@ namespace disk::runtime {
         ProcessRuntimeState(
             disk::utils::ProcessRole role,
             std::string instance_id,
-            bool worker_claiming_enabled = true
+            bool worker_claiming_enabled = true,
+            bool upload_task_creation_enabled = true
         );
 
         auto MarkInitialized() noexcept -> void;
@@ -58,6 +59,9 @@ namespace disk::runtime {
         auto IsWorkerClaimingEnabled() const noexcept -> bool;
 
         [[nodiscard]]
+        auto IsUploadTaskCreationEnabled() const noexcept -> bool;
+
+        [[nodiscard]]
         auto IsReady() const noexcept -> bool;
 
         [[nodiscard]]
@@ -81,6 +85,7 @@ namespace disk::runtime {
         std::atomic_bool m_initialized{ false };
         std::atomic_bool m_draining{ false };
         bool m_worker_claiming_enabled{ false };
+        bool m_upload_task_creation_enabled{ true };
         std::atomic_bool m_worker_accepting{ false };
         std::atomic_size_t m_business_requests_inflight{ 0 };
     };

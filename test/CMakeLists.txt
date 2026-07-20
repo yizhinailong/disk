@@ -352,6 +352,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME UploadRollbackGateIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_upload_rollback_gate.py"
+)
+set_tests_properties(
+    UploadRollbackGateIntegration
+    PROPERTIES
+    LABELS "backend-integration;distributed;deployment;rolling-upgrade"
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME LocalStagingMigrationIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_local_staging_migration.py"
 )

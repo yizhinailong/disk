@@ -97,6 +97,8 @@ namespace disk::error {
         FileReadError = 50011,
         /// 新上传任务创建已临时关闭
         UploadTaskCreationDisabled = 50012,
+        /// 上传生命周期已为回滚临时冻结
+        UploadLifecycleFrozen = 50013,
 
         /// ==================== 分享错误码 (60xxx) ====================
         /// 分享不存在
@@ -177,6 +179,7 @@ namespace disk::error {
             {        Code::FolderAlreadyExists,            drogon::k409Conflict },
             {              Code::FileReadError, drogon::k500InternalServerError },
             { Code::UploadTaskCreationDisabled,  drogon::k503ServiceUnavailable },
+            {      Code::UploadLifecycleFrozen,  drogon::k503ServiceUnavailable },
 
             /// 分享错误
             {              Code::ShareNotFound,            drogon::k404NotFound },
@@ -213,53 +216,54 @@ namespace disk::error {
     inline auto GetErrorMessage(Code code) -> std::string {
         static const std::unordered_map<Code, std::string> message_map = {
             /// 成功
-            {                    Code::Success,                                          "success" },
+            {                    Code::Success,                                             "success" },
 
             /// 通用错误
-            {           Code::InvalidParameter,                       "Invalid request parameters" },
-            {           Code::ValidationFailed,                      "Parameter validation failed" },
-            {           Code::ResourceNotFound,                               "Resource not found" },
-            {           Code::ResourceConflict,                                "Resource conflict" },
-            {            Code::TooManyRequests,                                "Too many requests" },
-            {              Code::InternalError,                            "Internal server error" },
+            {           Code::InvalidParameter,                          "Invalid request parameters" },
+            {           Code::ValidationFailed,                         "Parameter validation failed" },
+            {           Code::ResourceNotFound,                                  "Resource not found" },
+            {           Code::ResourceConflict,                                   "Resource conflict" },
+            {            Code::TooManyRequests,                                   "Too many requests" },
+            {              Code::InternalError,                               "Internal server error" },
 
             /// 认证错误
-            {             Code::UsernameExists,                      "Username already registered" },
-            {                Code::EmailExists,                         "Email already registered" },
-            {               Code::UserNotFound,                                   "User not found" },
-            {         Code::InvalidCredentials,                     "Invalid username or password" },
-            {              Code::AccountLocked,           "Account locked, please try again later" },
-            {            Code::AccountDisabled,                        "Account has been disabled" },
-            {               Code::InvalidToken,                         "Token invalid or expired" },
-            {               Code::TokenMissing,                               "Token not provided" },
-            {             Code::TokenMalformed,                               "Token format error" },
-            {               Code::TokenExpired,                                    "Token expired" },
-            {             Code::TokenWrongType,                                 "Token type error" },
-            {        Code::InvalidRefreshToken,                            "Invalid refresh token" },
-            {    Code::RefreshTokenAlreadyUsed,                       "Refresh token already used" },
-            {               Code::TokenRevoked,                                    "Token revoked" },
+            {             Code::UsernameExists,                         "Username already registered" },
+            {                Code::EmailExists,                            "Email already registered" },
+            {               Code::UserNotFound,                                      "User not found" },
+            {         Code::InvalidCredentials,                        "Invalid username or password" },
+            {              Code::AccountLocked,              "Account locked, please try again later" },
+            {            Code::AccountDisabled,                           "Account has been disabled" },
+            {               Code::InvalidToken,                            "Token invalid or expired" },
+            {               Code::TokenMissing,                                  "Token not provided" },
+            {             Code::TokenMalformed,                                  "Token format error" },
+            {               Code::TokenExpired,                                       "Token expired" },
+            {             Code::TokenWrongType,                                    "Token type error" },
+            {        Code::InvalidRefreshToken,                               "Invalid refresh token" },
+            {    Code::RefreshTokenAlreadyUsed,                          "Refresh token already used" },
+            {               Code::TokenRevoked,                                       "Token revoked" },
 
             /// 文件错误
-            {            Code::InvalidFilename,                                 "Invalid filename" },
-            {       Code::StorageQuotaExceeded,                       "Insufficient storage space" },
-            {               Code::FileNotFound,                                   "File not found" },
-            {             Code::FolderNotFound,                                 "Folder not found" },
-            {          Code::FileAlreadyExists,               "File with same name already exists" },
-            {         Code::UploadTaskNotFound,                 "Upload task not found or expired" },
-            {          Code::ChunkVerifyFailed,                        "Chunk verification failed" },
-            {        Code::FolderAlreadyExists,             "Folder with same name already exists" },
-            {              Code::FileReadError,                                 "File read failed" },
-            { Code::UploadTaskCreationDisabled, "New upload task creation is temporarily disabled" },
+            {            Code::InvalidFilename,                                    "Invalid filename" },
+            {       Code::StorageQuotaExceeded,                          "Insufficient storage space" },
+            {               Code::FileNotFound,                                      "File not found" },
+            {             Code::FolderNotFound,                                    "Folder not found" },
+            {          Code::FileAlreadyExists,                  "File with same name already exists" },
+            {         Code::UploadTaskNotFound,                    "Upload task not found or expired" },
+            {          Code::ChunkVerifyFailed,                           "Chunk verification failed" },
+            {        Code::FolderAlreadyExists,                "Folder with same name already exists" },
+            {              Code::FileReadError,                                    "File read failed" },
+            { Code::UploadTaskCreationDisabled,    "New upload task creation is temporarily disabled" },
+            {      Code::UploadLifecycleFrozen, "Upload lifecycle is temporarily frozen for rollback" },
 
             /// 分享错误
-            {              Code::ShareNotFound,                                  "Share not found" },
-            {               Code::ShareExpired,                                    "Share expired" },
-            {         Code::SharePasswordError,                             "Share password error" },
-            {          Code::ShareAccessDenied,                                    "Access denied" },
+            {              Code::ShareNotFound,                                     "Share not found" },
+            {               Code::ShareExpired,                                       "Share expired" },
+            {         Code::SharePasswordError,                                "Share password error" },
+            {          Code::ShareAccessDenied,                                       "Access denied" },
 
             /// Redis错误
-            {       Code::RedisOperationFailed,                           "Redis operation failed" },
-            {           Code::RedisKeyNotFound,                              "Redis key not found" },
+            {       Code::RedisOperationFailed,                              "Redis operation failed" },
+            {           Code::RedisKeyNotFound,                                 "Redis key not found" },
         };
 
         auto it = message_map.find(code);

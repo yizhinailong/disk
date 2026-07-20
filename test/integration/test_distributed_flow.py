@@ -353,6 +353,8 @@ def main(
             "draining",
             "worker_claiming_enabled",
             "worker_accepting",
+            "upload_task_creation_enabled",
+            "business_requests_inflight",
             "version",
             "uptime",
             "total_check_ms",
@@ -375,6 +377,11 @@ def main(
                 health_data["worker_claiming_enabled"] is False
                 and health_data["worker_accepting"] is False,
                 f"{label} {probe_name} reported API Worker activity",
+            )
+            require(
+                health_data["upload_task_creation_enabled"] is True
+                and health_data["business_requests_inflight"] == 0,
+                f"{label} {probe_name} reported unexpected rollback state",
             )
         require(
             set(live_data["components"]) == {"runtime"},

@@ -58,16 +58,24 @@ namespace disk::health {
             CheckCounts counts;
             auto runtime = std::make_shared<disk::runtime::ProcessRuntimeState>(
                 disk::utils::ProcessRole::Api,
-                "api-1"
+                "api-1",
+                true,
+                false
             );
             runtime->MarkInitialized();
+            ASSERT_TRUE(runtime->TryAcquireBusinessRequest());
             HealthService service(runtime, HealthyChecks(counts));
 
             const auto result = drogon::sync_wait(service.CheckReadiness());
+            const auto json = result.ToJson();
 
             EXPECT_EQ(result.overall_status, "healthy");
             EXPECT_FALSE(result.worker_claiming_enabled);
             EXPECT_FALSE(result.worker_accepting);
+            EXPECT_FALSE(result.upload_task_creation_enabled);
+            EXPECT_EQ(result.business_requests_inflight, 1U);
+            EXPECT_FALSE(json["upload_task_creation_enabled"].asBool());
+            EXPECT_EQ(json["business_requests_inflight"].asUInt64(), 1U);
             EXPECT_EQ(counts.database, 1U);
             EXPECT_EQ(counts.redis, 1U);
             EXPECT_EQ(counts.staging_storage, 1U);
@@ -75,6 +83,10 @@ namespace disk::health {
             EXPECT_EQ(counts.storage_jobs, 0U);
             EXPECT_TRUE(result.components.contains("redis"));
             EXPECT_FALSE(result.components.contains("storage_jobs"));
+
+            runtime->ReleaseBusinessRequest();
+            const auto drained = drogon::sync_wait(service.CheckReadiness());
+            EXPECT_EQ(drained.business_requests_inflight, 0U);
         }
 
         TEST(HealthServiceTest, WorkerReadinessChecksQueueButNotRedis) {

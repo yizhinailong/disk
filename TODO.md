@@ -715,7 +715,25 @@ OpenSpec 严格校验 24/24 通过。结构化证据为
 `.sisyphus/evidence/staging-rollout-expansion-summary.json`（SHA-256
 `3df62342dfa5af3e6305d1593ac6642231688cf9bcd80c21e4a4ecf62692ec0e`）。
 
-- [ ] 回滚应用前先停止新上传并处理/冻结新状态任务，避免旧版本误读 `Finalizing`。
+- [x] 回滚应用前先停止新上传并处理/冻结新状态任务，避免旧版本误读 `Finalizing`。
+
+2026-07-21 已在候选应用基线 `897fb50` 上完成上传生命周期 drain/freeze 回滚门禁。
+兼容 API readiness 新增启动期固定的 `upload_task_creation_enabled` 与实时
+`business_requests_inflight`；受评审 Nginx freeze 片段在应用和鉴权之前拦截
+`/api/file/upload` 及全部子路径，固定返回 `503/50013`、`Retry-After: 30` 和
+`Cache-Control: no-store`。重开入口必须显式设置 `DISK_UPLOAD_UNFREEZE_APPROVED=true`。
+
+唯一临时 PostgreSQL 夹具包含 1 个 `InProgress` 和 1 个持有有效租约的 `Finalizing` S3
+任务：freeze 模式在只读重复读快照中保留两行、租约、版本和 staging 描述符且 `xmin` 不变；
+drain 模式先稳定拒绝，只有两行进入终态后才以活动任务数 0 通过。门禁还分别拒绝在途业务请求、
+新任务创建未关闭和上传入口未冻结，并始终输出 `old_release_upload_route_allowed=false`。
+完整 CTest 共 1389 项：1383 通过、6 项环境门控跳过、0 失败，总耗时 383.43 秒；
+OpenSpec 严格校验 24/24 通过。结构化证据为
+`.sisyphus/evidence/upload-rollback-gate-summary.json`（SHA-256
+`08082a1ccc00cb952c005b8fe33b302e999ab17f7ceba31bc79bff923b191a03`）。该仓库门禁只证明
+上传处理面可被排空或冻结，不准入旧版本访问其他新 schema/Blob；目标环境仍须保存自身入口、
+直连兼容实例和数据库快照证据。
+
 - [ ] expand schema 默认保留；数据库 contract 迁移不得作为紧急回滚步骤。
 - [ ] Worker 可停止认领，已持有任务依靠租约到期恢复。
 - [ ] S3/DB 已成功但响应失败的任务通过幂等 complete 恢复，不手工删除对象。

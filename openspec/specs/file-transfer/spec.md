@@ -32,6 +32,13 @@ The system SHALL provide a startup-controlled rollback cutoff for creating uploa
 - **WHEN** initialization can create a file through the existing instant-upload path without creating an upload task
 - **THEN** the system SHALL preserve the instant-upload behavior and logical quota accounting
 
+### Requirement: Upload Lifecycle Freeze Response
+The deployment ingress SHALL support a reviewed rollback freeze mode that intercepts every `/api/file/upload` lifecycle request before authentication or application routing. Freeze mode SHALL return HTTP 503 with `UploadLifecycleFrozen` code `50013`, a stable message, retry guidance, and no-cache guidance; it SHALL NOT mutate upload tasks, quota, chunks, leases, or object storage.
+
+#### Scenario: A lifecycle request reaches frozen ingress
+- **WHEN** upload ingress is in rollback freeze mode and a client attempts initialization, chunk upload, completion, or cancellation
+- **THEN** the gateway SHALL return the stable frozen response without proxying the request to any compatible or old application instance
+
 ### Requirement: Upload Storage Reservation
 The system SHALL reserve user storage during upload initialization and SHALL release or convert that reservation during upload cancellation, expiry, or completion.
 

@@ -15,12 +15,14 @@ namespace disk::runtime {
     ProcessRuntimeState::ProcessRuntimeState(
         disk::utils::ProcessRole role,
         std::string instance_id,
-        bool worker_claiming_enabled
+        bool worker_claiming_enabled,
+        bool upload_task_creation_enabled
     ) : m_role(role),
         m_instance_id(std::move(instance_id)),
         m_worker_claiming_enabled(
             disk::utils::IncludesWorker(role) && worker_claiming_enabled
-        ) {
+        ),
+        m_upload_task_creation_enabled(upload_task_creation_enabled) {
         if (m_instance_id.empty() || m_instance_id.size() > 128) {
             throw std::invalid_argument(
                 "Process runtime instance ID must contain 1 to 128 characters"
@@ -81,6 +83,10 @@ namespace disk::runtime {
 
     auto ProcessRuntimeState::IsWorkerClaimingEnabled() const noexcept -> bool {
         return m_worker_claiming_enabled;
+    }
+
+    auto ProcessRuntimeState::IsUploadTaskCreationEnabled() const noexcept -> bool {
+        return m_upload_task_creation_enabled;
     }
 
     auto ProcessRuntimeState::IsReady() const noexcept -> bool {

@@ -264,7 +264,8 @@ auto main() -> int {
         std::make_shared<disk::runtime::ProcessRuntimeState>(
             role,
             config->GetInstanceId(),
-            config->GetWorkerClaimingEnabled()
+            config->GetWorkerClaimingEnabled(),
+            config->GetUploadTaskCreationEnabled()
         )
     );
     disk::runtime::ProcessRuntimeMgr::SetInstance(runtime_services->state);

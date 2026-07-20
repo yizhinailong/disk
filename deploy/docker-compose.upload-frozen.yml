@@ -1,0 +1,4 @@
+services:
+  load-balancer:
+    volumes:
+      - ./deploy/nginx/upload-mode/frozen.inc:/etc/nginx/conf.d/disk-upload-mode.inc:ro

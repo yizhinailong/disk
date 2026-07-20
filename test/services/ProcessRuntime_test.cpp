@@ -93,6 +93,29 @@ namespace disk::runtime {
             EXPECT_TRUE(state.IsReady());
         }
 
+        TEST(ProcessRuntimeTest, UploadCreationSettingIsFrozenAtStartup) {
+            ProcessRuntimeState enabled(
+                disk::utils::ProcessRole::Api,
+                "api-enabled",
+                true,
+                true
+            );
+            ProcessRuntimeState disabled(
+                disk::utils::ProcessRole::Api,
+                "api-disabled",
+                true,
+                false
+            );
+
+            enabled.MarkInitialized();
+            disabled.MarkInitialized();
+
+            EXPECT_TRUE(enabled.IsUploadTaskCreationEnabled());
+            EXPECT_FALSE(disabled.IsUploadTaskCreationEnabled());
+            EXPECT_TRUE(enabled.IsReady());
+            EXPECT_TRUE(disabled.IsReady());
+        }
+
         TEST(ProcessRuntimeTest, AllRoleRequiresWorkerAndApiSides) {
             ProcessRuntimeState state(disk::utils::ProcessRole::All, "all-1");
             state.MarkInitialized();
