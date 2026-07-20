@@ -66,6 +66,8 @@ namespace disk::health {
             const auto result = drogon::sync_wait(service.CheckReadiness());
 
             EXPECT_EQ(result.overall_status, "healthy");
+            EXPECT_FALSE(result.worker_claiming_enabled);
+            EXPECT_FALSE(result.worker_accepting);
             EXPECT_EQ(counts.database, 1U);
             EXPECT_EQ(counts.redis, 1U);
             EXPECT_EQ(counts.staging_storage, 1U);
@@ -88,6 +90,8 @@ namespace disk::health {
             const auto result = drogon::sync_wait(service.CheckReadiness());
 
             EXPECT_EQ(result.overall_status, "healthy");
+            EXPECT_TRUE(result.worker_claiming_enabled);
+            EXPECT_TRUE(result.worker_accepting);
             EXPECT_EQ(counts.database, 1U);
             EXPECT_EQ(counts.redis, 0U);
             EXPECT_EQ(counts.staging_storage, 1U);
@@ -95,6 +99,31 @@ namespace disk::health {
             EXPECT_EQ(counts.storage_jobs, 1U);
             EXPECT_FALSE(result.components.contains("redis"));
             EXPECT_TRUE(result.components.contains("storage_jobs"));
+        }
+
+        TEST(HealthServiceTest, ObservationWorkerChecksDependenciesAndReportsMode) {
+            CheckCounts counts;
+            auto runtime = std::make_shared<disk::runtime::ProcessRuntimeState>(
+                disk::utils::ProcessRole::Worker,
+                "worker-observer-1",
+                false
+            );
+            runtime->MarkInitialized();
+            HealthService service(runtime, HealthyChecks(counts));
+
+            const auto result = drogon::sync_wait(service.CheckReadiness());
+            const auto json = result.ToJson();
+
+            EXPECT_EQ(result.overall_status, "healthy");
+            EXPECT_FALSE(result.worker_claiming_enabled);
+            EXPECT_FALSE(result.worker_accepting);
+            EXPECT_FALSE(json["worker_claiming_enabled"].asBool());
+            EXPECT_FALSE(json["worker_accepting"].asBool());
+            EXPECT_EQ(counts.database, 1U);
+            EXPECT_EQ(counts.redis, 0U);
+            EXPECT_EQ(counts.staging_storage, 1U);
+            EXPECT_EQ(counts.final_storage, 1U);
+            EXPECT_EQ(counts.storage_jobs, 1U);
         }
 
         TEST(HealthServiceTest, UnreadyRuntimeFailsFastWithoutDependencyChecks) {

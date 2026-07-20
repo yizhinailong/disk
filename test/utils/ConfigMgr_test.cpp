@@ -435,6 +435,7 @@ namespace {
         EXPECT_EQ(first_instance_id.rfind("disk-", 0), 0);
         EXPECT_EQ(config->GetUploadFinalizeLeaseSeconds(), 120);
         EXPECT_EQ(config->GetProcessRole(), disk::utils::ProcessRole::All);
+        EXPECT_TRUE(config->GetWorkerClaimingEnabled());
         EXPECT_EQ(config->GetWorkerPollIntervalMs(), 1000);
         EXPECT_EQ(config->GetWorkerClaimBatchSize(), 20);
         EXPECT_EQ(config->GetWorkerConcurrency(), 1);
@@ -446,6 +447,7 @@ namespace {
     TEST_F(ConfigMgrDistributedTest, LoadsProcessRoleAndWorkerSettings) {
         Json::Value disk_config;
         disk_config["process_role"] = "worker";
+        disk_config["worker_claiming_enabled"] = false;
         disk_config["worker_poll_interval_ms"] = 250;
         disk_config["worker_claim_batch_size"] = 75;
         disk_config["worker_concurrency"] = 1;
@@ -458,6 +460,7 @@ namespace {
         EXPECT_EQ(config->GetProcessRole(), disk::utils::ProcessRole::Worker);
         EXPECT_FALSE(disk::utils::IncludesApi(config->GetProcessRole()));
         EXPECT_TRUE(disk::utils::IncludesWorker(config->GetProcessRole()));
+        EXPECT_FALSE(config->GetWorkerClaimingEnabled());
         EXPECT_EQ(config->GetWorkerPollIntervalMs(), 250);
         EXPECT_EQ(config->GetWorkerClaimBatchSize(), 75);
         EXPECT_EQ(config->GetWorkerConcurrency(), 1);
@@ -505,6 +508,7 @@ namespace {
         expect_invalid("worker_lease_duration_seconds", 29);
         expect_invalid("worker_drain_timeout_seconds", 301);
         expect_invalid("worker_claim_batch_size", "20");
+        expect_invalid("worker_claiming_enabled", "false");
     }
 
     TEST_F(ConfigMgrDistributedTest, RejectsInvalidAuthCpuPoolThreadCounts) {

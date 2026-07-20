@@ -41,6 +41,8 @@ namespace disk::health {
         std::string instance_id;
         bool initialized{ false };
         bool draining{ false };
+        bool worker_claiming_enabled{ false };
+        bool worker_accepting{ false };
         std::string version;
         int64_t uptime{ 0 };
         std::string timestamp;

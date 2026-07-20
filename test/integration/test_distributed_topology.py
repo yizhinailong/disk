@@ -96,6 +96,10 @@ def main() -> int:
     require(disk_config["upload_staging_backend"] == "s3", "distributed staging backend drifted")
     require(disk_config["auth_cpu_pool_threads"] == 4, "auth CPU pool recommendation drifted")
     require(disk_config["assembly_max_concurrent"] == 2, "assembly concurrency drifted")
+    require(
+        disk_config["worker_claiming_enabled"] is True,
+        "final distributed profile must enable Worker claiming",
+    )
     require(disk_config["worker_concurrency"] == 1, "Worker concurrency drifted")
     require(disk_config["s3"]["max_connections"] == 16, "S3 connection pool drifted")
     require(disk_config["s3"]["io_threads"] == 4, "S3 I/O thread pool drifted")
@@ -110,6 +114,18 @@ def main() -> int:
         environment = services[name]["environment"]
         for key, expected in expected_compose_pools.items():
             require(environment[key] == expected, f"{name} {key} default drifted")
+
+    for name in ("worker-a", "worker-b"):
+        require(
+            services[name]["environment"]["DISK_WORKER_CLAIMING_ENABLED"]
+            == "${DISK_WORKER_CLAIMING_ENABLED:-true}",
+            f"{name} observation override is missing",
+        )
+    for name in ("api-a", "api-b"):
+        require(
+            "DISK_WORKER_CLAIMING_ENABLED" not in services[name]["environment"],
+            f"{name} must not receive the Worker claiming override",
+        )
 
     nginx_lines = []
     for raw_line in (root / "deploy/nginx/disk.conf").read_text(encoding="utf-8").splitlines():

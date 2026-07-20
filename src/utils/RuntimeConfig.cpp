@@ -194,6 +194,9 @@ namespace disk::utils {
         ApplyString("DISK_INSTANCE_ID", [&config](std::string value) {
             DiskConfig(config)["instance_id"] = std::move(value);
         });
+        ApplyBoolean("DISK_WORKER_CLAIMING_ENABLED", [&config](bool value) {
+            DiskConfig(config)["worker_claiming_enabled"] = value;
+        });
         ApplyString("DISK_STORAGE_BACKEND", [&config](std::string value) {
             DiskConfig(config)["storage_backend"] = std::move(value);
         });

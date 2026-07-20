@@ -144,6 +144,8 @@ namespace disk::health {
         json["instance_id"] = instance_id;
         json["initialized"] = initialized;
         json["draining"] = draining;
+        json["worker_claiming_enabled"] = worker_claiming_enabled;
+        json["worker_accepting"] = worker_accepting;
         json["version"] = version;
         json["uptime"] = static_cast<Json::Int64>(uptime);
         json["total_check_ms"] = static_cast<Json::Int64>(total_check_ms);
@@ -257,6 +259,8 @@ namespace disk::health {
             .instance_id = m_runtime_state->InstanceId(),
             .initialized = m_runtime_state->IsInitialized(),
             .draining = m_runtime_state->IsDraining(),
+            .worker_claiming_enabled = m_runtime_state->IsWorkerClaimingEnabled(),
+            .worker_accepting = m_runtime_state->IsWorkerAccepting(),
             .version = "1.0.0",
             .uptime = std::chrono::duration_cast<std::chrono::seconds>(now - m_start_time).count(),
             .timestamp = GetTimestamp(),

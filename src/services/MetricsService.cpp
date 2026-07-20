@@ -757,6 +757,12 @@ namespace disk::metrics {
         output << "disk_process_initialized " << (runtime_state.IsInitialized() ? 1 : 0) << '\n';
         WriteMetricHeader(output, "disk_process_draining", "Whether the process is draining.", "gauge");
         output << "disk_process_draining " << (runtime_state.IsDraining() ? 1 : 0) << '\n';
+        WriteMetricHeader(output, "disk_worker_claiming_enabled", "Whether this process is configured to claim storage jobs.", "gauge");
+        output << "disk_worker_claiming_enabled "
+               << (runtime_state.IsWorkerClaimingEnabled() ? 1 : 0) << '\n';
+        WriteMetricHeader(output, "disk_worker_accepting_jobs", "Whether this process currently accepts storage jobs.", "gauge");
+        output << "disk_worker_accepting_jobs "
+               << (runtime_state.IsWorkerAccepting() ? 1 : 0) << '\n';
         WriteMetricHeader(output, "disk_process_business_requests_inflight", "In-flight business requests.", "gauge");
         output << "disk_process_business_requests_inflight "
                << runtime_state.BusinessRequestsInflight() << '\n';

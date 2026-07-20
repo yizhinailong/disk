@@ -43,8 +43,16 @@ The system SHALL associate requests with trace identifiers for log correlation a
 - **THEN** it SHALL make the request trace identifier available for logging and response propagation
 
 ### Requirement: Background Maintenance Visibility
-The system SHALL run scheduled maintenance tasks for time-based cleanup behavior.
+The system SHALL expose Worker claiming configuration and current acceptance state independently, and a Worker in observation mode SHALL continue to expose dependency readiness and database-backed queue snapshots without executing maintenance work.
 
 #### Scenario: Scheduled cleanup runs
 - **WHEN** scheduled maintenance executes
 - **THEN** the system SHALL process expired upload or trash state according to the relevant lifecycle rules
+
+#### Scenario: Worker observes without claiming
+- **WHEN** a Worker starts with job claiming disabled and its required dependencies are healthy
+- **THEN** readiness SHALL succeed, health SHALL report claiming disabled and accepting false, queue snapshot collection SHALL continue, and claiming/acceptance gauges SHALL both be zero
+
+#### Scenario: Claiming Worker drains
+- **WHEN** a claiming Worker begins graceful shutdown
+- **THEN** the configured claiming gauge SHALL remain one while the current acceptance gauge becomes zero and readiness fails

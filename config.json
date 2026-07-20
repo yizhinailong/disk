@@ -21,6 +21,7 @@
       "max_file_size": 10737418240,
       "upload_task_expiry_seconds": 86400,
       "upload_finalize_lease_seconds": 120,
+      "worker_claiming_enabled": true,
       "worker_poll_interval_ms": 1000,
       "worker_claim_batch_size": 20,
       "worker_concurrency": 1,

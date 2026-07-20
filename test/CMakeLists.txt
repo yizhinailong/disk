@@ -300,6 +300,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME WorkerObservationModeIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_worker_observation_mode.py"
+)
+set_tests_properties(
+    WorkerObservationModeIntegration
+    PROPERTIES
+    LABELS "backend-integration;distributed;rolling-upgrade;observability"
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME LocalStagingMigrationIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_local_staging_migration.py"
 )

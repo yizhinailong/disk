@@ -151,6 +151,9 @@ namespace disk::utils {
         auto GetProcessRole() const noexcept -> ProcessRole;
 
         [[nodiscard]]
+        auto GetWorkerClaimingEnabled() const noexcept -> bool;
+
+        [[nodiscard]]
         auto GetWorkerPollIntervalMs() const noexcept -> uint32_t;
 
         [[nodiscard]]
@@ -349,6 +352,7 @@ namespace disk::utils {
         std::string m_instance_id;
         ProcessRole m_process_role{ ProcessRole::All };
         bool m_process_role_explicit{ false };
+        bool m_worker_claiming_enabled{ true };
         uint32_t m_worker_poll_interval_ms{ DEFAULT_WORKER_POLL_INTERVAL_MS };
         uint32_t m_worker_claim_batch_size{ DEFAULT_WORKER_CLAIM_BATCH_SIZE };
         uint32_t m_worker_concurrency{ DEFAULT_WORKER_CONCURRENCY };

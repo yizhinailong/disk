@@ -62,6 +62,7 @@ namespace {
             "REDIS_POOL_SIZE",
             "DISK_PROCESS_ROLE",
             "DISK_INSTANCE_ID",
+            "DISK_WORKER_CLAIMING_ENABLED",
             "DISK_STORAGE_BACKEND",
             "DISK_UPLOAD_STAGING_BACKEND",
             "DISK_S3_BUCKET",
@@ -110,6 +111,7 @@ namespace {
         EnvironmentScope::Set("REDIS_POOL_SIZE", "8");
         EnvironmentScope::Set("DISK_PROCESS_ROLE", "worker");
         EnvironmentScope::Set("DISK_INSTANCE_ID", "disk-worker-a");
+        EnvironmentScope::Set("DISK_WORKER_CLAIMING_ENABLED", "false");
         EnvironmentScope::Set("DISK_STORAGE_BACKEND", "s3");
         EnvironmentScope::Set("DISK_UPLOAD_STAGING_BACKEND", "s3");
         EnvironmentScope::Set("DISK_S3_BUCKET", "disk-test");
@@ -148,6 +150,7 @@ namespace {
         const auto& disk = config["custom_config"]["disk"];
         EXPECT_EQ(disk["process_role"].asString(), "worker");
         EXPECT_EQ(disk["instance_id"].asString(), "disk-worker-a");
+        EXPECT_FALSE(disk["worker_claiming_enabled"].asBool());
         EXPECT_EQ(disk["storage_backend"].asString(), "s3");
         EXPECT_EQ(disk["upload_staging_backend"].asString(), "s3");
         EXPECT_EQ(disk["s3"]["bucket"].asString(), "disk-test");
@@ -213,6 +216,13 @@ namespace {
         );
 
         EnvironmentScope::Set("DISK_S3_USE_SSL", "true");
+        EnvironmentScope::Set("DISK_WORKER_CLAIMING_ENABLED", "disabled");
+        EXPECT_THROW(
+            disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config),
+            std::runtime_error
+        );
+
+        EnvironmentScope::Set("DISK_WORKER_CLAIMING_ENABLED", "true");
         EnvironmentScope::Set("DATABASE_HOST", "");
         EXPECT_THROW(
             disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config),

@@ -184,6 +184,7 @@ services:
       <<: *disk-environment
       DISK_PROCESS_ROLE: worker
       DISK_INSTANCE_ID: disk-worker-a
+      DISK_WORKER_CLAIMING_ENABLED: ${DISK_WORKER_CLAIMING_ENABLED:-true}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health/ready"]
       interval: 3s
@@ -196,6 +197,7 @@ services:
       <<: *disk-environment
       DISK_PROCESS_ROLE: worker
       DISK_INSTANCE_ID: disk-worker-b
+      DISK_WORKER_CLAIMING_ENABLED: ${DISK_WORKER_CLAIMING_ENABLED:-true}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health/ready"]
       interval: 3s

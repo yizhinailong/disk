@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-20）：`cmake --preset linux-debug-clang`、构建及完整 CTest 均通过，共 1362 项测试；Prometheus 规则校验因缺少 `promtool` 跳过，S3 适配器、S3 应用流和真实分布式拓扑 3 项因当前主机缺少对应外部环境而按门控跳过，相关验收项继续保持未完成。
+> 最近验证（2026-07-20）：`cmake --preset linux-debug-clang`、构建均通过；完整 CTest 共 1376 项，1370 通过、6 项按既有环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），无失败；`WorkerObservationModeIntegration` 已实际运行通过，OpenSpec 严格校验 24/24 通过。
 
 ## 1. 目标与范围
 
@@ -465,7 +465,12 @@ API Instance A  API Instance B ... N
 - [x] 创建 staging/final bucket 前缀、生命周期、权限和监控。
 - [x] 发布 expand schema，确认旧代码继续正常运行。
 - [x] 发布同时支持旧任务和新任务的过渡版本，但默认仍创建旧模式任务。
-- [ ] 部署 Worker，先以不认领或 dry-run 模式验证查询与指标。
+- [x] 部署 Worker，先以不认领或 dry-run 模式验证查询与指标。
+
+2026-07-20 已完成仓库门禁和本机隔离预发布演练：真实 Worker 以
+`worker_claiming_enabled=false` 启动并保持 readiness，通过数据库查询暴露队列指标；跨越 6 个配置
+轮询周期后，预置 Ready 任务仍为 Pending、尝试次数为 0、无 owner/lease，且未播种周期任务。
+目标预发布/生产环境必须按部署指南 4.5.1 使用真实依赖和部署身份重复该门禁，本记录不宣称已完成生产发布。
 
 ### 14.2 上传暂存切换
 

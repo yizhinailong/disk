@@ -14,8 +14,13 @@ namespace disk::runtime {
 
     ProcessRuntimeState::ProcessRuntimeState(
         disk::utils::ProcessRole role,
-        std::string instance_id
-    ) : m_role(role), m_instance_id(std::move(instance_id)) {
+        std::string instance_id,
+        bool worker_claiming_enabled
+    ) : m_role(role),
+        m_instance_id(std::move(instance_id)),
+        m_worker_claiming_enabled(
+            disk::utils::IncludesWorker(role) && worker_claiming_enabled
+        ) {
         if (m_instance_id.empty() || m_instance_id.size() > 128) {
             throw std::invalid_argument(
                 "Process runtime instance ID must contain 1 to 128 characters"
@@ -28,7 +33,9 @@ namespace disk::runtime {
     }
 
     auto ProcessRuntimeState::SetWorkerAccepting(bool accepting) noexcept -> void {
-        m_worker_accepting.store(accepting && !m_draining.load());
+        m_worker_accepting.store(
+            accepting && m_worker_claiming_enabled && !m_draining.load()
+        );
     }
 
     auto ProcessRuntimeState::BeginDrain() noexcept -> bool {
@@ -72,11 +79,15 @@ namespace disk::runtime {
         return m_worker_accepting.load();
     }
 
+    auto ProcessRuntimeState::IsWorkerClaimingEnabled() const noexcept -> bool {
+        return m_worker_claiming_enabled;
+    }
+
     auto ProcessRuntimeState::IsReady() const noexcept -> bool {
         if (!m_initialized.load() || m_draining.load()) {
             return false;
         }
-        return !disk::utils::IncludesWorker(m_role) || m_worker_accepting.load();
+        return !m_worker_claiming_enabled || m_worker_accepting.load();
     }
 
     auto ProcessRuntimeState::BusinessRequestsInflight() const noexcept -> size_t {

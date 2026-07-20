@@ -27,7 +27,11 @@ namespace disk::runtime {
 
     class ProcessRuntimeState final {
     public:
-        ProcessRuntimeState(disk::utils::ProcessRole role, std::string instance_id);
+        ProcessRuntimeState(
+            disk::utils::ProcessRole role,
+            std::string instance_id,
+            bool worker_claiming_enabled = true
+        );
 
         auto MarkInitialized() noexcept -> void;
 
@@ -49,6 +53,9 @@ namespace disk::runtime {
 
         [[nodiscard]]
         auto IsWorkerAccepting() const noexcept -> bool;
+
+        [[nodiscard]]
+        auto IsWorkerClaimingEnabled() const noexcept -> bool;
 
         [[nodiscard]]
         auto IsReady() const noexcept -> bool;
@@ -73,6 +80,7 @@ namespace disk::runtime {
         std::string m_instance_id;
         std::atomic_bool m_initialized{ false };
         std::atomic_bool m_draining{ false };
+        bool m_worker_claiming_enabled{ false };
         std::atomic_bool m_worker_accepting{ false };
         std::atomic_size_t m_business_requests_inflight{ 0 };
     };

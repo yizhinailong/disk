@@ -114,6 +114,21 @@ The compatibility release immediately after the expand migration SHALL default n
 - **WHEN** a request or Worker loads a legacy local task or a task with a persisted S3 descriptor
 - **THEN** it SHALL use that task's persisted compatible locator and SHALL NOT reinterpret it using the current process default
 
+### Requirement: Worker observation rollout
+The rollout SHALL support deploying a Worker with job claiming disabled after the expand migration and compatibility release. The observation Worker SHALL validate its required dependencies and query real queue metrics without claiming, renewing, completing, or seeding persistent jobs. Enabling execution SHALL require an explicit configuration change and process restart.
+
+#### Scenario: Observation Worker is deployed
+- **WHEN** a Worker starts with `worker_claiming_enabled=false`
+- **THEN** readiness SHALL succeed when its database, task schema, and storage dependencies are healthy, health and metrics SHALL identify the non-claiming state, and queued jobs SHALL remain unchanged across polling intervals
+
+#### Scenario: Observation gate fails
+- **WHEN** dependency readiness or queue snapshot collection fails, an observation instance appears as a lease owner, a queued job changes because of that instance, or cluster maintenance jobs are unexpectedly seeded
+- **THEN** the rollout SHALL stop before Worker execution is enabled
+
+#### Scenario: Worker execution is enabled
+- **WHEN** the observation gate has passed and the rollout advances to task execution
+- **THEN** the operator SHALL explicitly set job claiming enabled and restart or redeploy the Worker rather than treating the startup setting as a live pause control
+
 ### Requirement: Upgrade and rollback operations
 Deployment documentation SHALL define upgrade preparation, backup, test-environment verification, build/deploy steps, database migration application, health validation, and rollback to a previous application/database state.
 

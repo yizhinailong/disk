@@ -48,6 +48,7 @@ namespace disk::runtime {
             ProcessRuntimeState state(disk::utils::ProcessRole::Worker, "worker-1");
             state.MarkInitialized();
 
+            EXPECT_TRUE(state.IsWorkerClaimingEnabled());
             EXPECT_FALSE(state.IsReady());
             EXPECT_FALSE(state.TryAcquireBusinessRequest());
 
@@ -60,6 +61,36 @@ namespace disk::runtime {
             state.SetWorkerAccepting(true);
             EXPECT_FALSE(state.IsWorkerAccepting());
             EXPECT_FALSE(state.IsReady());
+        }
+
+        TEST(ProcessRuntimeTest, ObservationWorkerIsReadyWithoutAcceptingJobs) {
+            ProcessRuntimeState state(
+                disk::utils::ProcessRole::Worker,
+                "worker-observer-1",
+                false
+            );
+            state.MarkInitialized();
+
+            EXPECT_FALSE(state.IsWorkerClaimingEnabled());
+            EXPECT_FALSE(state.IsWorkerAccepting());
+            EXPECT_TRUE(state.IsReady());
+            EXPECT_FALSE(state.TryAcquireBusinessRequest());
+
+            state.SetWorkerAccepting(true);
+            EXPECT_FALSE(state.IsWorkerAccepting());
+            EXPECT_TRUE(state.IsReady());
+
+            static_cast<void>(state.BeginDrain());
+            EXPECT_FALSE(state.IsReady());
+        }
+
+        TEST(ProcessRuntimeTest, ApiNeverReportsWorkerClaimingEnabled) {
+            ProcessRuntimeState state(disk::utils::ProcessRole::Api, "api-1", true);
+            state.MarkInitialized();
+
+            EXPECT_FALSE(state.IsWorkerClaimingEnabled());
+            EXPECT_FALSE(state.IsWorkerAccepting());
+            EXPECT_TRUE(state.IsReady());
         }
 
         TEST(ProcessRuntimeTest, AllRoleRequiresWorkerAndApiSides) {

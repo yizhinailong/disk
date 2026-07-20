@@ -223,9 +223,31 @@ namespace disk::metrics {
             EXPECT_NE(output.find("disk_reconciliation_findings_unresolved{finding_type=\"missing_final_blob\"} 4"), std::string::npos);
             EXPECT_NE(output.find("disk_reconciliation_findings_unresolved{finding_type=\"upload_staging_mismatch\"} 2"), std::string::npos);
             EXPECT_NE(output.find("disk_metrics_snapshot_success 1"), std::string::npos);
+            EXPECT_NE(output.find("disk_worker_claiming_enabled 0"), std::string::npos);
+            EXPECT_NE(output.find("disk_worker_accepting_jobs 0"), std::string::npos);
             EXPECT_NE(output.find("instance_id=\"api-quoted\\\"\""), std::string::npos);
             EXPECT_EQ(output.find("upload_id="), std::string::npos);
             EXPECT_EQ(output.find("job_id="), std::string::npos);
+        }
+
+        TEST(MetricsServiceTest, RendersClaimingAndAcceptanceAsIndependentWorkerGauges) {
+            MetricsSnapshot metrics;
+            DatabaseMetricsSnapshot database;
+            disk::runtime::ProcessRuntimeState runtime(
+                disk::utils::ProcessRole::Worker,
+                "worker-1"
+            );
+            runtime.MarkInitialized();
+            runtime.SetWorkerAccepting(true);
+
+            auto output = MetricsService::RenderSnapshot(metrics, database, runtime);
+            EXPECT_NE(output.find("disk_worker_claiming_enabled 1"), std::string::npos);
+            EXPECT_NE(output.find("disk_worker_accepting_jobs 1"), std::string::npos);
+
+            static_cast<void>(runtime.BeginDrain());
+            output = MetricsService::RenderSnapshot(metrics, database, runtime);
+            EXPECT_NE(output.find("disk_worker_claiming_enabled 1"), std::string::npos);
+            EXPECT_NE(output.find("disk_worker_accepting_jobs 0"), std::string::npos);
         }
 
         TEST(MetricsServiceTest, ReconciliationFindingTypesUseFixedUnknownBucket) {

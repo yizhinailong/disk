@@ -46,11 +46,19 @@ The system SHALL initialize file storage from configured storage paths and uploa
 - **THEN** the system SHALL initialize the active file storage implementation using configured storage and temporary upload paths
 
 ### Requirement: Background Task Registration
-The system SHALL register background maintenance tasks during application startup.
+The system SHALL register cluster maintenance tasks only in a Worker-capable process whose startup configuration enables job claiming. Process-local maintenance MAY remain attached to the process that owns it.
 
-#### Scenario: Application begins serving
-- **WHEN** the backend application enters its serving lifecycle
-- **THEN** scheduled cleanup and token maintenance tasks SHALL be registered
+#### Scenario: Claiming Worker begins serving
+- **WHEN** a Worker-capable process starts with job claiming enabled
+- **THEN** the persistent job claim loop and cluster maintenance task registration SHALL start
+
+#### Scenario: Observation Worker begins serving
+- **WHEN** a Worker process starts with job claiming disabled
+- **THEN** it SHALL NOT claim, renew, complete, or seed persistent jobs while retaining dependency and queue observation
+
+#### Scenario: API process begins serving
+- **WHEN** an API-only process enters its serving lifecycle
+- **THEN** it SHALL NOT start the persistent job claim loop or register cluster maintenance tasks
 
 ### Requirement: Public Route Exemptions
 The system SHALL configure public APIs such as registration, login, refresh, health, and public share access so they can execute without bearer-token authentication while still applying any route-specific protection.

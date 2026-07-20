@@ -261,7 +261,11 @@ auto main() -> int {
     const auto config = disk::utils::ConfigMgr::GetInstance();
     const auto role = config->GetProcessRole();
     auto runtime_services = std::make_shared<RuntimeServices>(
-        std::make_shared<disk::runtime::ProcessRuntimeState>(role, config->GetInstanceId())
+        std::make_shared<disk::runtime::ProcessRuntimeState>(
+            role,
+            config->GetInstanceId(),
+            config->GetWorkerClaimingEnabled()
+        )
     );
     disk::runtime::ProcessRuntimeMgr::SetInstance(runtime_services->state);
 
@@ -334,7 +338,7 @@ auto main() -> int {
                 << config->GetInstanceId();
         }
 
-        if (disk::utils::IncludesWorker(role)) {
+        if (runtime_services->state->IsWorkerClaimingEnabled()) {
             auto worker = std::make_shared<disk::jobs::StorageJobWorker>(
                 db_client,
                 disk::storage::StorageMgr::GetUploadStagingStorage(),
@@ -366,6 +370,11 @@ auto main() -> int {
             worker_runtime->Start(drogon::app().getLoop());
             runtime_services->worker_runtime.store(std::move(worker_runtime));
             runtime_services->state->SetWorkerAccepting(true);
+        } else if (disk::utils::IncludesWorker(role)) {
+            disk::utils::Logger::Info()
+                << "Worker observation mode enabled; job claiming and scheduled task "
+                << "registration are disabled: instance_id="
+                << config->GetInstanceId();
         }
 
         runtime_services->state->MarkInitialized();

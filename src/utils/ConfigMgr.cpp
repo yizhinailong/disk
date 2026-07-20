@@ -178,6 +178,7 @@ namespace disk::utils {
         m_instance_id = m_generated_instance_id;
         m_process_role = ProcessRole::All;
         m_process_role_explicit = false;
+        m_worker_claiming_enabled = true;
         m_worker_poll_interval_ms = DEFAULT_WORKER_POLL_INTERVAL_MS;
         m_worker_claim_batch_size = DEFAULT_WORKER_CLAIM_BATCH_SIZE;
         m_worker_concurrency = DEFAULT_WORKER_CONCURRENCY;
@@ -225,6 +226,15 @@ namespace disk::utils {
                     );
                 }
                 m_upload_finalize_lease_seconds = static_cast<uint32_t>(lease_seconds.asUInt());
+            }
+
+            if (app_config.isMember("worker_claiming_enabled")) {
+                if (!app_config["worker_claiming_enabled"].isBool()) {
+                    throw std::runtime_error(
+                        "Invalid worker_claiming_enabled: expected boolean"
+                    );
+                }
+                m_worker_claiming_enabled = app_config["worker_claiming_enabled"].asBool();
             }
 
             m_worker_poll_interval_ms = ReadBoundedUInt(
@@ -589,6 +599,10 @@ namespace disk::utils {
 
     auto ConfigMgr::GetProcessRole() const noexcept -> ProcessRole {
         return m_process_role;
+    }
+
+    auto ConfigMgr::GetWorkerClaimingEnabled() const noexcept -> bool {
+        return m_worker_claiming_enabled;
     }
 
     auto ConfigMgr::GetWorkerPollIntervalMs() const noexcept -> uint32_t {

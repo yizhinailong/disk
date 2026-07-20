@@ -3639,8 +3639,8 @@ If-Range: "d41d8cd98f00b204e9800998ecf8427e"
 
 - 所有角色必须完成启动初始化、未进入 drain，并能访问 PostgreSQL、staging 与 final 存储；
 - `api` 还必须通过 Redis PING；
-- `worker` 还必须读取 `storage_jobs`，且任务认领运行时仍接受新任务；
-- `all` 同时满足 `api` 与 `worker` 的全部条件。
+- `worker` 还必须读取 `storage_jobs`；启用任务认领时，认领运行时必须仍接受新任务；显式关闭认领的观察模式保持 `worker_accepting=false`，但依赖健康时 readiness 为 200；
+- `all` 同时满足 `api` 与有效 Worker 模式的全部条件。
 
 对象存储探针执行每个前缀最多一项的有界只读 inventory 请求，不创建或删除探针对象；写权限由
 启动校验及部署验收测试证明。依赖失败只返回固定消息，禁止回显异常文本、连接地址、用户名、
@@ -3655,6 +3655,8 @@ bucket、对象 key 或凭据。
 | instance_id | string | 当前进程实例 ID |
 | initialized | boolean | 当前角色的启动初始化是否完成 |
 | draining | boolean | 是否正在优雅退出 |
+| worker_claiming_enabled | boolean | 当前进程是否具备 Worker 角色且启动配置允许认领；API 固定为 false，观察 Worker 为 false |
+| worker_accepting | boolean | Worker 认领运行时当前是否接受新任务；观察、API 和 drain 状态为 false |
 | version | string | 系统版本 |
 | uptime | integer | 运行时间（秒） |
 | timestamp | string | ISO 8601 时间戳 |
@@ -3687,6 +3689,8 @@ bucket、对象 key 或凭据。
     "instance_id": "disk-api-1",
     "initialized": true,
     "draining": false,
+    "worker_claiming_enabled": false,
+    "worker_accepting": false,
     "version": "1.0.0",
     "uptime": 86400,
     "timestamp": "2026-02-18T12:30:00Z",
@@ -3724,6 +3728,8 @@ bucket、对象 key 或凭据。
     "instance_id": "disk-worker-2",
     "initialized": true,
     "draining": false,
+    "worker_claiming_enabled": true,
+    "worker_accepting": true,
     "version": "1.0.0",
     "uptime": 86400,
     "timestamp": "2026-02-18T12:30:00Z",
