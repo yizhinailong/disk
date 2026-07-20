@@ -11,11 +11,13 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <expected>
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
 #include <string_view>
+#include <thread>
 #include <utility>
 
 #include <drogon/drogon.h>
@@ -29,6 +31,7 @@
 #include "storage/IBlobStore.hpp"
 #include "storage/MultipartUploadRecovery.hpp"
 #include "storage/UploadStagingStorage.hpp"
+#include "utils/ConfigMgr.hpp"
 #include "utils/LogHelper.hpp"
 
 namespace disk::jobs {
@@ -181,6 +184,29 @@ namespace disk::jobs {
                 .retryable = true,
                 .error = std::move(error),
             };
+        }
+
+        auto PauseBlobGcAfterDeleteForFaultInjection(
+            const StorageJob& job,
+            uint64_t content_id,
+            const std::string& instance_id
+        ) -> void {
+            if (disk::utils::ConfigMgr::GetInstance()->IsSecureMode()) {
+                return;
+            }
+
+            const auto* enabled = std::getenv("DISK_TEST_FAULT_INJECTION");
+            const auto* target_job_id =
+                std::getenv("DISK_TEST_PAUSE_AFTER_BLOB_DELETE_JOB_ID");
+            if (enabled == nullptr || std::string_view(enabled) != "1" ||
+                target_job_id == nullptr || std::to_string(job.id) != target_job_id) {
+                return;
+            }
+
+            Logger::Warn() << "Test fault injection paused blob_gc after blob delete: job_id="
+                           << job.id << ", content_id=" << content_id
+                           << ", instance_id=" << instance_id;
+            std::this_thread::sleep_for(std::chrono::minutes(5));
         }
 
         [[nodiscard]] auto ParseStagingSession(const StorageJob& job)
@@ -512,6 +538,12 @@ namespace disk::jobs {
                     .error = error.message.empty() ? "blob_gc storage deletion failed" : error.message,
                 };
             }
+
+            PauseBlobGcAfterDeleteForFaultInjection(
+                job,
+                candidate->content_id,
+                m_instance_id
+            );
 
             auto deleted = co_await transaction->execSqlCoro(
                 "DELETE FROM file_contents AS content " "WHERE content.id = $1 AND content.ref_count = 0 " "  AND NOT EXISTS (SELECT 1 FROM files WHERE content_id = content.id) " "  AND NOT EXISTS (SELECT 1 FROM trash WHERE content_id = content.id) " "RETURNING content.id",

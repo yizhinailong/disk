@@ -427,7 +427,7 @@ API Instance A  API Instance B ... N
 - [x] 完成认领后、组装前杀死实例。
 - [x] 组装对象创建后、最终事务前杀死实例。
 - [x] 最终事务提交后、HTTP 响应前杀死实例。
-- [ ] Blob 删除成功后、任务标记成功前杀死 Worker。
+- [x] Blob 删除成功后、任务标记成功前杀死 Worker。
 - [ ] PostgreSQL/Redis/S3 分别短暂不可用后恢复。
 - [ ] 租约续租超时、网络分区和旧 owner 恢复后尝试提交。
 

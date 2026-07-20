@@ -313,6 +313,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME BlobGcProcessDeathIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_blob_gc_process_death.py"
+)
+set_tests_properties(
+    BlobGcProcessDeathIntegration
+    PROPERTIES
+    LABELS "backend-integration;database-state-machine;process-death"
+    RUN_SERIAL TRUE
+    TIMEOUT 150
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME MultipartRecoveryIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_multipart_recovery.py"
 )
