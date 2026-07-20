@@ -159,6 +159,21 @@ The distributed release SHALL provide a reviewed two-API load-balancer pool and 
 - **WHEN** validation of either reviewed pool fails
 - **THEN** the load balancer SHALL NOT be recreated or reloaded from that configuration and the currently active pool SHALL remain the recovery point
 
+### Requirement: Non-sticky routed upload acceptance
+The active two-API pool SHALL accept a single upload whose requests are dynamically routed without client affinity. Runtime acceptance SHALL use one persistent HTTP client, one fixed cookie value, and only the load-balancer address for upload initialization, intentional same-chunk retries, completion, and download. It SHALL record the application-provided `X-Disk-Instance-Id` response header for every step, observe both reviewed API instance IDs before completion, and verify one completed file, one content reference, correct quota settlement, and byte-identical download. Static configuration inspection and requests sent directly to chosen API ports SHALL NOT satisfy this gate.
+
+#### Scenario: One client reaches both APIs
+- **WHEN** a client keeps the same connection context and cookie while retrying an immutable upload chunk through the active load-balancer pool
+- **THEN** successful responses SHALL identify both `disk-api-a` and `disk-api-b`, every retry SHALL converge on the same authoritative chunk, and no route-selection cookie or client-controlled instance hint SHALL be required
+
+#### Scenario: The randomly routed upload completes
+- **WHEN** the same client completes and downloads that upload only through the load-balancer address
+- **THEN** the task SHALL reach `Completed`, its completed file and final object SHALL be unique, reserved quota SHALL be settled exactly once, and the downloaded bytes SHALL match the original payload
+
+#### Scenario: Runtime routing remains affine
+- **WHEN** all bounded route probes for the same client and upload identify only one API while both reviewed targets are ready
+- **THEN** the acceptance gate SHALL fail even if static configuration contains no cookie, sticky, or IP-hash directive
+
 ### Requirement: Worker observation rollout
 The rollout SHALL support deploying a Worker with job claiming disabled after the expand migration and compatibility release. The observation Worker SHALL validate its required dependencies and query real queue metrics without claiming, renewing, completing, or seeding persistent jobs. Enabling execution SHALL require an explicit configuration change and process restart.
 

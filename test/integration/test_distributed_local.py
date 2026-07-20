@@ -16,6 +16,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import random
 import shutil
 import signal
 import socket
@@ -257,16 +258,20 @@ class LocalProxyServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, address: tuple[str, int], upstreams: list[tuple[str, int]]) -> None:
+        require(bool(upstreams), "local proxy requires at least one upstream")
         super().__init__(address, LocalProxyHandler)
         self.upstreams = upstreams
-        self.upstream_index = 0
         self.upstream_lock = threading.Lock()
+        self.random = random.SystemRandom()
+        self.primary_pool: list[tuple[str, int]] = []
 
     def candidates(self) -> list[tuple[str, int]]:
         with self.upstream_lock:
-            first = self.upstream_index % len(self.upstreams)
-            self.upstream_index += 1
-        return [self.upstreams[first], self.upstreams[(first + 1) % len(self.upstreams)]]
+            if not self.primary_pool:
+                self.primary_pool = list(self.upstreams)
+                self.random.shuffle(self.primary_pool)
+            primary = self.primary_pool.pop()
+        return [primary, *(upstream for upstream in self.upstreams if upstream != primary)]
 
 
 class LocalProxyHandler(BaseHTTPRequestHandler):

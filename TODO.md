@@ -542,7 +542,21 @@ local 非终态、未完成 cleanup 与逐原卷扫描全部归零的证据，�
 目标环境仍须按部署指南验证 B 直连 readiness 与实例响应头、加入双池、先切回仅 A 并连续确认
 入口只返回 A 后再终止 B；本项不替代下一条无 sticky 的真实随机路由验收。
 
-- [ ] 关闭 sticky session，运行真实随机路由验收。
+- [x] 关闭 sticky session，运行真实随机路由验收。
+
+2026-07-21 已在候选应用基线 `1191889` 上完成仓库级真实随机路由门禁。Nginx 配置继续由静态合同
+确认不存在 cookie/ip-hash/sticky，测试专用本地入口改为随机洗牌池且不重放非幂等请求；
+`DistributedLocalFlowIntegration` 以隔离 PostgreSQL、Redis、固定 MinIO、两个真实 API/Worker 和
+随机代理执行 1/1 通过，共 17 项检查、耗时 132.72 秒。同一持久 HTTP 客户端携带固定 cookie，
+只访问入口完成一个上传，init/chunk/complete/download 的实例序列为
+`disk-api-b -> disk-api-a -> disk-api-b -> disk-api-b`；同分片一次重试即覆盖 A/B，最终任务、
+文件/内容引用、配额、S3 final 对象和下载字节全部一致。证据为
+`.sisyphus/evidence/distributed-flow-summary.json`，SHA-256 为
+`f00fb45892199fce2cacefaae7ef0953eda0b714da4fb922c9679be66a6bc2a8`。完整 CTest 共 1381 项：
+1375 通过、6 项常规环境门控跳过、0 失败，总耗时 361.71 秒；OpenSpec 严格校验 24/24 通过。
+受管进程和临时拓扑已清理。本机没有 Docker/Nginx，目标环境仍须用真实 Nginx `least_conn` 入口
+复跑同一响应头与数据对账；本地门禁证明应用不依赖节点亲和，不替代目标网关加载确认。
+
 - [ ] 启用 Worker 任务执行后，关闭 API 中的集群级 `ScheduledTasks`。
 - [ ] 逐步增加 API/Worker 副本并重新核算 PostgreSQL、Redis、S3 连接和并发预算。
 - [ ] 观察至少一个完整上传过期/回收周期后再执行 contract 清理。

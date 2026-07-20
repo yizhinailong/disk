@@ -237,10 +237,17 @@ def main(
     file_hash = hashlib.md5(content).hexdigest()
     file_sha256 = hashlib.sha256(content).hexdigest()
     object_key = f"objects/sha256/{file_sha256[:2]}/{file_sha256}.bin"
+    routed_filename = f"distributed_random_route_{run_id}.bin"
+    routed_prefix = f"disk-random-route-{run_id}:".encode()
+    routed_content = (routed_prefix + b"R" * 1_048_576)[:1_048_576]
+    routed_md5 = hashlib.md5(routed_content).hexdigest()
+    routed_sha256 = hashlib.sha256(routed_content).hexdigest()
+    routed_object_key = f"objects/sha256/{routed_sha256[:2]}/{routed_sha256}.bin"
     access_token = ""
     refresh_token = ""
     user_id = 0
     file_id = 0
+    routed_file_id = 0
     race_upload_ids: list[str] = []
     race_file_ids: list[int] = []
     race_object_keys: list[str] = []
@@ -276,6 +283,7 @@ def main(
             "http://minio:9000",
             minio_url,
             object_key,
+            routed_object_key,
             access_token,
             refresh_token,
         )
@@ -523,6 +531,161 @@ def main(
             require(file_count is not None and int(file_count["count"]) == 1, "concurrent complete created duplicate files")
             wait_until(lambda: object_exists(object_key), 30, "final S3 object")
             passed("concurrent complete converges to one file and one final object")
+
+            routed_quota_before = query_one(
+                "SELECT storage_used, storage_reserved FROM users WHERE id = %s",
+                (user_id,),
+            )
+            require(routed_quota_before is not None, "random-routed upload quota baseline is missing")
+            route_sequence: list[str] = []
+            expected_instances = {"disk-api-a", "disk-api-b"}
+
+            def routed_instance(response: Any, label: str) -> str:
+                instance_id = response.headers.get("X-Disk-Instance-Id")
+                require(instance_id in expected_instances, f"{label} omitted a reviewed API instance ID")
+                return str(instance_id)
+
+            with httpx.Client(
+                base_url=load_balancer_url,
+                headers=auth,
+                cookies={"disk_route_probe": run_id},
+                timeout=180,
+            ) as routed_http:
+                routed_init = routed_http.post(
+                    "/api/file/upload/init",
+                    json={
+                        "filename": routed_filename,
+                        "file_size": len(routed_content),
+                        "file_hash": routed_md5,
+                        "parent_id": 0,
+                    },
+                )
+                routed_init_payload = response_json(routed_init, "random-routed upload init")
+                require(str(routed_init_payload["code"]) == "0", "random-routed upload init failed")
+                require(
+                    not routed_init_payload["data"].get("instant_upload", False),
+                    "random-routed upload unexpectedly deduplicated",
+                )
+                routed_upload_id = str(routed_init_payload["data"]["upload_id"])
+                route_sequence.append(routed_instance(routed_init, "random-routed upload init"))
+
+                routed_chunk_attempts = 0
+                for attempt in range(1, 17):
+                    routed_chunk = routed_http.post(
+                        "/api/file/upload/chunk",
+                        params={
+                            "upload_id": routed_upload_id,
+                            "chunk_index": 0,
+                            "chunk_hash": routed_md5,
+                        },
+                        headers={"Content-Type": "application/octet-stream"},
+                        content=routed_content,
+                    )
+                    routed_chunk_payload = response_json(
+                        routed_chunk,
+                        f"random-routed chunk attempt {attempt}",
+                    )
+                    require(
+                        str(routed_chunk_payload["code"]) == "0",
+                        f"random-routed chunk attempt {attempt} was not idempotent",
+                    )
+                    route_sequence.append(
+                        routed_instance(routed_chunk, f"random-routed chunk attempt {attempt}")
+                    )
+                    routed_chunk_attempts = attempt
+                    if set(route_sequence) == expected_instances:
+                        break
+
+                require(
+                    set(route_sequence) == expected_instances,
+                    "one load-balancer client remained affine while both APIs were ready",
+                )
+                routed_chunk_count = query_one(
+                    "SELECT COUNT(*) AS count FROM upload_task_chunks WHERE task_id = %s",
+                    (routed_upload_id,),
+                )
+                require(
+                    routed_chunk_count is not None and int(routed_chunk_count["count"]) == 1,
+                    "random-routed chunk retries created duplicate metadata",
+                )
+
+                routed_complete = routed_http.post(
+                    "/api/file/upload/complete",
+                    json={"upload_id": routed_upload_id},
+                )
+                routed_complete_payload = response_json(
+                    routed_complete,
+                    "random-routed upload complete",
+                )
+                require(
+                    str(routed_complete_payload["code"]) == "0",
+                    "random-routed upload complete failed",
+                )
+                route_sequence.append(
+                    routed_instance(routed_complete, "random-routed upload complete")
+                )
+                routed_file = (routed_complete_payload.get("data") or {}).get("file", {})
+                require(routed_file.get("id") is not None, "random-routed complete omitted its file")
+                routed_file_id = int(routed_file["id"])
+
+                routed_download = routed_http.get(f"/api/file/download/{routed_file_id}")
+                route_sequence.append(
+                    routed_instance(routed_download, "random-routed upload download")
+                )
+                require(
+                    routed_download.status_code == 200 and routed_download.content == routed_content,
+                    "random-routed download changed the uploaded content",
+                )
+
+            routed_task = query_one(
+                "SELECT status, completed_file_id FROM upload_tasks WHERE id = %s AND user_id = %s",
+                (routed_upload_id, user_id),
+            )
+            require(
+                routed_task is not None
+                and int(routed_task["status"]) == 1
+                and int(routed_task["completed_file_id"]) == routed_file_id,
+                "random-routed task did not persist one completed file",
+            )
+            routed_content_row = query_one(
+                "SELECT COUNT(*) AS count, MAX(content.ref_count) AS ref_count "
+                "FROM files AS file "
+                "JOIN file_contents AS content ON content.id = file.content_id "
+                "WHERE file.user_id = %s AND file.name = %s "
+                "AND content.hash_md5 = %s AND content.hash_sha256 = %s",
+                (user_id, routed_filename, routed_md5, routed_sha256),
+            )
+            require(
+                routed_content_row is not None
+                and int(routed_content_row["count"]) == 1
+                and int(routed_content_row["ref_count"]) == 1,
+                "random-routed upload did not create one file and content reference",
+            )
+            routed_quota_after = query_one(
+                "SELECT storage_used, storage_reserved FROM users WHERE id = %s",
+                (user_id,),
+            )
+            require(routed_quota_after is not None, "random-routed upload quota result is missing")
+            require(
+                int(routed_quota_after["storage_reserved"])
+                == int(routed_quota_before["storage_reserved"]),
+                "random-routed upload did not release reserved quota exactly once",
+            )
+            require(
+                int(routed_quota_after["storage_used"])
+                == int(routed_quota_before["storage_used"]) + len(routed_content),
+                "random-routed upload did not settle used quota exactly once",
+            )
+            require(object_exists(routed_object_key), "random-routed final S3 object is missing")
+            evidence["random_routing_upload"] = {
+                "upload_id": routed_upload_id,
+                "file_id": routed_file_id,
+                "content_sha256": routed_sha256,
+                "chunk_attempts": routed_chunk_attempts,
+                "route_sequence": route_sequence,
+                "distinct_instances": sorted(set(route_sequence)),
+            }
+            passed("one load-balancer client completes an upload across both API instances")
 
             admin_login = http.post(
                 f"{api_a_url}/api/auth/login",
@@ -953,7 +1116,7 @@ def main(
             wait_ready(api_a_url, "api", "disk-api-a")
             passed("load balancer continues serving after one API stops")
 
-            file_ids_to_delete = [file_id, *race_file_ids]
+            file_ids_to_delete = [file_id, routed_file_id, *race_file_ids]
             soft_delete = http.request(
                 "DELETE",
                 f"{api_b_url}/api/file",
@@ -984,7 +1147,7 @@ def main(
                 json={"trash_ids": deleted_trash_ids},
             )
             require(str(response_json(permanent, "permanent delete")["code"]) == "0", "permanent delete failed")
-            for deleted_object_key in (object_key, *race_object_keys):
+            for deleted_object_key in (object_key, routed_object_key, *race_object_keys):
                 wait_until(
                     lambda deleted_object_key=deleted_object_key: not object_exists(deleted_object_key),
                     45,
@@ -992,6 +1155,7 @@ def main(
                     interval=0.5,
                 )
             file_id = 0
+            routed_file_id = 0
             race_file_ids.clear()
 
             logout = http.post(f"{api_a_url}/api/auth/logout", headers=auth)
