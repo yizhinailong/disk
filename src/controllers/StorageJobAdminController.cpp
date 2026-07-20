@@ -6,13 +6,16 @@
 #include "controllers/StorageJobAdminController.hpp"
 
 #include "dtos/StorageJobAdminDto.hpp"
+#include "services/ObservedDbClient.hpp"
 #include "services/StorageJobAdminService.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::controllers {
     namespace {
         [[nodiscard]] auto BuildService() -> disk::jobs::StorageJobAdminService {
-            return disk::jobs::StorageJobAdminService(drogon::app().getDbClient());
+            return disk::jobs::StorageJobAdminService(
+                disk::metrics::ObserveDbClient(drogon::app().getDbClient())
+            );
         }
     } // namespace
 

@@ -382,7 +382,7 @@ API Instance A  API Instance B ... N
 - [x] 暴露请求量、错误率、延迟、活动上传数、分片吞吐和完成各阶段耗时。
 - [x] 暴露上传状态数量、过期租约、接管次数、重试次数和失败终态数量。
 - [x] 暴露任务队列深度、最老任务年龄、执行耗时、dead-letter 数量。
-- [ ] 暴露 PostgreSQL/Redis/S3 调用耗时、错误分类、连接池使用率和线程队列深度。
+- [x] 暴露 PostgreSQL/Redis/S3 调用耗时、错误分类、连接池使用率和线程队列深度。
 - [x] 暴露 staging/final 孤儿数量、缺失对象和配额/ref_count 对账差异。
 - [x] 指标标签禁止使用 `upload_id`、文件名等高基数字段。
 

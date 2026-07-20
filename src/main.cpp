@@ -11,6 +11,7 @@
 #include "filters/RequestTraceFilter.hpp"
 #include "services/MetricsService.hpp"
 #include "services/MultipartUploadJournal.hpp"
+#include "services/ObservedDbClient.hpp"
 #include "services/ProcessRuntime.hpp"
 #include "services/RedisService.hpp"
 #include "services/ScheduledTasks.hpp"
@@ -301,7 +302,7 @@ auto main() -> int {
     RegisterRequestLifecycle(runtime_services);
 
     drogon::app().registerBeginningAdvice([runtime_services, config, role]() {
-        auto db_client = drogon::app().getDbClient();
+        auto db_client = disk::metrics::ObserveDbClient(drogon::app().getDbClient());
 
         if (disk::utils::IncludesApi(role)) {
             auto redis_client = drogon::app().getRedisClient();

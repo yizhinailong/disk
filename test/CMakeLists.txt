@@ -14,6 +14,7 @@ set(TEST_SOURCES
     services/HashUtil_test.cpp
     services/HealthService_test.cpp
     services/MetricsService_test.cpp
+    services/ObservedDbClient_test.cpp
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp
     services/ModelDialect_test.cpp
@@ -94,6 +95,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/services/FileListCache.cpp
     ${CMAKE_SOURCE_DIR}/src/services/HealthService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/MetricsService.cpp
+    ${CMAKE_SOURCE_DIR}/src/services/ObservedDbClient.cpp
     ${CMAKE_SOURCE_DIR}/src/services/MultipartUploadJournal.cpp
     ${CMAKE_SOURCE_DIR}/src/services/ProcessRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/services/CleanupService.cpp

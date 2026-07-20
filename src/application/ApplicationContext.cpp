@@ -9,6 +9,7 @@
 
 #include "application/ApplicationContext.hpp"
 
+#include "services/ObservedDbClient.hpp"
 #include "storage/BlobStoreMgr.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/ConfigMgr.hpp"
@@ -79,7 +80,7 @@ namespace disk::application {
         }
 
         initialize(
-            drogon::app().getDbClient(),
+            disk::metrics::ObserveDbClient(drogon::app().getDbClient()),
             drogon::app().getRedisClient(),
             disk::storage::StorageMgr::GetStorage(),
             disk::storage::BlobStoreMgr::GetBlobStore(),

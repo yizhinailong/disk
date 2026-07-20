@@ -125,6 +125,7 @@ set(Services_HEADERS
     services/HealthService.hpp
     services/MetricsService.hpp
     services/MultipartUploadJournal.hpp
+    services/ObservedDbClient.hpp
     services/OperationLogService.hpp
     services/ProcessRuntime.hpp
     services/QuotaService.hpp
@@ -167,6 +168,7 @@ set(Services_SOURCES
     services/HealthService.cpp
     services/MetricsService.cpp
     services/MultipartUploadJournal.cpp
+    services/ObservedDbClient.cpp
     services/OperationLogService.cpp
     services/ProcessRuntime.cpp
     services/QuotaService.cpp

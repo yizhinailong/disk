@@ -10,12 +10,13 @@
 #include "UserController.hpp"
 
 #include "dtos/UserDto.hpp"
+#include "services/ObservedDbClient.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::user {
 
     UserController::UserController()
-        : m_user_service(std::make_unique<UserService>(drogon::app().getDbClient())) {
+        : m_user_service(std::make_unique<UserService>(disk::metrics::ObserveDbClient(drogon::app().getDbClient()))) {
     }
 
     auto UserController::GetProfile(drogon::HttpRequestPtr request)

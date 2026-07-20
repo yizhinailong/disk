@@ -13,6 +13,7 @@
 #include <trantor/net/EventLoop.h>
 #include <trantor/utils/ConcurrentTaskQueue.h>
 
+#include "services/MetricsService.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
 #include "utils/LogHelper.hpp"
@@ -199,6 +200,11 @@ namespace disk::storage {
         m_worker_queue = std::make_shared<trantor::ConcurrentTaskQueue>(
             worker_thread_count,
             std::string(LOCAL_BLOB_IO_QUEUE_NAME)
+        );
+        disk::metrics::MetricsRegistry::GetInstance().RegisterThreadQueue(
+            disk::metrics::ThreadQueue::LocalBlob,
+            m_worker_queue,
+            worker_thread_count
         );
 
         Logger::Info() << "LocalBlobStore worker queue initialized: io_threads=" << worker_thread_count;

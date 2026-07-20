@@ -34,6 +34,7 @@
 #include <aws/s3/model/UploadPartCopyRequest.h>
 #include <aws/s3/model/UploadPartRequest.h>
 
+#include "services/MetricsService.hpp"
 #include "utils/LogHelper.hpp"
 
 namespace disk::storage {
@@ -144,6 +145,57 @@ namespace disk::storage {
         auto IsPreconditionFailedError(const Aws::S3::S3Error& error) -> bool {
             return error.GetResponseCode() == Aws::Http::HttpResponseCode::PRECONDITION_FAILED ||
                    error.GetExceptionName() == "PreconditionFailed";
+        }
+
+        [[nodiscard]] auto ClassifyS3MetricOutcome(
+            int http_status,
+            std::string_view exception_name,
+            bool sdk_retryable
+        ) noexcept -> disk::metrics::DependencyOutcome {
+            constexpr std::array<std::string_view, 3> TIMEOUT_EXCEPTIONS{
+                "RequestTimeout",
+                "RequestTimeoutException",
+                "TimeoutError",
+            };
+            constexpr std::array<std::string_view, 4> CONNECTION_EXCEPTIONS{
+                "ConnectionError",
+                "NetworkConnection",
+                "NetworkingError",
+                "UnknownHost",
+            };
+
+            if (http_status == 408 ||
+                std::find(TIMEOUT_EXCEPTIONS.begin(), TIMEOUT_EXCEPTIONS.end(), exception_name) !=
+                    TIMEOUT_EXCEPTIONS.end()) {
+                return disk::metrics::DependencyOutcome::Timeout;
+            }
+            if (std::find(
+                    CONNECTION_EXCEPTIONS.begin(),
+                    CONNECTION_EXCEPTIONS.end(),
+                    exception_name
+                ) != CONNECTION_EXCEPTIONS.end()) {
+                return disk::metrics::DependencyOutcome::Connection;
+            }
+            return ClassifyS3Failure(http_status, exception_name, sdk_retryable) ==
+                           S3FailureClass::Retryable ?
+                       disk::metrics::DependencyOutcome::Retryable :
+                       disk::metrics::DependencyOutcome::Permanent;
+        }
+
+        [[nodiscard]] auto ClassifyS3MetricOutcome(const Aws::S3::S3Error& error) noexcept
+            -> disk::metrics::DependencyOutcome {
+            if (IsNotFoundError(error)) {
+                return disk::metrics::DependencyOutcome::NotFound;
+            }
+            if (IsPreconditionFailedError(error)) {
+                return disk::metrics::DependencyOutcome::Conflict;
+            }
+            const auto& exception_name = error.GetExceptionName();
+            return ClassifyS3MetricOutcome(
+                static_cast<int>(error.GetResponseCode()),
+                std::string_view(exception_name.data(), exception_name.size()),
+                error.ShouldRetry()
+            );
         }
 
         auto ToErrorInfo(const Aws::S3::S3Error& error, ErrorCode code, const std::string& operation)
@@ -280,8 +332,10 @@ namespace disk::storage {
         Aws::S3::Model::HeadBucketRequest request;
         request.SetBucket(m_impl->storage_config.bucket);
 
+        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
         auto outcome = m_impl->client->HeadBucket(request);
         if (!outcome.IsSuccess()) {
+            timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::InternalError,
@@ -289,6 +343,7 @@ namespace disk::storage {
             ));
         }
 
+        timer.Finish(disk::metrics::DependencyOutcome::Success);
         return {};
     }
 
@@ -297,11 +352,14 @@ namespace disk::storage {
         request.SetBucket(m_impl->storage_config.bucket);
         request.SetKey(key);
 
+        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
         auto outcome = m_impl->client->HeadObject(request);
         if (!outcome.IsSuccess()) {
             if (IsNotFoundError(outcome.GetError())) {
+                timer.Finish(disk::metrics::DependencyOutcome::NotFound);
                 return S3HeadObjectResult{ .exists = false, .size = 0, .etag = {} };
             }
+            timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::FileReadError,
@@ -309,6 +367,7 @@ namespace disk::storage {
             ));
         }
 
+        timer.Finish(disk::metrics::DependencyOutcome::Success);
         return S3HeadObjectResult{
             .exists = true,
             .size = static_cast<uint64_t>(outcome.GetResult().GetContentLength()),
@@ -329,11 +388,14 @@ namespace disk::storage {
         request.SetBody(input_data);
         request.SetIfNoneMatch("*");
 
+        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
         auto outcome = m_impl->client->PutObject(request);
         if (!outcome.IsSuccess()) {
             if (IsPreconditionFailedError(outcome.GetError())) {
+                timer.Finish(disk::metrics::DependencyOutcome::Conflict);
                 return S3PutObjectResult{ .etag = {}, .created = false };
             }
+            timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::InternalError,
@@ -341,6 +403,7 @@ namespace disk::storage {
             ));
         }
 
+        timer.Finish(disk::metrics::DependencyOutcome::Success);
         return S3PutObjectResult{
             .etag = outcome.GetResult().GetETag(),
             .created = true,
@@ -377,11 +440,14 @@ namespace disk::storage {
         request.SetBody(input_data);
         request.SetIfNoneMatch("*");
 
+        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
         auto outcome = m_impl->client->PutObject(request);
         if (!outcome.IsSuccess()) {
             if (IsPreconditionFailedError(outcome.GetError())) {
+                timer.Finish(disk::metrics::DependencyOutcome::Conflict);
                 return S3PutObjectResult{ .etag = {}, .created = false };
             }
+            timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::InternalError,
@@ -389,6 +455,7 @@ namespace disk::storage {
             ));
         }
 
+        timer.Finish(disk::metrics::DependencyOutcome::Success);
         return S3PutObjectResult{
             .etag = outcome.GetResult().GetETag(),
             .created = true,
@@ -400,15 +467,20 @@ namespace disk::storage {
         request.SetBucket(m_impl->storage_config.bucket);
         request.SetKey(key);
 
+        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
         auto outcome = m_impl->client->DeleteObject(request);
-        if (!outcome.IsSuccess() && !IsNotFoundError(outcome.GetError())) {
-            return std::unexpected(ToErrorInfo(
-                outcome.GetError(),
-                ErrorCode::InternalError,
-                "S3 DeleteObject"
-            ));
+        if (!outcome.IsSuccess()) {
+            if (IsNotFoundError(outcome.GetError())) {
+                timer.Finish(disk::metrics::DependencyOutcome::NotFound);
+                return {};
+            }
+            timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
+            return std::unexpected(
+                ToErrorInfo(outcome.GetError(), ErrorCode::InternalError, "S3 DeleteObject")
+            );
         }
 
+        timer.Finish(disk::metrics::DependencyOutcome::Success);
         return {};
     }
 
@@ -427,11 +499,14 @@ namespace disk::storage {
             request.SetRange("bytes=" + std::to_string(start) + "-" + std::to_string(end));
         }
 
+        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
         auto outcome = m_impl->client->GetObject(request);
         if (!outcome.IsSuccess()) {
             if (IsNotFoundError(outcome.GetError())) {
+                timer.Finish(disk::metrics::DependencyOutcome::NotFound);
                 return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "S3 object not found"));
             }
+            timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::FileReadError,
@@ -439,6 +514,7 @@ namespace disk::storage {
             ));
         }
 
+        timer.Finish(disk::metrics::DependencyOutcome::Success);
         return std::shared_ptr<StorageReadStream>(
             std::make_shared<S3ObjectReadStream>(std::move(outcome.GetResult()), length)
         );
@@ -463,8 +539,10 @@ namespace disk::storage {
             request.SetContinuationToken(continuation_token);
         }
 
+        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
         auto outcome = m_impl->client->ListObjectsV2(request);
         if (!outcome.IsSuccess()) {
+            timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::FileReadError,
@@ -479,6 +557,7 @@ namespace disk::storage {
         }
         result.is_truncated = outcome.GetResult().GetIsTruncated();
         result.continuation_token = outcome.GetResult().GetNextContinuationToken();
+        timer.Finish(disk::metrics::DependencyOutcome::Success);
         return result;
     }
 
@@ -504,8 +583,10 @@ namespace disk::storage {
         request.SetBucket(m_impl->storage_config.bucket);
         request.SetDelete(std::move(delete_payload));
 
+        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
         auto outcome = m_impl->client->DeleteObjects(request);
         if (!outcome.IsSuccess()) {
+            timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::InternalError,
@@ -514,12 +595,19 @@ namespace disk::storage {
         }
         if (!outcome.GetResult().GetErrors().empty()) {
             const auto& error = outcome.GetResult().GetErrors().front();
+            const auto& error_code = error.GetCode();
+            timer.Finish(ClassifyS3MetricOutcome(
+                0,
+                std::string_view(error_code.data(), error_code.size()),
+                false
+            ));
             return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "S3 DeleteObjects partially failed: " + std::string(error.GetCode()) +
                     ": " + std::string(error.GetMessage())
             ));
         }
+        timer.Finish(disk::metrics::DependencyOutcome::Success);
         return {};
     }
 
@@ -528,8 +616,10 @@ namespace disk::storage {
         request.SetBucket(m_impl->storage_config.bucket);
         request.SetKey(key);
 
+        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
         auto outcome = m_impl->client->CreateMultipartUpload(request);
         if (!outcome.IsSuccess()) {
+            timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::InternalError,
@@ -537,10 +627,12 @@ namespace disk::storage {
             ));
         }
         if (outcome.GetResult().GetUploadId().empty()) {
+            timer.Finish(disk::metrics::DependencyOutcome::Protocol);
             return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "S3 multipart upload ID is empty")
             );
         }
+        timer.Finish(disk::metrics::DependencyOutcome::Success);
         return std::string(outcome.GetResult().GetUploadId());
     }
 
@@ -572,8 +664,10 @@ namespace disk::storage {
         request.SetContentLength(static_cast<long long>(data.size()));
         request.SetBody(input_data);
 
+        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
         auto outcome = m_impl->client->UploadPart(request);
         if (!outcome.IsSuccess()) {
+            timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::InternalError,
@@ -581,8 +675,10 @@ namespace disk::storage {
             ));
         }
         if (outcome.GetResult().GetETag().empty()) {
+            timer.Finish(disk::metrics::DependencyOutcome::Protocol);
             return std::unexpected(ErrorInfo(ErrorCode::InternalError, "S3 upload part ETag is empty"));
         }
+        timer.Finish(disk::metrics::DependencyOutcome::Success);
         return std::string(outcome.GetResult().GetETag());
     }
 
@@ -614,8 +710,10 @@ namespace disk::storage {
         request.SetCopySource(m_impl->storage_config.bucket + "/" + source_key);
         request.SetCopySourceRange("bytes=" + std::to_string(start) + "-" + std::to_string(end));
 
+        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
         auto outcome = m_impl->client->UploadPartCopy(request);
         if (!outcome.IsSuccess()) {
+            timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::InternalError,
@@ -624,8 +722,10 @@ namespace disk::storage {
         }
         const auto& etag = outcome.GetResult().GetCopyPartResult().GetETag();
         if (etag.empty()) {
+            timer.Finish(disk::metrics::DependencyOutcome::Protocol);
             return std::unexpected(ErrorInfo(ErrorCode::InternalError, "S3 copied part ETag is empty"));
         }
+        timer.Finish(disk::metrics::DependencyOutcome::Success);
         return std::string(etag);
     }
 
@@ -667,17 +767,21 @@ namespace disk::storage {
             request.SetIfNoneMatch("*");
         }
 
+        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
         auto outcome = m_impl->client->CompleteMultipartUpload(request);
         if (!outcome.IsSuccess()) {
             if (only_if_absent && IsPreconditionFailedError(outcome.GetError())) {
+                timer.Finish(disk::metrics::DependencyOutcome::Conflict);
                 return S3CompleteMultipartResult{ .created = false };
             }
+            timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
             return std::unexpected(ToErrorInfo(
                 outcome.GetError(),
                 ErrorCode::InternalError,
                 "S3 CompleteMultipartUpload"
             ));
         }
+        timer.Finish(disk::metrics::DependencyOutcome::Success);
         return S3CompleteMultipartResult{ .created = true };
     }
 
@@ -694,14 +798,19 @@ namespace disk::storage {
         request.SetKey(key);
         request.SetUploadId(upload_id);
 
+        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::S3);
         auto outcome = m_impl->client->AbortMultipartUpload(request);
-        if (!outcome.IsSuccess() && !IsNotFoundError(outcome.GetError())) {
-            return std::unexpected(ToErrorInfo(
-                outcome.GetError(),
-                ErrorCode::InternalError,
-                "S3 AbortMultipartUpload"
-            ));
+        if (!outcome.IsSuccess()) {
+            if (IsNotFoundError(outcome.GetError())) {
+                timer.Finish(disk::metrics::DependencyOutcome::NotFound);
+                return {};
+            }
+            timer.Finish(ClassifyS3MetricOutcome(outcome.GetError()));
+            return std::unexpected(
+                ToErrorInfo(outcome.GetError(), ErrorCode::InternalError, "S3 AbortMultipartUpload")
+            );
         }
+        timer.Finish(disk::metrics::DependencyOutcome::Success);
         return {};
     }
 

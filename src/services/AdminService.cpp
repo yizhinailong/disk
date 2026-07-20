@@ -20,6 +20,8 @@
 #include <drogon/orm/Criteria.h>
 
 #include "models/Users.hpp"
+#include "services/ObservedDbClient.hpp"
+#include "services/RedisService.hpp"
 #include "utils/ConfigMgr.hpp"
 
 namespace disk::services {
@@ -30,7 +32,7 @@ namespace disk::services {
     using drogon_model::disk::Users;
 
     AdminService::AdminService()
-        : m_db_client(drogon::app().getDbClient()),
+        : m_db_client(disk::metrics::ObserveDbClient(drogon::app().getDbClient())),
           m_start_time(std::chrono::steady_clock::now()) {
         Logger::Debug() << "AdminService initialization completed";
     }
@@ -720,8 +722,9 @@ namespace disk::services {
         try {
             auto redis_client = drogon::app().getRedisClient();
             if (redis_client) {
-                auto result = co_await redis_client->execCommandCoro("ping");
-                response.redis_connected = !result.isNil() && result.asString() == "PONG";
+                RedisService::Initialize(redis_client);
+                const auto result = co_await RedisService::GetInstance()->Ping();
+                response.redis_connected = result.has_value() && *result;
             } else {
                 response.redis_connected = false;
             }

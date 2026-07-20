@@ -21,6 +21,7 @@
 #include <trantor/net/EventLoop.h>
 #include <trantor/utils/ConcurrentTaskQueue.h>
 
+#include "services/MetricsService.hpp"
 #include "storage/AssemblyWorkerPool.hpp"
 #include "utils/FileHashUtil.hpp"
 #include "utils/LogHelper.hpp"
@@ -776,6 +777,11 @@ namespace disk::storage {
         if (m_s3_client == nullptr) {
             throw std::runtime_error("S3ObjectStorage requires an S3 client");
         }
+        disk::metrics::MetricsRegistry::GetInstance().RegisterThreadQueue(
+            disk::metrics::ThreadQueue::S3,
+            m_worker_queue,
+            m_s3_config.io_threads
+        );
         Logger::Info() << "S3ObjectStorage initialized: bucket=" << m_s3_config.bucket
                        << ", prefix=" << m_s3_config.object_prefix
                        << ", max_connections=" << m_s3_config.max_connections

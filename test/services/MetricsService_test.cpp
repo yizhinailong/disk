@@ -1,9 +1,11 @@
 #include "services/MetricsService.hpp"
 
 #include <chrono>
+#include <memory>
 #include <string>
 
 #include <gtest/gtest.h>
+#include <trantor/utils/ConcurrentTaskQueue.h>
 
 #include "services/StorageJobRepository.hpp"
 #include "services/StorageReconciliationService.hpp"
@@ -89,6 +91,77 @@ namespace disk::metrics {
             );
         }
 
+        TEST(MetricsServiceTest, DependencyAndQueueNamesUseOnlyFixedLabels) {
+            EXPECT_EQ(DependencyName(Dependency::PostgreSql), "postgresql");
+            EXPECT_EQ(DependencyName(Dependency::Redis), "redis");
+            EXPECT_EQ(DependencyName(Dependency::S3), "s3");
+            EXPECT_EQ(DependencyName(Dependency::Count), "unknown");
+
+            EXPECT_EQ(DependencyOutcomeName(DependencyOutcome::Success), "success");
+            EXPECT_EQ(DependencyOutcomeName(DependencyOutcome::Timeout), "timeout");
+            EXPECT_EQ(DependencyOutcomeName(DependencyOutcome::Connection), "connection");
+            EXPECT_EQ(DependencyOutcomeName(DependencyOutcome::Conflict), "conflict");
+            EXPECT_EQ(DependencyOutcomeName(DependencyOutcome::NotFound), "not_found");
+            EXPECT_EQ(DependencyOutcomeName(DependencyOutcome::Retryable), "retryable");
+            EXPECT_EQ(DependencyOutcomeName(DependencyOutcome::Permanent), "permanent");
+            EXPECT_EQ(DependencyOutcomeName(DependencyOutcome::Protocol), "protocol");
+            EXPECT_EQ(DependencyOutcomeName(DependencyOutcome::Count), "other");
+
+            EXPECT_EQ(ThreadQueueName(ThreadQueue::LocalFile), "local_file");
+            EXPECT_EQ(ThreadQueueName(ThreadQueue::LocalAssembly), "local_assembly");
+            EXPECT_EQ(ThreadQueueName(ThreadQueue::LocalBlob), "local_blob");
+            EXPECT_EQ(ThreadQueueName(ThreadQueue::S3), "s3");
+            EXPECT_EQ(ThreadQueueName(ThreadQueue::Count), "unknown");
+        }
+
+        TEST(MetricsServiceTest, RegistryTracksDependencyPressureAndRegisteredQueue) {
+            auto& registry = MetricsRegistry::GetInstance();
+            const auto dependency = static_cast<size_t>(Dependency::Redis);
+            const auto timeout = static_cast<size_t>(DependencyOutcome::Timeout);
+            const auto before = registry.Snapshot();
+
+            registry.BeginDependencyCall(Dependency::Redis);
+            const auto during = registry.Snapshot();
+            EXPECT_EQ(
+                during.dependency_calls_inflight[dependency],
+                before.dependency_calls_inflight[dependency] + 1
+            );
+            EXPECT_EQ(
+                during.dependency_pool_demand[dependency],
+                before.dependency_pool_demand[dependency] + 1
+            );
+
+            registry.RecordDependencyCall(
+                Dependency::Redis,
+                DependencyOutcome::Timeout,
+                std::chrono::milliseconds(25)
+            );
+            const auto after = registry.Snapshot();
+            EXPECT_EQ(
+                after.dependency_calls[dependency][timeout],
+                before.dependency_calls[dependency][timeout] + 1
+            );
+            EXPECT_EQ(
+                after.dependency_duration_count[dependency],
+                before.dependency_duration_count[dependency] + 1
+            );
+            EXPECT_EQ(
+                after.dependency_calls_inflight[dependency],
+                before.dependency_calls_inflight[dependency]
+            );
+            EXPECT_EQ(
+                after.dependency_pool_demand[dependency],
+                before.dependency_pool_demand[dependency]
+            );
+
+            auto queue = std::make_shared<trantor::ConcurrentTaskQueue>(1, "metrics-test");
+            registry.RegisterThreadQueue(ThreadQueue::LocalFile, queue, 1);
+            const auto registered = registry.Snapshot();
+            const auto queue_index = static_cast<size_t>(ThreadQueue::LocalFile);
+            EXPECT_EQ(registered.thread_queue_depth[queue_index], 0);
+            EXPECT_EQ(registered.thread_queue_workers[queue_index], 1);
+        }
+
         TEST(MetricsServiceTest, RendersProcessAndDatabaseSnapshotWithoutHighCardinalityLabels) {
             MetricsSnapshot metrics;
             metrics.http_requests[static_cast<size_t>(HttpOperation::Admin)]
@@ -99,6 +172,18 @@ namespace disk::metrics {
             metrics.upload_complete_duration_buckets[promote][4] = 2;
             metrics.upload_complete_duration_count[promote] = 2;
             metrics.upload_complete_duration_microseconds[promote] = 150'000;
+            const auto postgresql = static_cast<size_t>(Dependency::PostgreSql);
+            metrics.dependency_calls[postgresql]
+                                    [static_cast<size_t>(DependencyOutcome::Success)] = 5;
+            metrics.dependency_duration_count[postgresql] = 5;
+            metrics.dependency_duration_microseconds[postgresql] = 250'000;
+            metrics.dependency_calls_inflight[postgresql] = 2;
+            metrics.dependency_pool_capacity[postgresql] = 8;
+            metrics.dependency_pool_demand[postgresql] = 3;
+            metrics.dependency_pool_leases[postgresql] = 1;
+            const auto s3_queue = static_cast<size_t>(ThreadQueue::S3);
+            metrics.thread_queue_depth[s3_queue] = 6;
+            metrics.thread_queue_workers[s3_queue] = 4;
             DatabaseMetricsSnapshot database;
             database.storage_jobs[4] = 2;
             database.upload_tasks[0] = 7;
@@ -124,6 +209,14 @@ namespace disk::metrics {
             EXPECT_NE(output.find("disk_upload_chunks_total 7"), std::string::npos);
             EXPECT_NE(output.find("disk_upload_chunk_bytes_total 12345"), std::string::npos);
             EXPECT_NE(output.find("disk_upload_complete_stage_duration_seconds_count{stage=\"promote\"} 2"), std::string::npos);
+            EXPECT_NE(output.find("disk_dependency_calls_total{dependency=\"postgresql\",outcome=\"success\"} 5"), std::string::npos);
+            EXPECT_NE(output.find("disk_dependency_call_duration_seconds_count{dependency=\"postgresql\"} 5"), std::string::npos);
+            EXPECT_NE(output.find("disk_dependency_calls_inflight{dependency=\"postgresql\"} 2"), std::string::npos);
+            EXPECT_NE(output.find("disk_dependency_pool_capacity{dependency=\"postgresql\"} 8"), std::string::npos);
+            EXPECT_NE(output.find("disk_dependency_pool_demand{dependency=\"postgresql\"} 4"), std::string::npos);
+            EXPECT_NE(output.find("disk_dependency_pool_utilization_ratio{dependency=\"postgresql\"} 0.5"), std::string::npos);
+            EXPECT_NE(output.find("disk_thread_queue_depth{queue=\"s3\"} 6"), std::string::npos);
+            EXPECT_NE(output.find("disk_thread_queue_workers{queue=\"s3\"} 4"), std::string::npos);
             EXPECT_NE(output.find("disk_storage_jobs{status=\"dead_letter\"} 2"), std::string::npos);
             EXPECT_NE(output.find("disk_upload_tasks{status=\"finalizing\"} 5"), std::string::npos);
             EXPECT_NE(output.find("disk_upload_tasks_active 12"), std::string::npos);

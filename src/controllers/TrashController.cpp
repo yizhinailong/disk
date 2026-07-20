@@ -10,12 +10,13 @@
 #include "TrashController.hpp"
 
 #include "dtos/TrashDto.hpp"
+#include "services/ObservedDbClient.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::trash {
 
     TrashController::TrashController()
-        : m_trash_service(std::make_unique<TrashService>(drogon::app().getDbClient())) {
+        : m_trash_service(std::make_unique<TrashService>(disk::metrics::ObserveDbClient(drogon::app().getDbClient()))) {
     }
 
     auto TrashController::List(drogon::HttpRequestPtr request)

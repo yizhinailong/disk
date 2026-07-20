@@ -9,12 +9,13 @@
 
 #include "OperationLogController.hpp"
 
+#include "services/ObservedDbClient.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::log {
 
     OperationLogController::OperationLogController()
-        : m_log_service(std::make_unique<OperationLogService>(drogon::app().getDbClient())) {
+        : m_log_service(std::make_unique<OperationLogService>(disk::metrics::ObserveDbClient(drogon::app().getDbClient()))) {
     }
 
     auto OperationLogController::GetList(drogon::HttpRequestPtr request)

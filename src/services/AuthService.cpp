@@ -15,6 +15,7 @@
 
 #include "dtos/AuthDto.hpp"
 #include "models/OperationLogs.hpp"
+#include "services/ObservedDbClient.hpp"
 #include "services/TokenService.hpp"
 #include "utils/AuthCpuPool.hpp"
 #include "utils/ConfigMgr.hpp"
@@ -33,7 +34,7 @@ namespace disk::auth {
     using drogon_model::disk::Users;
 
     AuthService::AuthService(const drogon::nosql::RedisClientPtr& redis_client)
-        : m_db_client(drogon::app().getDbClient()),
+        : m_db_client(disk::metrics::ObserveDbClient(drogon::app().getDbClient())),
           m_redis_service(disk::services::RedisService::GetInstance()) {
         /// 如果尚未初始化，则初始化 RedisService 单例
         disk::services::RedisService::Initialize(redis_client);

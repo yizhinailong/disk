@@ -7,6 +7,7 @@
 
 #include <utility>
 
+#include "services/ObservedDbClient.hpp"
 #include "services/ProcessRuntime.hpp"
 #include "storage/BlobStoreMgr.hpp"
 #include "storage/StorageMgr.hpp"
@@ -22,7 +23,7 @@ namespace disk::health {
             redis_client = drogon::app().getRedisClient();
         }
         m_health_service = std::make_unique<HealthService>(
-            drogon::app().getDbClient(),
+            disk::metrics::ObserveDbClient(drogon::app().getDbClient()),
             std::move(redis_client),
             disk::storage::StorageMgr::GetUploadStagingStorage(),
             disk::storage::BlobStoreMgr::GetBlobStore(),

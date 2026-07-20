@@ -18,6 +18,7 @@
 #include <trantor/net/EventLoop.h>
 #include <trantor/utils/ConcurrentTaskQueue.h>
 
+#include "services/MetricsService.hpp"
 #include "storage/AssemblyWorkerPool.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
@@ -229,6 +230,17 @@ namespace disk::storage {
         m_assembly_worker_queue = std::make_shared<trantor::ConcurrentTaskQueue>(
             assembly_worker_thread_count,
             std::string(LOCAL_FILE_ASSEMBLY_QUEUE_NAME)
+        );
+        auto& metrics = disk::metrics::MetricsRegistry::GetInstance();
+        metrics.RegisterThreadQueue(
+            disk::metrics::ThreadQueue::LocalFile,
+            m_worker_queue,
+            worker_thread_count
+        );
+        metrics.RegisterThreadQueue(
+            disk::metrics::ThreadQueue::LocalAssembly,
+            m_assembly_worker_queue,
+            assembly_worker_thread_count
         );
 
         Logger::Info() << "LocalFileStorage worker queues initialized: io_threads=" << worker_thread_count

@@ -6,6 +6,7 @@
 #include "controllers/MetricsController.hpp"
 
 #include "services/MetricsService.hpp"
+#include "services/ObservedDbClient.hpp"
 #include "services/ProcessRuntime.hpp"
 
 namespace disk::controllers {
@@ -13,7 +14,7 @@ namespace disk::controllers {
     auto MetricsController::Get(drogon::HttpRequestPtr /*request*/)
         -> drogon::Task<drogon::HttpResponsePtr> {
         disk::metrics::MetricsService service(
-            drogon::app().getDbClient(),
+            disk::metrics::ObserveDbClient(drogon::app().getDbClient()),
             disk::runtime::ProcessRuntimeMgr::GetInstance()
         );
         auto response = drogon::HttpResponse::newHttpResponse();

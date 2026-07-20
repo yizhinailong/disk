@@ -9,6 +9,7 @@
 
 #include "SystemController.hpp"
 
+#include "services/ObservedDbClient.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::system {
@@ -16,7 +17,7 @@ namespace disk::system {
     SystemController::SystemController()
         : m_system_service(
               std::make_unique<SystemService>(
-                  drogon::app().getDbClient(),
+                  disk::metrics::ObserveDbClient(drogon::app().getDbClient()),
                   drogon::app().getRedisClient()
               )
           ) {

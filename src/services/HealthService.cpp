@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "services/RedisService.hpp"
 #include "storage/IBlobStore.hpp"
 #include "storage/UploadStagingStorage.hpp"
 #include "utils/LogHelper.hpp"
@@ -64,12 +65,9 @@ namespace disk::health {
             if (redis_client == nullptr) {
                 co_return UnhealthyStatus(start);
             }
-            try {
-                const auto result = co_await redis_client->execCommandCoro("PING");
-                co_return !result.isNil() && result.asString() == "PONG" ? HealthyStatus(start) : UnhealthyStatus(start);
-            } catch (const std::exception&) {
-                co_return UnhealthyStatus(start);
-            }
+            disk::services::RedisService::Initialize(std::move(redis_client));
+            const auto result = co_await disk::services::RedisService::GetInstance()->Ping();
+            co_return result.has_value() && *result ? HealthyStatus(start) : UnhealthyStatus(start);
         }
 
         auto CheckStagingStorage(disk::storage::UploadStagingStorage* storage)

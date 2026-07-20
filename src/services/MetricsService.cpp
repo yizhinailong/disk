@@ -12,6 +12,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include <trantor/utils/ConcurrentTaskQueue.h>
+
 #include "services/StorageJobRepository.hpp"
 #include "services/StorageReconciliationService.hpp"
 #include "utils/ConfigMgr.hpp"
@@ -217,11 +219,74 @@ namespace disk::metrics {
         return index < names.size() ? names[index] : "ownership_lost";
     }
 
+    auto DependencyName(Dependency dependency) noexcept -> std::string_view {
+        constexpr std::array<std::string_view, kDependencyCount> names{
+            "postgresql",
+            "redis",
+            "s3",
+        };
+        const auto index = ToIndex(dependency);
+        return index < names.size() ? names[index] : "unknown";
+    }
+
+    auto DependencyOutcomeName(DependencyOutcome outcome) noexcept -> std::string_view {
+        constexpr std::array<std::string_view, kDependencyOutcomeCount> names{
+            "success",
+            "timeout",
+            "connection",
+            "conflict",
+            "not_found",
+            "retryable",
+            "permanent",
+            "protocol",
+            "other",
+        };
+        const auto index = ToIndex(outcome);
+        return index < names.size() ? names[index] : "other";
+    }
+
+    auto ThreadQueueName(ThreadQueue queue) noexcept -> std::string_view {
+        constexpr std::array<std::string_view, kThreadQueueCount> names{
+            "local_file",
+            "local_assembly",
+            "local_blob",
+            "s3",
+        };
+        const auto index = ToIndex(queue);
+        return index < names.size() ? names[index] : "unknown";
+    }
+
     auto ReconciliationFindingTypeIndex(std::string_view finding_type) noexcept -> size_t {
         const auto match = std::ranges::find(kReconciliationFindingTypeNames, finding_type);
         return match == kReconciliationFindingTypeNames.end() ?
                    kReconciliationFindingTypeNames.size() - 1 :
                    static_cast<size_t>(match - kReconciliationFindingTypeNames.begin());
+    }
+
+    DependencyCallTimer::DependencyCallTimer(Dependency dependency, bool uses_pool)
+        : m_dependency(dependency),
+          m_uses_pool(uses_pool),
+          m_started_at(std::chrono::steady_clock::now()) {
+        MetricsRegistry::GetInstance().BeginDependencyCall(m_dependency, m_uses_pool);
+    }
+
+    DependencyCallTimer::~DependencyCallTimer() {
+        Finish(DependencyOutcome::Other);
+    }
+
+    auto DependencyCallTimer::Finish(DependencyOutcome outcome) noexcept -> void {
+        if (m_finished) {
+            return;
+        }
+        m_finished = true;
+        MetricsRegistry::GetInstance().RecordDependencyCall(
+            m_dependency,
+            outcome,
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - m_started_at
+            ),
+            m_uses_pool
+        );
     }
 
     auto MetricsRegistry::GetInstance() -> MetricsRegistry& {
@@ -308,9 +373,110 @@ namespace disk::metrics {
         }
     }
 
-    auto MetricsRegistry::Snapshot() const -> MetricsSnapshot {
+    auto MetricsRegistry::BeginDependencyCall(Dependency dependency, bool uses_pool) -> void {
+        const auto dependency_index = ToIndex(dependency);
+        if (dependency_index >= kDependencyCount) {
+            return;
+        }
+
         std::scoped_lock lock(m_mutex);
-        return m_snapshot;
+        m_snapshot.dependency_calls_inflight[dependency_index]++;
+        if (uses_pool) {
+            m_snapshot.dependency_pool_demand[dependency_index]++;
+        }
+    }
+
+    auto MetricsRegistry::RecordDependencyCall(
+        Dependency dependency,
+        DependencyOutcome outcome,
+        std::chrono::microseconds duration,
+        bool uses_pool
+    ) -> void {
+        const auto dependency_index = ToIndex(dependency);
+        auto outcome_index = ToIndex(outcome);
+        if (dependency_index >= kDependencyCount) {
+            return;
+        }
+        if (outcome_index >= kDependencyOutcomeCount) {
+            outcome_index = ToIndex(DependencyOutcome::Other);
+        }
+        const auto duration_us = static_cast<uint64_t>(std::max<int64_t>(0, duration.count()));
+        const auto duration_seconds = static_cast<double>(duration_us) / 1'000'000.0;
+
+        std::scoped_lock lock(m_mutex);
+        if (m_snapshot.dependency_calls_inflight[dependency_index] > 0) {
+            m_snapshot.dependency_calls_inflight[dependency_index]--;
+        }
+        if (uses_pool && m_snapshot.dependency_pool_demand[dependency_index] > 0) {
+            m_snapshot.dependency_pool_demand[dependency_index]--;
+        }
+        m_snapshot.dependency_calls[dependency_index][outcome_index]++;
+        m_snapshot.dependency_duration_count[dependency_index]++;
+        m_snapshot.dependency_duration_microseconds[dependency_index] += duration_us;
+        for (size_t bucket = 0; bucket < kDurationBucketsSeconds.size(); ++bucket) {
+            if (duration_seconds <= kDurationBucketsSeconds[bucket]) {
+                m_snapshot.dependency_duration_buckets[dependency_index][bucket]++;
+            }
+        }
+    }
+
+    auto MetricsRegistry::AcquireDependencyPoolLease(Dependency dependency) -> void {
+        const auto index = ToIndex(dependency);
+        if (index >= kDependencyCount) {
+            return;
+        }
+        std::scoped_lock lock(m_mutex);
+        m_snapshot.dependency_pool_leases[index]++;
+    }
+
+    auto MetricsRegistry::ReleaseDependencyPoolLease(Dependency dependency) -> void {
+        const auto index = ToIndex(dependency);
+        if (index >= kDependencyCount) {
+            return;
+        }
+        std::scoped_lock lock(m_mutex);
+        if (m_snapshot.dependency_pool_leases[index] > 0) {
+            m_snapshot.dependency_pool_leases[index]--;
+        }
+    }
+
+    auto MetricsRegistry::SetDependencyPoolCapacity(Dependency dependency, uint64_t capacity) -> void {
+        const auto index = ToIndex(dependency);
+        if (index >= kDependencyCount) {
+            return;
+        }
+        std::scoped_lock lock(m_mutex);
+        m_snapshot.dependency_pool_capacity[index] = capacity;
+    }
+
+    auto MetricsRegistry::RegisterThreadQueue(
+        ThreadQueue queue,
+        const std::shared_ptr<trantor::ConcurrentTaskQueue>& task_queue,
+        uint64_t workers
+    ) -> void {
+        const auto index = ToIndex(queue);
+        if (index >= kThreadQueueCount) {
+            return;
+        }
+        std::scoped_lock lock(m_mutex);
+        m_thread_queues[index] = task_queue;
+        m_snapshot.thread_queue_workers[index] = workers;
+    }
+
+    auto MetricsRegistry::Snapshot() const -> MetricsSnapshot {
+        MetricsSnapshot snapshot;
+        std::array<std::weak_ptr<trantor::ConcurrentTaskQueue>, kThreadQueueCount> queues;
+        {
+            std::scoped_lock lock(m_mutex);
+            snapshot = m_snapshot;
+            queues = m_thread_queues;
+        }
+        for (size_t index = 0; index < queues.size(); ++index) {
+            if (const auto queue = queues[index].lock(); queue != nullptr) {
+                snapshot.thread_queue_depth[index] = queue->getTaskCount();
+            }
+        }
+        return snapshot;
     }
 
     MetricsService::MetricsService(
@@ -324,6 +490,23 @@ namespace disk::metrics {
     }
 
     auto MetricsService::Render() const -> drogon::Task<std::string> {
+        auto& registry = MetricsRegistry::GetInstance();
+        const auto config = disk::utils::ConfigMgr::GetInstance();
+        registry.SetDependencyPoolCapacity(
+            Dependency::PostgreSql,
+            static_cast<uint64_t>(std::max<int64_t>(0, config->GetDbPoolSize()))
+        );
+        registry.SetDependencyPoolCapacity(
+            Dependency::Redis,
+            static_cast<uint64_t>(std::max<int64_t>(0, config->GetRedisPoolSize()))
+        );
+        const auto uses_s3 = config->GetStorageBackend() == disk::utils::StorageBackend::S3 ||
+                             config->GetUploadStagingBackend() == disk::utils::StorageBackend::S3;
+        registry.SetDependencyPoolCapacity(
+            Dependency::S3,
+            uses_s3 ? config->GetS3StorageConfig().max_connections : 0
+        );
+
         DatabaseMetricsSnapshot database;
         try {
             auto result = co_await m_db_client->execSqlCoro(
@@ -374,7 +557,7 @@ namespace disk::metrics {
         }
 
         co_return RenderSnapshot(
-            MetricsRegistry::GetInstance().Snapshot(),
+            registry.Snapshot(),
             database,
             *m_runtime_state
         );
@@ -413,6 +596,69 @@ namespace disk::metrics {
                    << '\n';
             output << "disk_http_request_duration_seconds_count{operation=\"" << name << "\"} "
                    << metrics.http_duration_count[operation] << '\n';
+        }
+
+        WriteMetricHeader(output, "disk_dependency_calls_total", "Dependency calls by fixed dependency and outcome.", "counter");
+        for (size_t dependency = 0; dependency < kDependencyCount; ++dependency) {
+            for (size_t outcome = 0; outcome < kDependencyOutcomeCount; ++outcome) {
+                output << "disk_dependency_calls_total{dependency=\""
+                       << DependencyName(static_cast<Dependency>(dependency))
+                       << "\",outcome=\""
+                       << DependencyOutcomeName(static_cast<DependencyOutcome>(outcome)) << "\"} "
+                       << metrics.dependency_calls[dependency][outcome] << '\n';
+            }
+        }
+
+        WriteMetricHeader(output, "disk_dependency_call_duration_seconds", "Dependency call duration by fixed dependency.", "histogram");
+        for (size_t dependency = 0; dependency < kDependencyCount; ++dependency) {
+            const auto name = DependencyName(static_cast<Dependency>(dependency));
+            for (size_t bucket = 0; bucket < kDurationBucketsSeconds.size(); ++bucket) {
+                output << "disk_dependency_call_duration_seconds_bucket{dependency=\"" << name
+                       << "\",le=\"" << kDurationBucketsSeconds[bucket] << "\"} "
+                       << metrics.dependency_duration_buckets[dependency][bucket] << '\n';
+            }
+            output << "disk_dependency_call_duration_seconds_bucket{dependency=\"" << name
+                   << "\",le=\"+Inf\"} " << metrics.dependency_duration_count[dependency]
+                   << '\n';
+            output << "disk_dependency_call_duration_seconds_sum{dependency=\"" << name
+                   << "\"} "
+                   << static_cast<double>(metrics.dependency_duration_microseconds[dependency]) /
+                          1'000'000.0
+                   << '\n';
+            output << "disk_dependency_call_duration_seconds_count{dependency=\"" << name
+                   << "\"} " << metrics.dependency_duration_count[dependency] << '\n';
+        }
+
+        WriteMetricHeader(output, "disk_dependency_calls_inflight", "Dependency calls currently in flight.", "gauge");
+        WriteMetricHeader(output, "disk_dependency_pool_capacity", "Configured dependency connection capacity for this process.", "gauge");
+        WriteMetricHeader(output, "disk_dependency_pool_demand", "Application-observed pool demand including held transaction leases.", "gauge");
+        WriteMetricHeader(output, "disk_dependency_pool_utilization_ratio", "Observed pool demand divided by configured capacity, capped at one.", "gauge");
+        for (size_t dependency = 0; dependency < kDependencyCount; ++dependency) {
+            const auto name = DependencyName(static_cast<Dependency>(dependency));
+            const auto capacity = metrics.dependency_pool_capacity[dependency];
+            const auto demand = metrics.dependency_pool_demand[dependency] +
+                                metrics.dependency_pool_leases[dependency];
+            const auto utilization = capacity == 0 ? 0.0 :
+                                                     static_cast<double>(std::min(demand, capacity)) /
+                                                         static_cast<double>(capacity);
+            output << "disk_dependency_calls_inflight{dependency=\"" << name << "\"} "
+                   << metrics.dependency_calls_inflight[dependency] << '\n';
+            output << "disk_dependency_pool_capacity{dependency=\"" << name << "\"} "
+                   << capacity << '\n';
+            output << "disk_dependency_pool_demand{dependency=\"" << name << "\"} "
+                   << demand << '\n';
+            output << "disk_dependency_pool_utilization_ratio{dependency=\"" << name
+                   << "\"} " << utilization << '\n';
+        }
+
+        WriteMetricHeader(output, "disk_thread_queue_depth", "Tasks waiting to start in fixed blocking I/O queues.", "gauge");
+        WriteMetricHeader(output, "disk_thread_queue_workers", "Worker threads configured for fixed blocking I/O queues.", "gauge");
+        for (size_t queue = 0; queue < kThreadQueueCount; ++queue) {
+            const auto name = ThreadQueueName(static_cast<ThreadQueue>(queue));
+            output << "disk_thread_queue_depth{queue=\"" << name << "\"} "
+                   << metrics.thread_queue_depth[queue] << '\n';
+            output << "disk_thread_queue_workers{queue=\"" << name << "\"} "
+                   << metrics.thread_queue_workers[queue] << '\n';
         }
 
         WriteMetricHeader(output, "disk_upload_chunks_total", "Upload chunk requests accepted by staging and PostgreSQL.", "counter");

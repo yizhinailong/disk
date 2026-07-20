@@ -74,6 +74,13 @@ namespace disk::services {
         /// ==================== 通用方法 ====================
 
         /**
+         * @brief 检查 Redis 服务是否返回 PONG
+         * @return Result<bool> 成功返回响应是否有效，连接故障返回错误
+         */
+        [[nodiscard]]
+        auto Ping() -> drogon::Task<Result<bool>>;
+
+        /**
          * @brief 设置 Redis 键值对
          * @param key Redis 键
          * @param value Redis 值
