@@ -440,6 +440,7 @@ namespace {
         EXPECT_EQ(config->GetWorkerConcurrency(), 1);
         EXPECT_EQ(config->GetWorkerLeaseDurationSeconds(), 120);
         EXPECT_EQ(config->GetWorkerDrainTimeoutSeconds(), 30);
+        EXPECT_EQ(config->GetAuthCpuPoolThreads(), 4);
     }
 
     TEST_F(ConfigMgrDistributedTest, LoadsProcessRoleAndWorkerSettings) {
@@ -450,6 +451,7 @@ namespace {
         disk_config["worker_concurrency"] = 1;
         disk_config["worker_lease_duration_seconds"] = 300;
         disk_config["worker_drain_timeout_seconds"] = 45;
+        disk_config["auth_cpu_pool_threads"] = 8;
 
         const auto* config = LoadDiskConfig(disk_config);
 
@@ -461,6 +463,7 @@ namespace {
         EXPECT_EQ(config->GetWorkerConcurrency(), 1);
         EXPECT_EQ(config->GetWorkerLeaseDurationSeconds(), 300);
         EXPECT_EQ(config->GetWorkerDrainTimeoutSeconds(), 45);
+        EXPECT_EQ(config->GetAuthCpuPoolThreads(), 8);
     }
 
     TEST_F(ConfigMgrDistributedTest, EnvironmentProcessRoleOverridesJson) {
@@ -502,6 +505,18 @@ namespace {
         expect_invalid("worker_lease_duration_seconds", 29);
         expect_invalid("worker_drain_timeout_seconds", 301);
         expect_invalid("worker_claim_batch_size", "20");
+    }
+
+    TEST_F(ConfigMgrDistributedTest, RejectsInvalidAuthCpuPoolThreadCounts) {
+        const auto expect_invalid = [](const Json::Value& value) {
+            Json::Value disk_config;
+            disk_config["auth_cpu_pool_threads"] = value;
+            EXPECT_THROW((void)LoadDiskConfig(disk_config), std::runtime_error);
+        };
+
+        expect_invalid(0);
+        expect_invalid(65);
+        expect_invalid("4");
     }
 
     TEST_F(ConfigMgrDistributedTest, LoadsExplicitInstanceIdAndLeaseDuration) {

@@ -44,6 +44,7 @@
       "register_rate_limit_window_seconds": 300,
       "assembly_max_concurrent": 4,
       "assemble_buffer_size_bytes": 1048576,
+      "auth_cpu_pool_threads": 4,
       "auth_cpu_pool_metrics_interval_seconds": 60,
       "s3": {
         "bucket": "disk",

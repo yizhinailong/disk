@@ -37,6 +37,21 @@ Deployment documentation SHALL define PostgreSQL setup, schema initialization, p
 - **WHEN** Redis is configured for the application
 - **THEN** the operator SHALL be able to verify service status, authentication, connection count, and application configuration alignment
 
+### Requirement: Capacity-derived distributed defaults
+The distributed deployment profile SHALL fix conservative per-process starting values derived from the recorded capacity and failure baselines. Each application process SHALL use 4 HTTP threads, 8 PostgreSQL connections, 4 Redis connections, 16 S3 HTTP connections, and 4 S3 I/O threads. Each API process SHALL use 4 authentication CPU threads and an assembly concurrency limit of 2. Worker execution concurrency SHALL remain 1. The recommended highly available starting topology SHALL be 2 API replicas and 2 Worker replicas.
+
+#### Scenario: Distributed profile is rendered
+- **WHEN** an operator uses the repository distributed deployment artifacts without capacity overrides
+- **THEN** the fixed per-process pools, concurrency limits, and 2 API plus 2 Worker topology SHALL match the documented starting profile
+
+#### Scenario: Replica count is increased
+- **WHEN** API or Worker replicas are increased
+- **THEN** the operator SHALL recalculate aggregate PostgreSQL, Redis, S3 connection, S3 I/O, and CPU budgets before rollout and SHALL retain the documented operational reserve
+
+#### Scenario: Capacity moves beyond the measured matrix
+- **WHEN** Worker replicas exceed 4, a local pool or concurrency limit is raised, or the production object-store implementation differs from the recorded baseline
+- **THEN** a representative capacity test SHALL be completed before the new value is adopted as a production recommendation
+
 ### Requirement: Incremental database migration procedure
 Deployment documentation SHALL define safe forward migration, reconciliation checks, rollback scripts, stop conditions, and backup restoration for documented database migrations.
 

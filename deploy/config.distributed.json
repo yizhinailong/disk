@@ -7,7 +7,7 @@
   ],
   "app": {
     "upload_path": "/var/lib/disk/uploads",
-    "threads_num": 0,
+    "threads_num": 4,
     "client_max_body_size": "20M"
   },
   "custom_config": {
@@ -44,6 +44,7 @@
       "register_rate_limit_window_seconds": 300,
       "assembly_max_concurrent": 2,
       "assemble_buffer_size_bytes": 1048576,
+      "auth_cpu_pool_threads": 4,
       "auth_cpu_pool_metrics_interval_seconds": 60,
       "s3": {
         "bucket": "disk",
@@ -54,6 +55,8 @@
         "verify_ssl": false,
         "object_prefix": "objects",
         "staging_prefix": "staging",
+        "max_connections": 16,
+        "io_threads": 4,
         "connect_timeout_ms": 3000,
         "request_timeout_ms": 300000,
         "max_retries": 3,

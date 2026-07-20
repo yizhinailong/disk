@@ -80,11 +80,36 @@ def main() -> int:
     runtime_config = json.loads(
         (root / "deploy/config.distributed.json").read_text(encoding="utf-8")
     )
+    require(runtime_config["app"]["threads_num"] == 4, "HTTP thread recommendation drifted")
     require(runtime_config["db_clients"][0]["passwd"] == "", "database password leaked into JSON")
     require(runtime_config["redis_clients"][0]["passwd"] == "", "Redis password leaked into JSON")
+    require(
+        runtime_config["db_clients"][0]["connection_number"] == 8,
+        "PostgreSQL per-process pool recommendation drifted",
+    )
+    require(
+        runtime_config["redis_clients"][0]["number_of_connections"] == 4,
+        "Redis per-process pool recommendation drifted",
+    )
     disk_config = runtime_config["custom_config"]["disk"]
     require(disk_config["storage_backend"] == "s3", "distributed final backend drifted")
     require(disk_config["upload_staging_backend"] == "s3", "distributed staging backend drifted")
+    require(disk_config["auth_cpu_pool_threads"] == 4, "auth CPU pool recommendation drifted")
+    require(disk_config["assembly_max_concurrent"] == 2, "assembly concurrency drifted")
+    require(disk_config["worker_concurrency"] == 1, "Worker concurrency drifted")
+    require(disk_config["s3"]["max_connections"] == 16, "S3 connection pool drifted")
+    require(disk_config["s3"]["io_threads"] == 4, "S3 I/O thread pool drifted")
+
+    expected_compose_pools = {
+        "DATABASE_POOL_SIZE": "${DISK_DATABASE_POOL_SIZE:-8}",
+        "REDIS_POOL_SIZE": "${DISK_REDIS_POOL_SIZE:-4}",
+        "DISK_S3_MAX_CONNECTIONS": "${DISK_S3_MAX_CONNECTIONS:-16}",
+        "DISK_S3_IO_THREADS": "${DISK_S3_IO_THREADS:-4}",
+    }
+    for name in app_names:
+        environment = services[name]["environment"]
+        for key, expected in expected_compose_pools.items():
+            require(environment[key] == expected, f"{name} {key} default drifted")
 
     nginx_lines = []
     for raw_line in (root / "deploy/nginx/disk.conf").read_text(encoding="utf-8").splitlines():

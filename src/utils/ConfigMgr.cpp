@@ -184,6 +184,7 @@ namespace disk::utils {
         m_worker_lease_duration_seconds = DEFAULT_WORKER_LEASE_DURATION_SECONDS;
         m_worker_drain_timeout_seconds = DEFAULT_WORKER_DRAIN_TIMEOUT_SECONDS;
         m_upload_finalize_lease_seconds = DEFAULT_UPLOAD_FINALIZE_LEASE_SECONDS;
+        m_auth_cpu_pool_threads = DEFAULT_AUTH_CPU_POOL_THREADS;
         m_storage_backend = StorageBackend::Local;
         m_upload_staging_backend = StorageBackend::Local;
         m_s3_storage_config = S3StorageConfig{};
@@ -260,6 +261,13 @@ namespace disk::utils {
                 DEFAULT_WORKER_DRAIN_TIMEOUT_SECONDS,
                 1,
                 300
+            );
+            m_auth_cpu_pool_threads = ReadBoundedUInt(
+                app_config,
+                "auth_cpu_pool_threads",
+                DEFAULT_AUTH_CPU_POOL_THREADS,
+                1,
+                64
             );
 
             /// 从配置读取 storage_base_path
@@ -569,6 +577,10 @@ namespace disk::utils {
 
     auto ConfigMgr::GetRefreshTokenExpireSeconds() const -> int {
         return m_refresh_token_expire_seconds;
+    }
+
+    auto ConfigMgr::GetAuthCpuPoolThreads() const noexcept -> uint32_t {
+        return m_auth_cpu_pool_threads;
     }
 
     auto ConfigMgr::GetInstanceId() const noexcept -> std::string {

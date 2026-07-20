@@ -142,6 +142,9 @@ namespace disk::utils {
         auto GetRefreshTokenExpireSeconds() const -> int;
 
         [[nodiscard]]
+        auto GetAuthCpuPoolThreads() const noexcept -> uint32_t;
+
+        [[nodiscard]]
         auto GetInstanceId() const noexcept -> std::string;
 
         [[nodiscard]]
@@ -334,10 +337,12 @@ namespace disk::utils {
         static constexpr uint32_t DEFAULT_WORKER_CONCURRENCY = 1;
         static constexpr uint32_t DEFAULT_WORKER_LEASE_DURATION_SECONDS = 120;
         static constexpr uint32_t DEFAULT_WORKER_DRAIN_TIMEOUT_SECONDS = 30;
+        static constexpr uint32_t DEFAULT_AUTH_CPU_POOL_THREADS = 4;
 
         /// JWT 配置
         int m_access_token_expire_seconds{ 7200 };
         int m_refresh_token_expire_seconds{ 604800 };
+        uint32_t m_auth_cpu_pool_threads{ DEFAULT_AUTH_CPU_POOL_THREADS };
 
         /// 分布式进程配置
         std::string m_generated_instance_id;

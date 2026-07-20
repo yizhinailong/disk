@@ -9,10 +9,8 @@
 
 #include "TokenService.hpp"
 
-#include <algorithm>
 #include <atomic>
 #include <functional>
-#include <thread>
 
 #include <drogon/drogon.h>
 #include <drogon/utils/Utilities.h>
@@ -20,6 +18,7 @@
 #include <jwt-cpp/traits/open-source-parsers-jsoncpp/traits.h>
 #include <trantor/net/EventLoopThreadPool.h>
 
+#include "utils/ConfigMgr.hpp"
 #include "utils/ErrorCode.hpp"
 #include "utils/HashUtil.hpp"
 #include "utils/RedisKeyPrefix.hpp"
@@ -56,13 +55,13 @@ namespace disk::services {
         }
 
         auto CreateAuthCpuPool() -> trantor::EventLoopThreadPool* {
-            const auto hardware_threads = std::max(1u, std::thread::hardware_concurrency());
+            const auto thread_count = disk::utils::ConfigMgr::GetInstance()->GetAuthCpuPoolThreads();
             auto* pool = new trantor::EventLoopThreadPool(
-                static_cast<size_t>(hardware_threads),
+                static_cast<size_t>(thread_count),
                 "AuthCpuPool"
             );
             pool->start();
-            Logger::Info() << "[auth_cpu_pool] created threads=" << hardware_threads;
+            Logger::Info() << "[auth_cpu_pool] created threads=" << thread_count;
             return pool;
         }
 
