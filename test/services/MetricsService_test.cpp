@@ -33,6 +33,11 @@ namespace disk::metrics {
                 201,
                 std::chrono::microseconds(7'500)
             );
+            registry.RecordUploadChunk(4'096);
+            registry.RecordUploadCompleteStage(
+                UploadCompleteStage::Assemble,
+                std::chrono::microseconds(30'000)
+            );
             registry.RecordStorageJob(
                 disk::jobs::kBlobGcJobType,
                 StorageJobOutcome::Retry,
@@ -55,6 +60,22 @@ namespace disk::metrics {
                 after.http_duration_buckets[upload_chunk][1],
                 before.http_duration_buckets[upload_chunk][1] + 1
             );
+            EXPECT_EQ(after.upload_chunks_total, before.upload_chunks_total + 1);
+            EXPECT_EQ(after.upload_chunk_bytes_total, before.upload_chunk_bytes_total + 4'096);
+
+            const auto assemble = static_cast<size_t>(UploadCompleteStage::Assemble);
+            EXPECT_EQ(
+                after.upload_complete_duration_buckets[assemble][2],
+                before.upload_complete_duration_buckets[assemble][2]
+            );
+            EXPECT_EQ(
+                after.upload_complete_duration_buckets[assemble][3],
+                before.upload_complete_duration_buckets[assemble][3] + 1
+            );
+            EXPECT_EQ(
+                after.upload_complete_duration_count[assemble],
+                before.upload_complete_duration_count[assemble] + 1
+            );
 
             constexpr size_t blob_gc_index = 2;
             const auto retry = static_cast<size_t>(StorageJobOutcome::Retry);
@@ -72,8 +93,15 @@ namespace disk::metrics {
             MetricsSnapshot metrics;
             metrics.http_requests[static_cast<size_t>(HttpOperation::Admin)]
                                  [static_cast<size_t>(HttpStatusClass::ClientError)] = 3;
+            metrics.upload_chunks_total = 7;
+            metrics.upload_chunk_bytes_total = 12'345;
+            const auto promote = static_cast<size_t>(UploadCompleteStage::Promote);
+            metrics.upload_complete_duration_buckets[promote][4] = 2;
+            metrics.upload_complete_duration_count[promote] = 2;
+            metrics.upload_complete_duration_microseconds[promote] = 150'000;
             DatabaseMetricsSnapshot database;
             database.storage_jobs[4] = 2;
+            database.upload_tasks[0] = 7;
             database.upload_tasks[4] = 5;
             database.oldest_ready_job_age_seconds = 12.5;
             database.expired_job_leases = 1;
@@ -93,8 +121,12 @@ namespace disk::metrics {
             const auto output = MetricsService::RenderSnapshot(metrics, database, runtime);
 
             EXPECT_NE(output.find("disk_http_requests_total{operation=\"admin\",status_class=\"4xx\"} 3"), std::string::npos);
+            EXPECT_NE(output.find("disk_upload_chunks_total 7"), std::string::npos);
+            EXPECT_NE(output.find("disk_upload_chunk_bytes_total 12345"), std::string::npos);
+            EXPECT_NE(output.find("disk_upload_complete_stage_duration_seconds_count{stage=\"promote\"} 2"), std::string::npos);
             EXPECT_NE(output.find("disk_storage_jobs{status=\"dead_letter\"} 2"), std::string::npos);
             EXPECT_NE(output.find("disk_upload_tasks{status=\"finalizing\"} 5"), std::string::npos);
+            EXPECT_NE(output.find("disk_upload_tasks_active 12"), std::string::npos);
             EXPECT_NE(output.find("disk_reconciliation_findings_unresolved{finding_type=\"missing_final_blob\"} 4"), std::string::npos);
             EXPECT_NE(output.find("disk_reconciliation_findings_unresolved{finding_type=\"upload_staging_mismatch\"} 2"), std::string::npos);
             EXPECT_NE(output.find("disk_metrics_snapshot_success 1"), std::string::npos);
@@ -121,6 +153,16 @@ namespace disk::metrics {
                 ReconciliationFindingTypeIndex("future_finding_type"),
                 kReconciliationFindingTypeCount - 1
             );
+        }
+
+        TEST(MetricsServiceTest, UploadCompletionStagesUseOnlyFixedNames) {
+            EXPECT_EQ(UploadCompleteStageName(UploadCompleteStage::ClaimLease), "claim_lease");
+            EXPECT_EQ(UploadCompleteStageName(UploadCompleteStage::LoadMetadata), "load_metadata");
+            EXPECT_EQ(UploadCompleteStageName(UploadCompleteStage::Assemble), "assemble");
+            EXPECT_EQ(UploadCompleteStageName(UploadCompleteStage::DedupLookup), "dedup_lookup");
+            EXPECT_EQ(UploadCompleteStageName(UploadCompleteStage::Promote), "promote");
+            EXPECT_EQ(UploadCompleteStageName(UploadCompleteStage::Commit), "commit");
+            EXPECT_EQ(UploadCompleteStageName(UploadCompleteStage::Count), "unknown");
         }
     } // namespace
 } // namespace disk::metrics

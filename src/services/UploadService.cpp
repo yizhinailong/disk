@@ -16,6 +16,7 @@
 
 #include "models/UploadTasks.hpp"
 #include "services/FileListCache.hpp"
+#include "services/MetricsService.hpp"
 #include "services/UploadLifecycleService.hpp"
 #include "services/UploadTaskRepository.hpp"
 #include "storage/IBlobStore.hpp"
@@ -289,6 +290,10 @@ namespace disk::file {
                     ErrorInfo(ErrorCode::ResourceConflict, "Chunk index already contains different content")
                 );
             }
+
+            disk::metrics::MetricsRegistry::GetInstance().RecordUploadChunk(
+                write_result->size_bytes
+            );
 
             Logger::Debug() << "Chunk upload successful: upload_id=" << upload_id
                             << ", chunk_index=" << chunk_index;

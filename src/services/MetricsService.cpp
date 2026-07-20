@@ -193,6 +193,19 @@ namespace disk::metrics {
         return index < names.size() ? names[index] : "other";
     }
 
+    auto UploadCompleteStageName(UploadCompleteStage stage) noexcept -> std::string_view {
+        constexpr std::array<std::string_view, kUploadCompleteStageCount> names{
+            "claim_lease",
+            "load_metadata",
+            "assemble",
+            "dedup_lookup",
+            "promote",
+            "commit",
+        };
+        const auto index = ToIndex(stage);
+        return index < names.size() ? names[index] : "unknown";
+    }
+
     auto StorageJobOutcomeName(StorageJobOutcome outcome) noexcept -> std::string_view {
         constexpr std::array<std::string_view, kStorageJobOutcomeCount> names{
             "succeeded",
@@ -236,6 +249,33 @@ namespace disk::metrics {
         for (size_t bucket = 0; bucket < kDurationBucketsSeconds.size(); ++bucket) {
             if (duration_seconds <= kDurationBucketsSeconds[bucket]) {
                 m_snapshot.http_duration_buckets[operation_index][bucket]++;
+            }
+        }
+    }
+
+    auto MetricsRegistry::RecordUploadChunk(uint64_t size_bytes) -> void {
+        std::scoped_lock lock(m_mutex);
+        m_snapshot.upload_chunks_total++;
+        m_snapshot.upload_chunk_bytes_total += size_bytes;
+    }
+
+    auto MetricsRegistry::RecordUploadCompleteStage(
+        UploadCompleteStage stage,
+        std::chrono::microseconds duration
+    ) -> void {
+        const auto stage_index = ToIndex(stage);
+        if (stage_index >= kUploadCompleteStageCount) {
+            return;
+        }
+        const auto duration_us = static_cast<uint64_t>(std::max<int64_t>(0, duration.count()));
+        const auto duration_seconds = static_cast<double>(duration_us) / 1'000'000.0;
+
+        std::scoped_lock lock(m_mutex);
+        m_snapshot.upload_complete_duration_count[stage_index]++;
+        m_snapshot.upload_complete_duration_microseconds[stage_index] += duration_us;
+        for (size_t bucket = 0; bucket < kUploadCompleteDurationBucketsSeconds.size(); ++bucket) {
+            if (duration_seconds <= kUploadCompleteDurationBucketsSeconds[bucket]) {
+                m_snapshot.upload_complete_duration_buckets[stage_index][bucket]++;
             }
         }
     }
@@ -375,6 +415,31 @@ namespace disk::metrics {
                    << metrics.http_duration_count[operation] << '\n';
         }
 
+        WriteMetricHeader(output, "disk_upload_chunks_total", "Upload chunk requests accepted by staging and PostgreSQL.", "counter");
+        output << "disk_upload_chunks_total " << metrics.upload_chunks_total << '\n';
+        WriteMetricHeader(output, "disk_upload_chunk_bytes_total", "Upload chunk payload bytes accepted by staging and PostgreSQL.", "counter");
+        output << "disk_upload_chunk_bytes_total " << metrics.upload_chunk_bytes_total << '\n';
+
+        WriteMetricHeader(output, "disk_upload_complete_stage_duration_seconds", "Upload completion duration by fixed stage.", "histogram");
+        for (size_t stage = 0; stage < kUploadCompleteStageCount; ++stage) {
+            const auto name = UploadCompleteStageName(static_cast<UploadCompleteStage>(stage));
+            for (size_t bucket = 0; bucket < kUploadCompleteDurationBucketsSeconds.size(); ++bucket) {
+                output << "disk_upload_complete_stage_duration_seconds_bucket{stage=\"" << name
+                       << "\",le=\"" << kUploadCompleteDurationBucketsSeconds[bucket] << "\"} "
+                       << metrics.upload_complete_duration_buckets[stage][bucket] << '\n';
+            }
+            output << "disk_upload_complete_stage_duration_seconds_bucket{stage=\"" << name
+                   << "\",le=\"+Inf\"} " << metrics.upload_complete_duration_count[stage]
+                   << '\n';
+            output << "disk_upload_complete_stage_duration_seconds_sum{stage=\"" << name
+                   << "\"} "
+                   << static_cast<double>(metrics.upload_complete_duration_microseconds[stage]) /
+                          1'000'000.0
+                   << '\n';
+            output << "disk_upload_complete_stage_duration_seconds_count{stage=\"" << name
+                   << "\"} " << metrics.upload_complete_duration_count[stage] << '\n';
+        }
+
         WriteMetricHeader(output, "disk_storage_job_runs_total", "Storage job outcomes by fixed job type.", "counter");
         for (size_t job_type = 0; job_type < kStorageJobTypeCount; ++job_type) {
             for (size_t outcome = 0; outcome < kStorageJobOutcomeCount; ++outcome) {
@@ -422,6 +487,9 @@ namespace disk::metrics {
             output << "disk_upload_tasks{status=\"" << kUploadTaskStatusNames[status] << "\"} "
                    << database.upload_tasks[status] << '\n';
         }
+        WriteMetricHeader(output, "disk_upload_tasks_active", "Upload tasks currently accepting chunks or finalizing.", "gauge");
+        output << "disk_upload_tasks_active "
+               << database.upload_tasks[0] + database.upload_tasks[4] << '\n';
         WriteMetricHeader(output, "disk_storage_jobs_oldest_ready_age_seconds", "Age of the oldest ready storage job.", "gauge");
         output << "disk_storage_jobs_oldest_ready_age_seconds "
                << database.oldest_ready_job_age_seconds << '\n';

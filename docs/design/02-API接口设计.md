@@ -4218,13 +4218,15 @@ created_at  TIMESTAMP        -- 操作时间
 
 返回 Prometheus text exposition，供私网监控抓取，不使用用户 JWT。公网反向代理必须精确拒绝 `/metrics`，监控系统直接访问 Pod/实例端口。指标至少包括：
 
-- 按固定 `operation/status_class` 标签聚合的 HTTP 请求量、错误量和延迟；
-- 按固定状态聚合的上传任务数、存储任务数、最老可执行任务年龄、过期租约和 dead-letter 数；
+- `disk_http_requests_total{operation,status_class}` 与 `disk_http_request_duration_seconds{operation}`；错误率由 `4xx/5xx` counter 的区间增量除以请求总增量计算；
+- `disk_upload_tasks_active`，以及按固定状态聚合的上传任务数、存储任务数、最老可执行任务年龄、过期租约和 dead-letter 数；活动上传定义为 PostgreSQL 中 `InProgress + Finalizing`；
+- `disk_upload_chunks_total`、`disk_upload_chunk_bytes_total`；只累计 staging 写入成功且 PostgreSQL 接受的分片请求，吞吐由 counter 的 `rate` 计算；
+- `disk_upload_complete_stage_duration_seconds{stage}`；`stage` 固定为 `claim_lease/load_metadata/assemble/dedup_lookup/promote/commit`，已开始的失败阶段也计入，未执行的提升阶段不产生样本；
 - 按固定 `finding_type` 枚举聚合的未解决一致性 finding 数；未知类型归入 `unknown`，不得把资源 ID 或对象 key 用作标签；
 - 当前进程角色、启动状态、drain 状态、API 在途请求；
 - 指标快照数据库查询是否成功。
 
-标签集合由代码枚举，禁止使用请求路径参数、`request_id`、`upload_id`、文件名、对象 key、`job_id` 或异常文本。数据库快照失败时仍返回进程内指标，并将 `disk_metrics_snapshot_success` 置为 0。
+标签集合由代码枚举，禁止使用请求路径参数、`request_id`、`upload_id`、文件名、对象 key、`job_id`、租约 owner 或异常文本。数据库快照失败时仍返回进程内指标，并将 `disk_metrics_snapshot_success` 置为 0。数据库快照 gauge 在每个实例上重复暴露，跨副本聚合必须取 `max`；进程内 counter/histogram 才按实例求和。
 
 ### 10.1 管理员接口说明
 

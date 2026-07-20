@@ -53,9 +53,21 @@ namespace disk::metrics {
         Count,
     };
 
+    enum class UploadCompleteStage : uint8_t {
+        ClaimLease,
+        LoadMetadata,
+        Assemble,
+        DedupLookup,
+        Promote,
+        Commit,
+        Count,
+    };
+
     inline constexpr size_t kHttpOperationCount = static_cast<size_t>(HttpOperation::Count);
     inline constexpr size_t kHttpStatusClassCount = static_cast<size_t>(HttpStatusClass::Count);
     inline constexpr size_t kStorageJobOutcomeCount = static_cast<size_t>(StorageJobOutcome::Count);
+    inline constexpr size_t kUploadCompleteStageCount =
+        static_cast<size_t>(UploadCompleteStage::Count);
     inline constexpr size_t kStorageJobTypeCount = 7;
     inline constexpr size_t kReconciliationFindingTypeCount = 11;
     inline constexpr std::array<double, 8> kDurationBucketsSeconds{
@@ -68,6 +80,22 @@ namespace disk::metrics {
         1.0,
         5.0,
     };
+    inline constexpr std::array<double, 14> kUploadCompleteDurationBucketsSeconds{
+        0.005,
+        0.01,
+        0.025,
+        0.05,
+        0.1,
+        0.25,
+        1.0,
+        5.0,
+        15.0,
+        30.0,
+        60.0,
+        120.0,
+        300.0,
+        600.0,
+    };
 
     struct MetricsSnapshot final {
         std::array<std::array<uint64_t, kHttpStatusClassCount>, kHttpOperationCount>
@@ -76,6 +104,14 @@ namespace disk::metrics {
             http_duration_buckets{};
         std::array<uint64_t, kHttpOperationCount> http_duration_count{};
         std::array<uint64_t, kHttpOperationCount> http_duration_microseconds{};
+        uint64_t upload_chunks_total{ 0 };
+        uint64_t upload_chunk_bytes_total{ 0 };
+        std::array<
+            std::array<uint64_t, kUploadCompleteDurationBucketsSeconds.size()>,
+            kUploadCompleteStageCount>
+            upload_complete_duration_buckets{};
+        std::array<uint64_t, kUploadCompleteStageCount> upload_complete_duration_count{};
+        std::array<uint64_t, kUploadCompleteStageCount> upload_complete_duration_microseconds{};
         std::array<std::array<uint64_t, kStorageJobOutcomeCount>, kStorageJobTypeCount>
             storage_job_runs{};
         std::array<std::array<uint64_t, kDurationBucketsSeconds.size()>, kStorageJobTypeCount>
@@ -96,6 +132,8 @@ namespace disk::metrics {
 
     [[nodiscard]] auto ClassifyHttpOperation(std::string_view path) noexcept -> HttpOperation;
     [[nodiscard]] auto HttpOperationName(HttpOperation operation) noexcept -> std::string_view;
+    [[nodiscard]] auto UploadCompleteStageName(UploadCompleteStage stage) noexcept
+        -> std::string_view;
     [[nodiscard]] auto StorageJobOutcomeName(StorageJobOutcome outcome) noexcept -> std::string_view;
     [[nodiscard]] auto ReconciliationFindingTypeIndex(std::string_view finding_type) noexcept
         -> size_t;
@@ -107,6 +145,13 @@ namespace disk::metrics {
         auto RecordHttpRequest(
             HttpOperation operation,
             int status_code,
+            std::chrono::microseconds duration
+        ) -> void;
+
+        auto RecordUploadChunk(uint64_t size_bytes) -> void;
+
+        auto RecordUploadCompleteStage(
+            UploadCompleteStage stage,
             std::chrono::microseconds duration
         ) -> void;
 
