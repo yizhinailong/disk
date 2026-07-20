@@ -588,7 +588,20 @@ PostgreSQL `32/48/48/64`、Redis `16/24/24/32`、S3 HTTP `64/96/96/128`、S3 I/O
 `360e31b8d3a8c99f286d229c84974c86293c9d56c9c02716fc5ebd60465a9ba9`。Redis/S3 数值是
 仓库样例的最小应用侧配额，不代表目标托管服务能力；预发布/生产仍须输入实际审批上限，并在每档
 扩容后观察 readiness、错误率、P99、连接利用率、S3 限流与 Worker 积压。
-- [ ] 观察至少一个完整上传过期/回收周期后再执行 contract 清理。
+- [x] 观察至少一个完整上传过期/回收周期后再执行 contract 清理。
+
+2026-07-21 已在候选应用基线 `6783085` 上完成仓库级 data-to-contract 观察门禁。新增
+`ContractReadinessCycleIntegration` 以真实 S3-only API 创建并写入探针，不改数据库生成的
+`expires_at`；配置/持久 TTL 均为 3 秒，数据库与墙钟分别自然经过 3.098/3.741 秒后才启动 claiming
+Worker。Worker 首次小时级播种与唯一 S3 cleanup 均一次成功，探针收敛为 Expired，reserved、chunk、
+staging 对象全部归零；随后新上传完成并逐字节下载，文件/内容/ref_count 唯一，used/reserved 为
+4992/0。新的 `contents/users/staging/final` 对账各一页、一次成功，全部 contract 阻断计数为 0，
+API/Worker seeder 数为 0/1，且证据不含凭据、endpoint、upload ID 或对象 key。聚焦 CTest 1/1
+通过（7.65 秒）；完整 CTest 共 1384 项：1378 通过、6 项常规环境门控跳过、0 失败，总耗时
+373.28 秒；OpenSpec 严格校验 24/24 通过。证据为
+`.sisyphus/evidence/contract-readiness-cycle-summary.json`，SHA-256 为
+`8c59aa62d5e7fe6f93861e864e3ec473cb5b3b25a137aadc99d8554c7eb22e8c`。该结果只准入 V005 设计评审，
+未执行 DDL；预发布/生产仍须等待实际 TTL 加后续独立小时扫描并保存自身全量归零证据。
 
 ### 14.4 存量 final Blob 迁移（仅现网使用 local 时）
 

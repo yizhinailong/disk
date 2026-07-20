@@ -232,6 +232,25 @@ After incompatible old application versions have exited and the Worker observati
 - **WHEN** a new task persists the wrong backend or prefix, an S3 task creates node-local staging data, required S3 operations fail, or an existing task descriptor changes
 - **THEN** the rollout SHALL stop and MAY restore local staging for subsequently created tasks, but SHALL keep a compatible release available to finish or explicitly cancel already-created S3 tasks
 
+### Requirement: Contract migration observation gate
+The data-to-contract gate SHALL begin only after incompatible processes have exited, production APIs create only S3 staging sessions, and legacy local non-terminal tasks, incomplete local cleanup jobs, and inventoried original-volume artifacts have reached zero. The observation SHALL span the configured upload expiry TTL and a distinct successful hourly expiration scan after that TTL, then complete a fresh four-scope reconciliation. Passing evidence SHALL authorize only review of a later contract migration and SHALL NOT execute destructive DDL or remove compatibility code.
+
+#### Scenario: A post-cutover upload naturally expires and is reclaimed
+- **WHEN** an S3 upload created after the recorded cutover time reaches its persisted `expires_at` according to PostgreSQL and a later hourly `expire_uploads` job succeeds
+- **THEN** the task SHALL become Expired without direct database mutation, its unique cleanup job SHALL succeed, reserved quota and chunk rows SHALL be released, and its exact staging prefix SHALL become empty
+
+#### Scenario: Service health and full reconciliation are checked after reclamation
+- **WHEN** the expiration cleanup has converged
+- **THEN** a newly created S3 upload SHALL still complete and download correctly, and a new scan ID SHALL finish every page of `contents`, `users`, `staging`, and `final` reconciliation with no unresolved finding or quota mismatch
+
+#### Scenario: Contract readiness has a residual compatibility dependency
+- **WHEN** any old process, pre-cutover active upload, local non-terminal task, incomplete cleanup, active upload lease, nullable field targeted for tightening, pending/retry/running/dead-letter upload job, reconciliation failure, or unresolved finding remains
+- **THEN** the contract migration SHALL remain blocked and the expand schema and compatible handlers SHALL remain available
+
+#### Scenario: The repository compresses the observation time
+- **WHEN** an isolated integration test uses a shortened TTL and admits its claiming Worker only after PostgreSQL reports the probe expired
+- **THEN** the Worker's real initial periodic seed MAY represent the later expiration scan, while production acceptance SHALL still require the actual configured TTL and a distinct subsequent hourly scan
+
 ### Requirement: Upgrade and rollback operations
 Deployment documentation SHALL define upgrade preparation, backup, test-environment verification, build/deploy steps, database migration application, health validation, and rollback to a previous application/database state.
 

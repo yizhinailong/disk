@@ -365,6 +365,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME ContractReadinessCycleIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_contract_readiness_cycle.py"
+)
+set_tests_properties(
+    ContractReadinessCycleIntegration
+    PROPERTIES
+    LABELS "backend-integration;distributed;s3;database-migration;rolling-upgrade"
+    RUN_SERIAL TRUE
+    TIMEOUT 180
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME SecureLocalStagingCutoffIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_secure_local_staging_cutoff.py"
 )
