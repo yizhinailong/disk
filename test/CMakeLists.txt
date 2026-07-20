@@ -313,6 +313,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME SchedulerRoleCutoverIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_scheduler_role_cutover.py"
+)
+set_tests_properties(
+    SchedulerRoleCutoverIntegration
+    PROPERTIES
+    LABELS "backend-integration;distributed;rolling-upgrade"
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME StagingCanaryIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_staging_canary.py"
 )

@@ -60,6 +60,10 @@ The system SHALL register cluster maintenance tasks only in a Worker-capable pro
 - **WHEN** an API-only process enters its serving lifecycle
 - **THEN** it SHALL NOT start the persistent job claim loop or register cluster maintenance tasks
 
+#### Scenario: API process inherits the shared Worker claiming setting
+- **WHEN** an API-only process starts from a deployment profile whose shared configuration enables Worker claiming
+- **THEN** its effective Worker claiming state SHALL remain disabled and it SHALL NOT initialize, register, or seed cluster maintenance tasks
+
 ### Requirement: Public Route Exemptions
 The system SHALL configure public APIs such as registration, login, refresh, health, and public share access so they can execute without bearer-token authentication while still applying any route-specific protection.
 

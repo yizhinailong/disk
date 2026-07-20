@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-20）：`cmake --preset linux-debug-clang`、构建均通过；完整 CTest 共 1376 项，1370 通过、6 项按既有环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），无失败；`WorkerObservationModeIntegration` 和隔离 S3 staging 新任务门禁已实际运行通过，OpenSpec 严格校验 24/24 通过。
+> 最近验证（2026-07-21）：`cmake --preset linux-debug-clang`、构建均通过；完整 CTest 共 1382 项，1376 通过、6 项按既有环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），无失败；真实随机路由与 Worker/API 调度所有权切换门禁已实际运行通过，OpenSpec 严格校验 24/24 通过。
 
 ## 1. 目标与范围
 
@@ -292,7 +292,7 @@ API Instance A  API Instance B ... N
 
 - [ ] 两个 Worker 并发运行时，每个逻辑任务只成功执行一次，允许幂等重复尝试。
 - [ ] 杀死持有租约的 Worker 后，任务在约定恢复时间内被接管。
-- [ ] API 扩容或缩容不会改变周期任务执行次数。
+- [x] API 扩容或缩容不会改变周期任务执行次数。
 - [x] dead-letter 可查询、告警、人工重放并保留审计信息。
 
 ## 10. Phase 5：缓存、认证与跨实例一致性
@@ -557,7 +557,22 @@ local 非终态、未完成 cleanup 与逐原卷扫描全部归零的证据，�
 受管进程和临时拓扑已清理。本机没有 Docker/Nginx，目标环境仍须用真实 Nginx `least_conn` 入口
 复跑同一响应头与数据对账；本地门禁证明应用不依赖节点亲和，不替代目标网关加载确认。
 
-- [ ] 启用 Worker 任务执行后，关闭 API 中的集群级 `ScheduledTasks`。
+- [x] 启用 Worker 任务执行后，关闭 API 中的集群级 `ScheduledTasks`。
+
+2026-07-21 已在候选应用基线 `dd41910` 上完成 Worker/API 调度所有权切换门禁。
+`SchedulerRoleCutoverIntegration` 以唯一临时 PostgreSQL、隔离 local storage 和三个真实后端
+进程按 API A -> Worker -> API B 的顺序执行：API A/B 都显式继承
+`worker_claiming_enabled=true`，但 readiness 的有效认领值均为 false，两者日志的 seeder
+记录均为 0；只有 Worker 启动一个 seeder，并将当前 UTC 窗口中 1 个
+`expire_uploads`、1 个 `expire_trash` 和 4 个 `storage_reconcile` 首页任务各执行
+一次并收敛为 Succeeded。API B 加入和摘除后，包含 payload、状态、尝试次数、
+租约与时间戳的完整六行快照与基线逐字段相等。聚焦回归 13/13 通过；完整
+CTest 共 1382 项：1376 通过、6 项常规环境门控跳过、0 失败，总耗时 362.12 秒；
+OpenSpec 严格校验 24/24 通过。结构化证据为
+`.sisyphus/evidence/scheduler-role-cutover-summary.json`，SHA-256 为
+`960d00f7675d75ef59f687d2c8ba751b24762249c4b2bb0d245154e71995f93f`。本机门禁证明应用角色
+分离与数据库不变式；目标预发布/生产环境仍须按部署指南用实际编排重复 Worker
+重启、API B 加入/摘除和完整行快照比对。
 - [ ] 逐步增加 API/Worker 副本并重新核算 PostgreSQL、Redis、S3 连接和并发预算。
 - [ ] 观察至少一个完整上传过期/回收周期后再执行 contract 清理。
 
@@ -603,7 +618,7 @@ local 非终态、未完成 cleanup 与逐原卷扫描全部归零的证据，�
 - [ ] API/Worker 在关键阶段被强制终止后，任务可自动接管或由客户端幂等重试恢复。
 - [ ] 并发重复请求不会产生重复文件、重复配额结算、错误 ref_count 或误删 Blob。
 - [ ] PostgreSQL、Redis、S3/MinIO 均有明确高可用入口、容量预算、备份与恢复演练。
-- [ ] 集群级周期任务不会随 API 副本数重复执行。
+- [x] 集群级周期任务不会随 API 副本数重复执行。
 - [ ] liveness/readiness、日志、指标、告警和运维诊断覆盖 API、Worker、数据库、Redis、S3 和任务队列。
 - [ ] 所有文档先于对应实现更新，API、数据库、部署和测试描述与最终行为一致。
 - [ ] 完整 C++、Python 集成、多实例、S3、迁移、故障注入和压力测试通过。

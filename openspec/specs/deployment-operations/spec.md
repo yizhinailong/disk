@@ -189,6 +189,14 @@ The rollout SHALL support deploying a Worker with job claiming disabled after th
 - **WHEN** the observation gate has passed and the rollout advances to task execution
 - **THEN** the operator SHALL explicitly set job claiming enabled and restart or redeploy the Worker rather than treating the startup setting as a live pause control
 
+#### Scenario: API capacity changes after Worker execution cutover
+- **WHEN** a claiming Worker has seeded the current UTC window and API-only replicas are subsequently added or removed
+- **THEN** only the Worker SHALL report a running periodic seeder, the current window SHALL contain one `expire_uploads`, one `expire_trash`, and four first-page `storage_reconcile` jobs, and the complete persisted rows for those jobs SHALL remain unchanged by the API capacity change
+
+#### Scenario: Scheduler ownership cutover fails
+- **WHEN** an API-only process reports effective Worker claiming, logs periodic seeder startup or seed-cycle activity, or an API scale event creates or mutates a periodic job
+- **THEN** the rollout SHALL stop before additional API or Worker replicas are enabled
+
 ### Requirement: S3 staging activation gate
 After incompatible old application versions have exited and the Worker observation gate has passed, the distributed deployment SHALL expose an explicit startup setting that selects S3 staging for newly created upload sessions. Creating a session SHALL atomically persist its selected backend and exact prefix, and later requests or Workers SHALL continue to use that persisted descriptor independently of the process's current default.
 
