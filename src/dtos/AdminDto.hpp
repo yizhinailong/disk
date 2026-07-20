@@ -22,11 +22,14 @@
 
 #pragma once
 
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <drogon/HttpRequest.h>
@@ -36,6 +39,72 @@
 #include "utils/ErrorCode.hpp"
 
 namespace disk::admin {
+
+    namespace detail {
+        [[nodiscard]] constexpr auto IsLogIdentifier(std::string_view value, size_t maximum) noexcept -> bool {
+            if (value.empty() || value.size() > maximum) {
+                return false;
+            }
+            for (const auto character : value) {
+                const auto is_letter =
+                    (character >= 'A' && character <= 'Z') ||
+                    (character >= 'a' && character <= 'z');
+                const auto is_digit = character >= '0' && character <= '9';
+                if (!is_letter && !is_digit && character != '.' && character != '_' &&
+                    character != ':' && character != '-') {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        [[nodiscard]] constexpr auto IsLogTargetName(std::string_view value) noexcept -> bool {
+            if (value.empty() || value.size() > 255) {
+                return false;
+            }
+            for (const auto character : value) {
+                const auto byte = static_cast<unsigned char>(character);
+                if (byte < 0x20 || byte == 0x7F) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        [[nodiscard]] constexpr auto ParseLogDate(std::string_view value)
+            -> std::optional<std::chrono::sys_days> {
+            if (value.size() != 10 || value[4] != '-' || value[7] != '-') {
+                return std::nullopt;
+            }
+            const auto is_digit = [](char character) {
+                return character >= '0' && character <= '9';
+            };
+            if (!is_digit(value[0]) || !is_digit(value[1]) || !is_digit(value[2]) ||
+                !is_digit(value[3]) || !is_digit(value[5]) || !is_digit(value[6]) ||
+                !is_digit(value[8]) || !is_digit(value[9])) {
+                return std::nullopt;
+            }
+
+            const auto year_value =
+                (value[0] - '0') * 1000 + (value[1] - '0') * 100 +
+                (value[2] - '0') * 10 + (value[3] - '0');
+            const auto month_value = (value[5] - '0') * 10 + (value[6] - '0');
+            const auto day_value = (value[8] - '0') * 10 + (value[9] - '0');
+            if (year_value == 0) {
+                return std::nullopt;
+            }
+
+            const std::chrono::year_month_day calendar_date{
+                std::chrono::year{ year_value },
+                std::chrono::month{ static_cast<unsigned>(month_value) },
+                std::chrono::day{ static_cast<unsigned>(day_value) },
+            };
+            if (!calendar_date.ok()) {
+                return std::nullopt;
+            }
+            return std::chrono::sys_days{ calendar_date };
+        }
+    } // namespace detail
 
     /// ==================== 分页结构 ====================
 
@@ -416,7 +485,9 @@ namespace disk::admin {
      * 验证规则：
      * - page: 默认 1，必须 >= 1
      * - page_size: 默认 20，必须 >= 1 且 <= 100
-     * - action: 可选，筛选操作类型
+     * - action: 可选，精确筛选操作类型
+     * - target_type: 可选，精确筛选目标类型
+     * - target_name: 可选，精确筛选字符串目标
      * - start_date: 可选，筛选开始日期（YYYY-MM-DD）
      * - end_date: 可选，筛选结束日期（YYYY-MM-DD）
      *
@@ -426,6 +497,8 @@ namespace disk::admin {
         int page{ 1 };
         int page_size{ 20 };
         std::optional<std::string> action;
+        std::optional<std::string> target_type;
+        std::optional<std::string> target_name;
         std::optional<std::string> start_date;
         std::optional<std::string> end_date;
 
@@ -457,24 +530,79 @@ namespace disk::admin {
             /// 解析可选参数 action
             auto action_str = req->getParameter("action");
             if (!action_str.empty()) {
+                if (!detail::IsLogIdentifier(action_str, 128)) {
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'action' has an invalid format"
+                    ));
+                }
                 request.action = action_str;
             }
 
+            /// 解析可选参数 target_type
+            auto target_type_str = req->getParameter("target_type");
+            if (!target_type_str.empty()) {
+                if (!detail::IsLogIdentifier(target_type_str, 64)) {
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'target_type' has an invalid format"
+                    ));
+                }
+                request.target_type = target_type_str;
+            }
+
+            /// 解析可选参数 target_name
+            auto target_name_str = req->getParameter("target_name");
+            if (!target_name_str.empty()) {
+                if (!detail::IsLogTargetName(target_name_str)) {
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'target_name' has an invalid format"
+                    ));
+                }
+                request.target_name = target_name_str;
+            }
+
             /// 解析可选参数 start_date
+            std::optional<std::chrono::sys_days> parsed_start_date;
             auto start_date_str = req->getParameter("start_date");
             if (!start_date_str.empty()) {
+                parsed_start_date = detail::ParseLogDate(start_date_str);
+                if (!parsed_start_date.has_value()) {
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'start_date' must be a valid YYYY-MM-DD date"
+                    ));
+                }
                 request.start_date = start_date_str;
             }
 
             /// 解析可选参数 end_date
+            std::optional<std::chrono::sys_days> parsed_end_date;
             auto end_date_str = req->getParameter("end_date");
             if (!end_date_str.empty()) {
+                parsed_end_date = detail::ParseLogDate(end_date_str);
+                if (!parsed_end_date.has_value()) {
+                    return std::unexpected(ErrorInfo(
+                        ErrorCode::ValidationFailed,
+                        "Parameter 'end_date' must be a valid YYYY-MM-DD date"
+                    ));
+                }
                 request.end_date = end_date_str;
+            }
+            if (parsed_start_date.has_value() && parsed_end_date.has_value() &&
+                *parsed_start_date > *parsed_end_date) {
+                return std::unexpected(ErrorInfo(
+                    ErrorCode::ValidationFailed,
+                    "Parameter 'start_date' must not be after 'end_date'"
+                ));
             }
 
             Logger::Debug() << "Parsed admin log list request: page=" << request.page
                             << ", page_size=" << request.page_size
                             << ", action=" << (request.action.has_value() ? *request.action : "null")
+                            << ", target_type=" << (request.target_type.has_value() ? *request.target_type : "null")
+                            << ", target_name=" << (request.target_name.has_value() ? *request.target_name : "null")
                             << ", start_date=" << (request.start_date.has_value() ? *request.start_date : "null")
                             << ", end_date=" << (request.end_date.has_value() ? *request.end_date : "null");
 
@@ -668,6 +796,7 @@ namespace disk::admin {
         std::string action;
         std::string target_type;
         std::optional<uint64_t> target_id;
+        std::optional<std::string> target_name;
         std::optional<std::string> details;
         std::string ip_address;
         std::string created_at;
@@ -681,6 +810,7 @@ namespace disk::admin {
             SetField(json, "action", action);
             SetField(json, "target_type", target_type);
             SetOptionalOrNull(json, "target_id", target_id);
+            SetOptionalOrNull(json, "target_name", target_name);
             SetOptionalOrNull(json, "details", details);
             SetField(json, "ip_address", ip_address);
             SetField(json, "created_at", created_at);

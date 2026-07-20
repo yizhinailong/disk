@@ -13,6 +13,8 @@
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <drogon/HttpRequest.h>
 #include <drogon/utils/Utilities.h>
@@ -814,6 +816,115 @@ TEST(ListSharesRequest, UserId_LargeValue) {
     EXPECT_EQ(*result->user_id, 18446744073709551615ULL);
 }
 
+/// ==================== AdminLogListRequest Tests ====================
+
+TEST(AdminLogListRequest, ParsesExactRecoveryAuditFilters) {
+    auto req = CreateQueryRequest({
+        {      "action",           "admin.upload.lease_release" },
+        { "target_type",                               "upload" },
+        { "target_name", "0198f5f4-95ae-7c74-aea4-6f6e1c12e4bb" },
+        {  "start_date",                           "2026-07-20" },
+        {    "end_date",                           "2026-07-21" },
+        {        "page",                                    "2" },
+        {   "page_size",                                  "100" },
+    });
+
+    auto result = AdminLogListRequest::FromRequest(req);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->page, 2);
+    EXPECT_EQ(result->page_size, 100);
+    EXPECT_EQ(result->action, "admin.upload.lease_release");
+    EXPECT_EQ(result->target_type, "upload");
+    EXPECT_EQ(result->target_name, "0198f5f4-95ae-7c74-aea4-6f6e1c12e4bb");
+    EXPECT_EQ(result->start_date, "2026-07-20");
+    EXPECT_EQ(result->end_date, "2026-07-21");
+}
+
+TEST(AdminLogListRequest, DefaultsToNoFilters) {
+    auto result = AdminLogListRequest::FromRequest(CreateQueryRequest({}));
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->page, 1);
+    EXPECT_EQ(result->page_size, 20);
+    EXPECT_FALSE(result->action.has_value());
+    EXPECT_FALSE(result->target_type.has_value());
+    EXPECT_FALSE(result->target_name.has_value());
+    EXPECT_FALSE(result->start_date.has_value());
+    EXPECT_FALSE(result->end_date.has_value());
+}
+
+TEST(AdminLogListRequest, RejectsUnsafeIdentifiers) {
+    for (const auto& [parameter, value] : std::vector<std::pair<std::string, std::string>>{
+             { "action", "admin.upload' OR TRUE --" },
+             { "target_type", "upload/type" },
+             { "action", std::string(129, 'a') },
+             { "target_type", std::string(65, 't') },
+    }) {
+        auto result = AdminLogListRequest::FromRequest(CreateQueryRequest({
+            { parameter, value }
+        }));
+        ASSERT_FALSE(result.has_value()) << parameter;
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(AdminLogListRequest, AcceptsMaximumFilterLengths) {
+    auto result = AdminLogListRequest::FromRequest(CreateQueryRequest({
+        {      "action", std::string(128, 'a') },
+        { "target_type",  std::string(64, 't') },
+        { "target_name", std::string(255, 'n') },
+    }));
+
+    EXPECT_TRUE(result.has_value());
+}
+
+TEST(AdminLogListRequest, RejectsInvalidTargetNames) {
+    for (const auto& target_name : { std::string(256, 'x'), std::string("upload\nother") }) {
+        auto result = AdminLogListRequest::FromRequest(CreateQueryRequest({
+            { "target_name", target_name }
+        }));
+        ASSERT_FALSE(result.has_value());
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+}
+
+TEST(AdminLogListRequest, AcceptsHumanReadableTargetName) {
+    auto result = AdminLogListRequest::FromRequest(CreateQueryRequest({
+        { "target_name", "upload recovery 01" }
+    }));
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->target_name, "upload recovery 01");
+}
+
+TEST(AdminLogListRequest, ValidatesCalendarDatesAndOrder) {
+    for (const auto& [parameter, value] : std::vector<std::pair<std::string, std::string>>{
+             { "start_date", "2026-02-29" },
+             {   "end_date", "2026-13-01" },
+             { "start_date",  "2026-7-20" },
+    }) {
+        auto result = AdminLogListRequest::FromRequest(CreateQueryRequest({
+            { parameter, value }
+        }));
+        ASSERT_FALSE(result.has_value());
+        EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+    }
+
+    auto reversed = AdminLogListRequest::FromRequest(CreateQueryRequest({
+        { "start_date", "2026-07-21" },
+        {   "end_date", "2026-07-20" },
+    }));
+    ASSERT_FALSE(reversed.has_value());
+    EXPECT_EQ(reversed.error().code, ErrorCode::ValidationFailed);
+
+    auto leap_day = AdminLogListRequest::FromRequest(CreateQueryRequest({
+        { "start_date", "2028-02-29" },
+        {   "end_date", "2028-02-29" },
+    }));
+    EXPECT_TRUE(leap_day.has_value());
+}
+
 /// ==================== PaginationInfo Tests ====================
 
 TEST(PaginationInfo, BasicFields) {
@@ -1188,13 +1299,27 @@ TEST(AdminLogDetailResponse, AnonymousActorSerializesAsNull) {
     response.user_id = std::nullopt;
     response.action = "share_access";
     response.target_type = "share";
+    response.target_name = std::nullopt;
     response.ip_address = "127.0.0.1";
     response.created_at = "2026-07-14 12:00:00";
 
     const auto json = response.ToJson();
 
     EXPECT_TRUE(json["user_id"].isNull());
+    EXPECT_TRUE(json["target_name"].isNull());
     EXPECT_EQ(json["action"].asString(), "share_access");
+}
+
+TEST(AdminLogDetailResponse, SerializesStringTargetName) {
+    AdminLogDetailResponse response;
+    response.id = 43;
+    response.action = "admin.upload.lease_release";
+    response.target_type = "upload";
+    response.target_name = "0198f5f4-95ae-7c74-aea4-6f6e1c12e4bb";
+
+    const auto json = response.ToJson();
+
+    EXPECT_EQ(json["target_name"].asString(), "0198f5f4-95ae-7c74-aea4-6f6e1c12e4bb");
 }
 
 /// ==================== Error Code Contract Tests ====================

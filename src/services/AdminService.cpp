@@ -766,19 +766,31 @@ namespace disk::services {
                        << " page_size=" << req.page_size;
 
         try {
-            std::string where_clause = " WHERE 1=1";
-            if (req.action.has_value()) {
-                where_clause += " AND action = '" + *req.action + "'";
-            }
-            if (req.start_date.has_value()) {
-                where_clause += " AND created_at >= '" + *req.start_date + " 00:00:00'::timestamp";
-            }
-            if (req.end_date.has_value()) {
-                where_clause += " AND created_at <= '" + *req.end_date + " 23:59:59'::timestamp";
-            }
+            static constexpr auto FILTER_SQL = R"SQL(
+ WHERE ($1::boolean = FALSE OR action = $2)
+   AND ($3::boolean = FALSE OR created_at >= $4::date)
+   AND ($5::boolean = FALSE OR created_at < $6::date + INTERVAL '1 day')
+   AND ($7::boolean = FALSE OR target_type = $8)
+   AND ($9::boolean = FALSE OR target_name = $10)
+)SQL";
+            const auto action = req.action.value_or("");
+            const auto start_date = req.start_date.value_or("1970-01-01");
+            const auto end_date = req.end_date.value_or("1970-01-01");
+            const auto target_type = req.target_type.value_or("");
+            const auto target_name = req.target_name.value_or("");
 
             auto count_result = co_await m_db_client->execSqlCoro(
-                "SELECT COUNT(*) AS total FROM operation_logs" + where_clause
+                std::string("SELECT COUNT(*) AS total FROM operation_logs") + FILTER_SQL,
+                req.action.has_value(),
+                action,
+                req.start_date.has_value(),
+                start_date,
+                req.end_date.has_value(),
+                end_date,
+                req.target_type.has_value(),
+                target_type,
+                req.target_name.has_value(),
+                target_name
             );
 
             int total = 0;
@@ -786,13 +798,24 @@ namespace disk::services {
                 total = count_result[0]["total"].as<int>();
             }
 
-            int offset = (req.page - 1) * req.page_size;
+            const auto offset =
+                static_cast<int64_t>(req.page - 1) * static_cast<int64_t>(req.page_size);
             int total_pages = req.page_size > 0 ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size)) : 0;
 
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, action, target_type, target_id, details, ip_address, created_at " "FROM operation_logs" + where_clause +
-                    " ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-                req.page_size,
+                std::string("SELECT id, user_id, action, target_type, target_id, target_name, details, ip_address, created_at FROM operation_logs") + FILTER_SQL +
+                    " ORDER BY created_at DESC, id DESC LIMIT $11 OFFSET $12",
+                req.action.has_value(),
+                action,
+                req.start_date.has_value(),
+                start_date,
+                req.end_date.has_value(),
+                end_date,
+                req.target_type.has_value(),
+                target_type,
+                req.target_name.has_value(),
+                target_name,
+                static_cast<int64_t>(req.page_size),
                 offset
             );
 
@@ -809,6 +832,7 @@ namespace disk::services {
                 log.action = row["action"].as<std::string>();
                 log.target_type = row["target_type"].isNull() ? "" : row["target_type"].as<std::string>();
                 log.target_id = row["target_id"].isNull() ? std::optional<uint64_t>{} : std::optional<uint64_t>{ row["target_id"].as<uint64_t>() };
+                log.target_name = row["target_name"].isNull() ? std::optional<std::string>{} : std::optional<std::string>{ row["target_name"].as<std::string>() };
                 log.details = row["details"].isNull() ? std::optional<std::string>{} : std::optional<std::string>{ row["details"].as<std::string>() };
                 log.ip_address = row["ip_address"].as<std::string>();
                 log.created_at = row["created_at"].as<std::string>();

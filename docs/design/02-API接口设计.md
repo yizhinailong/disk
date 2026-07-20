@@ -4315,6 +4315,26 @@ dry-run 返回派生的稳定去重键和是否可入队，不写库。实际执
 
 以上三个写命令都必须经过 `AdminAuthFilter` 后再进入管理员限流。dry-run、校验失败、状态不合格和并发冲突均不得写 `operation_logs`；只有实际状态/任务变化与审计同时成功才返回成功。
 
+#### 精确查询恢复审计
+
+**GET** `/api/admin/logs`
+
+该管理员日志接口支持 `page`、`page_size`、`action`、`target_type`、`target_name`、`start_date` 和
+`end_date`。`page_size` 最大为 100；`action` 限 1-128 个、`target_type` 限 1-64 个
+`[A-Za-z0-9._:-]` 字符；`target_name` 最长 255 字节且不得包含 ASCII 控制字符；日期必须是有效的
+`YYYY-MM-DD`，并满足 `start_date <= end_date`。三个目标筛选均为精确匹配，日期范围包含起止两日。
+
+所有可选条件必须作为 PostgreSQL 参数绑定，不得拼接到 SQL。`data.items[]` 返回
+`id/user_id/action/target_type/target_id/target_name/details/ip_address/created_at`；可空的
+`user_id/target_id/target_name/details` 使用 JSON `null`。字符串资源（例如 upload ID 和对账 scan ID）
+通过 `target_name` 返回，因此运维人员可以仅使用管理 API 精确核对恢复审计，无需读取或修改数据库。
+
+上传租约解除后的核对示例：
+
+```text
+GET /api/admin/logs?action=admin.upload.lease_release&target_type=upload&target_name={upload_id}&page_size=20
+```
+
 ### 10.0.1 内部指标接口
 
 **GET** `/metrics`

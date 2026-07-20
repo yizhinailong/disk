@@ -20,6 +20,7 @@ import shutil
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlencode
 
 EVIDENCE_ROOT = Path(os.environ.get("EVIDENCE_DIR", ".sisyphus/evidence"))
 SERVER_LOG_PATH = EVIDENCE_ROOT / "safety-upload-server.log"
@@ -403,12 +404,13 @@ def test_db_failure_after_promotion_preserves_preexisting_blob() -> None:
 
 
 def test_missing_staging_object_records_reconciliation() -> None:
-    """Verify a DB/object mismatch fails completion and leaves durable evidence."""
+    """Verify operators can diagnose and safely retry without database writes."""
     log_section("Missing Staging Object Reconciliation")
     payload = f"safety-missing-staging-{unique_name()}".encode()
     filename = f"safety_missing_staging_{unique_name()}.bin"
     upload_id, file_hash = init_upload(filename, payload)
     scan_id: str | None = None
+    recovered_file_id: int | None = None
 
     try:
         upload_single_chunk(upload_id, payload)
@@ -524,6 +526,168 @@ def test_missing_staging_object_records_reconciliation() -> None:
             + "\n",
         )
         log_pass("one failed request locates instance, database state, object, and recovery task")
+
+        log_section("API-only Upload Recovery")
+        lease = diagnostic_task["lease"]
+        if not isinstance(lease, dict) or not lease.get("owner"):
+            log_fail("failed finalization exposes a live lease for recovery")
+            print_summary()
+        assert_equal("failed finalization lease is still live", lease["expired"], False)
+        observed_version = int(diagnostic_task["state_version"])
+        observed_owner = str(lease["owner"])
+
+        # Repair the failed dependency at its owning storage boundary. From this
+        # point onward every upload state transition and audit check uses HTTP.
+        chunk_path.parent.mkdir(parents=True, exist_ok=True)
+        chunk_path.write_bytes(payload)
+        assert_path_exists("operator restores the exact staging object", chunk_path)
+
+        diagnostic_path = (
+            f"/api/admin/uploads/{upload_id}/diagnostics"
+            "?chunk_page=1&chunk_page_size=20&job_page=1&job_page_size=100"
+        )
+        restored_diagnostic = fetch(diagnostic_path, headers=auth_headers(TOKEN))
+        if restored_diagnostic.status_code != 200 or json_field(restored_diagnostic.text, "code") != "0":
+            log_fail("restored staging object can be verified through diagnostics")
+            print(restored_diagnostic.text)
+            print_summary()
+        restored_task = json.loads(restored_diagnostic.text)["data"]["task"]
+        restored_chunk = json.loads(restored_diagnostic.text)["data"]["chunks"][0]
+        assert_equal("storage repair does not change upload version", int(restored_task["state_version"]), observed_version)
+        assert_equal("restored staging object is present", restored_chunk["object_head"]["status"], "present")
+        assert_equal("restored staging object matches its descriptor", restored_chunk["object_head"]["matches_record"], True)
+
+        release_path = f"/api/admin/uploads/{upload_id}/lease/release"
+        dry_run = fetch(
+            release_path,
+            method="POST",
+            headers=auth_headers(TOKEN),
+            json_body={
+                "expected_state_version": observed_version,
+                "expected_lease_owner": observed_owner,
+            },
+        )
+        if dry_run.status_code != 200 or json_field(dry_run.text, "code") != "0":
+            log_fail("lease release dry-run succeeds with diagnostic owner and version")
+            print(dry_run.text)
+            print_summary()
+        dry_run_data = json.loads(dry_run.text)["data"]
+        assert_equal("lease release defaults to dry-run", dry_run_data["dry_run"], True)
+        assert_equal("matching live lease is eligible", dry_run_data["eligible"], True)
+        assert_equal("dry-run reports no mutation", dry_run_data["released"], False)
+        assert_equal("dry-run preserves upload version", int(dry_run_data["state_version"]), observed_version)
+
+        release = fetch(
+            release_path,
+            method="POST",
+            headers=auth_headers(TOKEN),
+            json_body={
+                "dry_run": False,
+                "confirm_upload_id": upload_id,
+                "expected_state_version": observed_version,
+                "expected_lease_owner": observed_owner,
+                "reason": "staging dependency restored; retry completion",
+            },
+        )
+        if release.status_code != 200 or json_field(release.text, "code") != "0":
+            log_fail("confirmed lease release succeeds")
+            print(release.text)
+            print_summary()
+        release_data = json.loads(release.text)["data"]
+        released_version = observed_version + 1
+        assert_equal("confirmed command releases the lease", release_data["released"], True)
+        assert_equal("lease release keeps Finalizing state", release_data["status"], "finalizing")
+        assert_equal("lease release increments the version", int(release_data["state_version"]), released_version)
+        assert_equal("released lease is immediately expired", release_data["lease_expired"], True)
+
+        audit_query = urlencode(
+            {
+                "action": "admin.upload.lease_release",
+                "target_type": "upload",
+                "target_name": upload_id,
+                "page_size": 20,
+            }
+        )
+        audit_response = fetch(
+            f"/api/admin/logs?{audit_query}",
+            headers=auth_headers(TOKEN),
+        )
+        if audit_response.status_code != 200 or json_field(audit_response.text, "code") != "0":
+            log_fail("recovery audit is queryable through the admin API")
+            print(audit_response.text)
+            print_summary()
+        audit_items = json.loads(audit_response.text)["data"]["items"]
+        if len(audit_items) != 1:
+            log_fail(f"exact audit filters returned {len(audit_items)} actions instead of one")
+            print(audit_response.text)
+            print_summary()
+        log_pass("exact audit filters return one recovery action")
+        audit_item = audit_items[0]
+        assert_equal("recovery audit returns string target", audit_item["target_name"], upload_id)
+        assert_equal("recovery audit uses upload target type", audit_item["target_type"], "upload")
+        assert_equal("string target does not misuse numeric target ID", audit_item["target_id"], None)
+        audit_details = audit_item["details"]
+        if isinstance(audit_details, str):
+            audit_details = json.loads(audit_details)
+        assert_equal("recovery audit records previous version", int(audit_details["previous_state_version"]), observed_version)
+        assert_equal("recovery audit records released version", int(audit_details["new_state_version"]), released_version)
+
+        retry = complete_upload_raw(upload_id, f"safety-retry-{unique_name()}")
+        recovered_file_id_text = json_field(retry.text, "data.file.id")
+        if retry.status_code != 200 or json_field(retry.text, "code") != "0" or not recovered_file_id_text:
+            log_fail("normal complete retry succeeds after audited lease release")
+            print(retry.text)
+            print_summary()
+        recovered_file_id = int(recovered_file_id_text)
+
+        deadline = time.monotonic() + 20.0
+        final_diagnostic_data: dict[str, object] | None = None
+        cleanup_status: str | None = None
+        while time.monotonic() < deadline:
+            final_diagnostic = fetch(diagnostic_path, headers=auth_headers(TOKEN))
+            if final_diagnostic.status_code == 200 and json_field(final_diagnostic.text, "code") == "0":
+                final_diagnostic_data = json.loads(final_diagnostic.text)["data"]
+                cleanup_jobs = [
+                    item
+                    for item in final_diagnostic_data["related_jobs"]["items"]
+                    if item["job_type"] == "staging_cleanup"
+                    and item["aggregate_id"] == upload_id
+                ]
+                if cleanup_jobs:
+                    cleanup_status = cleanup_jobs[0]["status"]
+                    if cleanup_status in ("succeeded", "dead_letter"):
+                        break
+            time.sleep(0.05)
+
+        if final_diagnostic_data is None:
+            log_fail("completed upload remains available through diagnostics")
+            print_summary()
+        final_task = final_diagnostic_data["task"]
+        assert_equal("safe retry reaches Completed", final_task["status"], "completed")
+        assert_equal("safe retry records the completed file", int(final_task["completed_file_id"]), recovered_file_id)
+        assert_equal("completed upload clears its lease", final_task["lease"], None)
+        assert_equal("successful retry clears the prior error", final_task["last_error_code"], None)
+        assert_equal("staging cleanup converges through the worker", cleanup_status, "succeeded")
+        assert_path_absent("safe retry cleanup removes staging directory", upload_temp_dir(upload_id))
+
+        save_evidence(
+            f"{EVIDENCE_PREFIX}-{upload_id}-operator-recovery.json",
+            json.dumps(
+                {
+                    "upload_id": upload_id,
+                    "observed_state_version": observed_version,
+                    "released_state_version": released_version,
+                    "audit_id": audit_item["id"],
+                    "completed_file_id": recovered_file_id,
+                    "final_status": final_task["status"],
+                    "cleanup_status": cleanup_status,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+        )
+        log_pass("operator diagnosis, audited lease release, and safe retry use APIs only")
     finally:
         if scan_id is not None:
             execute(
@@ -535,7 +699,18 @@ def test_missing_staging_object_records_reconciliation() -> None:
             "WHERE finding_type = 'upload_staging_mismatch' AND resource_id = %s",
             (upload_id,),
         )
-        cleanup_failed_finalize_fixture(upload_id, final_blob_path(sha256_bytes(payload)))
+        execute(
+            "DELETE FROM operation_logs "
+            "WHERE action = 'admin.upload.lease_release' "
+            "AND target_type = 'upload' AND target_name = %s",
+            (upload_id,),
+        )
+        remaining_status = scalar(
+            "SELECT status FROM upload_tasks WHERE id = %s AND user_id = %s",
+            (upload_id, USER_ID),
+        )
+        if remaining_status == 4:
+            cleanup_failed_finalize_fixture(upload_id, final_blob_path(sha256_bytes(payload)))
 
 
 def test_cancel_upload_invariants() -> None:
