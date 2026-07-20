@@ -200,12 +200,21 @@ def main() -> int:
             f"job={last_job}, remaining_keys={last_keys}"
         )
 
-    def remove_failed_upload(upload_id: str, user: int, baseline_reserved: int) -> None:
+    def remove_upload_records(
+        upload_id: str,
+        user: int,
+        baseline_reserved: int | None = None,
+    ) -> None:
         with psycopg.connect(**db_connect) as connection:
             with connection.cursor() as cursor:
+                if baseline_reserved is not None:
+                    cursor.execute(
+                        "UPDATE users SET storage_reserved = %s WHERE id = %s",
+                        (baseline_reserved, user),
+                    )
                 cursor.execute(
-                    "UPDATE users SET storage_reserved = %s WHERE id = %s",
-                    (baseline_reserved, user),
+                    "DELETE FROM storage_jobs WHERE aggregate_id = %s",
+                    (upload_id,),
                 )
                 cursor.execute(
                     "DELETE FROM upload_tasks WHERE id = %s AND user_id = %s",
@@ -219,6 +228,7 @@ def main() -> int:
     token = ""
     user_id = 0
     file_id: int | None = None
+    primary_upload_id: str | None = None
     under_upload_id: str | None = None
     under_baseline_reserved: int | None = None
     return_code = 0
@@ -310,6 +320,7 @@ def main() -> int:
                 require(str(init_payload["code"]) == "0", "upload init succeeds")
                 require(not init_payload["data"].get("instant_upload", False), "application upload uses chunk finalization")
                 upload_id = str(init_payload["data"]["upload_id"])
+                primary_upload_id = upload_id
 
                 chunk = http.post(
                     "/api/file/upload/chunk",
@@ -490,7 +501,7 @@ def main() -> int:
                     "DB failure retains identifiable S3 staging objects",
                 )
 
-                remove_failed_upload(under_upload_id, user_id, under_baseline_reserved)
+                remove_upload_records(under_upload_id, user_id, under_baseline_reserved)
                 under_upload_id = None
                 final_quota = query_one("SELECT storage_reserved FROM users WHERE id = %s", (user_id,))
                 require(
@@ -509,7 +520,7 @@ def main() -> int:
                     with httpx.Client(base_url=base_url, timeout=10) as cleanup_http:
                         headers = {"Authorization": f"Bearer {token}"}
                         if under_upload_id is not None and user_id and under_baseline_reserved is not None:
-                            remove_failed_upload(under_upload_id, user_id, under_baseline_reserved)
+                            remove_upload_records(under_upload_id, user_id, under_baseline_reserved)
                         if file_id is not None and user_id:
                             cleanup_http.request(
                                 "DELETE",
@@ -530,6 +541,12 @@ def main() -> int:
                                 )
                 except Exception as cleanup_exc:
                     print(f"WARN: application fixture cleanup failed: {cleanup_exc}")
+
+            if primary_upload_id is not None and user_id:
+                try:
+                    remove_upload_records(primary_upload_id, user_id)
+                except Exception as cleanup_exc:
+                    print(f"WARN: upload record cleanup failed: {cleanup_exc}")
 
             try:
                 remove_prefix(s3_client, bucket, object_prefix)
