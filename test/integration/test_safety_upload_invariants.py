@@ -14,9 +14,16 @@ responses. They enforce the distributed upload recovery contract.
 from __future__ import annotations
 
 import atexit
+import json
 import os
 import shutil
 import sys
+import time
+from pathlib import Path
+
+EVIDENCE_ROOT = Path(os.environ.get("EVIDENCE_DIR", ".sisyphus/evidence"))
+SERVER_LOG_PATH = EVIDENCE_ROOT / "safety-upload-server.log"
+os.environ["SERVER_LOG"] = str(SERVER_LOG_PATH)
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
@@ -34,6 +41,7 @@ from lib_py import (  # noqa: E402
     execute,
     fetch,
     final_blob_path,
+    header_value,
     json_field,
     local_blob_path,
     log_fail,
@@ -144,16 +152,41 @@ def complete_upload(upload_id: str) -> str:
     return file_id
 
 
-def complete_upload_raw(upload_id: str):
+def complete_upload_raw(upload_id: str, request_id: str | None = None):
     """Call complete upload and return the raw response without asserting success."""
+    headers = auth_headers(TOKEN)
+    if request_id is not None:
+        headers["X-Request-Id"] = request_id
     resp = fetch(
         "/api/file/upload/complete",
         method="POST",
-        headers=auth_headers(TOKEN),
+        headers=headers,
         json_body={"upload_id": upload_id},
     )
     save_evidence(f"{EVIDENCE_PREFIX}-{upload_id}-complete.json", resp.text)
     return resp
+
+
+def wait_for_request_log(request_id: str, instance_id: str, status: int) -> str:
+    """Return the exact completion log line for one failed request."""
+    markers = (
+        f"request_id={request_id}",
+        f"instance_id={instance_id}",
+        "operation=upload_complete",
+        f"status={status}",
+    )
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if SERVER_LOG_PATH.is_file():
+            log_text = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+            for line in log_text.splitlines():
+                if all(marker in line for marker in markers):
+                    return line
+        time.sleep(0.05)
+
+    log_fail(f"request completion log contains correlation tuple for {request_id}")
+    print_summary()
+    raise AssertionError("unreachable")
 
 
 def run_expired_cleanup() -> dict[str, int]:
@@ -392,9 +425,16 @@ def test_missing_staging_object_records_reconciliation() -> None:
         assert_path_absent("missing-staging fixture removes only the object", chunk_path)
 
         quota_before_complete = user_quota()
-        resp = complete_upload_raw(upload_id)
+        request_id = f"safety-complete-{unique_name()}"
+        resp = complete_upload_raw(upload_id, request_id)
         assert_equal("missing staging object returns HTTP 400", resp.status_code, 400)
         assert_equal("missing staging object returns ChunkVerifyFailed", json_field(resp.text, "code"), "50009")
+        response_request_id = header_value(resp.headers, "X-Request-Id")
+        instance_id = header_value(resp.headers, "X-Disk-Instance-Id")
+        assert_equal("failed response preserves caller request ID", response_request_id, request_id)
+        assert_equal("failed response identifies the handling instance", bool(instance_id), True)
+        request_log = wait_for_request_log(request_id, instance_id, resp.status_code)
+        log_pass("failed request maps to one instance and completion log")
         assert_failed_finalize_recoverable(
             upload_id,
             filename,
@@ -428,6 +468,62 @@ def test_missing_staging_object_records_reconciliation() -> None:
             log_fail("missing staging object enqueues a durable reconciliation job")
             print_summary()
         log_pass("missing staging object enqueues a durable reconciliation job")
+
+        diagnostic = fetch(
+            f"/api/admin/uploads/{upload_id}/diagnostics"
+            "?chunk_page=1&chunk_page_size=20&job_page=1&job_page_size=100",
+            headers=auth_headers(TOKEN),
+        )
+        if diagnostic.status_code != 200 or json_field(diagnostic.text, "code") != "0":
+            log_fail("failed upload can be inspected through the read-only diagnostic endpoint")
+            print(diagnostic.text)
+            print_summary()
+        diagnostic_data = json.loads(diagnostic.text)["data"]
+        diagnostic_task = diagnostic_data["task"]
+        diagnostic_chunks = diagnostic_data["chunks"]
+        diagnostic_jobs = diagnostic_data["related_jobs"]["items"]
+        assert_equal("diagnostic reports Finalizing database state", diagnostic_task["status"], "finalizing")
+        assert_equal("diagnostic reports the finalize error code", diagnostic_task["last_error_code"], 50009)
+        assert_equal("diagnostic returns the persisted chunk", len(diagnostic_chunks), 1)
+        assert_equal("diagnostic reports the missing staging object", diagnostic_chunks[0]["object_head"]["status"], "missing")
+        assert_equal("missing object cannot match the DB descriptor", diagnostic_chunks[0]["object_head"]["matches_record"], False)
+        matching_jobs = [
+            item
+            for item in diagnostic_jobs
+            if item["job_type"] == "storage_reconcile"
+            and item["aggregate_id"] == scan_id
+        ]
+        assert_equal("diagnostic links the recovery task created by the failure", bool(matching_jobs), True)
+
+        save_evidence(
+            f"{EVIDENCE_PREFIX}-{upload_id}-failure-correlation.json",
+            json.dumps(
+                {
+                    "request_id": request_id,
+                    "instance_id": instance_id,
+                    "upload_id": upload_id,
+                    "request_log": request_log,
+                    "database": {
+                        "status": diagnostic_task["status"],
+                        "state_version": diagnostic_task["state_version"],
+                        "last_error_code": diagnostic_task["last_error_code"],
+                    },
+                    "object_head": {
+                        "status": diagnostic_chunks[0]["object_head"]["status"],
+                        "matches_record": diagnostic_chunks[0]["object_head"]["matches_record"],
+                    },
+                    "recovery_job": {
+                        "id": matching_jobs[0]["id"],
+                        "job_type": matching_jobs[0]["job_type"],
+                        "status": matching_jobs[0]["status"],
+                    },
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+        )
+        log_pass("one failed request locates instance, database state, object, and recovery task")
     finally:
         if scan_id is not None:
             execute(
@@ -662,6 +758,9 @@ def main() -> None:
     print("==========================================")
     print()
 
+    EVIDENCE_ROOT.mkdir(parents=True, exist_ok=True)
+    SERVER_LOG_PATH.unlink(missing_ok=True)
+    os.environ.setdefault("DISK_INSTANCE_ID", "safety-upload-api")
     ensure_server()
 
     global TOKEN, USER_ID

@@ -60,6 +60,7 @@ set(TEST_SOURCES
     filters/ShareRateLimitFilter_test.cpp
     filters/JwtAuthFilter_test.cpp
     filters/RegisterRateLimit_test.cpp
+    filters/RequestTraceFilter_test.cpp
     filters/DownloadRateLimit_test.cpp
     filters/AdminRateLimit_test.cpp
     filters/FolderRateLimit_test.cpp
@@ -120,6 +121,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/filters/ShareAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/ShareRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/RegisterRateLimitFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/RequestTraceFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/DownloadRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/FolderRateLimitFilter.cpp
@@ -166,12 +168,14 @@ set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/src/filters/ShareAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/ShareRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/RegisterRateLimitFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/RequestTraceFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/DownloadRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/FolderRateLimitFilter.cpp
     filters/AdminAuthFilter_test.cpp
     filters/ShareRateLimitFilter_test.cpp
     filters/RegisterRateLimit_test.cpp
+    filters/RequestTraceFilter_test.cpp
     filters/DownloadRateLimit_test.cpp
     filters/AdminRateLimit_test.cpp
     filters/FolderRateLimit_test.cpp

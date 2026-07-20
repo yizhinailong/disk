@@ -9,11 +9,25 @@
 
 #include "RequestTraceFilter.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <random>
 
 #include <drogon/utils/coroutine.h>
 
 namespace disk::filters {
+
+    namespace {
+        constexpr std::size_t MAX_REQUEST_ID_LENGTH = 128;
+
+        [[nodiscard]]
+        auto IsAllowedRequestIdCharacter(char character) noexcept -> bool {
+            return (character >= 'a' && character <= 'z') ||
+                   (character >= 'A' && character <= 'Z') ||
+                   (character >= '0' && character <= '9') || character == '.' ||
+                   character == '_' || character == ':' || character == '-';
+        }
+    } // namespace
 
     auto RequestTraceFilter::GenerateRequestId() -> std::string {
         /// UUID v4: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
@@ -49,11 +63,26 @@ namespace disk::filters {
         return { buf, 36 };
     }
 
+    auto RequestTraceFilter::IsValidRequestId(std::string_view request_id) noexcept -> bool {
+        return !request_id.empty() && request_id.size() <= MAX_REQUEST_ID_LENGTH &&
+               std::ranges::all_of(request_id, IsAllowedRequestIdCharacter);
+    }
+
+    auto RequestTraceFilter::ResolveRequestId(
+        const drogon::HttpRequestPtr& request
+    ) -> std::string {
+        const auto incoming_request_id = request->getHeader("X-Request-Id");
+        if (IsValidRequestId(incoming_request_id)) {
+            return incoming_request_id;
+        }
+        return GenerateRequestId();
+    }
+
     auto RequestTraceFilter::doFilter(const drogon::HttpRequestPtr& request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         if (!request->attributes()->find("request_id")) {
-            auto request_id = GenerateRequestId();
+            auto request_id = ResolveRequestId(request);
             request->attributes()->insert("request_id", std::move(request_id));
         }
 

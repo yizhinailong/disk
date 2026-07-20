@@ -68,7 +68,7 @@ namespace {
                 if (!attributes->find("request_id")) {
                     attributes->insert(
                         "request_id",
-                        disk::filters::RequestTraceFilter::GenerateRequestId()
+                        disk::filters::RequestTraceFilter::ResolveRequestId(request)
                     );
                 }
                 attributes->insert(

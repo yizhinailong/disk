@@ -18,7 +18,10 @@
 |--------|------|------|
 | Content-Type | 是 | `application/json`（分片上传时为 `application/octet-stream`，详见上传分片接口） |
 | Authorization | 是* | `Bearer <access_token>`（需认证的接口） |
-| X-Request-ID | 否 | 请求追踪 ID，用于日志关联 |
+| X-Request-ID | 否 | 1-128 个 `[A-Za-z0-9._:-]` 字符的请求追踪 ID；合法值由服务端原样用于日志关联，缺失或非法时由服务端生成 UUID |
+
+所有 HTTP 响应（包括认证、校验和业务失败）返回 `X-Request-Id` 与
+`X-Disk-Instance-Id`。前者等于本次请求采用的追踪 ID，后者是实际处理请求的进程实例 ID；调用方必须把二者与业务资源 ID 一并保留用于故障定位。客户端提供的追踪 ID 只作为日志关联值，服务端会在写日志前校验长度和字符集，非法值不会回显或写入日志，也不会导致业务请求失败。
 
 ### 1.3 响应格式
 
