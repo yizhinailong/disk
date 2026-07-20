@@ -13,6 +13,10 @@
 #include "services/ShareService.hpp"
 #include "storage/IBlobStore.hpp"
 
+namespace disk::download {
+    class IDownloadIntegrityService;
+}
+
 namespace disk::share {
 
     /// ==================== Controller ====================
@@ -195,6 +199,7 @@ namespace disk::share {
     private:
         ShareService* m_share_service{};
         disk::storage::IBlobStore* m_blob_store{};
+        disk::download::IDownloadIntegrityService* m_download_integrity_service{};
     };
 
 } ///< namespace disk::share

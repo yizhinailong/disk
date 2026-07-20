@@ -53,6 +53,9 @@ namespace disk::application {
         }
         m_blob_store = blob_store;
 
+        m_download_integrity_service =
+            std::make_unique<disk::download::DownloadIntegrityService>(m_db_client, m_blob_store);
+
         m_upload_service = std::make_unique<disk::file::UploadService>(
             m_db_client,
             m_storage,
@@ -122,6 +125,12 @@ namespace disk::application {
     auto ApplicationContext::BlobStore() -> disk::storage::IBlobStore* {
         ensureInitialized();
         return m_blob_store;
+    }
+
+    auto ApplicationContext::DownloadIntegrity()
+        -> disk::download::IDownloadIntegrityService* {
+        ensureInitialized();
+        return m_download_integrity_service.get();
     }
 
 } ///< namespace disk::application

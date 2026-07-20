@@ -25,6 +25,11 @@ namespace disk::reconciliation {
 
     inline constexpr size_t kMaxDatabaseReconciliationPageSize = 500;
     inline constexpr size_t kMaxObjectReconciliationPageSize = 1000;
+    inline constexpr std::string_view kMissingFinalBlobFindingType = "missing_final_blob";
+    inline constexpr std::string_view kFinalBlobSizeMismatchFindingType =
+        "final_blob_size_mismatch";
+    inline constexpr std::string_view kFinalBlobReadInterruptedFindingType =
+        "final_blob_read_interrupted";
     inline constexpr std::string_view kUploadStagingMismatchFindingType =
         "upload_staging_mismatch";
 

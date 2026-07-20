@@ -16,6 +16,7 @@
 #include <drogon/drogon.h>
 
 #include "services/CleanupService.hpp"
+#include "services/DownloadIntegrityService.hpp"
 #include "services/FileMutationService.hpp"
 #include "services/FileQueryService.hpp"
 #include "services/FolderService.hpp"
@@ -69,6 +70,9 @@ namespace disk::application {
         [[nodiscard]]
         auto BlobStore() -> disk::storage::IBlobStore*;
 
+        [[nodiscard]]
+        auto DownloadIntegrity() -> disk::download::IDownloadIntegrityService*;
+
         ~ApplicationContext() = default;
         ApplicationContext(const ApplicationContext&) = delete;
         auto operator=(const ApplicationContext&) -> ApplicationContext& = delete;
@@ -100,6 +104,8 @@ namespace disk::application {
         std::unique_ptr<disk::folder::FolderService> m_folder_service{};
         std::unique_ptr<disk::share::ShareService> m_share_service{};
         std::shared_ptr<disk::services::CleanupService> m_cleanup_service{};
+        std::unique_ptr<disk::download::DownloadIntegrityService>
+            m_download_integrity_service{};
     };
 
 } ///< namespace disk::application

@@ -14,6 +14,7 @@
 
 #include "../../src/controllers/DownloadResponder.hpp"
 
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -29,6 +30,7 @@
 #include <json/json.h>
 
 #include "../../src/dtos/FileDto.hpp"
+#include "../../src/services/DownloadIntegrityService.hpp"
 #include "../../src/storage/IBlobStore.hpp"
 #include "../../src/utils/ErrorCode.hpp"
 #include "../../src/utils/Response.hpp"
@@ -185,6 +187,57 @@ namespace {
         std::unordered_map<std::string, std::filesystem::path> m_blob_paths;
     };
 
+    class MockDownloadIntegrityService final
+        : public disk::download::IDownloadIntegrityService {
+    public:
+        auto Preflight(
+            const disk::storage::BlobDescriptor& blob,
+            uint64_t expected_size
+        ) -> drogon::Task<Result<void>> override {
+            ++preflight_count;
+            last_content_id = blob.content_id;
+            last_expected_bytes = expected_size;
+            co_return preflight_result;
+        }
+
+        auto RecordOpenFailure(
+            const disk::storage::BlobDescriptor& blob,
+            ErrorCode error_code,
+            uint64_t range_start,
+            uint64_t expected_bytes
+        ) -> drogon::Task<void> override {
+            ++open_failure_count;
+            last_content_id = blob.content_id;
+            last_error_code = error_code;
+            last_range_start = range_start;
+            last_expected_bytes = expected_bytes;
+            co_return;
+        }
+
+        auto RecordStreamInterruption(
+            const disk::storage::BlobDescriptor& blob,
+            uint64_t range_start,
+            uint64_t expected_bytes,
+            uint64_t delivered_bytes
+        ) noexcept -> void override {
+            ++stream_interruption_count;
+            last_content_id = blob.content_id;
+            last_range_start = range_start;
+            last_expected_bytes = expected_bytes;
+            last_delivered_bytes = delivered_bytes;
+        }
+
+        Result<void> preflight_result{};
+        int preflight_count{ 0 };
+        int open_failure_count{ 0 };
+        int stream_interruption_count{ 0 };
+        uint64_t last_content_id{ 0 };
+        uint64_t last_range_start{ 0 };
+        uint64_t last_expected_bytes{ 0 };
+        uint64_t last_delivered_bytes{ 0 };
+        ErrorCode last_error_code{ ErrorCode::Success };
+    };
+
     /// ============================================================
     /// RAII 临时目录
     /// ============================================================
@@ -283,9 +336,11 @@ protected:
     void SetUp() override {
         m_temp_dir = std::make_unique<TempDirGuard>();
         m_storage = std::make_unique<MockBlobStore>(m_temp_dir->Path());
+        m_integrity = std::make_unique<MockDownloadIntegrityService>();
     }
 
     void TearDown() override {
+        m_integrity.reset();
         m_storage.reset();
         m_temp_dir.reset();
     }
@@ -323,6 +378,7 @@ protected:
 
     std::unique_ptr<TempDirGuard> m_temp_dir;
     std::unique_ptr<MockBlobStore> m_storage;
+    std::unique_ptr<MockDownloadIntegrityService> m_integrity;
 };
 
 TEST_F(DownloadResponderTest, FullDownloadReturns200) {
@@ -330,7 +386,7 @@ TEST_F(DownloadResponderTest, FullDownloadReturns200) {
     auto params = MakeDownloadParams(content);
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
     );
 
     ASSERT_NE(resp, nullptr);
@@ -342,6 +398,7 @@ TEST_F(DownloadResponderTest, FullDownloadReturns200) {
     EXPECT_EQ(m_storage->open_blob_count, 1);
     EXPECT_EQ(m_storage->blob_exists_count, 0);
     EXPECT_EQ(m_storage->local_path_count, 0);
+    EXPECT_EQ(m_integrity->preflight_count, 1);
 
     /// newStreamResponse body is only populated when sent through HTTP;
     /// header verification captures the current behavior characterization.
@@ -353,7 +410,7 @@ TEST_F(DownloadResponderTest, RangeRequestReturns206) {
     auto params = MakeDownloadParams(content, "bytes=0-499");
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
     );
 
     ASSERT_NE(resp, nullptr);
@@ -370,7 +427,7 @@ TEST_F(DownloadResponderTest, OpenEndRangeReturns206) {
     auto params = MakeDownloadParams(content, "bytes=500-");
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
     );
 
     ASSERT_NE(resp, nullptr);
@@ -386,7 +443,7 @@ TEST_F(DownloadResponderTest, SuffixRangeReturns206) {
     auto params = MakeDownloadParams(content, "bytes=-500");
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
     );
 
     ASSERT_NE(resp, nullptr);
@@ -403,7 +460,7 @@ TEST_F(DownloadResponderTest, InvalidRangeReturns416WithoutTouchingStorage) {
     m_storage->ResetCounters();
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
     );
 
     ASSERT_NE(resp, nullptr);
@@ -417,6 +474,7 @@ TEST_F(DownloadResponderTest, InvalidRangeReturns416WithoutTouchingStorage) {
     EXPECT_EQ(m_storage->local_path_count, 0);
     EXPECT_EQ(m_storage->open_path_count, 0);
     EXPECT_EQ(m_storage->exists_path_count, 0);
+    EXPECT_EQ(m_integrity->preflight_count, 0);
 
     auto json = ParseJsonBody(resp);
     EXPECT_EQ(json["code"].asInt(), 10002);
@@ -430,14 +488,14 @@ TEST_F(DownloadResponderTest, LargeLocalFileUsesLocalFileResponse) {
     auto params = MakeDownloadParams(content);
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
     );
 
     ASSERT_NE(resp, nullptr);
     EXPECT_EQ(resp->getStatusCode(), drogon::HttpStatusCode::k200OK);
     EXPECT_EQ(resp->getHeader("Accept-Ranges"), "bytes");
     EXPECT_EQ(resp->getHeader("ETag"), "\"abc123hash\"");
-    EXPECT_EQ(m_storage->blob_exists_count, 1);
+    EXPECT_EQ(m_storage->blob_exists_count, 0);
     EXPECT_EQ(m_storage->local_path_count, 1);
     EXPECT_EQ(m_storage->open_blob_count, 0);
 }
@@ -447,13 +505,13 @@ TEST_F(DownloadResponderTest, LargeRangeLocalFileUsesLocalFileResponse) {
     auto params = MakeDownloadParams(content, "bytes=0-262143");
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
     );
 
     ASSERT_NE(resp, nullptr);
     EXPECT_EQ(resp->getStatusCode(), drogon::HttpStatusCode::k206PartialContent);
     EXPECT_EQ(resp->getHeader("Accept-Ranges"), "bytes");
-    EXPECT_EQ(m_storage->blob_exists_count, 1);
+    EXPECT_EQ(m_storage->blob_exists_count, 0);
     EXPECT_EQ(m_storage->local_path_count, 1);
     EXPECT_EQ(m_storage->open_blob_count, 0);
 }
@@ -464,44 +522,78 @@ TEST_F(DownloadResponderTest, LargeFileWithoutLocalPathFallsBackToStream) {
     m_storage->local_path_available = false;
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
     );
 
     ASSERT_NE(resp, nullptr);
     EXPECT_EQ(resp->getStatusCode(), drogon::HttpStatusCode::k200OK);
     EXPECT_EQ(resp->getHeader("Content-Length"), std::to_string(content.size()));
     EXPECT_EQ(resp->getHeader("Accept-Ranges"), "bytes");
-    EXPECT_EQ(m_storage->blob_exists_count, 1);
+    EXPECT_EQ(m_storage->blob_exists_count, 0);
     EXPECT_EQ(m_storage->local_path_count, 1);
     EXPECT_EQ(m_storage->open_blob_count, 1);
 }
 
-TEST_F(DownloadResponderTest, MissingLargeBlobReturns404) {
+TEST_F(DownloadResponderTest, PreflightFailureReturns500WithoutOpeningStorage) {
     auto content = MakeTestFile(300 * 1024);
     auto params = MakeDownloadParams(content);
-    m_storage->blob_exists = false;
+    m_integrity->preflight_result =
+        std::unexpected(ErrorInfo(ErrorCode::FileReadError));
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
     );
 
     ASSERT_NE(resp, nullptr);
-    EXPECT_EQ(resp->getStatusCode(), drogon::HttpStatusCode::k404NotFound);
-    EXPECT_EQ(m_storage->blob_exists_count, 1);
+    EXPECT_EQ(resp->getStatusCode(), drogon::HttpStatusCode::k500InternalServerError);
+    EXPECT_EQ(ParseJsonBody(resp)["code"].asUInt(), 50011U);
+    EXPECT_EQ(m_integrity->preflight_count, 1);
+    EXPECT_EQ(m_storage->blob_exists_count, 0);
     EXPECT_EQ(m_storage->local_path_count, 0);
     EXPECT_EQ(m_storage->open_blob_count, 0);
 }
 
-TEST_F(DownloadResponderTest, OpenBlobFailureReturns404) {
+TEST_F(DownloadResponderTest, OpenBlobFailureReturns500AndRecordsFinding) {
     auto content = MakeTestFile(1000);
     auto params = MakeDownloadParams(content);
     m_storage->open_blob_should_fail = true;
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get())
+        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
     );
 
     ASSERT_NE(resp, nullptr);
-    EXPECT_EQ(resp->getStatusCode(), drogon::HttpStatusCode::k404NotFound);
+    EXPECT_EQ(resp->getStatusCode(), drogon::HttpStatusCode::k500InternalServerError);
+    EXPECT_EQ(ParseJsonBody(resp)["code"].asUInt(), 50011U);
     EXPECT_EQ(m_storage->open_blob_count, 1);
+    EXPECT_EQ(m_integrity->open_failure_count, 1);
+    EXPECT_EQ(m_integrity->last_error_code, ErrorCode::FileReadError);
+    EXPECT_EQ(m_integrity->last_content_id, TEST_CONTENT_ID);
+    EXPECT_EQ(m_integrity->last_range_start, 0U);
+    EXPECT_EQ(m_integrity->last_expected_bytes, content.size());
+}
+
+TEST_F(DownloadResponderTest, StreamShortReadRecordsDeliveredBytesOnce) {
+    auto content = MakeTestFile(100);
+    auto params = MakeDownloadParams(content);
+    params.file_size = 200;
+    params.blob.size = 200;
+
+    auto resp = drogon::sync_wait(
+        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
+    );
+
+    ASSERT_NE(resp, nullptr);
+    ASSERT_EQ(resp->getStatusCode(), drogon::HttpStatusCode::k200OK);
+    auto& callback = resp->streamCallback();
+    std::array<char, 256> buffer{};
+
+    EXPECT_EQ(callback(buffer.data(), buffer.size()), content.size());
+    EXPECT_EQ(callback(buffer.data(), buffer.size()), 0U);
+    EXPECT_EQ(callback(buffer.data(), buffer.size()), 0U);
+    EXPECT_EQ(m_integrity->stream_interruption_count, 1);
+    EXPECT_EQ(m_integrity->last_content_id, TEST_CONTENT_ID);
+    EXPECT_EQ(m_integrity->last_range_start, 0U);
+    EXPECT_EQ(m_integrity->last_expected_bytes, 200U);
+    EXPECT_EQ(m_integrity->last_delivered_bytes, content.size());
 }

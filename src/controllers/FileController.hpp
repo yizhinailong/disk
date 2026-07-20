@@ -15,6 +15,10 @@
 #include "services/UploadService.hpp"
 #include "storage/IBlobStore.hpp"
 
+namespace disk::download {
+    class IDownloadIntegrityService;
+}
+
 namespace disk::file {
 
     /// ==================== Controller ====================
@@ -222,6 +226,7 @@ namespace disk::file {
         FileQueryService* m_query_service{};
         FileMutationService* m_mutation_service{};
         disk::storage::IBlobStore* m_blob_store{};
+        disk::download::IDownloadIntegrityService* m_download_integrity_service{};
     };
 
 } ///< namespace disk::file

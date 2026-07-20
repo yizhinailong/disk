@@ -55,8 +55,9 @@ namespace disk::metrics {
             kReconciliationFindingTypeNames{
                 "content_ref_count_mismatch",
                 "zero_reference_content",
-                "missing_final_blob",
-                "final_blob_size_mismatch",
+                disk::reconciliation::kMissingFinalBlobFindingType,
+                disk::reconciliation::kFinalBlobSizeMismatchFindingType,
+                disk::reconciliation::kFinalBlobReadInterruptedFindingType,
                 "quota_used_mismatch",
                 "quota_reserved_mismatch",
                 disk::reconciliation::kUploadStagingMismatchFindingType,

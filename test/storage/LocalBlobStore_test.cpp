@@ -223,5 +223,14 @@ namespace disk::storage {
             EXPECT_EQ(resolved.value(), legacy_path);
         }
 
+        TEST_F(LocalBlobStoreTest, MissingBlobSizeReturnsFileNotFound) {
+            auto result = drogon::sync_wait(
+                m_blob_store->GetFileSize(m_storage_base / "missing.bin")
+            );
+
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::FileNotFound);
+        }
+
     } // namespace
 } // namespace disk::storage

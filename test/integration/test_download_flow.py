@@ -10,6 +10,7 @@ Integration tests for download parity: personal file + share file.
 Covers:
   - File download: 200 (full), 206 (partial Range), 416 (unsatisfiable Range)
   - Share download: 200, 206, 416 (same assertions)
+  - Missing/size-mismatched final Blob: 500/50011 plus reconciliation finding
 
 Prerequisites:
   - Server running on localhost:8080
@@ -92,6 +93,41 @@ def file_blob_path():
         log_fail(f"file storage_path missing: file_id={FILE_ID}")
         print_summary()
     return local_blob_path(str(row["storage_path"]))
+
+
+def file_content_id():
+    row = query_one(
+        "SELECT content_id FROM files WHERE id = %s",
+        (int(FILE_ID),),
+    )
+    if row is None:
+        log_fail(f"file content_id missing: file_id={FILE_ID}")
+        return 0
+    return int(row["content_id"])
+
+
+def reconciliation_finding(finding_type):
+    return query_one(
+        "SELECT finding_type, resource_id, resource_locator, details, resolved_at "
+        "FROM storage_reconciliation_findings "
+        "WHERE finding_type = %s AND resource_id = %s",
+        (finding_type, str(file_content_id())),
+    )
+
+
+def assert_unresolved_finding(label, finding_type):
+    row = reconciliation_finding(finding_type)
+    if row is None:
+        log_fail(f"{label}: reconciliation finding {finding_type} missing")
+        return False
+    if row["resolved_at"] is not None:
+        log_fail(f"{label}: reconciliation finding unexpectedly resolved")
+        return False
+    if str(row["resource_id"]) != str(file_content_id()):
+        log_fail(f"{label}: reconciliation resource_id mismatch")
+        return False
+    log_pass(f"{label}: unresolved {finding_type} finding recorded")
+    return True
 
 
 def share_download_count():
@@ -598,7 +634,7 @@ def test_file_download_not_found():
 
 
 def test_missing_final_blob_error_mapping_and_side_effects():
-    log_step("Test: missing final blob maps to 404 and preserves current side effects")
+    log_step("Test: missing final blob maps to 50011 and records reconciliation")
 
     blob_path = file_blob_path()
     backup_path = blob_path.with_suffix(blob_path.suffix + ".missing-download-test")
@@ -618,8 +654,10 @@ def test_missing_final_blob_error_mapping_and_side_effects():
         save_evidence(f"{EVIDENCE_PREFIX}-file-missing-blob.json", private_resp.text)
 
         ok = True
-        assert_status("file-missing-blob", private_resp.status_code, 404) or (ok := False)
+        assert_status("file-missing-blob", private_resp.status_code, 500) or (ok := False)
+        assert_json_field("file-missing-blob", private_resp.text, "code", "50011") or (ok := False)
         assert_file_metadata_unchanged("file-missing-blob", file_before, file_after) or (ok := False)
+        assert_unresolved_finding("file-missing-blob", "missing_final_blob") or (ok := False)
 
         share_file_before = file_download_metadata()
         share_before = share_download_count()
@@ -632,14 +670,52 @@ def test_missing_final_blob_error_mapping_and_side_effects():
         share_after = share_download_count()
         save_evidence(f"{EVIDENCE_PREFIX}-share-missing-blob.json", share_resp.text)
 
-        assert_status("share-missing-blob", share_resp.status_code, 404) or (ok := False)
+        assert_status("share-missing-blob", share_resp.status_code, 500) or (ok := False)
+        assert_json_field("share-missing-blob", share_resp.text, "code", "50011") or (ok := False)
         assert_file_metadata_unchanged("share-missing-blob", share_file_before, share_file_after) or (ok := False)
         assert_share_download_delta("share-missing-blob", share_before, share_after, 1) or (ok := False)
+        assert_unresolved_finding("share-missing-blob", "missing_final_blob") or (ok := False)
 
         if ok:
-            log_pass("missing-blob: private/share error mapping and side effects preserved")
+            log_pass("missing-blob: private/share 50011 and reconciliation contract preserved")
     finally:
         os.replace(backup_path, blob_path)
+
+
+def test_final_blob_size_mismatch_records_reconciliation():
+    log_step("Test: final blob size mismatch maps to 50011 and records reconciliation")
+
+    blob_path = file_blob_path()
+    if not blob_path.exists():
+        log_fail(f"size-mismatch setup: final blob does not exist: {blob_path}")
+        return
+
+    with open(blob_path, "ab") as blob:
+        blob.write(b"x")
+
+    try:
+        metadata_before = file_download_metadata()
+        resp = fetch(
+            f"/api/file/download/{FILE_ID}",
+            method="GET",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+        )
+        metadata_after = file_download_metadata()
+        save_evidence(f"{EVIDENCE_PREFIX}-file-size-mismatch.json", resp.text)
+
+        ok = True
+        assert_status("file-size-mismatch", resp.status_code, 500) or (ok := False)
+        assert_json_field("file-size-mismatch", resp.text, "code", "50011") or (ok := False)
+        assert_file_metadata_unchanged("file-size-mismatch", metadata_before, metadata_after) or (ok := False)
+        assert_unresolved_finding(
+            "file-size-mismatch", "final_blob_size_mismatch"
+        ) or (ok := False)
+
+        if ok:
+            log_pass("size-mismatch: 50011 and reconciliation contract preserved")
+    finally:
+        with open(blob_path, "r+b") as blob:
+            blob.truncate(FILE_SIZE)
 
 
 # ─── Test: Share Download 200 ──────────────────────────────────────────────
@@ -855,6 +931,7 @@ def main():
     test_file_download_416()
     test_file_download_not_found()
     test_missing_final_blob_error_mapping_and_side_effects()
+    test_final_blob_size_mismatch_records_reconciliation()
 
     # Share file download tests
     test_share_download_200()

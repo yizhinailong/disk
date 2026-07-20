@@ -96,7 +96,10 @@ namespace disk::share {
 
     ShareController::ShareController()
         : m_share_service(&disk::application::ApplicationContext::GetInstance()->Share()),
-          m_blob_store(disk::application::ApplicationContext::GetInstance()->BlobStore()) {
+          m_blob_store(disk::application::ApplicationContext::GetInstance()->BlobStore()),
+          m_download_integrity_service(
+              disk::application::ApplicationContext::GetInstance()->DownloadIntegrity()
+          ) {
     }
 
     /// ==================== 所有者端点（JWT 保护） ====================
@@ -485,7 +488,8 @@ namespace disk::share {
                 .file_hash = download_info.file_hash,
                 .range_header = std::string(request->getHeader("Range")),
             },
-            m_blob_store
+            m_blob_store,
+            m_download_integrity_service
         );
 
         /// 6. 统一更新下载统计并记录审计结果

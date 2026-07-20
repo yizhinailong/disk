@@ -111,6 +111,12 @@ namespace disk::metrics {
                 ),
                 kReconciliationFindingTypeCount - 1
             );
+            EXPECT_NE(
+                ReconciliationFindingTypeIndex(
+                    disk::reconciliation::kFinalBlobReadInterruptedFindingType
+                ),
+                kReconciliationFindingTypeCount - 1
+            );
             EXPECT_EQ(
                 ReconciliationFindingTypeIndex("future_finding_type"),
                 kReconciliationFindingTypeCount - 1

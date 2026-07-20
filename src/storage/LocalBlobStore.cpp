@@ -393,6 +393,11 @@ namespace disk::storage {
                 std::error_code ec;
                 const auto file_size = std::filesystem::file_size(storage_path, ec);
                 if (ec) {
+                    if (ec == std::errc::no_such_file_or_directory) {
+                        return std::unexpected(
+                            ErrorInfo(ErrorCode::FileNotFound, "Local blob not found")
+                        );
+                    }
                     return std::unexpected(
                         ErrorInfo(ErrorCode::FileReadError, "Failed to read blob size")
                     );

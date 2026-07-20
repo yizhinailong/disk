@@ -36,7 +36,10 @@ namespace disk::file {
         : m_upload_service(&disk::application::ApplicationContext::GetInstance()->Upload()),
           m_query_service(&disk::application::ApplicationContext::GetInstance()->FileQuery()),
           m_mutation_service(&disk::application::ApplicationContext::GetInstance()->FileMutation()),
-          m_blob_store(disk::application::ApplicationContext::GetInstance()->BlobStore()) {
+          m_blob_store(disk::application::ApplicationContext::GetInstance()->BlobStore()),
+          m_download_integrity_service(
+              disk::application::ApplicationContext::GetInstance()->DownloadIntegrity()
+          ) {
     }
 
     auto FileController::InitUpload(drogon::HttpRequestPtr request)
@@ -363,7 +366,8 @@ namespace disk::file {
                 .file_hash = download_info.file_hash,
                 .range_header = std::string(request->getHeader("Range")),
             },
-            m_blob_store
+            m_blob_store,
+            m_download_integrity_service
         );
 
         /// 5. 成功内容下载后更新文件级元数据

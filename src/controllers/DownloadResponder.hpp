@@ -21,6 +21,10 @@
 
 #include "storage/IBlobStore.hpp"
 
+namespace disk::download {
+    class IDownloadIntegrityService;
+}
+
 namespace disk::controllers {
 
     struct DownloadParams {
@@ -35,7 +39,8 @@ namespace disk::controllers {
     [[nodiscard]]
     auto BuildDownloadResponse(
         const DownloadParams& params,
-        disk::storage::IBlobStore* blob_store
+        disk::storage::IBlobStore* blob_store,
+        disk::download::IDownloadIntegrityService* integrity_service
     ) -> drogon::Task<drogon::HttpResponsePtr>;
 
 } ///< namespace disk::controllers

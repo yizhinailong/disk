@@ -16,6 +16,7 @@
 #include <json/json.h>
 
 #include "dtos/FileDto.hpp"
+#include "services/DownloadIntegrityService.hpp"
 #include "utils/ErrorCode.hpp"
 #include "utils/Response.hpp"
 
@@ -31,11 +32,18 @@ namespace disk::controllers {
         /// 大文件仍走 newFileResponse 路径，享受 Drogon 的内部 TLS 回退机制；
         /// 小文件或非本地 Blob 走 newStreamResponse 流式路径，减少内存占用并兼容对象存储。
         constexpr std::size_t SENDFILE_THRESHOLD_BYTES = 256ULL * 1024ULL;
+
+        struct DownloadStreamState {
+            uint64_t remaining{ 0 };
+            uint64_t delivered{ 0 };
+            bool interruption_recorded{ false };
+        };
     }
 
     auto BuildDownloadResponse(
         const DownloadParams& params,
-        disk::storage::IBlobStore* blob_store
+        disk::storage::IBlobStore* blob_store,
+        disk::download::IDownloadIntegrityService* integrity_service
     ) -> drogon::Task<drogon::HttpResponsePtr> {
 
         const auto& file_size = params.file_size;
@@ -74,6 +82,17 @@ namespace disk::controllers {
         uint64_t end = range_request.has_range ? range_request.end : file_size - 1;
         uint64_t content_length = end - start + 1;
 
+        if (blob_store == nullptr || integrity_service == nullptr) {
+            co_return Response::Error(ErrorInfo(ErrorCode::FileReadError));
+        }
+
+        auto preflight_result = co_await integrity_service->Preflight(params.blob, file_size);
+        if (!preflight_result) {
+            Logger::Error() << "Download Blob preflight rejected content: content_id="
+                            << params.blob.content_id;
+            co_return Response::Error(preflight_result.error());
+        }
+
         /// ================================================================
         /// Path A: newFileResponse — 本地 Blob sendfile 零拷贝路径
         /// ================================================================
@@ -81,13 +100,6 @@ namespace disk::controllers {
         /// 内置的 newFileResponse。S3/MinIO 等对象存储不会暴露本地路径，会落到
         /// Path B 的 Blob range stream。
         if (content_length >= SENDFILE_THRESHOLD_BYTES) {
-            auto exists_result = co_await blob_store->BlobExists(params.blob);
-            if (!exists_result || !*exists_result) {
-                co_return Response::Error(
-                    ErrorInfo(ErrorCode::FileNotFound, "File not found")
-                );
-            }
-
             if (auto local_path = blob_store->GetLocalBlobPathForDownload(params.blob); local_path.has_value()) {
                 drogon::HttpResponsePtr resp;
 
@@ -134,19 +146,32 @@ namespace disk::controllers {
         auto open_result = co_await blob_store->OpenBlobRangeForRead(params.blob, start, content_length);
         if (!open_result) {
             Logger::Error() << "Cannot open blob stream for download: content_id=" << params.blob.content_id;
-            co_return Response::Error(ErrorInfo(ErrorCode::FileNotFound, "Cannot open file"));
+            co_await integrity_service->RecordOpenFailure(
+                params.blob,
+                open_result.error().code,
+                start,
+                content_length
+            );
+            co_return Response::Error(ErrorInfo(ErrorCode::FileReadError));
         }
         auto stream = std::move(*open_result);
 
-        auto remaining = std::make_shared<uint64_t>(content_length);
+        auto stream_state = std::make_shared<DownloadStreamState>(DownloadStreamState{
+            .remaining = content_length,
+        });
         auto resp = drogon::HttpResponse::newStreamResponse(
-            [stream, remaining](char* buffer, std::size_t suggested_length) -> std::size_t {
+            [stream,
+             stream_state,
+             integrity_service,
+             blob = params.blob,
+             start,
+             content_length](char* buffer, std::size_t suggested_length) -> std::size_t {
                 if (!buffer) {
                     stream->Close();
                     return 0;
                 }
 
-                if (*remaining == 0) {
+                if (stream_state->remaining == 0) {
                     stream->Close();
                     return 0;
                 }
@@ -154,22 +179,44 @@ namespace disk::controllers {
                 const auto max_remaining =
                     static_cast<uint64_t>(std::numeric_limits<std::size_t>::max());
                 const auto bounded_remaining =
-                    static_cast<std::size_t>(std::min<uint64_t>(*remaining, max_remaining));
+                    static_cast<std::size_t>(std::min<uint64_t>(
+                        stream_state->remaining,
+                        max_remaining
+                    ));
                 const auto read_size =
                     std::min({ suggested_length, DOWNLOAD_STREAM_CHUNK_BYTES, bounded_remaining });
 
-                const auto read_bytes = stream->Read(buffer, read_size);
+                std::size_t read_bytes = 0;
+                try {
+                    read_bytes = stream->Read(buffer, read_size);
+                } catch (...) {
+                    read_bytes = 0;
+                }
                 if (read_bytes == 0) {
-                    *remaining = 0;
+                    if (!stream_state->interruption_recorded) {
+                        stream_state->interruption_recorded = true;
+                        integrity_service->RecordStreamInterruption(
+                            blob,
+                            start,
+                            content_length,
+                            stream_state->delivered
+                        );
+                    }
+                    stream_state->remaining = 0;
                     stream->Close();
                     return 0;
                 }
 
-                *remaining -= read_bytes;
-                if (*remaining == 0) {
+                const auto bounded_read_bytes = static_cast<std::size_t>(std::min<uint64_t>(
+                    read_bytes,
+                    stream_state->remaining
+                ));
+                stream_state->remaining -= bounded_read_bytes;
+                stream_state->delivered += bounded_read_bytes;
+                if (stream_state->remaining == 0) {
                     stream->Close();
                 }
-                return read_bytes;
+                return bounded_read_bytes;
             }
         );
 

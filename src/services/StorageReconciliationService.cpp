@@ -22,8 +22,6 @@ namespace disk::reconciliation {
     namespace {
         constexpr std::string_view kContentRefCountMismatch = "content_ref_count_mismatch";
         constexpr std::string_view kZeroReferenceContent = "zero_reference_content";
-        constexpr std::string_view kMissingFinalBlob = "missing_final_blob";
-        constexpr std::string_view kFinalBlobSizeMismatch = "final_blob_size_mismatch";
         constexpr std::string_view kQuotaUsedMismatch = "quota_used_mismatch";
         constexpr std::string_view kQuotaReservedMismatch = "quota_reserved_mismatch";
         constexpr std::string_view kOrphanStagingObject = "orphan_staging_object";
@@ -278,7 +276,7 @@ namespace disk::reconciliation {
                 auto details = MakeDetails(request.scan_id);
                 details["expected_size"] = Json::UInt64(expected_size);
                 co_await RecordFinding(ReconciliationFinding{
-                    .finding_type = std::string(kMissingFinalBlob),
+                    .finding_type = std::string(kMissingFinalBlobFindingType),
                     .resource_id = resource_id,
                     .resource_locator = storage_path,
                     .severity = ReconciliationSeverity::Critical,
@@ -286,10 +284,10 @@ namespace disk::reconciliation {
                     .details = std::move(details),
                 });
                 ++page.findings_recorded;
-                co_await ResolveFinding(kFinalBlobSizeMismatch, resource_id);
+                co_await ResolveFinding(kFinalBlobSizeMismatchFindingType, resource_id);
                 continue;
             }
-            co_await ResolveFinding(kMissingFinalBlob, resource_id);
+            co_await ResolveFinding(kMissingFinalBlobFindingType, resource_id);
 
             auto observed_size = co_await m_blob_store->GetFileSize(storage_path);
             if (!observed_size) {
@@ -297,7 +295,7 @@ namespace disk::reconciliation {
                     auto details = MakeDetails(request.scan_id);
                     details["expected_size"] = Json::UInt64(expected_size);
                     co_await RecordFinding(ReconciliationFinding{
-                        .finding_type = std::string(kMissingFinalBlob),
+                        .finding_type = std::string(kMissingFinalBlobFindingType),
                         .resource_id = resource_id,
                         .resource_locator = storage_path,
                         .severity = ReconciliationSeverity::Critical,
@@ -305,7 +303,7 @@ namespace disk::reconciliation {
                         .details = std::move(details),
                     });
                     ++page.findings_recorded;
-                    co_await ResolveFinding(kFinalBlobSizeMismatch, resource_id);
+                    co_await ResolveFinding(kFinalBlobSizeMismatchFindingType, resource_id);
                     continue;
                 }
                 co_return std::unexpected(observed_size.error());
@@ -315,7 +313,7 @@ namespace disk::reconciliation {
                 details["expected_size"] = Json::UInt64(expected_size);
                 details["observed_size"] = Json::UInt64(observed_size.value());
                 co_await RecordFinding(ReconciliationFinding{
-                    .finding_type = std::string(kFinalBlobSizeMismatch),
+                    .finding_type = std::string(kFinalBlobSizeMismatchFindingType),
                     .resource_id = resource_id,
                     .resource_locator = storage_path,
                     .severity = ReconciliationSeverity::Critical,
@@ -324,7 +322,8 @@ namespace disk::reconciliation {
                 });
                 ++page.findings_recorded;
             } else {
-                co_await ResolveFinding(kFinalBlobSizeMismatch, resource_id);
+                co_await ResolveFinding(kFinalBlobSizeMismatchFindingType, resource_id);
+                co_await ResolveFinding(kFinalBlobReadInterruptedFindingType, resource_id);
             }
         }
         page.has_more = rows.size() == request.limit;

@@ -1117,6 +1117,7 @@ Authorization: Bearer <access_token>
 | 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
 | 404 | 50005 | `FileNotFound` | 文件不存在 | 指定的 file_id 不存在或不属于当前用户 |
+| 500 | 50011 | `FileReadError` | 文件读取失败 | 文件元数据存在，但最终对象缺失、长度不一致或无法打开读取流 |
 
 **40106 TokenMissing 响应示例**：
 
@@ -1160,6 +1161,11 @@ Authorization: Bearer <access_token>
 | `200 OK` | 无 Range 请求，返回完整文件 | 文件二进制数据流 |
 | `206 Partial Content` | 有效 Range 请求 | 请求范围的字节片段 |
 | `416 Range Not Satisfiable` | Range 范围无效或超出文件大小 | JSON 错误响应（见下方示例） |
+| `500 Internal Server Error` | 响应开始前发现最终对象缺失、长度不符或无法打开 | JSON 错误响应，业务码 `50011` |
+
+下载响应开始后若对象存储 Range 流提前结束，HTTP 状态和响应体已不能切换为 JSON 错误；服务端
+关闭流，客户端按 `Content-Length` 观察到不完整传输。该事件会以内容 ID 记录为
+`final_blob_read_interrupted` 对账 finding，客户端应使用 Range 重试，不得把短响应视为成功文件。
 
 #### 416 Range Not Satisfiable 错误响应
 
@@ -3408,6 +3414,7 @@ Range: bytes=0-1048575 (可选)
 | 400 | 60002 | `ShareExpired` | 分享已过期 | 分享已超过有效期 |
 | 403 | 60004 | `ShareAccessDenied` | 无权限访问 | 分享设置为仅查看，不允许下载 |
 | 404 | 50005 | `FileNotFound` | 文件不存在 | file_id 不存在于分享中 |
+| 500 | 50011 | `FileReadError` | 文件读取失败 | 文件元数据存在，但最终对象缺失、长度不一致或无法打开读取流 |
 
 **40106 TokenMissing 响应示例**：
 
@@ -3521,6 +3528,10 @@ Range: bytes=0-1048575 (可选)
 | `200 OK` | 无 Range 请求，返回完整文件 | 文件二进制数据流 |
 | `206 Partial Content` | 有效 Range 请求 | 请求范围的字节片段 |
 | `416 Range Not Satisfiable` | Range 范围无效或超出文件大小 | JSON 错误响应（见下方示例） |
+| `500 Internal Server Error` | 响应开始前发现最终对象缺失、长度不符或无法打开 | JSON 错误响应，业务码 `50011` |
+
+响应开始后的上游短读与所有者下载采用同一合同：连接以未满足声明 `Content-Length` 的不完整传输
+结束，服务端持久化 `final_blob_read_interrupted` 对账 finding，客户端通过 Range 重试。
 
 #### 响应头
 
