@@ -88,6 +88,10 @@ Deployment documentation SHALL define log rotation, health checks, service/datab
 - **WHEN** a production deployment is prepared
 - **THEN** database and file backups SHALL have documented commands, retention expectations, and restore steps
 
+#### Scenario: Isolated restore drill completed
+- **WHEN** backup readiness is accepted for a release
+- **THEN** a coordinated database and final-object recovery set SHALL be restored into isolated empty resources and SHALL pass schema, quota, reference-count, object-integrity, paginated reconciliation, failure-blocking, and repaired-rescan checks before traffic is allowed
+
 ### Requirement: Upgrade and rollback operations
 Deployment documentation SHALL define upgrade preparation, backup, test-environment verification, build/deploy steps, database migration application, health validation, and rollback to a previous application/database state.
 
