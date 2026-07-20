@@ -52,6 +52,37 @@
     "after_cutover_before_traffic": "rollback_database_before_open_ingress",
     "retain_local_sources_until_reconciliation": true
   },
+  "retirement": {
+    "mode": "schedule_only",
+    "minimum_days_after_all_gates": 30,
+    "destructive_action_included": false,
+    "separate_destructive_approval_required": true,
+    "required_approval_roles": [
+      "storage_owner",
+      "backup_owner",
+      "rollback_owner"
+    ],
+    "required_gates": [
+      "cutover_evidence_accepted",
+      "rollback_window_closed",
+      "post_cutover_recovery_set_completed",
+      "backup_manifest_digest_verified",
+      "isolated_restore_drill_passed",
+      "recovery_set_retained_through_retirement",
+      "download_and_range_probe_passed",
+      "contents_reconciliation_all_pages_succeeded",
+      "users_reconciliation_all_pages_succeeded",
+      "staging_reconciliation_all_pages_succeeded",
+      "final_reconciliation_all_pages_succeeded",
+      "unfinished_reconciliation_jobs_zero",
+      "unresolved_findings_zero",
+      "quota_mismatches_zero",
+      "ref_count_mismatches_zero",
+      "source_inventory_matches_manifest",
+      "manifest_and_checkpoint_archived",
+      "retirement_schedule_approved"
+    ]
+  },
   "forbidden_modes": [
     "online_partial_database_cutover",
     "online_dual_write",

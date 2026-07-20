@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import stat
@@ -21,6 +22,7 @@ from typing import Any, Callable
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "check-final-blob-cutover-plan.py"
 PLAN = ROOT / "deploy" / "final-blob-maintenance-window.json"
+MIGRATION_SCRIPT = ROOT / "scripts" / "migrate-final-blobs.py"
 EXPECTED_GATES = [
     "close_ingress",
     "stop_all_api",
@@ -40,6 +42,26 @@ EXPECTED_GATES = [
     "full_reconciliation",
     "start_all_s3_workers",
     "open_ingress",
+]
+EXPECTED_RETIREMENT_GATES = [
+    "cutover_evidence_accepted",
+    "rollback_window_closed",
+    "post_cutover_recovery_set_completed",
+    "backup_manifest_digest_verified",
+    "isolated_restore_drill_passed",
+    "recovery_set_retained_through_retirement",
+    "download_and_range_probe_passed",
+    "contents_reconciliation_all_pages_succeeded",
+    "users_reconciliation_all_pages_succeeded",
+    "staging_reconciliation_all_pages_succeeded",
+    "final_reconciliation_all_pages_succeeded",
+    "unfinished_reconciliation_jobs_zero",
+    "unresolved_findings_zero",
+    "quota_mismatches_zero",
+    "ref_count_mismatches_zero",
+    "source_inventory_matches_manifest",
+    "manifest_and_checkpoint_archived",
+    "retirement_schedule_approved",
 ]
 
 
@@ -140,6 +162,23 @@ def test_reviewed_policy_and_deterministic_evidence(temp_root: Path) -> None:
         ],
         "forbidden mode set drifted",
     )
+    expected_retirement = {
+        "destructive_action_included": False,
+        "minimum_days_after_all_gates": 30,
+        "mode": "schedule_only",
+        "required_approval_roles": [
+            "storage_owner",
+            "backup_owner",
+            "rollback_owner",
+        ],
+        "required_gates": EXPECTED_RETIREMENT_GATES,
+        "separate_destructive_approval_required": True,
+    }
+    require(plan["retirement"] == expected_retirement, "retirement policy drifted")
+    require(
+        evidence["reviewed_contract"]["retirement"] == expected_retirement,
+        "retirement evidence drifted",
+    )
 
 
 def test_unbounded_or_online_strategies_are_rejected(temp_root: Path) -> None:
@@ -211,6 +250,85 @@ def test_gate_order_owners_and_stop_actions_are_hard(temp_root: Path) -> None:
     )
 
 
+def test_retirement_requires_complete_non_destructive_evidence(temp_root: Path) -> None:
+    evidence = rejected_mutation(
+        temp_root,
+        "execute-retirement",
+        lambda plan: plan["retirement"].__setitem__("mode", "execute_delete"),
+    )
+    require(
+        "legacy local Blob retirement policy must remain schedule_only"
+        in evidence["acceptance"]["errors"],
+        "retirement-mode rejection reason drifted",
+    )
+    rejected_mutation(
+        temp_root,
+        "early-retirement",
+        lambda plan: plan["retirement"].__setitem__("minimum_days_after_all_gates", 0),
+    )
+    rejected_mutation(
+        temp_root,
+        "destructive-retirement-action",
+        lambda plan: plan["retirement"].__setitem__(
+            "destructive_action_included", True
+        ),
+    )
+    rejected_mutation(
+        temp_root,
+        "no-separate-destructive-approval",
+        lambda plan: plan["retirement"].__setitem__(
+            "separate_destructive_approval_required", False
+        ),
+    )
+    rejected_mutation(
+        temp_root,
+        "missing-backup-approval",
+        lambda plan: plan["retirement"]["required_approval_roles"].remove(
+            "backup_owner"
+        ),
+    )
+
+    for required_gate in EXPECTED_RETIREMENT_GATES:
+        rejected_mutation(
+            temp_root,
+            f"missing-retirement-gate-{required_gate}",
+            lambda plan, gate=required_gate: plan["retirement"][
+                "required_gates"
+            ].remove(gate),
+        )
+
+    def approve_before_reconciliation(plan: dict[str, Any]) -> None:
+        gates = plan["retirement"]["required_gates"]
+        approval = gates.pop()
+        gates.insert(
+            gates.index("contents_reconciliation_all_pages_succeeded"), approval
+        )
+
+    rejected_mutation(
+        temp_root,
+        "retirement-approval-before-reconciliation",
+        approve_before_reconciliation,
+    )
+
+
+def test_migration_cli_has_no_retirement_command() -> None:
+    syntax = ast.parse(MIGRATION_SCRIPT.read_text(encoding="utf-8"))
+    commands = {
+        call.args[0].value
+        for call in ast.walk(syntax)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and call.func.attr == "add_parser"
+        and call.args
+        and isinstance(call.args[0], ast.Constant)
+        and isinstance(call.args[0].value, str)
+    }
+    require(
+        commands == {"manifest", "copy", "cutover", "rollback"},
+        f"migration CLI command surface drifted: {sorted(commands)}",
+    )
+
+
 def test_malformed_and_sensitive_inputs_are_redacted(temp_root: Path) -> None:
     sentinel = "https://private-endpoint-sentinel.invalid"
     plan = json.loads(PLAN.read_text(encoding="utf-8"))
@@ -255,6 +373,8 @@ def main() -> int:
         test_reviewed_policy_and_deterministic_evidence(temp_root)
         test_unbounded_or_online_strategies_are_rejected(temp_root)
         test_gate_order_owners_and_stop_actions_are_hard(temp_root)
+        test_retirement_requires_complete_non_destructive_evidence(temp_root)
+        test_migration_cli_has_no_retirement_command()
         test_malformed_and_sensitive_inputs_are_redacted(temp_root)
     print("bounded final Blob maintenance-window contract passed")
     return 0

@@ -143,6 +143,21 @@ Because the current schema has no per-content final-storage backend, local-to-S3
 - **WHEN** a plan enables online partial cutover, dual write, an extension of the maintenance window, or dual read without a deadline
 - **THEN** the policy gate SHALL reject the plan before migration execution
 
+### Requirement: Deferred legacy local Blob retirement
+The reviewed final Blob migration policy SHALL authorize only scheduling, not executing, retirement of legacy local sources. Scheduling SHALL remain blocked until the cutover evidence is accepted, the rollback window is closed, a post-cutover coordinated recovery set and its manifest digest are verified through an isolated restore drill, download and Range probes pass, every page of `contents`, `users`, `staging`, and `final` reconciliation succeeds, all reconciliation jobs and findings plus quota and reference-count mismatches are zero, the local source inventory still matches the migration manifest, and the manifest and checkpoint are archived. The earliest retirement date SHALL be at least 30 days after all prerequisites pass.
+
+#### Scenario: Backup or reconciliation evidence is incomplete
+- **WHEN** a retirement proposal lacks the post-cutover recovery set, isolated restore acceptance, any reconciliation scope or page, a zero blocker result, or the exact retained source inventory
+- **THEN** the policy gate SHALL reject the proposal and every local source SHALL remain available
+
+#### Scenario: A retirement schedule is admitted
+- **WHEN** all reviewed prerequisites have passed, the rollback window is closed, the minimum retention interval has elapsed, and the storage, backup, and rollback owners approve a target-environment schedule
+- **THEN** the gate MAY admit that schedule while producing no delete command and changing no local source
+
+#### Scenario: Destructive retirement is requested
+- **WHEN** an operator is ready to quarantine or delete the scheduled local sources
+- **THEN** a separate target-environment destructive change SHALL revalidate the exact manifest inventory, recovery-set retention, and current S3 reconciliation; the repository scheduling gate SHALL NOT perform the deletion
+
 ### Requirement: Service management and hardening
 Deployment documentation SHALL define service installation, systemd or Windows service configuration, filesystem permissions, sandboxing/hardening settings, restart behavior, and routine service operations.
 

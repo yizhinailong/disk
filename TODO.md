@@ -676,7 +676,26 @@ PostgreSQL `SERIALIZABLE` + advisory lock + `ACCESS EXCLUSIVE NOWAIT` 事务。�
 该 fixture 证明工具安全属性，不代表现网已完成复制或切换；目标环境必须在停写窗口使用自身 manifest/checkpoint
 先运行 cutover dry-run，保存全量目标重验与 DB 快照证据，再经双人审批执行一次原子切换。
 
-- [ ] 完成全量对账和备份后，才安排旧本地 Blob 回收。
+- [x] 完成全量对账和备份后，才安排旧本地 Blob 回收。
+
+2026-07-21 已在候选应用基线 `5b0ec44` 上完成旧 local Blob 延迟回收的仓库级排期门禁。
+`deploy/final-blob-maintenance-window.json` 的 `retirement` 合同固定为 `schedule_only`，不包含破坏性动作，
+要求真正删除另走独立审批。排期只能在 cutover 证据验收、回滚窗口关闭、切换后一致恢复集及 manifest
+哈希完成、空隔离环境恢复演练、下载/Range 探针、`contents/users/staging/final` 四 scope 全分页对账、
+未完成任务/finding/配额/ref_count 阻断计数归零、source inventory 与原 manifest 一致以及
+manifest/checkpoint 归档之后准入；恢复集必须持续保留，最早回收日期为全部 18 个有序门禁通过后 30 天，
+并要求存储、备份和回滚负责人审批。
+
+`FinalBlobCutoverPlanContract` 逐项删除 18 个前置门，并验证提前回收、`execute_delete` 模式、夹带破坏性动作、
+取消独立审批、缺备份负责人和提前审批均非零拒绝；AST 命令面检查同时固定
+`migrate-final-blobs.py` 只有 `manifest/copy/cutover/rollback`，没有 delete/retire 子命令。准入证据以
+`0600` 原子发布且不读取或修改 local 源。聚焦 CTest 1/1 通过（2.48 秒）；完整 CTest 共 1385 项：
+1379 通过、6 项常规环境门控跳过、0 失败，总耗时 385.13 秒；OpenSpec 严格校验 24/24 通过。
+去敏证据为 `.sisyphus/evidence/final-blob-cutover-plan.json`，SHA-256 为
+`799f082f31193459dcf24d5df17b99bce61baf27340eacfd8f3603e16c38ec76`；受评审策略文件 SHA-256 为
+`8e7b42b5c6291fe50784edeb3da6b793977f3b8bd553e070770f13938f529069`。
+该结果只准入目标环境变更单中的延迟排期，不代表现网已完成备份、对账、等待期或删除；实际隔离/删除前
+仍须以目标环境当时的 manifest 重验 source inventory、恢复集保留状态和 S3 全量对账，并单独审批。
 
 ### 14.5 回滚
 

@@ -4,7 +4,7 @@
 # dependencies = []
 # ///
 
-"""Validate the reviewed bounded final Blob cutover policy."""
+"""Validate the reviewed bounded final Blob cutover and retirement policy."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ TOP_LEVEL_FIELDS = {
     "forbidden_modes",
     "ordered_gates",
     "owners",
+    "retirement",
     "schema_version",
     "source_backend",
     "stop_conditions",
@@ -43,6 +44,14 @@ EXPIRY_ACTION_FIELDS = {
     "after_cutover_before_traffic",
     "before_cutover",
     "retain_local_sources_until_reconciliation",
+}
+RETIREMENT_FIELDS = {
+    "destructive_action_included",
+    "minimum_days_after_all_gates",
+    "mode",
+    "required_approval_roles",
+    "required_gates",
+    "separate_destructive_approval_required",
 }
 REQUIRED_OWNER_ROLES = [
     "migration_owner",
@@ -85,6 +94,31 @@ FORBIDDEN_MODES = [
     "online_partial_database_cutover",
     "online_dual_write",
     "unbounded_dual_read",
+]
+RETIREMENT_GATES = [
+    "cutover_evidence_accepted",
+    "rollback_window_closed",
+    "post_cutover_recovery_set_completed",
+    "backup_manifest_digest_verified",
+    "isolated_restore_drill_passed",
+    "recovery_set_retained_through_retirement",
+    "download_and_range_probe_passed",
+    "contents_reconciliation_all_pages_succeeded",
+    "users_reconciliation_all_pages_succeeded",
+    "staging_reconciliation_all_pages_succeeded",
+    "final_reconciliation_all_pages_succeeded",
+    "unfinished_reconciliation_jobs_zero",
+    "unresolved_findings_zero",
+    "quota_mismatches_zero",
+    "ref_count_mismatches_zero",
+    "source_inventory_matches_manifest",
+    "manifest_and_checkpoint_archived",
+    "retirement_schedule_approved",
+]
+RETIREMENT_APPROVAL_ROLES = [
+    "storage_owner",
+    "backup_owner",
+    "rollback_owner",
 ]
 
 
@@ -156,6 +190,12 @@ def evaluate_plan(plan: dict[str, Any]) -> tuple[dict[str, bool], list[str]]:
         EXPIRY_ACTION_FIELDS,
         errors,
     )
+    retirement = get_mapping(
+        plan.get("retirement"),
+        "retirement",
+        RETIREMENT_FIELDS,
+        errors,
+    )
 
     checks = {
         "backends_are_local_to_s3": same_value(plan.get("source_backend"), "local")
@@ -184,6 +224,24 @@ def evaluate_plan(plan: dict[str, Any]) -> tuple[dict[str, bool], list[str]]:
         "local_sources_are_retained": same_value(
             expiry_actions.get("retain_local_sources_until_reconciliation"), True
         ),
+        "retirement_is_schedule_only": same_value(
+            retirement.get("mode"), "schedule_only"
+        ),
+        "retirement_waits_30_days_after_all_gates": same_value(
+            retirement.get("minimum_days_after_all_gates"), 30
+        ),
+        "retirement_gates_match_reviewed_sequence": same_value(
+            retirement.get("required_gates"), RETIREMENT_GATES
+        ),
+        "retirement_approval_roles_are_required": same_value(
+            retirement.get("required_approval_roles"), RETIREMENT_APPROVAL_ROLES
+        ),
+        "destructive_action_is_excluded": same_value(
+            retirement.get("destructive_action_included"), False
+        ),
+        "separate_destructive_approval_is_required": same_value(
+            retirement.get("separate_destructive_approval_required"), True
+        ),
         "schema_version_is_supported": same_value(
             plan.get("schema_version"), SCHEMA_VERSION
         ),
@@ -207,6 +265,12 @@ def evaluate_plan(plan: dict[str, Any]) -> tuple[dict[str, bool], list[str]]:
         "post_cutover_expiry_rolls_back_before_traffic": "post-cutover expiry must roll back before ingress opens",
         "pre_cutover_expiry_requires_new_window": "pre-cutover expiry must require a newly approved window",
         "local_sources_are_retained": "local sources must be retained through reconciliation",
+        "retirement_is_schedule_only": "legacy local Blob retirement policy must remain schedule_only",
+        "retirement_waits_30_days_after_all_gates": "legacy local Blob retirement must wait 30 days after all gates pass",
+        "retirement_gates_match_reviewed_sequence": "legacy local Blob retirement gates differ from the reviewed sequence",
+        "retirement_approval_roles_are_required": "legacy local Blob retirement approvals differ from the reviewed policy",
+        "destructive_action_is_excluded": "the scheduling gate must not include a destructive action",
+        "separate_destructive_approval_is_required": "legacy local Blob deletion must require separate destructive approval",
         "schema_version_is_supported": "plan schema version is unsupported",
         "stop_conditions_match_reviewed_policy": "stop conditions differ from the reviewed policy",
         "strategy_is_maintenance_window": "migration strategy must remain maintenance_window",
@@ -229,6 +293,14 @@ def build_evidence(
             "forbidden_modes": FORBIDDEN_MODES,
             "maximum_duration_minutes": 120,
             "ordered_gates": ORDERED_GATES,
+            "retirement": {
+                "destructive_action_included": False,
+                "minimum_days_after_all_gates": 30,
+                "mode": "schedule_only",
+                "required_approval_roles": RETIREMENT_APPROVAL_ROLES,
+                "required_gates": RETIREMENT_GATES,
+                "separate_destructive_approval_required": True,
+            },
             "required_owner_roles": REQUIRED_OWNER_ROLES,
             "stop_conditions": STOP_CONDITIONS,
             "strategy": "maintenance_window",
