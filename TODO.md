@@ -765,7 +765,24 @@ B 先以 attempts=1 完成信号后创建的独立哨兵，只在目标的持久
 `9e4a6f9d587e1557f13876d2bbe8711931cb0881b84a1e2d2111910bc44c0fe9`）。该本机隔离演练证明应用、
 数据库与 Compose 合同，不替代目标编排器逐台终止、实际宽限时间和目标数据库只读快照证据。
 
-- [ ] S3/DB 已成功但响应失败的任务通过幂等 complete 恢复，不手工删除对象。
+- [x] S3/DB 已成功但响应失败的任务通过幂等 complete 恢复，不手工删除对象。
+
+2026-07-21 已在候选应用基线 `c5622d1` 上完成 S3/DB complete 响应丢失恢复门禁。
+`CompleteResponseLossIntegration` 使用唯一临时 PostgreSQL、开启版本控制的 Moto bucket、
+两个真实 API 和一个真实 Worker：API A 在 final S3 对象提升且数据库终态事务提交后、
+HTTP 响应前被 SIGKILL，客户端未收到成功响应；API B 使用同一用户和 `upload_id` 立即重放
+complete，以 200 返回首次已提交的同一 `file_id`，不等待新租约。重放前后任务始终为
+`Completed/attempts=1`且完整快照不变，文件、内容、ref_count、配额结算和 cleanup 任务均唯一。
+final 对象仅 1 个版本、0 个 Delete Marker，版本 ID 和字节内容在重放后不变；Worker 以
+attempts=1 清理 staging 并收敛到 0 个当前 staging 对象。夹具对业务表直接更新和 final
+对象手工删除调用均为 0。
+
+聚焦 CTest 75/75 通过（122.76 秒）；完整 CTest 共 1392 项：1386 通过、6 项环境门控跳过、
+0 失败，总耗时 425.88 秒；OpenSpec 严格校验 24/24 通过。`0600` 结构化证据为
+`.sisyphus/evidence/complete-response-loss-summary.json`（SHA-256
+`3c26b4e145a97e74f920ad1970b7e93a8a6a544806aee23f5e81abc6aca468fa`）。该本机 Moto 隔离门禁不替代
+目标 MinIO/云 S3 和编排器演练；目标环境仍须保存自身的首次连接失败、重放响应、数据库
+只读快照、cleanup 终态及 final 版本快照。
 - [ ] 每个灰度阶段都有明确停止条件、回滚负责人、操作命令和数据校验查询。
 
 ### 14.6 Phase 9 验收

@@ -220,7 +220,18 @@ The backend SHALL expose upload lifecycle behavior through an explicit domain bo
 
 #### Scenario: Upload completion fails after blob promotion
 - **WHEN** final blob promotion succeeds but later database finalization fails
-- **THEN** the upload lifecycle SHALL attempt explicit compensation for the promoted blob and SHALL report/log any orphan-risk condition
+- **THEN** the upload lifecycle SHALL retain the content-addressed final candidate for idempotent retry or reconciliation, SHALL report/log the orphan-risk condition, and SHALL NOT blindly delete the candidate
+
+### Requirement: Lost Completion Response Recovery
+When final object promotion and the upload finalization transaction are durable but the HTTP success response is not delivered, the system SHALL recover through an idempotent replay of `POST /api/file/upload/complete` with the same authenticated user and `upload_id`. The replay SHALL return the file referenced by `completed_file_id` without waiting for a lease, recreating the final object, adding a finalize attempt, duplicating file/content/cleanup rows, or settling quota again. Operators SHALL NOT repair this condition by deleting S3 objects or directly updating upload state.
+
+#### Scenario: API exits after finalization commit
+- **WHEN** an API process exits after S3 promotion and the final database transaction commit but before delivering a successful HTTP response
+- **THEN** a compatible API SHALL immediately replay the completed result for the same `upload_id`, the final object SHALL remain the same unique version with no delete marker, and all database and quota effects SHALL remain single
+
+#### Scenario: Staging remains after the lost response
+- **WHEN** the completed upload still has a pending staging cleanup task
+- **THEN** a Worker SHALL perform the idempotent staging cleanup while preserving the final object, and operators SHALL NOT manually delete either the final object or an unverified staging prefix
 
 #### Scenario: Upload cancelled or expired
 - **WHEN** an in-progress upload is cancelled by the user or expires by scheduled cleanup

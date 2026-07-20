@@ -307,6 +307,17 @@ The rollout SHALL retire claiming Workers one at a time while at least one compa
 - **WHEN** the orchestrator kills the process before its application drain timeout, a retiring instance starts new work after drain, a successor claims a live lease, or an operator mutates owner/deadline fields
 - **THEN** the rollback SHALL stop and SHALL NOT retire another Worker until the deployment and persisted task state are reconciled
 
+### Requirement: Lost upload-completion responses use business replay
+The rollback and incident runbook SHALL treat a missing or failed HTTP response as an unknown outcome, preserve the original `upload_id`, and retry `POST /api/file/upload/complete` through a compatible API before considering any administrative recovery. A completed replay SHALL be verified through the returned file ID and read-only upload diagnostics. The runbook SHALL prohibit direct database state changes and manual deletion of final S3 objects or unverified staging objects.
+
+#### Scenario: Completion outcome is unknown
+- **WHEN** the client connection fails after a complete request may have reached an API
+- **THEN** operators SHALL retain the request and upload identifiers, retry complete with the same authenticated owner and `upload_id`, and accept the same completed file result without object surgery
+
+#### Scenario: Replay reports an active finalization lease
+- **WHEN** the retry returns the documented finalization conflict
+- **THEN** operators SHALL inspect the upload through the read-only diagnostic endpoint and retry after the active owner finishes or the lease expires, using audited lease release only when the owner is confirmed dead
+
 ### Requirement: S3 staging activation gate
 After incompatible old application versions have exited and the Worker observation gate has passed, the distributed deployment SHALL expose an explicit startup setting that selects S3 staging for newly created upload sessions. Creating a session SHALL atomically persist its selected backend and exact prefix, and later requests or Workers SHALL continue to use that persisted descriptor independently of the process's current default.
 

@@ -468,6 +468,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME CompleteResponseLossIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_complete_response_loss.py"
+)
+set_tests_properties(
+    CompleteResponseLossIntegration
+    PROPERTIES
+    LABELS "backend-integration;database-state-machine;object-storage;process-death;rolling-upgrade"
+    RUN_SERIAL TRUE
+    TIMEOUT 180
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME StorageJobQueueIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_storage_job_queue.py"
 )
