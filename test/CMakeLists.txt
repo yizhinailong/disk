@@ -480,6 +480,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME ApiPoolRolloutContract
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_api_pool_rollout.py"
+)
+set_tests_properties(
+    ApiPoolRolloutContract
+    PROPERTIES
+    LABELS "backend-integration;distributed;deployment;rolling-upgrade"
+    RUN_SERIAL TRUE
+    TIMEOUT 30
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME AlertFaultInjectionIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_alert_fault_injection.py"
 )

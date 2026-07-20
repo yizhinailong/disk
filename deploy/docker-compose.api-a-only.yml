@@ -1,0 +1,4 @@
+services:
+  load-balancer:
+    volumes:
+      - ./deploy/nginx/upstreams/api-a-only.inc:/etc/nginx/conf.d/disk-api-upstreams.inc:ro

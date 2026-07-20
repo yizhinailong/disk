@@ -529,7 +529,19 @@ local 非终态、未完成 cleanup 与逐原卷扫描全部归零的证据，�
 
 ### 14.3 多实例与 Worker 切换
 
-- [ ] 先启用两个 API 实例但保持可快速摘除新实例。
+- [x] 先启用两个 API 实例但保持可快速摘除新实例。
+
+2026-07-21 已在候选应用基线 `d1702d5` 上完成仓库级双 API 可逆准入门禁。基础 Compose 明确
+提供 `api-a`/`api-b` 及 A/B upstream，`deploy/docker-compose.api-a-only.yml` 只在相同挂载目标
+替换为仅 A upstream；`scripts/switch-api-pool.sh` 在双池与仅 A 模式下都先执行完整 Compose 校验，
+成功后才只重建 load-balancer，不负责停止 API。fake Docker 验证两种覆盖选择、校验先于 apply、
+校验失败不 apply 及非法模式不调用 Docker；与既有拓扑合同的聚焦 CTest 2/2 通过。完整 CTest
+共 1381 项：1375 通过、6 项环境门控跳过、0 失败，总耗时 360.82 秒；OpenSpec 严格校验
+24/24 通过。结构化证据为 `.sisyphus/evidence/api-pool-rollout-summary.json`，SHA-256 为
+`4652598ce305c52577932acade0124d127e62bfde0fc70df02407f51637f4913`。本机未安装 Docker/Nginx，
+目标环境仍须按部署指南验证 B 直连 readiness 与实例响应头、加入双池、先切回仅 A 并连续确认
+入口只返回 A 后再终止 B；本项不替代下一条无 sticky 的真实随机路由验收。
+
 - [ ] 关闭 sticky session，运行真实随机路由验收。
 - [ ] 启用 Worker 任务执行后，关闭 API 中的集群级 `ScheduledTasks`。
 - [ ] 逐步增加 API/Worker 副本并重新核算 PostgreSQL、Redis、S3 连接和并发预算。

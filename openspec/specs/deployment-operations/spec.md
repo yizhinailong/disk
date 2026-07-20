@@ -144,6 +144,21 @@ After local non-terminal uploads, incomplete local cleanup jobs, and staged arti
 - **WHEN** secure mode is disabled and local staging is selected
 - **THEN** the existing single-process development and test workflow SHALL remain available and SHALL NOT be represented as a production topology
 
+### Requirement: Reversible dual-API admission
+The distributed release SHALL provide a reviewed two-API load-balancer pool and a one-API fallback pool that removes the newly admitted instance without changing database schema, persistent application state, or client affinity. The switch operation SHALL validate the complete deployment configuration before applying it, and an instance SHALL be removed from the active pool and verified absent from routed traffic before it receives a termination signal. This admission gate does not replace the later non-sticky randomized-routing acceptance test.
+
+#### Scenario: A second API is admitted
+- **WHEN** the new `api-b` instance has passed its direct readiness probe and identifies itself as `disk-api-b`
+- **THEN** operators SHALL apply the validated two-API pool and keep the one-API pool available as the immediate rollback configuration
+
+#### Scenario: The new API is removed quickly
+- **WHEN** the new instance must be rolled back
+- **THEN** operators SHALL apply the validated `api-a`-only pool, repeatedly verify through the load balancer that successful probes identify only `disk-api-a`, and only then stop or terminate `api-b`
+
+#### Scenario: A pool configuration is invalid
+- **WHEN** validation of either reviewed pool fails
+- **THEN** the load balancer SHALL NOT be recreated or reloaded from that configuration and the currently active pool SHALL remain the recovery point
+
 ### Requirement: Worker observation rollout
 The rollout SHALL support deploying a Worker with job claiming disabled after the expand migration and compatibility release. The observation Worker SHALL validate its required dependencies and query real queue metrics without claiming, renewing, completing, or seeding persistent jobs. Enabling execution SHALL require an explicit configuration change and process restart.
 
