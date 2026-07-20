@@ -9,6 +9,21 @@ groups:
         annotations:
           summary: Disk process is unavailable
 
+      - alert: DiskReadinessFailed
+        expr: |
+          sum by (job, instance) (
+            increase(disk_http_requests_total{
+              job=~"disk-(api|worker)",
+              operation="health",
+              status_class="5xx"
+            }[1m])
+          ) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Disk readiness is continuously failing
+
       - alert: DiskMetricsSnapshotFailed
         expr: min_over_time(disk_metrics_snapshot_success[30s]) < 1
         for: 30s
@@ -19,10 +34,13 @@ groups:
 
       - alert: DiskApiHighErrorRate
         expr: |
-          sum(rate(disk_http_requests_total{status_class="5xx",operation!="health",operation!="metrics"}[5m]))
-          /
-          clamp_min(sum(rate(disk_http_requests_total{operation!="health",operation!="metrics"}[5m])), 1)
-          > 0.01
+          (
+            sum(rate(disk_http_requests_total{job="disk-api",status_class="5xx",operation!="health",operation!="metrics"}[5m]))
+            /
+            sum(rate(disk_http_requests_total{job="disk-api",operation!="health",operation!="metrics"}[5m]))
+          ) > 0.01
+          and
+          sum(increase(disk_http_requests_total{job="disk-api",operation!="health",operation!="metrics"}[5m])) >= 20
         for: 5m
         labels:
           severity: critical
@@ -34,7 +52,7 @@ groups:
           histogram_quantile(
             0.99,
             sum by (le) (
-              rate(disk_http_request_duration_seconds_bucket{operation!="health",operation!="metrics"}[10m])
+              rate(disk_http_request_duration_seconds_bucket{job="disk-api",operation!="health",operation!="metrics"}[10m])
             )
           ) > 1
         for: 10m
@@ -44,7 +62,7 @@ groups:
           summary: Disk API P99 latency exceeds one second
 
       - alert: DiskStorageJobBacklog
-        expr: disk_storage_jobs_oldest_ready_age_seconds > 300
+        expr: max(disk_storage_jobs_oldest_ready_age_seconds) > 300
         for: 5m
         labels:
           severity: warning
@@ -52,7 +70,7 @@ groups:
           summary: Disk storage job backlog is older than five minutes
 
       - alert: DiskStorageJobDeadLetter
-        expr: disk_storage_jobs{status="dead_letter"} > 0
+        expr: max(disk_storage_jobs{status="dead_letter"}) > 0
         for: 1m
         labels:
           severity: critical
@@ -67,8 +85,32 @@ groups:
         annotations:
           summary: Disk storage job leases are repeatedly taken over
 
+      - alert: DiskS3TransientErrors
+        expr: |
+          sum(increase(disk_dependency_calls_total{
+            dependency="s3",
+            outcome=~"timeout|connection|retryable"
+          }[5m])) >= 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Disk S3 dependency has repeated transient errors
+
+      - alert: DiskS3PermanentErrors
+        expr: |
+          sum(increase(disk_dependency_calls_total{
+            dependency="s3",
+            outcome=~"permanent|protocol|other"
+          }[5m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Disk S3 dependency has a permanent error
+
       - alert: DiskReconciliationFindings
-        expr: sum(disk_reconciliation_findings_unresolved) > 0
+        expr: max(disk_reconciliation_findings_unresolved) > 0
         for: 5m
         labels:
           severity: warning

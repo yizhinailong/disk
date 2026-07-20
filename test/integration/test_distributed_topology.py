@@ -20,6 +20,10 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+def compact_expression(rule: dict[str, object]) -> str:
+    return " ".join(str(rule["expr"]).split())
+
+
 def main() -> int:
     root = Path(__file__).resolve().parents[2]
     compose = yaml.safe_load((root / "docker-compose.distributed.yml").read_text(encoding="utf-8"))
@@ -106,20 +110,75 @@ def main() -> int:
         for rule in group["rules"]
     }
     expected_alerts = {
-        "DiskInstanceDown",
-        "DiskMetricsSnapshotFailed",
-        "DiskApiHighErrorRate",
-        "DiskApiP99LatencyHigh",
-        "DiskStorageJobBacklog",
-        "DiskStorageJobDeadLetter",
-        "DiskStorageJobRepeatedTakeover",
-        "DiskReconciliationFindings",
+        "DiskInstanceDown": ("2m", "critical"),
+        "DiskReadinessFailed": ("2m", "critical"),
+        "DiskMetricsSnapshotFailed": ("30s", "warning"),
+        "DiskApiHighErrorRate": ("5m", "critical"),
+        "DiskApiP99LatencyHigh": ("10m", "warning"),
+        "DiskStorageJobBacklog": ("5m", "warning"),
+        "DiskStorageJobDeadLetter": ("1m", "critical"),
+        "DiskStorageJobRepeatedTakeover": ("1m", "warning"),
+        "DiskS3TransientErrors": ("2m", "warning"),
+        "DiskS3PermanentErrors": ("1m", "critical"),
+        "DiskReconciliationFindings": ("5m", "warning"),
     }
-    require(set(alerts) == expected_alerts, "distributed alert rule set drifted")
+    require(set(alerts) == set(expected_alerts), "distributed alert rule set drifted")
     require(
         all(rule.get("for") for rule in alerts.values()),
         "every distributed alert must have a hold duration",
     )
+    for name, (hold_duration, severity) in expected_alerts.items():
+        require(alerts[name]["for"] == hold_duration, f"{name} hold duration drifted")
+        require(alerts[name]["labels"]["severity"] == severity, f"{name} severity drifted")
+
+    readiness = compact_expression(alerts["DiskReadinessFailed"])
+    for fragment in (
+        'sum by (job, instance)',
+        'job=~"disk-(api|worker)"',
+        'operation="health"',
+        'status_class="5xx"',
+        "[1m]",
+    ):
+        require(fragment in readiness, f"readiness alert is missing {fragment}")
+
+    api_error_rate = compact_expression(alerts["DiskApiHighErrorRate"])
+    require(api_error_rate.count('job="disk-api"') == 3, "API error alert job scope drifted")
+    require('status_class="5xx"' in api_error_rate, "API error numerator drifted")
+    require('operation!="health"' in api_error_rate, "API error alert includes health")
+    require('operation!="metrics"' in api_error_rate, "API error alert includes metrics")
+    require("> 0.01" in api_error_rate, "API error ratio threshold drifted")
+    require(">= 20" in api_error_rate, "API error sample threshold drifted")
+    require("clamp_min" not in api_error_rate, "API error ratio must not dilute low traffic")
+
+    api_p99 = compact_expression(alerts["DiskApiP99LatencyHigh"])
+    require('job="disk-api"' in api_p99, "API P99 alert job scope drifted")
+    require("histogram_quantile( 0.99" in api_p99, "API P99 quantile drifted")
+    require("[10m]" in api_p99 and "> 1" in api_p99, "API P99 window drifted")
+
+    transient_s3 = compact_expression(alerts["DiskS3TransientErrors"])
+    permanent_s3 = compact_expression(alerts["DiskS3PermanentErrors"])
+    require('dependency="s3"' in transient_s3, "transient S3 dependency scope drifted")
+    require(
+        'outcome=~"timeout|connection|retryable"' in transient_s3,
+        "transient S3 outcome set drifted",
+    )
+    require("[5m]" in transient_s3 and ">= 5" in transient_s3, "transient S3 threshold drifted")
+    require('dependency="s3"' in permanent_s3, "permanent S3 dependency scope drifted")
+    require(
+        'outcome=~"permanent|protocol|other"' in permanent_s3,
+        "permanent S3 outcome set drifted",
+    )
+    require("[5m]" in permanent_s3 and "> 0" in permanent_s3, "permanent S3 threshold drifted")
+    for expression in (transient_s3, permanent_s3):
+        require("not_found" not in expression, "expected S3 not-found entered an alert")
+        require("conflict" not in expression, "expected S3 conflict entered an alert")
+
+    for name in (
+        "DiskStorageJobBacklog",
+        "DiskStorageJobDeadLetter",
+        "DiskReconciliationFindings",
+    ):
+        require(compact_expression(alerts[name]).startswith("max("), f"{name} must aggregate replicas")
 
     print("PASS: distributed topology contract is valid")
     return 0
