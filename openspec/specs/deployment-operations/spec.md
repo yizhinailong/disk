@@ -129,6 +129,21 @@ The rollout SHALL treat legacy local staging as original-volume-affine state bec
 - **WHEN** a database row is missing its staged artifacts, appears on multiple volumes, or cannot be mapped to exactly one original volume
 - **THEN** operators SHALL freeze and reconcile it rather than claim that another arbitrary API or Worker can recover or clean it
 
+### Requirement: Production local staging creation cutoff
+After local non-terminal uploads, incomplete local cleanup jobs, and staged artifacts on every inventoried original volume have all reached zero, the cutover release SHALL reject a secure-mode API configured with local upload staging before it opens a listener. A secure-mode Worker MAY retain local staging access only to finish verified legacy cleanup; non-secure local staging SHALL remain limited to development, tests, and an isolated migration environment.
+
+#### Scenario: A production API is configured with local staging
+- **WHEN** an `api` process starts with secure mode enabled and `upload_staging_backend=local`
+- **THEN** startup SHALL fail before the process accepts traffic and no new local upload task can be created
+
+#### Scenario: A legacy cleanup Worker retains the original volume
+- **WHEN** an explicit `worker` process starts in secure mode with local staging after API creation has been cut off
+- **THEN** configuration validation SHALL allow the Worker to process persisted legacy descriptors without reopening the upload creation path
+
+#### Scenario: A developer runs the local backend
+- **WHEN** secure mode is disabled and local staging is selected
+- **THEN** the existing single-process development and test workflow SHALL remain available and SHALL NOT be represented as a production topology
+
 ### Requirement: Worker observation rollout
 The rollout SHALL support deploying a Worker with job claiming disabled after the expand migration and compatibility release. The observation Worker SHALL validate its required dependencies and query real queue metrics without claiming, renewing, completing, or seeding persistent jobs. Enabling execution SHALL require an explicit configuration change and process restart.
 

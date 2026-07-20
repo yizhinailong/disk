@@ -111,6 +111,8 @@ namespace disk::utils {
          * In secure mode (when DISK_SECURE_MODE=true), additionally validates:
          * - DATABASE_PASSWORD
          * - REDIS_PASSWORD
+         * - explicit api or worker process role
+         * - api processes use S3 upload staging
          */
         auto ValidateSecureConfig() const -> void;
 

@@ -515,7 +515,17 @@ current API/唯一 Worker 将任务分别收敛为 Completed、Cancelled、Expir
 `8ee371a2b9311c5b225557d5194c21b9348f1238dfdfbe410b088b7cf9534a09`。目标环境仍须按节点生成
 真实归属清单并保存逐卷扫描结果，仓库门禁不代替生产排空。
 
-- [ ] 旧任务归零后禁用生产 local staging 创建路径。
+- [x] 旧任务归零后禁用生产 local staging 创建路径。
+
+2026-07-21 已在候选应用基线 `8fe724a` 上封死生产 local staging 创建路径。
+`DISK_SECURE_MODE=true` 的显式 API 若选择 local staging，会在存储/外部依赖初始化和监听前以
+退出码 1 失败；显式 Worker 仍可保留 local 适配器完成遗留清理，非安全模式 API/local 仅保留
+开发测试兼容。真实二进制门禁确认预期错误出现、随机端口始终未开放且未超时；配置与启动聚焦
+CTest 38/38 通过。完整 CTest 共 1380 项：1374 通过、6 项环境门控跳过、0 失败，总耗时
+371.90 秒；OpenSpec 严格校验 24/24 通过。结构化证据为
+`.sisyphus/evidence/local-staging-cutoff-summary.json`，SHA-256 为
+`5aa86b02cab5166ace8c46b8798cc1292c881822f78ee27d5dce0958b0f08523`。目标环境仍须先保存
+local 非终态、未完成 cleanup 与逐原卷扫描全部归零的证据，再发布本门禁制品。
 
 ### 14.3 多实例与 Worker 切换
 

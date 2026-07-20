@@ -829,6 +829,14 @@ namespace disk::utils {
             throw std::runtime_error(error_msg);
         }
 
+        if (IncludesApi(m_process_role) &&
+            m_upload_staging_backend == StorageBackend::Local) {
+            const std::string error_msg =
+                "Secure mode API requires upload_staging_backend=s3; local staging creation is disabled";
+            Logger::Error() << error_msg;
+            throw std::runtime_error(error_msg);
+        }
+
         if ((m_storage_backend == StorageBackend::S3 ||
              m_upload_staging_backend == StorageBackend::S3) &&
             (!m_s3_storage_config.use_ssl || !m_s3_storage_config.verify_ssl)) {

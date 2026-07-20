@@ -352,6 +352,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME SecureLocalStagingCutoffIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_secure_local_staging_cutoff.py"
+)
+set_tests_properties(
+    SecureLocalStagingCutoffIntegration
+    PROPERTIES
+    LABELS "backend-integration;distributed;rolling-upgrade;configuration"
+    RUN_SERIAL TRUE
+    TIMEOUT 30
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME FinalBlobMigrationIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_final_blob_migration.py"
 )

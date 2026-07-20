@@ -11,6 +11,7 @@
  * 3. GetJwtSecret returns value when valid
  * 4. ValidateSecureConfig always checks JWT_SECRET regardless of DISK_SECURE_MODE
  * 5. ValidateSecureConfig gates DATABASE_PASSWORD/REDIS_PASSWORD on DISK_SECURE_MODE
+ * 6. ValidateSecureConfig rejects local staging for secure API processes while allowing Workers
  */
 
 #include "utils/ConfigMgr.hpp"
@@ -237,12 +238,31 @@ namespace {
     /// ValidateSecureConfig — in secure mode with all vars set, passes
     /// ================================================================================
 
-    TEST_F(ConfigMgrJwtTest, ValidateSecureConfigPassesWithAllVarsInSecureMode) {
+    TEST_F(ConfigMgrJwtTest, ValidateSecureConfigAcceptsLocalStagingForWorker) {
         secure_guard.Set("true");
         jwt_guard.Set("a_valid_jwt_secret_that_is_at_least_32_chars_long");
         mysql_guard.Set("mysql_pw");
         redis_guard.Set("redis_pw");
+        role_guard.Set("worker");
+        ConfigMgr::GetInstance()->LoadConfig();
         EXPECT_NO_THROW({ ConfigMgr::GetInstance()->ValidateSecureConfig(); });
+    }
+
+    TEST_F(ConfigMgrJwtTest, ValidateSecureConfigRejectsLocalStagingForApi) {
+        secure_guard.Set("true");
+        jwt_guard.Set("a_valid_jwt_secret_that_is_at_least_32_chars_long");
+        mysql_guard.Set("mysql_pw");
+        redis_guard.Set("redis_pw");
+
+        try {
+            ConfigMgr::GetInstance()->ValidateSecureConfig();
+            FAIL() << "secure API unexpectedly accepted local upload staging";
+        } catch (const std::runtime_error& error) {
+            EXPECT_STREQ(
+                error.what(),
+                "Secure mode API requires upload_staging_backend=s3; local staging creation is disabled"
+            );
+        }
     }
 
     TEST_F(ConfigMgrJwtTest, ValidateSecureConfigRejectsInsecureS3Transport) {
@@ -326,6 +346,8 @@ namespace {
         jwt_guard.Set("a_valid_jwt_secret_that_is_at_least_32_chars_long");
         mysql_guard.Set("mysql_pw");
         redis_guard.Set("redis_pw");
+        role_guard.Set("worker");
+        ConfigMgr::GetInstance()->LoadConfig();
         EXPECT_NO_THROW({ ConfigMgr::GetInstance()->ValidateSecureConfig(); });
     }
 
