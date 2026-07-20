@@ -463,7 +463,7 @@ API Instance A  API Instance B ... N
 
 - [x] 完成数据库和对象存储备份，验证恢复可用。
 - [x] 创建 staging/final bucket 前缀、生命周期、权限和监控。
-- [ ] 发布 expand schema，确认旧代码继续正常运行。
+- [x] 发布 expand schema，确认旧代码继续正常运行。
 - [ ] 发布同时支持旧任务和新任务的过渡版本，但默认仍创建旧模式任务。
 - [ ] 部署 Worker，先以不认领或 dry-run 模式验证查询与指标。
 
