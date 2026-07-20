@@ -148,6 +148,14 @@ After incompatible old application versions have exited and the Worker observati
 - **WHEN** the canary cohort handles uploads
 - **THEN** operators SHALL compare completion success and latency, S3 dependency outcomes, expired leases and takeovers, dead-letter jobs, metric snapshot health, and unresolved reconciliation findings against the baseline before increasing the cohort
 
+#### Scenario: The S3 staging cohort is progressively expanded
+- **WHEN** every prior observation gate has passed and initialization traffic advances through controlled intermediate cohorts to 100 percent S3 staging
+- **THEN** each stage SHALL affect only sessions initialized in that stage, all previously persisted backend and prefix descriptors SHALL remain byte-for-byte unchanged, and local sessions SHALL retain their required original-volume affinity until terminal cleanup
+
+#### Scenario: An expansion stage fails
+- **WHEN** an expansion stage breaches a stop condition or changes any descriptor captured before that stage
+- **THEN** operators SHALL stop expansion, route subsequent initialization requests back to the last passing cohort, and keep compatible local and S3 handlers available for every session already created
+
 #### Scenario: S3 staging activation fails its gate
 - **WHEN** a new task persists the wrong backend or prefix, an S3 task creates node-local staging data, required S3 operations fail, or an existing task descriptor changes
 - **THEN** the rollout SHALL stop and MAY restore local staging for subsequently created tasks, but SHALL keep a compatible release available to finish or explicitly cancel already-created S3 tasks

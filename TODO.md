@@ -486,13 +486,22 @@ API Instance A  API Instance B ... N
 
 2026-07-20 已完成候选应用基线 `d5c7d24` 的仓库级 10% 隔离灰度：两个 API
 分别以 local/S3 为新任务默认值，9 个 baseline 和 1 个 canary 任务均为 6 MiB/6 分片，
-精确固化描述符并全部完成。baseline 成功率 100%、完成均值 250.899 ms、P99 279.758 ms；
-canary 跨实例完成且成功率 100%，完成耗时 446.151 ms，S3 成功调用 86 次且
+精确固化描述符并全部完成。baseline 成功率 100%、完成均值 250.565 ms、P99 286.412 ms；
+canary 跨实例完成且成功率 100%，完成耗时 425.640 ms，S3 成功调用 92 次且
 可操作错误为 0，过期租约、接管、死信和未解决 finding 均为 0，10/10 cleanup 收敛。
 完整 CTest 为 1371 通过、6 项环境门控跳过、0 失败；结构化证据为
 `.sisyphus/evidence/staging-canary-summary.json`。目标预发布/生产环境仍须使用真实端点和部署身份复测。
 
-- [ ] 逐步扩大流量，不修改已创建任务的 staging backend。
+- [x] 逐步扩大流量，不修改已创建任务的 staging backend。
+
+2026-07-20 已完成候选应用基线 `f3ebd79` 的仓库级 10% → 50% → 100%
+扩流门禁：三阶段新任务的 local:S3 比例精确为 9:1、5:5、0:10；30 个任务经过
+5 个检查点后 backend/prefix 变更数为 0。切换前已写首分片的 local/S3 哨兵任务
+在所有 API 改为 S3 默认后均完成，30/30 cleanup 成功，reserved、可操作 S3 错误和
+未解决 finding 均为 0。完整 CTest 为 1372 通过、6 项环境门控跳过、0 失败；
+结构化证据为 `.sisyphus/evidence/staging-rollout-expansion-summary.json`。目标环境仍须按
+部署指南执行含 25% 阶段的完整观测窗口。
+
 - [ ] 旧 local 任务通过原节点完成、自然过期或维护窗口取消；禁止假装它们可被任意节点恢复。
 - [ ] 旧任务归零后禁用生产 local staging 创建路径。
 
