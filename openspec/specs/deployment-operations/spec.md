@@ -45,12 +45,16 @@ The distributed deployment profile SHALL fix conservative per-process starting v
 - **THEN** the fixed per-process pools, concurrency limits, and 2 API plus 2 Worker topology SHALL match the documented starting profile
 
 #### Scenario: Replica count is increased
-- **WHEN** API or Worker replicas are increased
-- **THEN** the operator SHALL recalculate aggregate PostgreSQL, Redis, S3 connection, S3 I/O, and CPU budgets before rollout and SHALL retain the documented operational reserve
+- **WHEN** an operator proposes one or more API/Worker replica steps
+- **THEN** the repository capacity gate SHALL derive per-process values from the distributed runtime configuration, calculate every named step, require explicit PostgreSQL, Redis, S3 HTTP, and S3 I/O budgets, retain one current application process as rolling-replacement reserve, and emit schema-versioned JSON evidence before rollout
+
+#### Scenario: A replica step exceeds a dependency budget
+- **WHEN** any proposed step plus its operational reserve exceeds a supplied PostgreSQL, Redis, S3 HTTP, or S3 I/O budget
+- **THEN** the capacity gate SHALL fail without marking the plan accepted and the operator SHALL stop before changing replica counts
 
 #### Scenario: Capacity moves beyond the measured matrix
-- **WHEN** Worker replicas exceed 4, a local pool or concurrency limit is raised, or the production object-store implementation differs from the recorded baseline
-- **THEN** a representative capacity test SHALL be completed before the new value is adopted as a production recommendation
+- **WHEN** API or Worker replicas exceed 4, a local pool or concurrency limit is raised, or the production object-store implementation differs from the recorded baseline
+- **THEN** the repository gate SHALL reject the existing capacity plan and a representative capacity test SHALL be completed before the measured boundary or production recommendation is changed
 
 ### Requirement: Incremental database migration procedure
 Deployment documentation SHALL define safe forward migration, reconciliation checks, rollback scripts, stop conditions, and backup restoration for documented database migrations.

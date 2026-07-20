@@ -493,6 +493,18 @@ set_tests_properties(
 )
 
 add_test(
+    NAME DistributedCapacityBudgetContract
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_capacity_budget.py"
+)
+set_tests_properties(
+    DistributedCapacityBudgetContract
+    PROPERTIES
+    LABELS "backend-integration;distributed;deployment"
+    TIMEOUT 30
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME ApiPoolRolloutContract
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_api_pool_rollout.py"
 )
