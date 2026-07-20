@@ -176,6 +176,30 @@ def main() -> int:
             connection.commit()
             return affected
 
+    def wait_for_staging_cleanup(upload_id: str, timeout_seconds: float = 20.0) -> None:
+        dedupe_key = f"staging-cleanup:{upload_id}"
+        prefix = f"{staging_prefix}/{upload_id}/"
+        deadline = time.monotonic() + timeout_seconds
+        last_job: dict[str, Any] | None = None
+        last_keys: list[str] = []
+        while time.monotonic() < deadline:
+            last_job = query_one(
+                "SELECT status, attempts, last_error FROM storage_jobs WHERE dedupe_key = %s",
+                (dedupe_key,),
+            )
+            last_keys = list_prefix_keys(s3_client, bucket, prefix)
+            if last_job is not None and int(last_job["status"]) == 3 and not last_keys:
+                return
+            if last_job is not None and int(last_job["status"]) == 4:
+                raise TestFailure(
+                    f"S3 staging cleanup entered DeadLetter: {last_job}"
+                )
+            time.sleep(0.1)
+        raise TestFailure(
+            f"S3 staging cleanup did not converge within {timeout_seconds:.0f}s: "
+            f"job={last_job}, remaining_keys={last_keys}"
+        )
+
     def remove_failed_upload(upload_id: str, user: int, baseline_reserved: int) -> None:
         with psycopg.connect(**db_connect) as connection:
             with connection.cursor() as cursor:
@@ -329,10 +353,8 @@ def main() -> int:
                 wait_for_object_state(s3_client, bucket, object_key, True)
                 head = s3_client.head_object(Bucket=bucket, Key=object_key)
                 require(head["ContentLength"] == len(payload), "final S3 object has the uploaded size")
-                require(
-                    not list_prefix_keys(s3_client, bucket, f"{staging_prefix}/{upload_id}/"),
-                    "successful finalization cleans only the completed S3 staging session",
-                )
+                wait_for_staging_cleanup(upload_id)
+                require(True, "Worker cleans only the completed S3 staging session")
                 content_row = query_one(
                     "SELECT fc.hash_sha256, fc.storage_path FROM files f "
                     "JOIN file_contents fc ON fc.id = f.content_id WHERE f.id = %s",
