@@ -61,6 +61,8 @@ namespace disk::utils {
         std::string staging_prefix{ "staging" };
         int connect_timeout_ms{ 3000 };
         int request_timeout_ms{ 300000 };
+        int max_retries{ 3 };
+        int retry_base_delay_ms{ 100 };
     };
 
     /**

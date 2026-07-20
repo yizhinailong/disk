@@ -348,10 +348,34 @@ namespace disk::utils {
                     "staging",
                     "s3.staging_prefix"
                 );
-                m_s3_storage_config.connect_timeout_ms =
-                    s3_config.get("connect_timeout_ms", m_s3_storage_config.connect_timeout_ms).asInt();
-                m_s3_storage_config.request_timeout_ms =
-                    s3_config.get("request_timeout_ms", m_s3_storage_config.request_timeout_ms).asInt();
+                m_s3_storage_config.connect_timeout_ms = static_cast<int>(ReadBoundedUInt(
+                    s3_config,
+                    "connect_timeout_ms",
+                    m_s3_storage_config.connect_timeout_ms,
+                    100,
+                    60000
+                ));
+                m_s3_storage_config.request_timeout_ms = static_cast<int>(ReadBoundedUInt(
+                    s3_config,
+                    "request_timeout_ms",
+                    m_s3_storage_config.request_timeout_ms,
+                    1000,
+                    3600000
+                ));
+                m_s3_storage_config.max_retries = static_cast<int>(ReadBoundedUInt(
+                    s3_config,
+                    "max_retries",
+                    m_s3_storage_config.max_retries,
+                    0,
+                    10
+                ));
+                m_s3_storage_config.retry_base_delay_ms = static_cast<int>(ReadBoundedUInt(
+                    s3_config,
+                    "retry_base_delay_ms",
+                    m_s3_storage_config.retry_base_delay_ms,
+                    1,
+                    60000
+                ));
             } else {
                 m_s3_storage_config.object_prefix = NormalizeObjectPrefix(
                     m_s3_storage_config.object_prefix,

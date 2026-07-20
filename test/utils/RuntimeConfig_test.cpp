@@ -72,6 +72,10 @@ namespace {
             "DISK_S3_VERIFY_SSL",
             "DISK_S3_OBJECT_PREFIX",
             "DISK_S3_STAGING_PREFIX",
+            "DISK_S3_CONNECT_TIMEOUT_MS",
+            "DISK_S3_REQUEST_TIMEOUT_MS",
+            "DISK_S3_MAX_RETRIES",
+            "DISK_S3_RETRY_BASE_DELAY_MS",
         };
     }
 
@@ -114,6 +118,10 @@ namespace {
         EnvironmentScope::Set("DISK_S3_VERIFY_SSL", "0");
         EnvironmentScope::Set("DISK_S3_OBJECT_PREFIX", "final");
         EnvironmentScope::Set("DISK_S3_STAGING_PREFIX", "incoming");
+        EnvironmentScope::Set("DISK_S3_CONNECT_TIMEOUT_MS", "1234");
+        EnvironmentScope::Set("DISK_S3_REQUEST_TIMEOUT_MS", "5678");
+        EnvironmentScope::Set("DISK_S3_MAX_RETRIES", "5");
+        EnvironmentScope::Set("DISK_S3_RETRY_BASE_DELAY_MS", "250");
 
         auto config = BaseConfig();
         disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config);
@@ -145,6 +153,10 @@ namespace {
         EXPECT_FALSE(disk["s3"]["verify_ssl"].asBool());
         EXPECT_EQ(disk["s3"]["object_prefix"].asString(), "final");
         EXPECT_EQ(disk["s3"]["staging_prefix"].asString(), "incoming");
+        EXPECT_EQ(disk["s3"]["connect_timeout_ms"].asInt(), 1234);
+        EXPECT_EQ(disk["s3"]["request_timeout_ms"].asInt(), 5678);
+        EXPECT_EQ(disk["s3"]["max_retries"].asInt(), 5);
+        EXPECT_EQ(disk["s3"]["retry_base_delay_ms"].asInt(), 250);
     }
 
     TEST(RuntimeConfigTest, RejectsInvalidIntegerWithoutEchoingValue) {
@@ -159,6 +171,17 @@ namespace {
             EXPECT_NE(std::string(error.what()).find("DATABASE_PORT"), std::string::npos);
             EXPECT_EQ(std::string(error.what()).find("not-a-port-secret"), std::string::npos);
         }
+    }
+
+    TEST(RuntimeConfigTest, RejectsOutOfRangeS3RetryBudget) {
+        EnvironmentScope environment(RuntimeEnvironmentNames());
+        EnvironmentScope::Set("DISK_S3_MAX_RETRIES", "11");
+        auto config = BaseConfig();
+
+        EXPECT_THROW(
+            disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config),
+            std::runtime_error
+        );
     }
 
     TEST(RuntimeConfigTest, RejectsInvalidBooleanAndEmptyOverride) {

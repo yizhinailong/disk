@@ -225,6 +225,18 @@ namespace disk::utils {
         ApplyString("DISK_S3_STAGING_PREFIX", [&config](std::string value) {
             DiskConfig(config)["s3"]["staging_prefix"] = std::move(value);
         });
+        ApplyInteger("DISK_S3_CONNECT_TIMEOUT_MS", 100, 60000, [&config](Json::Int64 value) {
+            DiskConfig(config)["s3"]["connect_timeout_ms"] = value;
+        });
+        ApplyInteger("DISK_S3_REQUEST_TIMEOUT_MS", 1000, 3600000, [&config](Json::Int64 value) {
+            DiskConfig(config)["s3"]["request_timeout_ms"] = value;
+        });
+        ApplyInteger("DISK_S3_MAX_RETRIES", 0, 10, [&config](Json::Int64 value) {
+            DiskConfig(config)["s3"]["max_retries"] = value;
+        });
+        ApplyInteger("DISK_S3_RETRY_BASE_DELAY_MS", 1, 60000, [&config](Json::Int64 value) {
+            DiskConfig(config)["s3"]["retry_base_delay_ms"] = value;
+        });
     }
 
 } // namespace disk::utils

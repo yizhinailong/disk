@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "storage/IBlobStore.hpp"
@@ -11,6 +12,27 @@
 #include "utils/ErrorCode.hpp"
 
 namespace disk::storage {
+
+    enum class S3FailureClass {
+        Permanent,
+        Retryable,
+    };
+
+    [[nodiscard]]
+    auto ClassifyS3Failure(
+        int http_status,
+        std::string_view exception_name,
+        bool sdk_retryable
+    ) noexcept -> S3FailureClass;
+
+    [[nodiscard]]
+    auto ShouldRetryS3Failure(
+        int http_status,
+        std::string_view exception_name,
+        bool sdk_retryable,
+        long attempted_retries,
+        long max_retries
+    ) noexcept -> bool;
 
     struct S3HeadObjectResult {
         bool exists{ false };

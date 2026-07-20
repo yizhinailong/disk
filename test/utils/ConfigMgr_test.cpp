@@ -765,6 +765,8 @@ namespace {
         disk["s3"]["staging_prefix"] = "/uploads/staging/";
         disk["s3"]["connect_timeout_ms"] = 1234;
         disk["s3"]["request_timeout_ms"] = 5678;
+        disk["s3"]["max_retries"] = 5;
+        disk["s3"]["retry_base_delay_ms"] = 250;
         drogon::app().loadConfigJson(cfg);
 
         ConfigMgr::GetInstance()->LoadConfig();
@@ -785,6 +787,26 @@ namespace {
         EXPECT_EQ(s3.staging_prefix, "uploads/staging");
         EXPECT_EQ(s3.connect_timeout_ms, 1234);
         EXPECT_EQ(s3.request_timeout_ms, 5678);
+        EXPECT_EQ(s3.max_retries, 5);
+        EXPECT_EQ(s3.retry_base_delay_ms, 250);
+
+        RestoreAssemblyDefaults();
+    }
+
+    TEST_F(ConfigMgrJwtTest, LoadConfigRejectsInvalidS3TimeoutAndRetrySettings) {
+        const auto expect_invalid = [](const char* field, const Json::Value& value) {
+            Json::Value cfg;
+            cfg["custom_config"]["disk"]["s3"][field] = value;
+            drogon::app().loadConfigJson(cfg);
+            EXPECT_THROW({ ConfigMgr::GetInstance()->LoadConfig(); }, std::runtime_error);
+        };
+
+        expect_invalid("connect_timeout_ms", 99);
+        expect_invalid("request_timeout_ms", 999);
+        expect_invalid("max_retries", -1);
+        expect_invalid("max_retries", 11);
+        expect_invalid("retry_base_delay_ms", 0);
+        expect_invalid("retry_base_delay_ms", "100");
 
         RestoreAssemblyDefaults();
     }

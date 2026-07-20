@@ -74,6 +74,7 @@ set(TEST_SOURCES
     storage/AssemblyWorkerPool_test.cpp
     storage/AssemblyPerf_test.cpp
     storage/LocalBlobStore_test.cpp
+    storage/S3Client_test.cpp
     storage/S3ObjectStorage_test.cpp
     storage/StorageFactory_test.cpp
     storage/StorageInventory_test.cpp

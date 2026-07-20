@@ -1,6 +1,7 @@
 #include "storage/S3Client.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <fstream>
 #include <limits>
@@ -11,6 +12,7 @@
 #include <aws/core/auth/AWSCredentials.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/client/ClientConfiguration.h>
+#include <aws/core/client/DefaultRetryStrategy.h>
 #include <aws/core/http/HttpResponse.h>
 #include <aws/core/utils/memory/stl/AWSStreamFwd.h>
 #include <aws/core/utils/memory/stl/AWSStringStream.h>
@@ -36,11 +38,100 @@
 
 namespace disk::storage {
 
+    auto ClassifyS3Failure(
+        int http_status,
+        std::string_view exception_name,
+        bool sdk_retryable
+    ) noexcept -> S3FailureClass {
+        constexpr std::array<std::string_view, 12> PERMANENT_EXCEPTIONS{
+            "AccessDenied",
+            "AuthorizationHeaderMalformed",
+            "ExpiredToken",
+            "InvalidAccessKeyId",
+            "InvalidArgument",
+            "InvalidBucketName",
+            "InvalidRequest",
+            "MissingAuthenticationToken",
+            "NoSuchBucket",
+            "PermanentRedirect",
+            "SignatureDoesNotMatch",
+            "UnrecognizedClientException",
+        };
+        constexpr std::array<std::string_view, 13> RETRYABLE_EXCEPTIONS{
+            "ConnectionError",
+            "InternalError",
+            "InternalFailure",
+            "NetworkConnection",
+            "NetworkingError",
+            "RequestTimeout",
+            "RequestTimeoutException",
+            "ServiceUnavailable",
+            "SlowDown",
+            "Throttling",
+            "ThrottlingException",
+            "TooManyRequestsException",
+            "TransientError",
+        };
+
+        if (std::find(PERMANENT_EXCEPTIONS.begin(), PERMANENT_EXCEPTIONS.end(), exception_name) !=
+            PERMANENT_EXCEPTIONS.end()) {
+            return S3FailureClass::Permanent;
+        }
+        if (http_status == 408 || http_status == 429 ||
+            (http_status >= 500 && http_status <= 599)) {
+            return S3FailureClass::Retryable;
+        }
+        if (http_status >= 400 && http_status <= 499) {
+            return S3FailureClass::Permanent;
+        }
+        if (std::find(RETRYABLE_EXCEPTIONS.begin(), RETRYABLE_EXCEPTIONS.end(), exception_name) !=
+            RETRYABLE_EXCEPTIONS.end()) {
+            return S3FailureClass::Retryable;
+        }
+        return sdk_retryable ? S3FailureClass::Retryable : S3FailureClass::Permanent;
+    }
+
+    auto ShouldRetryS3Failure(
+        int http_status,
+        std::string_view exception_name,
+        bool sdk_retryable,
+        long attempted_retries,
+        long max_retries
+    ) noexcept -> bool {
+        return attempted_retries < max_retries &&
+               ClassifyS3Failure(http_status, exception_name, sdk_retryable) ==
+                   S3FailureClass::Retryable;
+    }
+
     namespace {
         constexpr const char* AWS_ALLOC_TAG = "disk-s3-storage";
         constexpr uint32_t MAX_DELETE_OBJECTS = 1000;
         constexpr int MIN_MULTIPART_PART_NUMBER = 1;
         constexpr int MAX_MULTIPART_PART_NUMBER = 10000;
+
+        class DiskS3RetryStrategy final : public Aws::Client::DefaultRetryStrategy {
+        public:
+            DiskS3RetryStrategy(long max_retries, long scale_factor)
+                : Aws::Client::DefaultRetryStrategy(max_retries, scale_factor) {}
+
+            auto ShouldRetry(
+                const Aws::Client::AWSError<Aws::Client::CoreErrors>& error,
+                long attempted_retries
+            ) const -> bool override {
+                const auto& exception_name = error.GetExceptionName();
+                return ShouldRetryS3Failure(
+                    static_cast<int>(error.GetResponseCode()),
+                    std::string_view(exception_name.data(), exception_name.size()),
+                    error.ShouldRetry(),
+                    attempted_retries,
+                    m_maxRetries
+                );
+            }
+
+            auto GetStrategyName() const -> const char* override {
+                return "disk-s3";
+            }
+        };
 
         auto IsNotFoundError(const Aws::S3::S3Error& error) -> bool {
             const auto response_code = error.GetResponseCode();
@@ -139,6 +230,10 @@ namespace disk::storage {
             client_config.verifySSL = storage_config.verify_ssl;
             client_config.connectTimeoutMs = storage_config.connect_timeout_ms;
             client_config.requestTimeoutMs = storage_config.request_timeout_ms;
+            client_config.retryStrategy = std::make_shared<DiskS3RetryStrategy>(
+                storage_config.max_retries,
+                storage_config.retry_base_delay_ms
+            );
             if (!storage_config.endpoint.empty()) {
                 client_config.endpointOverride = storage_config.endpoint;
             }

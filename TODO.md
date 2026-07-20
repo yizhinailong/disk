@@ -234,7 +234,7 @@ API Instance A  API Instance B ... N
 - [x] 按 D-01/D-06 的设计支持流式组装至临时完整对象或 multipart 目标。
 - [x] 支持大对象的 server-side multipart copy/promote，不能假设单次 `CopyObject` 可覆盖所有文件大小。
 - [x] 所有阻塞 AWS SDK 调用继续运行在专用工作线程，不阻塞 Drogon event loop。
-- [ ] 为超时、限流、5xx、连接失败建立分类重试；认证和参数错误不做无界重试。
+- [x] 为超时、限流、5xx、连接失败建立分类重试；认证和参数错误不做无界重试。
 - [x] multipart 流程在请求内失败时执行 `AbortMultipartUpload`。
 - [x] multipart 在进程退出或 Abort 失败后由持久任务与 bucket 生命周期规则兜底。
 - [x] 不记录 access key、secret、session token 或带签名 URL。
