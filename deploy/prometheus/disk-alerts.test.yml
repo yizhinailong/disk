@@ -1,0 +1,87 @@
+rule_files:
+  - disk-alerts.yml
+
+evaluation_interval: 30s
+
+tests:
+  - name: distributed fault thresholds honor hold durations
+    interval: 30s
+    input_series:
+      - series: 'disk_storage_jobs_oldest_ready_age_seconds{job="disk-worker",instance="worker-a"}'
+        values: '301x24'
+      - series: 'disk_storage_jobs_expired_leases{job="disk-worker",instance="worker-a"}'
+        values: '1x24'
+      - series: 'disk_dependency_calls_total{dependency="s3",outcome="retryable",job="disk-api",instance="api-a"}'
+        values: '0 5x23'
+      - series: 'disk_dependency_calls_total{dependency="s3",outcome="permanent",job="disk-api",instance="api-a"}'
+        values: '0 1x23'
+    alert_rule_test:
+      - eval_time: 4m30s
+        alertname: DiskStorageJobBacklog
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: DiskStorageJobBacklog
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Disk storage job backlog is older than five minutes
+      - eval_time: 30s
+        alertname: DiskStorageJobExpiredLease
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: DiskStorageJobExpiredLease
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Disk storage job lease has expired
+      - eval_time: 2m
+        alertname: DiskS3TransientErrors
+        exp_alerts: []
+      - eval_time: 2m30s
+        alertname: DiskS3TransientErrors
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Disk S3 dependency has repeated transient errors
+      - eval_time: 1m
+        alertname: DiskS3PermanentErrors
+        exp_alerts: []
+      - eval_time: 1m30s
+        alertname: DiskS3PermanentErrors
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: Disk S3 dependency has a permanent error
+
+  - name: boundaries and expected S3 control flow do not alert
+    interval: 30s
+    input_series:
+      - series: 'disk_storage_jobs_oldest_ready_age_seconds{job="disk-worker",instance="worker-a"}'
+        values: '300x24'
+      - series: 'disk_storage_jobs_expired_leases{job="disk-worker",instance="worker-a"}'
+        values: '0x24'
+      - series: 'disk_dependency_calls_total{dependency="s3",outcome="retryable",job="disk-api",instance="api-a"}'
+        values: '0 4x23'
+      - series: 'disk_dependency_calls_total{dependency="s3",outcome="permanent",job="disk-api",instance="api-a"}'
+        values: '0x24'
+      - series: 'disk_dependency_calls_total{dependency="s3",outcome="not_found",job="disk-api",instance="api-a"}'
+        values: '0+10x24'
+      - series: 'disk_dependency_calls_total{dependency="s3",outcome="conflict",job="disk-api",instance="api-a"}'
+        values: '0+10x24'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DiskStorageJobBacklog
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: DiskStorageJobExpiredLease
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: DiskS3TransientErrors
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: DiskS3PermanentErrors
+        exp_alerts: []

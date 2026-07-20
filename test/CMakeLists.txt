@@ -349,6 +349,26 @@ set_tests_properties(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
+add_test(
+    NAME AlertFaultInjectionIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_alert_fault_injection.py"
+)
+set_tests_properties(
+    AlertFaultInjectionIntegration
+    PROPERTIES
+    LABELS "backend-integration;distributed;observability"
+    RUN_SERIAL TRUE
+    TIMEOUT 180
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_disk_gated_integration_test(
+    PrometheusAlertRulesIntegration
+    test_prometheus_alert_rules.py
+    60
+    "SKIP: promtool is not available"
+)
+
 add_disk_server_integration_test(LoginRateLimitIntegration test_login_rate_limit.py 120)
 add_disk_server_integration_test(UserProfileStorageIntegration test_user_profile_storage.py 120)
 add_disk_server_integration_test(AssemblyBackpressureIntegration test_assembly_backpressure.py 120)

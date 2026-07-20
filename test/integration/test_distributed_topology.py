@@ -116,6 +116,7 @@ def main() -> int:
         "DiskApiHighErrorRate": ("5m", "critical"),
         "DiskApiP99LatencyHigh": ("10m", "warning"),
         "DiskStorageJobBacklog": ("5m", "warning"),
+        "DiskStorageJobExpiredLease": ("1m", "warning"),
         "DiskStorageJobDeadLetter": ("1m", "critical"),
         "DiskStorageJobRepeatedTakeover": ("1m", "warning"),
         "DiskS3TransientErrors": ("2m", "warning"),
@@ -155,6 +156,12 @@ def main() -> int:
     require("histogram_quantile( 0.99" in api_p99, "API P99 quantile drifted")
     require("[10m]" in api_p99 and "> 1" in api_p99, "API P99 window drifted")
 
+    expired_lease = compact_expression(alerts["DiskStorageJobExpiredLease"])
+    require(
+        expired_lease == "max(disk_storage_jobs_expired_leases) > 0",
+        "expired storage job lease alert drifted",
+    )
+
     transient_s3 = compact_expression(alerts["DiskS3TransientErrors"])
     permanent_s3 = compact_expression(alerts["DiskS3PermanentErrors"])
     require('dependency="s3"' in transient_s3, "transient S3 dependency scope drifted")
@@ -175,10 +182,23 @@ def main() -> int:
 
     for name in (
         "DiskStorageJobBacklog",
+        "DiskStorageJobExpiredLease",
         "DiskStorageJobDeadLetter",
         "DiskReconciliationFindings",
     ):
         require(compact_expression(alerts[name]).startswith("max("), f"{name} must aggregate replicas")
+
+    alert_tests = yaml.safe_load(
+        (root / "deploy/prometheus/disk-alerts.test.yml").read_text(encoding="utf-8")
+    )
+    require(alert_tests["rule_files"] == ["disk-alerts.yml"], "alert test rule path drifted")
+    alert_test_source = json.dumps(alert_tests, sort_keys=True)
+    for metric in (
+        "disk_storage_jobs_oldest_ready_age_seconds",
+        "disk_storage_jobs_expired_leases",
+        "disk_dependency_calls_total",
+    ):
+        require(metric in alert_test_source, f"alert test fixture is missing {metric}")
 
     print("PASS: distributed topology contract is valid")
     return 0

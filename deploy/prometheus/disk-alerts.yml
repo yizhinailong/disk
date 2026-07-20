@@ -69,6 +69,14 @@ groups:
         annotations:
           summary: Disk storage job backlog is older than five minutes
 
+      - alert: DiskStorageJobExpiredLease
+        expr: max(disk_storage_jobs_expired_leases) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Disk storage job lease has expired
+
       - alert: DiskStorageJobDeadLetter
         expr: max(disk_storage_jobs{status="dead_letter"}) > 0
         for: 1m
