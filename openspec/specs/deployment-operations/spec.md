@@ -380,6 +380,25 @@ The data-to-contract gate SHALL begin only after incompatible processes have exi
 - **WHEN** an isolated integration test uses a shortened TTL and admits its claiming Worker only after PostgreSQL reports the probe expired
 - **THEN** the Worker's real initial periodic seed MAY represent the later expiration scan, while production acceptance SHALL still require the actual configured TTL and a distinct subsequent hourly scan
 
+### Requirement: Expand schema survives emergency application rollback
+Emergency application rollback SHALL preserve every applied expand migration and SHALL NOT execute a `*_rollback.sql` file, remove a migration-ledger row, or perform contract DDL. Destructive migration reversal SHALL be a separate pre-activation schema change available only through the reviewed reversal entry point, which SHALL require an exact pre-activation context, explicit approval, a change-ticket identifier, and a SHA-256 readiness-evidence digest before opening a database session. Each destructive SQL file SHALL independently enforce the same inputs before its first DDL statement.
+
+#### Scenario: An application rollback is urgent
+- **WHEN** operators roll application processes or configuration back because a candidate release fails
+- **THEN** the rollback evidence SHALL record `schema_action=preserve_expand` and `contract_migration_allowed=false`, and no database reversal command SHALL run
+
+#### Scenario: A destructive SQL file is invoked directly
+- **WHEN** a rollback SQL file is passed to `psql` without every reviewed pre-activation authorization input, or with `emergency_application_rollback` as its context
+- **THEN** execution SHALL fail before DDL and SHALL preserve both the expand objects and their migration-ledger rows
+
+#### Scenario: A separately approved pre-activation reversal is requested
+- **WHEN** the new capability has not been activated, the approved readiness evidence proves every migration-specific data guard, and the exact version is submitted through the reviewed reversal entry point
+- **THEN** the SQL MAY evaluate its existing data guards and execute transactionally, while any authorization or data-guard failure SHALL leave the schema unchanged
+
+#### Scenario: A later contract migration is proposed
+- **WHEN** the observation gate passes after production activation
+- **THEN** the result SHALL authorize only a new reviewed contract change with its own DDL, restore rehearsal, owners, evidence, and approval; it SHALL NOT authorize reuse of a historical rollback SQL file
+
 ### Requirement: Upgrade and rollback operations
 Deployment documentation SHALL define upgrade preparation, backup, test-environment verification, build/deploy steps, database migration application, health validation, and rollback to a previous application/database state.
 

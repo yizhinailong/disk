@@ -274,6 +274,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME SchemaReversalGuardIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_schema_reversal_guard.py"
+)
+set_tests_properties(
+    SchemaReversalGuardIntegration
+    PROPERTIES
+    LABELS "backend-integration;database-migration;deployment;rolling-upgrade"
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME FullSchemaUpgradeIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_full_schema_upgrade.py"
 )

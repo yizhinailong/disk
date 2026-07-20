@@ -33,13 +33,14 @@ from lib_py.db import database_config
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INIT_SQL = REPO_ROOT / "sql" / "init.sql"
 MIGRATOR = REPO_ROOT / "scripts" / "migrate-db.sh"
-MIGRATION_DIR = REPO_ROOT / "sql" / "migrations"
-ROLLBACKS = (
-    MIGRATION_DIR / "V004_storage_reconciliation_rollback.sql",
-    MIGRATION_DIR / "V003_distributed_upload_rollback.sql",
+REVERSAL = REPO_ROOT / "scripts" / "reverse-expand-migration.sh"
+REVERSAL_VERSIONS = (
+    "V004_storage_reconciliation",
+    "V003_distributed_upload",
 )
 LEGACY_COMMIT = "6ed0afefb9ae6614ac5cc735b237dead28d10ecb"
 JWT_SECRET = "expand-mixed-version-jwt-secret-2026-07-20"
+TEST_READINESS_SHA256 = "4" * 64
 
 
 def require(condition: bool, message: str) -> None:
@@ -79,9 +80,7 @@ def resolve_current_binary() -> Path:
         path = candidate if candidate.is_absolute() else REPO_ROOT / candidate
         if path.is_file() and os.access(path, os.X_OK):
             return path.resolve()
-    raise AssertionError(
-        "current server binary is missing; build it first or set SERVER_BIN"
-    )
+    raise AssertionError("current server binary is missing; build it first or set SERVER_BIN")
 
 
 def parse_cmake_cache(cache_path: Path) -> dict[str, str]:
@@ -103,9 +102,7 @@ def current_build_directory(current_binary: Path) -> Path:
         path = candidate if candidate.is_absolute() else REPO_ROOT / candidate
         if (path / "CMakeCache.txt").is_file():
             return path.resolve()
-    raise AssertionError(
-        "cannot locate the current CMakeCache.txt; set DISK_CURRENT_BUILD_DIR"
-    )
+    raise AssertionError("cannot locate the current CMakeCache.txt; set DISK_CURRENT_BUILD_DIR")
 
 
 def extract_legacy_source(source_directory: Path) -> None:
@@ -150,16 +147,11 @@ def build_legacy_binary(current_binary: Path) -> Path:
     )
     require(
         commit_check.returncode == 0,
-        "legacy commit is unavailable; fetch repository history or set "
-        "DISK_LEGACY_V002_BINARY",
+        "legacy commit is unavailable; fetch repository history or set DISK_LEGACY_V002_BINARY",
     )
 
     configured_root = os.environ.get("DISK_LEGACY_BUILD_ROOT")
-    cache_root = (
-        Path(configured_root)
-        if configured_root
-        else REPO_ROOT / "build/compat" / LEGACY_COMMIT
-    )
+    cache_root = Path(configured_root) if configured_root else REPO_ROOT / "build/compat" / LEGACY_COMMIT
     if not cache_root.is_absolute():
         cache_root = REPO_ROOT / cache_root
     source_directory = cache_root / "source"
@@ -169,8 +161,7 @@ def build_legacy_binary(current_binary: Path) -> Path:
 
     if legacy_binary.is_file() and os.access(legacy_binary, os.X_OK):
         require(
-            stamp_path.is_file()
-            and stamp_path.read_text(encoding="utf-8").strip() == LEGACY_COMMIT,
+            stamp_path.is_file() and stamp_path.read_text(encoding="utf-8").strip() == LEGACY_COMMIT,
             f"legacy build cache has no matching commit stamp: {cache_root}",
         )
         return legacy_binary.resolve()
@@ -192,8 +183,14 @@ def build_legacy_binary(current_binary: Path) -> Path:
     cache = parse_cmake_cache(current_build / "CMakeCache.txt")
     toolchain = cache.get("CMAKE_TOOLCHAIN_FILE", "")
     installed = cache.get("VCPKG_INSTALLED_DIR", "")
-    require(toolchain and Path(toolchain).is_file(), "current vcpkg toolchain is unavailable")
-    require(installed and Path(installed).is_dir(), "current vcpkg dependency tree is unavailable")
+    require(
+        toolchain and Path(toolchain).is_file(),
+        "current vcpkg toolchain is unavailable",
+    )
+    require(
+        installed and Path(installed).is_dir(),
+        "current vcpkg dependency tree is unavailable",
+    )
 
     configure = [
         "cmake",
@@ -256,6 +253,10 @@ def database_environment(database_name: str) -> dict[str, str]:
             "PGDATABASE": database_name,
             "PGUSER": str(config["user"]),
             "PGPASSWORD": str(config["password"]),
+            "DISK_SCHEMA_REVERSAL_CONTEXT": "pre_activation_reversal",
+            "DISK_SCHEMA_REVERSAL_APPROVED": "true",
+            "DISK_SCHEMA_CHANGE_TICKET": "TEST-EXPAND-MIXED-VERSION",
+            "DISK_SCHEMA_READINESS_SHA256": TEST_READINESS_SHA256,
         }
     )
     environment.pop("DISK_DATABASE_URL", None)
@@ -270,13 +271,10 @@ def create_database(database_name: str) -> None:
 def drop_database(database_name: str) -> None:
     with psycopg.connect(**admin_database_config(), autocommit=True) as connection:
         connection.execute(
-            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-            "WHERE datname = %s AND pid <> pg_backend_pid()",
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s AND pid <> pg_backend_pid()",
             (database_name,),
         )
-        connection.execute(
-            sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(database_name))
-        )
+        connection.execute(sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(database_name)))
 
 
 def connect(database_name: str) -> psycopg.Connection[dict[str, Any]]:
@@ -298,14 +296,15 @@ def run_sql_file(database_name: str, path: Path) -> None:
 
 def prepare_v002_database(database_name: str) -> None:
     run_sql_file(database_name, INIT_SQL)
-    for rollback in ROLLBACKS:
-        run_sql_file(database_name, rollback)
+    for version in REVERSAL_VERSIONS:
+        run_database_command([str(REVERSAL), version], database_name)
 
     with connect(database_name) as connection:
-        migration_count = connection.execute(
-            "SELECT COUNT(*) AS count FROM schema_migrations"
-        ).fetchone()
-        require(migration_count is not None and migration_count["count"] == 0, "V002 ledger is not empty")
+        migration_count = connection.execute("SELECT COUNT(*) AS count FROM schema_migrations").fetchone()
+        require(
+            migration_count is not None and migration_count["count"] == 0,
+            "V002 ledger is not empty",
+        )
         distributed_column = connection.execute(
             "SELECT COUNT(*) AS count FROM information_schema.columns "
             "WHERE table_schema = 'public' AND table_name = 'upload_tasks' "
@@ -318,9 +317,7 @@ def prepare_v002_database(database_name: str) -> None:
 
 
 def recycle_database_connections(database_name: str) -> int:
-    with psycopg.connect(
-        **admin_database_config(), autocommit=True, row_factory=dict_row
-    ) as connection:
+    with psycopg.connect(**admin_database_config(), autocommit=True, row_factory=dict_row) as connection:
         rows = connection.execute(
             "SELECT pid, pg_terminate_backend(pid) AS terminated "
             "FROM pg_stat_activity WHERE datname = %s "
@@ -328,7 +325,10 @@ def recycle_database_connections(database_name: str) -> int:
             (database_name,),
         ).fetchall()
     require(rows, "no legacy PostgreSQL connections were available to recycle")
-    require(all(row["terminated"] for row in rows), "failed to recycle a legacy DB connection")
+    require(
+        all(row["terminated"] for row in rows),
+        "failed to recycle a legacy DB connection",
+    )
     return len(rows)
 
 
@@ -571,8 +571,7 @@ class ManagedServer:
         while time.monotonic() < deadline:
             if self.process is not None and self.process.poll() is not None:
                 raise AssertionError(
-                    f"{self.name} exited before readiness with {self.process.returncode}\n"
-                    f"{self.log_tail()}"
+                    f"{self.name} exited before readiness with {self.process.returncode}\n{self.log_tail()}"
                 )
             try:
                 response = httpx.get(
@@ -585,9 +584,7 @@ class ManagedServer:
             except httpx.HTTPError as error:
                 last_error = str(error)
             time.sleep(0.2)
-        raise AssertionError(
-            f"{self.name} did not become ready: {last_error}\n{self.log_tail()}"
-        )
+        raise AssertionError(f"{self.name} did not become ready: {last_error}\n{self.log_tail()}")
 
     def require_running(self, label: str) -> None:
         require(
@@ -621,9 +618,7 @@ def success_data(response: httpx.Response, label: str) -> dict[str, Any]:
     try:
         body = response.json()
     except ValueError as error:
-        raise AssertionError(
-            f"{label} returned non-JSON HTTP {response.status_code}: {response.text[:500]}"
-        ) from error
+        raise AssertionError(f"{label} returned non-JSON HTTP {response.status_code}: {response.text[:500]}") from error
     require(
         response.status_code in (200, 201) and body.get("code") in (0, "0"),
         f"{label} failed: HTTP {response.status_code}, body={body}",
@@ -739,7 +734,10 @@ def complete_upload(base_url: str, token: str, upload_id: str) -> int:
     file = data.get("file")
     require(isinstance(file, dict), f"complete {upload_id} returned no file")
     file_id = file.get("id")
-    require(isinstance(file_id, int) and file_id > 0, f"complete {upload_id} returned no file id")
+    require(
+        isinstance(file_id, int) and file_id > 0,
+        f"complete {upload_id} returned no file id",
+    )
     return file_id
 
 
@@ -749,7 +747,10 @@ def download_file(base_url: str, token: str, file_id: int, payload: bytes, label
         headers={"Authorization": f"Bearer {token}"},
         timeout=15,
     )
-    require(response.status_code == 200, f"{label} download returned HTTP {response.status_code}")
+    require(
+        response.status_code == 200,
+        f"{label} download returned HTTP {response.status_code}",
+    )
     require(response.content == payload, f"{label} download content mismatch")
 
 
@@ -770,8 +771,7 @@ def assert_legacy_chunk(
     staging_root: Path,
 ) -> None:
     row = connection.execute(
-        "SELECT chunk_index, size_bytes, hash_md5, object_key, etag "
-        "FROM upload_task_chunks WHERE task_id = %s",
+        "SELECT chunk_index, size_bytes, hash_md5, object_key, etag FROM upload_task_chunks WHERE task_id = %s",
         (upload_id,),
     ).fetchone()
     require(row is not None and row["chunk_index"] == 0, "legacy chunk row is missing")
@@ -798,7 +798,10 @@ def verify_database_state(
         ).fetchone()
         require(user is not None, "test user disappeared")
         expected_size = sum(len(case["payload"]) for case in cases.values())
-        require(user["storage_used"] == expected_size, "storage_used does not match completed bytes")
+        require(
+            user["storage_used"] == expected_size,
+            "storage_used does not match completed bytes",
+        )
         require(user["storage_reserved"] == 0, "storage_reserved was not fully released")
 
         files = connection.execute(
@@ -808,16 +811,28 @@ def verify_database_state(
             "WHERE file.user_id = %s ORDER BY file.name",
             (user["id"],),
         ).fetchall()
-        require(len(files) == len(cases), "unexpected file count after mixed-version uploads")
+        require(
+            len(files) == len(cases),
+            "unexpected file count after mixed-version uploads",
+        )
         files_by_name = {row["name"]: row for row in files}
         for case in cases.values():
             row = files_by_name.get(case["filename"])
             require(row is not None, f"file row missing for {case['filename']}")
             payload = case["payload"]
             require(row["id"] == case["file_id"], f"file id mismatch for {case['filename']}")
-            require(row["size"] == len(payload), f"file size mismatch for {case['filename']}")
-            require(row["hash_md5"] == hashlib.md5(payload).hexdigest(), "content MD5 mismatch")
-            require(row["hash_sha256"] == hashlib.sha256(payload).hexdigest(), "content SHA-256 mismatch")
+            require(
+                row["size"] == len(payload),
+                f"file size mismatch for {case['filename']}",
+            )
+            require(
+                row["hash_md5"] == hashlib.md5(payload).hexdigest(),
+                "content MD5 mismatch",
+            )
+            require(
+                row["hash_sha256"] == hashlib.sha256(payload).hexdigest(),
+                "content SHA-256 mismatch",
+            )
             require(row["ref_count"] == 1, "content ref_count mismatch")
             storage_path = Path(row["storage_path"])
             require(storage_path.is_file(), f"final blob is missing: {storage_path}")
@@ -839,24 +854,44 @@ def verify_database_state(
             require(row is not None, f"upload task missing for {name}")
             require(row["status"] == 1, f"upload task is not Completed for {name}")
             require(row["staging_backend"] == "local", f"non-local task created for {name}")
-            require(row["reserved_bytes"] == len(case["payload"]), "reserved byte snapshot drifted")
-            require(row["lease_owner"] is None and row["lease_expires_at"] is None, "lease was not cleared")
+            require(
+                row["reserved_bytes"] == len(case["payload"]),
+                "reserved byte snapshot drifted",
+            )
+            require(
+                row["lease_owner"] is None and row["lease_expires_at"] is None,
+                "lease was not cleared",
+            )
             if case["completed_by"] == "legacy":
                 require(row["staging_prefix"] is None, "post-expand legacy default changed")
-                require(row["finalize_attempts"] == 0, "legacy completion used a new finalize lease")
-                require(row["completed_file_id"] is None, "legacy completion wrote a new-only field")
+                require(
+                    row["finalize_attempts"] == 0,
+                    "legacy completion used a new finalize lease",
+                )
+                require(
+                    row["completed_file_id"] is None,
+                    "legacy completion wrote a new-only field",
+                )
             else:
-                require(row["finalize_attempts"] == 1, "current completion claim count drifted")
-                require(row["completed_file_id"] == case["file_id"], "current completion result is not durable")
+                require(
+                    row["finalize_attempts"] == 1,
+                    "current completion claim count drifted",
+                )
+                require(
+                    row["completed_file_id"] == case["file_id"],
+                    "current completion result is not durable",
+                )
 
         pre_expand = tasks_by_id[cases["pre_expand_handoff"]["upload_id"]]
         require(
-            pre_expand["staging_prefix"]
-            == f"staging/{cases['pre_expand_handoff']['upload_id']}",
+            pre_expand["staging_prefix"] == f"staging/{cases['pre_expand_handoff']['upload_id']}",
             "pre-expand task did not receive the V003 staging prefix backfill",
         )
         post_expand = tasks_by_id[cases["post_expand_handoff"]["upload_id"]]
-        require(post_expand["staging_prefix"] is None, "legacy INSERT no longer uses the expand default")
+        require(
+            post_expand["staging_prefix"] is None,
+            "legacy INSERT no longer uses the expand default",
+        )
         current_task = tasks_by_id[cases["current_owned"]["upload_id"]]
         require(
             current_task["staging_prefix"] == cases["current_owned"]["upload_id"],
@@ -864,41 +899,35 @@ def verify_database_state(
         )
 
         chunk_count = connection.execute(
-            "SELECT COUNT(*) AS count FROM upload_task_chunks "
-            "WHERE task_id = ANY(%s)",
+            "SELECT COUNT(*) AS count FROM upload_task_chunks WHERE task_id = ANY(%s)",
             ([case["upload_id"] for case in cases.values()],),
         ).fetchone()
-        require(chunk_count is not None and chunk_count["count"] == 0, "completed chunks were not removed")
+        require(
+            chunk_count is not None and chunk_count["count"] == 0,
+            "completed chunks were not removed",
+        )
 
         cleanup_jobs = connection.execute(
             "SELECT aggregate_id, dedupe_key, status FROM storage_jobs "
             "WHERE aggregate_id = ANY(%s) ORDER BY aggregate_id",
             ([case["upload_id"] for case in cases.values()],),
         ).fetchall()
-        current_completed_ids = {
-            case["upload_id"]
-            for case in cases.values()
-            if case["completed_by"] == "current"
-        }
+        current_completed_ids = {case["upload_id"] for case in cases.values() if case["completed_by"] == "current"}
         require(
             {row["aggregate_id"] for row in cleanup_jobs} == current_completed_ids,
             "current completion cleanup jobs do not match current-owned finalizations",
         )
         require(
             all(
-                row["dedupe_key"] == f"staging-cleanup:{row['aggregate_id']}"
-                and row["status"] == 0
+                row["dedupe_key"] == f"staging-cleanup:{row['aggregate_id']}" and row["status"] == 0
                 for row in cleanup_jobs
             ),
             "staging cleanup job contract drifted",
         )
 
-        migrations = connection.execute(
-            "SELECT version FROM schema_migrations ORDER BY version"
-        ).fetchall()
+        migrations = connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
         require(
-            [row["version"] for row in migrations]
-            == ["V003_distributed_upload", "V004_storage_reconciliation"],
+            [row["version"] for row in migrations] == ["V003_distributed_upload", "V004_storage_reconciliation"],
             "expand migration ledger is incomplete",
         )
 
@@ -997,7 +1026,10 @@ def exercise_mixed_versions(
                 (pre_case["upload_id"],),
             ).fetchone()
             require(pre_task is not None, "pre-expand task disappeared")
-            require(pre_task["staging_backend"] == "local", "pre-expand task backend changed")
+            require(
+                pre_task["staging_backend"] == "local",
+                "pre-expand task backend changed",
+            )
             require(
                 pre_task["staging_prefix"] == f"staging/{pre_case['upload_id']}",
                 "pre-expand task was not backfilled",
@@ -1018,8 +1050,7 @@ def exercise_mixed_versions(
             ).fetchone()
             require(legacy_task is not None, "post-expand legacy task disappeared")
             require(
-                legacy_task["staging_backend"] == "local"
-                and legacy_task["staging_prefix"] is None,
+                legacy_task["staging_backend"] == "local" and legacy_task["staging_prefix"] is None,
                 "post-expand legacy INSERT did not use compatible defaults",
             )
             assert_legacy_chunk(connection, legacy_case["upload_id"], staging_root)

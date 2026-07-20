@@ -336,7 +336,9 @@ def main() -> int:
                 == {
                     "active_task_disposition": "freeze",
                     "compatible_handlers_required": True,
+                    "contract_migration_allowed": False,
                     "old_release_upload_route_allowed": False,
+                    "schema_action": "preserve_expand",
                     "upload_ingress": "closed",
                 },
                 "freeze decision drifted",
@@ -440,7 +442,9 @@ def main() -> int:
             require(
                 drained["decision"]["active_task_disposition"] == "drain"
                 and drained["decision"]["compatible_handlers_required"] is False
-                and drained["decision"]["old_release_upload_route_allowed"] is False,
+                and drained["decision"]["contract_migration_allowed"] is False
+                and drained["decision"]["old_release_upload_route_allowed"] is False
+                and drained["decision"]["schema_action"] == "preserve_expand",
                 "drain decision drifted",
             )
 
@@ -463,6 +467,8 @@ def main() -> int:
                         "upload_ingress_open",
                     ],
                     "database_mutations_by_gate": 0,
+                    "schema_action": "preserve_expand",
+                    "contract_migration_allowed": False,
                     "old_release_upload_route_allowed": False,
                     "passed": True,
                 },

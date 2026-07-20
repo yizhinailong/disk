@@ -30,10 +30,12 @@ INIT_SQL = REPO_ROOT / "sql" / "init.sql"
 MIGRATION_DIR = REPO_ROOT / "sql" / "migrations"
 MANIFEST = MIGRATION_DIR / "manifest.tsv"
 MIGRATOR = REPO_ROOT / "scripts" / "migrate-db.sh"
-ROLLBACKS = (
-    MIGRATION_DIR / "V004_storage_reconciliation_rollback.sql",
-    MIGRATION_DIR / "V003_distributed_upload_rollback.sql",
+REVERSAL = REPO_ROOT / "scripts" / "reverse-expand-migration.sh"
+REVERSAL_VERSIONS = (
+    "V004_storage_reconciliation",
+    "V003_distributed_upload",
 )
+TEST_READINESS_SHA256 = "3" * 64
 
 REPRESENTATIVE_DATA = """
 TRUNCATE TABLE file_contents, users RESTART IDENTITY CASCADE;
@@ -173,6 +175,10 @@ def database_env(database_name: str) -> dict[str, str]:
             "PGDATABASE": database_name,
             "PGUSER": str(config["user"]),
             "PGPASSWORD": str(config["password"]),
+            "DISK_SCHEMA_REVERSAL_CONTEXT": "pre_activation_reversal",
+            "DISK_SCHEMA_REVERSAL_APPROVED": "true",
+            "DISK_SCHEMA_CHANGE_TICKET": "TEST-FULL-SCHEMA-UPGRADE",
+            "DISK_SCHEMA_READINESS_SHA256": TEST_READINESS_SHA256,
         }
     )
     environment.pop("DISK_DATABASE_URL", None)
@@ -187,8 +193,7 @@ def create_database(database_name: str) -> None:
 def drop_database(database_name: str) -> None:
     with psycopg.connect(**admin_config(), autocommit=True) as connection:
         connection.execute(
-            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-            "WHERE datname = %s AND pid <> pg_backend_pid()",
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s AND pid <> pg_backend_pid()",
             (database_name,),
         )
         connection.execute(sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(database_name)))
@@ -240,9 +245,7 @@ def manifest_entries() -> list[tuple[str, str, str]]:
     return entries
 
 
-def fetch_rows(
-    connection: psycopg.Connection[dict[str, Any]], statement: str
-) -> list[dict[str, Any]]:
+def fetch_rows(connection: psycopg.Connection[dict[str, Any]], statement: str) -> list[dict[str, Any]]:
     return [dict(row) for row in connection.execute(statement).fetchall()]
 
 
@@ -266,8 +269,7 @@ def business_snapshot(
         ),
         "upload_task_chunks": fetch_rows(
             connection,
-            "SELECT task_id, chunk_index, uploaded_at "
-            "FROM upload_task_chunks ORDER BY task_id, chunk_index",
+            "SELECT task_id, chunk_index, uploaded_at FROM upload_task_chunks ORDER BY task_id, chunk_index",
         ),
         "quota": fetch_rows(
             connection,
@@ -301,10 +303,7 @@ def complete_snapshot(
         "storage_reconciliation_findings",
         "schema_migrations",
     )
-    return {
-        table: fetch_rows(connection, f"SELECT * FROM {table} ORDER BY 1")
-        for table in tables
-    }
+    return {table: fetch_rows(connection, f"SELECT * FROM {table} ORDER BY 1") for table in tables}
 
 
 def verify_business_invariants(snapshot: dict[str, list[dict[str, Any]]]) -> None:
@@ -338,8 +337,8 @@ def verify_business_invariants(snapshot: dict[str, list[dict[str, Any]]]) -> Non
 
 def prepare_v002_baseline(database_name: str) -> None:
     run_sql_file(database_name, INIT_SQL)
-    for rollback in ROLLBACKS:
-        run_sql_file(database_name, rollback)
+    for version in REVERSAL_VERSIONS:
+        run_command([str(REVERSAL), version], database_name)
 
     with connect(database_name) as connection:
         assert scalar(connection, "SELECT COUNT(*) FROM schema_migrations") == 0
@@ -382,10 +381,7 @@ def verify_complete_upgrade(database_name: str) -> None:
             )
         }
         assert after_updated_at.keys() == before_updated_at.keys()
-        assert all(
-            after_updated_at[task_id] >= before_updated_at[task_id]
-            for task_id in before_updated_at
-        )
+        assert all(after_updated_at[task_id] >= before_updated_at[task_id] for task_id in before_updated_at)
 
         task_metadata = fetch_rows(
             connection,
@@ -417,26 +413,23 @@ def verify_complete_upgrade(database_name: str) -> None:
             "FROM upload_task_chunks ORDER BY task_id, chunk_index",
         )
         assert all(
-            row["size_bytes"] is None
-            and row["hash_md5"] is None
-            and row["object_key"] is None
-            and row["etag"] is None
+            row["size_bytes"] is None and row["hash_md5"] is None and row["object_key"] is None and row["etag"] is None
             for row in chunk_metadata
         )
         assert scalar(connection, "SELECT COUNT(*) FROM storage_jobs") == 0
-        assert scalar(
-            connection,
-            "SELECT COUNT(*) FROM storage_reconciliation_findings",
-        ) == 0
+        assert (
+            scalar(
+                connection,
+                "SELECT COUNT(*) FROM storage_reconciliation_findings",
+            )
+            == 0
+        )
 
         ledger = fetch_rows(
             connection,
             "SELECT version, checksum FROM schema_migrations ORDER BY applied_at, version",
         )
-        assert ledger == [
-            {"version": version, "checksum": checksum}
-            for version, _, checksum in entries
-        ]
+        assert ledger == [{"version": version, "checksum": checksum} for version, _, checksum in entries]
         first_complete_snapshot = complete_snapshot(connection)
 
     second = run_migrator(database_name)

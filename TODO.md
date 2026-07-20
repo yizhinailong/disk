@@ -734,7 +734,20 @@ OpenSpec 严格校验 24/24 通过。结构化证据为
 上传处理面可被排空或冻结，不准入旧版本访问其他新 schema/Blob；目标环境仍须保存自身入口、
 直连兼容实例和数据库快照证据。
 
-- [ ] expand schema 默认保留；数据库 contract 迁移不得作为紧急回滚步骤。
+- [x] expand schema 默认保留；数据库 contract 迁移不得作为紧急回滚步骤。
+
+2026-07-21 已在候选应用基线 `e403ce2` 上完成 expand schema 保留门禁。紧急应用回滚证据固定为
+`schema_action=preserve_expand`、`contract_migration_allowed=false`；前向 manifest 不含
+`DROP TABLE/COLUMN/DATABASE`。V002/V003/V004 三份破坏性 rollback SQL 均在事务内、首条 DDL 前
+复核预激活上下文、独立批准、变更单与 readiness SHA-256；无参数直接执行 3/3、紧急上下文 1/1、
+逐项缺少批准/变更单/摘要 3/3 均失败，schema 与迁移账本变更数为 0。白名单入口的未知版本、紧急
+上下文、未批准、非法变更单和非法摘要共 5/5 在调用 `psql` 前拒绝；V004 非空数据门禁继续拒绝，
+空表经批准的预激活撤销及随后前向恢复成功。聚焦 CTest 6/6 通过（13.21 秒）；完整 CTest 共
+1390 项：1384 通过、6 项环境门控跳过、0 失败，总耗时 394.13 秒；OpenSpec 严格校验 24/24
+通过。`0600` 结构化证据为 `.sisyphus/evidence/schema-reversal-guard-summary.json`（SHA-256
+`dfbb9ff82c1073ac499751ae424c9f0da13ba3bcd36ee053b9c28256630c2691`）。该隔离库门禁未执行生产
+contract DDL；未来 contract 必须使用新的 DDL、恢复演练、负责人、目标环境证据和独立审批。
+
 - [ ] Worker 可停止认领，已持有任务依靠租约到期恢复。
 - [ ] S3/DB 已成功但响应失败的任务通过幂等 complete 恢复，不手工删除对象。
 - [ ] 每个灰度阶段都有明确停止条件、回滚负责人、操作命令和数据校验查询。

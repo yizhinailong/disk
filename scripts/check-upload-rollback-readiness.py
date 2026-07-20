@@ -437,7 +437,9 @@ def main() -> int:
         "decision": {
             "active_task_disposition": arguments.mode if passed else "blocked",
             "compatible_handlers_required": compatible_handlers_required,
+            "contract_migration_allowed": False,
             "old_release_upload_route_allowed": False,
+            "schema_action": "preserve_expand",
             "upload_ingress": "closed" if ingress_frozen else "unverified",
         },
         "acceptance": {"errors": errors, "passed": passed},

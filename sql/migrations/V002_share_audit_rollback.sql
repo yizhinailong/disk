@@ -1,4 +1,8 @@
+\set ON_ERROR_STOP on
+
 BEGIN;
+
+\ir schema_reversal_guard.sql
 
 DO $$
 BEGIN

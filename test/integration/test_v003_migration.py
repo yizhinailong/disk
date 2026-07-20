@@ -27,10 +27,11 @@ from lib_py.db import database_config
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATOR = REPO_ROOT / "scripts" / "migrate-db.sh"
+REVERSAL = REPO_ROOT / "scripts" / "reverse-expand-migration.sh"
 FORWARD = REPO_ROOT / "sql" / "migrations" / "V003_distributed_upload_forward.sql"
-ROLLBACK = REPO_ROOT / "sql" / "migrations" / "V003_distributed_upload_rollback.sql"
 INIT_SQL = REPO_ROOT / "sql" / "init.sql"
 MIGRATION_VERSION = "V003_distributed_upload"
+TEST_READINESS_SHA256 = "1" * 64
 
 LEGACY_SCHEMA = """
 CREATE TABLE users (
@@ -101,6 +102,10 @@ def database_env(database_name: str) -> dict[str, str]:
             "PGDATABASE": database_name,
             "PGUSER": str(config["user"]),
             "PGPASSWORD": str(config["password"]),
+            "DISK_SCHEMA_REVERSAL_CONTEXT": "pre_activation_reversal",
+            "DISK_SCHEMA_REVERSAL_APPROVED": "true",
+            "DISK_SCHEMA_CHANGE_TICKET": "TEST-V003-REVERSAL",
+            "DISK_SCHEMA_READINESS_SHA256": TEST_READINESS_SHA256,
         }
     )
     env.pop("DISK_DATABASE_URL", None)
@@ -115,8 +120,7 @@ def create_database(database_name: str) -> None:
 def drop_database(database_name: str) -> None:
     with psycopg.connect(**admin_config(), autocommit=True) as connection:
         connection.execute(
-            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-            "WHERE datname = %s AND pid <> pg_backend_pid()",
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s AND pid <> pg_backend_pid()",
             (database_name,),
         )
         connection.execute(sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(database_name)))
@@ -161,9 +165,7 @@ def scalar(connection: psycopg.Connection[dict[str, Any]], statement: str) -> An
     return next(iter(row.values()))
 
 
-def expect_check_violation(
-    connection: psycopg.Connection[dict[str, Any]], statement: str
-) -> None:
+def expect_check_violation(connection: psycopg.Connection[dict[str, Any]], statement: str) -> None:
     try:
         connection.execute(statement)
     except psycopg.errors.CheckViolation:
@@ -171,9 +173,7 @@ def expect_check_violation(
     raise AssertionError(f"statement unexpectedly bypassed a CHECK constraint: {statement}")
 
 
-def expect_index_plan(
-    connection: psycopg.Connection[dict[str, Any]], statement: str, index_name: str
-) -> None:
+def expect_index_plan(connection: psycopg.Connection[dict[str, Any]], statement: str, index_name: str) -> None:
     plan_rows = connection.execute(f"EXPLAIN (COSTS OFF) {statement}").fetchall()
     plan = "\n".join(str(row["QUERY PLAN"]) for row in plan_rows)
     assert index_name in plan, f"expected {index_name} in query plan:\n{plan}"
@@ -203,8 +203,7 @@ def verify_upgrade(database_name: str) -> None:
         }
 
         chunk = connection.execute(
-            "SELECT size_bytes, hash_md5, object_key, etag "
-            "FROM upload_task_chunks WHERE task_id = 'legacy-upload'"
+            "SELECT size_bytes, hash_md5, object_key, etag FROM upload_task_chunks WHERE task_id = 'legacy-upload'"
         ).fetchone()
         assert chunk == {
             "size_bytes": None,
@@ -233,9 +232,7 @@ def verify_upgrade(database_name: str) -> None:
 
         indexes = {
             row["indexname"]
-            for row in connection.execute(
-                "SELECT indexname FROM pg_indexes WHERE schemaname = 'public'"
-            ).fetchall()
+            for row in connection.execute("SELECT indexname FROM pg_indexes WHERE schemaname = 'public'").fetchall()
         }
         assert {
             "idx_upload_tasks_finalizing_lease",
@@ -255,8 +252,7 @@ def verify_upgrade(database_name: str) -> None:
         )
         expect_index_plan(
             connection,
-            "SELECT id FROM upload_tasks "
-            "WHERE staging_backend = 's3' AND status = 0",
+            "SELECT id FROM upload_tasks WHERE staging_backend = 's3' AND status = 0",
             "idx_upload_tasks_staging_backend",
         )
         expect_index_plan(
@@ -268,15 +264,12 @@ def verify_upgrade(database_name: str) -> None:
         )
         expect_index_plan(
             connection,
-            "SELECT id FROM storage_jobs "
-            "WHERE status = 1 AND locked_until <= NOW() "
-            "ORDER BY locked_until, id LIMIT 1",
+            "SELECT id FROM storage_jobs WHERE status = 1 AND locked_until <= NOW() ORDER BY locked_until, id LIMIT 1",
             "idx_storage_jobs_expired_lease",
         )
         expect_index_plan(
             connection,
-            "SELECT id FROM storage_jobs "
-            "WHERE job_type = 'staging_cleanup' AND status = 4",
+            "SELECT id FROM storage_jobs WHERE job_type = 'staging_cleanup' AND status = 4",
             "idx_storage_jobs_type_status",
         )
         connection.execute("RESET enable_seqscan")
@@ -289,13 +282,8 @@ def verify_upgrade(database_name: str) -> None:
             "'d41d8cd98f00b204e9800998ecf8427e', 1, 1, 1, "
             "'build/temp_uploads/old-app-write', NOW() + INTERVAL '1 day')"
         )
-        connection.execute(
-            "INSERT INTO upload_task_chunks (task_id, chunk_index) "
-            "VALUES ('old-app-write', 0)"
-        )
-        connection.execute(
-            "UPDATE upload_tasks SET status = 2 WHERE id = 'old-app-write'"
-        )
+        connection.execute("INSERT INTO upload_task_chunks (task_id, chunk_index) VALUES ('old-app-write', 0)")
+        connection.execute("UPDATE upload_tasks SET status = 2 WHERE id = 'old-app-write'")
         connection.execute("DELETE FROM upload_tasks WHERE id = 'old-app-write'")
 
         expect_check_violation(
@@ -312,13 +300,11 @@ def verify_upgrade(database_name: str) -> None:
             "WHERE id = 'legacy-upload'"
         )
         connection.execute(
-            "UPDATE upload_tasks SET status = 0, lease_owner = NULL, "
-            "lease_expires_at = NULL WHERE id = 'legacy-upload'"
+            "UPDATE upload_tasks SET status = 0, lease_owner = NULL, lease_expires_at = NULL WHERE id = 'legacy-upload'"
         )
         expect_check_violation(
             connection,
-            "UPDATE upload_task_chunks SET size_bytes = 0 "
-            "WHERE task_id = 'legacy-upload'",
+            "UPDATE upload_task_chunks SET size_bytes = 0 WHERE task_id = 'legacy-upload'",
         )
         expect_check_violation(
             connection,
@@ -339,11 +325,13 @@ def verify_legacy_upgrade(database_name: str) -> None:
     second = run_migrator(database_name)
     assert f"{MIGRATION_VERSION} already applied" in second.stdout
     with connect(database_name) as connection:
-        assert scalar(
-            connection,
-            "SELECT COUNT(*) FROM schema_migrations "
-            f"WHERE version = '{MIGRATION_VERSION}'",
-        ) == 1
+        assert (
+            scalar(
+                connection,
+                f"SELECT COUNT(*) FROM schema_migrations WHERE version = '{MIGRATION_VERSION}'",
+            )
+            == 1
+        )
 
         connection.execute(
             "UPDATE schema_migrations SET checksum = repeat('0', 64) WHERE version = %s",
@@ -366,7 +354,7 @@ def verify_legacy_upgrade(database_name: str) -> None:
         )
 
     blocked = run_command(
-        ["psql", "-X", "-v", "ON_ERROR_STOP=1", "-f", str(ROLLBACK)],
+        [str(REVERSAL), MIGRATION_VERSION],
         database_name,
         check=False,
     )
@@ -377,22 +365,27 @@ def verify_legacy_upgrade(database_name: str) -> None:
         connection.execute("DELETE FROM storage_jobs")
 
     run_command(
-        ["psql", "-X", "-v", "ON_ERROR_STOP=1", "-f", str(ROLLBACK)],
+        [str(REVERSAL), MIGRATION_VERSION],
         database_name,
     )
     with connect(database_name) as connection:
         assert scalar(connection, "SELECT to_regclass('public.storage_jobs')") is None
-        assert scalar(
-            connection,
-            "SELECT COUNT(*) FROM information_schema.columns "
-            "WHERE table_schema = 'public' AND table_name = 'upload_tasks' "
-            "AND column_name = 'state_version'",
-        ) == 0
-        assert scalar(
-            connection,
-            "SELECT COUNT(*) FROM schema_migrations "
-            f"WHERE version = '{MIGRATION_VERSION}'",
-        ) == 0
+        assert (
+            scalar(
+                connection,
+                "SELECT COUNT(*) FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND table_name = 'upload_tasks' "
+                "AND column_name = 'state_version'",
+            )
+            == 0
+        )
+        assert (
+            scalar(
+                connection,
+                f"SELECT COUNT(*) FROM schema_migrations WHERE version = '{MIGRATION_VERSION}'",
+            )
+            == 0
+        )
 
     run_migrator(database_name)
     verify_upgrade(database_name)
@@ -417,11 +410,13 @@ def verify_upgrade_fresh(database_name: str) -> None:
             (MIGRATION_VERSION,),
         ).fetchone()
         assert row == {"checksum": expected_checksum}
-        assert scalar(
-            connection,
-            "SELECT COUNT(*) FROM pg_indexes "
-            "WHERE indexname = 'idx_storage_jobs_ready'",
-        ) == 1
+        assert (
+            scalar(
+                connection,
+                "SELECT COUNT(*) FROM pg_indexes WHERE indexname = 'idx_storage_jobs_ready'",
+            )
+            == 1
+        )
 
 
 def main() -> int:

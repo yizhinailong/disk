@@ -2,6 +2,8 @@
 
 BEGIN;
 
+\ir schema_reversal_guard.sql
+
 DO $rollback$
 DECLARE
     has_findings BOOLEAN := FALSE;
