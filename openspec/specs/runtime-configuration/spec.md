@@ -34,6 +34,10 @@ The system SHALL use configured Redis connection settings for token, cache, rate
 - **WHEN** an operation requires Redis-backed state
 - **THEN** the system SHALL use the configured Redis client for that state access
 
+#### Scenario: Stable Redis writer endpoint fails over
+- **WHEN** established Redis connections time out while the configured stable writer endpoint moves from a fenced primary to a promoted replica
+- **THEN** security-sensitive Redis operations SHALL fail closed during the interruption and the existing API processes SHALL reconnect through the same configured endpoint without restart after the new writer is available
+
 #### Scenario: Rate-limit Redis state is unavailable
 - **WHEN** a rate-limit filter cannot read or update Redis limiter state for a request
 - **THEN** the system SHALL log the Redis failure and allow the request to continue without returning a rate-limit or server-error response solely because of the Redis limiter failure

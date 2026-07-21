@@ -59,6 +59,7 @@ class CuttableTcpProxy:
         self.port = int(self._listener.getsockname()[1])
         self._stop = threading.Event()
         self._cut = threading.Event()
+        self._paused = threading.Event()
         self._lock = threading.Lock()
         self._connections: set[socket.socket] = set()
         self._relay_threads: list[threading.Thread] = []
@@ -77,14 +78,28 @@ class CuttableTcpProxy:
 
     def cut(self) -> None:
         self._cut.set()
+        self._paused.clear()
         self._close_connections()
+
+    def pause_forwarding(self) -> None:
+        self._paused.set()
+
+    def switch_target(self, target_host: str, target_port: int) -> None:
+        self._paused.set()
+        with self._lock:
+            self._target = (target_host, target_port)
+        self._close_connections()
+        self._cut.clear()
+        self._paused.clear()
 
     def heal(self) -> None:
         self._cut.clear()
+        self._paused.clear()
 
     def close(self) -> None:
         self._stop.set()
         self._cut.clear()
+        self._paused.clear()
         try:
             self._listener.close()
         except OSError:
@@ -126,7 +141,9 @@ class CuttableTcpProxy:
                 continue
 
             try:
-                upstream = socket.create_connection(self._target, timeout=2)
+                with self._lock:
+                    target = self._target
+                upstream = socket.create_connection(target, timeout=2)
             except OSError:
                 self._close_socket(client)
                 continue
@@ -153,6 +170,9 @@ class CuttableTcpProxy:
     def _relay(self, source: socket.socket, destination: socket.socket) -> None:
         try:
             while not self._stop.is_set() and not self._cut.is_set():
+                if self._paused.is_set():
+                    time.sleep(0.01)
+                    continue
                 try:
                     data = source.recv(65536)
                 except TimeoutError:
@@ -161,6 +181,8 @@ class CuttableTcpProxy:
                     break
                 if not data:
                     break
+                if self._paused.is_set():
+                    continue
                 destination.sendall(data)
         except OSError:
             pass

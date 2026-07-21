@@ -104,6 +104,11 @@ The current refresh-token hash and unexpired access/share-token revocations SHAL
 - **THEN** both keys SHALL remain present with positive TTLs that have not been reset
 - **AND** a cold API instance SHALL reject the revoked access token while two API instances racing the retained refresh token SHALL still select exactly one rotation winner
 
+#### Scenario: Replicated Redis writer is promoted
+- **WHEN** the old Redis writer is fenced after the current refresh-token hash and access-token revocation have reached its replica, and that replica is promoted behind the same application endpoint
+- **THEN** the existing API processes SHALL reconnect without restart, the revoked token SHALL remain rejected, and the retained refresh token SHALL still select exactly one Lua/CAS rotation winner across two API instances
+- **AND** replicated expiring keys SHALL retain positive TTLs that continue from their original absolute expiry rather than being reset at promotion
+
 #### Scenario: Redis security state cannot be trusted after disaster recovery
 - **WHEN** Redis recovery cannot prove preservation of every acknowledged, unexpired session-security write
 - **THEN** authentication traffic SHALL remain closed until the JWT signing secret is rotated and every API instance is restarted with the new secret

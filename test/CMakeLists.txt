@@ -620,6 +620,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME RedisFailoverSemanticsIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_redis_failover_semantics.py"
+)
+set_tests_properties(
+    RedisFailoverSemanticsIntegration
+    PROPERTIES
+    LABELS "backend-integration;distributed;security"
+    RUN_SERIAL TRUE
+    TIMEOUT 180
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME DistributedCapacityBudgetContract
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_capacity_budget.py"
 )

@@ -65,9 +65,16 @@ def resolve_executable(candidates: tuple[str, ...]) -> Path:
 class PersistentRedis:
     """Own an isolated AOF Redis process that can be crash-restarted in place."""
 
-    def __init__(self, root: Path, port: int) -> None:
+    def __init__(
+        self,
+        root: Path,
+        port: int,
+        *,
+        server_options: tuple[str, ...] = (),
+    ) -> None:
         self.root = root
         self.port = port
+        self.server_options = server_options
         self.server_binary = resolve_executable(("valkey-server", "redis-server"))
         self.cli_binary = resolve_executable(("valkey-cli", "redis-cli"))
         self.log_path = root / "redis.log"
@@ -105,6 +112,7 @@ class PersistentRedis:
                     "",
                     "--logfile",
                     "",
+                    *self.server_options,
                 ],
                 cwd=self.root,
                 stdout=self.log_handle,
