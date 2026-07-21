@@ -36,7 +36,10 @@ namespace disk::storage {
         auto operator=(S3ObjectStorage&&) -> S3ObjectStorage& = delete;
 
         [[nodiscard]]
-        auto EnsureUploadSession(const UploadStagingSession& session)
+        auto EnsureUploadSession(
+            const UploadStagingSession& session,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>> override;
 
         [[nodiscard]]
@@ -44,13 +47,15 @@ namespace disk::storage {
             const UploadStagingSession& session,
             uint32_t chunk_index,
             const std::string& md5_hash,
-            std::string data
+            std::string data,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<UploadStagingChunk>> override;
 
         [[nodiscard]]
         auto HeadChunkObject(
             const UploadStagingSession& session,
-            const UploadStagingChunk& chunk
+            const UploadStagingChunk& chunk,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<UploadStagingObjectHead>> override;
 
         [[nodiscard]]
@@ -58,58 +63,91 @@ namespace disk::storage {
             const UploadStagingSession& session,
             uint64_t state_version,
             uint32_t expected_chunk_count,
-            const std::vector<UploadStagingChunk>& chunks
+            const std::vector<UploadStagingChunk>& chunks,
+            disk::utils::LogContext log_context = {}
         )
             -> drogon::Task<Result<UploadStagingAssembly>> override;
 
         [[nodiscard]]
         auto DiscardAssembly(
             const UploadStagingSession& session,
-            const UploadStagingAssembly& assembly
+            const UploadStagingAssembly& assembly,
+            disk::utils::LogContext log_context = {}
         )
             -> drogon::Task<Result<void>> override;
 
         [[nodiscard]]
-        auto CleanupSession(const UploadStagingSession& session)
+        auto CleanupSession(
+            const UploadStagingSession& session,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>> override;
 
         [[nodiscard]]
-        auto ListStagingObjects(const std::string& continuation_token, size_t limit)
+        auto ListStagingObjects(
+            const std::string& continuation_token,
+            size_t limit,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<StorageInventoryPage>> override;
 
         [[nodiscard]]
-        auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& sha256_hash)
+        auto PromoteToFinal(
+            const UploadStagingAssembly& assembly,
+            const std::string& sha256_hash,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<BlobPromoteResult>> override;
 
         [[nodiscard]]
-        auto OpenForRead(const std::filesystem::path& storage_path)
+        auto OpenForRead(
+            const std::filesystem::path& storage_path,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> override;
 
         [[nodiscard]]
         auto OpenBlobRangeForRead(
             const BlobDescriptor& blob,
             uint64_t start,
-            uint64_t length
+            uint64_t length,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<std::shared_ptr<StorageReadStream>>> override;
 
         [[nodiscard]]
-        auto DeleteBlob(const std::filesystem::path& storage_path) -> drogon::Task<Result<void>> override;
+        auto DeleteBlob(
+            const std::filesystem::path& storage_path,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<void>> override;
 
         [[nodiscard]]
-        auto Exists(const std::filesystem::path& storage_path) -> drogon::Task<Result<bool>> override;
+        auto Exists(
+            const std::filesystem::path& storage_path,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<bool>> override;
 
         [[nodiscard]]
         auto GetFinalStoragePath(const std::string& sha256_hash) const -> std::filesystem::path override;
 
         [[nodiscard]]
-        auto GetFileSize(const std::filesystem::path& storage_path) -> drogon::Task<Result<uint64_t>> override;
+        auto GetFileSize(
+            const std::filesystem::path& storage_path,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<uint64_t>> override;
 
         [[nodiscard]]
-        auto ListFinalObjects(const std::string& continuation_token, size_t limit)
+        auto ListFinalObjects(
+            const std::string& continuation_token,
+            size_t limit,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<StorageInventoryPage>> override;
 
         [[nodiscard]]
-        auto AbortMultipartUpload(const MultipartUploadDescriptor& descriptor)
+        auto AbortMultipartUpload(
+            const MultipartUploadDescriptor& descriptor,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>> override;
 
         auto SetMultipartUploadJournal(std::shared_ptr<IMultipartUploadJournal> journal) -> void;

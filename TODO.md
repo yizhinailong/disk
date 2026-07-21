@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 下载日志关联）：完整构建、聚焦下载/分享审计 CTest 24/24、真实分享审计集成 1/1 及下载流集成 1/1 通过；完整 CTest 共 1398 项，1391 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 465.62 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 S3 SDK 日志关联）：完整构建、聚焦 S3/Worker/对账/下载 CTest 89/89 通过；完整 CTest 共 1402 项，1395 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 477.76 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -547,6 +547,12 @@ stdout、旋转文件以及被捕获的 Drogon/Trantor 诊断现统一输出单�
 部署运维、系统测试、单元测试和 OpenSpec 先行固定 cleanup 的类型化字段与空值合同。手动过期清理的精确路由现从通用 admin 分类为低基数 `operation=cleanup`，`AdminController` 在任何清理逻辑前从请求属性创建 `LogContext`，并按值传过 `CleanupService`、过期回收站分页/永久删除、`ContentService` 的引用计数与 Blob GC 入队，以及过期上传 Lifecycle。手动批次事件保持 `upload_id/job_id/lease_owner/state_version=null`；逐项 Lifecycle 只用数据库行的真实上传 ID 补全 `upload_id`，入队接口未返回持久主键时不从 content ID、aggregate ID 或 dedupe key 伪造 `job_id`。过期上传/回收站 Worker 也将已认领的真实 job/owner 和固定 operation 传入同一内部服务，不暗中继承 HTTP request 或伪造 state version。
 
 `MetricsServiceTest` 锁定精确 cleanup 路由与通用 admin 路由的分类边界，清理/上传仓储源码合同同步锁定上下文传播。`SafetyUploadInvariantsIntegration` 以调用方指定的 `X-Request-Id` 真实过期一个上传，逐行解析 Controller、TrashService 和上传清理批次 NDJSON，核对响应同一 request/实际 instance、固定 operation 及四个 JSON `null`；直接查询受管日志也确认该唯一 request ID 的七条清理事件未误命中历史记录。完整构建、Python 语法检查、聚焦 CTest 49/49 和真实 HTTP safety 集成 1/1（脚本内 503 项断言）通过；完整 CTest 共 1398 项，1391 通过、7 项环境门控跳过、0 失败，总耗时 469.67 秒；OpenSpec 严格校验 24/24 通过。S3 适配器内部 SDK 日志仍是未完成的独立存储边界，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.12 S3 SDK 日志关联记录（2026-07-22）
+
+部署运维、系统测试、单元测试、ADR 和 OpenSpec 先行固定 S3 SDK 的类型化关联、固定语汇、级别与脱敏合同。`LogContext` 现在按值穿过 `UploadStagingStorage`/`IBlobStore`、`S3ObjectStorage` 阻塞工作队列和 `IS3Client`；分片写入、完成组装/提升、下载读取、staging cleanup、multipart abort、Blob GC 与存储对账均保留调用方已有的业务 operation 和类型化字段。AWS 适配器只从编译期枚举生成 12 个 `sdk_operation` 和 9 个 `outcome`，每次最终 SDK 返回同时结束无采样依赖指标并记录结果；`success/not_found/conflict` 固定为 `DEBUG`，其他结果固定为 `WARN`。结果事件和 Blob 删除重试日志不记录 bucket、endpoint、对象 key/prefix、远端 multipart ID、continuation token、凭据、签名、正文或 SDK 异常正文。
+
+`S3ClientTest` 锁定全部操作/结果名称、`INFO` 下预期结果丢弃、失败 `WARN` 及六个上下文字段；`S3ObjectStorageTest` 通过内存 client 验证完整上下文跨过真实阻塞队列，`StorageJobWorkerTest` 验证已认领 cleanup/abort 任务把数据库 job/owner 和合法业务 upload ID 传入存储边界。完整构建、聚焦 S3/Worker/对账/下载 CTest 89/89 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1402 项，1395 通过、7 项环境门控跳过、0 失败，总耗时 477.76 秒。真实 S3/MinIO 与分布式拓扑门控未在本机执行；取消上传、本地组装等历史日志也尚未全部改为调用方上下文，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

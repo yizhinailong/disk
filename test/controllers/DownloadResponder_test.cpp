@@ -93,18 +93,25 @@ namespace {
 
         auto PromoteToFinal(
             const disk::storage::UploadStagingAssembly& /*assembly*/,
-            const std::string& /*hash*/
+            const std::string& /*hash*/,
+            disk::utils::LogContext /*log_context*/
         ) -> drogon::Task<Result<disk::storage::BlobPromoteResult>> override {
             co_return disk::storage::BlobPromoteResult{ .path = m_temp_dir / "final", .created = true };
         }
 
-        auto OpenForRead(const std::filesystem::path& storage_path)
+        auto OpenForRead(
+            const std::filesystem::path& storage_path,
+            disk::utils::LogContext /*log_context*/
+        )
             -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> override {
             ++open_path_count;
             co_return OpenPath(storage_path);
         }
 
-        auto OpenBlobForRead(const disk::storage::BlobDescriptor& blob)
+        auto OpenBlobForRead(
+            const disk::storage::BlobDescriptor& blob,
+            disk::utils::LogContext /*log_context*/
+        )
             -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> override {
             ++open_blob_count;
             if (open_blob_should_fail) {
@@ -121,18 +128,27 @@ namespace {
             co_return OpenPath(path_it->second);
         }
 
-        auto DeleteBlob(const std::filesystem::path& /*storage_path*/)
+        auto DeleteBlob(
+            const std::filesystem::path& /*storage_path*/,
+            disk::utils::LogContext /*log_context*/
+        )
             -> drogon::Task<Result<void>> override {
             co_return Result<void>{};
         }
 
-        auto Exists(const std::filesystem::path& /*storage_path*/)
+        auto Exists(
+            const std::filesystem::path& /*storage_path*/,
+            disk::utils::LogContext /*log_context*/
+        )
             -> drogon::Task<Result<bool>> override {
             ++exists_path_count;
             co_return true;
         }
 
-        auto BlobExists(const disk::storage::BlobDescriptor& /*blob*/)
+        auto BlobExists(
+            const disk::storage::BlobDescriptor& /*blob*/,
+            disk::utils::LogContext /*log_context*/
+        )
             -> drogon::Task<Result<bool>> override {
             ++blob_exists_count;
             co_return blob_exists;
@@ -156,7 +172,10 @@ namespace {
             return m_temp_dir / (hash + ".bin");
         }
 
-        auto GetFileSize(const std::filesystem::path& /*storage_path*/)
+        auto GetFileSize(
+            const std::filesystem::path& /*storage_path*/,
+            disk::utils::LogContext /*log_context*/
+        )
             -> drogon::Task<Result<uint64_t>> override {
             co_return static_cast<uint64_t>(0);
         }

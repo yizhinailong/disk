@@ -49,18 +49,31 @@ namespace disk::storage {
         auto operator=(LocalBlobStore&&) -> LocalBlobStore& = default;
 
         [[nodiscard]]
-        auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& sha256_hash)
+        auto PromoteToFinal(
+            const UploadStagingAssembly& assembly,
+            const std::string& sha256_hash,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<BlobPromoteResult>> override;
 
         [[nodiscard]]
-        auto OpenForRead(const std::filesystem::path& storage_path)
+        auto OpenForRead(
+            const std::filesystem::path& storage_path,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> override;
 
         [[nodiscard]]
-        auto DeleteBlob(const std::filesystem::path& storage_path) -> drogon::Task<Result<void>> override;
+        auto DeleteBlob(
+            const std::filesystem::path& storage_path,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<void>> override;
 
         [[nodiscard]]
-        auto Exists(const std::filesystem::path& storage_path) -> drogon::Task<Result<bool>> override;
+        auto Exists(
+            const std::filesystem::path& storage_path,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<bool>> override;
 
         [[nodiscard]]
         auto GetLocalBlobPathForDownload(const BlobDescriptor& blob) const
@@ -70,10 +83,17 @@ namespace disk::storage {
         auto GetFinalStoragePath(const std::string& sha256_hash) const -> std::filesystem::path override;
 
         [[nodiscard]]
-        auto GetFileSize(const std::filesystem::path& storage_path) -> drogon::Task<Result<uint64_t>> override;
+        auto GetFileSize(
+            const std::filesystem::path& storage_path,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<uint64_t>> override;
 
         [[nodiscard]]
-        auto ListFinalObjects(const std::string& continuation_token, size_t limit)
+        auto ListFinalObjects(
+            const std::string& continuation_token,
+            size_t limit,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<StorageInventoryPage>> override;
 
     private:

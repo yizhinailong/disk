@@ -255,7 +255,8 @@ namespace disk::file {
             task.staging_session,
             chunk_index,
             actual_hash,
-            std::move(chunk_payload)
+            std::move(chunk_payload),
+            log_context
         );
         if (!write_result) {
             Logger::Error(log_context) << "Failed to write chunk file: upload_id=" << upload_id

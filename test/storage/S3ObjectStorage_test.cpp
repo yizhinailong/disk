@@ -42,9 +42,15 @@ namespace {
 
     class FakeS3Client final : public disk::storage::IS3Client {
     public:
-        auto ValidateBucketAccessible() -> Result<void> override { return {}; }
+        auto ValidateBucketAccessible(disk::utils::LogContext log_context)
+            -> Result<void> override {
+            Record(disk::storage::S3SdkOperation::GetBucketLocation, std::move(log_context));
+            return {};
+        }
 
-        auto HeadObject(const std::string& key) -> Result<disk::storage::S3HeadObjectResult> override {
+        auto HeadObject(const std::string& key, disk::utils::LogContext log_context)
+            -> Result<disk::storage::S3HeadObjectResult> override {
+            Record(disk::storage::S3SdkOperation::HeadObject, std::move(log_context));
             ++head_calls;
             const auto it = objects.find(key);
             if (it == objects.end()) {
@@ -57,8 +63,13 @@ namespace {
             };
         }
 
-        auto PutObjectIfAbsent(const std::string& key, std::string data)
+        auto PutObjectIfAbsent(
+            const std::string& key,
+            std::string data,
+            disk::utils::LogContext log_context
+        )
             -> Result<disk::storage::S3PutObjectResult> override {
+            Record(disk::storage::S3SdkOperation::PutObject, std::move(log_context));
             ++put_calls;
             uploaded_keys.push_back(key);
             if (objects.contains(key)) {
@@ -77,8 +88,10 @@ namespace {
 
         auto PutObjectFromFileIfAbsent(
             const std::string& key,
-            const std::filesystem::path& local_path
+            const std::filesystem::path& local_path,
+            disk::utils::LogContext log_context
         ) -> Result<disk::storage::S3PutObjectResult> override {
+            Record(disk::storage::S3SdkOperation::PutObject, std::move(log_context));
             ++put_calls;
             uploaded_keys.push_back(key);
             if (objects.contains(key)) {
@@ -103,7 +116,9 @@ namespace {
             };
         }
 
-        auto DeleteObject(const std::string& key) -> Result<void> override {
+        auto DeleteObject(const std::string& key, disk::utils::LogContext log_context)
+            -> Result<void> override {
+            Record(disk::storage::S3SdkOperation::DeleteObject, std::move(log_context));
             ++delete_calls;
             deleted_keys.push_back(key);
             if (delete_failures_remaining > 0) {
@@ -114,8 +129,14 @@ namespace {
             return {};
         }
 
-        auto GetObjectRange(const std::string& key, uint64_t start, uint64_t length)
+        auto GetObjectRange(
+            const std::string& key,
+            uint64_t start,
+            uint64_t length,
+            disk::utils::LogContext log_context
+        )
             -> Result<std::shared_ptr<disk::storage::StorageReadStream>> override {
+            Record(disk::storage::S3SdkOperation::GetObject, std::move(log_context));
             ++get_calls;
             last_range_key = key;
             last_range_start = start;
@@ -138,8 +159,10 @@ namespace {
         auto ListObjects(
             const std::string& prefix,
             const std::string& continuation_token,
-            uint32_t max_keys
+            uint32_t max_keys,
+            disk::utils::LogContext log_context
         ) -> Result<disk::storage::S3ListObjectsResult> override {
+            Record(disk::storage::S3SdkOperation::ListObjectsV2, std::move(log_context));
             ++list_calls;
             disk::storage::S3ListObjectsResult result;
             auto it = continuation_token.empty() ? objects.lower_bound(prefix) : objects.upper_bound(continuation_token);
@@ -158,7 +181,11 @@ namespace {
             return result;
         }
 
-        auto DeleteObjects(const std::vector<std::string>& keys) -> Result<void> override {
+        auto DeleteObjects(
+            const std::vector<std::string>& keys,
+            disk::utils::LogContext log_context
+        ) -> Result<void> override {
+            Record(disk::storage::S3SdkOperation::DeleteObjects, std::move(log_context));
             ++delete_batch_calls;
             delete_batch_sizes.push_back(keys.size());
             for (const auto& key : keys) {
@@ -168,7 +195,14 @@ namespace {
             return {};
         }
 
-        auto CreateMultipartUpload(const std::string& key) -> Result<std::string> override {
+        auto CreateMultipartUpload(
+            const std::string& key,
+            disk::utils::LogContext log_context
+        ) -> Result<std::string> override {
+            Record(
+                disk::storage::S3SdkOperation::CreateMultipartUpload,
+                std::move(log_context)
+            );
             ++create_multipart_calls;
             const auto upload_id = "multipart-" + std::to_string(++next_multipart_id);
             multipart_uploads.emplace(upload_id, MultipartUpload{ .key = key });
@@ -179,8 +213,10 @@ namespace {
             const std::string& key,
             const std::string& upload_id,
             int part_number,
-            std::string data
+            std::string data,
+            disk::utils::LogContext log_context
         ) -> Result<std::string> override {
+            Record(disk::storage::S3SdkOperation::UploadPart, std::move(log_context));
             ++upload_part_calls;
             auto upload = multipart_uploads.find(upload_id);
             if (upload == multipart_uploads.end() || upload->second.key != key) {
@@ -203,8 +239,10 @@ namespace {
             const std::string& upload_id,
             int part_number,
             uint64_t start,
-            uint64_t length
+            uint64_t length,
+            disk::utils::LogContext log_context
         ) -> Result<std::string> override {
+            Record(disk::storage::S3SdkOperation::UploadPartCopy, log_context);
             copied_ranges.push_back(CopiedRange{
                 .source_key = source_key,
                 .destination_key = destination_key,
@@ -220,7 +258,8 @@ namespace {
                 destination_key,
                 upload_id,
                 part_number,
-                source->second.substr(static_cast<size_t>(start), static_cast<size_t>(length))
+                source->second.substr(static_cast<size_t>(start), static_cast<size_t>(length)),
+                std::move(log_context)
             );
         }
 
@@ -228,8 +267,13 @@ namespace {
             const std::string& key,
             const std::string& upload_id,
             const std::vector<disk::storage::S3CompletedPart>& parts,
-            bool only_if_absent
+            bool only_if_absent,
+            disk::utils::LogContext log_context
         ) -> Result<disk::storage::S3CompleteMultipartResult> override {
+            Record(
+                disk::storage::S3SdkOperation::CompleteMultipartUpload,
+                std::move(log_context)
+            );
             ++complete_multipart_calls;
             auto upload = multipart_uploads.find(upload_id);
             if (upload == multipart_uploads.end() || upload->second.key != key) {
@@ -262,8 +306,16 @@ namespace {
             return disk::storage::S3CompleteMultipartResult{ .created = true };
         }
 
-        auto AbortMultipartUpload(const std::string& /*key*/, const std::string& upload_id)
+        auto AbortMultipartUpload(
+            const std::string& /*key*/,
+            const std::string& upload_id,
+            disk::utils::LogContext log_context
+        )
             -> Result<void> override {
+            Record(
+                disk::storage::S3SdkOperation::AbortMultipartUpload,
+                std::move(log_context)
+            );
             ++abort_multipart_calls;
             aborted_upload_ids.push_back(upload_id);
             if (abort_multipart_failure) {
@@ -289,6 +341,21 @@ namespace {
 
             auto operator==(const CopiedRange&) const -> bool = default;
         };
+
+        struct ObservedCall {
+            disk::storage::S3SdkOperation operation;
+            disk::utils::LogContext log_context;
+        };
+
+        auto Record(
+            disk::storage::S3SdkOperation operation,
+            disk::utils::LogContext log_context
+        ) -> void {
+            observed_calls.push_back(ObservedCall{
+                .operation = operation,
+                .log_context = std::move(log_context),
+            });
+        }
 
         static auto EtagFor(const std::string& data) -> std::string {
             return "\"fake-etag-" + std::to_string(data.size()) + "\"";
@@ -325,6 +392,7 @@ namespace {
         std::vector<int> completed_part_numbers;
         std::vector<std::string> aborted_upload_ids;
         std::vector<CopiedRange> copied_ranges;
+        std::vector<ObservedCall> observed_calls;
         std::map<std::string, MultipartUpload> multipart_uploads;
         ErrorInfo delete_error{ ErrorCode::InternalError, "fake delete failure" };
     };
@@ -373,6 +441,18 @@ namespace {
         std::vector<disk::storage::MultipartUploadDescriptor> released_for_retry;
         std::vector<std::string> retry_errors;
     };
+
+    auto ExpectLogContextEquals(
+        const disk::utils::LogContext& actual,
+        const disk::utils::LogContext& expected
+    ) -> void {
+        EXPECT_EQ(actual.request_id, expected.request_id);
+        EXPECT_EQ(actual.operation, expected.operation);
+        EXPECT_EQ(actual.upload_id, expected.upload_id);
+        EXPECT_EQ(actual.job_id, expected.job_id);
+        EXPECT_EQ(actual.lease_owner, expected.lease_owner);
+        EXPECT_EQ(actual.state_version, expected.state_version);
+    }
 
     auto LoadS3StorageConfig(const std::filesystem::path& temp_upload_path) -> void {
         Json::Value cfg;
@@ -574,6 +654,55 @@ TEST_F(S3ObjectStorageTest, S3ChunkWriteIsConditionalAndIdempotent) {
     EXPECT_EQ(client->objects.at(expected_key), data);
     EXPECT_EQ(client->put_calls, 2);
     EXPECT_EQ(client->get_calls, 1);
+}
+
+TEST_F(S3ObjectStorageTest, PreservesLogContextAcrossBlockingS3Tasks) {
+    const disk::utils::LogContext log_context{
+        .request_id = "request-context",
+        .operation = "upload_chunk",
+        .upload_id = "upload-123",
+        .job_id = 73,
+        .lease_owner = "worker-context",
+        .state_version = 11,
+    };
+    const auto session = S3Session();
+    const std::string data = "context-aware-chunk";
+
+    auto chunk = drogon::sync_wait(storage->WriteChunk(
+        session,
+        1,
+        disk::utils::FileHashUtil::HashMd5(data),
+        data,
+        log_context
+    ));
+
+    ASSERT_TRUE(chunk.has_value()) << chunk.error().message;
+    ASSERT_EQ(client->observed_calls.size(), 2U);
+    EXPECT_EQ(client->observed_calls[0].operation, disk::storage::S3SdkOperation::PutObject);
+    EXPECT_EQ(client->observed_calls[1].operation, disk::storage::S3SdkOperation::HeadObject);
+    for (const auto& call : client->observed_calls) {
+        ExpectLogContextEquals(call.log_context, log_context);
+    }
+
+    client->observed_calls.clear();
+    const auto key = "objects/sha256/ab/context-object.bin";
+    client->objects[key] = "0123456789";
+    auto stream = drogon::sync_wait(storage->OpenBlobRangeForRead(
+        disk::storage::BlobDescriptor{
+            .content_id = 9,
+            .hash_md5 = "00000000000000000000000000000000",
+            .storage_path = key,
+            .size = 10,
+        },
+        2,
+        4,
+        log_context
+    ));
+
+    ASSERT_TRUE(stream.has_value()) << stream.error().message;
+    ASSERT_EQ(client->observed_calls.size(), 1U);
+    EXPECT_EQ(client->observed_calls[0].operation, disk::storage::S3SdkOperation::GetObject);
+    ExpectLogContextEquals(client->observed_calls[0].log_context, log_context);
 }
 
 TEST_F(S3ObjectStorageTest, S3ChunkWriteNeverOverwritesConflictingObject) {

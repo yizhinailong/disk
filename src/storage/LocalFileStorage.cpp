@@ -247,7 +247,10 @@ namespace disk::storage {
                        << ", assembly_threads=" << assembly_worker_thread_count;
     }
 
-    auto LocalFileStorage::EnsureUploadSession(const UploadStagingSession& session)
+    auto LocalFileStorage::EnsureUploadSession(
+        const UploadStagingSession& session,
+        disk::utils::LogContext /*log_context*/
+    )
         -> drogon::Task<Result<void>> {
         auto validation = ValidateLocalSession(session);
         if (!validation) {
@@ -278,7 +281,8 @@ namespace disk::storage {
         const UploadStagingSession& session,
         uint32_t chunk_index,
         const std::string& md5_hash,
-        std::string data
+        std::string data,
+        disk::utils::LogContext /*log_context*/
     ) -> drogon::Task<Result<UploadStagingChunk>> {
         auto validation = ValidateLocalSession(session);
         if (!validation || !IsLowerHexMd5(md5_hash)) {
@@ -385,7 +389,8 @@ namespace disk::storage {
 
     auto LocalFileStorage::HeadChunkObject(
         const UploadStagingSession& session,
-        const UploadStagingChunk& chunk
+        const UploadStagingChunk& chunk,
+        disk::utils::LogContext /*log_context*/
     ) -> drogon::Task<Result<UploadStagingObjectHead>> {
         auto validation = ValidateLocalSession(session);
         if (!validation) {
@@ -429,7 +434,8 @@ namespace disk::storage {
         const UploadStagingSession& session,
         uint64_t state_version,
         uint32_t expected_chunk_count,
-        const std::vector<UploadStagingChunk>& chunks
+        const std::vector<UploadStagingChunk>& chunks,
+        disk::utils::LogContext /*log_context*/
     )
         -> drogon::Task<Result<UploadStagingAssembly>> {
         auto validation = ValidateLocalSession(session);
@@ -671,7 +677,8 @@ namespace disk::storage {
 
     auto LocalFileStorage::DiscardAssembly(
         const UploadStagingSession& session,
-        const UploadStagingAssembly& assembly
+        const UploadStagingAssembly& assembly,
+        disk::utils::LogContext /*log_context*/
     ) -> drogon::Task<Result<void>> {
         auto validation = ValidateLocalSession(session);
         if (!validation) {
@@ -722,7 +729,10 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto LocalFileStorage::CleanupSession(const UploadStagingSession& session)
+    auto LocalFileStorage::CleanupSession(
+        const UploadStagingSession& session,
+        disk::utils::LogContext /*log_context*/
+    )
         -> drogon::Task<Result<void>> {
         auto validation = ValidateLocalSession(session);
         if (!validation) {
@@ -759,7 +769,8 @@ namespace disk::storage {
 
     auto LocalFileStorage::ListStagingObjects(
         const std::string& continuation_token,
-        size_t limit
+        size_t limit,
+        disk::utils::LogContext /*log_context*/
     ) -> drogon::Task<Result<StorageInventoryPage>> {
         const auto root = std::filesystem::path(m_config_mgr->GetTempUploadPath());
         auto result = co_await RunBlockingFilesystemTask(

@@ -212,7 +212,8 @@ namespace disk::storage {
 
     auto LocalBlobStore::PromoteToFinal(
         const UploadStagingAssembly& assembly,
-        const std::string& sha256_hash
+        const std::string& sha256_hash,
+        disk::utils::LogContext /*log_context*/
     )
         -> drogon::Task<Result<BlobPromoteResult>> {
         if (assembly.backend != UploadStagingBackend::Local || assembly.locator.empty()) {
@@ -296,7 +297,10 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto LocalBlobStore::OpenForRead(const std::filesystem::path& storage_path)
+    auto LocalBlobStore::OpenForRead(
+        const std::filesystem::path& storage_path,
+        disk::utils::LogContext /*log_context*/
+    )
         -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> {
         auto result = co_await RunBlockingFilesystemTask(
             m_worker_queue,
@@ -315,7 +319,10 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto LocalBlobStore::DeleteBlob(const std::filesystem::path& storage_path)
+    auto LocalBlobStore::DeleteBlob(
+        const std::filesystem::path& storage_path,
+        disk::utils::LogContext /*log_context*/
+    )
         -> drogon::Task<Result<void>> {
         auto result = co_await RunBlockingFilesystemTaskWithTimeout(
             m_worker_queue,
@@ -357,7 +364,10 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto LocalBlobStore::Exists(const std::filesystem::path& storage_path)
+    auto LocalBlobStore::Exists(
+        const std::filesystem::path& storage_path,
+        disk::utils::LogContext /*log_context*/
+    )
         -> drogon::Task<Result<bool>> {
         auto result = co_await RunBlockingFilesystemTask(
             m_worker_queue,
@@ -391,7 +401,10 @@ namespace disk::storage {
                sha256_hash.substr(0, 2) / (sha256_hash + ".bin");
     }
 
-    auto LocalBlobStore::GetFileSize(const std::filesystem::path& storage_path)
+    auto LocalBlobStore::GetFileSize(
+        const std::filesystem::path& storage_path,
+        disk::utils::LogContext /*log_context*/
+    )
         -> drogon::Task<Result<uint64_t>> {
         auto result = co_await RunBlockingFilesystemTask(
             m_worker_queue,
@@ -418,7 +431,8 @@ namespace disk::storage {
 
     auto LocalBlobStore::ListFinalObjects(
         const std::string& continuation_token,
-        size_t limit
+        size_t limit,
+        disk::utils::LogContext /*log_context*/
     ) -> drogon::Task<Result<StorageInventoryPage>> {
         const auto root = std::filesystem::path(m_config_mgr->GetStorageBasePath());
         auto result = co_await RunBlockingFilesystemTask(

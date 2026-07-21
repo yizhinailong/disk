@@ -731,7 +731,8 @@ namespace disk::upload {
 
             if (m_upload_staging_storage != nullptr) {
                 auto ensure_result = co_await m_upload_staging_storage->EnsureUploadSession(
-                    staging_session
+                    staging_session,
+                    log_context
                 );
                 if (!ensure_result) {
                     Logger::Warn(log_context)
@@ -974,7 +975,8 @@ namespace disk::upload {
             staging_session.value(),
             state_version,
             upload_task.getValueOfTotalChunks(),
-            chunks
+            chunks,
+            log_context
         );
         const auto assemble_duration = assemble_timer.Stop();
         Logger::Debug(log_context)
@@ -1034,7 +1036,8 @@ namespace disk::upload {
         if (!renew_after_assembly) {
             auto cleanup_result = co_await m_upload_staging_storage->DiscardAssembly(
                 staging_session.value(),
-                assembled
+                assembled,
+                log_context
             );
             if (!cleanup_result) {
                 Logger::Warn(log_context)
@@ -1055,7 +1058,8 @@ namespace disk::upload {
                 << ", actual_md5=" << final_hash;
             auto delete_result = co_await m_upload_staging_storage->DiscardAssembly(
                 staging_session.value(),
-                assembled
+                assembled,
+                log_context
             );
             if (!delete_result) {
                 Logger::Warn(log_context)
@@ -1133,7 +1137,8 @@ namespace disk::upload {
                 << "File with same name already exists: " << upload_task.getValueOfFilename();
             auto delete_result = co_await m_upload_staging_storage->DiscardAssembly(
                 staging_session.value(),
-                assembled
+                assembled,
+                log_context
             );
             if (!delete_result) {
                 Logger::Warn(log_context)
@@ -1188,7 +1193,8 @@ namespace disk::upload {
                 Logger::Error(log_context) << "Blob store is not configured";
                 auto cleanup_result = co_await m_upload_staging_storage->DiscardAssembly(
                     staging_session.value(),
-                    assembled
+                    assembled,
+                    log_context
                 );
                 if (!cleanup_result) {
                     Logger::Warn(log_context)
@@ -1207,7 +1213,11 @@ namespace disk::upload {
                 );
             }
 
-            auto promote_result = co_await m_blob_store->PromoteToFinal(assembled, precomputed_sha256);
+            auto promote_result = co_await m_blob_store->PromoteToFinal(
+                assembled,
+                precomputed_sha256,
+                log_context
+            );
             promote_timer.Stop();
             if (!promote_result) {
                 Logger::Error(log_context)

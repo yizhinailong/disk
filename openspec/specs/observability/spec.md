@@ -121,6 +121,21 @@ The system SHALL apply an outcome-based logging policy to upload-chunk traffic s
 - **WHEN** an operator temporarily lowers an isolated API instance to `DEBUG`
 - **THEN** successful chunk details MAY be emitted only for the bounded diagnostic window and SHALL continue to exclude credentials and file content
 
+### Requirement: Typed S3 SDK Correlation
+The system SHALL propagate caller-owned correlation explicitly by value through storage abstractions, the S3 blocking queue, and the AWS adapter without thread-local state or identifier inference.
+
+#### Scenario: API or Worker reaches the S3 adapter
+- **WHEN** an upload, download, cleanup, or claimed durable Worker operation performs one or more S3 SDK calls
+- **THEN** every final SDK result event SHALL retain the caller's typed request, operation, upload, job, owner, and state-version values exactly as supplied, including null values for unavailable identifiers
+
+#### Scenario: AWS SDK call returns a final result
+- **WHEN** an AWS SDK call completes after its configured internal retries
+- **THEN** the adapter SHALL record a bounded SDK operation and outcome, SHALL emit success, not-found, and conflict only at `DEBUG`, SHALL emit every other final outcome at `WARN`, and SHALL keep dependency metrics unsampled
+
+#### Scenario: S3 result event is serialized
+- **WHEN** the adapter records an SDK result event
+- **THEN** it SHALL NOT include bucket, endpoint, object key or prefix, remote multipart upload ID, continuation token, credentials, signatures, object content, or SDK exception text
+
 ### Requirement: Background Maintenance Visibility
 The system SHALL expose Worker claiming configuration and current acceptance state independently, and a Worker in observation mode SHALL continue to expose dependency readiness and database-backed queue snapshots without executing maintenance work.
 

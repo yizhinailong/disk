@@ -119,7 +119,10 @@ namespace disk::reconciliation {
         m_staging_storage(staging_storage),
         m_blob_store(blob_store) {}
 
-    auto StorageReconciliationService::RunPage(const ReconciliationPageRequest& request) const
+    auto StorageReconciliationService::RunPage(
+        const ReconciliationPageRequest& request,
+        disk::utils::LogContext log_context
+    ) const
         -> drogon::Task<Result<ReconciliationPageResult>> {
         auto validation = ValidateReconciliationPageRequest(request);
         if (!validation) {
@@ -134,24 +137,25 @@ namespace disk::reconciliation {
         try {
             switch (request.scope) {
                 case ReconciliationScope::Contents:
-                    co_return co_await RunContentPage(request);
+                    co_return co_await RunContentPage(request, log_context);
                 case ReconciliationScope::Users:
                     co_return co_await RunUserPage(request);
                 case ReconciliationScope::Staging:
                 case ReconciliationScope::Final:
-                    co_return co_await RunObjectPage(request);
+                    co_return co_await RunObjectPage(request, log_context);
             }
         } catch (const drogon::orm::DrogonDbException& error) {
-            Logger::Warn() << "Storage reconciliation database failure: scope="
-                           << ToStorageValue(request.scope) << ", scan_id=" << request.scan_id
-                           << ", error=" << error.base().what();
+            Logger::Warn(log_context)
+                << "Storage reconciliation database failure: scope="
+                << ToStorageValue(request.scope) << ", scan_id=" << request.scan_id
+                << ", error=" << error.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Storage reconciliation database failure")
             );
         } catch (const std::exception& error) {
-            Logger::Warn() << "Storage reconciliation failure: scope="
-                           << ToStorageValue(request.scope) << ", scan_id=" << request.scan_id
-                           << ", error=" << error.what();
+            Logger::Warn(log_context)
+                << "Storage reconciliation failure: scope=" << ToStorageValue(request.scope)
+                << ", scan_id=" << request.scan_id << ", error=" << error.what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Storage reconciliation failed")
             );
@@ -216,7 +220,8 @@ namespace disk::reconciliation {
     }
 
     auto StorageReconciliationService::RunContentPage(
-        const ReconciliationPageRequest& request
+        const ReconciliationPageRequest& request,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<ReconciliationPageResult>> {
         auto rows = co_await m_db_client->execSqlCoro(
             "SELECT content.id, content.hash_md5, content.size, content.storage_path, " "       content.ref_count, " "       ((SELECT COUNT(*) FROM files WHERE content_id = content.id) + " "        (SELECT COUNT(*) FROM trash " "         WHERE content_id = content.id AND item_type = 'file')) AS actual_ref_count " "FROM file_contents AS content " "WHERE content.id > $1 ORDER BY content.id LIMIT $2",
@@ -290,7 +295,7 @@ namespace disk::reconciliation {
                 .storage_path = storage_path,
                 .size = expected_size,
             };
-            auto exists = co_await m_blob_store->BlobExists(blob);
+            auto exists = co_await m_blob_store->BlobExists(blob, log_context);
             if (!exists) {
                 co_return std::unexpected(exists.error());
             }
@@ -311,7 +316,7 @@ namespace disk::reconciliation {
             }
             co_await ResolveFinding(kMissingFinalBlobFindingType, resource_id);
 
-            auto observed_size = co_await m_blob_store->GetFileSize(storage_path);
+            auto observed_size = co_await m_blob_store->GetFileSize(storage_path, log_context);
             if (!observed_size) {
                 if (observed_size.error().code == ErrorCode::FileNotFound) {
                     auto details = MakeDetails(request.scan_id);
@@ -417,7 +422,8 @@ namespace disk::reconciliation {
     }
 
     auto StorageReconciliationService::RunObjectPage(
-        const ReconciliationPageRequest& request
+        const ReconciliationPageRequest& request,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<ReconciliationPageResult>> {
         Result<disk::storage::StorageInventoryPage> inventory = std::unexpected(
             ErrorInfo(ErrorCode::InternalError, "Reconciliation inventory is not configured")
@@ -428,7 +434,8 @@ namespace disk::reconciliation {
             }
             inventory = co_await m_staging_storage->ListStagingObjects(
                 request.continuation_token,
-                request.limit
+                request.limit,
+                log_context
             );
         } else {
             if (m_blob_store == nullptr) {
@@ -436,7 +443,8 @@ namespace disk::reconciliation {
             }
             inventory = co_await m_blob_store->ListFinalObjects(
                 request.continuation_token,
-                request.limit
+                request.limit,
+                log_context
             );
         }
         if (!inventory) {

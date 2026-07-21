@@ -5,6 +5,7 @@
 #include <drogon/utils/coroutine.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::storage {
 
@@ -47,7 +48,10 @@ namespace disk::storage {
         virtual ~IMultipartUploadCleaner() = default;
 
         [[nodiscard]]
-        virtual auto AbortMultipartUpload(const MultipartUploadDescriptor& descriptor)
+        virtual auto AbortMultipartUpload(
+            const MultipartUploadDescriptor& descriptor,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>> = 0;
     };
 

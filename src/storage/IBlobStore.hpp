@@ -17,6 +17,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include <drogon/orm/DbClient.h>
 
@@ -24,6 +25,7 @@
 #include "storage/StorageInventory.hpp"
 #include "storage/UploadStagingStorage.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::storage {
 
@@ -103,7 +105,11 @@ namespace disk::storage {
          * @return 成功返回最终路径与是否由本次调用创建，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto PromoteToFinal(const UploadStagingAssembly& assembly, const std::string& sha256_hash)
+        virtual auto PromoteToFinal(
+            const UploadStagingAssembly& assembly,
+            const std::string& sha256_hash,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<BlobPromoteResult>> = 0;
 
         /**
@@ -112,7 +118,10 @@ namespace disk::storage {
          * @return 成功返回可读文件流，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto OpenForRead(const std::filesystem::path& storage_path)
+        virtual auto OpenForRead(
+            const std::filesystem::path& storage_path,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> = 0;
 
         /**
@@ -121,14 +130,20 @@ namespace disk::storage {
          * @return 成功返回可读文件流，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto OpenBlobForRead(const BlobDescriptor& blob)
+        virtual auto OpenBlobForRead(
+            const BlobDescriptor& blob,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> {
             if (blob.storage_path.empty()) {
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::FileReadError, "Blob storage path is empty")
                 );
             }
-            co_return co_await OpenForRead(std::filesystem::path(blob.storage_path));
+            co_return co_await OpenForRead(
+                std::filesystem::path(blob.storage_path),
+                std::move(log_context)
+            );
         }
 
         /**
@@ -142,9 +157,10 @@ namespace disk::storage {
         virtual auto OpenBlobRangeForRead(
             const BlobDescriptor& blob,
             uint64_t start,
-            uint64_t length
+            uint64_t length,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<std::shared_ptr<StorageReadStream>>> {
-            auto open_result = co_await OpenBlobForRead(blob);
+            auto open_result = co_await OpenBlobForRead(blob, std::move(log_context));
             if (!open_result) {
                 co_return std::unexpected(open_result.error());
             }
@@ -174,13 +190,19 @@ namespace disk::storage {
          * @return 成功返回存在性布尔值，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto BlobExists(const BlobDescriptor& blob) -> drogon::Task<Result<bool>> {
+        virtual auto BlobExists(
+            const BlobDescriptor& blob,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<bool>> {
             if (blob.storage_path.empty()) {
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::FileReadError, "Blob storage path is empty")
                 );
             }
-            co_return co_await Exists(std::filesystem::path(blob.storage_path));
+            co_return co_await Exists(
+                std::filesystem::path(blob.storage_path),
+                std::move(log_context)
+            );
         }
 
         /**
@@ -201,7 +223,10 @@ namespace disk::storage {
          * @return 成功返回空，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto DeleteBlob(const std::filesystem::path& storage_path)
+        virtual auto DeleteBlob(
+            const std::filesystem::path& storage_path,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>> = 0;
 
         /**
@@ -210,7 +235,10 @@ namespace disk::storage {
          * @return 成功返回存在性布尔值，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto Exists(const std::filesystem::path& storage_path) -> drogon::Task<Result<bool>> = 0;
+        virtual auto Exists(
+            const std::filesystem::path& storage_path,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<bool>> = 0;
 
         /**
          * @brief 根据 SHA-256 内容哈希计算新 Blob 的最终存储路径
@@ -226,7 +254,10 @@ namespace disk::storage {
          * @return 成功返回文件大小，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto GetFileSize(const std::filesystem::path& storage_path)
+        virtual auto GetFileSize(
+            const std::filesystem::path& storage_path,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<uint64_t>> = 0;
 
         /**
@@ -235,10 +266,12 @@ namespace disk::storage {
         [[nodiscard]]
         virtual auto ListFinalObjects(
             const std::string& continuation_token,
-            size_t limit
+            size_t limit,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<StorageInventoryPage>> {
             static_cast<void>(continuation_token);
             static_cast<void>(limit);
+            static_cast<void>(log_context);
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Final Blob inventory is not supported")
             );

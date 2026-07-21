@@ -55,7 +55,10 @@ namespace disk::jobs {
 
         class RecordingStagingStorage final : public disk::storage::UploadStagingStorage {
         public:
-            auto EnsureUploadSession(const disk::storage::UploadStagingSession&)
+            auto EnsureUploadSession(
+                const disk::storage::UploadStagingSession&,
+                disk::utils::LogContext
+            )
                 -> drogon::Task<Result<void>> override {
                 co_return {};
             }
@@ -64,7 +67,8 @@ namespace disk::jobs {
                 const disk::storage::UploadStagingSession&,
                 uint32_t,
                 const std::string&,
-                std::string
+                std::string,
+                disk::utils::LogContext
             ) -> drogon::Task<Result<disk::storage::UploadStagingChunk>> override {
                 co_return std::unexpected(ErrorInfo(ErrorCode::InternalError));
             }
@@ -73,21 +77,27 @@ namespace disk::jobs {
                 const disk::storage::UploadStagingSession&,
                 uint64_t,
                 uint32_t,
-                const std::vector<disk::storage::UploadStagingChunk>&
+                const std::vector<disk::storage::UploadStagingChunk>&,
+                disk::utils::LogContext
             ) -> drogon::Task<Result<disk::storage::UploadStagingAssembly>> override {
                 co_return std::unexpected(ErrorInfo(ErrorCode::InternalError));
             }
 
             auto DiscardAssembly(
                 const disk::storage::UploadStagingSession&,
-                const disk::storage::UploadStagingAssembly&
+                const disk::storage::UploadStagingAssembly&,
+                disk::utils::LogContext
             ) -> drogon::Task<Result<void>> override {
                 co_return {};
             }
 
-            auto CleanupSession(const disk::storage::UploadStagingSession& session)
+            auto CleanupSession(
+                const disk::storage::UploadStagingSession& session,
+                disk::utils::LogContext log_context
+            )
                 -> drogon::Task<Result<void>> override {
                 cleaned_sessions.push_back(session);
+                cleanup_log_contexts.push_back(std::move(log_context));
                 if (cleanup_error.has_value()) {
                     co_return std::unexpected(cleanup_error.value());
                 }
@@ -95,6 +105,7 @@ namespace disk::jobs {
             }
 
             std::vector<disk::storage::UploadStagingSession> cleaned_sessions;
+            std::vector<disk::utils::LogContext> cleanup_log_contexts;
             std::optional<ErrorInfo> cleanup_error;
         };
 
@@ -102,9 +113,11 @@ namespace disk::jobs {
             : public disk::storage::IMultipartUploadCleaner {
         public:
             auto AbortMultipartUpload(
-                const disk::storage::MultipartUploadDescriptor& descriptor
+                const disk::storage::MultipartUploadDescriptor& descriptor,
+                disk::utils::LogContext log_context
             ) -> drogon::Task<Result<void>> override {
                 aborted.push_back(descriptor);
+                log_contexts.push_back(std::move(log_context));
                 if (error.has_value()) {
                     co_return std::unexpected(error.value());
                 }
@@ -112,6 +125,7 @@ namespace disk::jobs {
             }
 
             std::vector<disk::storage::MultipartUploadDescriptor> aborted;
+            std::vector<disk::utils::LogContext> log_contexts;
             std::optional<ErrorInfo> error;
         };
 
@@ -258,6 +272,12 @@ namespace disk::jobs {
             EXPECT_EQ(storage.cleaned_sessions[0].upload_id, "upload-123");
             EXPECT_EQ(storage.cleaned_sessions[0].backend, disk::storage::UploadStagingBackend::S3);
             EXPECT_EQ(storage.cleaned_sessions[0].prefix, "staging/upload-123");
+            ASSERT_EQ(storage.cleanup_log_contexts.size(), 1U);
+            const auto& log_context = storage.cleanup_log_contexts.front();
+            EXPECT_EQ(log_context.operation, "storage_job_staging_cleanup");
+            EXPECT_EQ(log_context.upload_id, "upload-123");
+            EXPECT_EQ(log_context.job_id, 42U);
+            EXPECT_EQ(log_context.lease_owner, "worker-1");
         }
 
         TEST(StorageJobWorkerHandlerTest, RejectsMismatchedAggregateWithoutDeleting) {
@@ -332,6 +352,12 @@ namespace disk::jobs {
             ASSERT_EQ(cleaner.aborted.size(), 1U);
             EXPECT_EQ(cleaner.aborted[0].key, "staging/upload-123/assembled/7.bin");
             EXPECT_EQ(cleaner.aborted[0].upload_id, "remote-upload-id");
+            ASSERT_EQ(cleaner.log_contexts.size(), 1U);
+            const auto& log_context = cleaner.log_contexts.front();
+            EXPECT_EQ(log_context.operation, "storage_job_multipart_abort");
+            EXPECT_EQ(log_context.job_id, 44U);
+            EXPECT_EQ(log_context.lease_owner, "worker-1");
+            EXPECT_FALSE(log_context.upload_id.has_value());
         }
 
         TEST(StorageJobWorkerHandlerTest, RejectsMultipartDigestMismatchBeforeStorageAccess) {

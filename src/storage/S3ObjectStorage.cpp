@@ -193,9 +193,10 @@ namespace disk::storage {
         [[nodiscard]] auto VerifyFinalObjectSize(
             const std::shared_ptr<IS3Client>& client,
             const std::string& key,
-            uint64_t expected_size
+            uint64_t expected_size,
+            const disk::utils::LogContext& log_context
         ) -> Result<void> {
-            auto head_result = client->HeadObject(key);
+            auto head_result = client->HeadObject(key, log_context);
             if (!head_result) {
                 return std::unexpected(head_result.error());
             }
@@ -268,7 +269,8 @@ namespace disk::storage {
             const std::shared_ptr<IS3Client>& client,
             const std::string& prefix,
             const std::string& continuation_token,
-            size_t limit
+            size_t limit,
+            const disk::utils::LogContext& log_context
         ) -> Result<StorageInventoryPage> {
             if (limit == 0 || limit > kMaxStorageInventoryPageSize || prefix.empty()) {
                 return std::unexpected(
@@ -278,7 +280,8 @@ namespace disk::storage {
             auto listed = client->ListObjects(
                 prefix,
                 continuation_token,
-                static_cast<uint32_t>(limit)
+                static_cast<uint32_t>(limit),
+                log_context
             );
             if (!listed) {
                 return std::unexpected(listed.error());
@@ -301,7 +304,7 @@ namespace disk::storage {
             StorageInventoryPage page;
             page.objects.reserve(listed->keys.size());
             for (const auto& key : listed->keys) {
-                auto head = client->HeadObject(key);
+                auto head = client->HeadObject(key, log_context);
                 if (!head) {
                     return std::unexpected(head.error());
                 }
@@ -325,10 +328,12 @@ namespace disk::storage {
             MultipartAbortGuard(
                 std::shared_ptr<IS3Client> client,
                 std::shared_ptr<IMultipartUploadJournal> journal,
-                MultipartUploadDescriptor descriptor
+                MultipartUploadDescriptor descriptor,
+                disk::utils::LogContext log_context
             ) : m_client(std::move(client)),
                 m_journal(std::move(journal)),
-                m_descriptor(std::move(descriptor)) {}
+                m_descriptor(std::move(descriptor)),
+                m_log_context(std::move(log_context)) {}
 
             ~MultipartAbortGuard() {
                 if (!m_active) {
@@ -337,16 +342,17 @@ namespace disk::storage {
                 try {
                     auto abort_result = m_client->AbortMultipartUpload(
                         m_descriptor.key,
-                        m_descriptor.upload_id
+                        m_descriptor.upload_id,
+                        m_log_context
                     );
                     if (abort_result) {
                         ResolveTracked("resolve aborted");
                         return;
                     }
 
-                    Logger::Warn() << "Failed to abort S3 multipart upload: key="
-                                   << m_descriptor.key
-                                   << ", error=" << abort_result.error().message;
+                    Logger::Warn(m_log_context)
+                        << "Failed to abort S3 multipart upload: error_code="
+                        << abort_result.error().CodeInt();
                     if (m_tracked && m_journal != nullptr) {
                         auto release_result = m_journal->ReleaseForRetry(
                             m_descriptor,
@@ -355,8 +361,9 @@ namespace disk::storage {
                         LogJournalFailure("release", release_result);
                     }
                 } catch (const std::exception& error) {
-                    Logger::Warn() << "S3 multipart abort cleanup threw: key="
-                                   << m_descriptor.key << ", error=" << error.what();
+                    static_cast<void>(error);
+                    Logger::Warn(m_log_context)
+                        << "S3 multipart abort cleanup threw";
                 }
             }
 
@@ -405,24 +412,26 @@ namespace disk::storage {
                     auto result = m_journal->Resolve(m_descriptor);
                     LogJournalFailure(action, result);
                 } catch (const std::exception& error) {
-                    Logger::Warn() << "Failed to " << action
-                                   << " multipart recovery task: key=" << m_descriptor.key
-                                   << ", error=" << error.what();
+                    static_cast<void>(error);
+                    Logger::Warn(m_log_context)
+                        << "Failed to " << action << " multipart recovery task";
                 }
             }
 
             auto LogJournalFailure(std::string_view action, const Result<void>& result) const
                 -> void {
                 if (!result) {
-                    Logger::Warn() << "Failed to " << action
-                                   << " multipart recovery task: key=" << m_descriptor.key
-                                   << ", error=" << result.error().message;
+                    Logger::Warn(m_log_context)
+                        << "Failed to " << action
+                        << " multipart recovery task: error_code="
+                        << result.error().CodeInt();
                 }
             }
 
             std::shared_ptr<IS3Client> m_client;
             std::shared_ptr<IMultipartUploadJournal> m_journal;
             MultipartUploadDescriptor m_descriptor;
+            disk::utils::LogContext m_log_context;
             bool m_active{ true };
             bool m_tracked{ false };
         };
@@ -431,9 +440,10 @@ namespace disk::storage {
             const std::shared_ptr<IS3Client>& client,
             const UploadStagingChunk& chunk,
             size_t buffer_size,
-            bool verify_etag
+            bool verify_etag,
+            const disk::utils::LogContext& log_context
         ) -> Result<S3HeadObjectResult> {
-            auto head_result = client->HeadObject(chunk.object_key);
+            auto head_result = client->HeadObject(chunk.object_key, log_context);
             if (!head_result) {
                 return std::unexpected(head_result.error());
             }
@@ -457,7 +467,8 @@ namespace disk::storage {
             auto stream_result = client->GetObjectRange(
                 chunk.object_key,
                 0,
-                chunk.size_bytes
+                chunk.size_bytes,
+                log_context
             );
             if (!stream_result) {
                 return std::unexpected(stream_result.error());
@@ -511,7 +522,8 @@ namespace disk::storage {
             const UploadStagingSession& session,
             uint64_t state_version,
             const std::vector<UploadStagingChunk>& chunks,
-            size_t read_buffer_size
+            size_t read_buffer_size,
+            const disk::utils::LogContext& log_context
         ) -> Result<UploadStagingAssembly> {
             if (journal == nullptr) {
                 return std::unexpected(
@@ -519,7 +531,7 @@ namespace disk::storage {
                 );
             }
             const auto assembly_key = BuildS3AssemblyKey(session, state_version);
-            auto create_result = client->CreateMultipartUpload(assembly_key);
+            auto create_result = client->CreateMultipartUpload(assembly_key, log_context);
             if (!create_result) {
                 return std::unexpected(create_result.error());
             }
@@ -529,7 +541,8 @@ namespace disk::storage {
                 MultipartUploadDescriptor{
                     .key = assembly_key,
                     .upload_id = create_result.value(),
-                }
+                },
+                log_context
             );
             auto track_result = abort_guard.Track();
             if (!track_result) {
@@ -567,7 +580,8 @@ namespace disk::storage {
                     assembly_key,
                     create_result.value(),
                     next_part_number,
-                    std::move(part_buffer)
+                    std::move(part_buffer),
+                    log_context
                 );
                 if (!upload_result) {
                     return std::unexpected(upload_result.error());
@@ -583,7 +597,7 @@ namespace disk::storage {
             };
 
             for (const auto& chunk : chunks) {
-                auto head_result = client->HeadObject(chunk.object_key);
+                auto head_result = client->HeadObject(chunk.object_key, log_context);
                 if (!head_result) {
                     return std::unexpected(head_result.error());
                 }
@@ -597,7 +611,8 @@ namespace disk::storage {
                 auto stream_result = client->GetObjectRange(
                     chunk.object_key,
                     0,
-                    chunk.size_bytes
+                    chunk.size_bytes,
+                    log_context
                 );
                 if (!stream_result) {
                     return std::unexpected(stream_result.error());
@@ -696,14 +711,15 @@ namespace disk::storage {
                 assembly_key,
                 create_result.value(),
                 completed_parts,
-                false
+                false,
+                log_context
             );
             if (!complete_result) {
                 return std::unexpected(complete_result.error());
             }
             abort_guard.Release();
 
-            auto assembled_head = client->HeadObject(assembly_key);
+            auto assembled_head = client->HeadObject(assembly_key, log_context);
             if (!assembled_head) {
                 return std::unexpected(assembled_head.error());
             }
@@ -817,10 +833,16 @@ namespace disk::storage {
         m_multipart_upload_journal = std::move(journal);
     }
 
-    auto S3ObjectStorage::EnsureUploadSession(const UploadStagingSession& session)
+    auto S3ObjectStorage::EnsureUploadSession(
+        const UploadStagingSession& session,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<void>> {
         if (session.backend == UploadStagingBackend::Local) {
-            co_return co_await m_local_staging.EnsureUploadSession(session);
+            co_return co_await m_local_staging.EnsureUploadSession(
+                session,
+                std::move(log_context)
+            );
         }
         co_return ValidateS3Session(session, m_s3_config.staging_prefix);
     }
@@ -829,14 +851,16 @@ namespace disk::storage {
         const UploadStagingSession& session,
         uint32_t chunk_index,
         const std::string& md5_hash,
-        std::string data
+        std::string data,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<UploadStagingChunk>> {
         if (session.backend == UploadStagingBackend::Local) {
             co_return co_await m_local_staging.WriteChunk(
                 session,
                 chunk_index,
                 md5_hash,
-                std::move(data)
+                std::move(data),
+                std::move(log_context)
             );
         }
         auto session_validation = ValidateS3Session(session, m_s3_config.staging_prefix);
@@ -854,7 +878,7 @@ namespace disk::storage {
         auto client = m_s3_client;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, key, chunk_index, md5_hash, size_bytes, read_buffer_size, data = std::move(data)]() mutable
+            [client, key, chunk_index, md5_hash, size_bytes, read_buffer_size, data = std::move(data), log_context = std::move(log_context)]() mutable
                 -> Result<UploadStagingChunk> {
                 if (disk::utils::FileHashUtil::HashMd5(data) != md5_hash) {
                     return std::unexpected(
@@ -862,7 +886,11 @@ namespace disk::storage {
                     );
                 }
 
-                auto put_result = client->PutObjectIfAbsent(key, std::move(data));
+                auto put_result = client->PutObjectIfAbsent(
+                    key,
+                    std::move(data),
+                    log_context
+                );
                 if (!put_result) {
                     return std::unexpected(put_result.error());
                 }
@@ -879,7 +907,8 @@ namespace disk::storage {
                         client,
                         chunk,
                         read_buffer_size,
-                        false
+                        false,
+                        log_context
                     );
                     if (!verify_result) {
                         return std::unexpected(verify_result.error());
@@ -888,7 +917,7 @@ namespace disk::storage {
                     return chunk;
                 }
 
-                auto head_result = client->HeadObject(key);
+                auto head_result = client->HeadObject(key, log_context);
                 if (!head_result) {
                     return std::unexpected(head_result.error());
                 }
@@ -912,10 +941,15 @@ namespace disk::storage {
 
     auto S3ObjectStorage::HeadChunkObject(
         const UploadStagingSession& session,
-        const UploadStagingChunk& chunk
+        const UploadStagingChunk& chunk,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<UploadStagingObjectHead>> {
         if (session.backend == UploadStagingBackend::Local) {
-            co_return co_await m_local_staging.HeadChunkObject(session, chunk);
+            co_return co_await m_local_staging.HeadChunkObject(
+                session,
+                chunk,
+                std::move(log_context)
+            );
         }
         auto session_validation = ValidateS3Session(session, m_s3_config.staging_prefix);
         if (!session_validation) {
@@ -929,8 +963,9 @@ namespace disk::storage {
         auto client = m_s3_client;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, key = chunk.object_key]() -> Result<UploadStagingObjectHead> {
-                auto head = client->HeadObject(key);
+            [client, key = chunk.object_key, log_context = std::move(log_context)]()
+                -> Result<UploadStagingObjectHead> {
+                auto head = client->HeadObject(key, log_context);
                 if (!head) {
                     return std::unexpected(head.error());
                 }
@@ -952,7 +987,8 @@ namespace disk::storage {
         const UploadStagingSession& session,
         uint64_t state_version,
         uint32_t expected_chunk_count,
-        const std::vector<UploadStagingChunk>& chunks
+        const std::vector<UploadStagingChunk>& chunks,
+        disk::utils::LogContext log_context
     )
         -> drogon::Task<Result<UploadStagingAssembly>> {
         if (session.backend == UploadStagingBackend::Local) {
@@ -960,7 +996,8 @@ namespace disk::storage {
                 session,
                 state_version,
                 expected_chunk_count,
-                chunks
+                chunks,
+                std::move(log_context)
             );
         }
         auto session_validation = ValidateS3Session(session, m_s3_config.staging_prefix);
@@ -995,14 +1032,15 @@ namespace disk::storage {
         auto journal = m_multipart_upload_journal;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, journal, session, state_version, chunks, read_buffer_size]() {
+            [client, journal, session, state_version, chunks, read_buffer_size, log_context = std::move(log_context)]() {
                 return AssembleS3ChunksBlocking(
                     client,
                     journal,
                     session,
                     state_version,
                     chunks,
-                    read_buffer_size
+                    read_buffer_size,
+                    log_context
                 );
             }
         );
@@ -1011,10 +1049,15 @@ namespace disk::storage {
 
     auto S3ObjectStorage::DiscardAssembly(
         const UploadStagingSession& session,
-        const UploadStagingAssembly& assembly
+        const UploadStagingAssembly& assembly,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<void>> {
         if (session.backend == UploadStagingBackend::Local) {
-            co_return co_await m_local_staging.DiscardAssembly(session, assembly);
+            co_return co_await m_local_staging.DiscardAssembly(
+                session,
+                assembly,
+                std::move(log_context)
+            );
         }
         auto session_validation = ValidateS3Session(session, m_s3_config.staging_prefix);
         if (!session_validation) {
@@ -1031,15 +1074,23 @@ namespace disk::storage {
         const auto key = assembly.locator;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, key]() { return client->DeleteObject(key); }
+            [client, key, log_context = std::move(log_context)]() {
+                return client->DeleteObject(key, log_context);
+            }
         );
         co_return result;
     }
 
-    auto S3ObjectStorage::CleanupSession(const UploadStagingSession& session)
+    auto S3ObjectStorage::CleanupSession(
+        const UploadStagingSession& session,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<void>> {
         if (session.backend == UploadStagingBackend::Local) {
-            co_return co_await m_local_staging.CleanupSession(session);
+            co_return co_await m_local_staging.CleanupSession(
+                session,
+                std::move(log_context)
+            );
         }
         auto session_validation = ValidateS3Session(session, m_s3_config.staging_prefix);
         if (!session_validation) {
@@ -1050,13 +1101,14 @@ namespace disk::storage {
         auto client = m_s3_client;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, cleanup_prefix]() -> Result<void> {
+            [client, cleanup_prefix, log_context = std::move(log_context)]() -> Result<void> {
                 std::string continuation_token;
                 while (true) {
                     auto list_result = client->ListObjects(
                         cleanup_prefix,
                         continuation_token,
-                        S3_LIST_PAGE_SIZE
+                        S3_LIST_PAGE_SIZE,
+                        log_context
                     );
                     if (!list_result) {
                         return std::unexpected(list_result.error());
@@ -1069,7 +1121,10 @@ namespace disk::storage {
                         );
                     }
                     if (!list_result->keys.empty()) {
-                        auto delete_result = client->DeleteObjects(list_result->keys);
+                        auto delete_result = client->DeleteObjects(
+                            list_result->keys,
+                            log_context
+                        );
                         if (!delete_result) {
                             return std::unexpected(delete_result.error());
                         }
@@ -1092,14 +1147,21 @@ namespace disk::storage {
 
     auto S3ObjectStorage::ListStagingObjects(
         const std::string& continuation_token,
-        size_t limit
+        size_t limit,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<StorageInventoryPage>> {
         const auto prefix = m_s3_config.staging_prefix + "/";
         auto client = m_s3_client;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, prefix, continuation_token, limit]() {
-                return ListS3Inventory(client, prefix, continuation_token, limit);
+            [client, prefix, continuation_token, limit, log_context = std::move(log_context)]() {
+                return ListS3Inventory(
+                    client,
+                    prefix,
+                    continuation_token,
+                    limit,
+                    log_context
+                );
             }
         );
         co_return result;
@@ -1107,7 +1169,8 @@ namespace disk::storage {
 
     auto S3ObjectStorage::PromoteToFinal(
         const UploadStagingAssembly& assembly,
-        const std::string& sha256_hash
+        const std::string& sha256_hash,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<BlobPromoteResult>> {
         if (!IsLowerHex(sha256_hash, 64) || assembly.sha256_hash != sha256_hash ||
             assembly.locator.empty()) {
@@ -1138,9 +1201,9 @@ namespace disk::storage {
 
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, journal, key, source_key, local_source_path, object_key, expected_size, backend = assembly.backend]()
+            [client, journal, key, source_key, local_source_path, object_key, expected_size, backend = assembly.backend, log_context = std::move(log_context)]()
                 -> Result<BlobPromoteResult> {
-                auto head_result = client->HeadObject(key);
+                auto head_result = client->HeadObject(key, log_context);
                 if (!head_result) {
                     return std::unexpected(head_result.error());
                 }
@@ -1162,11 +1225,20 @@ namespace disk::storage {
                         );
                     }
 
-                    auto put_result = client->PutObjectFromFileIfAbsent(key, local_source_path);
+                    auto put_result = client->PutObjectFromFileIfAbsent(
+                        key,
+                        local_source_path,
+                        log_context
+                    );
                     if (!put_result) {
                         return std::unexpected(put_result.error());
                     }
-                    auto verify_result = VerifyFinalObjectSize(client, key, expected_size);
+                    auto verify_result = VerifyFinalObjectSize(
+                        client,
+                        key,
+                        expected_size,
+                        log_context
+                    );
                     if (!verify_result) {
                         return std::unexpected(verify_result.error());
                     }
@@ -1176,7 +1248,7 @@ namespace disk::storage {
                     };
                 }
 
-                auto source_head = client->HeadObject(source_key);
+                auto source_head = client->HeadObject(source_key, log_context);
                 if (!source_head) {
                     return std::unexpected(source_head.error());
                 }
@@ -1187,11 +1259,16 @@ namespace disk::storage {
                 }
 
                 if (expected_size == 0) {
-                    auto put_result = client->PutObjectIfAbsent(key, {});
+                    auto put_result = client->PutObjectIfAbsent(key, {}, log_context);
                     if (!put_result) {
                         return std::unexpected(put_result.error());
                     }
-                    auto verify_result = VerifyFinalObjectSize(client, key, expected_size);
+                    auto verify_result = VerifyFinalObjectSize(
+                        client,
+                        key,
+                        expected_size,
+                        log_context
+                    );
                     if (!verify_result) {
                         return std::unexpected(verify_result.error());
                     }
@@ -1214,7 +1291,7 @@ namespace disk::storage {
                     );
                 }
 
-                auto create_result = client->CreateMultipartUpload(key);
+                auto create_result = client->CreateMultipartUpload(key, log_context);
                 if (!create_result) {
                     return std::unexpected(create_result.error());
                 }
@@ -1224,7 +1301,8 @@ namespace disk::storage {
                     MultipartUploadDescriptor{
                         .key = key,
                         .upload_id = create_result.value(),
-                    }
+                    },
+                    log_context
                 );
                 auto track_result = abort_guard.Track();
                 if (!track_result) {
@@ -1250,7 +1328,8 @@ namespace disk::storage {
                         create_result.value(),
                         part_number,
                         offset,
-                        length
+                        length,
+                        log_context
                     );
                     if (!copy_result) {
                         return std::unexpected(copy_result.error());
@@ -1270,7 +1349,8 @@ namespace disk::storage {
                     key,
                     create_result.value(),
                     completed_parts,
-                    true
+                    true,
+                    log_context
                 );
                 if (!complete_result) {
                     return std::unexpected(complete_result.error());
@@ -1280,7 +1360,12 @@ namespace disk::storage {
                     abort_guard.Release();
                 }
 
-                auto verify_result = VerifyFinalObjectSize(client, key, expected_size);
+                auto verify_result = VerifyFinalObjectSize(
+                    client,
+                    key,
+                    expected_size,
+                    log_context
+                );
                 if (!verify_result) {
                     return std::unexpected(verify_result.error());
                 }
@@ -1292,7 +1377,10 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto S3ObjectStorage::OpenForRead(const std::filesystem::path& /*storage_path*/)
+    auto S3ObjectStorage::OpenForRead(
+        const std::filesystem::path& /*storage_path*/,
+        disk::utils::LogContext /*log_context*/
+    )
         -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> {
         co_return std::unexpected(
             ErrorInfo(ErrorCode::FileReadError, "S3 storage does not support direct ifstream reads")
@@ -1302,7 +1390,8 @@ namespace disk::storage {
     auto S3ObjectStorage::OpenBlobRangeForRead(
         const BlobDescriptor& blob,
         uint64_t start,
-        uint64_t length
+        uint64_t length,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<std::shared_ptr<StorageReadStream>>> {
         auto key_result = ResolveFinalObjectKey(
             std::filesystem::path(blob.storage_path),
@@ -1315,14 +1404,18 @@ namespace disk::storage {
         auto client = m_s3_client;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, key, start, length]() -> Result<std::shared_ptr<StorageReadStream>> {
-                return client->GetObjectRange(key, start, length);
+            [client, key, start, length, log_context = std::move(log_context)]()
+                -> Result<std::shared_ptr<StorageReadStream>> {
+                return client->GetObjectRange(key, start, length, log_context);
             }
         );
         co_return result;
     }
 
-    auto S3ObjectStorage::DeleteBlob(const std::filesystem::path& storage_path)
+    auto S3ObjectStorage::DeleteBlob(
+        const std::filesystem::path& storage_path,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<void>> {
         auto key_result = ResolveFinalObjectKey(storage_path, m_s3_config.object_prefix);
         if (!key_result) {
@@ -1330,26 +1423,24 @@ namespace disk::storage {
         }
         auto key = std::move(key_result.value());
         auto client = m_s3_client;
-        const auto bucket = m_s3_config.bucket;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, key, bucket]() -> Result<void> {
+            [client, key, log_context = std::move(log_context)]() -> Result<void> {
                 for (int attempt = 1; attempt <= S3_DELETE_MAX_ATTEMPTS; ++attempt) {
-                    auto delete_result = client->DeleteObject(key);
+                    auto delete_result = client->DeleteObject(key, log_context);
                     if (delete_result) {
                         if (attempt > 1) {
-                            Logger::Info() << "S3 blob delete succeeded after retry: bucket="
-                                           << bucket << ", key=" << key << ", attempt=" << attempt
-                                           << "/" << S3_DELETE_MAX_ATTEMPTS;
+                            Logger::Info(log_context)
+                                << "S3 blob delete succeeded after retry: attempt=" << attempt
+                                << "/" << S3_DELETE_MAX_ATTEMPTS;
                         }
                         return {};
                     }
 
-                    Logger::Warn() << "S3 blob delete attempt failed: bucket=" << bucket
-                                   << ", key=" << key << ", attempt=" << attempt << "/"
-                                   << S3_DELETE_MAX_ATTEMPTS
-                                   << ", error_code=" << delete_result.error().CodeInt()
-                                   << ", error=" << delete_result.error().message;
+                    Logger::Warn(log_context)
+                        << "S3 blob delete attempt failed: attempt=" << attempt << "/"
+                        << S3_DELETE_MAX_ATTEMPTS
+                        << ", error_code=" << delete_result.error().CodeInt();
                     if (attempt == S3_DELETE_MAX_ATTEMPTS) {
                         return std::unexpected(delete_result.error());
                     }
@@ -1363,7 +1454,10 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto S3ObjectStorage::Exists(const std::filesystem::path& storage_path)
+    auto S3ObjectStorage::Exists(
+        const std::filesystem::path& storage_path,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<bool>> {
         auto key_result = ResolveFinalObjectKey(storage_path, m_s3_config.object_prefix);
         if (!key_result) {
@@ -1373,8 +1467,8 @@ namespace disk::storage {
         auto client = m_s3_client;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, key]() -> Result<bool> {
-                auto head_result = client->HeadObject(key);
+            [client, key, log_context = std::move(log_context)]() -> Result<bool> {
+                auto head_result = client->HeadObject(key, log_context);
                 if (!head_result) {
                     return std::unexpected(head_result.error());
                 }
@@ -1390,7 +1484,10 @@ namespace disk::storage {
                sha256_hash.substr(0, 2) / (sha256_hash + ".bin");
     }
 
-    auto S3ObjectStorage::GetFileSize(const std::filesystem::path& storage_path)
+    auto S3ObjectStorage::GetFileSize(
+        const std::filesystem::path& storage_path,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<uint64_t>> {
         auto key_result = ResolveFinalObjectKey(storage_path, m_s3_config.object_prefix);
         if (!key_result) {
@@ -1400,8 +1497,8 @@ namespace disk::storage {
         auto client = m_s3_client;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, key]() -> Result<uint64_t> {
-                auto head_result = client->HeadObject(key);
+            [client, key, log_context = std::move(log_context)]() -> Result<uint64_t> {
+                auto head_result = client->HeadObject(key, log_context);
                 if (!head_result) {
                     return std::unexpected(head_result.error());
                 }
@@ -1416,21 +1513,29 @@ namespace disk::storage {
 
     auto S3ObjectStorage::ListFinalObjects(
         const std::string& continuation_token,
-        size_t limit
+        size_t limit,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<StorageInventoryPage>> {
         const auto prefix = m_s3_config.object_prefix + "/";
         auto client = m_s3_client;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, prefix, continuation_token, limit]() {
-                return ListS3Inventory(client, prefix, continuation_token, limit);
+            [client, prefix, continuation_token, limit, log_context = std::move(log_context)]() {
+                return ListS3Inventory(
+                    client,
+                    prefix,
+                    continuation_token,
+                    limit,
+                    log_context
+                );
             }
         );
         co_return result;
     }
 
     auto S3ObjectStorage::AbortMultipartUpload(
-        const MultipartUploadDescriptor& descriptor
+        const MultipartUploadDescriptor& descriptor,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<void>> {
         auto validation = ValidateMultipartAbortDescriptor(descriptor, m_s3_config);
         if (!validation) {
@@ -1440,8 +1545,12 @@ namespace disk::storage {
         auto client = m_s3_client;
         auto result = co_await RunBlockingS3Task(
             m_worker_queue,
-            [client, descriptor]() {
-                return client->AbortMultipartUpload(descriptor.key, descriptor.upload_id);
+            [client, descriptor, log_context = std::move(log_context)]() {
+                return client->AbortMultipartUpload(
+                    descriptor.key,
+                    descriptor.upload_id,
+                    log_context
+                );
             }
         );
         co_return result;

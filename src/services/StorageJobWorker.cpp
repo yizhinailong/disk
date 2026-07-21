@@ -436,6 +436,7 @@ namespace disk::jobs {
 
     auto StorageJobWorker::ExecuteStagingCleanup(const StorageJob& job) const
         -> drogon::Task<JobExecutionResult> {
+        const auto log_context = BuildStorageJobLogContext(job);
         auto session = ParseStagingSession(job);
         if (!session) {
             co_return PermanentFailure(session.error());
@@ -444,7 +445,8 @@ namespace disk::jobs {
             co_return RetryableFailure("Upload staging storage is not configured");
         }
 
-        auto cleanup_result = co_await m_staging_storage->CleanupSession(session.value());
+        auto cleanup_result =
+            co_await m_staging_storage->CleanupSession(session.value(), log_context);
         if (cleanup_result) {
             co_return JobExecutionResult{ .succeeded = true };
         }
@@ -462,6 +464,7 @@ namespace disk::jobs {
 
     auto StorageJobWorker::ExecuteMultipartAbort(const StorageJob& job) const
         -> drogon::Task<JobExecutionResult> {
+        const auto log_context = BuildStorageJobLogContext(job);
         auto descriptor = ParseMultipartUpload(job);
         if (!descriptor) {
             co_return PermanentFailure(descriptor.error());
@@ -471,7 +474,8 @@ namespace disk::jobs {
         }
 
         auto abort_result = co_await m_multipart_upload_cleaner->AbortMultipartUpload(
-            descriptor.value()
+            descriptor.value(),
+            log_context
         );
         if (abort_result) {
             co_return JobExecutionResult{ .succeeded = true };
@@ -553,7 +557,8 @@ namespace disk::jobs {
                 co_return PermanentFailure("blob_gc found inconsistent content references");
             }
 
-            auto delete_result = co_await m_blob_store->DeleteBlob(candidate->storage_path);
+            auto delete_result =
+                co_await m_blob_store->DeleteBlob(candidate->storage_path, log_context);
             if (!delete_result) {
                 RollbackQuietly(transaction, log_context);
                 const auto& error = delete_result.error();
@@ -724,6 +729,7 @@ namespace disk::jobs {
 
     auto StorageJobWorker::ExecuteStorageReconcile(const StorageJob& job) const
         -> drogon::Task<JobExecutionResult> {
+        const auto log_context = BuildStorageJobLogContext(job);
         auto request = ParseStorageReconcileJob(job);
         if (!request) {
             co_return PermanentFailure(request.error());
@@ -732,7 +738,7 @@ namespace disk::jobs {
             request->scope == disk::reconciliation::ReconciliationScope::Contents ||
             request->scope == disk::reconciliation::ReconciliationScope::Users;
         PeriodicScanPageLogGuard scan_log(
-            BuildStorageJobLogContext(job),
+            log_context,
             m_instance_id,
             std::string(kStorageReconcileJobType),
             request->scan_id,
@@ -749,7 +755,7 @@ namespace disk::jobs {
             m_staging_storage,
             m_blob_store
         );
-        auto page = co_await reconciliation_service.RunPage(request.value());
+        auto page = co_await reconciliation_service.RunPage(request.value(), log_context);
         if (!page) {
             const auto& error = page.error();
             const auto retryable =

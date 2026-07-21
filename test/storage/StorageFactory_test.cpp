@@ -18,34 +18,49 @@ namespace {
 
     class FakeS3Client final : public disk::storage::IS3Client {
     public:
-        auto ValidateBucketAccessible() -> Result<void> override {
+        auto ValidateBucketAccessible(disk::utils::LogContext /*log_context*/)
+            -> Result<void> override {
             ++validate_calls;
             return validate_result;
         }
 
-        auto HeadObject(const std::string& /*key*/)
+        auto HeadObject(
+            const std::string& /*key*/,
+            disk::utils::LogContext /*log_context*/
+        )
             -> Result<disk::storage::S3HeadObjectResult> override {
             return disk::storage::S3HeadObjectResult{};
         }
 
-        auto PutObjectIfAbsent(const std::string& /*key*/, std::string /*data*/)
+        auto PutObjectIfAbsent(
+            const std::string& /*key*/,
+            std::string /*data*/,
+            disk::utils::LogContext /*log_context*/
+        )
             -> Result<disk::storage::S3PutObjectResult> override {
             return disk::storage::S3PutObjectResult{ .created = true };
         }
 
         auto PutObjectFromFileIfAbsent(
             const std::string& /*key*/,
-            const std::filesystem::path& /*local_path*/
+            const std::filesystem::path& /*local_path*/,
+            disk::utils::LogContext /*log_context*/
         ) -> Result<disk::storage::S3PutObjectResult> override {
             return disk::storage::S3PutObjectResult{ .created = true };
         }
 
-        auto DeleteObject(const std::string& /*key*/) -> Result<void> override { return {}; }
+        auto DeleteObject(
+            const std::string& /*key*/,
+            disk::utils::LogContext /*log_context*/
+        ) -> Result<void> override {
+            return {};
+        }
 
         auto GetObjectRange(
             const std::string& /*key*/,
             uint64_t /*start*/,
-            uint64_t /*length*/
+            uint64_t /*length*/,
+            disk::utils::LogContext /*log_context*/
         ) -> Result<std::shared_ptr<disk::storage::StorageReadStream>> override {
             return std::unexpected(ErrorInfo(ErrorCode::FileNotFound, "unused fake range"));
         }
@@ -53,16 +68,23 @@ namespace {
         auto ListObjects(
             const std::string& /*prefix*/,
             const std::string& /*continuation_token*/,
-            uint32_t /*max_keys*/
+            uint32_t /*max_keys*/,
+            disk::utils::LogContext /*log_context*/
         ) -> Result<disk::storage::S3ListObjectsResult> override {
             return disk::storage::S3ListObjectsResult{};
         }
 
-        auto DeleteObjects(const std::vector<std::string>& /*keys*/) -> Result<void> override {
+        auto DeleteObjects(
+            const std::vector<std::string>& /*keys*/,
+            disk::utils::LogContext /*log_context*/
+        ) -> Result<void> override {
             return {};
         }
 
-        auto CreateMultipartUpload(const std::string& /*key*/) -> Result<std::string> override {
+        auto CreateMultipartUpload(
+            const std::string& /*key*/,
+            disk::utils::LogContext /*log_context*/
+        ) -> Result<std::string> override {
             return "unused-upload";
         }
 
@@ -70,7 +92,8 @@ namespace {
             const std::string& /*key*/,
             const std::string& /*upload_id*/,
             int /*part_number*/,
-            std::string /*data*/
+            std::string /*data*/,
+            disk::utils::LogContext /*log_context*/
         ) -> Result<std::string> override {
             return "unused-etag";
         }
@@ -81,7 +104,8 @@ namespace {
             const std::string& /*upload_id*/,
             int /*part_number*/,
             uint64_t /*start*/,
-            uint64_t /*length*/
+            uint64_t /*length*/,
+            disk::utils::LogContext /*log_context*/
         ) -> Result<std::string> override {
             return "unused-etag";
         }
@@ -90,14 +114,16 @@ namespace {
             const std::string& /*key*/,
             const std::string& /*upload_id*/,
             const std::vector<disk::storage::S3CompletedPart>& /*parts*/,
-            bool /*only_if_absent*/
+            bool /*only_if_absent*/,
+            disk::utils::LogContext /*log_context*/
         ) -> Result<disk::storage::S3CompleteMultipartResult> override {
             return disk::storage::S3CompleteMultipartResult{ .created = true };
         }
 
         auto AbortMultipartUpload(
             const std::string& /*key*/,
-            const std::string& /*upload_id*/
+            const std::string& /*upload_id*/,
+            disk::utils::LogContext /*log_context*/
         ) -> Result<void> override {
             return {};
         }

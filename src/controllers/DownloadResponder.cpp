@@ -154,7 +154,12 @@ namespace disk::controllers {
         /// ================================================================
         /// Path B: newStreamResponse — Blob range 流式下载路径（对象存储/小文件）
         /// ================================================================
-        auto open_result = co_await blob_store->OpenBlobRangeForRead(params.blob, start, content_length);
+        auto open_result = co_await blob_store->OpenBlobRangeForRead(
+            params.blob,
+            start,
+            content_length,
+            log_context
+        );
         if (!open_result) {
             Logger::Error(log_context)
                 << "Cannot open blob stream for download: content_id="

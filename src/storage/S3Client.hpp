@@ -10,8 +10,48 @@
 #include "storage/IBlobStore.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::storage {
+
+    enum class S3SdkOperation : uint8_t {
+        GetBucketLocation,
+        HeadObject,
+        PutObject,
+        DeleteObject,
+        GetObject,
+        ListObjectsV2,
+        DeleteObjects,
+        CreateMultipartUpload,
+        UploadPart,
+        UploadPartCopy,
+        CompleteMultipartUpload,
+        AbortMultipartUpload,
+    };
+
+    enum class S3SdkOutcome : uint8_t {
+        Success,
+        Timeout,
+        Connection,
+        Conflict,
+        NotFound,
+        Retryable,
+        Permanent,
+        Protocol,
+        Other,
+    };
+
+    [[nodiscard]]
+    auto S3SdkOperationName(S3SdkOperation operation) noexcept -> std::string_view;
+
+    [[nodiscard]]
+    auto S3SdkOutcomeName(S3SdkOutcome outcome) noexcept -> std::string_view;
+
+    auto RecordS3SdkCallResult(
+        const disk::utils::LogContext& log_context,
+        S3SdkOperation operation,
+        S3SdkOutcome outcome
+    ) noexcept -> void;
 
     enum class S3FailureClass {
         Permanent,
@@ -65,47 +105,72 @@ namespace disk::storage {
         virtual ~IS3Client() = default;
 
         [[nodiscard]]
-        virtual auto ValidateBucketAccessible() -> Result<void> = 0;
+        virtual auto ValidateBucketAccessible(disk::utils::LogContext log_context = {})
+            -> Result<void> = 0;
 
         [[nodiscard]]
-        virtual auto HeadObject(const std::string& key) -> Result<S3HeadObjectResult> = 0;
+        virtual auto HeadObject(
+            const std::string& key,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<S3HeadObjectResult> = 0;
 
         [[nodiscard]]
-        virtual auto PutObjectIfAbsent(const std::string& key, std::string data)
+        virtual auto PutObjectIfAbsent(
+            const std::string& key,
+            std::string data,
+            disk::utils::LogContext log_context = {}
+        )
             -> Result<S3PutObjectResult> = 0;
 
         [[nodiscard]]
         virtual auto PutObjectFromFileIfAbsent(
             const std::string& key,
-            const std::filesystem::path& local_path
+            const std::filesystem::path& local_path,
+            disk::utils::LogContext log_context = {}
         ) -> Result<S3PutObjectResult> = 0;
 
         [[nodiscard]]
-        virtual auto DeleteObject(const std::string& key) -> Result<void> = 0;
+        virtual auto DeleteObject(
+            const std::string& key,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<void> = 0;
 
         [[nodiscard]]
-        virtual auto GetObjectRange(const std::string& key, uint64_t start, uint64_t length)
+        virtual auto GetObjectRange(
+            const std::string& key,
+            uint64_t start,
+            uint64_t length,
+            disk::utils::LogContext log_context = {}
+        )
             -> Result<std::shared_ptr<StorageReadStream>> = 0;
 
         [[nodiscard]]
         virtual auto ListObjects(
             const std::string& prefix,
             const std::string& continuation_token,
-            uint32_t max_keys
+            uint32_t max_keys,
+            disk::utils::LogContext log_context = {}
         ) -> Result<S3ListObjectsResult> = 0;
 
         [[nodiscard]]
-        virtual auto DeleteObjects(const std::vector<std::string>& keys) -> Result<void> = 0;
+        virtual auto DeleteObjects(
+            const std::vector<std::string>& keys,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<void> = 0;
 
         [[nodiscard]]
-        virtual auto CreateMultipartUpload(const std::string& key) -> Result<std::string> = 0;
+        virtual auto CreateMultipartUpload(
+            const std::string& key,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<std::string> = 0;
 
         [[nodiscard]]
         virtual auto UploadPart(
             const std::string& key,
             const std::string& upload_id,
             int part_number,
-            std::string data
+            std::string data,
+            disk::utils::LogContext log_context = {}
         ) -> Result<std::string> = 0;
 
         [[nodiscard]]
@@ -115,7 +180,8 @@ namespace disk::storage {
             const std::string& upload_id,
             int part_number,
             uint64_t start,
-            uint64_t length
+            uint64_t length,
+            disk::utils::LogContext log_context = {}
         ) -> Result<std::string> = 0;
 
         [[nodiscard]]
@@ -123,11 +189,16 @@ namespace disk::storage {
             const std::string& key,
             const std::string& upload_id,
             const std::vector<S3CompletedPart>& parts,
-            bool only_if_absent
+            bool only_if_absent,
+            disk::utils::LogContext log_context = {}
         ) -> Result<S3CompleteMultipartResult> = 0;
 
         [[nodiscard]]
-        virtual auto AbortMultipartUpload(const std::string& key, const std::string& upload_id)
+        virtual auto AbortMultipartUpload(
+            const std::string& key,
+            const std::string& upload_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> Result<void> = 0;
     };
 
@@ -142,47 +213,72 @@ namespace disk::storage {
         auto operator=(AwsS3Client&&) -> AwsS3Client& = delete;
 
         [[nodiscard]]
-        auto ValidateBucketAccessible() -> Result<void> override;
+        auto ValidateBucketAccessible(disk::utils::LogContext log_context = {})
+            -> Result<void> override;
 
         [[nodiscard]]
-        auto HeadObject(const std::string& key) -> Result<S3HeadObjectResult> override;
+        auto HeadObject(
+            const std::string& key,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<S3HeadObjectResult> override;
 
         [[nodiscard]]
-        auto PutObjectIfAbsent(const std::string& key, std::string data)
+        auto PutObjectIfAbsent(
+            const std::string& key,
+            std::string data,
+            disk::utils::LogContext log_context = {}
+        )
             -> Result<S3PutObjectResult> override;
 
         [[nodiscard]]
         auto PutObjectFromFileIfAbsent(
             const std::string& key,
-            const std::filesystem::path& local_path
+            const std::filesystem::path& local_path,
+            disk::utils::LogContext log_context = {}
         ) -> Result<S3PutObjectResult> override;
 
         [[nodiscard]]
-        auto DeleteObject(const std::string& key) -> Result<void> override;
+        auto DeleteObject(
+            const std::string& key,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<void> override;
 
         [[nodiscard]]
-        auto GetObjectRange(const std::string& key, uint64_t start, uint64_t length)
+        auto GetObjectRange(
+            const std::string& key,
+            uint64_t start,
+            uint64_t length,
+            disk::utils::LogContext log_context = {}
+        )
             -> Result<std::shared_ptr<StorageReadStream>> override;
 
         [[nodiscard]]
         auto ListObjects(
             const std::string& prefix,
             const std::string& continuation_token,
-            uint32_t max_keys
+            uint32_t max_keys,
+            disk::utils::LogContext log_context = {}
         ) -> Result<S3ListObjectsResult> override;
 
         [[nodiscard]]
-        auto DeleteObjects(const std::vector<std::string>& keys) -> Result<void> override;
+        auto DeleteObjects(
+            const std::vector<std::string>& keys,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<void> override;
 
         [[nodiscard]]
-        auto CreateMultipartUpload(const std::string& key) -> Result<std::string> override;
+        auto CreateMultipartUpload(
+            const std::string& key,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<std::string> override;
 
         [[nodiscard]]
         auto UploadPart(
             const std::string& key,
             const std::string& upload_id,
             int part_number,
-            std::string data
+            std::string data,
+            disk::utils::LogContext log_context = {}
         ) -> Result<std::string> override;
 
         [[nodiscard]]
@@ -192,7 +288,8 @@ namespace disk::storage {
             const std::string& upload_id,
             int part_number,
             uint64_t start,
-            uint64_t length
+            uint64_t length,
+            disk::utils::LogContext log_context = {}
         ) -> Result<std::string> override;
 
         [[nodiscard]]
@@ -200,11 +297,16 @@ namespace disk::storage {
             const std::string& key,
             const std::string& upload_id,
             const std::vector<S3CompletedPart>& parts,
-            bool only_if_absent
+            bool only_if_absent,
+            disk::utils::LogContext log_context = {}
         ) -> Result<S3CompleteMultipartResult> override;
 
         [[nodiscard]]
-        auto AbortMultipartUpload(const std::string& key, const std::string& upload_id)
+        auto AbortMultipartUpload(
+            const std::string& key,
+            const std::string& upload_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> Result<void> override;
 
     private:

@@ -15,6 +15,7 @@
 #include <json/json.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::storage {
     class IBlobStore;
@@ -145,14 +146,20 @@ namespace disk::reconciliation {
         );
 
         [[nodiscard]]
-        auto RunPage(const ReconciliationPageRequest& request) const
+        auto RunPage(
+            const ReconciliationPageRequest& request,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<Result<ReconciliationPageResult>>;
 
         auto RecordFinding(const ReconciliationFinding& finding) const -> drogon::Task<void>;
 
     private:
         [[nodiscard]]
-        auto RunContentPage(const ReconciliationPageRequest& request) const
+        auto RunContentPage(
+            const ReconciliationPageRequest& request,
+            disk::utils::LogContext log_context
+        ) const
             -> drogon::Task<Result<ReconciliationPageResult>>;
 
         [[nodiscard]]
@@ -160,7 +167,10 @@ namespace disk::reconciliation {
             -> drogon::Task<Result<ReconciliationPageResult>>;
 
         [[nodiscard]]
-        auto RunObjectPage(const ReconciliationPageRequest& request) const
+        auto RunObjectPage(
+            const ReconciliationPageRequest& request,
+            disk::utils::LogContext log_context
+        ) const
             -> drogon::Task<Result<ReconciliationPageResult>>;
 
         auto ResolveFinding(std::string_view finding_type, std::string_view resource_id) const

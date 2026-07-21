@@ -19,6 +19,7 @@
 
 #include "storage/StorageInventory.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::storage {
 
@@ -96,7 +97,10 @@ namespace disk::storage {
          * @return 成功返回空，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto EnsureUploadSession(const UploadStagingSession& session)
+        virtual auto EnsureUploadSession(
+            const UploadStagingSession& session,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>> = 0;
 
         /**
@@ -112,7 +116,8 @@ namespace disk::storage {
             const UploadStagingSession& session,
             uint32_t chunk_index,
             const std::string& md5_hash,
-            std::string data
+            std::string data,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<UploadStagingChunk>> = 0;
 
         /**
@@ -124,10 +129,12 @@ namespace disk::storage {
         [[nodiscard]]
         virtual auto HeadChunkObject(
             const UploadStagingSession& session,
-            const UploadStagingChunk& chunk
+            const UploadStagingChunk& chunk,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<UploadStagingObjectHead>> {
             static_cast<void>(session);
             static_cast<void>(chunk);
+            static_cast<void>(log_context);
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Staging object HEAD is not supported")
             );
@@ -146,7 +153,8 @@ namespace disk::storage {
             const UploadStagingSession& session,
             uint64_t state_version,
             uint32_t expected_chunk_count,
-            const std::vector<UploadStagingChunk>& chunks
+            const std::vector<UploadStagingChunk>& chunks,
+            disk::utils::LogContext log_context = {}
         )
             -> drogon::Task<Result<UploadStagingAssembly>> = 0;
 
@@ -159,7 +167,8 @@ namespace disk::storage {
         [[nodiscard]]
         virtual auto DiscardAssembly(
             const UploadStagingSession& session,
-            const UploadStagingAssembly& assembly
+            const UploadStagingAssembly& assembly,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<void>> = 0;
 
         /**
@@ -168,7 +177,10 @@ namespace disk::storage {
          * @return 成功返回空，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto CleanupSession(const UploadStagingSession& session)
+        virtual auto CleanupSession(
+            const UploadStagingSession& session,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>> = 0;
 
         /**
@@ -177,10 +189,12 @@ namespace disk::storage {
         [[nodiscard]]
         virtual auto ListStagingObjects(
             const std::string& continuation_token,
-            size_t limit
+            size_t limit,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<StorageInventoryPage>> {
             static_cast<void>(continuation_token);
             static_cast<void>(limit);
+            static_cast<void>(log_context);
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Staging inventory is not supported")
             );
