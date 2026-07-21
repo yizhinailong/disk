@@ -4,7 +4,7 @@
 # dependencies = ["httpx", "psycopg[binary]"]
 # ///
 
-"""Verify SIGTERM stops Worker claims and preserves leases for natural takeover."""
+"""Verify exclusive Worker claims, bounded drain, and natural lease takeover."""
 
 from __future__ import annotations
 
@@ -44,6 +44,7 @@ ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE_PATH = ROOT / ".sisyphus/evidence/worker-drain-takeover-summary.json"
 WORKER_A = "worker-drain-a"
 WORKER_B = "worker-drain-b"
+WORKER_C = "worker-drain-c"
 POLL_INTERVAL_MS = 100
 LEASE_SECONDS = 30
 DRAIN_SECONDS = 2
@@ -113,7 +114,7 @@ def blocking_connection(database_name: str) -> psycopg.Connection[dict[str, Any]
     return psycopg.connect(**config, row_factory=dict_row)
 
 
-def create_blob_gc_fixture(
+def create_blob_gc_content_fixture(
     database_name: str,
     final_root: Path,
     label: str,
@@ -135,7 +136,21 @@ def create_blob_gc_fixture(
         ).fetchone()
         require(content is not None, f"failed to create {label} content")
         content_id = int(content["id"])
-        dedupe_key = f"worker-drain:{label}:{content_id}"
+    return {
+        "content_id": content_id,
+        "blob_path": blob_path,
+    }
+
+
+def enqueue_blob_gc_fixture(
+    database_name: str,
+    fixture: dict[str, Any],
+    label: str,
+) -> dict[str, Any]:
+    content_id = int(fixture["content_id"])
+    blob_path = Path(fixture["blob_path"])
+    dedupe_key = f"worker-drain:{label}:{content_id}"
+    with connect(database_name) as connection:
         job = connection.execute(
             "INSERT INTO storage_jobs "
             "(job_type, aggregate_id, dedupe_key, payload, max_attempts) "
@@ -148,11 +163,22 @@ def create_blob_gc_fixture(
         ).fetchone()
         require(job is not None, f"failed to create {label} job")
     return {
-        "content_id": content_id,
+        **fixture,
         "job_id": int(job["id"]),
         "dedupe_key": dedupe_key,
-        "blob_path": blob_path,
     }
+
+
+def create_blob_gc_fixture(
+    database_name: str,
+    final_root: Path,
+    label: str,
+) -> dict[str, Any]:
+    return enqueue_blob_gc_fixture(
+        database_name,
+        create_blob_gc_content_fixture(database_name, final_root, label),
+        label,
+    )
 
 
 def job_snapshot(database_name: str, job_id: int) -> dict[str, Any]:
@@ -185,6 +211,26 @@ def dedupe_count(database_name: str, dedupe_key: str) -> int:
         ).fetchone()
     require(row is not None, "dedupe count returned no row")
     return int(row["count"])
+
+
+def distinct_running_claims(
+    database_name: str,
+    fixtures: list[dict[str, Any]],
+    expected_owners: set[str],
+) -> list[dict[str, Any]] | None:
+    snapshots = [
+        job_snapshot(database_name, int(fixture["job_id"])) for fixture in fixtures
+    ]
+    if not all(
+        int(snapshot["status"]) == 1
+        and int(snapshot["attempts"]) == 1
+        and snapshot["lease_live"] is True
+        for snapshot in snapshots
+    ):
+        return None
+    if {str(snapshot["locked_by"]) for snapshot in snapshots} != expected_owners:
+        return None
+    return snapshots
 
 
 def draining_health(server: ManagedServer) -> dict[str, Any] | None:
@@ -248,8 +294,10 @@ def main() -> int:
     database_name = f"disk_worker_drain_{suffix}"
     database_created = False
     blocker: psycopg.Connection[dict[str, Any]] | None = None
+    competition_blockers: list[psycopg.Connection[dict[str, Any]]] = []
     worker_a: ManagedServer | None = None
     worker_b: ManagedServer | None = None
+    worker_c: ManagedServer | None = None
 
     try:
         binary = resolve_current_binary()
@@ -257,7 +305,7 @@ def main() -> int:
             temporary_root = Path(temporary)
             final_root = temporary_root / "final"
             staging_root = temporary_root / "staging"
-            worker_a_port, worker_b_port = allocate_ports(2)
+            worker_a_port, worker_b_port, worker_c_port = allocate_ports(3)
 
             create_database(database_name)
             database_created = True
@@ -493,10 +541,106 @@ def main() -> int:
                 "Worker drain scenario duplicated a logical job",
             )
 
+            competition_fixtures: list[dict[str, Any]] = []
+            for label in ("competition-one", "competition-two"):
+                fixture = create_blob_gc_content_fixture(
+                    database_name,
+                    final_root,
+                    label,
+                )
+                competition_blocker = blocking_connection(database_name)
+                competition_blocker.execute(
+                    "SELECT id FROM file_contents WHERE id = %s FOR UPDATE",
+                    (fixture["content_id"],),
+                )
+                competition_blockers.append(competition_blocker)
+                competition_fixtures.append(
+                    enqueue_blob_gc_fixture(database_name, fixture, label)
+                )
+
+            worker_c = ManagedServer(
+                name=WORKER_C,
+                binary=binary,
+                run_directory=temporary_root / "worker-c",
+                config=worker_config(
+                    database_name,
+                    worker_c_port,
+                    WORKER_C,
+                    final_root,
+                    staging_root,
+                ),
+                database_name=database_name,
+                port=worker_c_port,
+                readiness_path="/api/health/ready",
+                role="worker",
+                environment_overrides={"DISK_WORKER_CLAIMING_ENABLED": "true"},
+            )
+
+            competition_claims = wait_until(
+                "distinct Worker B/C claims",
+                lambda: distinct_running_claims(
+                    database_name,
+                    competition_fixtures,
+                    {WORKER_B, WORKER_C},
+                ),
+                timeout_seconds=15,
+            )
+            for competition_blocker in competition_blockers:
+                competition_blocker.rollback()
+                competition_blocker.close()
+            competition_blockers.clear()
+
+            competition_finals = [
+                wait_until(
+                    f"single-attempt completion for job {fixture['job_id']}",
+                    lambda job_id=int(fixture["job_id"]): (
+                        snapshot
+                        if int(
+                            (snapshot := job_snapshot(database_name, job_id))["status"]
+                        )
+                        == 3
+                        else None
+                    ),
+                    timeout_seconds=15,
+                )
+                for fixture in competition_fixtures
+            ]
+            for fixture, claim, final in zip(
+                competition_fixtures,
+                competition_claims,
+                competition_finals,
+                strict=True,
+            ):
+                require(
+                    int(final["attempts"]) == 1
+                    and final["locked_by"] is None
+                    and final["locked_until"] is None,
+                    f"competing Worker did not persist one clean success: {final}",
+                )
+                require(
+                    content_count(database_name, fixture["content_id"]) == 0
+                    and not fixture["blob_path"].exists()
+                    and dedupe_count(database_name, fixture["dedupe_key"]) == 1,
+                    f"competing Worker duplicated or retained side effects: {fixture}",
+                )
+                owner = str(claim["locked_by"])
+                owner_server = worker_b if owner == WORKER_B else worker_c
+                marker = (
+                    f"Storage job execution started: instance_id={owner}, "
+                    f"job_id={fixture['job_id']}, job_type=blob_gc"
+                )
+                require(
+                    read_log(owner_server).count(marker) == 1,
+                    f"logical job execution count drifted for {fixture['job_id']}",
+                )
+
+            worker_c.stop()
+            worker_c = None
+
             write_evidence(
                 {
-                    "schema_version": 1,
-                    "scenario": "worker_sigterm_drain_and_natural_lease_takeover",
+                    "schema_version": 2,
+                    "scenario": "worker_exclusive_claim_drain_and_lease_takeover",
                     "readiness_status": 503,
                     "draining": health["draining"],
                     "worker_claiming_enabled": health["worker_claiming_enabled"],
@@ -515,8 +659,15 @@ def main() -> int:
                     "lease_takeover_logged": True,
                     "sentinel_attempts": int(sentinel_final["attempts"]),
                     "sentinel_completed_by_successor": True,
+                    "competition_workers": [WORKER_B, WORKER_C],
+                    "competition_jobs": len(competition_fixtures),
+                    "competition_distinct_owners": True,
+                    "competition_attempts": [
+                        int(snapshot["attempts"])
+                        for snapshot in competition_finals
+                    ],
                     "manual_storage_job_updates": 0,
-                    "logical_job_rows": 2,
+                    "logical_job_rows": 4,
                     "remaining_content_rows": 0,
                     "remaining_blob_objects": 0,
                     "passed": True,
@@ -532,12 +683,12 @@ def main() -> int:
             worker_a.stop()
             worker_a = None
             print(
-                "PASS: SIGTERM stopped Worker claims and preserved the held lease "
-                "for natural successor takeover"
+                "PASS: Workers claimed exclusively, SIGTERM stopped new work, and "
+                "the held lease reached natural successor takeover"
             )
         return 0
     except BaseException:
-        for server in (worker_a, worker_b):
+        for server in (worker_a, worker_b, worker_c):
             if server is not None:
                 print(server.log_tail(), file=sys.stderr)
         raise
@@ -545,7 +696,10 @@ def main() -> int:
         if blocker is not None:
             blocker.rollback()
             blocker.close()
-        for server in (worker_b, worker_a):
+        for competition_blocker in competition_blockers:
+            competition_blocker.rollback()
+            competition_blocker.close()
+        for server in (worker_c, worker_b, worker_a):
             if server is not None:
                 server.stop()
         if database_created:

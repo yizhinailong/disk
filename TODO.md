@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮分片日志采样策略）：`cmake --preset linux-debug-clang`、完整构建和日志策略聚焦 CTest 2/2 均通过；完整 CTest 共 1383 项，1377 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 434.98 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
+> 最近验证（2026-07-21，本轮 Worker 多实例唯一执行与故障接管）：`cmake --preset linux-debug-clang`、完整构建和 Worker 队列/进程死亡/排空接管/拓扑契约聚焦 CTest 4/4 均通过；完整 CTest 共 1383 项，1377 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 427.86 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
 
 ## 1. 目标与范围
 
@@ -290,10 +290,18 @@ API Instance A  API Instance B ... N
 
 ### 9.4 Phase 4 验收
 
-- [ ] 两个 Worker 并发运行时，每个逻辑任务只成功执行一次，允许幂等重复尝试。
-- [ ] 杀死持有租约的 Worker 后，任务在约定恢复时间内被接管。
+- [x] 两个 Worker 并发运行时，每个逻辑任务只成功执行一次，允许幂等重复尝试。
+- [x] 杀死持有租约的 Worker 后，任务在约定恢复时间内被接管。
 - [x] API 扩容或缩容不会改变周期任务执行次数。
 - [x] dead-letter 可查询、告警、人工重放并保留审计信息。
+
+### 9.5 Phase 4 Worker 多实例验收记录（2026-07-21）
+
+`test_worker_drain_takeover.py` 在唯一临时 PostgreSQL 上启动真实 Worker B/C，并分别用数据库行锁阻塞两个零引用 Blob GC handler。两个单并发实例同时领取后，测试要求两行同时处于 `Running/attempts=1`、owner 精确分离为 B/C；释放锁后，两项任务均一次进入 `Succeeded`，清空 owner/租约，保留唯一去重行，并各自只删除一次内容行和 Blob。测试不直接修改任务状态、owner、attempts 或租约截止时间。
+
+同一脚本先让 Worker A 持有受阻任务并接收 `SIGTERM`，验证 readiness 退出、停止领取新任务和超时排空后保留有效租约，再由 Worker B 严格晚于 PostgreSQL 持久租约截止接管，attempts 从 1 收敛到 2。`test_blob_gc_process_death.py` 另以真实 `SIGKILL` 终止租约持有者，验证后继 Worker 只在租约到期后接管，并将队列与 Blob GC 副作用原子收敛。
+
+队列事务、真实 `SIGKILL`、排空接管与拓扑契约聚焦 CTest 4/4 通过；完整 CTest 共 1383 项，1377 通过、6 项按既有环境门控跳过、0 失败，总耗时 427.86 秒；OpenSpec 严格校验 24/24 通过。本记录关闭 Phase 4 的 Worker 队列唯一执行与进程死亡接管验收，不替代 Phase 6 目标高可用环境、Phase 9 灰度迁移及最终 DoD 的真实 MinIO/多实例/压力门禁。
 
 ## 10. Phase 5：缓存、认证与跨实例一致性
 

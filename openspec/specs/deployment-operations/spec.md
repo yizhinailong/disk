@@ -327,6 +327,17 @@ The rollout SHALL retire claiming Workers one at a time while at least one compa
 - **WHEN** the orchestrator kills the process before its application drain timeout, a retiring instance starts new work after drain, a successor claims a live lease, or an operator mutates owner/deadline fields
 - **THEN** the rollback SHALL stop and SHALL NOT retire another Worker until the deployment and persisted task state are reconciled
 
+### Requirement: Concurrent Workers use exclusive queue ownership
+When multiple claiming Workers are ready, PostgreSQL queue ownership SHALL assign each job row to at most one live owner at a time. Successful handlers SHALL persist one terminal result per logical job while idempotent retries remain safe after an owner failure.
+
+#### Scenario: Two Workers compete for blocked jobs
+- **WHEN** two single-concurrency Workers claim the same ready batch while two independent Blob GC handlers are held open by database row locks
+- **THEN** the two `Running` rows SHALL have distinct Worker owners and one attempt each, and neither Worker SHALL claim both execution slots
+
+#### Scenario: Both blocked jobs are released
+- **WHEN** the database locks are released while both Worker leases remain live
+- **THEN** each job SHALL reach `Succeeded` with one attempt, clear its owner and lease, retain one deduplicated queue row, and remove its zero-reference content row and Blob exactly once
+
 ### Requirement: Lost upload-completion responses use business replay
 The rollback and incident runbook SHALL treat a missing or failed HTTP response as an unknown outcome, preserve the original `upload_id`, and retry `POST /api/file/upload/complete` through a compatible API before considering any administrative recovery. A completed replay SHALL be verified through the returned file ID and read-only upload diagnostics. The runbook SHALL prohibit direct database state changes and manual deletion of final S3 objects or unverified staging objects.
 
