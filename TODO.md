@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮 Phase 6 PostgreSQL 物理备份与时间点恢复）：`cmake --preset linux-debug-clang`、完整构建和 PostgreSQL 恢复/拓扑聚焦 CTest 4/4 均通过；完整 CTest 共 1388 项，1382 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 479.82 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
+> 最近验证（2026-07-21，本轮 Phase 6 PostgreSQL 读副本准入评估）：`cmake --preset linux-debug-clang`、完整构建和 RuntimeConfig/拓扑聚焦 CTest 10/10 均通过；完整 CTest 共 1391 项，1385 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 485.33 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
 
 ## 1. 目标与范围
 
@@ -353,7 +353,7 @@ A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 
 - [ ] 区分事务池模式限制，确认 Drogon ORM、prepared statement 和 advisory lock 兼容性。
 - [x] Compose PostgreSQL 显式设置 statement、lock、idle transaction 超时，避免故障任务长期占用资源。
 - [x] 建立备份、时间点恢复和恢复演练流程。
-- [ ] 只在可证明安全的只读查询上评估读副本；上传状态与权限判断不得读延迟副本。
+- [x] 只在可证明安全的只读查询上评估读副本；当前查询白名单为空，上传状态、权限及全部既有业务/运维判断只读主库写端点。
 
 ### 11.3 Redis
 
@@ -425,6 +425,14 @@ PostgreSQL/认证/Redis/拓扑聚焦 CTest 5/5 通过（48.17 秒）；完整 CT
 隔离恢复以 inclusive LSN `0/3000750` 为目标，在 replay LSN `0/3000810` 完成并从 timeline 1 提升到 2；恢复库保留 schema、基线行和目标前行，排除位于 `0/30009D8` 的目标后行。4 个归档文件覆盖所需恢复范围，物理备份 manifest 的 WAL range 为 1，本机恢复耗时 0.109 秒。`0600` 原子证据 `.sisyphus/evidence/postgres-pitr-recovery-summary.json` 的 SHA-256 为 `a9eb1507e6901138222e7a2be9d2cc59200a391cae2c509f5ad1873fd3d0edf9`，不含密码、令牌、用户名、邮箱或连接串。
 
 逻辑恢复/对象对账、物理 PITR、稳定端点晋升和拓扑合同聚焦 CTest 4/4 通过（20.24 秒）；完整 CTest 共 1388 项，1382 通过、6 项既有环境门控跳过、0 失败，总耗时 479.82 秒；OpenSpec 严格校验 24/24 通过。本记录结合既有 `BackupRestoreReconciliationIntegration` 关闭 11.2 的仓库级备份、时间点恢复与恢复演练流程，但本机 `cp` 归档不替代托管/pgBackRest/WAL-G、异地加密不可变存储、真实对象时间点快照或经批准的生产 RPO/RTO，因此 11.6 的完整依赖故障切换验收继续保持未勾选。
+
+### 11.11 Phase 6 PostgreSQL 读副本准入评估记录（2026-07-21）
+
+生产源码审计确认控制器、服务、Worker、健康检查和指标均只取得 Drogon 默认 `DbClient`。认证与用户状态、权限/分享、文件/目录/搜索/回收站、上传任务/分片/配额/租约、持久任务、管理员诊断与恢复、健康检查和指标都参与权威判断或没有最大陈旧时间合同；因此第一阶段读副本查询白名单为空，不能把普通 `SELECT` 当作安全准入依据。
+
+`RuntimeConfig` 现在会在环境覆盖、数据库连接和服务初始化前要求 `db_clients` 精确包含一个名为 `default` 的对象；缺失、非数组、空数组、非对象、重命名或追加 replica 均拒绝启动，错误不回显配置中的客户端名称、主机或密码。`DistributedTopologyContract` 同时锁定默认/分布式模板各只有一个 `default` 客户端，并禁止生产源码取得命名数据库客户端。
+
+clang-format、Python 语法检查、CMake 配置和完整构建通过；RuntimeConfig/拓扑聚焦 CTest 10/10 通过，完整 CTest 共 1391 项，1385 通过、6 项既有环境门控跳过、0 失败，总耗时 485.33 秒；OpenSpec 严格校验 24/24 通过。本记录完成 11.2 的“评估”要求但没有启用读副本；未来只有具有版本化陈旧读取合同、最大延迟、数据版本/观测时间、主库降级策略、隔离路由和故障测试的非权限报表可重新评估，所以第 17 节报表读副本演进项继续保持未勾选，事务池兼容项也不受本记录影响。
 
 ## 12. Phase 7：可观测性与运维工具
 

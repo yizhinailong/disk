@@ -21,6 +21,8 @@ namespace disk::utils {
         [[nodiscard]]
         static auto LoadFile(std::string_view path) -> Json::Value;
 
+        static auto ValidateDatabaseRouting(const Json::Value& config) -> void;
+
         static auto ApplyEnvironmentOverrides(Json::Value& config) -> void;
     };
 

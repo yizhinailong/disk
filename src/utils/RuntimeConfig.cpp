@@ -122,6 +122,7 @@ namespace disk::utils {
     auto RuntimeConfig::LoadFromEnvironment() -> Json::Value {
         auto path = ReadEnvironment("DISK_CONFIG_FILE").value_or("config.json");
         auto config = LoadFile(path);
+        ValidateDatabaseRouting(config);
         ApplyEnvironmentOverrides(config);
         return config;
     }
@@ -139,6 +140,25 @@ namespace disk::utils {
             throw std::runtime_error("Cannot parse runtime configuration file: " + errors);
         }
         return config;
+    }
+
+    auto RuntimeConfig::ValidateDatabaseRouting(const Json::Value& config) -> void {
+        constexpr auto ERROR_MESSAGE =
+            "Database routing configuration must contain exactly one client object named default";
+
+        if (!config.isObject()) {
+            throw std::runtime_error(ERROR_MESSAGE);
+        }
+
+        const auto& clients = config["db_clients"];
+        if (!clients.isArray() || clients.size() != 1 || !clients[0].isObject()) {
+            throw std::runtime_error(ERROR_MESSAGE);
+        }
+
+        const auto& name = clients[0]["name"];
+        if (!name.isString() || name.asString() != "default") {
+            throw std::runtime_error(ERROR_MESSAGE);
+        }
     }
 
     auto RuntimeConfig::ApplyEnvironmentOverrides(Json::Value& config) -> void {

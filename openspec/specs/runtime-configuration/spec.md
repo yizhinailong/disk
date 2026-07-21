@@ -27,6 +27,20 @@ The system SHALL use configured PostgreSQL connection settings for persistent me
 - **WHEN** an operation requires persistent metadata
 - **THEN** the system SHALL use the configured PostgreSQL client for that metadata access
 
+#### Scenario: Writer-only database routing is configured
+- **WHEN** runtime configuration is loaded for any API, Worker, or combined process
+- **THEN** `db_clients` SHALL contain exactly one object named `default`, and every database-backed operation SHALL use that client through the stable PostgreSQL writer endpoint
+- **AND** the current read-replica query allowlist SHALL remain empty because no existing API contract declares bounded stale reads
+
+#### Scenario: Ambiguous database routing is configured
+- **WHEN** `db_clients` is missing, malformed, empty, contains more than one client, or its sole client is not named `default`
+- **THEN** startup SHALL fail before database connection or service initialization without echoing client names, hosts, or credentials
+
+#### Scenario: A future read-replica query is proposed
+- **WHEN** a non-authoritative reporting query is considered for replica routing
+- **THEN** it SHALL use a versioned stale-read contract and an isolated routing interface with a maximum lag, observation version or time, writer fallback or rejection policy, metrics, and failover tests
+- **AND** authorization, upload state, quota, lease, Worker, readiness, recovery, and existing business-service queries SHALL remain on the writer client
+
 #### Scenario: Stable PostgreSQL writer endpoint fails over
 - **WHEN** established database connections time out while a fenced primary is replaced by a fully replayed, promoted standby behind the configured stable writer endpoint
 - **THEN** database operations SHALL return controlled failures during the interruption, liveness SHALL remain available, and readiness SHALL identify the database dependency as unavailable

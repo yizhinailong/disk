@@ -342,7 +342,7 @@ def main() -> int:
     require(latest_verification is not None, "TODO latest verification summary is missing or malformed")
     total, passed_count, skipped_count = map(int, latest_verification.groups())
     require(
-        (total, passed_count, skipped_count) == (1388, 1382, 6),
+        (total, passed_count, skipped_count) == (1391, 1385, 6),
         "TODO latest CTest inventory drifted without an explicit contract update",
     )
     require(total == passed_count + skipped_count, "TODO latest CTest totals do not reconcile")
@@ -450,6 +450,27 @@ def main() -> int:
     runtime_config = json.loads(
         (root / "deploy/config.distributed.json").read_text(encoding="utf-8")
     )
+    for relative_path in ("config.json", "deploy/config.distributed.json"):
+        checked_config = json.loads((root / relative_path).read_text(encoding="utf-8"))
+        database_clients = checked_config.get("db_clients")
+        require(
+            isinstance(database_clients, list)
+            and len(database_clients) == 1
+            and isinstance(database_clients[0], dict)
+            and database_clients[0].get("name") == "default",
+            f"{relative_path} must contain exactly one default database client",
+        )
+
+    production_sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (root / "src").rglob("*")
+        if path.suffix in {".cpp", ".hpp"}
+    )
+    require(
+        "getDbClientByName" not in production_sources,
+        "production code must not route queries through a named database client",
+    )
+
     require(runtime_config["app"]["threads_num"] == 4, "HTTP thread recommendation drifted")
     require(runtime_config["db_clients"][0]["passwd"] == "", "database password leaked into JSON")
     require(runtime_config["redis_clients"][0]["passwd"] == "", "Redis password leaked into JSON")
