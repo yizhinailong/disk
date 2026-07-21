@@ -1,68 +1,88 @@
+/**
+ * @file LogHelper.hpp
+ * @brief Structured application logging and typed correlation context
+ */
+
 #pragma once
 
-#include <spdlog/spdlog.h>
-#include <spdlog/sinks/rotating_file_sink.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
-
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <optional>
 #include <sstream>
-#include <trantor/utils/Logger.h>
+#include <string>
+
+#include <spdlog/common.h>
+
+namespace spdlog {
+    class logger;
+}
 
 namespace disk::utils {
 
-class LogStream {
-public:
-    explicit LogStream(spdlog::level::level_enum level) : level_(level) {}
+    struct LogContext final {
+        std::optional<std::string> request_id;
+        std::optional<std::string> operation;
+        std::optional<std::string> upload_id;
+        std::optional<uint64_t> job_id;
+        std::optional<std::string> lease_owner;
+        std::optional<uint64_t> state_version;
+    };
 
-    ~LogStream() {
-        spdlog::default_logger_raw()->log(level_, "{}", oss_.str());
-    }
+    class LogStream final {
+    public:
+        explicit LogStream(
+            spdlog::level::level_enum level,
+            LogContext context = {}
+        );
 
-    LogStream(const LogStream&) = delete;
-    LogStream& operator=(const LogStream&) = delete;
+        ~LogStream() noexcept;
 
-    template <typename T>
-    LogStream& operator<<(const T& val) {
-        oss_ << val;
-        return *this;
-    }
+        LogStream(const LogStream&) = delete;
+        auto operator=(const LogStream&) -> LogStream& = delete;
 
-private:
-    spdlog::level::level_enum level_;
-    std::ostringstream oss_;
-};
+        template <typename T>
+        auto operator<<(const T& value) -> LogStream& {
+            m_stream << value;
+            return *this;
+        }
 
-class Logger {
-public:
-    static void Init(const std::string& log_file = "build/log/disk.log",
-                     size_t max_file_size = 10485760,
-                     size_t max_files = 10) {
-        auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-        auto file_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-            log_file, max_file_size, max_files);
-        auto logger = std::make_shared<spdlog::logger>(
-            "disk", spdlog::sinks_init_list{console_sink, file_sink});
-        logger->set_pattern("%Y-%m-%d %H:%M:%S.%e [%^%l%$] %v");
-        logger->flush_on(spdlog::level::err);
-        spdlog::set_default_logger(logger);
-    }
+    private:
+        spdlog::level::level_enum m_level;
+        LogContext m_context;
+        std::ostringstream m_stream;
+    };
 
-    static void CaptureFrameworkLogs() {
-        trantor::Logger::enableSpdLog(-1, spdlog::default_logger());
-    }
+    class Logger final {
+    public:
+        static auto Init(
+            const std::string& log_file = "build/log/disk.log",
+            size_t max_file_size = 10485760,
+            size_t max_files = 10
+        ) -> void;
 
-    static LogStream Trace() { return LogStream(spdlog::level::trace); }
-    static LogStream Debug() { return LogStream(spdlog::level::debug); }
-    static LogStream Info() { return LogStream(spdlog::level::info); }
-    static LogStream Warn() { return LogStream(spdlog::level::warn); }
-    static LogStream Error() { return LogStream(spdlog::level::err); }
-    static LogStream Fatal() { return LogStream(spdlog::level::critical); }
+        static auto ApplyStructuredFormatter(
+            const std::shared_ptr<spdlog::logger>& logger
+        ) -> void;
 
-    static LogStream HighVolumeDetail() { return Debug(); }
-    static LogStream HighVolumeSuccess() { return Debug(); }
-    static LogStream HighVolumeFailure() { return Info(); }
-};
+        static auto CaptureFrameworkLogs() -> void;
 
-} ///< namespace disk::utils
+        static auto SetInstanceId(std::string instance_id) -> void;
 
-/// Import Logger into disk namespace so it's accessible as Logger:: inside disk::*
-namespace disk { using utils::Logger; }
+        static auto Trace(LogContext context = {}) -> LogStream;
+        static auto Debug(LogContext context = {}) -> LogStream;
+        static auto Info(LogContext context = {}) -> LogStream;
+        static auto Warn(LogContext context = {}) -> LogStream;
+        static auto Error(LogContext context = {}) -> LogStream;
+        static auto Fatal(LogContext context = {}) -> LogStream;
+
+        static auto HighVolumeDetail(LogContext context = {}) -> LogStream;
+        static auto HighVolumeSuccess(LogContext context = {}) -> LogStream;
+        static auto HighVolumeFailure(LogContext context = {}) -> LogStream;
+    };
+
+} // namespace disk::utils
+
+namespace disk {
+    using utils::Logger;
+}

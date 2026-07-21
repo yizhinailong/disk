@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 6 Kubernetes 兼容发布与扩缩容参考部署）：完整构建和聚焦拓扑/容量 CTest 2/2 通过；Kubernetes 1.30 Kustomize 五个发布/聚合入口 5/5、四个发布入口的离线严格 Schema 资源 11/11 通过；完整 CTest 共 1392 项，1385 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 481.47 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 结构化日志信封基础）：CMake 配置、完整构建及聚焦日志/请求追踪/Worker CTest 26/26 通过；完整 CTest 共 1395 项，1388 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 466.69 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -511,6 +511,12 @@ Python 语法检查、CMake 配置和完整构建通过；PgBouncer/拓扑聚焦
 生产 `INFO` 采用确定性的结果分层：成功分片的接收、参数、成功结果和 `[upload_chunk] outcome=success` 摘要固定为 `DEBUG`，常态保留比例为 0%；失败摘要及对应 `WARN`/`ERROR` 上下文不做概率采样，常态保留比例为 100%。请求数、字节数和延迟继续由低基数 Prometheus 指标无采样累计，操作审计不受高频诊断日志策略影响。临时 `DEBUG` 仅允许在从入口摘除的单个 API 上按最长 15 分钟和日志空间预算启用，且仍禁止记录凭据或文件正文。
 
 `Logger::HighVolumeDetail`、`HighVolumeSuccess` 和 `HighVolumeFailure` 将策略集中为可复用接口，`FileController` 与 `UploadService` 的分片路径已改用该接口；`LogHelperTest` 通过内存 sink 锁定 `INFO` 丢弃细节/成功、保留失败，以及 `DEBUG` 恢复细节/成功的行为。日志策略聚焦 CTest 2/2 通过；CMake 配置和完整构建通过，完整 CTest 共 1383 项，1377 通过、6 项环境门控跳过、0 失败，总耗时 434.98 秒；OpenSpec 严格校验 24/24 通过。结构化字段与跨 API/DB/Worker/S3 追踪仍未全部收敛，因此 Phase 7 对应两项继续保持未勾选。
+
+### 12.6 结构化日志信封基础记录（2026-07-22）
+
+stdout、旋转文件以及被捕获的 Drogon/Trantor 诊断现统一输出单行 `schema_version=1` JSON；固定字段包含时间、级别、来源、logger、消息和七个关联字段，未知关联值使用 JSON `null`。应用事件通过 `LogContext` 显式传入类型化关联值，框架事件不猜测协程上下文；配置冻结后全局注册 `instance_id`，HTTP 完成事件写入响应使用的真实 `request_id` 与低基数 `operation`。消息中的引号和换行由 JSON 序列化器转义，不再破坏 NDJSON 边界。
+
+部署运维、系统测试和单元测试文档先行更新；`LogHelperTest` 锁定应用/框架信封、字段类型、空值和字符转义，现有 Worker 日志捕获也使用同一格式。聚焦日志/请求追踪/Worker CTest 26/26 通过，CMake 配置和完整构建通过；完整 CTest 共 1395 项，1388 通过、7 项环境门控跳过、0 失败，总耗时 466.69 秒；OpenSpec 严格校验 24/24 通过。init/chunk/complete/download/cleanup 各域日志尚未全部显式传播 `upload_id`、`job_id`、`lease_owner` 与 `state_version`，API、DB、Worker、S3 的端到端关联也未完成，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

@@ -1,6 +1,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -138,18 +139,28 @@ namespace {
                     );
 
                     const auto request_id = attributes->find("request_id") ?
-                                                attributes->get<std::string>("request_id") :
-                                                std::string("missing");
+                                                std::optional<std::string>(
+                                                    attributes->get<std::string>("request_id")
+                                                ) :
+                                                std::nullopt;
+                    const disk::utils::LogContext log_context{
+                        .request_id = request_id,
+                        .operation = std::string(
+                            disk::metrics::HttpOperationName(operation)
+                        ),
+                    };
                     if (status_code >= 400) {
-                        disk::utils::Logger::Warn()
-                            << "HTTP request completed: request_id=" << request_id
+                        disk::utils::Logger::Warn(log_context)
+                            << "HTTP request completed: request_id="
+                            << request_id.value_or("missing")
                             << ", instance_id=" << services->state->InstanceId()
                             << ", operation=" << disk::metrics::HttpOperationName(operation)
                             << ", status=" << status_code
                             << ", duration_us=" << duration.count();
                     } else {
-                        disk::utils::Logger::Debug()
-                            << "HTTP request completed: request_id=" << request_id
+                        disk::utils::Logger::Debug(log_context)
+                            << "HTTP request completed: request_id="
+                            << request_id.value_or("missing")
                             << ", instance_id=" << services->state->InstanceId()
                             << ", operation=" << disk::metrics::HttpOperationName(operation)
                             << ", status=" << status_code
@@ -260,6 +271,7 @@ auto main() -> int {
 
     const auto config = disk::utils::ConfigMgr::GetInstance();
     const auto role = config->GetProcessRole();
+    disk::utils::Logger::SetInstanceId(config->GetInstanceId());
     auto runtime_services = std::make_shared<RuntimeServices>(
         std::make_shared<disk::runtime::ProcessRuntimeState>(
             role,

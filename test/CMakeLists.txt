@@ -126,6 +126,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/filters/AdminRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/FolderRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/utils/ConfigMgr.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/LogHelper.cpp
     ${CMAKE_SOURCE_DIR}/src/utils/RuntimeConfig.cpp
     ${CMAKE_SOURCE_DIR}/src/storage/StorageMgr.cpp
     ${CMAKE_SOURCE_DIR}/src/models/FileContents.cpp

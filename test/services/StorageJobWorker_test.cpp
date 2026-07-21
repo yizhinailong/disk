@@ -14,6 +14,7 @@
 #include "services/StorageJobContract.hpp"
 #include "storage/MultipartUploadRecovery.hpp"
 #include "storage/UploadStagingStorage.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::jobs {
     namespace {
@@ -23,7 +24,7 @@ namespace disk::jobs {
                 : m_previous_logger(spdlog::default_logger()),
                   m_sink(std::make_shared<spdlog::sinks::ostream_sink_mt>(m_output)),
                   m_logger(std::make_shared<spdlog::logger>("storage-job-worker-test", m_sink)) {
-                m_logger->set_pattern("%v");
+                disk::utils::Logger::ApplyStructuredFormatter(m_logger);
                 spdlog::set_default_logger(m_logger);
             }
 

@@ -238,6 +238,7 @@ set(Utils_HEADERS
     utils/ErrorCode.hpp
     utils/FileHashUtil.hpp
     utils/HashUtil.hpp
+    utils/LogHelper.hpp
     utils/Pch.hpp
     utils/RedisKeyPrefix.hpp
     utils/Response.hpp
@@ -246,6 +247,7 @@ set(Utils_HEADERS
 )
 set(Utils_SOURCES
     utils/ConfigMgr.cpp
+    utils/LogHelper.cpp
     utils/RuntimeConfig.cpp
 )
 
