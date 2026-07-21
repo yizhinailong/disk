@@ -132,6 +132,18 @@
 | 70002 | `RedisOperationFailed` | 500 | Redis操作失败 |
 | 70003 | `RedisKeyNotFound` | 404 | Redis key不存在 |
 
+#### 管理员错误码
+
+| 错误码 | 枚举名称 | HTTP状态码 | 说明 |
+|--------|----------|------------|------|
+| 80001 | `AdminRequired` | 403 | 需要管理员权限 |
+| 80002 | `AdminUserNotFound` | 404 | 用户不存在 |
+| 80003 | `AdminCannotModifySelf` | 400 | 不能修改自己的状态或角色 |
+| 80004 | `AdminCannotDemoteLast` | 400 | 不能降级最后一个管理员 |
+| 80005 | `AdminShareNotFound` | 404 | 分享不存在 |
+| 80006 | `AdminInvalidStatus` | 400 | 无效的用户状态 |
+| 80007 | `AdminInvalidRole` | 400 | 无效的角色 |
+
 #### 代码使用示例
 
 ```cpp

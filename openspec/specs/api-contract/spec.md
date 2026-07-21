@@ -24,6 +24,10 @@ The system SHALL expose stable business error codes for common, authentication, 
 - **WHEN** a request fails due to a known domain condition
 - **THEN** the system SHALL map the failure to the documented business error code and an appropriate HTTP status code
 
+#### Scenario: Known error uses its default message
+- **WHEN** a known business error is returned without a custom message
+- **THEN** the response SHALL use that error code's human-readable default message and SHALL NOT fall back to `Unknown error`
+
 ### Requirement: Pagination Envelope
 The system SHALL return paginated collection results with item data and pagination metadata.
 

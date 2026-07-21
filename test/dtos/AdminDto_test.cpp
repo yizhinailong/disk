@@ -1324,7 +1324,7 @@ TEST(AdminLogDetailResponse, SerializesStringTargetName) {
 
 /// ==================== Error Code Contract Tests ====================
 
-TEST(AdminErrorCodeContract, AllCodesHaveCorrectValues) {
+TEST(AdminErrorCodeContract, AllCodesHaveStableMappings) {
     EXPECT_EQ(static_cast<int>(Code::AdminRequired), 80001);
     EXPECT_EQ(static_cast<int>(Code::AdminUserNotFound), 80002);
     EXPECT_EQ(static_cast<int>(Code::AdminCannotModifySelf), 80003);
@@ -1332,6 +1332,22 @@ TEST(AdminErrorCodeContract, AllCodesHaveCorrectValues) {
     EXPECT_EQ(static_cast<int>(Code::AdminShareNotFound), 80005);
     EXPECT_EQ(static_cast<int>(Code::AdminInvalidStatus), 80006);
     EXPECT_EQ(static_cast<int>(Code::AdminInvalidRole), 80007);
+
+    EXPECT_EQ(disk::error::GetHttpStatus(Code::AdminRequired), drogon::k403Forbidden);
+    EXPECT_EQ(disk::error::GetHttpStatus(Code::AdminUserNotFound), drogon::k404NotFound);
+    EXPECT_EQ(disk::error::GetHttpStatus(Code::AdminCannotModifySelf), drogon::k400BadRequest);
+    EXPECT_EQ(disk::error::GetHttpStatus(Code::AdminCannotDemoteLast), drogon::k400BadRequest);
+    EXPECT_EQ(disk::error::GetHttpStatus(Code::AdminShareNotFound), drogon::k404NotFound);
+    EXPECT_EQ(disk::error::GetHttpStatus(Code::AdminInvalidStatus), drogon::k400BadRequest);
+    EXPECT_EQ(disk::error::GetHttpStatus(Code::AdminInvalidRole), drogon::k400BadRequest);
+
+    EXPECT_EQ(disk::error::GetErrorMessage(Code::AdminRequired), "Administrator privileges required");
+    EXPECT_EQ(disk::error::GetErrorMessage(Code::AdminUserNotFound), "User not found");
+    EXPECT_EQ(disk::error::GetErrorMessage(Code::AdminCannotModifySelf), "Cannot modify your own account");
+    EXPECT_EQ(disk::error::GetErrorMessage(Code::AdminCannotDemoteLast), "Cannot demote the last administrator");
+    EXPECT_EQ(disk::error::GetErrorMessage(Code::AdminShareNotFound), "Share not found");
+    EXPECT_EQ(disk::error::GetErrorMessage(Code::AdminInvalidStatus), "Invalid user status");
+    EXPECT_EQ(disk::error::GetErrorMessage(Code::AdminInvalidRole), "Invalid role");
 }
 
 TEST(AdminErrorCodeContract, CodesAreDistinct) {

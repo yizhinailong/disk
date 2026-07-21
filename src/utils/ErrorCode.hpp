@@ -27,6 +27,7 @@ namespace disk::error {
      * - 50xxx: 文件相关错误
      * - 60xxx: 分享相关错误
      * - 70xxx: Redis相关错误
+     * - 80xxx: 管理员相关错误
      */
     enum class Code : std::uint32_t {
         /// ==================== 成功 ====================
@@ -264,6 +265,15 @@ namespace disk::error {
             /// Redis错误
             {       Code::RedisOperationFailed,                              "Redis operation failed" },
             {           Code::RedisKeyNotFound,                                 "Redis key not found" },
+
+            /// 管理员错误
+            {              Code::AdminRequired,                   "Administrator privileges required" },
+            {          Code::AdminUserNotFound,                                      "User not found" },
+            {      Code::AdminCannotModifySelf,                      "Cannot modify your own account" },
+            {      Code::AdminCannotDemoteLast,                "Cannot demote the last administrator" },
+            {         Code::AdminShareNotFound,                                     "Share not found" },
+            {         Code::AdminInvalidStatus,                                 "Invalid user status" },
+            {           Code::AdminInvalidRole,                                        "Invalid role" },
         };
 
         auto it = message_map.find(code);

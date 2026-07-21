@@ -235,7 +235,7 @@ TEST(AdminAuthFilterTest, RejectResponse_ContainsMessage) {
     ASSERT_NE(resp, nullptr);
     auto json = resp->getJsonObject();
     ASSERT_NE(json, nullptr);
-    EXPECT_FALSE((*json)["message"].asString().empty());
+    EXPECT_EQ((*json)["message"].asString(), "Administrator privileges required");
 }
 
 TEST(AdminAuthFilterTest, RejectResponse_ContainsNullData) {
