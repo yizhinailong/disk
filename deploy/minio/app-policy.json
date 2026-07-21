@@ -45,6 +45,17 @@
         "arn:aws:s3:::disk/objects/*",
         "arn:aws:s3:::disk/staging/*"
       ]
+    },
+    {
+      "Sid": "DenyObjectVersionPurge",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteObjectVersion"
+      ],
+      "Resource": [
+        "arn:aws:s3:::disk/objects/*",
+        "arn:aws:s3:::disk/staging/*"
+      ]
     }
   ]
 }

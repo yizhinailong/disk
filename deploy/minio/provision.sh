@@ -33,6 +33,15 @@ run_mc() {
 run_mc alias set local "${DISK_S3_ENDPOINT:-http://minio:9000}" \
     "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
 run_mc mb --ignore-existing "local/${DISK_S3_BUCKET}"
+run_mc version enable "local/${DISK_S3_BUCKET}"
+versioning_info="$(run_mc --json version info "local/${DISK_S3_BUCKET}")"
+case "${versioning_info}" in
+    *'"versioning":{"status":"Enabled"'*) ;;
+    *)
+        echo "MinIO bucket versioning is not enabled" >&2
+        exit 1
+        ;;
+esac
 run_mc ilm rule import "local/${DISK_S3_BUCKET}" < "${LIFECYCLE_FILE}"
 run_mc admin user add local "${DISK_S3_ACCESS_KEY}" "${DISK_S3_SECRET_KEY}"
 run_mc admin policy create local disk-app "${POLICY_FILE}"

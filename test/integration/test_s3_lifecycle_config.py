@@ -94,8 +94,16 @@ def main() -> int:
         "BucketMetadata",
         "ListApplicationPrefixes",
         "ApplicationObjects",
+        "DenyObjectVersionPurge",
     }
-    assert all(statement.get("Effect") == "Allow" for statement in statements)
+    assert all(
+        statements_by_id[sid].get("Effect") == "Allow"
+        for sid in (
+            "BucketMetadata",
+            "ListApplicationPrefixes",
+            "ApplicationObjects",
+        )
+    )
     assert statements_by_id["BucketMetadata"]["Action"] == ["s3:GetBucketLocation"]
     assert statements_by_id["BucketMetadata"]["Resource"] == ["arn:aws:s3:::disk"]
     assert statements_by_id["ListApplicationPrefixes"]["Action"] == ["s3:ListBucket"]
@@ -115,6 +123,15 @@ def main() -> int:
     assert set(statements_by_id["ApplicationObjects"]["Resource"]) == {
         "arn:aws:s3:::disk/objects/*",
         "arn:aws:s3:::disk/staging/*",
+    }
+    assert statements_by_id["DenyObjectVersionPurge"] == {
+        "Sid": "DenyObjectVersionPurge",
+        "Effect": "Deny",
+        "Action": ["s3:DeleteObjectVersion"],
+        "Resource": [
+            "arn:aws:s3:::disk/objects/*",
+            "arn:aws:s3:::disk/staging/*",
+        ],
     }
     assert all(
         action != "s3:*" and not action.startswith("iam:")
@@ -177,6 +194,8 @@ def main() -> int:
     provision = PROVISION_PATH.read_text(encoding="utf-8")
     for command in (
         "run_mc mb --ignore-existing",
+        "run_mc version enable",
+        "run_mc --json version info",
         "run_mc ilm rule import",
         "run_mc admin user add",
         "run_mc admin policy create",
@@ -184,6 +203,7 @@ def main() -> int:
         "run_mc ilm rule export",
     ):
         assert command in provision
+    assert '\"versioning\":{\"status\":\"Enabled\"' in provision
     assert '"${MINIO_ROOT_USER}" = "${DISK_S3_ACCESS_KEY}"' in provision
     assert '"${MINIO_ROOT_PASSWORD}" = "${DISK_S3_SECRET_KEY}"' in provision
 

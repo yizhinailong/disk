@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮 Phase 6 PostgreSQL PgBouncer 事务池兼容性验收）：`cmake --preset linux-debug-clang`、完整构建和 PgBouncer/拓扑聚焦 CTest 2/2 均通过；完整 CTest 共 1392 项，1386 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 483.59 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
+> 最近验证（2026-07-21，本轮 Phase 6 MinIO bucket 版本与权限门禁）：`cmake --preset linux-debug-clang`、完整构建、固定版 MinIO 聚焦 CTest 1/1 和 PgBouncer 聚焦 CTest 1/1 均通过；完整 CTest 共 1392 项，1386 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 481.00 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
 
 ## 1. 目标与范围
 
@@ -364,6 +364,7 @@ A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 
 
 ### 11.4 S3/MinIO
 
+- [x] 仓库 MinIO 样例初始化会幂等开启并回读 `Enabled` bucket 版本控制，且应用凭据显式拒绝版本级删除；该仓库门禁不代表下述生产整项完成。
 - [ ] 生产 bucket 开启必要的版本、加密、TLS、最小权限和生命周期规则。
 - [ ] API/Worker 凭据仅允许所需前缀和操作，迁移工具使用独立临时权限。
 - [x] 配置连接池、请求超时、重试预算和每实例并发上限。
@@ -441,6 +442,12 @@ clang-format、Python 语法检查、CMake 配置和完整构建通过；Runtime
 本轮先以官方 SHA-256 校验的源码临时构建 PgBouncer 1.25.2，再由 `test_pgbouncer_transaction_pool.py` 启动它与唯一临时 PostgreSQL/Redis、两个真实 API。夹具把每 API 4 条、合计 8 条 Drogon 客户端连接复用到精确 2 条 PostgreSQL 后端连接；跨实例注册/profile、ORM 父子文件夹创建、`TransactionRunner` 子树 rename 和 breadcrumb 回读均成功。`SHOW STATS` 最终记录 client parse 26、server parse 19、bind 54；双代理客户端证明同一 `pg_advisory_xact_lock` 在持有事务提交前拒绝竞争者、提交后立即释放，事务内 `SET LOCAL` 与 `ON COMMIT DROP` 临时表也成功。测试先完成应用连接/plan 取证并停止双 API，再执行双连接锁探针，避免把 2 条后端预算耗尽误判为锁失败。
 
 Python 语法检查、CMake 配置和完整构建通过；PgBouncer/拓扑聚焦 CTest 2/2 通过（3.67 秒），真实脚本另连续重复 3/3 通过；完整 CTest 共 1392 项，1386 通过、6 项既有环境门控跳过、0 失败，总耗时 483.59 秒；OpenSpec 严格校验 24/24 通过。`0600` 原子证据 `.sisyphus/evidence/pgbouncer-transaction-pool-summary.json` 的 SHA-256 为 `02e268afc4bbf8b1b4612af2db9292ca9e70aaa94cd5478d3052c6f9d0e85a30`，不含端口、路径、凭据或业务标识。本记录不支持被禁止的会话特性，也不替代生产 PgBouncer 认证/TLS、稳定写端点 HA、独立故障域、内存/连接容量和版本升级回归。
+
+### 11.13 Phase 6 MinIO bucket 版本与权限门禁记录（2026-07-21）
+
+`deploy/minio/provision.sh` 现在建 bucket 后、发放应用账号前幂等执行 `mc version enable`，并解析 `mc --json version info` 要求精确的 `Enabled` 状态。固定 MinIO `RELEASE.2025-04-22T22-12-26Z` 实测发现，仅仅不授予 `DeleteObjectVersion` 仍会让带 `VersionId` 的删除借用已允许的 `DeleteObject` 成功；因此应用 policy 对 `objects/*`/`staging/*` 增加精确的显式 `Deny s3:DeleteObjectVersion`，同时保留应用正常读写、复制、multipart 和普通删除能力。
+
+`S3ProvisioningIntegration` 在 SHA-256 已复核的固定 MinIO/mc 二进制上 1/1 通过（2.02 秒），11 项检查覆盖二次幂等初始化、版本状态/lifecycle 回读、stale multipart 清理、受限数据面、越权管理/版本删除拒绝、删除标记/历史版本保留和初始化身份最终清理。`0600` 原子证据 `.sisyphus/evidence/s3-provisioning-summary.json` 的 SHA-256 为 `5a5bfdd48eb448d460391cd8183798f92a7e277ee4681de6654a41c2c52cada0`。完整 CTest 共 1392 项，1386 通过、6 项预期环境门控跳过、0 失败，总耗时 481.00 秒；OpenSpec 严格校验 24/24 通过。该单节点 HTTP 样例不替代目标 bucket 的加密、TLS、非当前版本保留、备份/恢复、故障域与高可用验收，所以 11.4 生产整项仍保持未勾选。
 
 ## 12. Phase 7：可观测性与运维工具
 

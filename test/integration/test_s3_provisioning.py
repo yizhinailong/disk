@@ -142,7 +142,17 @@ def require_access_denied(label: str, operation: Callable[[], Any]) -> None:
 
 def write_evidence(evidence: dict[str, Any]) -> None:
     EVIDENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    EVIDENCE_PATH.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=EVIDENCE_PATH.parent,
+        prefix=f".{EVIDENCE_PATH.name}.",
+    )
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        os.fchmod(handle.fileno(), 0o600)
+        json.dump(evidence, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary_name, EVIDENCE_PATH)
 
 
 def main() -> int:
@@ -257,6 +267,13 @@ def main() -> int:
 
             root_client = s3_client(endpoint, root_access_key, root_secret_key)
             app_client = s3_client(endpoint, app_access_key, app_secret_key)
+            versioning = root_client.get_bucket_versioning(Bucket=BUCKET)
+            require(
+                versioning.get("Status") == "Enabled",
+                f"bucket versioning is not enabled: {versioning}",
+            )
+            checks.append("bucket_versioning_enabled")
+
             lifecycle = root_client.get_bucket_lifecycle_configuration(Bucket=BUCKET)
             lifecycle_ids = {rule["ID"] for rule in lifecycle.get("Rules", [])}
             require(
@@ -273,7 +290,11 @@ def main() -> int:
             staging_key = f"staging/integration/{run_id}/source.bin"
             final_key = f"objects/integration/{run_id}/final.bin"
             payload = b"disk-s3-provisioning-payload\n"
-            app_client.put_object(Bucket=BUCKET, Key=staging_key, Body=payload)
+            staged = app_client.put_object(
+                Bucket=BUCKET, Key=staging_key, Body=payload
+            )
+            staging_version_id = str(staged.get("VersionId", ""))
+            require(staging_version_id, "versioned PUT did not return a version ID")
             head = app_client.head_object(Bucket=BUCKET, Key=staging_key)
             require(
                 int(head["ContentLength"]) == len(payload), "staging HEAD size mismatch"
@@ -339,6 +360,25 @@ def main() -> int:
                     LifecycleConfiguration={"Rules": []},
                 ),
             )
+            require_access_denied(
+                "versioning read",
+                lambda: app_client.get_bucket_versioning(Bucket=BUCKET),
+            )
+            require_access_denied(
+                "versioning administration",
+                lambda: app_client.put_bucket_versioning(
+                    Bucket=BUCKET,
+                    VersioningConfiguration={"Status": "Suspended"},
+                ),
+            )
+            require_access_denied(
+                "specific version deletion",
+                lambda: app_client.delete_object(
+                    Bucket=BUCKET,
+                    Key=staging_key,
+                    VersionId=staging_version_id,
+                ),
+            )
             visible_buckets = {
                 item["Name"] for item in app_client.list_buckets().get("Buckets", [])
             }
@@ -359,12 +399,53 @@ def main() -> int:
                     ).get("Contents", [])
                 )
             require(not remaining, f"provisioning test objects remain: {remaining}")
-            checks.append("test_objects_cleaned")
+
+            versions = root_client.list_object_versions(
+                Bucket=BUCKET, Prefix=f"staging/integration/{run_id}/"
+            )
+            retained_versions = versions.get("Versions", [])
+            delete_markers = versions.get("DeleteMarkers", [])
+            require(retained_versions, "ordinary delete did not retain object versions")
+            require(delete_markers, "ordinary delete did not create delete markers")
+            require(
+                any(
+                    item.get("Key") == staging_key
+                    and item.get("VersionId") == staging_version_id
+                    for item in retained_versions
+                ),
+                "original staging version was not retained",
+            )
+            checks.append("version_history_retained")
+
+            for prefix in (
+                f"staging/integration/{run_id}/",
+                f"objects/integration/{run_id}/",
+            ):
+                object_versions = root_client.list_object_versions(
+                    Bucket=BUCKET, Prefix=prefix
+                )
+                for item in object_versions.get(
+                    "Versions", []
+                ) + object_versions.get("DeleteMarkers", []):
+                    root_client.delete_object(
+                        Bucket=BUCKET,
+                        Key=item["Key"],
+                        VersionId=item["VersionId"],
+                    )
+                after_cleanup = root_client.list_object_versions(
+                    Bucket=BUCKET, Prefix=prefix
+                )
+                require(
+                    not after_cleanup.get("Versions")
+                    and not after_cleanup.get("DeleteMarkers"),
+                    f"provisioner cleanup left object versions under {prefix}",
+                )
+            checks.append("test_object_versions_cleaned_by_provisioner")
 
         evidence["passed"] = True
         write_evidence(evidence)
         print(
-            "PASS: MinIO lifecycle and least-privilege application policy are enforced"
+            "PASS: MinIO versioning, lifecycle, and least-privilege policy are enforced"
         )
         return 0
     except Exception as error:  # noqa: BLE001 - persist a credential-free failure summary

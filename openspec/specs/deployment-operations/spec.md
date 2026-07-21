@@ -228,15 +228,15 @@ Deployment documentation SHALL define log rotation, health checks, service/datab
 - **THEN** a coordinated database and final-object recovery set SHALL be restored into isolated empty resources and SHALL pass schema, quota, reference-count, object-integrity, paginated reconciliation, failure-blocking, and repaired-rescan checks before traffic is allowed
 
 ### Requirement: Least-privilege object-storage provisioning
-Distributed deployment artifacts SHALL provision distinct staging and final key namespaces, a lifecycle policy that cannot expire final objects, and an application identity limited to required data-plane operations in those namespaces. Object-store root or administrative credentials SHALL be confined to provisioning and SHALL NOT be injected into API or Worker processes. Application S3 dependency failures and reconciliation findings SHALL be monitored, while provider-native availability, capacity, replication, healing, and lifecycle monitoring remain required for the target object store.
+Distributed deployment artifacts SHALL provision distinct staging and final key namespaces, a lifecycle policy that cannot expire final objects, and an application identity limited to required data-plane operations in those namespaces. The repository MinIO sample bucket SHALL have versioning enabled and verified by the provisioning identity before application access is admitted; this SHALL NOT grant the application identity bucket-versioning administration or object-version purge permissions. Object-store root or administrative credentials SHALL be confined to provisioning and SHALL NOT be injected into API or Worker processes. Application S3 dependency failures and reconciliation findings SHALL be monitored, while provider-native availability, capacity, replication, healing, encryption, transport security, and lifecycle monitoring remain required for the target object store.
 
 #### Scenario: MinIO sample is provisioned
 - **WHEN** the repository MinIO initializer runs with separate root and application credentials
-- **THEN** it SHALL create the bucket, import and verify lifecycle rules, idempotently provision and bind the application policy, and leave API and Worker processes configured only with the application credentials
+- **THEN** it SHALL create the bucket, idempotently enable and verify bucket versioning, import and verify lifecycle rules, idempotently provision and bind the application policy, and leave API and Worker processes configured only with the application credentials
 
 #### Scenario: Application S3 credentials are exercised
 - **WHEN** the application identity accesses the sample bucket
-- **THEN** required list, object, copy-compatible, delete, and multipart operations under `objects/*` and `staging/*` SHALL succeed while access outside those namespaces and bucket administration SHALL be denied
+- **THEN** required list, object, copy-compatible, delete, and multipart operations under `objects/*` and `staging/*` SHALL succeed while access outside those namespaces, bucket-versioning administration, object-version purge, and other bucket administration SHALL be denied
 
 ### Requirement: Transitional upload release
 The compatibility release immediately after the expand migration SHALL default newly created upload sessions to local staging while retaining support for both persisted local and S3 staging descriptors. Existing tasks SHALL always select storage from their persisted backend and prefix rather than the process's current default. The final distributed S3 configuration SHALL NOT be enabled during this compatibility step.
