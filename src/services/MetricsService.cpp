@@ -171,6 +171,9 @@ namespace disk::metrics {
         if (path == "/api/share" || path.starts_with("/api/share/")) {
             return HttpOperation::Share;
         }
+        if (path == "/api/admin/maintenance/cleanup/expired") {
+            return HttpOperation::Cleanup;
+        }
         if (path == "/api/admin" || path.starts_with("/api/admin/")) {
             return HttpOperation::Admin;
         }
@@ -188,6 +191,7 @@ namespace disk::metrics {
             "upload_cancel",
             "download",
             "share",
+            "cleanup",
             "admin",
             "other",
         };

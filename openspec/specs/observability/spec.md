@@ -66,7 +66,7 @@ The system SHALL derive durable Worker correlation only from claimed PostgreSQL 
 
 #### Scenario: Worker correlates staging cleanup to an upload
 - **WHEN** a claimed `staging_cleanup` job has a valid cleanup payload whose non-empty upload ID exactly matches its aggregate ID
-- **THEN** Worker events SHALL carry that value as the upload ID, while malformed staging jobs and every other job type SHALL keep the upload ID null
+- **THEN** job-level Worker events SHALL carry that value as the upload ID, while malformed staging jobs and every other job type SHALL keep the job-level upload ID null; an expiration lifecycle event MAY add an upload ID only after reading the actual persistent upload-task row
 
 #### Scenario: Worker no longer owns the completed attempt
 - **WHEN** the Worker persists a succeeded, retry, or dead-letter result, or can no longer confirm continued ownership
@@ -86,6 +86,25 @@ The system SHALL propagate download request correlation explicitly across owner 
 #### Scenario: Visitor download writes its audit result
 - **WHEN** a visitor download records its final HTTP outcome
 - **THEN** the share-download audit details SHALL persist the same request ID and `download` operation without recording the share token or overloading upload or job identifiers
+
+### Requirement: Typed Cleanup Correlation
+The system SHALL classify the manual expired-cleanup endpoint as the bounded `cleanup` operation and SHALL propagate correlation explicitly by value through cleanup controller, service, database, trash, content-reference, and upload-lifecycle coroutine boundaries.
+
+#### Scenario: Administrator runs expired cleanup
+- **WHEN** an administrator calls `POST /api/admin/maintenance/cleanup/expired` with a valid request ID
+- **THEN** the response, HTTP completion event, controller event, and cleanup batch events SHALL use the same request ID, actual handling instance, and `cleanup` operation, while batch-level upload ID, job ID, lease owner, and state version remain null
+
+#### Scenario: Cleanup expires an individual upload
+- **WHEN** cleanup reads and expires a persistent upload-task row
+- **THEN** the item-level lifecycle event MAY add that row's actual upload ID without changing the caller's request or durable-job correlation
+
+#### Scenario: Cleanup enqueues Blob garbage collection without observing its row ID
+- **WHEN** expired-trash deletion decrements a content reference and the repository enqueue interface does not return the durable job's persistent row ID
+- **THEN** request-side cleanup events SHALL keep the job ID null and SHALL NOT derive it from a content ID, aggregate ID, dedupe key, count, or message text
+
+#### Scenario: Worker executes expiration through shared services
+- **WHEN** a claimed expired-upload or expired-trash job enters the same lifecycle and trash/content services
+- **THEN** its internal events SHALL retain the corresponding `storage_job_expire_uploads` or `storage_job_expire_trash` operation, persistent job ID, and current owner, while request ID and state version remain null unless a future persisted schema explicitly supplies them
 
 ### Requirement: Bounded High-Volume Logging
 The system SHALL apply an outcome-based logging policy to upload-chunk traffic so that the normal production log level does not emit one success record per chunk while failures and low-cardinality metrics remain complete.

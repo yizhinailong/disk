@@ -10,6 +10,7 @@
 #include "AdminController.hpp"
 
 #include "application/ApplicationContext.hpp"
+#include "controllers/ControllerHelpers.hpp"
 #include "dtos/AdminDto.hpp"
 #include "utils/Response.hpp"
 
@@ -421,12 +422,15 @@ namespace disk::controllers {
     auto AdminController::RunExpiredCleanup(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin run expired cleanup request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "cleanup");
+        Logger::Info(log_context)
+            << "Admin run expired cleanup request: " << request->getPeerAddr().toIpPort();
 
         auto& cleanup_service = application::ApplicationContext::GetInstance()->Cleanup();
-        auto result = co_await cleanup_service.RunExpiredCleanupOnce();
+        auto result = co_await cleanup_service.RunExpiredCleanupOnce(log_context);
         if (!result) {
-            Logger::Error() << "Failed to run expired cleanup: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to run expired cleanup: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
@@ -434,9 +438,10 @@ namespace disk::controllers {
         data["expired_trash_deleted"] = result->expired_trash_deleted;
         data["expired_upload_tasks_cleaned"] = result->expired_upload_tasks_cleaned;
 
-        Logger::Info() << "Admin run expired cleanup successful: expired_trash_deleted="
-                 << result->expired_trash_deleted
-                 << ", expired_upload_tasks_cleaned=" << result->expired_upload_tasks_cleaned;
+        Logger::Info(log_context)
+            << "Admin run expired cleanup successful: expired_trash_deleted="
+            << result->expired_trash_deleted
+            << ", expired_upload_tasks_cleaned=" << result->expired_upload_tasks_cleaned;
         co_return Response::Success(data);
     }
 

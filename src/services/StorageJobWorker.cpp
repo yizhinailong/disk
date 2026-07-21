@@ -598,8 +598,9 @@ namespace disk::jobs {
         if (!request) {
             co_return PermanentFailure(request.error());
         }
+        const auto log_context = BuildStorageJobLogContext(job);
         PeriodicScanPageLogGuard scan_log(
-            BuildStorageJobLogContext(job),
+            log_context,
             m_instance_id,
             std::string(kExpireUploadsJobType),
             request->scan_id,
@@ -617,7 +618,10 @@ namespace disk::jobs {
             m_staging_storage,
             m_blob_store
         );
-        auto expiration = co_await lifecycle_service.ExpireInProgressUploads(request->limit);
+        auto expiration = co_await lifecycle_service.ExpireInProgressUploads(
+            request->limit,
+            log_context
+        );
         if (!expiration) {
             const auto& error = expiration.error();
             const auto retryable =
@@ -661,8 +665,9 @@ namespace disk::jobs {
         if (!request) {
             co_return PermanentFailure(request.error());
         }
+        const auto log_context = BuildStorageJobLogContext(job);
         PeriodicScanPageLogGuard scan_log(
-            BuildStorageJobLogContext(job),
+            log_context,
             m_instance_id,
             std::string(kExpireTrashJobType),
             request->scan_id,
@@ -677,7 +682,8 @@ namespace disk::jobs {
         disk::trash::TrashService trash_service(m_db_client);
         auto page = co_await trash_service.CleanupExpiredTrashPage(
             request->after_id,
-            request->limit
+            request->limit,
+            log_context
         );
         if (!page) {
             const auto& error = page.error();

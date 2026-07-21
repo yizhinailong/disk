@@ -542,6 +542,12 @@ stdout、旋转文件以及被捕获的 Drogon/Trantor 诊断现统一输出单�
 
 `DownloadResponderTest` 直接验证预检、打开失败和延迟流中断的上下文按值传播，`ShareAuditServiceTest` 锁定审计关联字段及空上下文 null 语义。`DownloadFlowIntegration` 以不同调用方 request ID 让所有者和访客下载同一缺失 final Blob，核对响应回显的 request/实际 instance、受管进程 NDJSON 的固定 operation 与四个类型化空值、每次请求后的 finding details，以及访客分享审计 details；`ShareAuditIntegration` 同时回归真实 PostgreSQL 审计写入。完整构建、Python 语法检查、聚焦 CTest 24/24、真实分享审计集成 1/1 和下载流集成 1/1 通过；完整 CTest 共 1398 项，1391 通过、7 项环境门控跳过、0 失败，总耗时 465.62 秒；OpenSpec 严格校验 24/24 通过。cleanup API 生命周期与 S3 适配器内部 SDK 日志的显式关联仍待后续最小批次，因此 12.1 的两个总任务继续保持未勾选。
 
+### 12.11 cleanup 日志关联记录（2026-07-22）
+
+部署运维、系统测试、单元测试和 OpenSpec 先行固定 cleanup 的类型化字段与空值合同。手动过期清理的精确路由现从通用 admin 分类为低基数 `operation=cleanup`，`AdminController` 在任何清理逻辑前从请求属性创建 `LogContext`，并按值传过 `CleanupService`、过期回收站分页/永久删除、`ContentService` 的引用计数与 Blob GC 入队，以及过期上传 Lifecycle。手动批次事件保持 `upload_id/job_id/lease_owner/state_version=null`；逐项 Lifecycle 只用数据库行的真实上传 ID 补全 `upload_id`，入队接口未返回持久主键时不从 content ID、aggregate ID 或 dedupe key 伪造 `job_id`。过期上传/回收站 Worker 也将已认领的真实 job/owner 和固定 operation 传入同一内部服务，不暗中继承 HTTP request 或伪造 state version。
+
+`MetricsServiceTest` 锁定精确 cleanup 路由与通用 admin 路由的分类边界，清理/上传仓储源码合同同步锁定上下文传播。`SafetyUploadInvariantsIntegration` 以调用方指定的 `X-Request-Id` 真实过期一个上传，逐行解析 Controller、TrashService 和上传清理批次 NDJSON，核对响应同一 request/实际 instance、固定 operation 及四个 JSON `null`；直接查询受管日志也确认该唯一 request ID 的七条清理事件未误命中历史记录。完整构建、Python 语法检查、聚焦 CTest 49/49 和真实 HTTP safety 集成 1/1（脚本内 503 项断言）通过；完整 CTest 共 1398 项，1391 通过、7 项环境门控跳过、0 失败，总耗时 469.67 秒；OpenSpec 严格校验 24/24 通过。S3 适配器内部 SDK 日志仍是未完成的独立存储边界，因此 12.1 的两个总任务继续保持未勾选。
+
 ## 13. Phase 8：测试与验证
 
 ### 13.1 单元测试

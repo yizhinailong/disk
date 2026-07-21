@@ -238,7 +238,7 @@ namespace disk::file {
             EXPECT_FALSE(Contains(service_source, "IsExpired(task.expires_at"));
             EXPECT_FALSE(Contains(lifecycle_source, "task.setExpiresAt("));
             EXPECT_TRUE(Contains(lifecycle_source, "auto expire_result = co_await ExpireInProgressUpload(task_id, log_context)"));
-            EXPECT_TRUE(Contains(lifecycle_source, "auto expire_result = co_await ExpireInProgressUpload(task.id)"));
+            EXPECT_TRUE(Contains(lifecycle_source, "auto expire_result = co_await ExpireInProgressUpload(task.id, log_context)"));
             EXPECT_TRUE(Contains(lifecycle_source, "if (*expire_result)"));
 
             EXPECT_TRUE(Contains(repository_source, "auto UploadTaskRepository::MarkExpiredIfInProgressReturning("));

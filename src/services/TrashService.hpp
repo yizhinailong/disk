@@ -36,6 +36,7 @@
 #include "services/RedisService.hpp"
 #include "services/TrashQuery.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::trash {
 
@@ -106,11 +107,19 @@ namespace disk::trash {
             -> drogon::Task<Result<MoveToTrashResult>>;
 
         [[nodiscard]]
-        auto CleanupExpiredTrashItems(int fetch_batch_size, int max_batches_per_run)
+        auto CleanupExpiredTrashItems(
+            int fetch_batch_size,
+            int max_batches_per_run,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<int>>;
 
         [[nodiscard]]
-        auto CleanupExpiredTrashPage(uint64_t after_id, size_t limit)
+        auto CleanupExpiredTrashPage(
+            uint64_t after_id,
+            size_t limit,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<ExpiredTrashCleanupPageResult>>;
 
         /**
@@ -212,7 +221,8 @@ namespace disk::trash {
         [[nodiscard]]
         auto PermanentlyDeleteTrashItems(
             const std::vector<TrashLifecycleRecord>& trash_items,
-            bool require_valid_file_content
+            bool require_valid_file_content,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<PermanentDeleteResult>;
 
         /**

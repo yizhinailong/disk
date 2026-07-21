@@ -114,7 +114,8 @@ namespace disk::trash {
             EXPECT_TRUE(Contains(service_source, "auto TrashService::CleanupExpiredTrashPage("));
             EXPECT_TRUE(Contains(service_source, "page.next_after_id = trash_items.back().id;"));
             EXPECT_TRUE(Contains(service_source, "Expired trash page contains an invalid content reference"));
-            EXPECT_TRUE(Contains(service_source, "PermanentlyDeleteTrashItems(chunk, false)"));
+            EXPECT_TRUE(Contains(service_source, "PermanentlyDeleteTrashItems("));
+            EXPECT_TRUE(Contains(service_source, "false,\n                    log_context"));
             EXPECT_TRUE(Contains(service_source, "DecrementRefCountsAndEnqueueGc("));
             EXPECT_FALSE(Contains(service_source, "CleanupVerifiedZeroRefBlobs("));
             EXPECT_FALSE(Contains(service_source, "DeleteBlob("));

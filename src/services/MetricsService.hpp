@@ -34,6 +34,7 @@ namespace disk::metrics {
         UploadCancel,
         Download,
         Share,
+        Cleanup,
         Admin,
         Other,
         Count,

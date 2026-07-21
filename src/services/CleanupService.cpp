@@ -51,9 +51,10 @@ namespace disk::services {
         Logger::Debug() << "CleanupService initialization completed";
     }
 
-    auto CleanupService::RunExpiredCleanupOnce() -> drogon::Task<Result<CleanupRunResult>> {
-        auto trash_result = co_await CleanupExpiredTrash();
-        auto upload_result = co_await CleanupExpiredUploadTasks();
+    auto CleanupService::RunExpiredCleanupOnce(disk::utils::LogContext log_context)
+        -> drogon::Task<Result<CleanupRunResult>> {
+        auto trash_result = co_await CleanupExpiredTrash(log_context);
+        auto upload_result = co_await CleanupExpiredUploadTasks(log_context);
 
         if (!trash_result) {
             co_return std::unexpected(trash_result.error());
@@ -68,16 +69,19 @@ namespace disk::services {
         };
     }
 
-    auto CleanupService::CleanupExpiredTrash() -> drogon::Task<Result<int>> {
+    auto CleanupService::CleanupExpiredTrash(disk::utils::LogContext log_context)
+        -> drogon::Task<Result<int>> {
         disk::trash::TrashService trash_service(m_db_client);
         co_return co_await trash_service.CleanupExpiredTrashItems(
             kTrashFetchBatchSize,
-            kMaxTrashBatchesPerRun
+            kMaxTrashBatchesPerRun,
+            std::move(log_context)
         );
     }
 
-    auto CleanupService::CleanupExpiredUploadTasks() -> drogon::Task<Result<int>> {
-        Logger::Info() << "Starting cleanup of expired upload tasks";
+    auto CleanupService::CleanupExpiredUploadTasks(disk::utils::LogContext log_context)
+        -> drogon::Task<Result<int>> {
+        Logger::Info(log_context) << "Starting cleanup of expired upload tasks";
 
         auto batch_start = std::chrono::steady_clock::now();
         try {
@@ -88,30 +92,35 @@ namespace disk::services {
                 disk::storage::BlobStoreMgr::GetBlobStore()
             );
             auto cleanup_result = co_await lifecycle_service.ExpireInProgressUploads(
-                kUploadTaskCleanupBatchSize
+                kUploadTaskCleanupBatchSize,
+                log_context
             );
             if (!cleanup_result) {
                 co_return std::unexpected(cleanup_result.error());
             }
 
             auto cleaned_count = static_cast<int>(cleanup_result->expired);
-            Logger::Info() << "[cleanup_batch] upload_tasks cleaned_count=" << cleaned_count
-                     << " batch_duration_ms="
-                     << std::chrono::duration_cast<std::chrono::milliseconds>(
-                            std::chrono::steady_clock::now() - batch_start
-                        )
-                            .count();
+            Logger::Info(log_context)
+                << "[cleanup_batch] upload_tasks cleaned_count=" << cleaned_count
+                << " batch_duration_ms="
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - batch_start
+                   )
+                       .count();
 
-            Logger::Info() << "Upload task cleanup completed: cleaned_count=" << cleaned_count;
+            Logger::Info(log_context)
+                << "Upload task cleanup completed: cleaned_count=" << cleaned_count;
             co_return cleaned_count;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Database error cleaning expired upload tasks: " << e.base().what();
+            Logger::Error(log_context)
+                << "Database error cleaning expired upload tasks: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to clean expired upload tasks")
             );
         } catch (const std::exception& e) {
-            Logger::Error() << "Unknown error cleaning expired upload tasks: " << e.what();
+            Logger::Error(log_context)
+                << "Unknown error cleaning expired upload tasks: " << e.what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to clean expired upload tasks")
             );

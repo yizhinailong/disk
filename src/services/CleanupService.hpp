@@ -16,6 +16,7 @@
 #include <drogon/orm/DbClient.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::services {
 
@@ -54,7 +55,8 @@ namespace disk::services {
          * @return drogon::Task<Result<CleanupRunResult>> 成功返回本次清理结果
          */
         [[nodiscard]]
-        auto RunExpiredCleanupOnce() -> drogon::Task<Result<CleanupRunResult>>;
+        auto RunExpiredCleanupOnce(disk::utils::LogContext log_context = {})
+            -> drogon::Task<Result<CleanupRunResult>>;
 
         /**
          * @brief 清理过期的回收站项目
@@ -70,7 +72,8 @@ namespace disk::services {
          * @return drogon::Task<Result<int>> 成功返回清理数量，失败返回错误
          */
         [[nodiscard]]
-        auto CleanupExpiredTrash() -> drogon::Task<Result<int>>;
+        auto CleanupExpiredTrash(disk::utils::LogContext log_context = {})
+            -> drogon::Task<Result<int>>;
 
         /**
          * @brief 清理过期的上传任务
@@ -85,7 +88,8 @@ namespace disk::services {
          * @return drogon::Task<Result<int>> 成功返回清理数量，失败返回错误
          */
         [[nodiscard]]
-        auto CleanupExpiredUploadTasks() -> drogon::Task<Result<int>>;
+        auto CleanupExpiredUploadTasks(disk::utils::LogContext log_context = {})
+            -> drogon::Task<Result<int>>;
 
     private:
         drogon::orm::DbClientPtr m_db_client;

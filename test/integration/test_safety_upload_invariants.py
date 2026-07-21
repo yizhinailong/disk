@@ -661,18 +661,48 @@ def wait_for_correlated_application_log(
     raise AssertionError("unreachable")
 
 
-def run_expired_cleanup() -> dict[str, int]:
+def run_expired_cleanup(request_id: str | None = None) -> dict[str, int]:
     """Run the deterministic admin/manual cleanup seam and return cleanup counts."""
+    headers = auth_headers(TOKEN)
+    if request_id is not None:
+        headers["X-Request-Id"] = request_id
     resp = fetch(
         "/api/admin/maintenance/cleanup/expired",
         method="POST",
-        headers=auth_headers(TOKEN),
+        headers=headers,
     )
     save_evidence(f"{EVIDENCE_PREFIX}-cleanup-expired.json", resp.text)
     if resp.status_code != 200 or json_field(resp.text, "code") != "0":
         log_fail("deterministic expired cleanup trigger failed")
         print(resp.text)
         print_summary()
+    if request_id is not None:
+        instance_id = header_value(resp.headers, "X-Disk-Instance-Id")
+        assert_equal(
+            "expired cleanup preserves caller request ID",
+            header_value(resp.headers, "X-Request-Id"),
+            request_id,
+        )
+        assert_equal(
+            "expired cleanup identifies the handling instance",
+            bool(instance_id),
+            True,
+        )
+        for marker in (
+            "Admin run expired cleanup request",
+            "Starting cleanup of expired trash items",
+            "Starting cleanup of expired upload tasks",
+            "[cleanup_batch] upload_tasks",
+            "Admin run expired cleanup successful",
+        ):
+            wait_for_correlated_application_log(
+                request_id=request_id,
+                instance_id=instance_id,
+                operation="cleanup",
+                upload_id=None,
+                message_marker=marker,
+            )
+        log_pass("expired cleanup logs keep typed request correlation")
     return {
         "expired_trash_deleted": int(json_field(resp.text, "data.expired_trash_deleted") or 0),
         "expired_upload_tasks_cleaned": int(json_field(resp.text, "data.expired_upload_tasks_cleaned") or 0),
@@ -3677,7 +3707,8 @@ def test_expired_upload_cleanup_invariants() -> None:
     )
     assert_equal("expire fixture marks upload task expired in DB", affected, 1)
 
-    cleanup_counts = run_expired_cleanup()
+    cleanup_request_id = f"safety-cleanup-log-{unique_name()}"
+    cleanup_counts = run_expired_cleanup(cleanup_request_id)
     quota_after_cleanup = user_quota()
 
     assert_equal("cleanup reports at least one expired upload", cleanup_counts["expired_upload_tasks_cleaned"] >= 1, True)

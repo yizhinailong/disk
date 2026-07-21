@@ -22,7 +22,16 @@ namespace disk::metrics {
             EXPECT_EQ(ClassifyHttpOperation("/api/file/upload/upload-123"), HttpOperation::UploadCancel);
             EXPECT_EQ(ClassifyHttpOperation("/api/file/download/77"), HttpOperation::Download);
             EXPECT_EQ(ClassifyHttpOperation("/api/share/secret-id"), HttpOperation::Share);
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/admin/maintenance/cleanup/expired"),
+                HttpOperation::Cleanup
+            );
+            EXPECT_EQ(HttpOperationName(HttpOperation::Cleanup), "cleanup");
             EXPECT_EQ(ClassifyHttpOperation("/api/admin/users"), HttpOperation::Admin);
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/admin/maintenance/cleanup/expired/extra"),
+                HttpOperation::Admin
+            );
             EXPECT_EQ(ClassifyHttpOperation("/api/folder/list"), HttpOperation::Other);
         }
 

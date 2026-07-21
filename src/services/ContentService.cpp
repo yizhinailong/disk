@@ -321,7 +321,8 @@ namespace disk::content {
 
     auto ContentService::DecrementRefCountsAndEnqueueGc(
         const drogon::orm::DbClientPtr& client,
-        const std::unordered_map<uint64_t, uint64_t>& decrements
+        const std::unordered_map<uint64_t, uint64_t>& decrements,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<size_t>> {
         auto content_ids = CollectContentIds(decrements);
         if (content_ids.empty()) {
@@ -386,14 +387,14 @@ namespace disk::content {
 
             co_return zero_ref_contents.size();
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "File content decrement and Blob GC enqueue failed: "
-                           << e.base().what();
+            Logger::Warn(log_context)
+                << "File content decrement and Blob GC enqueue failed: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to update file content references"
             ));
         } catch (const std::exception& e) {
-            Logger::Warn() << "Blob GC enqueue failed: " << e.what();
+            Logger::Warn(log_context) << "Blob GC enqueue failed: " << e.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to enqueue Blob garbage collection"

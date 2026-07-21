@@ -416,9 +416,10 @@ namespace disk::trash {
 
     auto TrashService::CleanupExpiredTrashItems(
         int fetch_batch_size,
-        int max_batches_per_run
+        int max_batches_per_run,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<int>> {
-        Logger::Info() << "Starting cleanup of expired trash items";
+        Logger::Info(log_context) << "Starting cleanup of expired trash items";
 
         if (fetch_batch_size <= 0 || max_batches_per_run <= 0) {
             co_return std::unexpected(
@@ -432,7 +433,8 @@ namespace disk::trash {
         while (batch_iteration < max_batches_per_run) {
             auto page = co_await CleanupExpiredTrashPage(
                 after_id,
-                static_cast<size_t>(fetch_batch_size)
+                static_cast<size_t>(fetch_batch_size),
+                log_context
             );
             if (!page) {
                 co_return std::unexpected(page.error());
@@ -453,14 +455,19 @@ namespace disk::trash {
         }
 
         if (batch_iteration >= max_batches_per_run) {
-            Logger::Info() << "[cleanup_batch] trash reached max batches per run cap: max="
-                           << max_batches_per_run << " rows_deleted=" << deleted_count;
+            Logger::Info(log_context)
+                << "[cleanup_batch] trash reached max batches per run cap: max="
+                << max_batches_per_run << " rows_deleted=" << deleted_count;
         }
-        Logger::Info() << "Trash cleanup completed: deleted_count=" << deleted_count;
+        Logger::Info(log_context) << "Trash cleanup completed: deleted_count=" << deleted_count;
         co_return deleted_count;
     }
 
-    auto TrashService::CleanupExpiredTrashPage(uint64_t after_id, size_t limit)
+    auto TrashService::CleanupExpiredTrashPage(
+        uint64_t after_id,
+        size_t limit,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<ExpiredTrashCleanupPageResult>> {
         constexpr size_t kMaxPageSize = 500;
         if (limit == 0 || limit > kMaxPageSize ||
@@ -493,7 +500,11 @@ namespace disk::trash {
                     continue;
                 }
 
-                auto delete_result = co_await PermanentlyDeleteTrashItems(chunk, false);
+                auto delete_result = co_await PermanentlyDeleteTrashItems(
+                    chunk,
+                    false,
+                    log_context
+                );
                 page.deleted += static_cast<size_t>(delete_result.deleted_count);
                 if (delete_result.deleted_count != static_cast<int>(chunk.size())) {
                     co_return std::unexpected(ErrorInfo(
@@ -503,22 +514,24 @@ namespace disk::trash {
                 }
             }
 
-            Logger::Info() << "[cleanup_batch] trash after_id=" << after_id
-                           << " candidates=" << page.candidates
-                           << " deleted=" << page.deleted
-                           << " next_after_id=" << page.next_after_id
-                           << " has_more=" << page.has_more
-                           << " batch_duration_ms="
-                           << std::chrono::duration_cast<std::chrono::milliseconds>(
-                                  std::chrono::steady_clock::now() - started_at
-                              )
-                                  .count();
+            Logger::Info(log_context)
+                << "[cleanup_batch] trash after_id=" << after_id
+                << " candidates=" << page.candidates
+                << " deleted=" << page.deleted
+                << " next_after_id=" << page.next_after_id
+                << " has_more=" << page.has_more
+                << " batch_duration_ms="
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - started_at
+                   )
+                       .count();
             co_return page;
         } catch (const drogon::orm::DrogonDbException& error) {
-            Logger::Error() << "Database error cleaning expired trash page: "
-                            << error.base().what();
+            Logger::Error(log_context)
+                << "Database error cleaning expired trash page: " << error.base().what();
         } catch (const std::exception& error) {
-            Logger::Error() << "Failed to clean expired trash page: " << error.what();
+            Logger::Error(log_context)
+                << "Failed to clean expired trash page: " << error.what();
         }
         co_return std::unexpected(
             ErrorInfo(ErrorCode::InternalError, "Failed to clean expired trash")
@@ -1344,7 +1357,8 @@ namespace disk::trash {
 
     auto TrashService::PermanentlyDeleteTrashItems(
         const std::vector<TrashLifecycleRecord>& trash_items,
-        bool require_valid_file_content
+        bool require_valid_file_content,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<PermanentDeleteResult> {
         PermanentDeleteResult result;
         if (trash_items.empty()) {
@@ -1370,15 +1384,17 @@ namespace disk::trash {
                         if (require_valid_file_content) {
                             throw std::runtime_error(content_id_result.error().message);
                         }
-                        Logger::Warn() << "Skip permanent delete for legacy trash file without valid content_id: trash_id="
-                                       << item.id << ", user_id=" << item.user_id;
+                        Logger::Warn(log_context)
+                            << "Skip permanent delete for legacy trash file without valid content_id: trash_id="
+                            << item.id << ", user_id=" << item.user_id;
                         continue;
                     }
 
                     if (content_id_result->source ==
                         disk::services::trash_content_internal::ContentIdSource::ItemData) {
-                        Logger::Debug() << "Resolved legacy trash content_id from item_data during permanent delete: trash_id="
-                                        << item.id << ", content_id=" << content_id_result->value;
+                        Logger::Debug(log_context)
+                            << "Resolved legacy trash content_id from item_data during permanent delete: trash_id="
+                            << item.id << ", content_id=" << content_id_result->value;
                     }
 
                     content_ref_decrements[content_id_result->value] += 1;
@@ -1405,7 +1421,8 @@ namespace disk::trash {
                 disk::content::ContentService content_service(m_db_client);
                 auto decrement_result = co_await content_service.DecrementRefCountsAndEnqueueGc(
                     transaction,
-                    content_ref_decrements
+                    content_ref_decrements,
+                    log_context
                 );
                 if (!decrement_result) {
                     throw std::runtime_error(decrement_result.error().message);
@@ -1437,8 +1454,8 @@ namespace disk::trash {
                 try {
                     transaction->rollback();
                 } catch (const std::exception& rollback_error) {
-                    Logger::Error() << "Trash permanent-delete rollback failed: "
-                                    << rollback_error.what();
+                    Logger::Error(log_context)
+                        << "Trash permanent-delete rollback failed: " << rollback_error.what();
                 }
             }
             throw;

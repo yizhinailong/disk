@@ -1575,7 +1575,10 @@ namespace disk::upload {
         co_return true;
     }
 
-    auto UploadLifecycleService::ExpireInProgressUploads(size_t limit) const
+    auto UploadLifecycleService::ExpireInProgressUploads(
+        size_t limit,
+        disk::utils::LogContext log_context
+    ) const
         -> drogon::Task<Result<UploadExpirationBatchResult>> {
         if (limit == 0 || limit > disk::jobs::kMaxExpireUploadsPageSize) {
             co_return std::unexpected(
@@ -1588,7 +1591,7 @@ namespace disk::upload {
 
         size_t cleaned_count = 0;
         for (const auto& task : expired_tasks) {
-            auto expire_result = co_await ExpireInProgressUpload(task.id);
+            auto expire_result = co_await ExpireInProgressUpload(task.id, log_context);
             if (!expire_result) {
                 co_return std::unexpected(expire_result.error());
             }

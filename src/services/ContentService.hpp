@@ -19,6 +19,7 @@
 #include <drogon/orm/DbClient.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::content {
 
@@ -99,7 +100,8 @@ namespace disk::content {
         [[nodiscard]]
         auto DecrementRefCountsAndEnqueueGc(
             const drogon::orm::DbClientPtr& client,
-            const std::unordered_map<uint64_t, uint64_t>& decrements
+            const std::unordered_map<uint64_t, uint64_t>& decrements,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<size_t>>;
 
     private:
