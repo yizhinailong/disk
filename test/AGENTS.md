@@ -13,7 +13,7 @@ test/
 ├── dtos/                # DTO validation/serialization tests
 ├── filters/             # JwtAuth/ShareAuth/AdminAuth filter tests
 ├── services/            # service/domain unit tests
-├── storage/             # AssemblyWorkerPool tests
+├── storage/             # AssemblyConcurrencyLimiter and storage backend tests
 ├── utils/               # Config/hash/response/key tests
 ├── mocks/               # MockDbClient, MockRedisClient
 ├── integration/         # Python end-to-end tests + lib_py harness

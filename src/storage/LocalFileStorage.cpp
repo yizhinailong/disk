@@ -19,7 +19,7 @@
 #include <trantor/utils/ConcurrentTaskQueue.h>
 
 #include "services/MetricsService.hpp"
-#include "storage/AssemblyWorkerPool.hpp"
+#include "storage/AssemblyConcurrencyLimiter.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
 #include "utils/LogHelper.hpp"
@@ -67,7 +67,7 @@ namespace disk::storage {
         auto ResolveConfiguredAssemblyConcurrency(const disk::utils::ConfigMgr& config_mgr) -> size_t {
             const auto configured_count =
                 static_cast<size_t>(config_mgr.GetAssemblyMaxConcurrent());
-            return configured_count == 0 ? AssemblyWorkerPool::DEFAULT_MAX_CONCURRENT : configured_count;
+            return configured_count == 0 ? AssemblyConcurrencyLimiter::DEFAULT_MAX_CONCURRENT : configured_count;
         }
 
         auto ResolveLocalFileIoThreadCount(const disk::utils::ConfigMgr& config_mgr) -> size_t {
@@ -439,7 +439,7 @@ namespace disk::storage {
         const auto& upload_id = session.upload_id;
         (void)state_version;
         auto start = std::chrono::steady_clock::now();
-        auto& pool = AssemblyWorkerPool::GetInstance();
+        auto& limiter = AssemblyConcurrencyLimiter::GetInstance();
 
         if (chunks.size() != expected_chunk_count) {
             co_return std::unexpected(
@@ -463,36 +463,32 @@ namespace disk::storage {
             resolved_chunks.emplace_back(chunk, std::move(chunk_path.value()));
         }
 
-        Logger::Debug() << "[assemble_chunks] start active_count=" << pool.ActiveCount()
-                        << " max_concurrent=" << pool.MaxConcurrent()
+        Logger::Debug() << "[assemble_chunks] start running_count=" << limiter.RunningCount()
+                        << " max_concurrent=" << limiter.MaxConcurrent()
                         << " upload_id=" << upload_id;
 
-        auto slot_guard = pool.TryAcquireGuard(upload_id);
+        auto slot_guard = limiter.TryAcquire();
         if (!slot_guard.has_value()) {
-            const auto upload_already_active = pool.IsUploadActive(upload_id);
-            const auto* message = upload_already_active ? "Upload assembly already in progress for this upload_id, please retry later" : "Too many concurrent assembly operations, please retry later";
-
-            const auto* reason = upload_already_active ? "upload_already_active" : "pool_saturated";
             Logger::Warn() << "Assembly admission rejected: upload_id=" << upload_id
-                           << ", reason=" << reason
-                           << ", running=" << pool.ActiveCount()
-                           << ", max_concurrent=" << pool.MaxConcurrent();
+                           << ", reason=local_capacity_exhausted"
+                           << ", running=" << limiter.RunningCount()
+                           << ", max_concurrent=" << limiter.MaxConcurrent();
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             Logger::Info() << "[assemble_chunks] duration_us=" << duration_us
-                           << " outcome=failure reason=" << reason
-                           << " active_count=" << pool.ActiveCount()
-                           << " max_concurrent=" << pool.MaxConcurrent();
+                           << " outcome=failure reason=local_capacity_exhausted"
+                           << " running_count=" << limiter.RunningCount()
+                           << " max_concurrent=" << limiter.MaxConcurrent();
 
             co_return std::unexpected(
-                ErrorInfo(ErrorCode::TooManyRequests, message)
+                ErrorInfo(ErrorCode::TooManyRequests, "Too many concurrent assembly operations, please retry later")
             );
         }
 
-        Logger::Debug() << "Assembly started: upload_id=" << upload_id << ", running=" << pool.ActiveCount()
-                        << ", max_concurrent=" << pool.MaxConcurrent();
+        Logger::Debug() << "Assembly started: upload_id=" << upload_id << ", running=" << limiter.RunningCount()
+                        << ", max_concurrent=" << limiter.MaxConcurrent();
 
         const auto assembled_path = GetAssembleFilePath(upload_id);
         const auto assembled_parent = assembled_path.parent_path();
@@ -613,20 +609,20 @@ namespace disk::storage {
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             Logger::Info() << "[assemble_chunks] duration_us=" << duration_us
-                           << " outcome=failure active_count=" << pool.ActiveCount()
-                           << " max_concurrent=" << pool.MaxConcurrent();
+                           << " outcome=failure running_count=" << limiter.RunningCount()
+                           << " max_concurrent=" << limiter.MaxConcurrent();
             co_return result;
         }
 
-        Logger::Debug() << "Assembly completed: upload_id=" << upload_id << ", running=" << pool.ActiveCount()
-                        << ", max_concurrent=" << pool.MaxConcurrent();
+        Logger::Debug() << "Assembly completed: upload_id=" << upload_id << ", running=" << limiter.RunningCount()
+                        << ", max_concurrent=" << limiter.MaxConcurrent();
 
         auto end = std::chrono::steady_clock::now();
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         Logger::Debug() << "[assemble_chunks] duration_us=" << duration_us
-                        << " outcome=success active_count=" << pool.ActiveCount()
-                        << " max_concurrent=" << pool.MaxConcurrent();
+                        << " outcome=success running_count=" << limiter.RunningCount()
+                        << " max_concurrent=" << limiter.MaxConcurrent();
 
         co_return result;
     }

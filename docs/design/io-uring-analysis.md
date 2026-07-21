@@ -30,7 +30,7 @@ Trantor 的 `TcpConnectionImpl` 在 Channel 上注册读写事件。当连接可
 - **下载响应**：`DownloadResponder` 区分两条路径：
   - **Path A（>= 256KB）**：使用 `drogon::HttpResponse::newFileResponse()`，由 Drogon 内部走 `sendfile()` 零拷贝。
   - **Path B（< 256KB）**：使用 `drogon::HttpResponse::newStreamResponse()`，通过回调函数 `ifstream::read` 读取文件内容到用户态缓冲区。
-- **分片合并（Assembly）**：独立的 `m_assembly_worker_queue`（1-4 线程），通过 `AssemblyWorkerPool` 控制并发和同 `upload_id` 单飞。
+- **分片合并（Assembly）**：独立的 `m_assembly_worker_queue`（1-4 线程），通过不感知任务标识的 `AssemblyConcurrencyLimiter` 限制本机在途组装数量；同 `upload_id` 的完成排他只由 PostgreSQL 完成租约负责。
 
 总体 I/O 架构：事件循环只处理网络 IO（epoll），文件 IO 全部通过线程池完成，两者通过协程（`co_await RunBlockingFilesystemTask`）桥接。
 

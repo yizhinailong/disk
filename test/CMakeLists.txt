@@ -23,7 +23,6 @@ set(TEST_SOURCES
     services/TransactionRunner_test.cpp
     services/FileUploadConsistency_test.cpp
     services/UploadPath_test.cpp
-    services/CompleteUploadSingleflight_test.cpp
     services/UploadLifecycleService_test.cpp
     services/UploadStateMachine_test.cpp
     services/UploadTaskRepository_test.cpp
@@ -75,7 +74,7 @@ set(TEST_SOURCES
     dtos/TrashDto_test.cpp
     dtos/UploadDiagnosticDto_test.cpp
     dtos/UserDto_test.cpp
-    storage/AssemblyWorkerPool_test.cpp
+    storage/AssemblyConcurrencyLimiter_test.cpp
     storage/AssemblyPerf_test.cpp
     storage/LocalBlobStore_test.cpp
     storage/S3Client_test.cpp

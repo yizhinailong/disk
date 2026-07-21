@@ -5,12 +5,12 @@
 # ///
 
 """
-Integration test for assembly backpressure (AssemblyWorkerPool singleflight + saturation).
+Integration test for PostgreSQL finalize leases and local assembly backpressure.
 
 Tests:
   1. Normal assembly completion succeeds (200)
   2. Duplicate finalize on same upload_id after completion returns success (idempotent)
-  3. Concurrent finalize for same upload_id — at least one wins
+  3. Concurrent finalize for same upload_id uses the database lease or completed replay
   4. Pool saturation — overflow concurrent assemblies return 429
   5. No duplicate finalize side effects
 
@@ -209,14 +209,14 @@ def test_duplicate_finalize_after_completion():
         print(second_body)
 
 
-# ─── Test 3: Concurrent finalize — same upload_id (singleflight) ────────────
+# ─── Test 3: Concurrent finalize — same upload_id (database lease) ───────────
 
 
-def test_concurrent_finalize_singleflight():
-    log_section("Test 3: Concurrent finalize — same upload_id (singleflight)")
+def test_concurrent_finalize_lease():
+    log_section("Test 3: Concurrent finalize — same upload_id (database lease)")
     log_info("Firing 6 concurrent complete requests for same upload_id...")
 
-    content = _unique_content("ConcurrentSingleflight")
+    content = _unique_content("ConcurrentFinalizeLease")
     file_hash = _md5_str(content)
     upload_id = create_upload_task(
         f"backpressure_sf_{os.getpid()}.pdf", len(content), file_hash
@@ -241,32 +241,34 @@ def test_concurrent_finalize_singleflight():
             results.append((idx, hc, bd))
 
     success_count = sum(1 for _, hc, _ in results if hc == 200)
-    conflict_or_429_count = sum(1 for _, hc, _ in results if hc == 429)
-    other_fail_count = sum(1 for _, hc, _ in results if hc != 200 and hc != 429)
+    conflict_count = sum(1 for _, hc, _ in results if hc == 409)
+    unexpected_count = sum(1 for _, hc, _ in results if hc not in (200, 409))
 
     evidence_lines = "".join(
         f"Worker {idx}: HTTP {hc}\n" for idx, hc, _ in sorted(results)
     )
-    save_evidence("backpressure-singleflight-results.txt", evidence_lines)
+    save_evidence("backpressure-finalize-lease-results.txt", evidence_lines)
 
     log_info(
-        f"Results: success={success_count}, 429={conflict_or_429_count}, other={other_fail_count}"
+        f"Results: success={success_count}, lease_conflict={conflict_count}, unexpected={unexpected_count}"
     )
 
     if success_count >= 1:
-        log_pass(f"Singleflight: at least 1 request succeeded ({success_count})")
+        log_pass(f"Database lease: at least 1 request succeeded ({success_count})")
     else:
-        log_fail("Singleflight: no requests succeeded (expected at least 1)")
+        log_fail("Database lease: no requests succeeded (expected at least 1)")
         return
 
-    if conflict_or_429_count >= 1 or other_fail_count >= 1:
-        log_pass(
-            f"Singleflight: {conflict_or_429_count + other_fail_count} requests were rejected/errored"
+    if unexpected_count:
+        log_fail(
+            f"Database lease: {unexpected_count} requests returned statuses other than 200/409"
         )
+    elif conflict_count:
+        log_pass(f"Database lease: {conflict_count} requests observed the active lease")
     else:
         log_info(
-            "Singleflight: all requests got 200 "
-            "(possible — first completes before others arrive, rest see completed status)"
+            "Database lease: all requests got 200 "
+            "(the first completed before the rest observed completed replay)"
         )
 
 
@@ -414,7 +416,7 @@ def main():
 
     test_normal_assembly_completes()
     test_duplicate_finalize_after_completion()
-    test_concurrent_finalize_singleflight()
+    test_concurrent_finalize_lease()
     test_pool_saturation_overflow()
     test_no_duplicate_side_effects()
 

@@ -22,7 +22,7 @@
 #include <trantor/utils/ConcurrentTaskQueue.h>
 
 #include "services/MetricsService.hpp"
-#include "storage/AssemblyWorkerPool.hpp"
+#include "storage/AssemblyConcurrencyLimiter.hpp"
 #include "utils/FileHashUtil.hpp"
 #include "utils/LogHelper.hpp"
 
@@ -979,13 +979,12 @@ namespace disk::storage {
             }
         }
 
-        auto& pool = AssemblyWorkerPool::GetInstance();
-        auto slot_guard = pool.TryAcquireGuard(session.upload_id);
+        auto& limiter = AssemblyConcurrencyLimiter::GetInstance();
+        auto slot_guard = limiter.TryAcquire();
         if (!slot_guard.has_value()) {
-            const auto upload_already_active = pool.IsUploadActive(session.upload_id);
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::TooManyRequests,
-                upload_already_active ? "Upload assembly already in progress for this upload_id, please retry later" : "Too many concurrent assembly operations, please retry later"
+                "Too many concurrent assembly operations, please retry later"
             ));
         }
 

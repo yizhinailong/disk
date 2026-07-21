@@ -91,6 +91,17 @@ The system SHALL complete an upload only after all required chunks are present a
 - **WHEN** a client attempts to complete an upload with missing or invalid chunks
 - **THEN** the system SHALL reject completion and preserve enough state for retry or cleanup
 
+### Requirement: Distributed Upload Completion Ownership
+PostgreSQL conditional state transitions and expiring finalization leases SHALL be the sole authority for upload-completion ownership and same-upload exclusion across all API instances. Process-local assembly admission SHALL be identifier-agnostic, SHALL only bound local resource usage, and SHALL NOT track upload ownership.
+
+#### Scenario: Concurrent completion targets the same upload
+- **WHEN** multiple API instances concurrently attempt to complete the same upload
+- **THEN** only the request holding the current PostgreSQL finalization lease SHALL assemble or finalize it, while other requests SHALL receive the documented lease-conflict or completed-replay result
+
+#### Scenario: Local assembly capacity is exhausted
+- **WHEN** a lease-owning request reaches an API instance whose local assembly slots are full
+- **THEN** the instance SHALL reject that local admission with HTTP 429 without changing upload ownership or creating upload-identifier state in memory
+
 ### Requirement: File Download Metadata
 The system SHALL provide download metadata before file content transfer.
 

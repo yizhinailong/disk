@@ -940,6 +940,8 @@ Authorization: Bearer <access_token>
 
 完成过程按“租约认领 → 事务外对象组装/校验 → 短事务提交 → 异步清理”执行。服务端在组装后、最终 Blob 晋升后分别用最新 `state_version` 续租；最终事务的首条业务语句还必须在该事务连接上再次续租并锁定当前 generation，事务末尾继续执行完成 CAS。任一次续租或最终 CAS 未命中时，当前请求失去完成权限并返回 `409 + 10004 ResourceConflict`，不得提交文件、配额或上传终态。这样即使数据库网络分区使旧 owner 的事务开始被延迟到租约过期和新 owner 完成之后，恢复的旧请求也只能回滚。服务端验证分片对象、总大小、整文件 MD5 与 SHA-256；multipart ETag 不作为文件 MD5。数据库分片描述符对应的对象缺失、大小、ETag 或内容哈希不一致时返回 `400 + 50009 ChunkVerifyFailed`，并持久化 `upload_staging_mismatch` finding 与一项去重的 staging 对账任务。最终事务提交但 HTTP 响应丢失后，客户端必须以同一身份和同一 `upload_id` 重复调用；服务端从 `completed_file_id` 恢复原成功响应，不等待租约、不重新提升 final Blob、不增加完成尝试或重复结算。重放还必须推进共享文件列表缓存代际，使事务提交后、首次缓存失效前退出的实例不会留下持续到 TTL 的旧列表。超时或断连只表示结果未知，禁止另建上传、直接改写任务，或人工删除 final/staging 对象来“回滚”；staging 仅由已入队的幂等 cleanup 任务清理。
 
+PostgreSQL 租约是同一上传完成权的唯一判断来源。存储层的 `AssemblyConcurrencyLimiter` 不接收、不缓存 `upload_id`，只限制当前实例的组装在途数量；本机槽位耗尽时返回 `429 + 10005 TooManyRequests`，不会把本机状态解释为上传所有权，也不会替代上述 `409` 租约冲突语义。
+
 #### 错误响应矩阵
 
 | HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |

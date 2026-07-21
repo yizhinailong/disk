@@ -37,7 +37,7 @@
 | 缓存/令牌 | Redis + 进程内短缓存 | 本地负缓存和上传任务缓存跨实例不一致 | 本地缓存仅作提示，写操作始终由共享状态校验 |
 | 最终 Blob | local 或 S3/MinIO，默认 local | local 后端不能供多实例共享 | 生产统一使用 S3/MinIO |
 | 上传暂存 | local 与 S3 后端均使用本地目录 | 分片被路由到不同节点后无法组装 | 对象存储原生暂存，节点无关 |
-| 上传单飞 | `AssemblyWorkerPool` 进程内互斥 | 不能阻止其他实例并发完成同一任务 | PostgreSQL 条件更新 + 有期限租约 |
+| 上传完成所有权 | PostgreSQL 条件更新 + 有期限租约 | 目标环境多实例接管仍待验收 | 数据库是唯一所有权来源；本机只做无任务标识的并发限流 |
 | 定时任务 | 每个 API 实例 `runEvery` | 多实例会重复扫描和执行 | 独立 Worker + 数据库任务认领 |
 | 健康检查 | PostgreSQL + Redis | 缺少对象存储、角色和就绪状态 | liveness/readiness 分离并覆盖必要依赖 |
 | 集成测试 | 单后端、共享状态、串行 | 未验证随机路由、宕机和接管 | 双实例 + MinIO + 故障注入场景 |
@@ -813,7 +813,7 @@ SHA-256 分别为 `8380abf9d97188bfda1451cf2179f70fecdd62194549c5e24a85b46bd5461
 ## 15. Phase 10：收尾与技术债清理
 
 - [ ] 删除生产路径对 sticky session 和本地上传暂存的依赖。
-- [ ] 删除被数据库租约替代的跨请求 `AssemblyWorkerPool` 单飞职责；仅保留仍有明确局部价值的并发控制。
+- [x] 删除被数据库租约替代的跨请求 `AssemblyWorkerPool` 单飞职责；仅保留仍有明确局部价值的并发控制。
 - [ ] 删除过渡 feature flag、旧 schema 字段、旧配置和旧迁移分支。
 - [x] 删除已被 Worker 替代的 API 集群级定时任务注册。
 - [ ] 更新所有架构图、部署样例、运维手册、错误码表和测试数量。
@@ -821,6 +821,12 @@ SHA-256 分别为 `8380abf9d97188bfda1451cf2179f70fecdd62194549c5e24a85b46bd5461
 - [ ] 完成安全审查：S3 key 注入、SSRF/endpoint 配置、凭据泄漏、跨用户 upload ID、重放与限流。
 - [ ] 完成数据一致性审计：用户配额、文件数、内容 ref_count、DB/对象存在性、staging/multipart 孤儿。
 - [x] 记录最终容量建议、已知限制和下一次扩容触发条件。
+
+### 15.1 本机组装限流职责收敛记录（2026-07-21）
+
+旧 `AssemblyWorkerPool` 及其 `m_active_upload_ids`、`IsUploadActive`、带 `upload_id` 的获取/释放接口已删除，替换为无任务标识的 `AssemblyConcurrencyLimiter`。Local/S3 组装准入只在本机容量耗尽时返回稳定的 `429 + 10005`；同一上传的有效租约冲突继续由 `UploadTaskRepository::ClaimFinalizeLease` 在组装前返回 `409 + 10004`。重复 DTO/模拟单飞测试已删除，限流器测试直接覆盖真实实现的 RAII、移动、容量恢复和并发上限；真实 PostgreSQL 完成集成中 6 个并发请求得到 1 个成功与 5 个租约冲突。
+
+聚焦存储/状态机 CTest 79/79 通过，完成租约与组装背压集成 2/2 通过；完整构建成功，完整 CTest 共 1377 项：1371 通过、6 项既有环境门控跳过、0 失败，总耗时 425.36 秒；OpenSpec 严格校验 24/24 通过。环境门控的 S3/分布式拓扑测试仍不计作目标环境多实例验收，不据此勾选 Phase 9 或最终 Definition of Done。
 
 ## 16. 最终 Definition of Done
 

@@ -39,7 +39,7 @@ src/
 | Share domain | `ShareService.*`, `ShareDto.hpp`, `ShareAuthFilter.*` | Owner share CRUD + public access/browse/download via share token |
 | Trash domain | `TrashService.*`, `TrashDto.hpp` | Soft delete, restore with conflict naming, permanent delete, clear |
 | Admin domain | `AdminService.*`, `AdminDto.hpp`, `AdminAuthFilter.*` | User status/role changes and admin safety checks |
-| Storage | `IFileStorage.hpp`, `LocalFileStorage.*`, `AssemblyWorkerPool.hpp` | Content-addressed paths, temp chunks, promotion, Range-ready reads |
+| Storage | `IFileStorage.hpp`, `LocalFileStorage.*`, `AssemblyConcurrencyLimiter.hpp` | Content-addressed paths, temp chunks, promotion, Range-ready reads |
 | Utilities | `ErrorCode.hpp`, `Response.hpp`, `BatchUtils.hpp`, `RedisKeyPrefix.hpp`, `StageTimer.hpp` | Cross-cutting contracts used by multiple services |
 
 ## CONVENTIONS
@@ -59,7 +59,7 @@ src/
 - Do not edit ORM `.hpp` files for custom behavior; add methods/logic in `.cpp` or services.
 - Do not use exceptions for expected validation/auth/domain failures.
 - Do not bypass `StorageMgr` after startup unless explicitly injecting a test/storage seam.
-- Do not queue upload assembly work in `AssemblyWorkerPool`; current design rejects over-capacity or duplicate `upload_id` immediately.
+- Do not put upload ownership into process-local storage state. `AssemblyConcurrencyLimiter` only rejects over-capacity work; same-`upload_id` coordination belongs to PostgreSQL finalization leases.
 - Do not introduce public endpoints without documenting their route filter policy and adding tests for public/protected behavior.
 - Do not declare `drogon::plugin::GlobalFilters` more than once in `config.json`; one instance must contain request tracing, global JWT, and public rate limiters.
 
